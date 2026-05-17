@@ -5527,7 +5527,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Revoke every refresh token for the authenticated user except the one bound to the current refresh cookie.",
+                "description": "Revoke every refresh token for the authenticated user except the one identified as current.\nPass ` + "`" + `?keep_id=\u003cid\u003e` + "`" + ` (the session marked ` + "`" + `is_current: true` + "`" + ` on GET /users/me/sessions) to\npreserve the caller's own session — required because the refresh cookie is scoped to\n/api/v1/auth and isn't sent on this route.",
                 "produces": [
                     "application/json"
                 ],
@@ -5535,6 +5535,14 @@ const docTemplate = `{
                     "users-me"
                 ],
                 "summary": "Revoke all other sessions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session id to keep alive (the is_current row from GET /users/me/sessions)",
+                        "name": "keep_id",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "204": {
                         "description": "No Content",

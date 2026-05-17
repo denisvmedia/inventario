@@ -194,6 +194,48 @@ func TestUsersMeAPI(t *testing.T) {
 		c.Assert(stored.RevokedAt, qt.IsNotNil)
 	})
 
+	// DELETE /sessions?keep_id=... — explicit keep-id path. Required
+	// because the refresh cookie is scoped to /api/v1/auth and isn't
+	// sent on /users/me/sessions, so callers can't rely on the cookie
+	// fallback alone. Regression guard for the cleanup branch of the
+	// sessions-and-login-history e2e (#1644 follow-up exposed in #1616).
+	t.Run("revoke_all_other_sessions_with_explicit_keep_id", func(t *testing.T) {
+		c := qt.New(t)
+		// Re-seed two sessions: one we want to keep, one we expect to
+		// be wiped. We deliberately do NOT attach the refresh cookie
+		// so this case exercises the keep_id query-param path.
+		keep, err := rtReg.Create(c.Context(), models.RefreshToken{
+			TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+				TenantID: user.TenantID, UserID: user.ID,
+			},
+			TokenHash: "keep-hash",
+			ExpiresAt: time.Now().Add(time.Hour),
+		})
+		c.Assert(err, qt.IsNil)
+		wipe, err := rtReg.Create(c.Context(), models.RefreshToken{
+			TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+				TenantID: user.TenantID, UserID: user.ID,
+			},
+			TokenHash: "wipe-hash",
+			ExpiresAt: time.Now().Add(time.Hour),
+		})
+		c.Assert(err, qt.IsNil)
+
+		req := httptest.NewRequest(http.MethodDelete,
+			"/users/me/sessions?keep_id="+keep.ID, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		c.Assert(w.Code, qt.Equals, http.StatusNoContent)
+
+		stored, err := rtReg.Get(c.Context(), keep.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(stored.RevokedAt, qt.IsNil)
+
+		wiped, err := rtReg.Get(c.Context(), wipe.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(wiped.RevokedAt, qt.IsNotNil)
+	})
+
 	// GET /login-history — newest first, optional failed-count
 	// hint populated.
 	t.Run("login_history_newest_first", func(t *testing.T) {

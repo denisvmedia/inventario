@@ -21,9 +21,16 @@ export async function revokeSession(id: string): Promise<void> {
   await http.del(`/users/me/sessions/${encodeURIComponent(id)}`, { skipGroupRewrite: true })
 }
 
-// revokeAllOtherSessions revokes every session except the one bound to the
-// current refresh cookie. The BE derives the keep-id from the cookie hash
-// — the FE does not need to supply it.
-export async function revokeAllOtherSessions(): Promise<void> {
-  await http.del("/users/me/sessions", { skipGroupRewrite: true })
+// revokeAllOtherSessions revokes every session except the one identified
+// as current. We must pass the id of the row the list endpoint flagged
+// `is_current: true` via `?keep_id=` because the refresh cookie is
+// path-scoped to /api/v1/auth — it isn't sent on /users/me/sessions, so
+// the BE can't fall back to hashing the cookie here. Pass `undefined`
+// to deliberately wipe every session (e.g. for "log out everywhere"
+// surfaces yet to be built).
+export async function revokeAllOtherSessions(keepSessionId?: string): Promise<void> {
+  const path = keepSessionId
+    ? `/users/me/sessions?keep_id=${encodeURIComponent(keepSessionId)}`
+    : "/users/me/sessions"
+  await http.del(path, { skipGroupRewrite: true })
 }

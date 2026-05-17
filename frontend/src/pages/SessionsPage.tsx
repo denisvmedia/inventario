@@ -67,7 +67,15 @@ export function SessionsPage() {
   }
 
   const doRevokeAllOthers = () => {
-    revokeAllOthersMutation.mutate(undefined, {
+    // Resolve the id of the session the BE should preserve. The list
+    // endpoint flags exactly one row with `is_current: true`; we hand
+    // that id off to the mutation so the BE knows which refresh-token
+    // row to keep alive. Without it the BE wipes every session
+    // because the refresh cookie is path-scoped to /api/v1/auth and
+    // isn't sent on this route (issue surfaced via the
+    // sessions-and-login-history e2e cleanup branch).
+    const currentSessionId = sessions.find((s) => s.is_current)?.id
+    revokeAllOthersMutation.mutate(currentSessionId, {
       onSuccess: () => {
         toast.success(t("settings:sessions.toasts.allRevoked"))
         setRevokeAllOpen(false)
