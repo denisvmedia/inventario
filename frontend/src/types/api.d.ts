@@ -37,7 +37,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": string;
+                        "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
                 /** @description Forbidden - system-admin required */
@@ -46,7 +46,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": string;
+                        "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };

@@ -26,8 +26,8 @@ type AdminPingResponse struct {
 // @Tags admin
 // @Produce json
 // @Success 200 {object} AdminPingResponse "OK"
-// @Failure 401 {string} string "Unauthorized"
-// @Failure 403 {string} string "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized"
+// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
 // @Router /admin/_ping [get]
 func adminPing(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")

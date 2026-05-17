@@ -42,13 +42,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
                         "description": "Forbidden - system-admin required",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     }
                 }
