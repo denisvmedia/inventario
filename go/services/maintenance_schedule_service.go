@@ -53,13 +53,13 @@ func (s *MaintenanceScheduleService) Create(ctx context.Context, schedule models
 // this value" convention. The clear-flag pair on LastDoneAt mirrors
 // LoanUpdate.ClearDueBackAt.
 type MaintenanceScheduleUpdate struct {
-	Title          *string
-	IntervalDays   *int
-	NextDueAt      *models.Date
-	LastDoneAt     models.PDate
-	ClearLastDone  bool
-	Notes          *string
-	Enabled        *bool
+	Title         *string
+	IntervalDays  *int
+	NextDueAt     *models.Date
+	LastDoneAt    models.PDate
+	ClearLastDone bool
+	Notes         *string
+	Enabled       *bool
 }
 
 // Update applies partial updates to an existing schedule.

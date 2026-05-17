@@ -156,12 +156,16 @@ func matchedMaintenanceThresholds(m *models.MaintenanceSchedule, now time.Time) 
 
 // processOne handles one (schedule, threshold) pair across the
 // commit + send pipeline. Returns (true, nil) ONLY when the worker
-// actually enqueued at least one email — the three "commit the row
+// actually enqueued at least one email — the four "commit the row
 // but no email went out" branches (stub mode, missing commodity,
 // no recipients, fully-opted-out cohort) deliberately return
 // (false, nil) so the SentByThreshold counter never reports a
-// phantom send. Mirrors WarrantyReminderService.processOne; see the
-// comments there for the idempotency / retry / opt-out reasoning.
+// phantom send. The fan-out + enqueue loop is split into
+// fanOutToRecipients to keep this function under the gocyclo
+// ceiling; the commit-then-skip helper centralises the four "no
+// email" early returns. Mirrors WarrantyReminderService.processOne;
+// see the comments there for the idempotency / retry / opt-out
+// reasoning.
 func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.MaintenanceSchedule, threshold models.MaintenanceReminderThreshold, now time.Time, prefsCache *notifications.Cache) (bool, error) {
 	already, err := s.factorySet.MaintenanceReminderRegistry.HasSent(ctx, m.ID, int(threshold))
 	if err != nil {
@@ -175,17 +179,7 @@ func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.M
 		// Stub mode (tests, dev). Persist the idempotency row so the
 		// worker stops re-evaluating, but DO NOT report this as a
 		// sent reminder — there was no email.
-		ok, commitErr := s.commitReminderRow(ctx, m, threshold, now)
-		if commitErr != nil {
-			return false, errxtrace.Wrap("maintenance reminder: insert idempotency row", commitErr)
-		}
-		if ok {
-			slog.Info("maintenance reminder row inserted (no email service configured)",
-				"schedule_id", m.ID,
-				"threshold", int(threshold),
-			)
-		}
-		return false, nil
+		return s.commitWithoutSend(ctx, m, threshold, now, "no email service configured", nil)
 	}
 
 	commodity, err := s.lookupCommodity(ctx, m.CommodityID)
@@ -196,10 +190,7 @@ func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.M
 		// Schedule references a commodity that's gone (cross-tenant
 		// drift / mid-purge). Write the row so we stop revisiting,
 		// but do NOT count this as a sent reminder.
-		if _, commitErr := s.commitReminderRow(ctx, m, threshold, now); commitErr != nil {
-			return false, errxtrace.Wrap("maintenance reminder: insert idempotency row (no commodity)", commitErr)
-		}
-		return false, nil
+		return s.commitWithoutSend(ctx, m, threshold, now, "commodity missing", nil)
 	}
 
 	recipients, err := s.recipientsForCommodity(ctx, commodity)
@@ -209,22 +200,74 @@ func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.M
 	if len(recipients) == 0 {
 		// No one to email. Persist the row to stop re-evaluating but
 		// don't inflate SentByThreshold — see #1368 / CR feedback.
-		if _, commitErr := s.commitReminderRow(ctx, m, threshold, now); commitErr != nil {
-			return false, errxtrace.Wrap("maintenance reminder: insert idempotency row (no recipients)", commitErr)
-		}
-		slog.Warn("maintenance reminder: no recipients found for commodity",
-			"schedule_id", m.ID,
-			"commodity_id", commodity.ID,
-			"group_id", commodity.GroupID,
-		)
-		return false, nil
+		return s.commitWithoutSend(ctx, m, threshold, now, "no recipients", commodity)
 	}
 
+	attempted, enqueueErrs, firstEnqueueErr := s.fanOutToRecipients(ctx, m, threshold, commodity, recipients, prefsCache)
+	if attempted > 0 && enqueueErrs == attempted {
+		return false, errxtrace.Wrap("maintenance reminder: all enqueues failed", firstEnqueueErr)
+	}
+	if attempted == 0 {
+		// Every recipient opted out. Persist the row so we don't
+		// sweep this tuple every tick, but report (false, nil) — no
+		// email was enqueued so SentByThreshold must not move.
+		return s.commitWithoutSend(ctx, m, threshold, now, "all opted out", commodity)
+	}
+	ok, err := s.commitReminderRow(ctx, m, threshold, now)
+	if err != nil {
+		return false, errxtrace.Wrap("maintenance reminder: insert idempotency row", err)
+	}
+	return ok, nil
+}
+
+// commitWithoutSend handles the four "commit the row, no email
+// fires" early-return branches of processOne (stub mode, missing
+// commodity, no recipients, fully-opted-out cohort). It writes the
+// idempotency row so the worker stops re-evaluating the (schedule,
+// threshold) tuple, logs a per-branch breadcrumb, and returns
+// (false, nil) so the SentByThreshold counter doesn't move.
+// Extracted from processOne to keep the parent under gocyclo's
+// ceiling and put the per-branch wording in one place. `reason` is
+// the short branch label used in the slog message; `commodity` is
+// optional context (nil for the stub / commodity-missing paths
+// since the commodity is unavailable there).
+func (s *MaintenanceReminderService) commitWithoutSend(ctx context.Context, m *models.MaintenanceSchedule, threshold models.MaintenanceReminderThreshold, now time.Time, reason string, commodity *models.Commodity) (bool, error) {
+	ok, commitErr := s.commitReminderRow(ctx, m, threshold, now)
+	if commitErr != nil {
+		return false, errxtrace.Wrap("maintenance reminder: insert idempotency row ("+reason+")", commitErr)
+	}
+	if ok {
+		attrs := []any{
+			"schedule_id", m.ID,
+			"threshold", int(threshold),
+			"reason", reason,
+		}
+		if commodity != nil {
+			attrs = append(attrs, "commodity_id", commodity.ID, "group_id", commodity.GroupID)
+		}
+		//nolint:sloglint // structured fields are constructed dynamically.
+		slog.Info("maintenance reminder row inserted without sending email", attrs...)
+	}
+	return false, nil
+}
+
+// fanOutToRecipients enqueues SendMaintenanceReminderEmail for every
+// recipient that isn't opted out of the maintenance-reminder
+// notification category. Returns (attempted, enqueueErrs,
+// firstEnqueueErr) so the caller can decide between three terminal
+// states: every attempt failed, every recipient opted out, or at
+// least one enqueue succeeded. Extracted from processOne to keep the
+// parent under the gocyclo ceiling.
+func (s *MaintenanceReminderService) fanOutToRecipients(
+	ctx context.Context,
+	m *models.MaintenanceSchedule,
+	threshold models.MaintenanceReminderThreshold,
+	commodity *models.Commodity,
+	recipients []maintenanceRecipient,
+	prefsCache *notifications.Cache,
+) (attempted, enqueueErrs int, firstEnqueueErr error) {
 	dueDate := string(m.NextDueAt)
 	url := s.buildCommodityURL(ctx, commodity)
-	enqueueErrs := 0
-	attempted := 0
-	var firstEnqueueErr error
 	for _, r := range recipients {
 		if prefsCache != nil && !prefsCache.IsEnabledForGroup(ctx, r.user, commodity.TenantID, commodity.GroupID, notifications.CategoryMaintenanceReminder, notifications.ChannelEmail) {
 			slog.Debug("maintenance reminder: recipient opted out",
@@ -248,23 +291,7 @@ func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.M
 			)
 		}
 	}
-	if attempted > 0 && enqueueErrs == attempted {
-		return false, errxtrace.Wrap("maintenance reminder: all enqueues failed", firstEnqueueErr)
-	}
-	if attempted == 0 {
-		// Every recipient opted out. Persist the row so we don't
-		// sweep this tuple every tick, but report (false, nil) — no
-		// email was enqueued so SentByThreshold must not move.
-		if _, err := s.commitReminderRow(ctx, m, threshold, now); err != nil {
-			return false, errxtrace.Wrap("maintenance reminder: insert idempotency row (all opted out)", err)
-		}
-		return false, nil
-	}
-	ok, err := s.commitReminderRow(ctx, m, threshold, now)
-	if err != nil {
-		return false, errxtrace.Wrap("maintenance reminder: insert idempotency row", err)
-	}
-	return ok, nil
+	return attempted, enqueueErrs, firstEnqueueErr
 }
 
 func (s *MaintenanceReminderService) commitReminderRow(ctx context.Context, m *models.MaintenanceSchedule, threshold models.MaintenanceReminderThreshold, now time.Time) (bool, error) {
