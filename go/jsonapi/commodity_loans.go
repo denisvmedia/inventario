@@ -250,7 +250,7 @@ type CommodityLoanReturnRequest struct {
 }
 
 type CommodityLoanReturnRequestDataWrapper struct {
-	Type       string                         `json:"type"`
+	Type       string                         `json:"type" example:"commodity_loans" enums:"commodity_loans"`
 	Attributes CommodityLoanReturnRequestData `json:"attributes"`
 }
 

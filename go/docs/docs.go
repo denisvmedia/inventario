@@ -7324,7 +7324,11 @@ const docTemplate = `{
                     "$ref": "#/definitions/jsonapi.CommodityLoanReturnRequestData"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "commodity_loans"
+                    ],
+                    "example": "commodity_loans"
                 }
             }
         },
@@ -7642,7 +7646,11 @@ const docTemplate = `{
                     "$ref": "#/definitions/jsonapi.CommodityServiceReturnRequestData"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "commodity_services"
+                    ],
+                    "example": "commodity_services"
                 }
             }
         },

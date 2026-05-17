@@ -7386,7 +7386,11 @@ export type components = {
         };
         "jsonapi.CommodityLoanReturnRequestDataWrapper": {
             attributes?: components["schemas"]["jsonapi.CommodityLoanReturnRequestData"];
-            type?: string;
+            /**
+             * @example commodity_loans
+             * @enum {string}
+             */
+            type?: "commodity_loans";
         };
         "jsonapi.CommodityLoanUpdateRequest": {
             data?: components["schemas"]["jsonapi.CommodityLoanUpdateRequestDataWrapper"];
@@ -7564,7 +7568,11 @@ export type components = {
         };
         "jsonapi.CommodityServiceReturnRequestDataWrapper": {
             attributes?: components["schemas"]["jsonapi.CommodityServiceReturnRequestData"];
-            type?: string;
+            /**
+             * @example commodity_services
+             * @enum {string}
+             */
+            type?: "commodity_services";
         };
         "jsonapi.CommodityServiceUpdateRequest": {
             data?: components["schemas"]["jsonapi.CommodityServiceUpdateRequestDataWrapper"];

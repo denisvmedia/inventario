@@ -745,6 +745,9 @@ definitions:
       attributes:
         $ref: '#/definitions/jsonapi.CommodityLoanReturnRequestData'
       type:
+        enum:
+        - commodity_loans
+        example: commodity_loans
         type: string
     type: object
   jsonapi.CommodityLoanUpdateRequest:
@@ -988,6 +991,9 @@ definitions:
       attributes:
         $ref: '#/definitions/jsonapi.CommodityServiceReturnRequestData'
       type:
+        enum:
+        - commodity_services
+        example: commodity_services
         type: string
     type: object
   jsonapi.CommodityServiceUpdateRequest:
