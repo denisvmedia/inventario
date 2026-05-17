@@ -88,7 +88,7 @@ func TestSupplyLink_ValidateWithContext_UnhappyPath(t *testing.T) {
 			tc.mut(&link)
 			err := link.ValidateWithContext(context.Background())
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(strings.Contains(err.Error(), tc.want), qt.IsTrue, qt.Commentf("error %q should mention %q", err.Error(), tc.want))
+			c.Assert(err.Error(), qt.Contains, tc.want)
 		})
 	}
 }

@@ -61,8 +61,10 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
       setOpen(false)
     } catch (err) {
       toast.error(
-        parseServerError(err) ??
+        parseServerError(
+          err,
           t("supplies:toasts.createError", { defaultValue: "Couldn't add the supply link." })
+        )
       )
     }
   }
@@ -83,8 +85,10 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
       setEditing(null)
     } catch (err) {
       toast.error(
-        parseServerError(err) ??
+        parseServerError(
+          err,
           t("supplies:toasts.updateError", { defaultValue: "Couldn't update the supply link." })
+        )
       )
     }
   }
@@ -107,8 +111,10 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
       )
     } catch (err) {
       toast.error(
-        parseServerError(err) ??
+        parseServerError(
+          err,
           t("supplies:toasts.deleteError", { defaultValue: "Couldn't delete the supply link." })
+        )
       )
     }
   }
@@ -122,8 +128,10 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
       await reorder.mutateAsync({ commodity_id: commodityId, ids })
     } catch (err) {
       toast.error(
-        parseServerError(err) ??
+        parseServerError(
+          err,
           t("supplies:toasts.reorderError", { defaultValue: "Couldn't reorder the supply links." })
+        )
       )
     }
   }

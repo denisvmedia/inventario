@@ -109,7 +109,6 @@ export function SupplyLinkDialog({
             </Label>
             <Input
               id="supply-label"
-              autoFocus
               placeholder={t("supplies:fields.labelPlaceholder", {
                 defaultValue: "e.g. Water filter",
               })}
