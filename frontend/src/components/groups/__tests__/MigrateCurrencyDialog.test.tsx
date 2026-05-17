@@ -1,8 +1,34 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+
+// Local sonner mock so the feature-disabled tests can assert that the
+// toast was fired with the specific i18n key (#1616). The global setup
+// stubs sonner as no-ops; the per-file mock wins because vi.mock is
+// hoisted. Keep the surface minimal — the wizard only ever calls
+// `toast.error` here, the rest of sonner.toast.* is filled in just to
+// match the imported shape so the bundle resolves.
+vi.mock("sonner", () => {
+  const noop = vi.fn()
+  return {
+    Toaster: () => null,
+    toast: Object.assign(noop, {
+      success: noop,
+      error: vi.fn(),
+      info: noop,
+      warning: noop,
+      message: noop,
+      promise: noop,
+      dismiss: vi.fn(),
+      loading: noop,
+      custom: noop,
+    }),
+  }
+})
+
+import { toast } from "sonner"
 
 import {
   MigrateCurrencyDialog,
@@ -14,7 +40,10 @@ import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { apiUrl, currencyMigrationHandlers, groupHandlers } from "@/test/handlers"
 
+const toastErrorMock = toast.error as ReturnType<typeof vi.fn>
+
 beforeEach(() => {
+  toastErrorMock.mockReset()
   // Currencies endpoint backs the CurrencyCombobox in step 1 and the
   // groups list backs GroupProvider; both want a stable default for
   // every case so individual `server.use(...)` calls only have to
@@ -130,5 +159,121 @@ describe("<MigrateCurrencyDialog />", () => {
       /Preview expires in /
     )
     expect(screen.getByTestId("wizard-top-deltas")).toBeInTheDocument()
+  })
+
+  // #1616: the operator may turn the feature off between the time the
+  // dialog rendered and the click on Preview. The BE returns a coded
+  // 404 (`currency_migration.feature_disabled`); the wizard must close
+  // and surface a deployment-scoped toast instead of treating it as a
+  // generic "preview failed, fix your inputs" inline error.
+  it("closes the wizard and toasts when Preview returns the feature-disabled code", async () => {
+    const user = userEvent.setup()
+    let onOpenChangeArg: boolean | null = null
+    server.use(
+      msw.post(apiUrl("/g/household/currency-migrations/preview"), () =>
+        HttpResponse.json(
+          { errors: [{ code: "currency_migration.feature_disabled", detail: "disabled" }] },
+          { status: 404 }
+        )
+      )
+    )
+    renderWithProviders({
+      initialPath: "/groups/g1/settings",
+      routes: (
+        <Route
+          path="/groups/:groupId/settings"
+          element={
+            <GroupProvider>
+              <MigrateCurrencyDialog
+                open={true}
+                onOpenChange={(next) => {
+                  onOpenChangeArg = next
+                }}
+                groupName="Household"
+                fromCurrency="USD"
+                groupSlug="household"
+              />
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    await user.click(screen.getByRole("combobox"))
+    await user.click(await screen.findByText("EUR"))
+    await user.click(screen.getByTestId("wizard-next"))
+    const rate = await screen.findByTestId("wizard-rate-input")
+    await user.type(rate, "0.9")
+    await user.click(screen.getByTestId("wizard-preview"))
+    // Inline error block must NOT be the surface — that copy reads as
+    // "fix your rate", which doesn't fit a deployment-config issue.
+    await waitFor(() => {
+      expect(onOpenChangeArg).toBe(false)
+    })
+    expect(screen.queryByTestId("wizard-preview-error")).not.toBeInTheDocument()
+    // Belt-and-braces: the close-on-its-own already proves the
+    // feature-disabled branch fired, but asserting the toast copy
+    // guards against a future refactor that closes the dialog
+    // without surfacing any deployment-scoped message — the bug
+    // #1616 was filed against in the first place.
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      expect.stringMatching(/disabled in this deployment/i),
+      undefined
+    )
+  })
+
+  // Symmetric Start-side test: even if Preview succeeded, the operator
+  // can still flip the flag off between confirm and start. The Start
+  // handler must mirror the Preview behavior — close + toast, not the
+  // inline confirm-error which reads as "your input is wrong".
+  it("closes the wizard and toasts when Start returns the feature-disabled code", async () => {
+    const user = userEvent.setup()
+    let onOpenChangeArg: boolean | null = null
+    server.use(
+      ...currencyMigrationHandlers.preview("household"),
+      ...currencyMigrationHandlers.startError(
+        "household",
+        404,
+        "currency_migration.feature_disabled"
+      )
+    )
+    renderWithProviders({
+      initialPath: "/groups/g1/settings",
+      routes: (
+        <Route
+          path="/groups/:groupId/settings"
+          element={
+            <GroupProvider>
+              <MigrateCurrencyDialog
+                open={true}
+                onOpenChange={(next) => {
+                  onOpenChangeArg = next
+                }}
+                groupName="Household"
+                fromCurrency="USD"
+                groupSlug="household"
+              />
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    // Walk all four wizard steps with a happy preview.
+    await user.click(screen.getByRole("combobox"))
+    await user.click(await screen.findByText("EUR"))
+    await user.click(screen.getByTestId("wizard-next"))
+    await user.type(await screen.findByTestId("wizard-rate-input"), "0.9")
+    await user.click(screen.getByTestId("wizard-preview"))
+    await screen.findByTestId("wizard-preview-body")
+    await user.click(screen.getByTestId("wizard-confirm"))
+    await user.type(await screen.findByTestId("wizard-confirm-input"), "Household")
+    await user.click(screen.getByTestId("wizard-submit"))
+    await waitFor(() => {
+      expect(onOpenChangeArg).toBe(false)
+    })
+    expect(screen.queryByTestId("wizard-confirm-error")).not.toBeInTheDocument()
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      expect.stringMatching(/disabled in this deployment/i),
+      undefined
+    )
   })
 })

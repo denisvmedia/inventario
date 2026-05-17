@@ -45,6 +45,7 @@ import { Label } from "@/components/ui/label"
 import { StorageCard } from "@/features/storage/StorageCard"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrencyMigrations } from "@/features/currency-migration/hooks"
+import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import {
   useDeleteGroup,
   useGroup,
@@ -267,17 +268,35 @@ function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }
   const [serverError, setServerError] = useState<string | null>(null)
   const [migrateOpen, setMigrateOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  // Migrations list: only fetch when a group is loaded. The group's
-  // `slug` is required because /groups/:groupId/settings has no
-  // :groupSlug URL param, so the http rewrite slot is empty here — the
-  // API takes the slug explicitly and builds /g/${slug}/currency-
-  // migrations itself.
+  // Deployment kill-switch — when the backend has the currency-migration
+  // feature gated off (#1616) we don't render the CTA, the history sheet,
+  // or the background list query. The flag is fail-closed: while the
+  // /feature-flags request is in flight we keep the UI hidden so a slow
+  // boot can't flash a button that 404s on click.
+  const currencyMigrationEnabled = useFeatureFlag("currency_migration")
+  // Migrations list: only fetch when a group is loaded AND the feature
+  // is on. The group's `slug` is required because /groups/:groupId/
+  // settings has no :groupSlug URL param, so the http rewrite slot is
+  // empty here — the API takes the slug explicitly and builds
+  // /g/${slug}/currency-migrations itself.
   const groupSlug = groupQuery.data?.slug ?? ""
   const migrationsQuery = useCurrencyMigrations(groupSlug, {
-    enabled: !!groupQuery.data,
+    enabled: !!groupQuery.data && currencyMigrationEnabled,
   })
   const migrations = migrationsQuery.data?.migrations ?? []
   const migrationInFlightId = groupQuery.data?.currency_migration_id
+
+  // If the feature flag flips off between renders (operator pushed a
+  // re-deploy while the user had the wizard or history sheet open), the
+  // gated JSX below stops mounting — but the `open` state we kept here
+  // would still read as true. Reset both so a subsequent flag-on flip
+  // doesn't re-open a sheet the user already closed-by-proxy.
+  useEffect(() => {
+    if (!currencyMigrationEnabled) {
+      setMigrateOpen(false)
+      setHistoryOpen(false)
+    }
+  }, [currencyMigrationEnabled])
 
   const form = useForm<UpdateGroupInput>({
     resolver: zodResolver(updateGroupSchema),
@@ -398,38 +417,47 @@ function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }
               disabled
               className="font-mono uppercase"
             />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0 gap-1.5"
-              // The BE blocks a second migration on the same group at the
-              // start handler with 409 migration_in_progress. We mirror
-              // that as a disabled CTA driven by the group's own
-              // currency_migration_id (read-only on JSON:API; the
-              // migration registry sets it). The 409 is the safety net
-              // for the race between this read and the click.
-              disabled={!!migrationInFlightId}
-              title={migrationInFlightId ? t("errors:lockedDuringMigration") : undefined}
-              aria-disabled={!!migrationInFlightId || undefined}
-              onClick={() => setMigrateOpen(true)}
-              data-testid="migrate-currency-open"
-            >
-              <ArrowRightLeft className="size-3.5" aria-hidden="true" />
-              {t("groups:settings.migrateCurrency")}
-            </Button>
+            {/* Migrate-currency CTA: visible only when the deployment
+                has the currency-migration feature enabled (#1616). When
+                off, the BE 404s the wizard endpoints — showing the CTA
+                anyway is the silent-failure UX bug we're fixing. */}
+            {currencyMigrationEnabled ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5"
+                // The BE blocks a second migration on the same group at the
+                // start handler with 409 migration_in_progress. We mirror
+                // that as a disabled CTA driven by the group's own
+                // currency_migration_id (read-only on JSON:API; the
+                // migration registry sets it). The 409 is the safety net
+                // for the race between this read and the click.
+                disabled={!!migrationInFlightId}
+                title={migrationInFlightId ? t("errors:lockedDuringMigration") : undefined}
+                aria-disabled={!!migrationInFlightId || undefined}
+                onClick={() => setMigrateOpen(true)}
+                data-testid="migrate-currency-open"
+              >
+                <ArrowRightLeft className="size-3.5" aria-hidden="true" />
+                {t("groups:settings.migrateCurrency")}
+              </Button>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
             <p className="text-[11px] text-muted-foreground">
-              {t("groups:settings.migrateCurrencyHelp")}
+              {currencyMigrationEnabled
+                ? t("groups:settings.migrateCurrencyHelp")
+                : t("groups:settings.migrateCurrencyDisabledHelp")}
             </p>
             {/* History link mounts only after at least one migration
                 has been started — there's nothing useful behind it
                 on a fresh group. Opens a right-side Sheet instead
                 of inlining the list, since this is reference data
                 a user opens occasionally, not the primary content
-                of the page. */}
-            {migrations.length > 0 ? (
+                of the page. Hidden along with the CTA when the
+                feature is gated off in this deployment. */}
+            {currencyMigrationEnabled && migrations.length > 0 ? (
               <button
                 type="button"
                 onClick={() => setHistoryOpen(true)}
@@ -464,7 +492,7 @@ function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }
         </div>
       </form>
 
-      {group.group_currency && groupSlug ? (
+      {currencyMigrationEnabled && group.group_currency && groupSlug ? (
         <MigrateCurrencyDialog
           open={migrateOpen}
           onOpenChange={setMigrateOpen}

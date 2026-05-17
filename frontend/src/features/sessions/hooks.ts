@@ -23,10 +23,14 @@ export function useRevokeSession() {
   })
 }
 
+// useRevokeAllOtherSessions takes the id of the session the caller wants
+// to keep — typically the row the list endpoint marked `is_current: true`.
+// The BE needs an explicit signal here because the refresh cookie is
+// scoped to /api/v1/auth and isn't sent on /users/me/sessions.
 export function useRevokeAllOtherSessions() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => revokeAllOtherSessions(),
+    mutationFn: (keepSessionId: string | undefined) => revokeAllOtherSessions(keepSessionId),
     onSuccess: () => qc.invalidateQueries({ queryKey: sessionsKeys.all }),
   })
 }

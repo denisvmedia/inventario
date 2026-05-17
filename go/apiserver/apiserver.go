@@ -327,6 +327,12 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 				PublicBaseURL:         params.PublicURL,
 			}))
 			r.Route("/currencies", Currencies())
+			// Feature flags are deployment-scoped (operator kill-switches,
+			// #1604) so the FE reads them once at boot — including before
+			// login, to hide entry points for features whose backend is
+			// gated off (#1616). Hence: unauthenticated, behind the same
+			// global rate limit as the other public reads.
+			r.Route("/feature-flags", FeatureFlagsHandler(params))
 			// Seed endpoint is public for e2e testing and development.
 			// Seed uses a service registry set since it's a privileged operation in dev/test.
 			r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet, params.UploadLocation))

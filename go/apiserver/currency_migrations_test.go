@@ -115,11 +115,29 @@ func TestCurrencyMigrations_FeatureFlagOff_NotMounted(t *testing.T) {
 	params, testUser, testGroup := newParams() // flag default false
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
-	rr := doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations/preview", testUser.ID, previewBody("USD", "EUR", "0.9"))
-
-	// The route is not mounted at all when the feature is off — chi
-	// returns 404 because the path doesn't match any handler.
-	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	// Every endpoint under /currency-migrations is short-circuited by
+	// the featureGate middleware. The response must be a 404 with the
+	// `currency_migration.feature_disabled` JSON:API code so the FE can
+	// surface "feature disabled in this deployment" copy instead of
+	// silently swallowing the error (#1616).
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   any
+	}{
+		{"preview", http.MethodPost, "/currency-migrations/preview", previewBody("USD", "EUR", "0.9")},
+		{"start", http.MethodPost, "/currency-migrations", startBody("USD", "EUR", "0.9", "tok")},
+		{"list", http.MethodGet, "/currency-migrations", nil},
+		{"detail", http.MethodGet, "/currency-migrations/some-id", nil},
+	}
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			rr := doJSONAPIRequest(t, handler, tc.method, "/api/v1/g/"+testGroup.Slug+tc.path, testUser.ID, tc.body)
+			c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+			assertErrorCode(t, c, rr.Body.Bytes(), "currency_migration.feature_disabled")
+		})
+	}
 }
 
 func TestCurrencyMigrations_Preview_Happy(t *testing.T) {
