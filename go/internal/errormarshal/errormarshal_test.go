@@ -46,7 +46,7 @@ func TestMarshal_NilError(t *testing.T) {
 	result := errormarshal.Marshal(nil)
 	c.Assert(result, qt.IsNotNil)
 
-	// nil errors marshal to JSON null (matching original errkit behavior)
+	// nil errors marshal to JSON null
 	c.Assert(string(result), qt.Equals, "null")
 }
 
