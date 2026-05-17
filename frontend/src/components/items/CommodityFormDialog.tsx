@@ -241,14 +241,6 @@ export function CommodityFormDialog({
   // save-as-draft confirm and the user loses the draft silently
   // (the same problem the auto-save was trying to prevent).
   const [draftRehydrated, setDraftRehydrated] = useState(false)
-  // Tracks whether the user has manually typed into Current Value.
-  // Until they do, the input live-mirrors Original Price in the
-  // same-currency case (BE field-level Required on CurrentPrice
-  // forces a non-zero value even though PriceRule says it's
-  // optional — see #1625). Once the user edits the field, the
-  // mirror stops; flipping back to "untouched" requires a fresh
-  // dialog open.
-  const currentPriceManualRef = useRef(false)
   // Drafts only persist for create mode — editing an existing item
   // never auto-saves to storage (the BE row is the canonical state).
   const persistDrafts = mode === "create" && !!draftKey
@@ -314,13 +306,6 @@ export function CommodityFormDialog({
     // returns non-empty.
     setPendingFiles([])
     setPendingFilesLoaded(false)
-    // Edit mode opens with an existing current_price; treat that as
-    // already user-set so the mirror never overwrites it. Create
-    // mode starts clean — mirror is on until first manual edit.
-    // A rehydrated draft also counts as "already user-set" — we
-    // shouldn't overwrite values the user typed during a previous
-    // visit just because they refresh and come back.
-    currentPriceManualRef.current = mode === "edit" || restoredFromDraft
 
     // Pending files restoration. Browser-level reloads (manual,
     // mobile-OS tab kill, etc) wipe in-memory state; IDB persists
@@ -390,32 +375,6 @@ export function CommodityFormDialog({
     if (!open || !persistDrafts || !draftKey || !pendingFilesLoaded) return
     void savePendingFiles(draftKey, pendingFiles)
   }, [open, persistDrafts, draftKey, pendingFiles, pendingFilesLoaded])
-
-  // Live mirror: in create mode, when purchase currency matches the
-  // group currency and the user hasn't manually edited Current Value
-  // yet, push the typed Original Price into Current Value so the
-  // input visibly tracks. Stops as soon as the user types into the
-  // Current Value field (PurchaseStep marks `currentPriceManualRef`
-  // on user-driven onChange). Reset by the dialog-open effect above.
-  // Tracking this with a ref + setValue rather than a derived render
-  // value because BE field-level Required (#1625) means the mirrored
-  // value needs to actually live in the form state, not just look
-  // like it does in the DOM.
-  useEffect(() => {
-    if (!open || mode !== "create") return
-    const subscription = watch((values, info) => {
-      if (info.name !== "original_price" && info.name !== "original_price_currency") return
-      if (currentPriceManualRef.current) return
-      const purchaseCurrency = (values.original_price_currency ?? "").trim().toUpperCase()
-      const groupCurrencyUpper = (defaultCurrency ?? "").trim().toUpperCase()
-      if (!purchaseCurrency || purchaseCurrency !== groupCurrencyUpper) return
-      const next = (values.original_price ?? "") as string
-      // Use shouldDirty=false so the mirror doesn't itself flip the
-      // form's dirty flag — that's reserved for real user intent.
-      setValue("current_price", next, { shouldDirty: false, shouldValidate: false })
-    })
-    return () => subscription.unsubscribe()
-  }, [open, mode, watch, setValue, defaultCurrency])
 
   async function nextStep() {
     const fields = STEP_FIELDS[step]
@@ -810,9 +769,6 @@ export function CommodityFormDialog({
                 errors={errors}
                 watch={watch}
                 defaultCurrency={defaultCurrency}
-                onCurrentPriceUserEdit={() => {
-                  currentPriceManualRef.current = true
-                }}
               />
             ) : null}
             {step === "warranty" ? (
@@ -1293,13 +1249,7 @@ function priceInputPaddingClass(symbol: string): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see BasicsStep
 function PurchaseStep(props: any) {
   const { t } = useTranslation()
-  const { register, control, errors, watch, defaultCurrency, onCurrentPriceUserEdit } = props
-  // Wrap RHF's register output for current_price so user-driven
-  // onChange events also flip the dialog's
-  // `currentPriceManualRef` — once that fires, the dialog's
-  // live-mirror effect stops auto-filling Current Value with
-  // Original Price.
-  const currentPriceReg = register("current_price")
+  const { register, control, errors, watch, defaultCurrency } = props
   // Required-ness on Purchase fields is dynamic. Drafts relax all
   // four (purchase_date / original_price / converted / current);
   // commodity submits require them. Schema is in
@@ -1464,11 +1414,7 @@ function PurchaseStep(props: any) {
                 min={0}
                 placeholder="0"
                 className={cn("bg-background", groupPadClass)}
-                {...currentPriceReg}
-                onChange={(e) => {
-                  onCurrentPriceUserEdit?.()
-                  currentPriceReg.onChange(e)
-                }}
+                {...register("current_price")}
                 aria-required={requireWhenNotDraft || undefined}
                 aria-invalid={!!errors.current_price}
               />
@@ -1484,7 +1430,11 @@ function PurchaseStep(props: any) {
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">
-          <FieldLabel htmlFor="commodity-current-price" required={requireWhenNotDraft}>
+          {/* #1625: same-currency Current Value is optional — the original
+              price already carries the canonical amount in the group's
+              currency. The label drops the "required" asterisk and the
+              input drops aria-required accordingly. */}
+          <FieldLabel htmlFor="commodity-current-price">
             {t("commodities:fields.currentPrice")}
           </FieldLabel>
           <div className="relative">
@@ -1501,12 +1451,7 @@ function PurchaseStep(props: any) {
               min={0}
               placeholder="0"
               className={groupPadClass}
-              {...currentPriceReg}
-              onChange={(e) => {
-                onCurrentPriceUserEdit?.()
-                currentPriceReg.onChange(e)
-              }}
-              aria-required={requireWhenNotDraft || undefined}
+              {...register("current_price")}
               aria-invalid={!!errors.current_price}
             />
           </div>
@@ -2573,47 +2518,39 @@ function toRequest(
     const trimmed = v.trim()
     return trimmed === "" ? undefined : trimmed
   }
-  // BE rule (commodity.go:378 + the matching custom validator):
-  // when the purchase currency matches the group's currency,
-  // `converted_original_price` MUST be 0 — the original price is
-  // already expressed in group currency, so a non-zero converted
-  // amount would conflict. The mock hides the converted-price field
-  // entirely in this case (AddItemDialog L1198 isForeignCurrency =
-  // false branch); we mirror that visually, and force the value to
-  // 0 here so the BE's same-currency invariant is satisfied. Foreign
-  // currency: pass through whatever the user typed.
+  // BE rule (PriceRule.ErrConvertedPriceNotZero in
+  // go/models/rules/price.go): when the purchase currency matches the
+  // group's currency, `converted_original_price` MUST be 0 — the
+  // original price is already expressed in group currency, so a
+  // non-zero converted amount would conflict. The mock hides the
+  // converted-price field entirely in this case (AddItemDialog L1198
+  // isForeignCurrency = false branch); we mirror that visually, and
+  // force the value to 0 here so the BE's same-currency invariant is
+  // satisfied.
   const original = num(values.original_price)
   const convertedFromForm = num(values.converted_original_price)
   const currentFromForm = num(values.current_price)
   const sameCurrency =
     !!groupCurrency &&
     values.original_price_currency.trim().toUpperCase() === groupCurrency.trim().toUpperCase()
-  // TODO(#1625): remove this same-currency mirror once the BE drops
-  // `validation.Required` from `CurrentPrice` in commodity.go:382.
-  // PriceRule's design intent is that current_price=0 is valid in the
-  // same-currency case (the unit test in price_test.go:42-47 covers
-  // this), but the field-level `Required` contradicts the rule and
-  // makes BE refuse any same-currency row with an empty Current Value.
-  // Same-currency: force converted=0 (BE invariant) + mirror
-  // current←original when blank.
-  // Foreign-currency: schema enforces "at least one of converted /
-  // current > 0" — but the BE *also* has `validation.Required` on
-  // each individual field for non-draft commodities. So leaving the
-  // sibling blank passes our schema and 422s on submit. Mirror the
-  // present value into the missing sibling so both fields are set;
-  // PriceRule still passes (both > 0), and the user's "either one"
-  // mental model from the UI copy survives. Explicit 0s are
-  // preserved (`?? `, not `||`) so an edit-mode foreign row that
-  // genuinely has converted=0 / current>0 round-trips unchanged.
+  // Foreign-currency: ConvertedOriginalPrice still carries
+  // `validation.Required` at the BE for non-draft commodities, so an
+  // omitted value JSON-decodes to the zero struct and is rejected.
+  // The schema's cross-field rule lets the user satisfy "at-least-one"
+  // by filling only the current-value field; mirror that into
+  // converted so the BE invariant survives. Explicit 0s are preserved
+  // (`?? `, not `||`) so an edit-mode row that genuinely has
+  // converted=0 / current>0 round-trips unchanged.
+  // CurrentPrice carries no field-level Required anymore (#1625), so
+  // we never need to mirror in the other direction — passing through
+  // whatever the user typed is enough.
   let converted: number | undefined
-  let current: number | undefined
   if (sameCurrency) {
     converted = 0
-    current = currentFromForm ?? original
   } else {
     converted = convertedFromForm ?? currentFromForm
-    current = currentFromForm ?? convertedFromForm
   }
+  const current = currentFromForm
   return {
     name: values.name.trim(),
     short_name: values.short_name.trim(),

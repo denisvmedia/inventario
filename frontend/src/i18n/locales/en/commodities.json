@@ -407,7 +407,6 @@
     "convertedPriceRequired": "Converted original price is required for non-draft items.",
     "countMin": "Quantity must be at least 1.",
     "currencyRequired": "Currency is required.",
-    "currentPriceRequired": "Current value is required for non-draft items.",
     "nameRequired": "Name is required.",
     "nameTooLong": "Name must be 200 characters or fewer.",
     "noPriceInGroupCurrency": "Enter at least one of converted price or current value so the item is reportable in group currency.",
