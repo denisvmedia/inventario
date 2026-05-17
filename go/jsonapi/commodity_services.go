@@ -82,7 +82,7 @@ type CommodityServiceRequest struct {
 
 type CommodityServiceRequestDataWrapper struct {
 	ID         string                      `json:"id,omitempty"`
-	Type       string                      `json:"type"`
+	Type       string                      `json:"type" example:"commodity_services" enums:"commodity_services"`
 	Attributes CommodityServiceRequestData `json:"attributes"`
 }
 
@@ -159,7 +159,7 @@ type CommodityServiceUpdateRequest struct {
 
 type CommodityServiceUpdateRequestDataWrapper struct {
 	ID         string                            `json:"id"`
-	Type       string                            `json:"type"`
+	Type       string                            `json:"type" example:"commodity_services" enums:"commodity_services"`
 	Attributes CommodityServiceUpdateRequestData `json:"attributes"`
 }
 
@@ -231,7 +231,7 @@ type CommodityServiceReturnRequest struct {
 }
 
 type CommodityServiceReturnRequestDataWrapper struct {
-	Type       string                            `json:"type"`
+	Type       string                            `json:"type" example:"commodity_services" enums:"commodity_services"`
 	Attributes CommodityServiceReturnRequestData `json:"attributes"`
 }
 

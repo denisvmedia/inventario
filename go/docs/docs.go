@@ -7267,7 +7267,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "commodity_loans"
+                    ],
+                    "example": "commodity_loans"
                 }
             }
         },
@@ -7320,7 +7324,11 @@ const docTemplate = `{
                     "$ref": "#/definitions/jsonapi.CommodityLoanReturnRequestData"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "commodity_loans"
+                    ],
+                    "example": "commodity_loans"
                 }
             }
         },
@@ -7361,7 +7369,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "commodity_loans"
+                    ],
+                    "example": "commodity_loans"
                 }
             }
         },
@@ -7571,7 +7583,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "commodity_services"
+                    ],
+                    "example": "commodity_services"
                 }
             }
         },
@@ -7630,7 +7646,11 @@ const docTemplate = `{
                     "$ref": "#/definitions/jsonapi.CommodityServiceReturnRequestData"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "commodity_services"
+                    ],
+                    "example": "commodity_services"
                 }
             }
         },
@@ -7675,7 +7695,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "commodity_services"
+                    ],
+                    "example": "commodity_services"
                 }
             }
         },
@@ -9241,7 +9265,11 @@ const docTemplate = `{
                     "$ref": "#/definitions/jsonapi.SupplyLinkReorderRequestAttributes"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "commodity_supply_links_reorder"
+                    ],
+                    "example": "commodity_supply_links_reorder"
                 }
             }
         },
@@ -9277,7 +9305,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "commodity_supply_links"
+                    ],
+                    "example": "commodity_supply_links"
                 }
             }
         },
@@ -9339,7 +9371,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "commodity_supply_links"
+                    ],
+                    "example": "commodity_supply_links"
                 }
             }
         },
