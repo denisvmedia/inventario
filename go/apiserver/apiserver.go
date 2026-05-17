@@ -158,6 +158,7 @@ type Params struct {
 	TenantResolver             TenantResolver                     // resolves host → tenant; nil = single-tenant (HostTenantResolver with no BaseDomain)
 	EmailService               services.EmailService              // Transactional email service (queue + providers)
 	PublicURL                  string                             // Public base URL used in transactional links
+	SupportEmail               string                             // Destination for /api/v1/feedback submissions (issue #1387). Empty leaves the route mounted but it returns 503.
 	RedisPinger                RedisPinger                        // Optional Redis dependency check for /readyz
 
 	// FeatureCurrencyMigration gates the /currency-migrations endpoints
@@ -362,6 +363,16 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
 			LoginEventRegistry:   params.FactorySet.LoginEventRegistry,
 		}))
+		// In-app feedback / contact support (#1387). Auth-required and
+		// per-user rate-limited (5/hour). The handler returns 503 when
+		// SupportEmail is empty, so it stays mounted in the
+		// "feedback not configured" deployment shape too — the FE can
+		// rely on a stable URL and surface the operator's mailto
+		// fallback when the 503 comes back.
+		r.With(userMiddlewares...).Route("/feedback", Feedback(FeedbackParams{
+			EmailService: emailSvc,
+			SupportEmail: params.SupportEmail,
+		}, rateLimiter))
 		// Invites are mounted WITHOUT userMiddlewares so that GET /invites/{token}
 		// remains public (the invitee is typically unauthenticated at first).
 		// POST /invites/{token}/accept is wrapped with the userMiddlewares chain

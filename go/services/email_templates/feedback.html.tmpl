@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<body>
+<p>New {{.FeedbackType}} from <strong>{{.FromName}}</strong>
+&lt;<a href="mailto:{{.FromEmail}}">{{.FromEmail}}</a>&gt;
+(user&nbsp;<code>{{.FromUserID}}</code>).</p>
+
+<p><strong>Message:</strong></p>
+<pre style="white-space: pre-wrap; font-family: inherit;">{{.Message}}</pre>
+
+{{- if .ReplyToEmail}}
+<p><strong>Reply to:</strong>
+<a href="mailto:{{.ReplyToEmail}}">{{.ReplyToEmail}}</a></p>
+{{- else}}
+<p><em>The submitter chose not to share a reply-to address.</em></p>
+{{- end}}
+
+{{- if .DiagnosticsLines}}
+<p><strong>Diagnostics:</strong></p>
+<ul>
+{{- range .DiagnosticsLines}}
+<li>{{.}}</li>
+{{- end}}
+</ul>
+{{- end}}
+</body>
+</html>

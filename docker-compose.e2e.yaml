@@ -50,3 +50,9 @@ services:
       # explicit override is no longer needed here. Set
       # INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION=false to flip the
       # kill-switch for a one-off run.
+      #
+      # Feedback (#1387) needs a destination address or it 503s. The
+      # stub email provider doesn't actually deliver anything; this
+      # value just satisfies the handler's "configured?" check so the
+      # e2e flow can exercise the happy path.
+      INVENTARIO_RUN_SUPPORT_EMAIL: "support@e2e.test"

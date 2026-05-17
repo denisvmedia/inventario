@@ -184,6 +184,22 @@ func (s *AsyncEmailService) SendGroupInviteEmail(ctx context.Context, to, invite
 	})
 }
 
+// SendFeedbackEmail enqueues an in-app feedback submission (#1387)
+// for asynchronous delivery to the configured support inbox.
+func (s *AsyncEmailService) SendFeedbackEmail(ctx context.Context, to, fromEmail, fromName, fromUserID, feedbackType, message, replyToEmail string, diagnosticsLines []string) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType:     emailTemplateFeedback,
+		To:               to,
+		FeedbackType:     feedbackType,
+		FromName:         fromName,
+		FromEmail:        fromEmail,
+		FromUserID:       fromUserID,
+		ReplyToEmail:     replyToEmail,
+		FeedbackMessage:  message,
+		DiagnosticsLines: diagnosticsLines,
+	})
+}
+
 // SendLoanReminderEmail enqueues a loan reminder (#1509). The job
 // carries the LoanReminderKind label verbatim so the renderer picks
 // the right subject + body branch without re-parsing the kind.

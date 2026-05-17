@@ -69,6 +69,21 @@ type EmailService interface {
 	// — the template suppresses the link block in that case rather
 	// than printing a relative URL.
 	SendLoanReminderEmail(ctx context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error
+
+	// SendFeedbackEmail requests delivery of an in-app feedback /
+	// support submission (#1387) to the configured support address.
+	// `to` is the operator-configured support inbox; `fromEmail` /
+	// `fromName` / `fromUserID` identify the submitter so the inbox
+	// owner can correlate without round-tripping. `feedbackType` is the
+	// human label ("Bug", "Feature request", …) the FE picked.
+	// `replyToEmail` is optional — when empty, the template renders a
+	// "submitter declined to share a reply-to" note instead. The
+	// rendered email also sets Reply-To at the SMTP envelope when
+	// non-empty so the inbox owner can reply directly.
+	// `diagnosticsLines` is the pre-formatted "label: value" slice
+	// rendered into a bullet list; the FE opts in via the diagnostics
+	// checkbox and is responsible for choosing which fields to include.
+	SendFeedbackEmail(ctx context.Context, to, fromEmail, fromName, fromUserID, feedbackType, message, replyToEmail string, diagnosticsLines []string) error
 }
 
 // EmailProvider identifies which transport backend should be instantiated by
@@ -359,6 +374,24 @@ func (s *StubEmailService) SendStorageQuotaWarningEmail(_ context.Context, to, n
 	}
 	//nolint:sloglint // structured fields are constructed dynamically.
 	slog.Info("STUB email: storage quota warning", attrs...)
+	return nil
+}
+
+// SendFeedbackEmail logs the in-app feedback submission (#1387)
+// without dispatching anything externally — useful in tests and the
+// "stub" provider profile. The body itself is logged at debug level so
+// the long free-form text does not flood the default info stream.
+func (s *StubEmailService) SendFeedbackEmail(_ context.Context, to, fromEmail, fromName, fromUserID, feedbackType, message, replyToEmail string, diagnosticsLines []string) error {
+	slog.Info("STUB email: feedback submission",
+		"to", to,
+		"from_email", fromEmail,
+		"from_name", fromName,
+		"from_user_id", fromUserID,
+		"feedback_type", feedbackType,
+		"reply_to_email", replyToEmail,
+		"message_chars", len(message),
+		"diagnostics_line_count", len(diagnosticsLines),
+	)
 	return nil
 }
 

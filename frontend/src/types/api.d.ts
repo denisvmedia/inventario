@@ -785,6 +785,86 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit feedback
+         * @description Forward an authenticated user's in-app feedback / bug report / feature request to the operator-configured support inbox. Per-user rate-limited (5/hour).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Feedback payload */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.FeedbackRequest"];
+                };
+            };
+            responses: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.FeedbackResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Feedback not configured */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/download/files/{fileID}": {
         parameters: {
             query?: never;
@@ -6259,6 +6339,37 @@ export type components = {
              *     group-settings page.
              */
             currency_migration?: boolean;
+        };
+        "apiserver.FeedbackRequest": {
+            /**
+             * @description Diagnostics is the FE-controlled set of debug attributes. Keys
+             *     are surfaced verbatim — the BE does not whitelist or rewrite
+             *     them — but the BE caps per-line size and the number of entries.
+             */
+            diagnostics?: {
+                [key: string]: string;
+            };
+            /**
+             * @description Message is the free-form body. Required, trimmed, capped at
+             *     feedbackMaxMessageBytes.
+             */
+            message?: string;
+            /**
+             * @description ReplyToEmail is optional. When set the value goes into the email
+             *     body and (in the async sender) into the Reply-To header. Empty
+             *     means "the submitter declined to share a reply-to address".
+             */
+            reply_to_email?: string;
+            /**
+             * @description Type is one of "feedback" | "bug" | "feature" | "question". The
+             *     FE renders these as radio chips; the backend uses the value
+             *     verbatim in the email subject and body. Unknown values are
+             *     rejected with 400.
+             */
+            type?: string;
+        };
+        "apiserver.FeedbackResponse": {
+            status?: string;
         };
         "apiserver.ForgotPasswordRequest": {
             email?: string;
