@@ -179,7 +179,7 @@ Uses Go Cloud Development Kit for storage abstraction:
 - In-app viewers for images (with zoom) and PDFs
 
 ### Error Handling
-Structured error handling with `errkit` package:
+Structured error handling with `github.com/go-extras/errx` and `github.com/go-extras/errx/stacktrace` (`errxtrace`):
 - Context-aware validation using `jellydator/validation`
 - Human-readable error messages
 - Proper HTTP status code mapping
