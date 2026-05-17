@@ -515,6 +515,68 @@ func TestCommodityRegistry_Delete_UnhappyPath(t *testing.T) {
 	}
 }
 
+// TestCommodityRegistry_GetMany pins the batched primitive added for
+// issue #1512. The handler-level test in apiserver/ asserts that the
+// listGroupLoans path makes exactly one commodity-fetch round-trip — this
+// test locks the registry contract that path depends on: arbitrary
+// result order, missing/cross-scope ids dropped silently, duplicates
+// collapsed, and empty input never opens a transaction.
+func TestCommodityRegistry_GetMany(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
+	c1 := createTestCommodity(c, registrySet, area.GetID())
+	c2 := createTestCommodity(c, registrySet, area.GetID())
+	c3 := createTestCommodity(c, registrySet, area.GetID())
+
+	c.Run("returns the requested rows; order is unspecified", func(c *qt.C) {
+		got, err := registrySet.CommodityRegistry.GetMany(ctx, []string{c3.ID, c1.ID, c2.ID})
+		c.Assert(err, qt.IsNil)
+		c.Assert(got, qt.HasLen, 3)
+
+		ids := make(map[string]struct{}, len(got))
+		for _, com := range got {
+			ids[com.ID] = struct{}{}
+		}
+		_, ok1 := ids[c1.ID]
+		_, ok2 := ids[c2.ID]
+		_, ok3 := ids[c3.ID]
+		c.Assert(ok1, qt.IsTrue)
+		c.Assert(ok2, qt.IsTrue)
+		c.Assert(ok3, qt.IsTrue)
+	})
+
+	c.Run("empty ids returns nil and skips the round-trip", func(c *qt.C) {
+		got, err := registrySet.CommodityRegistry.GetMany(ctx, nil)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got, qt.IsNil)
+	})
+
+	c.Run("unknown ids are dropped silently", func(c *qt.C) {
+		got, err := registrySet.CommodityRegistry.GetMany(ctx, []string{c1.ID, "00000000-0000-0000-0000-000000000000"})
+		c.Assert(err, qt.IsNil)
+		c.Assert(got, qt.HasLen, 1)
+		c.Assert(got[0].ID, qt.Equals, c1.ID)
+	})
+
+	c.Run("duplicate ids collapse to one result", func(c *qt.C) {
+		got, err := registrySet.CommodityRegistry.GetMany(ctx, []string{c2.ID, c2.ID, c2.ID})
+		c.Assert(err, qt.IsNil)
+		c.Assert(got, qt.HasLen, 1)
+		c.Assert(got[0].ID, qt.Equals, c2.ID)
+	})
+}
+
 func TestCommodityRegistry_Count_HappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()

@@ -326,29 +326,57 @@ func (api *commodityLoansAPI) listGroupLoans(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	commoditiesByID := make(map[string]*models.Commodity, len(loans))
-	for _, l := range loans {
-		if _, ok := commoditiesByID[l.CommodityID]; ok {
-			continue
-		}
-		c, cerr := regSet.CommodityRegistry.Get(r.Context(), l.CommodityID)
-		// A missing commodity should not break the list — render the
-		// row without the commodity ref. Only surface real errors.
+	// Batch-fetch the parent commodities for every loan on the page in a
+	// single round-trip (issue #1512). Pre-#1512 the loop above did one
+	// Get per unique CommodityID; bounded by per_page (≤50) but still up
+	// to 50 round-trips per page request. The id slice is deduped so
+	// repeated commodity references on the page collapse to a single
+	// IN-list entry, and the GetMany contract drops missing /
+	// RLS-hidden rows silently — the FE renders those rows without the
+	// commodity ref (rather than 500ing) on a cascaded-away commodity.
+	uniqueIDs := uniqueCommodityIDsForLoans(loans)
+	commoditiesByID := make(map[string]*models.Commodity, len(uniqueIDs))
+	if len(uniqueIDs) > 0 {
+		fetched, cerr := regSet.CommodityRegistry.GetMany(r.Context(), uniqueIDs)
 		if cerr != nil {
-			if errors.Is(cerr, registry.ErrNotFound) {
-				commoditiesByID[l.CommodityID] = nil
-				continue
-			}
 			renderEntityError(w, r, cerr)
 			return
 		}
-		commoditiesByID[l.CommodityID] = c
+		for _, c := range fetched {
+			commoditiesByID[c.ID] = c
+		}
 	}
 
 	setPaginationHeaders(w, page, perPage, total)
 	if err := render.Render(w, r, jsonapi.NewCommodityLoanListResponse(loans, total, commoditiesByID)); err != nil {
 		internalServerError(w, r, err)
 	}
+}
+
+// uniqueCommodityIDsForLoans collects each loan's CommodityID once,
+// preserving first-seen order. The order itself is incidental for the
+// downstream IN-list query (GetMany result order is unspecified anyway),
+// but a deterministic walk makes the function easy to reason about in
+// tests and gives stable inputs to the SQL planner across requests with
+// the same shape. Empty / blank ids are dropped — a malformed loan row
+// shouldn't widen the WHERE IN list with a useless "" entry.
+func uniqueCommodityIDsForLoans(loans []*models.CommodityLoan) []string {
+	if len(loans) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(loans))
+	ids := make([]string, 0, len(loans))
+	for _, l := range loans {
+		if l == nil || l.CommodityID == "" {
+			continue
+		}
+		if _, ok := seen[l.CommodityID]; ok {
+			continue
+		}
+		seen[l.CommodityID] = struct{}{}
+		ids = append(ids, l.CommodityID)
+	}
+	return ids
 }
 
 // getGroupLoanCounts returns per-commodity open-loan counts for a list
