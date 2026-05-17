@@ -51,6 +51,7 @@ import {
 } from "@/components/items/StatusTransitionDialog"
 import { LendTab } from "@/components/loans/LendTab"
 import { ServiceTab } from "@/components/services/ServiceTab"
+import { SuppliesTab } from "@/components/supplies/SuppliesTab"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
 import { useFiles } from "@/features/files/hooks"
@@ -100,7 +101,7 @@ import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
-type TabKey = "details" | "warranty" | "files" | "lend" | "service"
+type TabKey = "details" | "warranty" | "files" | "lend" | "service" | "supplies"
 
 const TAB_KEYS = ["details", "warranty", "files", "lend", "service"] as const
 
@@ -753,6 +754,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
             />
+          ) : tab === "supplies" ? (
+            <SuppliesTab commodityId={commodity?.id ?? id} />
           ) : (
             <FilesTab
               commodityId={commodity?.id ?? id}
@@ -894,6 +897,10 @@ function Tabs({ value, onChange, fileCount = 0, variant = "page" }: TabsProps) {
     },
     { key: "lend", label: t("commodities:detail.tabs.lend") },
     { key: "service", label: t("commodities:detail.tabs.service") },
+    {
+      key: "supplies",
+      label: t("commodities:detail.tabs.supplies", { defaultValue: "Supplies" }),
+    },
   ]
   return (
     <div
