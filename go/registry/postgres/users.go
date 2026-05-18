@@ -220,6 +220,113 @@ func (r *UserRegistry) GetByEmail(ctx context.Context, tenantID, email string) (
 	return &user, nil
 }
 
+// RevokeSystemAdminAtomic clears is_system_admin on the target user
+// inside a transaction that also takes a global pg_advisory_xact_lock on
+// the system-admin lock space. Serialising all system-admin mutations
+// through one lock is sufficient (and far simpler than per-row locking)
+// because grant/revoke writes are rare CLI events — contention is not a
+// concern, correctness is. When allowZero=false, the lock guarantees
+// that the count check ("are there other admins?") and the UPDATE happen
+// atomically: a concurrent revoke either commits first (and our count
+// then returns <=1, blocking us) or blocks until our COMMIT (and then
+// sees the new count). Idempotent: a non-admin user returns (false, nil)
+// with no row touched.
+//
+//revive:disable-next-line:flag-parameter
+func (r *UserRegistry) RevokeSystemAdminAtomic(ctx context.Context, userID string, allowZero bool) (hadFlag bool, err error) {
+	if userID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
+	}
+
+	reg := r.newSQLRegistry()
+	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Single-keyspace advisory lock: every system-admin mutation
+		// serialises through this lock so the count+update is atomic.
+		if _, lockErr := tx.ExecContext(ctx,
+			`SELECT pg_advisory_xact_lock(hashtext('system_admin_mutations'))`,
+		); lockErr != nil {
+			return errxtrace.Wrap("failed to acquire system-admin advisory lock", lockErr)
+		}
+
+		// FOR UPDATE pins the target row so any concurrent direct
+		// UPDATE on the same user blocks on us — defense-in-depth in
+		// case a future code path bypasses this method.
+		var isAdmin bool
+		query := fmt.Sprintf(`SELECT is_system_admin FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.Users())
+		if scanErr := tx.QueryRowContext(ctx, query, userID).Scan(&isAdmin); scanErr != nil {
+			if errors.Is(scanErr, sql.ErrNoRows) {
+				return errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+					"entity_type", "User",
+					"entity_id", userID,
+				))
+			}
+			return errxtrace.Wrap("failed to lock user row for revoke", scanErr)
+		}
+
+		if !isAdmin {
+			// Idempotent — already non-admin.
+			return nil
+		}
+
+		hadFlag = true
+
+		if !allowZero {
+			var count int
+			countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE is_system_admin = true`, r.tableNames.Users())
+			if countErr := tx.QueryRowContext(ctx, countQuery).Scan(&count); countErr != nil {
+				return errxtrace.Wrap("failed to count system admins under lock", countErr)
+			}
+			if count <= 1 {
+				return errxtrace.Classify(registry.ErrLastSystemAdmin, errx.Attrs(
+					"user_id", userID,
+				))
+			}
+		}
+
+		updateQuery := fmt.Sprintf(`UPDATE %s SET is_system_admin = false, updated_at = now() WHERE id = $1`, r.tableNames.Users())
+		if _, updErr := tx.ExecContext(ctx, updateQuery, userID); updErr != nil {
+			return errxtrace.Wrap("failed to clear is_system_admin", updErr)
+		}
+		return nil
+	})
+	if err != nil {
+		return hadFlag, err
+	}
+	return hadFlag, nil
+}
+
+// ListSystemAdmins returns every user with is_system_admin = true.
+// Backed by the partial index `users_system_admin_idx` so the scan is
+// O(matches) regardless of the total user count.
+func (r *UserRegistry) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
+	reg := r.newSQLRegistry()
+
+	var admins []*models.User
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE is_system_admin = true ORDER BY created_at ASC`, r.tableNames.Users())
+		rows, err := tx.QueryxContext(ctx, query)
+		if err != nil {
+			return errxtrace.Wrap("failed to list system admins", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var u models.User
+			if err := rows.StructScan(&u); err != nil {
+				return errxtrace.Wrap("failed to scan system admin row", err)
+			}
+			admins = append(admins, &u)
+		}
+		if err := rows.Err(); err != nil {
+			return errxtrace.Wrap("failed during system admin row iteration", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return admins, nil
+}
+
 // ListByTenant returns all users for a tenant
 func (r *UserRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*models.User, error) {
 	if tenantID == "" {

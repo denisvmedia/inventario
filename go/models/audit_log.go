@@ -52,6 +52,11 @@ type AuditLog struct {
 	// ErrorMessage contains an optional error description for failed actions.
 	//migrator:schema:field name="error_message" type="TEXT"
 	ErrorMessage *string `json:"error_message,omitempty" db:"error_message"`
+
+	// ImpersonatedBy is the operator-of-record when the action was performed
+	// inside an impersonation session (#1745 foundation, #1750 primitive).
+	//migrator:schema:field name="impersonated_by" type="TEXT"
+	ImpersonatedBy *string `json:"impersonated_by,omitempty" db:"impersonated_by"`
 }
 
 // GetID returns the audit log entry's unique identifier.

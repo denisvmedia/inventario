@@ -15,6 +15,38 @@
     },
     "basePath": "/api/v1",
     "paths": {
+        "/admin/_ping": {
+            "get": {
+                "description": "Returns 200 when the caller has system-admin privileges. Probe endpoint for the admin surface (#1745).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "System-admin ping",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminPingResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - system-admin required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/change-password": {
             "post": {
                 "description": "Change the authenticated user's password. All existing sessions are invalidated on success.",
@@ -6151,7 +6183,7 @@
                 }
             },
             "delete": {
-                "description": "Revoke every refresh token for the authenticated user except the one identified as current.\nPass `?keep_id=\u003cid\u003e` (the session marked `is_current: true` on GET /users/me/sessions) to\npreserve the caller's own session — required because the refresh cookie is scoped to\n/api/v1/auth and isn't sent on this route.",
+                "description": "Revoke every refresh token for the authenticated user except the one identified as current.\nResolution order for the \"current\" session: `?keep_id=\u003cid\u003e` (recommended; the id the FE\nrendered with `is_current: true` on GET /users/me/sessions) → access token `rti` claim\n→ refresh cookie hash. When none matches, every session is revoked.",
                 "produces": [
                     "application/json"
                 ],
@@ -6162,7 +6194,7 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Session id to keep alive (the is_current row from GET /users/me/sessions)",
+                        "description": "Session id to keep alive (the is_current row from GET /users/me/sessions). Optional — when omitted the BE falls back to the access token's rti claim, then the refresh cookie.",
                         "name": "keep_id",
                         "in": "query"
                     }
@@ -6276,6 +6308,17 @@
         }
     },
     "definitions": {
+        "apiserver.AdminPingResponse": {
+            "type": "object",
+            "properties": {
+                "ok": {
+                    "type": "boolean"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
         "apiserver.ChangePasswordRequest": {
             "type": "object",
             "properties": {
@@ -11101,6 +11144,10 @@
                     "type": "string"
                 },
                 "is_active": {
+                    "type": "boolean"
+                },
+                "is_system_admin": {
+                    "description": "IsSystemAdmin grants platform-wide admin access (#1745).",
                     "type": "boolean"
                 },
                 "last_login_at": {

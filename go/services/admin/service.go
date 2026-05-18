@@ -4,12 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
+
+	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
+
+// ErrLastSystemAdmin is re-exported from the registry layer for callers
+// (CLI, tests) that still import this package. The sentinel itself lives
+// at the registry layer so RevokeSystemAdminAtomic can return it from
+// inside the lock-protected revoke path. New callers should branch on
+// registry.ErrLastSystemAdmin directly. #1745.
+var ErrLastSystemAdmin = registry.ErrLastSystemAdmin
 
 // Service provides administrative operations for CLI commands
 type Service struct {
@@ -475,6 +485,149 @@ func (s *Service) ResetUserMFA(ctx context.Context, idOrEmail string) (resetUser
 	}
 
 	return user, hadEnrollment, nil
+}
+
+// GrantSystemAdmin sets IsSystemAdmin=true on the user resolved by
+// idOrEmail. Idempotent — calling on an already-admin user returns the
+// row unchanged with hadFlag=true so the CLI can print "already a system
+// admin" rather than a misleading "granted" line. Writes a
+// `admin.grant_system_admin` audit row regardless so the audit trail
+// shows the attempt.
+func (s *Service) GrantSystemAdmin(ctx context.Context, idOrEmail string) (resultUser *models.User, hadFlag bool, err error) {
+	user, err := s.GetUser(ctx, idOrEmail)
+	if err != nil {
+		s.logAdminAction(ctx, "admin.grant_system_admin", nil, "", err)
+		return nil, false, err
+	}
+
+	if user.IsSystemAdmin {
+		// Audit the no-op too so an operator can see "already admin"
+		// in the trail without having to grep for the create-only case.
+		s.logAdminAction(ctx, "admin.grant_system_admin", &user.TenantID, user.ID, nil)
+		return user, true, nil
+	}
+
+	user.IsSystemAdmin = true
+	updated, err := s.factorySet.UserRegistry.Update(ctx, *user)
+	if err != nil {
+		s.logAdminAction(ctx, "admin.grant_system_admin", &user.TenantID, user.ID, err)
+		return nil, false, errxtrace.Wrap("failed to grant system-admin flag", err)
+	}
+
+	s.logAdminAction(ctx, "admin.grant_system_admin", &updated.TenantID, updated.ID, nil)
+	return updated, false, nil
+}
+
+// RevokeSystemAdmin clears IsSystemAdmin on the resolved user. When
+// allowZero is false (the default), the registry refuses to revoke the
+// last remaining system admin so an operator can't lock themselves out
+// of every admin surface — the count is checked AND the flag is cleared
+// inside the same transaction (postgres) / under the same registry mutex
+// (memory), so the operation is atomic against concurrent revokes.
+// Idempotent: revoking a user who is not a system admin returns
+// hadFlag=false with no error.
+//
+// allowZero=true bypasses the guard; intended for the deliberate
+// "I'm shutting down the platform" path, exposed on the CLI as
+// `--allow-zero`.
+//
+// safety-override toggle, not control coupling; the alternative would
+// be a sibling RevokeSystemAdminAllowZero method which adds API
+// surface without changing the behaviour story.
+//
+//revive:disable-next-line:flag-parameter — allowZero is a deliberate
+func (s *Service) RevokeSystemAdmin(ctx context.Context, idOrEmail string, allowZero bool) (resultUser *models.User, hadFlag bool, err error) {
+	user, err := s.GetUser(ctx, idOrEmail)
+	if err != nil {
+		s.logAdminAction(ctx, "admin.revoke_system_admin", nil, "", err)
+		return nil, false, err
+	}
+
+	hadFlag, revokeErr := s.factorySet.UserRegistry.RevokeSystemAdminAtomic(ctx, user.ID, allowZero)
+	if revokeErr != nil {
+		s.logAdminAction(ctx, "admin.revoke_system_admin", &user.TenantID, user.ID, revokeErr)
+		if errors.Is(revokeErr, registry.ErrLastSystemAdmin) {
+			// Return the sentinel unwrapped so callers branching on
+			// errors.Is continue to work; also lets the CLI render the
+			// friendly --allow-zero hint without consuming the wrap.
+			return nil, hadFlag, revokeErr
+		}
+		return nil, hadFlag, errxtrace.Wrap("failed to revoke system-admin flag", revokeErr)
+	}
+
+	if !hadFlag {
+		// Idempotent: the user wasn't an admin in the first place.
+		s.logAdminAction(ctx, "admin.revoke_system_admin", &user.TenantID, user.ID, nil)
+		return user, false, nil
+	}
+
+	// Re-fetch the post-update row so the caller can show fresh state.
+	updated, err := s.factorySet.UserRegistry.Get(ctx, user.ID)
+	if err != nil {
+		s.logAdminAction(ctx, "admin.revoke_system_admin", &user.TenantID, user.ID, err)
+		return nil, true, errxtrace.Wrap("failed to re-fetch user after revoke", err)
+	}
+	s.logAdminAction(ctx, "admin.revoke_system_admin", &updated.TenantID, updated.ID, nil)
+	return updated, true, nil
+}
+
+// ListSystemAdmins returns every user with IsSystemAdmin = true. Logs an
+// `admin.list_system_admins` audit row regardless of result count so the
+// trail shows operator-side reads as well as writes.
+func (s *Service) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
+	admins, err := s.factorySet.UserRegistry.ListSystemAdmins(ctx)
+	if err != nil {
+		s.logAdminAction(ctx, "admin.list_system_admins", nil, "", err)
+		return nil, errxtrace.Wrap("failed to list system admins", err)
+	}
+	s.logAdminAction(ctx, "admin.list_system_admins", nil, "", nil)
+	return admins, nil
+}
+
+// logAdminAction writes an admin audit row via the AuditLogRegistry on
+// the factory set. Best-effort: write failures are tolerated because the
+// CLI surfaces them via slog; the operator-visible result is still the
+// CLI's own return value. We don't go through services.AuditService here
+// because the CLI is not built around a *services.AuditService — it
+// holds the factory set directly. Mirrors the row shape that
+// AuditService.LogAdmin would produce (action / user_id / entity_type /
+// entity_id / success / error_message), but without the HTTP fields:
+// CLI invocations have no IP / User-Agent and no impersonation context.
+//
+// Actor convention: the CLI runs out-of-band with no JWT-authenticated
+// operator, so UserID (the actor) is intentionally nil for every CLI
+// invocation — "operator" identity for CLI runs is the OS/host
+// boundary, not a row in this database. The subject of the action is
+// stored as EntityID. When the HTTP admin path lands it will populate
+// UserID from the impersonation JWT's actor claim (#1744 umbrella).
+func (s *Service) logAdminAction(ctx context.Context, action string, tenantID *string, subjectUserID string, opErr error) {
+	if s.factorySet == nil || s.factorySet.AuditLogRegistry == nil {
+		return
+	}
+
+	entry := models.AuditLog{
+		Action:   action,
+		UserID:   nil, // CLI invocations have no authenticated actor — see method doc.
+		TenantID: tenantID,
+		Success:  opErr == nil,
+	}
+	if subjectUserID != "" {
+		subjectType := "user"
+		entry.EntityType = &subjectType
+		entry.EntityID = &subjectUserID
+	}
+	if opErr != nil {
+		msg := opErr.Error()
+		entry.ErrorMessage = &msg
+	}
+
+	if _, createErr := s.factorySet.AuditLogRegistry.Create(ctx, entry); createErr != nil {
+		// Best-effort: the CLI surfaces success/failure of the operation
+		// itself; a missing audit row is recoverable. Log via slog so
+		// operators with audit-completeness monitoring can still notice.
+		slog.Error("Failed to write admin audit log entry",
+			"action", action, "error", createErr)
+	}
 }
 
 // matchesTenantFilters checks if a tenant matches the given filters

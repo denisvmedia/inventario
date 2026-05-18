@@ -9,6 +9,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/appctx"
@@ -225,6 +226,122 @@ func TestUsersMeAPI(t *testing.T) {
 			"/users/me/sessions?keep_id="+keep.ID, nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
+		c.Assert(w.Code, qt.Equals, http.StatusNoContent)
+
+		stored, err := rtReg.Get(c.Context(), keep.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(stored.RevokedAt, qt.IsNil)
+
+		wiped, err := rtReg.Get(c.Context(), wipe.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(wiped.RevokedAt, qt.IsNotNil)
+	})
+
+	// GET /sessions — when the refresh cookie isn't sent (the cookie is
+	// path-scoped to /api/v1/auth and not delivered on /users/me/sessions),
+	// the access token's "rti" claim is the only signal left to flag
+	// is_current. Regression guard for the pre-existing webkit flake on
+	// sessions-and-login-history.spec.ts:15 — without rti the FE finds no
+	// is_current row, sends DELETE without keep_id, and the BE wipes the
+	// caller's own session along with everything else.
+	t.Run("list_sessions_marks_current_via_rti_when_no_cookie", func(t *testing.T) {
+		c := qt.New(t)
+		// Self-contained seeds — earlier subtests have mutated the shared
+		// rtReg (revoked `current` via the explicit-keep-id path) and we
+		// don't want to depend on their ordering.
+		via, err := rtReg.Create(c.Context(), models.RefreshToken{
+			TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+				TenantID: user.TenantID, UserID: user.ID,
+			},
+			TokenHash: "via-rti-current-hash",
+			ExpiresAt: time.Now().Add(time.Hour),
+		})
+		c.Assert(err, qt.IsNil)
+		sibling, err := rtReg.Create(c.Context(), models.RefreshToken{
+			TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+				TenantID: user.TenantID, UserID: user.ID,
+			},
+			TokenHash: "via-rti-sibling-hash",
+			ExpiresAt: time.Now().Add(time.Hour),
+		})
+		c.Assert(err, qt.IsNil)
+
+		rr := chi.NewRouter()
+		rr.Route("/users/me", func(sub chi.Router) {
+			sub.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+					ctx := appctx.WithUser(req.Context(), user)
+					ctx = appctx.WithJWTClaims(ctx, jwt.MapClaims{"rti": via.ID})
+					next.ServeHTTP(w, req.WithContext(ctx))
+				})
+			})
+			apiserver.UsersMe(apiserver.UsersMeParams{
+				RefreshTokenRegistry: rtReg,
+				LoginEventRegistry:   leReg,
+			})(sub)
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/users/me/sessions", nil)
+		// NO refresh cookie — this is the production flow on /users/me/*.
+		w := httptest.NewRecorder()
+		rr.ServeHTTP(w, req)
+		c.Assert(w.Code, qt.Equals, http.StatusOK)
+		var resp apiserver.SessionsListResponse
+		c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
+		var sawCurrent bool
+		for _, s := range resp.Sessions {
+			switch s.ID {
+			case via.ID:
+				c.Assert(s.IsCurrent, qt.IsTrue)
+				sawCurrent = true
+			case sibling.ID:
+				c.Assert(s.IsCurrent, qt.IsFalse)
+			}
+		}
+		c.Assert(sawCurrent, qt.IsTrue)
+	})
+
+	// DELETE /sessions — rti claim is honored as the keep_id fallback
+	// when neither query param nor cookie are present. Defense-in-depth
+	// for direct API callers that aren't the FE.
+	t.Run("revoke_all_other_sessions_falls_back_to_rti", func(t *testing.T) {
+		c := qt.New(t)
+		keep, err := rtReg.Create(c.Context(), models.RefreshToken{
+			TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+				TenantID: user.TenantID, UserID: user.ID,
+			},
+			TokenHash: "keep-via-rti-hash",
+			ExpiresAt: time.Now().Add(time.Hour),
+		})
+		c.Assert(err, qt.IsNil)
+		wipe, err := rtReg.Create(c.Context(), models.RefreshToken{
+			TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+				TenantID: user.TenantID, UserID: user.ID,
+			},
+			TokenHash: "wipe-via-rti-hash",
+			ExpiresAt: time.Now().Add(time.Hour),
+		})
+		c.Assert(err, qt.IsNil)
+
+		rr := chi.NewRouter()
+		rr.Route("/users/me", func(sub chi.Router) {
+			sub.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+					ctx := appctx.WithUser(req.Context(), user)
+					ctx = appctx.WithJWTClaims(ctx, jwt.MapClaims{"rti": keep.ID})
+					next.ServeHTTP(w, req.WithContext(ctx))
+				})
+			})
+			apiserver.UsersMe(apiserver.UsersMeParams{
+				RefreshTokenRegistry: rtReg,
+				LoginEventRegistry:   leReg,
+			})(sub)
+		})
+
+		// NO ?keep_id=, NO refresh cookie — only the rti claim.
+		req := httptest.NewRequest(http.MethodDelete, "/users/me/sessions", nil)
+		w := httptest.NewRecorder()
+		rr.ServeHTTP(w, req)
 		c.Assert(w.Code, qt.Equals, http.StatusNoContent)
 
 		stored, err := rtReg.Get(c.Context(), keep.ID)

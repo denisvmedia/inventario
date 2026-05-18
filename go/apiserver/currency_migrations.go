@@ -794,6 +794,13 @@ func (api *currencyMigrationsAPI) logAuditCurrencyMigration(r *http.Request, use
 	if errMsg != "" {
 		em = &errMsg
 	}
-	api.auditService.LogAuth(r.Context(), action, &userID, &tenantID, success, r, em)
+	api.auditService.LogAuth(r.Context(), services.AuthEvent{
+		Action:   action,
+		UserID:   &userID,
+		TenantID: &tenantID,
+		Success:  success,
+		Request:  r,
+		ErrMsg:   em,
+	})
 	_ = group // group context lives in the entity_id field of a future audit-log expansion; today's AuditLogger signature is auth-shaped
 }

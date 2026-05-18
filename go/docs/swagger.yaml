@@ -1,5 +1,12 @@
 basePath: /api/v1
 definitions:
+  apiserver.AdminPingResponse:
+    properties:
+      ok:
+        type: boolean
+      timestamp:
+        type: string
+    type: object
   apiserver.ChangePasswordRequest:
     properties:
       current_password:
@@ -3679,6 +3686,9 @@ definitions:
         type: string
       is_active:
         type: boolean
+      is_system_admin:
+        description: IsSystemAdmin grants platform-wide admin access (#1745).
+        type: boolean
       last_login_at:
         type: string
       name:
@@ -3739,6 +3749,28 @@ info:
   title: Inventario API
   version: "1.0"
 paths:
+  /admin/_ping:
+    get:
+      description: Returns 200 when the caller has system-admin privileges. Probe
+        endpoint for the admin surface (#1745).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.AdminPingResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - system-admin required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: System-admin ping
+      tags:
+      - admin
   /auth/change-password:
     post:
       consumes:
@@ -7923,11 +7955,13 @@ paths:
     delete:
       description: |-
         Revoke every refresh token for the authenticated user except the one identified as current.
-        Pass `?keep_id=<id>` (the session marked `is_current: true` on GET /users/me/sessions) to
-        preserve the caller's own session — required because the refresh cookie is scoped to
-        /api/v1/auth and isn't sent on this route.
+        Resolution order for the "current" session: `?keep_id=<id>` (recommended; the id the FE
+        rendered with `is_current: true` on GET /users/me/sessions) → access token `rti` claim
+        → refresh cookie hash. When none matches, every session is revoked.
       parameters:
-      - description: Session id to keep alive (the is_current row from GET /users/me/sessions)
+      - description: Session id to keep alive (the is_current row from GET /users/me/sessions).
+          Optional — when omitted the BE falls back to the access token's rti claim,
+          then the refresh cookie.
         in: query
         name: keep_id
         type: string

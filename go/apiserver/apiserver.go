@@ -351,6 +351,12 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// Non-group-scoped routes (system, debug, users, groups management)
 		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
 		r.With(userMiddlewares...).Route("/debug", Debug(params))
+		// Platform-administrative subtree (#1745 foundation; #1744 umbrella).
+		// userMiddlewares populates the JWT user; the RequireSystemAdmin gate
+		// inside Admin() rejects non-admins before any handler runs. Mounting
+		// at the same level as /system keeps the surface tenant-agnostic —
+		// system admins are not scoped to a tenant.
+		r.With(userMiddlewares...).Route("/admin", Admin())
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives
 		// under /groups/{id}/members; a tenant-wide admin surface will be

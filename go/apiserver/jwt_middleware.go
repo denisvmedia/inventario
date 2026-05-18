@@ -190,6 +190,10 @@ func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry, blackli
 
 			// Add user to context
 			ctx := appctx.WithUser(r.Context(), user)
+			// Plumb the validated JWT claims so downstream helpers
+			// (audit logging, impersonation #1750) can read `imp` /
+			// `impersonated_by` without re-parsing the bearer token.
+			ctx = appctx.WithJWTClaims(ctx, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
