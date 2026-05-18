@@ -1029,6 +1029,77 @@ type TenantRegistry interface {
 
 	// GetByDomain returns a tenant by its domain
 	GetByDomain(ctx context.Context, domain string) (*models.Tenant, error)
+
+	// ListAdmin returns a paginated, filtered, and sorted listing of every
+	// tenant in the deployment alongside per-tenant computed counts
+	// (user_count, group_count). The endpoint behind this method
+	// (/api/v1/admin/tenants — #1746) crosses tenants by design, so
+	// implementations MUST bypass tenant-isolation RLS. The postgres
+	// TenantRegistry already runs against a NonRLSRepository (the tenants
+	// table has no RLS enabled — it IS the tenant boundary), so no
+	// additional bypass is needed there; user_count + group_count are
+	// computed via correlated subqueries on the users / location_groups
+	// tables, which use `SET LOCAL row_security = off` as
+	// defense-in-depth on the join transaction so a future schema change
+	// that enables RLS on those tables doesn't silently shrink the count
+	// to zero. Memory just walks the in-memory stores.
+	//
+	// Total is the count before LIMIT/OFFSET is applied.
+	ListAdmin(ctx context.Context, opts AdminTenantListOptions) (items []*AdminTenantListItem, total int, err error)
+}
+
+// AdminTenantSortField names the columns the admin tenant listing
+// endpoint understands for sorting. Names are part of the public API
+// surface; the FE codegen treats them as opaque strings sent in `?sort`.
+type AdminTenantSortField string
+
+const (
+	AdminTenantSortName      AdminTenantSortField = "name"
+	AdminTenantSortSlug      AdminTenantSortField = "slug"
+	AdminTenantSortCreatedAt AdminTenantSortField = "created_at"
+	AdminTenantSortStatus    AdminTenantSortField = "status"
+)
+
+// IsValid reports whether s is a known admin tenant sort field. Callers
+// should fall back to AdminTenantSortName on invalid input rather than
+// 4xx — the FE may pass an unknown sort during a multi-version rollout.
+func (s AdminTenantSortField) IsValid() bool {
+	switch s {
+	case AdminTenantSortName, AdminTenantSortSlug, AdminTenantSortCreatedAt, AdminTenantSortStatus:
+		return true
+	}
+	return false
+}
+
+// AdminTenantListOptions narrows the result of TenantRegistry.ListAdmin.
+// Page/PerPage are 1-based; PerPage <= 0 falls back to a sensible default
+// at the registry layer, and the handler caps it at 100.
+type AdminTenantListOptions struct {
+	// Page is the 1-based page index. Defaults to 1 when <= 0.
+	Page int
+	// PerPage is the requested page size. Defaults to 50 when <= 0.
+	PerPage int
+	// Query, when non-empty, narrows the result to tenants whose name,
+	// slug, or domain ILIKE %query%. The match is case-insensitive and
+	// uses substring semantics so operators can search by partial slug
+	// or company-name prefix.
+	Query string
+	// SortField is the column to sort by. Defaults to AdminTenantSortName
+	// when empty or invalid.
+	SortField AdminTenantSortField
+	// SortDesc reverses the natural order of the chosen field. Default
+	// is false (ascending) so the FE sends `-name` style strings and the
+	// handler splits the leading `-` into this bool.
+	SortDesc bool
+}
+
+// AdminTenantListItem is the row shape returned by
+// TenantRegistry.ListAdmin: the tenant row plus the computed cross-table
+// counts the admin listing UI needs to render at a glance.
+type AdminTenantListItem struct {
+	Tenant     *models.Tenant
+	UserCount  int
+	GroupCount int
 }
 
 // AuditLogRegistry manages security-relevant event records for compliance and debugging.
@@ -1362,6 +1433,76 @@ type UserRegistry interface {
 	//
 	//revive:disable-next-line:flag-parameter
 	RevokeSystemAdminAtomic(ctx context.Context, userID string, allowZero bool) (hadFlag bool, err error)
+
+	// ListAdminByTenant returns a paginated, filtered, and sorted listing
+	// of every user in the given tenant alongside per-row group membership
+	// counts. The endpoint behind this method
+	// (/api/v1/admin/tenants/{tenantID}/users — #1746) crosses tenants by
+	// design, so implementations MUST bypass tenant-isolation RLS — the
+	// postgres UserRegistry uses NonRLSRepository, which is already cross
+	// -tenant, and explicitly `SET LOCAL row_security = off` on the join
+	// tx as defense-in-depth. Total is the count before LIMIT/OFFSET.
+	ListAdminByTenant(ctx context.Context, tenantID string, opts AdminUserListOptions) (items []*AdminUserListItem, total int, err error)
+
+	// CountSessionsByUser returns the number of unrevoked, unexpired
+	// refresh_tokens rows belonging to the user. Backs the
+	// `active_session_count` field on the admin user-detail endpoint
+	// (#1746). Implementations cross tenants intentionally so the admin
+	// surface can see sessions for users in any tenant.
+	CountSessionsByUser(ctx context.Context, userID string) (int, error)
+}
+
+// AdminUserSortField names the columns the admin user listing endpoint
+// understands for sorting. Names are part of the public API surface; the
+// FE codegen treats them as opaque strings sent in `?sort`.
+type AdminUserSortField string
+
+const (
+	AdminUserSortEmail       AdminUserSortField = "email"
+	AdminUserSortName        AdminUserSortField = "name"
+	AdminUserSortCreatedAt   AdminUserSortField = "created_at"
+	AdminUserSortLastLoginAt AdminUserSortField = "last_login_at"
+	AdminUserSortIsActive    AdminUserSortField = "is_active"
+)
+
+// IsValid reports whether s is a known admin user sort field. Callers
+// should fall back to AdminUserSortEmail on invalid input rather than
+// 4xx — the FE may pass an unknown sort during a multi-version rollout.
+func (s AdminUserSortField) IsValid() bool {
+	switch s {
+	case AdminUserSortEmail, AdminUserSortName, AdminUserSortCreatedAt, AdminUserSortLastLoginAt, AdminUserSortIsActive:
+		return true
+	}
+	return false
+}
+
+// AdminUserListOptions narrows the result of UserRegistry.ListAdminByTenant.
+// Page/PerPage are 1-based; PerPage <= 0 falls back to a sensible default
+// at the registry layer, and the handler caps it at 100.
+type AdminUserListOptions struct {
+	// Page is the 1-based page index. Defaults to 1 when <= 0.
+	Page int
+	// PerPage is the requested page size. Defaults to 50 when <= 0.
+	PerPage int
+	// Query, when non-empty, narrows the result to users whose email or
+	// name ILIKE %query%. Case-insensitive substring match.
+	Query string
+	// IsActive is tri-state. Nil means "no filter"; a non-nil value
+	// restricts to rows whose is_active column equals *IsActive.
+	IsActive *bool
+	// SortField is the column to sort by. Defaults to AdminUserSortEmail
+	// when empty or invalid.
+	SortField AdminUserSortField
+	// SortDesc reverses the natural order of the chosen field.
+	SortDesc bool
+}
+
+// AdminUserListItem is the row shape returned by
+// UserRegistry.ListAdminByTenant: the user row plus the computed group
+// membership count the admin listing UI surfaces at a glance.
+type AdminUserListItem struct {
+	User                 *models.User
+	GroupMembershipCount int
 }
 
 type RefreshTokenRegistry interface {
