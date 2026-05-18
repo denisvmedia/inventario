@@ -126,7 +126,7 @@ func TestAuditService_LogAdmin_PersistsActorSubjectAndImpersonation(t *testing.T
 	req.Header.Set("X-Real-IP", "10.0.0.5")
 	req.Header.Set("User-Agent", "inventario-admin/1.0")
 
-	svc.LogAdmin(ctx, "admin.grant_system_admin", &actorID, &tenantID, &subjectType, &subjectID, req, nil)
+	svc.LogAdmin(ctx, "admin.grant_system_admin", &actorID, &tenantID, &subjectType, &subjectID, true, req, nil)
 
 	entries, err := reg.List(ctx)
 	c.Assert(err, qt.IsNil)
@@ -164,7 +164,7 @@ func TestAuditService_LogAdmin_NoImpersonationWithoutImpClaim(t *testing.T) {
 
 	actor := "alice"
 	tenant := "tenant-acme"
-	svc.LogAdmin(ctx, "admin.list_system_admins", &actor, &tenant, nil, nil, nil, nil)
+	svc.LogAdmin(ctx, "admin.list_system_admins", &actor, &tenant, nil, nil, true, nil, nil)
 
 	entries, err := reg.List(ctx)
 	c.Assert(err, qt.IsNil)
@@ -182,7 +182,7 @@ func TestAuditService_LogAdmin_FailureRecordsErrorMessage(t *testing.T) {
 	actor := "operator-1"
 	tenant := "tenant-acme"
 	errMsg := "cannot remove the last system admin"
-	svc.LogAdmin(ctx, "admin.revoke_system_admin", &actor, &tenant, nil, nil, nil, &errMsg)
+	svc.LogAdmin(ctx, "admin.revoke_system_admin", &actor, &tenant, nil, nil, false, nil, &errMsg)
 
 	entries, err := reg.List(ctx)
 	c.Assert(err, qt.IsNil)

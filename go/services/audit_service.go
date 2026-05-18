@@ -19,9 +19,12 @@ type AuditLogger interface {
 	LogAuth(ctx context.Context, action string, userID, tenantID *string, success bool, r *http.Request, errMsg *string)
 
 	// LogAdmin records a platform-administrative event (grant/revoke
-	// system-admin, future impersonation start/end, etc.). The call is
+	// system-admin, future impersonation start/end). success is explicit
+	// (matching LogAuth) so callers can record a *failed* admin action
+	// without inventing an error message — e.g. last-admin guard rejected
+	// the revoke before any handler error existed. The call is
 	// best-effort like LogAuth: errors are logged but do not propagate.
-	LogAdmin(ctx context.Context, action string, actorID, tenantID, subjectType, subjectID *string, r *http.Request, errMsg *string)
+	LogAdmin(ctx context.Context, action string, actorID, tenantID, subjectType, subjectID *string, success bool, r *http.Request, errMsg *string)
 }
 
 // AuditService persists security-relevant events via the AuditLogRegistry.
@@ -77,7 +80,7 @@ func (s *AuditService) LogAuth(ctx context.Context, action string, userID, tenan
 // The helper is best-effort: like LogAuth, write failures are logged via
 // slog but not returned to the caller so admin flows are never blocked by
 // audit-log write blips.
-func (s *AuditService) LogAdmin(ctx context.Context, action string, actorID, tenantID, subjectType, subjectID *string, r *http.Request, errMsg *string) {
+func (s *AuditService) LogAdmin(ctx context.Context, action string, actorID, tenantID, subjectType, subjectID *string, success bool, r *http.Request, errMsg *string) {
 	if s == nil || s.auditRegistry == nil {
 		return
 	}
@@ -88,7 +91,7 @@ func (s *AuditService) LogAdmin(ctx context.Context, action string, actorID, ten
 		TenantID:       tenantID,
 		EntityType:     subjectType,
 		EntityID:       subjectID,
-		Success:        errMsg == nil,
+		Success:        success,
 		ErrorMessage:   errMsg,
 		ImpersonatedBy: impersonatorFromContext(ctx),
 	}
