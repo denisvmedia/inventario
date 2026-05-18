@@ -191,23 +191,36 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Issue a short-lived access token with a unique JTI for revocation support.
-	// The new token's iat claim is based on the current time and is intended to
-	// work with iat-based blacklist checks in the JWT middleware, without
-	// requiring explicit removal of any existing blacklist entry in typical cases.
-	accessTokenString, _, err := api.issueAccessToken(user)
+	// Persist the long-lived refresh token first so the access token can
+	// carry its row id as the "rti" claim — needed by /users/me/sessions
+	// to flag the caller's own session when the refresh cookie isn't sent
+	// (the cookie is path-scoped to /api/v1/auth).
+	//
+	// The cookie is NOT set yet: if issueAccessToken fails below we roll
+	// back the just-created refresh row instead of leaving the client
+	// with a valid session cookie alongside a 500 response (#1745 ghost-
+	// session avoidance).
+	rti, rawRefreshToken, err := api.persistRefreshToken(r.Context(), r, user)
 	if err != nil {
-		slog.Error("Failed to generate access token", "user_id", user.ID, "error", err)
-		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
-		return
-	}
-
-	// Issue and persist a long-lived refresh token.
-	if err := api.issueRefreshTokenCookie(w, r, user); err != nil {
 		slog.Error("Failed to issue refresh token", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return
 	}
+
+	// Issue a short-lived access token with a unique JTI for revocation support.
+	// The new token's iat claim is based on the current time and is intended to
+	// work with iat-based blacklist checks in the JWT middleware, without
+	// requiring explicit removal of any existing blacklist entry in typical cases.
+	accessTokenString, _, err := api.issueAccessToken(user, rti)
+	if err != nil {
+		slog.Error("Failed to generate access token", "user_id", user.ID, "error", err)
+		api.rollbackRefreshToken(r.Context(), user.ID, rti)
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
+	// Both tokens minted successfully — now safe to write the cookie.
+	api.setRefreshTokenCookie(w, r, rawRefreshToken)
 
 	// Update last login timestamp (best-effort).
 	now := time.Now()
@@ -289,7 +302,9 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	accessTokenString, _, err := api.issueAccessToken(user)
+	// Carry the refreshed-from row id as "rti" so /users/me/sessions can
+	// identify the caller's own session without the refresh cookie.
+	accessTokenString, _, err := api.issueAccessToken(user, refreshToken.ID)
 	if err != nil {
 		slog.Error("Failed to generate access token on refresh", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
@@ -868,7 +883,14 @@ func (api *AuthAPI) logAuth(ctx context.Context, action string, userID, tenantID
 	if api.auditService == nil {
 		return
 	}
-	api.auditService.LogAuth(ctx, action, userID, tenantID, success, r, errMsg)
+	api.auditService.LogAuth(ctx, services.AuthEvent{
+		Action:   action,
+		UserID:   userID,
+		TenantID: tenantID,
+		Success:  success,
+		Request:  r,
+		ErrMsg:   errMsg,
+	})
 }
 
 // recordLoginEvent persists a single login_events row (issue #1379). It is
@@ -913,29 +935,56 @@ func (api *AuthAPI) recordLoginEvent(ctx context.Context, tenantID, email string
 
 // issueAccessToken creates and signs a short-lived JWT with a unique JTI.
 // Returns the signed token string, its expiry time, and any error.
-func (api *AuthAPI) issueAccessToken(user *models.User) (string, time.Time, error) {
+//
+// rti, when non-empty, pins the access token to the refresh-token row
+// it was minted from. Routes that need to identify "the caller's own
+// session" without the refresh cookie (which is path-scoped to
+// /api/v1/auth and not sent on /api/v1/users/me/sessions) can read the
+// claim from the validated JWT. Pass "" when no refresh-token row exists
+// yet — the claim is then omitted.
+//
+// The is_system_admin claim mirrors models.User.IsSystemAdmin so the
+// RequireSystemAdmin middleware (#1745) can gate /api/v1/admin/* without
+// re-fetching the user — though in practice JWTMiddleware also re-loads
+// the user from the DB on every request, so the claim is informational
+// and the user struct in context is authoritative. The refresh path
+// re-loads the user before reissuing, so revoking the flag invalidates
+// active access tokens within accessTokenExpiration (15 min).
+func (api *AuthAPI) issueAccessToken(user *models.User, rti string) (string, time.Time, error) {
 	expiresAt := time.Now().Add(accessTokenExpiration)
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"jti":     uuid.New().String(),
-		"user_id": user.ID,
-		"exp":     expiresAt.Unix(),
-		"iat":     time.Now().Unix(),
-	})
+	claims := jwt.MapClaims{
+		"jti":             uuid.New().String(),
+		"user_id":         user.ID,
+		"is_system_admin": user.IsSystemAdmin,
+		"exp":             expiresAt.Unix(),
+		"iat":             time.Now().Unix(),
+	}
+	if rti != "" {
+		claims["rti"] = rti
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(api.jwtSecret)
 	return tokenString, expiresAt, err
 }
 
-// issueRefreshTokenCookie generates a refresh token, stores it in the database, and
-// sets it as an httpOnly cookie on the response.
-// If no refreshTokenRegistry is configured, the cookie is skipped.
-func (api *AuthAPI) issueRefreshTokenCookie(w http.ResponseWriter, r *http.Request, user *models.User) error {
+// persistRefreshToken stores a fresh refresh-token row in the database
+// WITHOUT writing the Set-Cookie header yet. Splitting the persist step
+// from the cookie write lets login() mint the access token in between:
+// if access mint fails the caller revokes the row (see revokeRefreshTokenByID)
+// instead of leaving the client with a "ghost session" — a valid refresh
+// cookie + DB row alongside a 500 response.
+//
+// Returns the persisted row id (for use as the access token's "rti" claim,
+// see issueAccessToken) and the raw token string (to be written as a cookie
+// by setRefreshTokenCookie). Both are empty when no registry is configured.
+func (api *AuthAPI) persistRefreshToken(ctx context.Context, r *http.Request, user *models.User) (id, rawToken string, err error) {
 	if api.refreshTokenRegistry == nil {
-		return nil
+		return "", "", nil
 	}
 
-	rawToken, tokenHash, err := models.GenerateRefreshToken()
+	raw, tokenHash, err := models.GenerateRefreshToken()
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	rt := models.RefreshToken{
@@ -949,10 +998,21 @@ func (api *AuthAPI) issueRefreshTokenCookie(w http.ResponseWriter, r *http.Reque
 		UserAgent: r.UserAgent(),
 	}
 
-	if _, err := api.refreshTokenRegistry.Create(r.Context(), rt); err != nil {
-		return err
+	created, err := api.refreshTokenRegistry.Create(ctx, rt)
+	if err != nil {
+		return "", "", err
 	}
+	return created.ID, raw, nil
+}
 
+// setRefreshTokenCookie writes the refresh-token cookie to the response.
+// Pair with persistRefreshToken: call setRefreshTokenCookie only after
+// the access token has been minted successfully so a failure on the
+// access path doesn't leak a valid cookie to the client.
+func (api *AuthAPI) setRefreshTokenCookie(w http.ResponseWriter, r *http.Request, rawToken string) {
+	if rawToken == "" {
+		return
+	}
 	// Set Secure flag only when the connection is already over HTTPS to allow
 	// local development over plain HTTP.
 	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
@@ -967,7 +1027,21 @@ func (api *AuthAPI) issueRefreshTokenCookie(w http.ResponseWriter, r *http.Reque
 		Secure:   secureCookie,
 		SameSite: http.SameSiteStrictMode,
 	})
-	return nil
+}
+
+// rollbackRefreshToken revokes a refresh-token row that was persisted
+// in preparation for a login response that will not be sent — e.g. the
+// access token mint failed between persistRefreshToken and the response
+// write. Best-effort: a failure here is logged but the outer error
+// reaches the caller unchanged.
+func (api *AuthAPI) rollbackRefreshToken(ctx context.Context, userID, rowID string) {
+	if api.refreshTokenRegistry == nil || rowID == "" {
+		return
+	}
+	if err := api.refreshTokenRegistry.RevokeByID(ctx, userID, rowID); err != nil {
+		slog.Error("Failed to roll back refresh token after access mint failure",
+			"user_id", userID, "row_id", rowID, "error", err)
+	}
 }
 
 // writeLoginResponse encodes and writes a LoginResponse to w.

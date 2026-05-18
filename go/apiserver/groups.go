@@ -601,7 +601,14 @@ func (api *groupsAPI) logGroupDeletion(r *http.Request, user *models.User, group
 		errPtr = &msg
 	}
 	tenantID := user.TenantID
-	api.auditService.LogAuth(r.Context(), "group_delete", &user.ID, &tenantID, success, r, errPtr)
+	api.auditService.LogAuth(r.Context(), services.AuthEvent{
+		Action:   "group_delete",
+		UserID:   &user.ID,
+		TenantID: &tenantID,
+		Success:  success,
+		Request:  r,
+		ErrMsg:   errPtr,
+	})
 }
 
 // listMembers lists all members of a group with their resolved user data.

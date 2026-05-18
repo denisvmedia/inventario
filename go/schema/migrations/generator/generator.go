@@ -43,7 +43,7 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 	}
 
 	// Connect to database first
-	conn, err := dbschema.ConnectToDatabase(m.dbURL)
+	conn, err := dbschema.ConnectToDatabase(ctx, m.dbURL)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to connect to database", err)
 	}
@@ -64,7 +64,7 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 		CompareOptions: config.WithAdditionalIgnoredExtensions("btree_gin", "pg_trgm", "pgcrypto"),
 	}
 
-	files, err := generator.GenerateMigration(opts)
+	files, err := generator.GenerateMigration(ctx, opts)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to generate migration files", err)
 	}

@@ -112,3 +112,77 @@ func (r *UserRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*mo
 
 	return tenantUsers, nil
 }
+
+// ListSystemAdmins returns every user with is_system_admin = true across
+// all tenants. Mirrors the postgres impl which is backed by a partial
+// index; memory just filters the full list.
+func (r *UserRegistry) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
+	users, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var admins []*models.User
+	for _, user := range users {
+		if user.IsSystemAdmin {
+			admins = append(admins, user)
+		}
+	}
+	return admins, nil
+}
+
+// RevokeSystemAdminAtomic clears IsSystemAdmin on the target user while
+// holding the registry's write mutex, which serialises the count check
+// and the flag flip the same way postgres serialises them under
+// pg_advisory_xact_lock. The memory backend has no transactions, so
+// holding the registry lock for the duration of read+check+write is the
+// equivalent boundary. Idempotent: a non-admin user returns (false, nil).
+//
+//revive:disable-next-line:flag-parameter
+func (r *UserRegistry) RevokeSystemAdminAtomic(_ context.Context, userID string, allowZero bool) (hadFlag bool, err error) {
+	if userID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	userPtr, ok := r.items.Get(userID)
+	if !ok || userPtr == nil {
+		return false, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+			"entity_type", "User",
+			"entity_id", userID,
+		))
+	}
+
+	if !userPtr.IsSystemAdmin {
+		// Idempotent — already non-admin.
+		return false, nil
+	}
+
+	if !allowZero {
+		// Count admins under the same lock. Iterating the live items
+		// map is fine because the lock prevents concurrent mutation.
+		count := 0
+		for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+			u := pair.Value
+			if u != nil && u.IsSystemAdmin {
+				count++
+			}
+		}
+		if count <= 1 {
+			return true, errxtrace.Classify(registry.ErrLastSystemAdmin, errx.Attrs(
+				"user_id", userID,
+			))
+		}
+	}
+
+	// Copy-on-write — the items map stores pointers, so a direct
+	// mutation would leak through to callers holding the pointer.
+	updated := *userPtr
+	updated.IsSystemAdmin = false
+	updated.UpdatedAt = time.Now().UTC()
+	r.items.Set(userID, &updated)
+
+	return true, nil
+}

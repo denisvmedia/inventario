@@ -34,7 +34,7 @@ func TestSchemaDriftDetection(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Connect to database and read current schema
-	conn, err := dbschema.ConnectToDatabase(dbURL)
+	conn, err := dbschema.ConnectToDatabase(t.Context(), dbURL)
 	c.Assert(err, qt.IsNil)
 	defer conn.Close()
 
@@ -95,7 +95,7 @@ func TestMigrationFilesSyncWithAnnotations(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Read the database schema after migration
-	conn, err := dbschema.ConnectToDatabase(testDBURL)
+	conn, err := dbschema.ConnectToDatabase(t.Context(), testDBURL)
 	c.Assert(err, qt.IsNil)
 	defer conn.Close()
 
