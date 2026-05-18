@@ -199,28 +199,30 @@ func (api *usersMeAPI) revokeSession(w http.ResponseWriter, r *http.Request) {
 //
 // The keep-id is resolved in this order (first match wins):
 //  1. `?keep_id=<id>` query parameter — the FE supplies the ID it
-//     rendered with `is_current: true`. Required because the refresh
-//     cookie is path-scoped to /api/v1/auth and therefore NOT sent on
-//     this route; without an explicit signal the BE has no way to tell
-//     which session is the caller's own and would wipe everything.
-//     The ID is validated against the user's active sessions; an ID
-//     that doesn't belong to the user is silently ignored (falls
-//     through to the cookie path / wipe-all).
-//  2. The refresh cookie's hash, retained as a fallback for clients
-//     that scope their cookie wider or call this route directly.
+//     rendered with `is_current: true`. Recommended because it's the
+//     explicit signal the caller already has; the ID is validated
+//     against the user's active sessions, and an ID that doesn't
+//     belong to the user is silently ignored (falls through to the
+//     fallbacks below).
+//  2. The access token's "rti" claim (the refresh-token row id this
+//     access token was minted from). Lets direct API callers omit
+//     ?keep_id= entirely — the BE pulls the same id off the validated
+//     JWT that the FE would have read from listSessions.
+//  3. The refresh cookie's hash, retained for tokens minted before
+//     "rti" landed or for callers that scope their cookie wider.
 //
-// When neither produces a match we still revoke everything — the
-// caller has already proven they hold a valid access token, so wiping
-// all sessions is the correct outcome for that (legitimate but rare)
-// shape.
+// When none of the three produces a match we still revoke everything —
+// the caller has already proven they hold a valid access token, so
+// wiping all sessions is the correct outcome for that (legitimate but
+// rare) shape.
 // @Summary Revoke all other sessions
 // @Description Revoke every refresh token for the authenticated user except the one identified as current.
-// @Description Pass `?keep_id=<id>` (the session marked `is_current: true` on GET /users/me/sessions) to
-// @Description preserve the caller's own session — required because the refresh cookie is scoped to
-// @Description /api/v1/auth and isn't sent on this route.
+// @Description Resolution order for the "current" session: `?keep_id=<id>` (recommended; the id the FE
+// @Description rendered with `is_current: true` on GET /users/me/sessions) → access token `rti` claim
+// @Description → refresh cookie hash. When none matches, every session is revoked.
 // @Tags users-me
 // @Produce json
-// @Param keep_id query string false "Session id to keep alive (the is_current row from GET /users/me/sessions)"
+// @Param keep_id query string false "Session id to keep alive (the is_current row from GET /users/me/sessions). Optional — when omitted the BE falls back to the access token's rti claim, then the refresh cookie."
 // @Success 204 {string} string "No Content"
 // @Failure 401 {string} string "Unauthorized"
 // @Router /users/me/sessions [delete]

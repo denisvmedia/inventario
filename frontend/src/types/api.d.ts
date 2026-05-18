@@ -6773,14 +6773,14 @@ export type paths = {
         /**
          * Revoke all other sessions
          * @description Revoke every refresh token for the authenticated user except the one identified as current.
-         *     Pass `?keep_id=<id>` (the session marked `is_current: true` on GET /users/me/sessions) to
-         *     preserve the caller's own session — required because the refresh cookie is scoped to
-         *     /api/v1/auth and isn't sent on this route.
+         *     Resolution order for the "current" session: `?keep_id=<id>` (recommended; the id the FE
+         *     rendered with `is_current: true` on GET /users/me/sessions) → access token `rti` claim
+         *     → refresh cookie hash. When none matches, every session is revoked.
          */
         delete: {
             parameters: {
                 query?: {
-                    /** @description Session id to keep alive (the is_current row from GET /users/me/sessions) */
+                    /** @description Session id to keep alive (the is_current row from GET /users/me/sessions). Optional — when omitted the BE falls back to the access token's rti claim, then the refresh cookie. */
                     keep_id?: string;
                 };
                 header?: never;

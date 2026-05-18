@@ -29,6 +29,13 @@ var (
 	// JSON:API code "admin.forbidden" so the FE can render specific copy
 	// instead of the generic "permission denied" toast (#1745).
 	ErrNotSystemAdmin = errx.NewSentinel("system administrator privileges required")
+	// ErrMissingUserContext fires when a handler runs without an
+	// authenticated user in context — almost always a middleware-wiring
+	// bug (JWTMiddleware was bypassed). Distinct from ErrNotSystemAdmin
+	// because the right diagnosis is "not authenticated", not "not
+	// authorized for admin"; using the auth sentinel makes the 401 path
+	// readable in logs and avoids misleading clients with admin copy.
+	ErrMissingUserContext = errx.NewSentinel("authenticated user context required")
 )
 
 func NewNotFoundError(err error) jsonapi.Error {

@@ -31,9 +31,12 @@ func RequireSystemAdmin(next http.Handler) http.Handler {
 			// the middleware chain is wired wrong — fail closed with 401
 			// rather than 403 so the operator notices the misconfiguration
 			// (a missing user is "not authenticated", not "not authorized").
+			// Use ErrMissingUserContext rather than ErrNotSystemAdmin so the
+			// 401 path doesn't surface "admin privileges required" copy for
+			// what is fundamentally an auth-wiring problem.
 			slog.Warn("RequireSystemAdmin: no user in context — middleware chain misconfigured",
 				"path", r.URL.Path)
-			_ = unauthorizedError(w, r, ErrNotSystemAdmin)
+			_ = unauthorizedError(w, r, ErrMissingUserContext)
 			return
 		}
 		if !user.IsSystemAdmin {
