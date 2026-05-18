@@ -29,18 +29,14 @@ type adminUsersAPI struct {
 // defense-in-depth.
 //
 // @Summary List users for a tenant (admin)
-// @Description Returns every user in the target tenant with computed
-// group_membership_count. Tri-state ?is_active filter (`true`/`false`/
-// unset). Pagination via ?page&per_page; full-text search via ?q on
-// email/name; sort via ?sort=<field> with optional `-` prefix or
-// explicit ?order=.
+// @Description Returns users in the target tenant with computed group_membership_count. Tri-state ?is_active. Pagination via ?page&per_page; ?q matches email/name (ILIKE); ?sort=<field> with `-` prefix or ?order=asc|desc.
 // @Tags admin
 // @Produce json-api
 // @Param tenantID path string true "Tenant ID"
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
 // @Param q query string false "Search term — ILIKE match on email/name"
-// @Param is_active query string false "Filter by active flag: true|false (unset = no filter)"
+// @Param is_active query boolean false "Tri-state active-flag filter: true (active only), false (inactive only), or omit the param entirely for no filter. Unknown values are ignored."
 // @Param sort query string false "Sort field: email|name|created_at|last_login_at|is_active (prefix with - for desc)"
 // @Param order query string false "Sort direction override: asc|desc (wins over `-` prefix)"
 // @Success 200 {object} jsonapi.AdminUsersResponse "OK"
@@ -99,9 +95,7 @@ func (api *adminUsersAPI) listTenantUsers(w http.ResponseWriter, r *http.Request
 // so the FE doesn't N+1 the group registry per row.
 //
 // @Summary Get user (admin)
-// @Description Returns the user detail row across all tenants:
-// identity, is_active, last_login_at, group memberships and active
-// session count. No password hash is returned.
+// @Description Returns the user detail across tenants: identity, is_active, last_login_at, group memberships (group_id, group_slug, group_name, role, joined_at), and active_session_count from unrevoked refresh tokens. No password hash.
 // @Tags admin
 // @Produce json-api
 // @Param userID path string true "User ID"

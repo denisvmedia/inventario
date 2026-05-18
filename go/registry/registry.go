@@ -1045,6 +1045,16 @@ type TenantRegistry interface {
 	//
 	// Total is the count before LIMIT/OFFSET is applied.
 	ListAdmin(ctx context.Context, opts AdminTenantListOptions) (items []*AdminTenantListItem, total int, err error)
+
+	// GetAdmin returns a single tenant row with the same computed counts
+	// the listing surfaces (user_count, group_count). Used by the
+	// `/api/v1/admin/tenants/{tenantID}` detail handler — sharing the
+	// SET LOCAL row_security = off fail-loud guard with ListAdmin keeps
+	// the count semantics identical between list and detail, and avoids
+	// the previous "load every row and call len()" implementation that
+	// scaled linearly with tenant size. Returns ErrNotFound when the
+	// tenant id doesn't exist.
+	GetAdmin(ctx context.Context, tenantID string) (*AdminTenantListItem, error)
 }
 
 // AdminTenantSortField names the columns the admin tenant listing

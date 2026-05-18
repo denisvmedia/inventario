@@ -173,20 +173,31 @@ func filterUsers(users []*models.User, query string, isActive *bool) []*models.U
 // sortUsers sorts the slice in place by the requested column. Unknown
 // sort fields fall back to email asc with id as the tiebreaker.
 //
+// Descending is implemented by swapping operands (a vs b) into
+// userLess rather than negating the boolean — `!less` would violate
+// strict-weak-ordering for equal keys (both `less(a,b)` and `less(b,a)`
+// would return true). With operand-swap, equal keys produce false in
+// both directions, which is what sort.SliceStable expects.
+//
 //revive:disable-next-line:flag-parameter // SortDesc is the natural shape for the public AdminUserListOptions; threading it down keeps the call site readable.
 func sortUsers(users []*models.User, field registry.AdminUserSortField, desc bool) {
 	if !field.IsValid() {
 		field = registry.AdminUserSortEmail
 	}
 	sort.SliceStable(users, func(i, j int) bool {
-		less := userLess(users[i], users[j], field)
 		if desc {
-			return !less
+			return userLess(users[j], users[i], field)
 		}
-		return less
+		return userLess(users[i], users[j], field)
 	})
 }
 
+// userLess is a strict less-than: returns true only when a is strictly
+// less than b under the chosen field. Equal keys fall through to the
+// id tiebreaker. Postgres semantics drive NULL placement on
+// `last_login_at`: under ASC, postgres treats NULLs as greater than
+// any non-null value (NULLS LAST is the default for ASC), so a nil
+// LastLoginAt sorts AFTER any concrete timestamp.
 func userLess(a, b *models.User, field registry.AdminUserSortField) bool {
 	switch field {
 	case registry.AdminUserSortName:
@@ -198,18 +209,29 @@ func userLess(a, b *models.User, field registry.AdminUserSortField) bool {
 			return a.CreatedAt.Before(b.CreatedAt)
 		}
 	case registry.AdminUserSortLastLoginAt:
-		at := zeroTimeIfNil(a.LastLoginAt)
-		bt := zeroTimeIfNil(b.LastLoginAt)
-		if !at.Equal(bt) {
-			return at.Before(bt)
+		// Postgres ASC NULLS LAST: a nil LastLoginAt is "greater" than
+		// any concrete value, so it sorts AFTER under ASC and BEFORE
+		// under DESC (sortUsers achieves the DESC flip via
+		// operand-swap, so the comparator only needs to encode ASC).
+		switch {
+		case a.LastLoginAt == nil && b.LastLoginAt == nil:
+			// fall through to id tiebreaker
+		case a.LastLoginAt == nil:
+			return false // nil > non-nil under ASC NULLS LAST → not less
+		case b.LastLoginAt == nil:
+			return true // non-nil < nil under ASC NULLS LAST → less
+		default:
+			if !a.LastLoginAt.Equal(*b.LastLoginAt) {
+				return a.LastLoginAt.Before(*b.LastLoginAt)
+			}
 		}
 	case registry.AdminUserSortIsActive:
 		if a.IsActive != b.IsActive {
-			// false < true under ascending — matches postgres
+			// false < true under ASC — matches postgres
 			// `ORDER BY u.is_active ASC` where false sorts first.
 			// Inactive users surface at the top of the ASC listing so
-			// operators can triage them; the FE can flip to DESC for
-			// active-first.
+			// operators can triage them; the FE flips to DESC for
+			// active-first via operand-swap in sortUsers.
 			return !a.IsActive && b.IsActive
 		}
 	default:
@@ -218,13 +240,6 @@ func userLess(a, b *models.User, field registry.AdminUserSortField) bool {
 		}
 	}
 	return a.ID < b.ID
-}
-
-func zeroTimeIfNil(t *time.Time) time.Time {
-	if t == nil {
-		return time.Time{}
-	}
-	return *t
 }
 
 func (r *UserRegistry) countMembershipsForUser(ctx context.Context, tenantID, userID string) int {

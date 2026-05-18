@@ -68,7 +68,7 @@ export type paths = {
         };
         /**
          * List tenants (admin)
-         * @description Returns every tenant in the deployment with computed
+         * @description Returns every tenant with computed user_count and group_count. Pagination via ?page&per_page; ?q matches name/slug/domain (ILIKE); ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
          */
         get: {
             parameters: {
@@ -136,7 +136,7 @@ export type paths = {
         };
         /**
          * Get tenant (admin)
-         * @description Returns the tenant row with computed user_count and
+         * @description Returns the tenant row with computed user_count and group_count. No nested users or groups list — those live behind GET /admin/tenants/{tenantID}/users (#1746).
          */
         get: {
             parameters: {
@@ -205,7 +205,7 @@ export type paths = {
         };
         /**
          * List users for a tenant (admin)
-         * @description Returns every user in the target tenant with computed
+         * @description Returns users in the target tenant with computed group_membership_count. Tri-state ?is_active. Pagination via ?page&per_page; ?q matches email/name (ILIKE); ?sort=<field> with `-` prefix or ?order=asc|desc.
          */
         get: {
             parameters: {
@@ -216,8 +216,8 @@ export type paths = {
                     per_page?: number;
                     /** @description Search term — ILIKE match on email/name */
                     q?: string;
-                    /** @description Filter by active flag: true|false (unset = no filter) */
-                    is_active?: string;
+                    /** @description Tri-state active-flag filter: true (active only), false (inactive only), or omit the param entirely for no filter. Unknown values are ignored. */
+                    is_active?: boolean;
                     /** @description Sort field: email|name|created_at|last_login_at|is_active (prefix with - for desc) */
                     sort?: string;
                     /** @description Sort direction override: asc|desc (wins over `-` prefix) */
@@ -287,7 +287,7 @@ export type paths = {
         };
         /**
          * Get user (admin)
-         * @description Returns the user detail row across all tenants:
+         * @description Returns the user detail across tenants: identity, is_active, last_login_at, group memberships (group_id, group_slug, group_name, role, joined_at), and active_session_count from unrevoked refresh tokens. No password hash.
          */
         get: {
             parameters: {

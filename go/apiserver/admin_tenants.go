@@ -34,10 +34,7 @@ type adminTenantsAPI struct {
 // is revoked.
 //
 // @Summary List tenants (admin)
-// @Description Returns every tenant in the deployment with computed
-// user_count and group_count. Pagination via ?page&per_page; full-text
-// search via ?q on name/slug/domain; sort via ?sort=<field> with optional
-// `-` prefix for descending (e.g. -created_at) or explicit ?order=.
+// @Description Returns every tenant with computed user_count and group_count. Pagination via ?page&per_page; ?q matches name/slug/domain (ILIKE); ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
 // @Tags admin
 // @Produce json-api
 // @Param page query int false "Page number (default 1)"
@@ -79,9 +76,7 @@ func (api *adminTenantsAPI) listTenants(w http.ResponseWriter, r *http.Request) 
 // item — the issue spec is explicit: "No nested users / groups").
 //
 // @Summary Get tenant (admin)
-// @Description Returns the tenant row with computed user_count and
-// group_count. No nested users / groups list — those live behind
-// GET /admin/tenants/{tenantID}/users (#1746).
+// @Description Returns the tenant row with computed user_count and group_count. No nested users or groups list — those live behind GET /admin/tenants/{tenantID}/users (#1746).
 // @Tags admin
 // @Produce json-api
 // @Param tenantID path string true "Tenant ID"
@@ -98,34 +93,16 @@ func (api *adminTenantsAPI) getTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenant, err := api.factorySet.TenantRegistry.Get(r.Context(), tenantID)
+	// GetAdmin runs a single tx with row_security=off plus COUNT
+	// subqueries for user_count + group_count — semantics identical to
+	// the listing endpoint and O(1) regardless of tenant size. The
+	// previous "ListByTenant + len()" implementation scaled linearly
+	// with tenant data and skipped the fail-loud RLS guard.
+	item, err := api.factorySet.TenantRegistry.GetAdmin(r.Context(), tenantID)
 	if err != nil {
 		api.auditGet(r, tenantID, err)
 		_ = renderEntityError(w, r, err)
 		return
-	}
-
-	// Compute the same counts the listing surfaces. UserRegistry runs
-	// against NonRLSRepository (no role switch, cross-tenant by default);
-	// LocationGroupRegistry runs in service mode under the
-	// background-worker role which has a bypass-RLS policy on
-	// location_groups — both reach across tenants. Errors degrade to
-	// zero rather than 500 so a transient registry hiccup on a derived
-	// count doesn't hide the tenant row itself; the audit-log entry
-	// still records err=nil because the primary read succeeded.
-	userCount := 0
-	groupCount := 0
-	if users, listErr := api.factorySet.UserRegistry.ListByTenant(r.Context(), tenantID); listErr == nil {
-		userCount = len(users)
-	}
-	if groups, listErr := api.factorySet.LocationGroupRegistry.ListByTenant(r.Context(), tenantID); listErr == nil {
-		groupCount = len(groups)
-	}
-
-	item := &registry.AdminTenantListItem{
-		Tenant:     tenant,
-		UserCount:  userCount,
-		GroupCount: groupCount,
 	}
 
 	api.auditGet(r, tenantID, nil)

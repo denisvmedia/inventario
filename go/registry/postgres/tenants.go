@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -337,6 +338,73 @@ func (r *TenantRegistry) ListAdmin(ctx context.Context, opts registry.AdminTenan
 		return nil, 0, err
 	}
 	return items, total, nil
+}
+
+// GetAdmin returns a single tenant detail row with the same computed
+// counts the listing surfaces. Runs one tx with row_security=off plus
+// COUNT subqueries instead of materialising the full user / group
+// row sets — keeps the detail endpoint O(constant) regardless of
+// tenant size.
+func (r *TenantRegistry) GetAdmin(ctx context.Context, tenantID string) (*registry.AdminTenantListItem, error) {
+	if tenantID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+
+	tenantsTable := r.tableNames.Tenants()
+	usersTable := r.tableNames.Users()
+	groupsTable := r.tableNames.LocationGroups()
+
+	var (
+		tenant     models.Tenant
+		userCount  int
+		groupCount int
+		found      bool
+	)
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
+			return errxtrace.Wrap("failed to disable row_security for admin tenant detail", execErr)
+		}
+		query := fmt.Sprintf(`
+			SELECT t.*,
+				(SELECT COUNT(*) FROM %s AS u WHERE u.tenant_id = t.id) AS _user_count,
+				(SELECT COUNT(*) FROM %s AS g WHERE g.tenant_id = t.id) AS _group_count
+			FROM %s AS t
+			WHERE t.id = $1`,
+			usersTable, groupsTable, tenantsTable,
+		)
+		var row struct {
+			models.Tenant
+			UserCount  int `db:"_user_count"`
+			GroupCount int `db:"_group_count"`
+		}
+		scanErr := tx.QueryRowxContext(ctx, query, tenantID).StructScan(&row)
+		if scanErr != nil {
+			if errors.Is(scanErr, sql.ErrNoRows) {
+				return nil
+			}
+			return errxtrace.Wrap("failed to load admin tenant detail", scanErr)
+		}
+		tenant = row.Tenant
+		userCount = row.UserCount
+		groupCount = row.GroupCount
+		found = true
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+			"entity_type", "Tenant",
+			"entity_id", tenantID,
+		))
+	}
+	return &registry.AdminTenantListItem{
+		Tenant:     &tenant,
+		UserCount:  userCount,
+		GroupCount: groupCount,
+	}, nil
 }
 
 // GetByDomain returns a tenant by its domain

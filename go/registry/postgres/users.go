@@ -405,9 +405,15 @@ func (r *UserRegistry) ListAdminByTenant(ctx context.Context, tenantID string, o
 		// SECURITY: sortField is constrained to AdminUserSortField via IsValid above,
 		// direction is "ASC"/"DESC" literals, and table-names come from r.tableNames —
 		// never user-supplied — so direct fmt.Sprintf interpolation is safe.
+		// The membership COUNT joins on (tenant_id, member_user_id) — the
+		// tenant predicate is belt-and-braces: today the user.id PK is
+		// globally unique, but tenant-scoping the join keeps the count
+		// honest if id-reuse-across-tenants ever becomes possible (e.g.
+		// a future tenant-import flow) and matches the
+		// (tenant_id, member_user_id) shape ListByUser uses elsewhere.
 		pageQuery := fmt.Sprintf(`
 			SELECT u.*,
-				(SELECT COUNT(*) FROM %s AS m WHERE m.member_user_id = u.id) AS _group_membership_count
+				(SELECT COUNT(*) FROM %s AS m WHERE m.member_user_id = u.id AND m.tenant_id = u.tenant_id) AS _group_membership_count
 			FROM %s AS u
 			%s
 			ORDER BY u.%s %s, u.id ASC

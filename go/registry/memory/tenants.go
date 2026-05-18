@@ -157,32 +157,47 @@ func filterTenantsByQuery(tenants []*models.Tenant, query string) []*models.Tena
 // stable tiebreaker for deterministic pagination (mirrors the postgres
 // `ORDER BY t.<col>, t.id`).
 //
+// Descending is implemented by swapping operands (a vs b) into
+// tenantLess rather than negating the boolean — `!less` would violate
+// the strict-weak-ordering contract for equal keys, because both
+// `less(a,b)` and `less(b,a)` would return true when the two are
+// equal under the chosen field.
+//
 //revive:disable-next-line:flag-parameter // SortDesc is the natural shape for the public AdminTenantListOptions; threading it down via the same field keeps the call site readable.
 func sortTenants(tenants []*models.Tenant, field registry.AdminTenantSortField, desc bool) {
 	if !field.IsValid() {
 		field = registry.AdminTenantSortName
 	}
 	sort.SliceStable(tenants, func(i, j int) bool {
-		less := tenantLess(tenants[i], tenants[j], field)
 		if desc {
-			return !less
+			return tenantLess(tenants[j], tenants[i], field)
 		}
-		return less
+		return tenantLess(tenants[i], tenants[j], field)
 	})
 }
 
+// tenantLess is a strict less-than: it ONLY returns true when a is
+// strictly less than b under the chosen field. Equal keys fall through
+// to the id tiebreaker. This shape is what lets sortTenants implement
+// desc via operand-swapping without producing two-way "true" for ties.
 func tenantLess(a, b *models.Tenant, field registry.AdminTenantSortField) bool {
 	switch field {
 	case registry.AdminTenantSortSlug:
-		return a.Slug < b.Slug
+		if a.Slug != b.Slug {
+			return a.Slug < b.Slug
+		}
 	case registry.AdminTenantSortCreatedAt:
-		return a.CreatedAt.Before(b.CreatedAt)
+		if !a.CreatedAt.Equal(b.CreatedAt) {
+			return a.CreatedAt.Before(b.CreatedAt)
+		}
 	case registry.AdminTenantSortStatus:
-		return string(a.Status) < string(b.Status)
-	}
-	// Default = name with id tiebreaker.
-	if a.Name != b.Name {
-		return a.Name < b.Name
+		if a.Status != b.Status {
+			return string(a.Status) < string(b.Status)
+		}
+	default:
+		if a.Name != b.Name {
+			return a.Name < b.Name
+		}
 	}
 	return a.ID < b.ID
 }
@@ -230,6 +245,25 @@ func paginate[T any](rows []T, page, perPage int) []T {
 	}
 	end := min(offset+perPage, len(rows))
 	return rows[offset:end]
+}
+
+// GetAdmin mirrors the postgres single-row detail lookup for the
+// in-memory backend. Walks the in-memory user / group registries to
+// derive the same counts.
+func (r *TenantRegistry) GetAdmin(ctx context.Context, tenantID string) (*registry.AdminTenantListItem, error) {
+	if tenantID == "" {
+		return nil, registry.ErrFieldRequired
+	}
+	tenant, err := r.Get(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	t := *tenant // copy so callers don't share the registry's pointer
+	return &registry.AdminTenantListItem{
+		Tenant:     &t,
+		UserCount:  r.countUsersForTenant(ctx, tenantID),
+		GroupCount: r.countGroupsForTenant(ctx, tenantID),
+	}, nil
 }
 
 // GetByDomain returns a tenant by its domain
