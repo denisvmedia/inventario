@@ -210,13 +210,23 @@ func (r *TenantRegistry) GetBySlug(ctx context.Context, slug string) (*models.Te
 //
 // The `tenants` table has no RLS enabled (it IS the tenant boundary), so
 // the cross-tenant read works through the existing NonRLSRepository
-// without a role switch. The correlated COUNT subqueries on `users` and
-// `location_groups` reach into RLS-enabled tables; `SET LOCAL
-// row_security = off` on the tx is the defense-in-depth bypass that
-// keeps those counts honest even if the default connection role's
-// BYPASSRLS attribute is revoked or the policy shape changes in the
-// future. Two queries are issued under the same tx so total + page rows
-// stay consistent with one another. The COUNT/page split exists because
+// without a role switch — the correlated COUNT subqueries on the
+// RLS-enabled `users` / `location_groups` tables rely on the connection
+// role's bypass (table-owner or BYPASSRLS attribute) to produce the
+// cross-tenant counts the admin UI needs.
+//
+// `SET LOCAL row_security = off` on the tx is a fail-loud guard: per
+// the postgres semantics, queries against an RLS-protected table by a
+// non-bypass role with row_security=off ERROR out rather than silently
+// filtering. If the connection role's bypass is ever revoked this
+// endpoint will start 5xx-ing loudly instead of returning honest-looking
+// "0" counts that mask a misconfiguration. That matches the issue
+// spec's "Endpoints bypass RLS via SET LOCAL row_security = off inside
+// the handler's tx" — the bypass narrative is "fail loud on
+// misconfiguration", not "produce rows the role couldn't otherwise see".
+//
+// Two queries are issued under the same tx so total + page rows stay
+// consistent with one another. The COUNT/page split exists because
 // applying the same correlated subqueries inside the count query is
 // wasteful — `SELECT count(*)` on the filter-only predicate is enough.
 func (r *TenantRegistry) ListAdmin(ctx context.Context, opts registry.AdminTenantListOptions) ([]*registry.AdminTenantListItem, int, error) {
@@ -257,14 +267,12 @@ func (r *TenantRegistry) ListAdmin(ctx context.Context, opts registry.AdminTenan
 	)
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Defense-in-depth: the postgres connection role bypasses RLS
-		// today on the tenants/users/location_groups tables, but the
-		// correlated COUNT subqueries below otherwise rely on that
-		// implicit bypass. SET LOCAL row_security = off scopes the
-		// override to this tx so the admin listing keeps producing
-		// cross-tenant rows even if the role's default behaviour ever
-		// changes. See the issue spec: "Endpoints bypass RLS via SET
-		// LOCAL row_security = off inside the handler's tx".
+		// SET LOCAL row_security = off scopes the override to this tx.
+		// Postgres semantics: with row_security=off, any non-bypass role
+		// querying an RLS-protected table ERRORs instead of silently
+		// filtering. That's the fail-loud guard — if this connection
+		// role ever loses its bypass we want a 5xx, not a quietly empty
+		// page. See the function godoc for the full reasoning.
 		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
 			return errxtrace.Wrap("failed to disable row_security for admin tenant listing", execErr)
 		}

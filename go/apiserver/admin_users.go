@@ -125,6 +125,11 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Memberships are part of the resource identity (the FE renders
+	// group access on this page), so a registry failure here is a 500.
+	// Contrast with the session-count path below, which degrades
+	// silently because active_session_count is derived metadata and
+	// the user-detail row is still useful without it.
 	memberships, mlErr := api.factorySet.GroupMembershipRegistry.ListByUser(r.Context(), user.TenantID, user.ID)
 	if mlErr != nil && !errors.Is(mlErr, registry.ErrNotFound) {
 		api.auditGetUser(r, userID, user.TenantID, mlErr)
@@ -169,17 +174,10 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 		// registry hiccup doesn't hide the user detail. The audit row
 		// still flags the failure via a separate `admin.get_user_sessions`
 		// action so operators can spot a pattern of session-count
-		// outages without taking down the primary endpoint.
-		api.auditService.LogAdmin(r.Context(), services.AdminEvent{
-			Action:      "admin.get_user_sessions",
-			ActorID:     actorIDFromRequest(r),
-			TenantID:    nullableTenantID(user.TenantID),
-			SubjectType: stringPtr("user"),
-			SubjectID:   stringPtr(user.ID),
-			Success:     false,
-			Request:     r,
-			ErrMsg:      strPtrFromErr(sErr),
-		})
+		// outages without taking down the primary endpoint — note the
+		// primary `admin.get_user` row reports Success: true, so audit
+		// readers correlating on ActorID + timestamp see both rows.
+		api.auditSessionCountFailure(r, user.ID, user.TenantID, sErr)
 		sessionCount = 0
 	}
 
@@ -193,6 +191,27 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// auditSessionCountFailure records the secondary `admin.get_user_sessions`
+// audit row when CountSessionsByUser fails. The primary
+// `admin.get_user` row still reports Success: true because the user
+// detail itself rendered correctly; this row exists so audit consumers
+// can spot a pattern of session-count outages.
+func (api *adminUsersAPI) auditSessionCountFailure(r *http.Request, userID, tenantID string, opErr error) {
+	if api.auditService == nil {
+		return
+	}
+	api.auditService.LogAdmin(r.Context(), services.AdminEvent{
+		Action:      "admin.get_user_sessions",
+		ActorID:     actorIDFromRequest(r),
+		TenantID:    nullableString(tenantID),
+		SubjectType: stringPtr("user"),
+		SubjectID:   nullableString(userID),
+		Success:     false,
+		Request:     r,
+		ErrMsg:      strPtrFromErr(opErr),
+	})
+}
+
 // auditListUsers records an `admin.list_tenant_users` audit row keyed
 // to the target tenant.
 func (api *adminUsersAPI) auditListUsers(r *http.Request, tenantID string, opErr error) {
@@ -202,9 +221,9 @@ func (api *adminUsersAPI) auditListUsers(r *http.Request, tenantID string, opErr
 	ev := services.AdminEvent{
 		Action:      "admin.list_tenant_users",
 		ActorID:     actorIDFromRequest(r),
-		TenantID:    nullableTenantID(tenantID),
+		TenantID:    nullableString(tenantID),
 		SubjectType: stringPtr("tenant"),
-		SubjectID:   nullableTenantID(tenantID),
+		SubjectID:   nullableString(tenantID),
 		Success:     opErr == nil && !errors.Is(opErr, registry.ErrNotFound),
 		Request:     r,
 		ErrMsg:      strPtrFromErr(opErr),
@@ -221,9 +240,9 @@ func (api *adminUsersAPI) auditGetUser(r *http.Request, userID, tenantID string,
 	ev := services.AdminEvent{
 		Action:      "admin.get_user",
 		ActorID:     actorIDFromRequest(r),
-		TenantID:    nullableTenantID(tenantID),
+		TenantID:    nullableString(tenantID),
 		SubjectType: stringPtr("user"),
-		SubjectID:   nullableTenantID(userID),
+		SubjectID:   nullableString(userID),
 		Success:     opErr == nil && !errors.Is(opErr, registry.ErrNotFound),
 		Request:     r,
 		ErrMsg:      strPtrFromErr(opErr),
@@ -231,7 +250,11 @@ func (api *adminUsersAPI) auditGetUser(r *http.Request, userID, tenantID string,
 	api.auditService.LogAdmin(r.Context(), ev)
 }
 
-func nullableTenantID(s string) *string {
+// nullableString returns nil for empty strings, &s otherwise. Used by
+// the admin audit helpers where TenantID/SubjectID columns are
+// nullable on the audit_logs schema and we want "missing" represented
+// as SQL NULL rather than an empty string.
+func nullableString(s string) *string {
 	if s == "" {
 		return nil
 	}

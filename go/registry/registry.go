@@ -1034,15 +1034,14 @@ type TenantRegistry interface {
 	// tenant in the deployment alongside per-tenant computed counts
 	// (user_count, group_count). The endpoint behind this method
 	// (/api/v1/admin/tenants — #1746) crosses tenants by design, so
-	// implementations MUST bypass tenant-isolation RLS. The postgres
-	// TenantRegistry already runs against a NonRLSRepository (the tenants
-	// table has no RLS enabled — it IS the tenant boundary), so no
-	// additional bypass is needed there; user_count + group_count are
-	// computed via correlated subqueries on the users / location_groups
-	// tables, which use `SET LOCAL row_security = off` as
-	// defense-in-depth on the join transaction so a future schema change
-	// that enables RLS on those tables doesn't silently shrink the count
-	// to zero. Memory just walks the in-memory stores.
+	// implementations MUST return rows across all tenants regardless of
+	// caller membership. The postgres TenantRegistry runs against
+	// NonRLSRepository (the tenants table has no RLS enabled — it IS the
+	// tenant boundary); user_count + group_count are computed via
+	// correlated subqueries on the users / location_groups tables under
+	// `SET LOCAL row_security = off` as a fail-loud guard so a future
+	// loss of the connection role's RLS bypass produces a 5xx rather
+	// than a silently empty page. Memory just walks the in-memory stores.
 	//
 	// Total is the count before LIMIT/OFFSET is applied.
 	ListAdmin(ctx context.Context, opts AdminTenantListOptions) (items []*AdminTenantListItem, total int, err error)
@@ -1438,10 +1437,12 @@ type UserRegistry interface {
 	// of every user in the given tenant alongside per-row group membership
 	// counts. The endpoint behind this method
 	// (/api/v1/admin/tenants/{tenantID}/users — #1746) crosses tenants by
-	// design, so implementations MUST bypass tenant-isolation RLS — the
-	// postgres UserRegistry uses NonRLSRepository, which is already cross
-	// -tenant, and explicitly `SET LOCAL row_security = off` on the join
-	// tx as defense-in-depth. Total is the count before LIMIT/OFFSET.
+	// design, so implementations MUST return rows for the requested
+	// tenant regardless of caller membership. The postgres UserRegistry
+	// uses NonRLSRepository for the cross-tenant read and `SET LOCAL
+	// row_security = off` on the join tx as a fail-loud guard (a future
+	// loss of the connection role's RLS bypass surfaces as 5xx, not a
+	// silently empty page). Total is the count before LIMIT/OFFSET.
 	ListAdminByTenant(ctx context.Context, tenantID string, opts AdminUserListOptions) (items []*AdminUserListItem, total int, err error)
 
 	// CountSessionsByUser returns the number of unrevoked, unexpired
@@ -1449,6 +1450,12 @@ type UserRegistry interface {
 	// `active_session_count` field on the admin user-detail endpoint
 	// (#1746). Implementations cross tenants intentionally so the admin
 	// surface can see sessions for users in any tenant.
+	//
+	// The admin handler degrades a CountSessionsByUser failure to 0 +
+	// a secondary `admin.get_user_sessions` audit row rather than 500-ing
+	// the whole user-detail endpoint, so audit consumers must correlate
+	// by ActorID + timestamp to distinguish "genuine 0 sessions" from
+	// "session-count registry hiccup".
 	CountSessionsByUser(ctx context.Context, userID string) (int, error)
 }
 

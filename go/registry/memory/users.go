@@ -205,6 +205,11 @@ func userLess(a, b *models.User, field registry.AdminUserSortField) bool {
 		}
 	case registry.AdminUserSortIsActive:
 		if a.IsActive != b.IsActive {
+			// false < true under ascending — matches postgres
+			// `ORDER BY u.is_active ASC` where false sorts first.
+			// Inactive users surface at the top of the ASC listing so
+			// operators can triage them; the FE can flip to DESC for
+			// active-first.
 			return !a.IsActive && b.IsActive
 		}
 	default:
@@ -234,8 +239,17 @@ func (r *UserRegistry) countMembershipsForUser(ctx context.Context, tenantID, us
 }
 
 // CountSessionsByUser counts unrevoked, unexpired refresh tokens for the
-// user via the linked refresh-token registry. Returns 0 when the linkage
-// is missing (e.g. targeted tests that don't wire the dependency).
+// user via the linked refresh-token registry.
+//
+// Contract: returns (0, nil) when SetAdminListingRegistries has not been
+// called — that is, the registry was constructed bare via
+// NewUserRegistry() rather than wired through NewFactorySet(). The
+// no-op-when-unwired shape exists so legacy tests that don't touch the
+// admin surface can stay terse; production callers always go through
+// NewFactorySet which wires the linkage, so the silent-zero path is
+// unreachable in production. Tests that exercise CountSessionsByUser
+// directly must use NewFactorySet().UserRegistry or call
+// SetAdminListingRegistries themselves.
 func (r *UserRegistry) CountSessionsByUser(ctx context.Context, userID string) (int, error) {
 	if userID == "" {
 		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))

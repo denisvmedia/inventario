@@ -105,13 +105,14 @@ func (api *adminTenantsAPI) getTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Compute the same counts the listing surfaces. The two registries
-	// run cross-tenant by virtue of NonRLSRepository — see issue spec
-	// "Endpoints bypass RLS … they cross tenants intentionally". Errors
-	// degrade to zero rather than 500 so a transient registry hiccup
-	// on a derived count doesn't hide the tenant row itself; the
-	// audit-log entry still records err=nil because the primary read
-	// succeeded.
+	// Compute the same counts the listing surfaces. UserRegistry runs
+	// against NonRLSRepository (no role switch, cross-tenant by default);
+	// LocationGroupRegistry runs in service mode under the
+	// background-worker role which has a bypass-RLS policy on
+	// location_groups — both reach across tenants. Errors degrade to
+	// zero rather than 500 so a transient registry hiccup on a derived
+	// count doesn't hide the tenant row itself; the audit-log entry
+	// still records err=nil because the primary read succeeded.
 	userCount := 0
 	groupCount := 0
 	if users, listErr := api.factorySet.UserRegistry.ListByTenant(r.Context(), tenantID); listErr == nil {
@@ -142,16 +143,12 @@ func (api *adminTenantsAPI) auditList(r *http.Request, action string, opErr erro
 	if api.auditService == nil {
 		return
 	}
-	actor := actorIDFromRequest(r)
 	ev := services.AdminEvent{
 		Action:  action,
-		ActorID: actor,
+		ActorID: actorIDFromRequest(r),
 		Success: opErr == nil,
 		Request: r,
-	}
-	if opErr != nil {
-		msg := opErr.Error()
-		ev.ErrMsg = &msg
+		ErrMsg:  strPtrFromErr(opErr),
 	}
 	api.auditService.LogAdmin(r.Context(), ev)
 }
@@ -162,30 +159,16 @@ func (api *adminTenantsAPI) auditGet(r *http.Request, tenantID string, opErr err
 	if api.auditService == nil {
 		return
 	}
-	actor := actorIDFromRequest(r)
-	subjectType := "tenant"
-	var subjectID *string
-	if tenantID != "" {
-		id := tenantID
-		subjectID = &id
-	}
-	var ptrTenant *string
-	if tenantID != "" {
-		id := tenantID
-		ptrTenant = &id
-	}
+	subject := nullableString(tenantID)
 	ev := services.AdminEvent{
 		Action:      "admin.get_tenant",
-		ActorID:     actor,
-		TenantID:    ptrTenant,
-		SubjectType: &subjectType,
-		SubjectID:   subjectID,
+		ActorID:     actorIDFromRequest(r),
+		TenantID:    subject,
+		SubjectType: stringPtr("tenant"),
+		SubjectID:   subject,
 		Success:     opErr == nil && !errors.Is(opErr, registry.ErrNotFound),
 		Request:     r,
-	}
-	if opErr != nil {
-		msg := opErr.Error()
-		ev.ErrMsg = &msg
+		ErrMsg:      strPtrFromErr(opErr),
 	}
 	api.auditService.LogAdmin(r.Context(), ev)
 }

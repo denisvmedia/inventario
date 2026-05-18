@@ -107,7 +107,10 @@ func parseAdminSort(raw string) (field string, desc bool) {
 // rest of the API) or the explicit `?sort=name&order=desc` pair (which
 // some FE table libs prefer). An explicit `order=` param always wins
 // over a leading `-` prefix so the FE never has to strip the prefix
-// before re-sending the current sort with a flipped direction.
+// before re-sending the current sort with a flipped direction. Unknown
+// `order=` values (e.g. `?order=ascending`) are intentionally ignored
+// rather than rejected so the FE can drift slightly across versions —
+// the registry layer further whitelists the sort field via IsValid().
 func parseAdminSortAndOrder(rawSort, rawOrder string) (field string, desc bool) {
 	field, desc = parseAdminSort(rawSort)
 	switch strings.ToLower(strings.TrimSpace(rawOrder)) {

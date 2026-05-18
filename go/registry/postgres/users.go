@@ -335,12 +335,15 @@ func (r *UserRegistry) ListSystemAdmins(ctx context.Context) ([]*models.User, er
 // computed from a correlated subquery on group_memberships.
 //
 // The endpoint crosses tenants by design — the admin caller may not be
-// a member of the target tenant — so the tx flips off row_security as
-// defense-in-depth (the postgres UserRegistry's NonRLSRepository
-// already runs without an explicit role switch and the connection role
-// bypasses RLS today; the SET LOCAL keeps that behaviour explicit and
-// pinned to the tx). Total is post-filter, pre-pagination, matching
-// TenantRegistry.ListAdmin.
+// a member of the target tenant. The postgres UserRegistry uses
+// NonRLSRepository (no role switch); the cross-tenant read relies on
+// the connection role's bypass (table-owner or BYPASSRLS). `SET LOCAL
+// row_security = off` on the tx is a fail-loud guard — if the bypass
+// is ever revoked, the query ERRORs instead of silently filtering, so
+// a misconfiguration surfaces as a 5xx rather than a quietly empty
+// admin page (see TenantRegistry.ListAdmin for the same rationale).
+//
+// Total is post-filter, pre-pagination, matching TenantRegistry.ListAdmin.
 func (r *UserRegistry) ListAdminByTenant(ctx context.Context, tenantID string, opts registry.AdminUserListOptions) ([]*registry.AdminUserListItem, int, error) {
 	if tenantID == "" {
 		return nil, 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
@@ -450,8 +453,15 @@ func (r *UserRegistry) ListAdminByTenant(ctx context.Context, tenantID string, o
 // (#1746). The lookup crosses tenants intentionally — the admin caller
 // may not be a member of the target user's tenant — and runs under the
 // default connection role, which bypasses RLS on refresh_tokens. SET
-// LOCAL row_security = off pins that behaviour to the tx so the count
-// stays accurate even if the policy shape changes later.
+// LOCAL row_security = off is the same fail-loud guard the other admin
+// listings carry: if the role's bypass is revoked the query ERRORs
+// instead of silently returning 0 (see TenantRegistry.ListAdmin).
+//
+// Note on the handler contract: admin handler degrades a CountSessionsByUser
+// failure to 0 + a separate audit row (admin.get_user_sessions, success=false)
+// rather than 500-ing the whole user-detail endpoint, so audit consumers
+// must correlate by ActorID/timestamp to distinguish "genuine 0
+// sessions" from "session-count registry hiccup".
 func (r *UserRegistry) CountSessionsByUser(ctx context.Context, userID string) (int, error) {
 	if userID == "" {
 		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
