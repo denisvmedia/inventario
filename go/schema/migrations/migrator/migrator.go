@@ -79,7 +79,7 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 	// Connect to database using standard ptah approach
 	// When using a shared pool, we still create a separate connection for migrations
 	// but the pool limits will prevent connection exhaustion
-	conn, err := dbschema.ConnectToDatabase(m.dbURL)
+	conn, err := dbschema.ConnectToDatabase(ctx, m.dbURL)
 	if err != nil {
 		return errxtrace.Wrap("failed to connect to database", err)
 	}
@@ -126,7 +126,7 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 // docker-compose migrate container can't quietly leave the app running
 // against a half-migrated schema (#1655).
 func (m *Migrator) VerifySchemaUpToDate(ctx context.Context) error {
-	conn, err := dbschema.ConnectToDatabase(m.dbURL)
+	conn, err := dbschema.ConnectToDatabase(ctx, m.dbURL)
 	if err != nil {
 		return errxtrace.Wrap("failed to connect to database", err)
 	}
