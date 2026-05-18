@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -325,6 +327,171 @@ func (r *UserRegistry) ListSystemAdmins(ctx context.Context) ([]*models.User, er
 		return nil, err
 	}
 	return admins, nil
+}
+
+// ListAdminByTenant returns paginated, filtered, sorted users belonging
+// to the given tenant for the `/api/v1/admin/tenants/{tenantID}/users`
+// listing (#1746) along with the per-row group_membership_count
+// computed from a correlated subquery on group_memberships.
+//
+// The endpoint crosses tenants by design — the admin caller may not be
+// a member of the target tenant. The postgres UserRegistry uses
+// NonRLSRepository (no role switch); the cross-tenant read relies on
+// the connection role's bypass (table-owner or BYPASSRLS). `SET LOCAL
+// row_security = off` on the tx is a fail-loud guard — if the bypass
+// is ever revoked, the query ERRORs instead of silently filtering, so
+// a misconfiguration surfaces as a 5xx rather than a quietly empty
+// admin page (see TenantRegistry.ListAdmin for the same rationale).
+//
+// Total is post-filter, pre-pagination, matching TenantRegistry.ListAdmin.
+func (r *UserRegistry) ListAdminByTenant(ctx context.Context, tenantID string, opts registry.AdminUserListOptions) ([]*registry.AdminUserListItem, int, error) {
+	if tenantID == "" {
+		return nil, 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+
+	page := opts.Page
+	if page <= 0 {
+		page = 1
+	}
+	perPage := opts.PerPage
+	if perPage <= 0 {
+		perPage = 50
+	}
+
+	sortField := opts.SortField
+	if !sortField.IsValid() {
+		sortField = registry.AdminUserSortEmail
+	}
+	direction := "ASC"
+	if opts.SortDesc {
+		direction = "DESC"
+	}
+
+	usersTable := r.tableNames.Users()
+	membershipsTable := r.tableNames.GroupMemberships()
+
+	args := []any{tenantID}
+	whereClauses := []string{"u.tenant_id = $1"}
+	if q := strings.TrimSpace(opts.Query); q != "" {
+		args = append(args, "%"+q+"%")
+		// $2 reused across email + name.
+		whereClauses = append(whereClauses, fmt.Sprintf("(u.email ILIKE $%d OR u.name ILIKE $%d)", len(args), len(args)))
+	}
+	if opts.IsActive != nil {
+		args = append(args, *opts.IsActive)
+		whereClauses = append(whereClauses, fmt.Sprintf("u.is_active = $%d", len(args)))
+	}
+	where := "WHERE " + strings.Join(whereClauses, " AND ")
+
+	var (
+		items []*registry.AdminUserListItem
+		total int
+	)
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
+			return errxtrace.Wrap("failed to disable row_security for admin user listing", execErr)
+		}
+
+		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s AS u %s", usersTable, where)
+		if scanErr := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); scanErr != nil {
+			return errxtrace.Wrap("failed to count admin users", scanErr)
+		}
+
+		limitPos := len(args) + 1
+		offsetPos := len(args) + 2
+		offset := (page - 1) * perPage
+
+		// SECURITY: sortField is constrained to AdminUserSortField via IsValid above,
+		// direction is "ASC"/"DESC" literals, and table-names come from r.tableNames —
+		// never user-supplied — so direct fmt.Sprintf interpolation is safe.
+		// The membership COUNT joins on (tenant_id, member_user_id) — the
+		// tenant predicate is belt-and-braces: today the user.id PK is
+		// globally unique, but tenant-scoping the join keeps the count
+		// honest if id-reuse-across-tenants ever becomes possible (e.g.
+		// a future tenant-import flow) and matches the
+		// (tenant_id, member_user_id) shape ListByUser uses elsewhere.
+		pageQuery := fmt.Sprintf(`
+			SELECT u.*,
+				(SELECT COUNT(*) FROM %s AS m WHERE m.member_user_id = u.id AND m.tenant_id = u.tenant_id) AS _group_membership_count
+			FROM %s AS u
+			%s
+			ORDER BY u.%s %s, u.id ASC
+			LIMIT $%d OFFSET $%d`,
+			membershipsTable, usersTable, where, string(sortField), direction, limitPos, offsetPos,
+		)
+		pageArgs := append(append([]any{}, args...), perPage, offset)
+
+		rows, err := tx.QueryxContext(ctx, pageQuery, pageArgs...)
+		if err != nil {
+			return errxtrace.Wrap("failed to list admin users", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var row struct {
+				models.User
+				GroupMembershipCount int `db:"_group_membership_count"`
+			}
+			if scanErr := rows.StructScan(&row); scanErr != nil {
+				return errxtrace.Wrap("failed to scan admin user row", scanErr)
+			}
+			user := row.User
+			items = append(items, &registry.AdminUserListItem{
+				User:                 &user,
+				GroupMembershipCount: row.GroupMembershipCount,
+			})
+		}
+		if rowsErr := rows.Err(); rowsErr != nil {
+			return errxtrace.Wrap("failed during admin user row iteration", rowsErr)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+// CountSessionsByUser returns the number of refresh_tokens rows for the
+// user that are neither revoked nor expired. Backs the
+// `active_session_count` field on the admin user-detail endpoint
+// (#1746). The lookup crosses tenants intentionally — the admin caller
+// may not be a member of the target user's tenant — and runs under the
+// default connection role, which bypasses RLS on refresh_tokens. SET
+// LOCAL row_security = off is the same fail-loud guard the other admin
+// listings carry: if the role's bypass is revoked the query ERRORs
+// instead of silently returning 0 (see TenantRegistry.ListAdmin).
+//
+// Note on the handler contract: admin handler degrades a CountSessionsByUser
+// failure to 0 + a separate audit row (admin.get_user_sessions, success=false)
+// rather than 500-ing the whole user-detail endpoint, so audit consumers
+// must correlate by ActorID/timestamp to distinguish "genuine 0
+// sessions" from "session-count registry hiccup".
+func (r *UserRegistry) CountSessionsByUser(ctx context.Context, userID string) (int, error) {
+	if userID == "" {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+
+	var count int
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
+			return errxtrace.Wrap("failed to disable row_security for active-session count", execErr)
+		}
+		query := fmt.Sprintf(
+			`SELECT COUNT(*) FROM %s WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > $2`,
+			r.tableNames.RefreshTokens(),
+		)
+		if scanErr := tx.QueryRowContext(ctx, query, userID, time.Now()).Scan(&count); scanErr != nil {
+			return errxtrace.Wrap("failed to count active sessions", scanErr)
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 // ListByTenant returns all users for a tenant

@@ -59,6 +59,294 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List tenants (admin)
+         * @description Returns every tenant with computed user_count and group_count. Pagination via ?page&per_page; ?q matches name/slug/domain (ILIKE); ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Page number (default 1) */
+                    page?: number;
+                    /** @description Items per page (default 50, max 100) */
+                    per_page?: number;
+                    /** @description Search term — ILIKE match on name/slug/domain */
+                    q?: string;
+                    /** @description Sort field: name|slug|created_at|status (prefix with - for desc) */
+                    sort?: string;
+                    /** @description Sort direction override: asc|desc (wins over `-` prefix) */
+                    order?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantsResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get tenant (admin)
+         * @description Returns the tenant row with computed user_count and group_count. No nested users or groups list — those live behind GET /admin/tenants/{tenantID}/users (#1746).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant ID */
+                    tenantID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Tenant not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantID}/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List users for a tenant (admin)
+         * @description Returns users in the target tenant with computed group_membership_count. Tri-state ?is_active. Pagination via ?page&per_page; ?q matches email/name (ILIKE); ?sort=<field> with `-` prefix or ?order=asc|desc.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Page number (default 1) */
+                    page?: number;
+                    /** @description Items per page (default 50, max 100) */
+                    per_page?: number;
+                    /** @description Search term — ILIKE match on email/name */
+                    q?: string;
+                    /** @description Tri-state active-flag filter: true (active only), false (inactive only), or omit the param entirely for no filter. Unknown values are ignored. */
+                    is_active?: boolean;
+                    /** @description Sort field: email|name|created_at|last_login_at|is_active (prefix with - for desc) */
+                    sort?: string;
+                    /** @description Sort direction override: asc|desc (wins over `-` prefix) */
+                    order?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Tenant ID */
+                    tenantID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminUsersResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Tenant not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{userID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get user (admin)
+         * @description Returns the user detail across tenants: identity, is_active, last_login_at, group memberships (group_id, group_slug, group_name, role, joined_at), and active_session_count from unrevoked refresh tokens. No password hash.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description User ID */
+                    userID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminUserResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/change-password": {
         parameters: {
             query?: never;
@@ -7144,6 +7432,88 @@ export type components = {
             file_storage_driver?: string;
             operating_system?: string;
         };
+        "jsonapi.AdminListMeta": {
+            /** @example 1 */
+            page?: number;
+            /** @example 50 */
+            per_page?: number;
+            /** @example 100 */
+            total?: number;
+            /** @example 2 */
+            total_pages?: number;
+        };
+        "jsonapi.AdminTenantListItem": {
+            created_at?: string;
+            domain?: string;
+            group_count?: number;
+            id?: string;
+            is_default?: boolean;
+            name?: string;
+            plan_id?: string;
+            registration_mode?: string;
+            slug?: string;
+            status?: components["schemas"]["models.TenantStatus"];
+            /**
+             * @example admin_tenants
+             * @enum {string}
+             */
+            type?: "admin_tenants";
+            updated_at?: string;
+            user_count?: number;
+        };
+        "jsonapi.AdminTenantResponse": {
+            data?: components["schemas"]["jsonapi.AdminTenantListItem"];
+        };
+        "jsonapi.AdminTenantsResponse": {
+            data?: components["schemas"]["jsonapi.AdminTenantListItem"][];
+            meta?: components["schemas"]["jsonapi.AdminListMeta"];
+        };
+        "jsonapi.AdminUserDetail": {
+            active_session_count?: number;
+            created_at?: string;
+            email?: string;
+            group_memberships?: components["schemas"]["jsonapi.AdminUserGroupMembership"][];
+            id?: string;
+            is_active?: boolean;
+            is_system_admin?: boolean;
+            last_login_at?: string;
+            name?: string;
+            tenant_id?: string;
+            /**
+             * @example admin_users
+             * @enum {string}
+             */
+            type?: "admin_users";
+            updated_at?: string;
+        };
+        "jsonapi.AdminUserGroupMembership": {
+            group_id?: string;
+            group_name?: string;
+            group_slug?: string;
+            joined_at?: string;
+            role?: components["schemas"]["models.GroupRole"];
+        };
+        "jsonapi.AdminUserListItem": {
+            created_at?: string;
+            email?: string;
+            group_membership_count?: number;
+            id?: string;
+            is_active?: boolean;
+            last_login_at?: string;
+            name?: string;
+            /**
+             * @example admin_users
+             * @enum {string}
+             */
+            type?: "admin_users";
+        };
+        "jsonapi.AdminUserResponse": {
+            data?: components["schemas"]["jsonapi.AdminUserDetail"];
+        };
+        "jsonapi.AdminUsersResponse": {
+            data?: components["schemas"]["jsonapi.AdminUserListItem"][];
+            meta?: components["schemas"]["jsonapi.AdminListMeta"];
+        };
         "jsonapi.AreaData": {
             attributes?: components["schemas"]["models.Area"];
             id?: string;
@@ -9410,6 +9780,8 @@ export type components = {
         };
         /** @enum {string} */
         "models.TagColor": "amber" | "green" | "blue" | "orange" | "red" | "muted";
+        /** @enum {string} */
+        "models.TenantStatus": "active" | "suspended" | "inactive";
         "models.User": {
             created_at?: string;
             /**
