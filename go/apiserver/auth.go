@@ -191,21 +191,25 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Issue the long-lived refresh token first so the access token can
+	// carry its row id as the "rti" claim — needed by /users/me/sessions
+	// to flag the caller's own session when the refresh cookie isn't sent
+	// (the cookie is path-scoped to /api/v1/auth).
+	rti, err := api.issueRefreshTokenCookie(w, r, user)
+	if err != nil {
+		slog.Error("Failed to issue refresh token", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		return
+	}
+
 	// Issue a short-lived access token with a unique JTI for revocation support.
 	// The new token's iat claim is based on the current time and is intended to
 	// work with iat-based blacklist checks in the JWT middleware, without
 	// requiring explicit removal of any existing blacklist entry in typical cases.
-	accessTokenString, _, err := api.issueAccessToken(user)
+	accessTokenString, _, err := api.issueAccessToken(user, rti)
 	if err != nil {
 		slog.Error("Failed to generate access token", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
-		return
-	}
-
-	// Issue and persist a long-lived refresh token.
-	if err := api.issueRefreshTokenCookie(w, r, user); err != nil {
-		slog.Error("Failed to issue refresh token", "user_id", user.ID, "error", err)
-		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return
 	}
 
@@ -289,7 +293,9 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	accessTokenString, _, err := api.issueAccessToken(user)
+	// Carry the refreshed-from row id as "rti" so /users/me/sessions can
+	// identify the caller's own session without the refresh cookie.
+	accessTokenString, _, err := api.issueAccessToken(user, refreshToken.ID)
 	if err != nil {
 		slog.Error("Failed to generate access token on refresh", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
@@ -914,6 +920,13 @@ func (api *AuthAPI) recordLoginEvent(ctx context.Context, tenantID, email string
 // issueAccessToken creates and signs a short-lived JWT with a unique JTI.
 // Returns the signed token string, its expiry time, and any error.
 //
+// rti, when non-empty, pins the access token to the refresh-token row
+// it was minted from. Routes that need to identify "the caller's own
+// session" without the refresh cookie (which is path-scoped to
+// /api/v1/auth and not sent on /api/v1/users/me/sessions) can read the
+// claim from the validated JWT. Pass "" when no refresh-token row exists
+// yet — the claim is then omitted.
+//
 // The is_system_admin claim mirrors models.User.IsSystemAdmin so the
 // RequireSystemAdmin middleware (#1745) can gate /api/v1/admin/* without
 // re-fetching the user — though in practice JWTMiddleware also re-loads
@@ -921,30 +934,37 @@ func (api *AuthAPI) recordLoginEvent(ctx context.Context, tenantID, email string
 // and the user struct in context is authoritative. The refresh path
 // re-loads the user before reissuing, so revoking the flag invalidates
 // active access tokens within accessTokenExpiration (15 min).
-func (api *AuthAPI) issueAccessToken(user *models.User) (string, time.Time, error) {
+func (api *AuthAPI) issueAccessToken(user *models.User, rti string) (string, time.Time, error) {
 	expiresAt := time.Now().Add(accessTokenExpiration)
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	claims := jwt.MapClaims{
 		"jti":             uuid.New().String(),
 		"user_id":         user.ID,
 		"is_system_admin": user.IsSystemAdmin,
 		"exp":             expiresAt.Unix(),
 		"iat":             time.Now().Unix(),
-	})
+	}
+	if rti != "" {
+		claims["rti"] = rti
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(api.jwtSecret)
 	return tokenString, expiresAt, err
 }
 
 // issueRefreshTokenCookie generates a refresh token, stores it in the database, and
 // sets it as an httpOnly cookie on the response.
-// If no refreshTokenRegistry is configured, the cookie is skipped.
-func (api *AuthAPI) issueRefreshTokenCookie(w http.ResponseWriter, r *http.Request, user *models.User) error {
+// If no refreshTokenRegistry is configured, the cookie is skipped and the
+// returned id is empty.
+// Returns the persisted refresh-token row id so the caller can mint an
+// access token with a matching "rti" claim — see issueAccessToken.
+func (api *AuthAPI) issueRefreshTokenCookie(w http.ResponseWriter, r *http.Request, user *models.User) (string, error) {
 	if api.refreshTokenRegistry == nil {
-		return nil
+		return "", nil
 	}
 
 	rawToken, tokenHash, err := models.GenerateRefreshToken()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	rt := models.RefreshToken{
@@ -958,8 +978,9 @@ func (api *AuthAPI) issueRefreshTokenCookie(w http.ResponseWriter, r *http.Reque
 		UserAgent: r.UserAgent(),
 	}
 
-	if _, err := api.refreshTokenRegistry.Create(r.Context(), rt); err != nil {
-		return err
+	created, err := api.refreshTokenRegistry.Create(r.Context(), rt)
+	if err != nil {
+		return "", err
 	}
 
 	// Set Secure flag only when the connection is already over HTTPS to allow
@@ -976,7 +997,7 @@ func (api *AuthAPI) issueRefreshTokenCookie(w http.ResponseWriter, r *http.Reque
 		Secure:   secureCookie,
 		SameSite: http.SameSiteStrictMode,
 	})
-	return nil
+	return created.ID, nil
 }
 
 // writeLoginResponse encodes and writes a LoginResponse to w.

@@ -589,15 +589,19 @@ func (api *AuthAPI) afterMFALoginSuccess(ctx context.Context, email, userID stri
 // last-login, and writes the LoginResponse. Returns false if any of
 // the token mints failed (caller has already written the error).
 func (api *AuthAPI) issueMFALoginSession(w http.ResponseWriter, r *http.Request, user *models.User, claims *mfaTokenClaims) bool {
-	accessToken, _, err := api.issueAccessToken(user)
+	// Refresh token first so issueAccessToken can pin "rti" — same
+	// reasoning as login(): /users/me/sessions can't read the refresh
+	// cookie, so the access token carries the row id explicitly.
+	rti, err := api.issueRefreshTokenCookie(w, r, user)
+	if err != nil {
+		slog.Error("MFA login: refresh token failed", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		return false
+	}
+	accessToken, _, err := api.issueAccessToken(user, rti)
 	if err != nil {
 		slog.Error("MFA login: access token failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
-		return false
-	}
-	if err := api.issueRefreshTokenCookie(w, r, user); err != nil {
-		slog.Error("MFA login: refresh token failed", "user_id", user.ID, "error", err)
-		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return false
 	}
 	now := time.Now()

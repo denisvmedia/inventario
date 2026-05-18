@@ -120,9 +120,29 @@ func (api *usersMeAPI) listSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// "Current" detection order:
+	//  1. The "rti" claim on the validated access token — the cleanest
+	//     signal, written at issuance, sent on every request via the
+	//     Authorization header. Works for this route even though the
+	//     refresh cookie isn't (cookie Path=/api/v1/auth).
+	//  2. The refresh cookie hash — kept as a fallback for tokens minted
+	//     before "rti" landed, or for callers that scope the cookie wider.
+	currentID := ""
+	if claims := appctx.JWTClaimsFromContext(r.Context()); claims != nil {
+		if rti, ok := claims["rti"].(string); ok {
+			currentID = rti
+		}
+	}
 	currentHash := currentRefreshTokenHash(r)
 	sessions := make([]SessionView, 0, len(tokens))
 	for _, t := range tokens {
+		isCurrent := false
+		switch {
+		case currentID != "" && t.ID == currentID:
+			isCurrent = true
+		case currentID == "" && currentHash != "" && t.TokenHash == currentHash:
+			isCurrent = true
+		}
 		sessions = append(sessions, SessionView{
 			ID:         t.ID,
 			CreatedAt:  t.CreatedAt,
@@ -130,7 +150,7 @@ func (api *usersMeAPI) listSessions(w http.ResponseWriter, r *http.Request) {
 			ExpiresAt:  t.ExpiresAt,
 			IPAddress:  t.IPAddress,
 			UserAgent:  t.UserAgent,
-			IsCurrent:  currentHash != "" && t.TokenHash == currentHash,
+			IsCurrent:  isCurrent,
 		})
 	}
 	writeJSON(w, http.StatusOK, SessionsListResponse{Sessions: sessions})
@@ -222,7 +242,7 @@ func (api *usersMeAPI) revokeAllOtherSessions(w http.ResponseWriter, r *http.Req
 		// we trust the same authorisation boundary. An ID that doesn't
 		// match a row is silently ignored: the caller may have passed
 		// a stale id from a list response that's now revoked, and the
-		// cookie-fallback below still has a chance to recover.
+		// fallbacks below still have a chance to recover.
 		if rts, err := api.refreshTokenRegistry.ListActiveByUserID(r.Context(), user.ID); err == nil {
 			for _, rt := range rts {
 				if rt.ID == requested {
@@ -231,6 +251,9 @@ func (api *usersMeAPI) revokeAllOtherSessions(w http.ResponseWriter, r *http.Req
 				}
 			}
 		}
+	}
+	if keepID == "" {
+		keepID = api.resolveKeepIDFromRTIClaim(r, user.ID)
 	}
 	if keepID == "" {
 		if hash := currentRefreshTokenHash(r); hash != "" {
@@ -310,6 +333,32 @@ func (api *usersMeAPI) listLoginHistory(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, LoginHistoryResponse{Events: out, FailedLast7d: failed})
+}
+
+// resolveKeepIDFromRTIClaim returns the refresh-token row id pinned by
+// the access token's "rti" claim, validated against the user's active
+// sessions. Returns "" when no claim is present, the claim is empty,
+// the lookup fails, or the claimed id no longer belongs to an active
+// row (e.g. the row was revoked since the access token was minted).
+func (api *usersMeAPI) resolveKeepIDFromRTIClaim(r *http.Request, userID string) string {
+	claims := appctx.JWTClaimsFromContext(r.Context())
+	if claims == nil {
+		return ""
+	}
+	rti, ok := claims["rti"].(string)
+	if !ok || rti == "" {
+		return ""
+	}
+	rts, err := api.refreshTokenRegistry.ListActiveByUserID(r.Context(), userID)
+	if err != nil {
+		return ""
+	}
+	for _, rt := range rts {
+		if rt.ID == rti {
+			return rt.ID
+		}
+	}
+	return ""
 }
 
 // currentRefreshTokenHash extracts the SHA-256 hash of the request's
