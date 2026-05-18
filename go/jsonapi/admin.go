@@ -23,7 +23,7 @@ type AdminTenantListItem struct {
 	Type             string              `json:"type" example:"admin_tenants" enums:"admin_tenants"`
 	Name             string              `json:"name"`
 	Slug             string              `json:"slug"`
-	Domain           *string             `json:"domain"`
+	Domain           *string             `json:"domain,omitempty"`
 	Status           models.TenantStatus `json:"status"`
 	IsDefault        bool                `json:"is_default"`
 	PlanID           string              `json:"plan_id"`

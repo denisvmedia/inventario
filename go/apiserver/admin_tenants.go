@@ -60,14 +60,21 @@ func (api *adminTenantsAPI) listTenants(w http.ResponseWriter, r *http.Request) 
 	}
 
 	items, total, err := api.factorySet.TenantRegistry.ListAdmin(r.Context(), opts)
-	api.auditList(r, "admin.list_tenants", err)
 	if err != nil {
+		api.auditList(r, "admin.list_tenants", err)
 		_ = renderEntityError(w, r, err)
 		return
 	}
 
 	setPaginationHeaders(w, page, perPage, total)
-	if renderErr := render.Render(w, r, jsonapi.NewAdminTenantsResponse(items, page, perPage, total)); renderErr != nil {
+	// Audit AFTER render so a JSON-encoding / response-writer failure
+	// turns into a Success=false row instead of silently claiming the
+	// client got their data. The 500 still surfaces via
+	// internalServerError; the audit row simply reflects the actual
+	// final outcome.
+	renderErr := render.Render(w, r, jsonapi.NewAdminTenantsResponse(items, page, perPage, total))
+	api.auditList(r, "admin.list_tenants", renderErr)
+	if renderErr != nil {
 		_ = internalServerError(w, r, renderErr)
 	}
 }
@@ -105,8 +112,10 @@ func (api *adminTenantsAPI) getTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.auditGet(r, tenantID, nil)
-	if renderErr := render.Render(w, r, jsonapi.NewAdminTenantResponse(item)); renderErr != nil {
+	// Audit AFTER render — see listTenants for the rationale.
+	renderErr := render.Render(w, r, jsonapi.NewAdminTenantResponse(item))
+	api.auditGet(r, tenantID, renderErr)
+	if renderErr != nil {
 		_ = internalServerError(w, r, renderErr)
 	}
 }

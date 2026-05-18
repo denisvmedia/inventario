@@ -75,14 +75,19 @@ func (api *adminUsersAPI) listTenantUsers(w http.ResponseWriter, r *http.Request
 	}
 
 	items, total, err := api.factorySet.UserRegistry.ListAdminByTenant(r.Context(), tenantID, opts)
-	api.auditListUsers(r, tenantID, err)
 	if err != nil {
+		api.auditListUsers(r, tenantID, err)
 		_ = renderEntityError(w, r, err)
 		return
 	}
 
 	setPaginationHeaders(w, page, perPage, total)
-	if renderErr := render.Render(w, r, jsonapi.NewAdminUsersResponse(items, page, perPage, total)); renderErr != nil {
+	// Audit AFTER render so a JSON-encoding / response-writer failure
+	// turns into a Success=false row instead of claiming the client
+	// received their data successfully.
+	renderErr := render.Render(w, r, jsonapi.NewAdminUsersResponse(items, page, perPage, total))
+	api.auditListUsers(r, tenantID, renderErr)
+	if renderErr != nil {
 		_ = internalServerError(w, r, renderErr)
 	}
 }
@@ -175,12 +180,18 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 		sessionCount = 0
 	}
 
-	api.auditGetUser(r, userID, user.TenantID, nil)
-	if renderErr := render.Render(w, r, jsonapi.NewAdminUserResponse(jsonapi.AdminUserResponseInput{
+	// Audit AFTER render — a JSON-encoding / writer failure should
+	// land in the audit trail as Success=false rather than the
+	// previous "say success then 500" pattern. The session-count
+	// degradation audit above is a separate row keyed on
+	// `admin.get_user_sessions` and is unaffected by render outcome.
+	renderErr := render.Render(w, r, jsonapi.NewAdminUserResponse(jsonapi.AdminUserResponseInput{
 		User:               user,
 		Memberships:        mems,
 		ActiveSessionCount: sessionCount,
-	})); renderErr != nil {
+	}))
+	api.auditGetUser(r, userID, user.TenantID, renderErr)
+	if renderErr != nil {
 		_ = internalServerError(w, r, renderErr)
 	}
 }

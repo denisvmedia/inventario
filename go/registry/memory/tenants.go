@@ -121,11 +121,19 @@ func (r *TenantRegistry) ListAdmin(ctx context.Context, opts registry.AdminTenan
 
 	items := make([]*registry.AdminTenantListItem, 0, len(pageRows))
 	for _, t := range pageRows {
+		userCount, err := r.countUsersForTenant(ctx, t.ID)
+		if err != nil {
+			return nil, 0, err
+		}
+		groupCount, err := r.countGroupsForTenant(ctx, t.ID)
+		if err != nil {
+			return nil, 0, err
+		}
 		tenant := *t // copy so callers don't share the registry's pointer
 		items = append(items, &registry.AdminTenantListItem{
 			Tenant:     &tenant,
-			UserCount:  r.countUsersForTenant(ctx, t.ID),
-			GroupCount: r.countGroupsForTenant(ctx, t.ID),
+			UserCount:  userCount,
+			GroupCount: groupCount,
 		})
 	}
 	return items, total, nil
@@ -153,15 +161,15 @@ func filterTenantsByQuery(tenants []*models.Tenant, query string) []*models.Tena
 }
 
 // sortTenants sorts the slice in place by the requested column.
-// Unknown sort fields fall back to name asc, with id ascending as the
-// stable tiebreaker for deterministic pagination (mirrors the postgres
-// `ORDER BY t.<col>, t.id`).
+// Unknown sort fields fall back to name asc. The id tiebreaker is
+// ALWAYS ascending regardless of `desc` so pagination is deterministic
+// across asc/desc requests and consistent with postgres's
+// `ORDER BY t.<col> <dir>, t.id ASC` (id is always ASC there too).
 //
-// Descending is implemented by swapping operands (a vs b) into
-// tenantLess rather than negating the boolean — `!less` would violate
-// the strict-weak-ordering contract for equal keys, because both
-// `less(a,b)` and `less(b,a)` would return true when the two are
-// equal under the chosen field.
+// The primary-key direction is implemented by operand-swap on
+// tenantPrimaryLess — `!less` would violate strict-weak-ordering for
+// equal keys (both directions would return true). Equal primary keys
+// fall through to tenantIDLess, which is asc unconditionally.
 //
 //revive:disable-next-line:flag-parameter // SortDesc is the natural shape for the public AdminTenantListOptions; threading it down via the same field keeps the call site readable.
 func sortTenants(tenants []*models.Tenant, field registry.AdminTenantSortField, desc bool) {
@@ -169,64 +177,69 @@ func sortTenants(tenants []*models.Tenant, field registry.AdminTenantSortField, 
 		field = registry.AdminTenantSortName
 	}
 	sort.SliceStable(tenants, func(i, j int) bool {
-		if desc {
-			return tenantLess(tenants[j], tenants[i], field)
+		a, b := tenants[i], tenants[j]
+		// Apply direction only to the primary key.
+		var primary int
+		switch {
+		case tenantPrimaryLess(a, b, field):
+			primary = -1
+		case tenantPrimaryLess(b, a, field):
+			primary = 1
 		}
-		return tenantLess(tenants[i], tenants[j], field)
+		if desc {
+			primary = -primary
+		}
+		if primary != 0 {
+			return primary < 0
+		}
+		// Equal primary key → id tiebreaker, always ascending.
+		return a.ID < b.ID
 	})
 }
 
-// tenantLess is a strict less-than: it ONLY returns true when a is
-// strictly less than b under the chosen field. Equal keys fall through
-// to the id tiebreaker. This shape is what lets sortTenants implement
-// desc via operand-swapping without producing two-way "true" for ties.
-func tenantLess(a, b *models.Tenant, field registry.AdminTenantSortField) bool {
+// tenantPrimaryLess is a strict less-than on the chosen field only.
+// Returns false when the field values are equal; the id tiebreaker is
+// applied by sortTenants directly and stays ascending regardless of
+// the sort direction.
+func tenantPrimaryLess(a, b *models.Tenant, field registry.AdminTenantSortField) bool {
 	switch field {
 	case registry.AdminTenantSortSlug:
-		if a.Slug != b.Slug {
-			return a.Slug < b.Slug
-		}
+		return a.Slug < b.Slug
 	case registry.AdminTenantSortCreatedAt:
-		if !a.CreatedAt.Equal(b.CreatedAt) {
-			return a.CreatedAt.Before(b.CreatedAt)
-		}
+		return a.CreatedAt.Before(b.CreatedAt)
 	case registry.AdminTenantSortStatus:
-		if a.Status != b.Status {
-			return string(a.Status) < string(b.Status)
-		}
-	default:
-		if a.Name != b.Name {
-			return a.Name < b.Name
-		}
+		return string(a.Status) < string(b.Status)
 	}
-	return a.ID < b.ID
+	return a.Name < b.Name
 }
 
-// countUsersForTenant returns the user count from the linked registry,
-// or zero when the linkage is missing (targeted tests that don't call
-// NewFactorySet).
-func (r *TenantRegistry) countUsersForTenant(ctx context.Context, tenantID string) int {
+// countUsersForTenant returns the user count from the linked registry.
+// Unwired (NewTenantRegistry without SetCountRegistries — targeted
+// tests that don't touch ListAdmin) returns (0, nil) by design; once
+// the linkage is present, registry errors are propagated rather than
+// swallowed so a broken backend doesn't masquerade as an empty tenant.
+func (r *TenantRegistry) countUsersForTenant(ctx context.Context, tenantID string) (int, error) {
 	if r.userRegistry == nil {
-		return 0
+		return 0, nil
 	}
 	users, err := r.userRegistry.ListByTenant(ctx, tenantID)
 	if err != nil {
-		return 0
+		return 0, err
 	}
-	return len(users)
+	return len(users), nil
 }
 
 // countGroupsForTenant mirrors countUsersForTenant for the location
 // group registry.
-func (r *TenantRegistry) countGroupsForTenant(ctx context.Context, tenantID string) int {
+func (r *TenantRegistry) countGroupsForTenant(ctx context.Context, tenantID string) (int, error) {
 	if r.groupRegistry == nil {
-		return 0
+		return 0, nil
 	}
 	groups, err := r.groupRegistry.ListByTenant(ctx, tenantID)
 	if err != nil {
-		return 0
+		return 0, err
 	}
-	return len(groups)
+	return len(groups), nil
 }
 
 // paginate slices `rows` to the requested page. Returns nil when the
@@ -258,11 +271,19 @@ func (r *TenantRegistry) GetAdmin(ctx context.Context, tenantID string) (*regist
 	if err != nil {
 		return nil, err
 	}
+	userCount, err := r.countUsersForTenant(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	groupCount, err := r.countGroupsForTenant(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
 	t := *tenant // copy so callers don't share the registry's pointer
 	return &registry.AdminTenantListItem{
 		Tenant:     &t,
-		UserCount:  r.countUsersForTenant(ctx, tenantID),
-		GroupCount: r.countGroupsForTenant(ctx, tenantID),
+		UserCount:  userCount,
+		GroupCount: groupCount,
 	}, nil
 }
 
