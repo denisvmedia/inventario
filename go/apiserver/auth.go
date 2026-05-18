@@ -874,7 +874,14 @@ func (api *AuthAPI) logAuth(ctx context.Context, action string, userID, tenantID
 	if api.auditService == nil {
 		return
 	}
-	api.auditService.LogAuth(ctx, action, userID, tenantID, success, r, errMsg)
+	api.auditService.LogAuth(ctx, services.AuthEvent{
+		Action:   action,
+		UserID:   userID,
+		TenantID: tenantID,
+		Success:  success,
+		Request:  r,
+		ErrMsg:   errMsg,
+	})
 }
 
 // recordLoginEvent persists a single login_events row (issue #1379). It is

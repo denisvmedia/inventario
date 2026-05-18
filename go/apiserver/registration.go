@@ -453,7 +453,14 @@ func (api *RegistrationAPI) logAuth(r *http.Request, action string, userID *stri
 		ep = &errMsg
 	}
 	tenantID := TenantIDFromContext(r.Context())
-	api.auditService.LogAuth(r.Context(), action, userID, &tenantID, success, r, ep)
+	api.auditService.LogAuth(r.Context(), services.AuthEvent{
+		Action:   action,
+		UserID:   userID,
+		TenantID: &tenantID,
+		Success:  success,
+		Request:  r,
+		ErrMsg:   ep,
+	})
 }
 
 // writeJSON writes a JSON response with the given status code.

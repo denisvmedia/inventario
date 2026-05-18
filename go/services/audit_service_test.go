@@ -29,13 +29,13 @@ func (r *errorAuditLogRegistry) Create(_ context.Context, _ models.AuditLog) (*m
 func TestAuditService_LogAuth_NilReceiver(t *testing.T) {
 	// A nil *AuditService must not panic — the nil check in LogAuth guards against this.
 	var svc *services.AuditService
-	svc.LogAuth(context.Background(), "login", nil, nil, true, nil, nil)
+	svc.LogAuth(context.Background(), services.AuthEvent{Action: "login", Success: true})
 }
 
 func TestAuditService_LogAuth_NilRegistry(t *testing.T) {
 	// NewAuditService with a nil registry must behave as a no-op.
 	svc := services.NewAuditService(nil)
-	svc.LogAuth(context.Background(), "login", nil, nil, true, nil, nil)
+	svc.LogAuth(context.Background(), services.AuthEvent{Action: "login", Success: true})
 }
 
 func TestAuditService_LogAuth_BestEffort(t *testing.T) {
@@ -44,7 +44,7 @@ func TestAuditService_LogAuth_BestEffort(t *testing.T) {
 	reg := &errorAuditLogRegistry{AuditLogRegistry: memory.NewAuditLogRegistry()}
 	svc := services.NewAuditService(reg)
 	// This call must complete without panicking even though Create will fail.
-	svc.LogAuth(context.Background(), "login", nil, nil, true, nil, nil)
+	svc.LogAuth(context.Background(), services.AuthEvent{Action: "login", Success: true})
 }
 
 func TestAuditService_LogAuth_FieldPopulation(t *testing.T) {
@@ -62,7 +62,14 @@ func TestAuditService_LogAuth_FieldPopulation(t *testing.T) {
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	req.Header.Set("X-Real-IP", "9.8.7.6")
 
-	svc.LogAuth(ctx, "login", &userID, &tenantID, false, req, &errMsg)
+	svc.LogAuth(ctx, services.AuthEvent{
+		Action:   "login",
+		UserID:   &userID,
+		TenantID: &tenantID,
+		Success:  false,
+		Request:  req,
+		ErrMsg:   &errMsg,
+	})
 
 	entries, err := reg.List(ctx)
 	c.Assert(err, qt.IsNil)
@@ -91,7 +98,7 @@ func TestAuditService_LogAuth_NilRequest(t *testing.T) {
 	reg := memory.NewAuditLogRegistry()
 	svc := services.NewAuditService(reg)
 
-	svc.LogAuth(ctx, "logout", nil, nil, true, nil, nil)
+	svc.LogAuth(ctx, services.AuthEvent{Action: "logout", Success: true})
 
 	entries, err := reg.List(ctx)
 	c.Assert(err, qt.IsNil)
@@ -126,7 +133,15 @@ func TestAuditService_LogAdmin_PersistsActorSubjectAndImpersonation(t *testing.T
 	req.Header.Set("X-Real-IP", "10.0.0.5")
 	req.Header.Set("User-Agent", "inventario-admin/1.0")
 
-	svc.LogAdmin(ctx, "admin.grant_system_admin", &actorID, &tenantID, &subjectType, &subjectID, true, req, nil)
+	svc.LogAdmin(ctx, services.AdminEvent{
+		Action:      "admin.grant_system_admin",
+		ActorID:     &actorID,
+		TenantID:    &tenantID,
+		SubjectType: &subjectType,
+		SubjectID:   &subjectID,
+		Success:     true,
+		Request:     req,
+	})
 
 	entries, err := reg.List(ctx)
 	c.Assert(err, qt.IsNil)
@@ -164,7 +179,12 @@ func TestAuditService_LogAdmin_NoImpersonationWithoutImpClaim(t *testing.T) {
 
 	actor := "alice"
 	tenant := "tenant-acme"
-	svc.LogAdmin(ctx, "admin.list_system_admins", &actor, &tenant, nil, nil, true, nil, nil)
+	svc.LogAdmin(ctx, services.AdminEvent{
+		Action:   "admin.list_system_admins",
+		ActorID:  &actor,
+		TenantID: &tenant,
+		Success:  true,
+	})
 
 	entries, err := reg.List(ctx)
 	c.Assert(err, qt.IsNil)
@@ -182,7 +202,13 @@ func TestAuditService_LogAdmin_FailureRecordsErrorMessage(t *testing.T) {
 	actor := "operator-1"
 	tenant := "tenant-acme"
 	errMsg := "cannot remove the last system admin"
-	svc.LogAdmin(ctx, "admin.revoke_system_admin", &actor, &tenant, nil, nil, false, nil, &errMsg)
+	svc.LogAdmin(ctx, services.AdminEvent{
+		Action:   "admin.revoke_system_admin",
+		ActorID:  &actor,
+		TenantID: &tenant,
+		Success:  false,
+		ErrMsg:   &errMsg,
+	})
 
 	entries, err := reg.List(ctx)
 	c.Assert(err, qt.IsNil)
@@ -255,7 +281,7 @@ func TestAuditService_LogAuth_IPExtraction(t *testing.T) {
 			req := httptest.NewRequest("GET", "/", nil)
 			tt.setup(req)
 
-			svc.LogAuth(ctx, "login", nil, nil, true, req, nil)
+			svc.LogAuth(ctx, services.AuthEvent{Action: "login", Success: true, Request: req})
 
 			entries, err := reg.List(ctx)
 			c.Assert(err, qt.IsNil)
