@@ -251,6 +251,14 @@ func (m *mockUserRegistryForAuth) RevokeSystemAdminAtomic(ctx context.Context, u
 	return false, nil
 }
 
+func (m *mockUserRegistryForAuth) ListAdminByTenant(ctx context.Context, tenantID string, opts registry.AdminUserListOptions) ([]*registry.AdminUserListItem, int, error) {
+	return nil, 0, nil
+}
+
+func (m *mockUserRegistryForAuth) CountSessionsByUser(ctx context.Context, userID string) (int, error) {
+	return 0, nil
+}
+
 // mockGroupMembershipRegistryForAuth satisfies registry.GroupMembershipRegistry for the
 // default_group_id membership check (#1263). Only GetByGroupAndUser is exercised by the
 // auth handler; the rest return zero values.

@@ -3,9 +3,13 @@ package apiserver
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 // AdminPingResponse is the body returned by GET /admin/_ping. It is
@@ -39,16 +43,81 @@ func adminPing(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// AdminParams is the set of dependencies the admin subtree needs to
+// resolve cross-tenant data. The FactorySet is held directly (not the
+// per-request user-aware Set) because admin endpoints intentionally
+// cross tenants — using the user-aware registries would limit the
+// admin to their own tenant, defeating the surface. AuditService is
+// shared with the rest of the apiserver so the admin audit trail
+// lands in the same audit_logs table.
+type AdminParams struct {
+	FactorySet   *registry.FactorySet
+	AuditService services.AuditLogger
+}
+
 // Admin returns the router configurator for /api/v1/admin/*. Mounted
 // from apiserver.go behind the standard userMiddlewares (JWT + RLS +
-// CSRF) and the RequireSystemAdmin gate. Later admin issues (#1750,
-// etc.) hang their endpoints off the same chi.Router this closure
-// receives.
-func Admin() func(r chi.Router) {
+// CSRF) and the RequireSystemAdmin gate. Later admin issues hang their
+// endpoints off the same chi.Router this closure receives.
+func Admin(params AdminParams) func(r chi.Router) {
+	tenantsAPI := &adminTenantsAPI{
+		factorySet:   params.FactorySet,
+		auditService: params.AuditService,
+	}
+	usersAPI := &adminUsersAPI{
+		factorySet:   params.FactorySet,
+		auditService: params.AuditService,
+	}
 	return func(r chi.Router) {
 		// RequireSystemAdmin runs as the first per-subtree middleware so
 		// every handler below it can assume the caller is a system admin.
 		r.Use(RequireSystemAdmin)
 		r.Get("/_ping", adminPing)
+
+		// #1746: tenants + users listing endpoints. Each handler
+		// audit-logs via params.AuditService and bypasses RLS at the
+		// registry layer (correlated COUNT subqueries on RLS-enabled
+		// tables run with `SET LOCAL row_security = off` for
+		// defense-in-depth).
+		r.Get("/tenants", tenantsAPI.listTenants)
+		r.Get("/tenants/{tenantID}", tenantsAPI.getTenant)
+		r.Get("/tenants/{tenantID}/users", usersAPI.listTenantUsers)
+		r.Get("/users/{userID}", usersAPI.getUser)
 	}
+}
+
+// parseAdminSort splits a `?sort=<field>` query value into the (field, desc)
+// pair the registry layer expects. A leading `-` reverses the natural
+// order (e.g. `-created_at` → desc by created_at). Unknown fields are
+// left as-is and the registry layer falls back to its default sort —
+// surface drift across FE/BE versions is intentionally tolerated to
+// keep the listing endpoint responsive during deploys.
+func parseAdminSort(raw string) (field string, desc bool) {
+	if raw == "" {
+		return "", false
+	}
+	if raw[0] == '-' {
+		return raw[1:], true
+	}
+	return raw, false
+}
+
+// parseAdminSortAndOrder reconciles the dual sort conventions the
+// admin FE may send: the `?sort=-name` shorthand (consistent with the
+// rest of the API) or the explicit `?sort=name&order=desc` pair (which
+// some FE table libs prefer). An explicit `order=` param always wins
+// over a leading `-` prefix so the FE never has to strip the prefix
+// before re-sending the current sort with a flipped direction. Unknown
+// `order=` values (e.g. `?order=ascending`) are intentionally ignored
+// rather than rejected so the FE can drift slightly across versions —
+// the registry layer further whitelists the sort field via IsValid().
+func parseAdminSortAndOrder(rawSort, rawOrder string) (field string, desc bool) {
+	field, desc = parseAdminSort(rawSort)
+	switch strings.ToLower(strings.TrimSpace(rawOrder)) {
+	case "asc":
+		desc = false
+	case "desc":
+		desc = true
+	}
+	return field, desc
 }

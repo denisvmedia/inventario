@@ -78,6 +78,14 @@ func (m *mockUserRegistry) RevokeSystemAdminAtomic(ctx context.Context, userID s
 	return false, registry.ErrNotFound
 }
 
+func (m *mockUserRegistry) ListAdminByTenant(ctx context.Context, tenantID string, opts registry.AdminUserListOptions) ([]*registry.AdminUserListItem, int, error) {
+	return nil, 0, nil
+}
+
+func (m *mockUserRegistry) CountSessionsByUser(ctx context.Context, userID string) (int, error) {
+	return 0, nil
+}
+
 func TestSignedURLMiddleware(t *testing.T) {
 	c := qt.New(t)
 

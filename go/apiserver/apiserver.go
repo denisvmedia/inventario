@@ -356,7 +356,10 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// inside Admin() rejects non-admins before any handler runs. Mounting
 		// at the same level as /system keeps the surface tenant-agnostic —
 		// system admins are not scoped to a tenant.
-		r.With(userMiddlewares...).Route("/admin", Admin())
+		r.With(userMiddlewares...).Route("/admin", Admin(AdminParams{
+			FactorySet:   params.FactorySet,
+			AuditService: auditSvc,
+		}))
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives
 		// under /groups/{id}/members; a tenant-wide admin surface will be
