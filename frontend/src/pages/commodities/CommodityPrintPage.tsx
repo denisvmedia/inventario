@@ -119,8 +119,8 @@ export function CommodityPrintPage() {
                   {type ? t(`commodities:type.${type}`) : ""}
                 </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {formatDate(new Date(), { style: "short" })}
+              <p className="text-xs text-muted-foreground" data-testid="commodity-print-header-date">
+                {formatDate(new Date(), { style: "medium" })}
               </p>
             </header>
 
