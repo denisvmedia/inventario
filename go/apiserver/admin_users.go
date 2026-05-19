@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -324,7 +326,7 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 // @Description Body-validation rejections surface as 422 with `admin.block.reason_required` (missing or blank `reason`) or `admin.block.reason_too_long` (reason exceeds 500 characters).
 // @Tags admin
 // @Accept json
-// @Produce json
+// @Produce json-api
 // @Param userID path string true "Target user ID"
 // @Param data body AdminBlockRequest true "Block request"
 // @Success 200 {object} AdminUserEnvelope "OK"
@@ -459,7 +461,7 @@ func operatorIDFromContext(ctx context.Context, actor *models.User) string {
 // @Description Body-validation rejections surface as 422 with `admin.block.reason_required` (missing or blank `reason`) or `admin.block.reason_too_long` (reason exceeds 500 characters); the codes are shared with the block endpoint.
 // @Tags admin
 // @Accept json
-// @Produce json
+// @Produce json-api
 // @Param userID path string true "Target user ID"
 // @Param data body AdminUnblockRequest true "Unblock request"
 // @Success 200 {object} AdminUserEnvelope "OK"
@@ -538,7 +540,7 @@ func (api *adminUsersAPI) decodeBlockRequest(w http.ResponseWriter, r *http.Requ
 		_ = badRequest(w, r, err)
 		return req, false
 	}
-	if dec.More() {
+	if !decoderAtEOF(dec) {
 		_ = badRequest(w, r, errors.New("invalid JSON body — trailing tokens"))
 		return req, false
 	}
@@ -547,7 +549,7 @@ func (api *adminUsersAPI) decodeBlockRequest(w http.ResponseWriter, r *http.Requ
 		_ = codedUnprocessableEntityError(w, r, errors.New("reason is required"), AdminBlockReasonRequiredCode)
 		return req, false
 	}
-	if len(req.Reason) > adminBlockReasonMaxLen {
+	if utf8.RuneCountInString(req.Reason) > adminBlockReasonMaxLen {
 		_ = codedUnprocessableEntityError(w, r, errors.New("reason is too long"), AdminBlockReasonTooLongCode)
 		return req, false
 	}
@@ -570,7 +572,7 @@ func (api *adminUsersAPI) decodeUnblockRequest(w http.ResponseWriter, r *http.Re
 		_ = badRequest(w, r, err)
 		return req, false
 	}
-	if dec.More() {
+	if !decoderAtEOF(dec) {
 		_ = badRequest(w, r, errors.New("invalid JSON body — trailing tokens"))
 		return req, false
 	}
@@ -582,11 +584,25 @@ func (api *adminUsersAPI) decodeUnblockRequest(w http.ResponseWriter, r *http.Re
 		_ = codedUnprocessableEntityError(w, r, errors.New("reason is required"), AdminBlockReasonRequiredCode)
 		return req, false
 	}
-	if len(req.Reason) > adminBlockReasonMaxLen {
+	if utf8.RuneCountInString(req.Reason) > adminBlockReasonMaxLen {
 		_ = codedUnprocessableEntityError(w, r, errors.New("reason is too long"), AdminBlockReasonTooLongCode)
 		return req, false
 	}
 	return req, true
+}
+
+// decoderAtEOF reports whether the decoder has consumed all of its
+// input. The standard json.Decoder.More() method is documented to
+// report whether there is another element in the *current array or
+// object* being parsed, not whether there are trailing top-level
+// tokens — so the canonical way to reject concatenated payloads like
+// `{"reason":"x"}{"extra":1}` is to attempt a second Decode and
+// require io.EOF. Any other outcome (a successful decode, or an
+// error that is NOT io.EOF) means trailing data exists.
+func decoderAtEOF(dec *json.Decoder) bool {
+	var trailing json.RawMessage
+	err := dec.Decode(&trailing)
+	return errors.Is(err, io.EOF)
 }
 
 // applyBlockCascade tears down the user's live sessions after the

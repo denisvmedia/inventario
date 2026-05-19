@@ -385,7 +385,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["apiserver.AdminUserEnvelope"];
+                        "application/vnd.api+json": components["schemas"]["apiserver.AdminUserEnvelope"];
                     };
                 };
                 /** @description Bad Request - invalid body */
@@ -394,7 +394,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["jsonapi.Errors"];
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
                 /** @description Unauthorized */
@@ -403,7 +403,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["jsonapi.Errors"];
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
                 /** @description Forbidden - system-admin required */
@@ -412,7 +412,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["jsonapi.Errors"];
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
                 /** @description Not Found - unknown user */
@@ -421,7 +421,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["jsonapi.Errors"];
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
                 /** @description Unprocessable Entity - self-block or admin-on-admin without force */
@@ -430,7 +430,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["jsonapi.Errors"];
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };
@@ -479,7 +479,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["apiserver.AdminUserEnvelope"];
+                        "application/vnd.api+json": components["schemas"]["apiserver.AdminUserEnvelope"];
                     };
                 };
                 /** @description Bad Request - invalid body */
@@ -488,7 +488,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["jsonapi.Errors"];
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
                 /** @description Unauthorized */
@@ -497,7 +497,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["jsonapi.Errors"];
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
                 /** @description Forbidden - system-admin required */
@@ -506,7 +506,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["jsonapi.Errors"];
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
                 /** @description Not Found - unknown user */
@@ -515,7 +515,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["jsonapi.Errors"];
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
                 /** @description Unprocessable Entity - invalid reason */
@@ -524,7 +524,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["jsonapi.Errors"];
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };

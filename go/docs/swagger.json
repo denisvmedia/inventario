@@ -295,7 +295,7 @@
                     "application/json"
                 ],
                 "produces": [
-                    "application/json"
+                    "application/vnd.api+json"
                 ],
                 "tags": [
                     "admin"
@@ -366,7 +366,7 @@
                     "application/json"
                 ],
                 "produces": [
-                    "application/json"
+                    "application/vnd.api+json"
                 ],
                 "tags": [
                     "admin"

@@ -4167,7 +4167,7 @@ paths:
         schema:
           $ref: '#/definitions/apiserver.AdminBlockRequest'
       produces:
-      - application/json
+      - application/vnd.api+json
       responses:
         "200":
           description: OK
@@ -4218,7 +4218,7 @@ paths:
         schema:
           $ref: '#/definitions/apiserver.AdminUnblockRequest'
       produces:
-      - application/json
+      - application/vnd.api+json
       responses:
         "200":
           description: OK

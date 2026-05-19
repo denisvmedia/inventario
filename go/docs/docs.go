@@ -302,7 +302,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "produces": [
-                    "application/json"
+                    "application/vnd.api+json"
                 ],
                 "tags": [
                     "admin"
@@ -373,7 +373,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "produces": [
-                    "application/json"
+                    "application/vnd.api+json"
                 ],
                 "tags": [
                     "admin"

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -231,29 +232,26 @@ func adminAuditBreadcrumb(ev AdminEvent, rawUA string) string {
 // but a future CLI / in-process caller might call LogAdmin directly with
 // a multi-KB string. Truncating here keeps the user_agent column bounded
 // regardless of caller hygiene.
+//
+// The cap is measured in runes (Unicode code points), consistent with
+// the OpenAPI `maxLength` semantics on the request schema. The
+// truncation marker counts toward the cap so the returned string is
+// always ≤ adminBreadcrumbReasonMaxLen runes — never one rune over.
 func truncateReason(reason string) string {
-	if len(reason) <= adminBreadcrumbReasonMaxLen {
+	if utf8.RuneCountInString(reason) <= adminBreadcrumbReasonMaxLen {
 		return reason
 	}
-	// Truncate by rune boundary to avoid splitting a multi-byte
-	// codepoint mid-sequence, then append the truncation marker so the
-	// reader can tell the value was clipped.
-	r := []rune(reason)
-	// Pick the smaller of (rune cap, byte cap) — both are conservative.
-	if len(r) > adminBreadcrumbReasonMaxLen {
-		r = r[:adminBreadcrumbReasonMaxLen]
+	markerRunes := utf8.RuneCountInString(adminBreadcrumbTruncateMarker)
+	keep := adminBreadcrumbReasonMaxLen - markerRunes
+	if keep <= 0 {
+		// Pathological config (marker alone exceeds the cap). Fall back
+		// to the marker truncated to the cap so the caller still gets
+		// a bounded string rather than a panic.
+		runes := []rune(adminBreadcrumbTruncateMarker)
+		return string(runes[:adminBreadcrumbReasonMaxLen])
 	}
-	out := string(r)
-	if len(out) > adminBreadcrumbReasonMaxLen {
-		// Multi-byte codepoints can push us back over the byte cap even
-		// after the rune trim. Walk back one rune at a time until we
-		// fit. Tight loop, bounded by the rune count we already trimmed.
-		for len(out) > adminBreadcrumbReasonMaxLen-len(adminBreadcrumbTruncateMarker) && len(r) > 0 {
-			r = r[:len(r)-1]
-			out = string(r)
-		}
-	}
-	return out + adminBreadcrumbTruncateMarker
+	runes := []rune(reason)
+	return string(runes[:keep]) + adminBreadcrumbTruncateMarker
 }
 
 // ImpersonatorIDFromContext returns the operator's user ID when the
