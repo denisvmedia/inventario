@@ -347,6 +347,194 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/admin/users/{userID}/block": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Block (deactivate) a user account
+         * @description Sets the user's `is_active` flag to false, revokes every refresh token, and bumps the JWT-blacklist staleness threshold so live access tokens are rejected on next use.
+         *     Returns 422 with `admin.block.self_blocked` when the caller targets their own account, and 422 with `admin.block.admin_requires_force` when targeting another system admin without `force=true`.
+         *     Body-validation rejections surface as 422 with `admin.block.reason_required` (missing or blank `reason`) or `admin.block.reason_too_long` (reason exceeds 500 characters).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Target user ID */
+                    userID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Block request */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.AdminBlockRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.AdminUserEnvelope"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown user */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - self-block or admin-on-admin without force */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{userID}/unblock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unblock (reactivate) a user account
+         * @description Sets the user's `is_active` flag back to true. Does NOT re-issue tokens — the user must log in again.
+         *     Does NOT clear the JWT-blacklist staleness threshold either, so any access tokens that were issued before the block stay rejected until the iat-staleness ring expires.
+         *     Body-validation rejections surface as 422 with `admin.block.reason_required` (missing or blank `reason`) or `admin.block.reason_too_long` (reason exceeds 500 characters); the codes are shared with the block endpoint.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Target user ID */
+                    userID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Unblock request */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.AdminUnblockRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.AdminUserEnvelope"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown user */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - invalid reason */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/change-password": {
         parameters: {
             query?: never;
@@ -7237,9 +7425,38 @@ export type paths = {
 export type webhooks = Record<string, never>;
 export type components = {
     schemas: {
+        "apiserver.AdminBlockRequest": {
+            /**
+             * @description Force overrides the "cannot block another system admin" guard.
+             *     Has no effect when blocking a non-admin user.
+             */
+            force?: boolean;
+            /** @description Reason is the free-form justification for the block (max 500 chars). */
+            reason: string;
+        };
         "apiserver.AdminPingResponse": {
             ok?: boolean;
             timestamp?: string;
+        };
+        "apiserver.AdminUnblockRequest": {
+            /** @description Reason is the free-form justification for the unblock (max 500 chars). */
+            reason: string;
+        };
+        "apiserver.AdminUserEnvelope": {
+            data?: components["schemas"]["apiserver.AdminUserResource"];
+        };
+        "apiserver.AdminUserResource": {
+            attributes?: components["schemas"]["apiserver.AdminUserView"];
+            id?: string;
+            type?: string;
+        };
+        "apiserver.AdminUserView": {
+            email?: string;
+            id?: string;
+            is_active?: boolean;
+            is_system_admin?: boolean;
+            name?: string;
+            tenant_id?: string;
         };
         "apiserver.ChangePasswordRequest": {
             current_password?: string;

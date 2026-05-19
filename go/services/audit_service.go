@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"strings"
@@ -42,6 +44,16 @@ type AuthEvent struct {
 // fills it from the request's JWT claims (`imp` / `impersonated_by`),
 // so the call site never needs to know whether an impersonation session
 // is active.
+//
+// Reason / Forced / Extra carry the action-specific breadcrumb that
+// LogAdmin persists alongside the row. The audit_logs schema doesn't
+// have a generic context column today (#1747) — stuffing the breadcrumb
+// into user_agent as a JSON blob with the real UA preserved under a
+// sub-key keeps the row self-describing without a schema bump. Mirrors
+// insertCurrencyMigrationAuditLog. When Reason/Forced/Extra are all
+// zero-valued the helper falls back to writing the raw User-Agent
+// header so existing callers (grant/revoke) continue to write a plain
+// UA string, not a noisy {"ua":"..."} blob.
 type AdminEvent struct {
 	Action      string
 	ActorID     *string
@@ -51,6 +63,19 @@ type AdminEvent struct {
 	Success     bool
 	Request     *http.Request
 	ErrMsg      *string
+	// Reason is the operator-supplied free-form text accompanying a
+	// state-changing admin action (e.g. the body field on block/unblock).
+	Reason string
+	// Forced flags a sensitive admin action that bypassed a guard via an
+	// explicit `force: true` body flag (e.g. blocking another system
+	// admin). The audit consumer can pivot on this in queries even
+	// when Action is identical to the non-forced variant.
+	Forced bool
+	// Extra carries action-specific breadcrumb fields. Merged into the
+	// user_agent JSON blob alongside reason / forced / ua. Keep the
+	// values small and JSON-serialisable — this column is text, not
+	// jsonb, and oversized blobs hurt audit log scans.
+	Extra map[string]any
 }
 
 // AuditLogger is the interface for logging security-relevant events.
@@ -143,9 +168,104 @@ func (s *AuditService) LogAdmin(ctx context.Context, ev AdminEvent) {
 		entry.UserAgent = ev.Request.UserAgent()
 	}
 
+	// When the caller supplied any breadcrumb fields, encode them as a
+	// JSON blob in user_agent and tuck the real UA under "ua" so the
+	// row carries the full context — see AdminEvent doc-comment for
+	// the rationale.
+	if breadcrumb := adminAuditBreadcrumb(ev, entry.UserAgent); breadcrumb != "" {
+		entry.UserAgent = breadcrumb
+	}
+
 	if _, err := s.auditRegistry.Create(ctx, entry); err != nil {
 		slog.Error("Failed to write admin audit log entry", "action", ev.Action, "error", err)
 	}
+}
+
+// adminBreadcrumbReasonMaxLen caps the breadcrumb reason at 500
+// characters as defence-in-depth against non-HTTP callers (future CLI
+// admin actions, in-process service helpers) that don't share the
+// HTTP-decoder's input validation. The audit_logs.user_agent column
+// tunnels the JSON breadcrumb today (#1747) — a multi-KB reason would
+// bloat the row without an upper bound here.
+const adminBreadcrumbReasonMaxLen = 500
+
+// adminBreadcrumbTruncateMarker is the suffix appended to a reason that
+// exceeds the cap so post-hoc readers can tell the value was truncated
+// rather than provided verbatim.
+const adminBreadcrumbTruncateMarker = "…"
+
+// adminAuditBreadcrumb returns a JSON-encoded breadcrumb if any of the
+// optional context fields are populated, or "" to signal that the
+// caller should keep the existing user_agent value (raw UA string).
+// Keeping the fall-through path explicit avoids retroactively rewriting
+// every existing admin.* audit row to a noisy {"ua":"..."} blob.
+func adminAuditBreadcrumb(ev AdminEvent, rawUA string) string {
+	if ev.Reason == "" && !ev.Forced && len(ev.Extra) == 0 {
+		return ""
+	}
+	payload := make(map[string]any, len(ev.Extra)+3)
+	maps.Copy(payload, ev.Extra)
+	if ev.Reason != "" {
+		payload["reason"] = truncateReason(ev.Reason)
+	}
+	if ev.Forced {
+		payload["forced"] = true
+	}
+	if rawUA != "" {
+		payload["ua"] = rawUA
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		// Falling back to the raw UA keeps the row intact when the
+		// breadcrumb payload contains an unsupported type — the
+		// alternative would silently drop the audit row, which is
+		// strictly worse than losing the breadcrumb context.
+		slog.Error("Failed to marshal admin audit breadcrumb", "action", ev.Action, "error", err)
+		return ""
+	}
+	return string(encoded)
+}
+
+// truncateReason enforces the audit-breadcrumb reason cap. Defence-in-
+// depth: the HTTP decoder already rejects oversized reasons with a 422,
+// but a future CLI / in-process caller might call LogAdmin directly with
+// a multi-KB string. Truncating here keeps the user_agent column bounded
+// regardless of caller hygiene.
+func truncateReason(reason string) string {
+	if len(reason) <= adminBreadcrumbReasonMaxLen {
+		return reason
+	}
+	// Truncate by rune boundary to avoid splitting a multi-byte
+	// codepoint mid-sequence, then append the truncation marker so the
+	// reader can tell the value was clipped.
+	r := []rune(reason)
+	// Pick the smaller of (rune cap, byte cap) — both are conservative.
+	if len(r) > adminBreadcrumbReasonMaxLen {
+		r = r[:adminBreadcrumbReasonMaxLen]
+	}
+	out := string(r)
+	if len(out) > adminBreadcrumbReasonMaxLen {
+		// Multi-byte codepoints can push us back over the byte cap even
+		// after the rune trim. Walk back one rune at a time until we
+		// fit. Tight loop, bounded by the rune count we already trimmed.
+		for len(out) > adminBreadcrumbReasonMaxLen-len(adminBreadcrumbTruncateMarker) && len(r) > 0 {
+			r = r[:len(r)-1]
+			out = string(r)
+		}
+	}
+	return out + adminBreadcrumbTruncateMarker
+}
+
+// ImpersonatorIDFromContext returns the operator's user ID when the
+// request context carries impersonation claims (`imp` == true with a
+// non-empty `impersonated_by`), and nil otherwise. Exported so the HTTP
+// layer can resolve "who actually initiated this request" without
+// re-parsing the bearer token — for example to prevent an operator from
+// self-blocking through an impersonated session (#1747).
+//
+// Returns nil for the common case where no impersonation is active.
+func ImpersonatorIDFromContext(ctx context.Context) *string {
+	return impersonatorFromContext(ctx)
 }
 
 // impersonatorFromContext returns the user ID stored in the `impersonated_by`

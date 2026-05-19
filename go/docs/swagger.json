@@ -288,6 +288,148 @@
                 }
             }
         },
+        "/admin/users/{userID}/block": {
+            "post": {
+                "description": "Sets the user's `is_active` flag to false, revokes every refresh token, and bumps the JWT-blacklist staleness threshold so live access tokens are rejected on next use.\nReturns 422 with `admin.block.self_blocked` when the caller targets their own account, and 422 with `admin.block.admin_requires_force` when targeting another system admin without `force=true`.\nBody-validation rejections surface as 422 with `admin.block.reason_required` (missing or blank `reason`) or `admin.block.reason_too_long` (reason exceeds 500 characters).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Block (deactivate) a user account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target user ID",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Block request",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminBlockRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminUserEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - system-admin required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown user",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - self-block or admin-on-admin without force",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/users/{userID}/unblock": {
+            "post": {
+                "description": "Sets the user's `is_active` flag back to true. Does NOT re-issue tokens — the user must log in again.\nDoes NOT clear the JWT-blacklist staleness threshold either, so any access tokens that were issued before the block stay rejected until the iat-staleness ring expires.\nBody-validation rejections surface as 422 with `admin.block.reason_required` (missing or blank `reason`) or `admin.block.reason_too_long` (reason exceeds 500 characters); the codes are shared with the block endpoint.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Unblock (reactivate) a user account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target user ID",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Unblock request",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminUnblockRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminUserEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - system-admin required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown user",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - invalid reason",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/change-password": {
             "post": {
                 "description": "Change the authenticated user's password. All existing sessions are invalidated on success.",
@@ -6549,6 +6691,23 @@
         }
     },
     "definitions": {
+        "apiserver.AdminBlockRequest": {
+            "type": "object",
+            "required": [
+                "reason"
+            ],
+            "properties": {
+                "force": {
+                    "description": "Force overrides the \"cannot block another system admin\" guard.\nHas no effect when blocking a non-admin user.",
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "Reason is the free-form justification for the block (max 500 chars).",
+                    "type": "string",
+                    "maxLength": 500
+                }
+            }
+        },
         "apiserver.AdminPingResponse": {
             "type": "object",
             "properties": {
@@ -6556,6 +6715,64 @@
                     "type": "boolean"
                 },
                 "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.AdminUnblockRequest": {
+            "type": "object",
+            "required": [
+                "reason"
+            ],
+            "properties": {
+                "reason": {
+                    "description": "Reason is the free-form justification for the unblock (max 500 chars).",
+                    "type": "string",
+                    "maxLength": 500
+                }
+            }
+        },
+        "apiserver.AdminUserEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/apiserver.AdminUserResource"
+                }
+            }
+        },
+        "apiserver.AdminUserResource": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/apiserver.AdminUserView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.AdminUserView": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "is_system_admin": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tenant_id": {
                     "type": "string"
                 }
             }
