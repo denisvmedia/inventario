@@ -45,7 +45,9 @@ describe("ImpersonationBanner", () => {
     )
     renderBanner()
     // Let the auth probe + impersonation query settle.
-    await new Promise((r) => setTimeout(r, 50))
+    await waitFor(() => {
+      expect(screen.queryByTestId("impersonation-banner")).not.toBeInTheDocument()
+    })
     expect(screen.queryByTestId("impersonation-banner")).toBeNull()
   })
 
@@ -62,7 +64,9 @@ describe("ImpersonationBanner", () => {
       )
     )
     renderBanner()
-    await new Promise((r) => setTimeout(r, 50))
+    await waitFor(() => {
+      expect(screen.queryByTestId("impersonation-banner")).not.toBeInTheDocument()
+    })
     expect(screen.queryByTestId("impersonation-banner")).toBeNull()
   })
 

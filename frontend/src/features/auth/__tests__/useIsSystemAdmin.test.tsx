@@ -22,7 +22,7 @@ function makeWrapper() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   )
-  return { wrapper }
+  return { wrapper, queryClient }
 }
 
 beforeEach(() => {
@@ -61,10 +61,10 @@ describe("useIsSystemAdmin", () => {
         })
       )
     )
-    const { wrapper } = makeWrapper()
+    const { wrapper, queryClient } = makeWrapper()
     const { result } = renderHook(() => useIsSystemAdmin(), { wrapper })
     // Give the query time to settle, then assert it never flips to true.
-    await new Promise((r) => setTimeout(r, 50))
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(result.current).toBe(false)
   })
 
@@ -75,9 +75,9 @@ describe("useIsSystemAdmin", () => {
         HttpResponse.json({ id: "u3", email: "legacy@example.com", name: "Legacy" })
       )
     )
-    const { wrapper } = makeWrapper()
+    const { wrapper, queryClient } = makeWrapper()
     const { result } = renderHook(() => useIsSystemAdmin(), { wrapper })
-    await new Promise((r) => setTimeout(r, 50))
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
     expect(result.current).toBe(false)
   })
 

@@ -3,6 +3,7 @@ import { Activity, Building2, Layers, Search, Users, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAdminTenants } from "@/features/admin/hooks"
@@ -125,14 +126,16 @@ export function AdminTenantsPage() {
             data-testid="admin-tenants-search"
           />
           {search ? (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setSearch("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              className="absolute right-1.5 top-1/2 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               aria-label={t("tenants.search.clear")}
             >
               <X className="size-3.5" />
-            </button>
+            </Button>
           ) : null}
         </div>
 
