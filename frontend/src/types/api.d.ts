@@ -59,6 +59,255 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/admin/groups/{groupID}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a member to a group (admin)
+         * @description Adds a user to a group with the given role, bypassing the per-group admin check. The membership cap is still enforced — a user already at the cap is rejected with 422.
+         *     Returns 422 with `admin.member.tenant_mismatch` when the target user's tenant differs from the group's tenant, `admin.member.invalid_role` for a missing or invalid role, and `admin.member.user_required` for a missing userID.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Add-member request */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.AdminAddMemberRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.AdminMemberEnvelope"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown group or user */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - tenant mismatch, cap reached, duplicate, or invalid role */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/groups/{groupID}/members/{userID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a member from a group (admin)
+         * @description Removes a user from a group, bypassing the per-group admin check. The ≥1-owner and ≥1-member invariants still apply — removing the last owner returns 422, removing the last member returns 422 with `group.last_member`.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                    /** @description User ID of the member to remove */
+                    userID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - user is not a member of the group */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - removing the last owner or last member */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Change a member's role (admin)
+         * @description Changes a group member's role, bypassing the per-group admin check. Demoting the sole owner is rejected with 422 (`ErrLastOwner`). Returns 422 with `admin.member.invalid_role` for a missing or invalid role.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                    /** @description User ID of the member */
+                    userID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Role-change request */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.AdminUpdateMemberRoleRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.AdminMemberEnvelope"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - user is not a member of the group */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - demoting the last owner or invalid role */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/admin/tenants": {
         parameters: {
             query?: never;
@@ -7425,6 +7674,12 @@ export type paths = {
 export type webhooks = Record<string, never>;
 export type components = {
     schemas: {
+        "apiserver.AdminAddMemberRequest": {
+            /** @description Role is the group role granted to the user: viewer|user|admin|owner. */
+            role: components["schemas"]["models.GroupRole"];
+            /** @description UserID is the ID of the user being added to the group. */
+            userID: string;
+        };
         "apiserver.AdminBlockRequest": {
             /**
              * @description Force overrides the "cannot block another system admin" guard.
@@ -7434,6 +7689,21 @@ export type components = {
             /** @description Reason is the free-form justification for the block (max 500 chars). */
             reason: string;
         };
+        "apiserver.AdminMemberEnvelope": {
+            data?: components["schemas"]["apiserver.AdminMemberResource"];
+        };
+        "apiserver.AdminMemberResource": {
+            attributes?: components["schemas"]["apiserver.AdminMemberView"];
+            id?: string;
+            type?: string;
+        };
+        "apiserver.AdminMemberView": {
+            group_id?: string;
+            joined_at?: string;
+            member_user_id?: string;
+            role?: components["schemas"]["models.GroupRole"];
+            tenant_id?: string;
+        };
         "apiserver.AdminPingResponse": {
             ok?: boolean;
             timestamp?: string;
@@ -7441,6 +7711,10 @@ export type components = {
         "apiserver.AdminUnblockRequest": {
             /** @description Reason is the free-form justification for the unblock (max 500 chars). */
             reason: string;
+        };
+        "apiserver.AdminUpdateMemberRoleRequest": {
+            /** @description Role is the new group role: viewer|user|admin|owner. */
+            role: components["schemas"]["models.GroupRole"];
         };
         "apiserver.AdminUserEnvelope": {
             data?: components["schemas"]["apiserver.AdminUserResource"];

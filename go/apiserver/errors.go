@@ -170,6 +170,21 @@ func adminBlockGuardError(err error) jsonapi.Error {
 	}
 }
 
+// adminMemberTenantMismatchError maps the #1749 cross-tenant
+// add-member rejection (services.ErrTenantMismatch) to its 422 + code
+// wire shape. Extracted as a free function — like adminBlockGuardError
+// — so the toJSONAPIError switch stays under the gocyclo budget while
+// keeping the mapping explicit and grep-friendly.
+func adminMemberTenantMismatchError(err error) jsonapi.Error {
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusUnprocessableEntity,
+		StatusText:     "Unprocessable Entity",
+		Code:           adminMemberTenantMismatchCode,
+	}
+}
+
 func toJSONAPIError(err error) jsonapi.Error {
 	switch {
 	case errors.Is(err, registry.ErrCannotDelete):
@@ -202,22 +217,27 @@ func toJSONAPIError(err error) jsonapi.Error {
 		// Resending a legacy token-only invite (no captured email)
 		// is a business-rule violation: 422, not 500.
 		return NewUnprocessableEntityError(err)
-	case errors.Is(err, services.ErrCommodityNotTrackable):
+	case errors.Is(err, services.ErrCommodityNotTrackable),
+		errors.Is(err, services.ErrClosedLoanFieldImmutable):
 		// #1554: a bundle commodity (count > 1) cannot carry a per-
-		// instance event (lend / service / warranty). Surface as 422
-		// so the FE renders the same "split into separate items" hint
-		// the create-form banner uses.
-		return NewUnprocessableEntityError(err)
-	case errors.Is(err, services.ErrClosedLoanFieldImmutable):
-		// #1511: due_back_at / returned_at are frozen on closed loans
-		// (date-of-record after the loan ends). Surface as 422 so the
-		// FE can render a toast that names the offending field — the
-		// dialog already disables the date inputs, so this only fires
-		// against a hand-crafted request.
+		// instance event (lend / service / warranty) — the FE renders
+		// the "split into separate items" hint the create-form banner
+		// uses. #1511: due_back_at / returned_at are frozen on closed
+		// loans (date-of-record after the loan ends). Both are
+		// business-rule violations: 422, not 500.
 		return NewUnprocessableEntityError(err)
 	case errors.Is(err, services.ErrInvalidConfirmation),
 		errors.Is(err, services.ErrInvalidPassword):
 		return NewUnprocessableEntityError(err)
+	case errors.Is(err, services.ErrTenantMismatch):
+		// #1749: an admin add-member request named a user whose tenant
+		// differs from the group's tenant. A membership crosses no
+		// tenant boundary, so this is a business-rule violation, not a
+		// server bug. 422 + the JSON:API code lets the admin FE render
+		// targeted copy ("that user belongs to a different tenant")
+		// instead of a generic 422 toast. Extracted into a helper so
+		// the switch stays under the gocyclo budget.
+		return adminMemberTenantMismatchError(err)
 	case errors.Is(err, services.ErrTooManyGroupMemberships):
 		// Per-user group-membership cap reached (#1388). Same shape as
 		// the other invite/membership business-rule violations below —
