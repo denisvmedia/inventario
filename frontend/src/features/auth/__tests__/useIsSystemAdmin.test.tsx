@@ -51,33 +51,46 @@ describe("useIsSystemAdmin", () => {
 
   it("returns false for a non-admin user", async () => {
     setAccessToken("good-token")
+    let authMeCalls = 0
     server.use(
-      msw.get(api("/auth/me"), () =>
-        HttpResponse.json({
+      msw.get(api("/auth/me"), () => {
+        authMeCalls++
+        return HttpResponse.json({
           id: "u2",
           email: "user@example.com",
           name: "User",
           is_system_admin: false,
         })
-      )
+      })
     )
     const { wrapper, queryClient } = makeWrapper()
     const { result } = renderHook(() => useIsSystemAdmin(), { wrapper })
-    // Give the query time to settle, then assert it never flips to true.
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+    // Positive completion signal: the assertion only runs once /auth/me has
+    // actually been hit and its response processed by the query cache.
+    await waitFor(() => {
+      expect(authMeCalls).toBeGreaterThan(0)
+      expect(queryClient.isFetching()).toBe(0)
+    })
     expect(result.current).toBe(false)
   })
 
   it("returns false when the flag is absent from the payload", async () => {
     setAccessToken("good-token")
+    let authMeCalls = 0
     server.use(
-      msw.get(api("/auth/me"), () =>
-        HttpResponse.json({ id: "u3", email: "legacy@example.com", name: "Legacy" })
-      )
+      msw.get(api("/auth/me"), () => {
+        authMeCalls++
+        return HttpResponse.json({ id: "u3", email: "legacy@example.com", name: "Legacy" })
+      })
     )
     const { wrapper, queryClient } = makeWrapper()
     const { result } = renderHook(() => useIsSystemAdmin(), { wrapper })
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+    // Positive completion signal: wait until /auth/me has actually responded
+    // and the query has settled before asserting the derived flag.
+    await waitFor(() => {
+      expect(authMeCalls).toBeGreaterThan(0)
+      expect(queryClient.isFetching()).toBe(0)
+    })
     expect(result.current).toBe(false)
   })
 

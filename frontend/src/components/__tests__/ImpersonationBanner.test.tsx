@@ -37,35 +37,51 @@ function renderBanner() {
 describe("ImpersonationBanner", () => {
   it("renders nothing when no impersonation session is active", async () => {
     setAccessToken("good-token")
+    let authMeCalls = 0
+    let impersonationCalls = 0
     server.use(
-      msw.get(api("/auth/me"), () =>
-        HttpResponse.json({ id: "u1", email: "admin@example.com", name: "Admin" })
-      ),
-      msw.get(api("/admin/impersonation/current"), () => HttpResponse.json({ active: false }))
+      msw.get(api("/auth/me"), () => {
+        authMeCalls++
+        return HttpResponse.json({ id: "u1", email: "admin@example.com", name: "Admin" })
+      }),
+      msw.get(api("/admin/impersonation/current"), () => {
+        impersonationCalls++
+        return HttpResponse.json({ active: false })
+      })
     )
     renderBanner()
-    // Let the auth probe + impersonation query settle.
+    // Positive completion signal: wait until both probes have actually been
+    // hit before asserting the banner is absent — the absent state is also
+    // true before the queries resolve, so a bare waitFor would pass early.
     await waitFor(() => {
-      expect(screen.queryByTestId("impersonation-banner")).not.toBeInTheDocument()
+      expect(authMeCalls).toBeGreaterThan(0)
+      expect(impersonationCalls).toBeGreaterThan(0)
     })
     expect(screen.queryByTestId("impersonation-banner")).toBeNull()
   })
 
   it("stays hidden when the endpoint 403s for a non-admin user", async () => {
     setAccessToken("good-token")
+    let authMeCalls = 0
+    let impersonationCalls = 0
     server.use(
-      msw.get(api("/auth/me"), () =>
-        HttpResponse.json({ id: "u9", email: "plain@example.com", name: "Plain" })
-      ),
+      msw.get(api("/auth/me"), () => {
+        authMeCalls++
+        return HttpResponse.json({ id: "u9", email: "plain@example.com", name: "Plain" })
+      }),
       // A plain user 403s on /admin/impersonation/current — the api layer
       // translates that into `{ active: false }`, so the banner hides.
-      msw.get(api("/admin/impersonation/current"), () =>
-        HttpResponse.json({ errors: [] }, { status: 403 })
-      )
+      msw.get(api("/admin/impersonation/current"), () => {
+        impersonationCalls++
+        return HttpResponse.json({ errors: [] }, { status: 403 })
+      })
     )
     renderBanner()
+    // Positive completion signal: wait until both probes have actually been
+    // hit (the 403 included) before asserting the banner stays absent.
     await waitFor(() => {
-      expect(screen.queryByTestId("impersonation-banner")).not.toBeInTheDocument()
+      expect(authMeCalls).toBeGreaterThan(0)
+      expect(impersonationCalls).toBeGreaterThan(0)
     })
     expect(screen.queryByTestId("impersonation-banner")).toBeNull()
   })
