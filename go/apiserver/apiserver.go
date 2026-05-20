@@ -168,6 +168,12 @@ type Params struct {
 	// 404s while the lock middleware no-ops. The Helm chart exposes this
 	// via `features.currencyMigration`.
 	FeatureCurrencyMigration bool
+
+	// ImpersonationTTL is the lifetime of an admin impersonation session
+	// (#1750). Operators tune it via INVENTARIO_RUN_IMPERSONATION_TTL;
+	// zero falls back to the 30-min default and any value above 30 min
+	// is clamped down inside the impersonation handler.
+	ImpersonationTTL time.Duration
 }
 
 func (p *Params) Validate() error {
@@ -357,10 +363,16 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// at the same level as /system keeps the surface tenant-agnostic —
 		// system admins are not scoped to a tenant.
 		r.With(userMiddlewares...).Route("/admin", Admin(AdminParams{
-			FactorySet:   params.FactorySet,
-			Blacklist:    blacklist,
-			AuditService: auditSvc,
-			GroupService: groupService,
+			FactorySet:       params.FactorySet,
+			Blacklist:        blacklist,
+			AuditService:     auditSvc,
+			GroupService:     groupService,
+			JWTSecret:        params.JWTSecret,
+			RateLimiter:      rateLimiter,
+			ImpersonationTTL: params.ImpersonationTTL,
+			// ImpersonationStore left nil — Admin() falls back to an
+			// in-memory store. A shared (Redis) store would be wired
+			// here for multi-replica deployments.
 		}))
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives

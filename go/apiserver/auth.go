@@ -254,6 +254,22 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Refresh tokens not supported", http.StatusNotImplemented)
 		return
 	}
+
+	// Impersonation sessions (#1750) are deliberately non-refreshable:
+	// they must expire hard at the impersonation TTL so an operator can
+	// never extend a borrowed identity indefinitely. The impersonation
+	// access token is the only artifact carrying the `imp` claim — when
+	// the FE sends it on the Authorization header during refresh, reject
+	// the call. The refresh cookie itself still belongs to the admin's
+	// own session (impersonation issues no refresh token), so omitting
+	// this check would silently hand the caller a fresh *admin* access
+	// token mid-impersonation.
+	if api.accessTokenIsImpersonation(r.Header.Get("Authorization")) {
+		slog.Warn("Refresh rejected: impersonation access token cannot be refreshed")
+		http.Error(w, ErrImpersonationTokenCannotRefresh.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	cookie, err := r.Cookie(refreshTokenCookieName)
 	if err != nil {
 		// Cookie missing: nothing to clear — do not set MaxAge=-1 for a non-existent cookie.
@@ -353,6 +369,39 @@ func (api *AuthAPI) userIDFromAccessTokenHeader(authHeader string) (string, bool
 	// Tokens are issued with "user_id" (see issueAccessToken); "sub" is not set.
 	userID, ok := claims["user_id"].(string)
 	return userID, ok && userID != ""
+}
+
+// accessTokenIsImpersonation reports whether the Bearer token in
+// authHeader is an impersonation access token (carries `imp` == true).
+// Used by the refresh endpoint to reject impersonation tokens (#1750).
+// Expired tokens still count — an expired impersonation token presented
+// at refresh must not be refreshable either. Returns false when the
+// header is absent, malformed, or the signature is invalid: a token we
+// cannot verify is treated as "not an impersonation token" so the
+// regular cookie-based refresh path handles (and rejects) it.
+func (api *AuthAPI) accessTokenIsImpersonation(authHeader string) bool {
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader || tokenString == "" {
+		return false
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return api.jwtSecret, nil
+	})
+	if token == nil {
+		return false
+	}
+	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
+		return false
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return false
+	}
+	imp, _ := claims["imp"].(bool)
+	return imp
 }
 
 // blacklistAccessToken extracts claims from a Bearer token header and blacklists its JTI.
