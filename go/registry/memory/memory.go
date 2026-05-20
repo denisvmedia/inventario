@@ -62,17 +62,20 @@ func NewFactorySet() *registry.FactorySet {
 	fs.LoginEventRegistry = NewLoginEventRegistry()
 	fs.UserMFASecretRegistry = NewUserMFASecretRegistry()
 	fs.AuditLogRegistry = NewAuditLogRegistry()
-	fs.LocationGroupRegistry = NewLocationGroupRegistry()
+	groupReg := NewLocationGroupRegistry()
+	fs.LocationGroupRegistry = groupReg
 	membershipReg := NewGroupMembershipRegistry()
 	membershipReg.SetUserRegistry(fs.UserRegistry)
 	fs.GroupMembershipRegistry = membershipReg
-	// Wire the admin-listing cross-table dependencies (#1746). Counts on
-	// the /api/v1/admin/tenants and /api/v1/admin/users surface depend on
-	// these linkages; tests that construct the registries directly without
-	// going through NewFactorySet can leave them nil and the counts
-	// degrade to zero (mirrors postgres "empty join result" semantics).
+	// Wire the admin-listing cross-table dependencies (#1746, #1748).
+	// Counts on the /api/v1/admin/tenants, /api/v1/admin/users and
+	// /api/v1/admin/groups surfaces depend on these linkages; tests that
+	// construct the registries directly without going through
+	// NewFactorySet can leave them nil and the counts degrade to zero
+	// (mirrors postgres "empty join result" semantics).
 	tenantReg.SetCountRegistries(fs.UserRegistry, fs.LocationGroupRegistry)
 	userReg.SetAdminListingRegistries(fs.RefreshTokenRegistry, fs.GroupMembershipRegistry)
+	groupReg.SetAdminListingRegistries(fs.GroupMembershipRegistry, fs.TenantRegistry)
 	fs.GroupInviteRegistry = NewGroupInviteRegistry()
 	fs.GroupInviteAuditRegistry = NewGroupInviteAuditRegistry()
 	fs.GroupNotificationPrefRegistry = NewGroupNotificationPrefRegistry()
