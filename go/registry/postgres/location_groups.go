@@ -251,6 +251,7 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 
 	groupsTable := r.tableNames.LocationGroups()
 	membershipsTable := r.tableNames.GroupMemberships()
+	tenantsTable := r.tableNames.Tenants()
 
 	args := make([]any, 0, 3)
 	whereClauses := make([]string, 0, 3)
@@ -294,14 +295,21 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 		// SECURITY: sortField is constrained to AdminGroupSortField via IsValid above,
 		// direction is "ASC"/"DESC" literals, and table-names come from r.tableNames —
 		// never user-supplied — so direct fmt.Sprintf interpolation is safe.
+		//
+		// tenants is JOINed (not a correlated subquery) so each row carries
+		// the owning-tenant chip — the cross-tenant admin list renders the
+		// tenant name per row without an FE N+1 lookup. Same tx, so the JOIN
+		// is read under the same `SET LOCAL row_security = off`.
 		pageQuery := fmt.Sprintf(`
 			SELECT g.*,
-				(SELECT COUNT(*) FROM %s AS m WHERE m.group_id = g.id) AS _member_count
+				(SELECT COUNT(*) FROM %s AS m WHERE m.group_id = g.id) AS _member_count,
+				t.id AS _tenant_id, t.name AS _tenant_name, t.slug AS _tenant_slug
 			FROM %s AS g
+			JOIN %s AS t ON t.id = g.tenant_id
 			%s
 			ORDER BY g.%s %s, g.id ASC
 			LIMIT $%d OFFSET $%d`,
-			membershipsTable, groupsTable, where, string(sortField), direction, limitPos, offsetPos,
+			membershipsTable, groupsTable, tenantsTable, where, string(sortField), direction, limitPos, offsetPos,
 		)
 		pageArgs := append(append([]any{}, args...), perPage, offset)
 
@@ -314,7 +322,10 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 		for rows.Next() {
 			var row struct {
 				models.LocationGroup
-				MemberCount int `db:"_member_count"`
+				MemberCount int    `db:"_member_count"`
+				TenantID    string `db:"_tenant_id"`
+				TenantName  string `db:"_tenant_name"`
+				TenantSlug  string `db:"_tenant_slug"`
 			}
 			if scanErr := rows.StructScan(&row); scanErr != nil {
 				return errxtrace.Wrap("failed to scan admin group row", scanErr)
@@ -323,6 +334,11 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 			items = append(items, &registry.AdminGroupListItem{
 				Group:       &group,
 				MemberCount: row.MemberCount,
+				Tenant: &models.Tenant{
+					EntityID: models.EntityID{ID: row.TenantID},
+					Name:     row.TenantName,
+					Slug:     row.TenantSlug,
+				},
 			})
 		}
 		if rowsErr := rows.Err(); rowsErr != nil {
@@ -441,6 +457,14 @@ func (r *LocationGroupRegistry) MarkPendingDeletionAdmin(ctx context.Context, gr
 		detail         *registry.AdminGroupDetail
 	)
 	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Defense-in-depth: like ListAdmin / GetAdmin, make the intentional
+		// cross-tenant write explicit at the call site. On the background-
+		// worker role (which carries RLS bypass policies on location_groups)
+		// this is effectively a no-op rather than the primary guard.
+		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
+			return errxtrace.Wrap("failed to disable row_security for admin group soft-delete", execErr)
+		}
+
 		var currentStatus string
 		selectQuery := fmt.Sprintf("SELECT status FROM %s WHERE id = $1 FOR UPDATE", groupsTable)
 		scanErr := tx.QueryRowContext(ctx, selectQuery, groupID).Scan(&currentStatus)

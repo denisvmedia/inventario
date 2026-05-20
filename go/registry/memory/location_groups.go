@@ -74,9 +74,12 @@ func (r *LocationGroupRegistry) ListByTenant(_ context.Context, tenantID string)
 
 // ListAdmin returns the memory equivalent of postgres' admin group
 // listing — filter, sort and paginate the in-memory rows, then attach
-// member_count from the linked membership registry (or zero when unwired).
-// Mirrors the postgres "Total is post-filter, pre-pagination" semantics so
-// callers see one invariant across backends.
+// member_count from the linked membership registry (or zero when unwired)
+// and the owning tenant from the linked tenant registry (or nil when
+// unwired) so the cross-tenant admin list carries an owning-tenant chip
+// per row without an FE N+1 lookup. Mirrors the postgres "Total is
+// post-filter, pre-pagination" semantics so callers see one invariant
+// across backends.
 func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.AdminGroupListOptions) ([]*registry.AdminGroupListItem, int, error) {
 	groups, err := r.List(ctx)
 	if err != nil {
@@ -98,13 +101,35 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 		if err != nil {
 			return nil, 0, err
 		}
+		tenant, err := r.resolveTenant(ctx, g.TenantID)
+		if err != nil {
+			return nil, 0, err
+		}
 		group := *g // copy so callers don't share the registry's pointer
 		items = append(items, &registry.AdminGroupListItem{
 			Group:       &group,
 			MemberCount: memberCount,
+			Tenant:      tenant,
 		})
 	}
 	return items, total, nil
+}
+
+// resolveTenant looks up the owning tenant chip from the linked tenant
+// registry, returning a copy so callers don't share the registry's
+// pointer. Unwired (NewLocationGroupRegistry without
+// SetAdminListingRegistries) or an empty tenantID returns (nil, nil) by
+// design, mirroring the "empty join result" shape.
+func (r *LocationGroupRegistry) resolveTenant(ctx context.Context, tenantID string) (*models.Tenant, error) {
+	if r.tenantRegistry == nil || tenantID == "" {
+		return nil, nil
+	}
+	tenant, err := r.tenantRegistry.Get(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	t := *tenant
+	return &t, nil
 }
 
 // filterGroups applies the case-insensitive ILIKE-style substring match
@@ -217,20 +242,16 @@ func (r *LocationGroupRegistry) buildAdminGroupDetail(ctx context.Context, group
 	if err != nil {
 		return nil, err
 	}
+	tenant, err := r.resolveTenant(ctx, group.TenantID)
+	if err != nil {
+		return nil, err
+	}
 	g := *group // copy so callers don't share the registry's pointer
-	detail := &registry.AdminGroupDetail{
+	return &registry.AdminGroupDetail{
 		Group:       &g,
 		MemberCount: memberCount,
-	}
-	if r.tenantRegistry != nil && g.TenantID != "" {
-		tenant, terr := r.tenantRegistry.Get(ctx, g.TenantID)
-		if terr != nil {
-			return nil, terr
-		}
-		t := *tenant
-		detail.Tenant = &t
-	}
-	return detail, nil
+		Tenant:      tenant,
+	}, nil
 }
 
 // MarkPendingDeletionAdmin flips a group to pending_deletion for the

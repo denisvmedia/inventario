@@ -280,7 +280,11 @@ func (*AdminUserResponse) Render(_ http.ResponseWriter, r *http.Request) error {
 // member_count is pre-computed by the registry layer via a correlated
 // subquery on group_memberships (accepted memberships only) so the FE
 // doesn't need a second roundtrip per row to render the at-a-glance
-// table.
+// table. The `tenant` chip (id + name + slug) is resolved per row by the
+// registry layer so the cross-tenant admin list renders the owning-
+// tenant name without an FE N+1 lookup against /admin/tenants. The flat
+// `tenant_id` is kept alongside the chip for callers that only need the
+// id.
 type AdminGroupListItem struct {
 	ID          string                     `json:"id"`
 	Type        string                     `json:"type" example:"admin_groups" enums:"admin_groups"`
@@ -293,6 +297,7 @@ type AdminGroupListItem struct {
 	CreatedAt   time.Time                  `json:"created_at"`
 	UpdatedAt   time.Time                  `json:"updated_at"`
 	MemberCount int                        `json:"member_count"`
+	Tenant      *AdminGroupTenantChip      `json:"tenant,omitempty"`
 }
 
 // AdminGroupsResponse is the JSON:API envelope for GET /admin/groups.
@@ -312,7 +317,7 @@ func NewAdminGroupsResponse(items []*registry.AdminGroupListItem, page, perPage,
 			continue
 		}
 		g := it.Group
-		data = append(data, &AdminGroupListItem{
+		item := &AdminGroupListItem{
 			ID:          g.ID,
 			Type:        "admin_groups",
 			Name:        g.Name,
@@ -324,7 +329,15 @@ func NewAdminGroupsResponse(items []*registry.AdminGroupListItem, page, perPage,
 			CreatedAt:   g.CreatedAt,
 			UpdatedAt:   g.UpdatedAt,
 			MemberCount: it.MemberCount,
-		})
+		}
+		if it.Tenant != nil {
+			item.Tenant = &AdminGroupTenantChip{
+				ID:   it.Tenant.ID,
+				Name: it.Tenant.Name,
+				Slug: it.Tenant.Slug,
+			}
+		}
+		data = append(data, item)
 	}
 	return &AdminGroupsResponse{
 		Data: data,

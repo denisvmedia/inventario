@@ -431,6 +431,8 @@ definitions:
         type: string
       status:
         $ref: '#/definitions/models.LocationGroupStatus'
+      tenant:
+        $ref: '#/definitions/jsonapi.AdminGroupTenantChip'
       tenant_id:
         type: string
       type:
@@ -4060,9 +4062,9 @@ paths:
       - admin
   /admin/groups:
     get:
-      description: |-
-        Returns every location group with computed member_count. Pagination via ?page&per_page; ?q matches name/slug (ILIKE).
-        ?tenantID and ?status are exact-match filters; ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
+      description: Returns every location group with computed member_count and an
+        owning-tenant chip (id, name, slug). Paginate via ?page&per_page; ?q ILIKE-matches
+        name/slug; ?tenantID/?status filter exactly; ?sort/?order set ordering.
       parameters:
       - description: Page number (default 1)
         in: query
@@ -4080,8 +4082,10 @@ paths:
         in: query
         name: tenantID
         type: string
-      - description: 'Filter to groups in this status: active|pending_deletion (exact
-          match)'
+      - description: Filter to groups in this status (exact match)
+        enum:
+        - active
+        - pending_deletion
         in: query
         name: status
         type: string
@@ -4089,7 +4093,10 @@ paths:
         in: query
         name: sort
         type: string
-      - description: 'Sort direction override: asc|desc (wins over `-` prefix)'
+      - description: Sort direction override (wins over `-` prefix)
+        enum:
+        - asc
+        - desc
         in: query
         name: order
         type: string
@@ -4113,9 +4120,9 @@ paths:
       - admin
   /admin/groups/{groupID}:
     delete:
-      description: |-
-        Sets the group's status to `pending_deletion`; the group purge worker finishes the hard-delete asynchronously.
-        Idempotent — re-deleting an already-pending group returns 200 with the current status. Returns the post-transition group row.
+      description: Sets the group's status to `pending_deletion`; the group purge
+        worker finishes the hard-delete asynchronously. Idempotent — re-deleting an
+        already-pending group returns 200. Returns the post-transition group row.
       parameters:
       - description: Group ID
         in: path

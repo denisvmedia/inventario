@@ -91,6 +91,24 @@ func TestAdminListGroups_AllowsSystemAdmin(t *testing.T) {
 	c.Assert(body.Meta.Total, qt.Equals, 4)
 	c.Assert(body.Data, qt.HasLen, 4)
 	c.Assert(rr.Header().Get("X-Total"), qt.Equals, "4")
+
+	// Assert the per-row tenant chip + member_count on one known seeded
+	// row: "Charlie Group" lives on the fixture's "Other Org" tenant. This
+	// covers the cross-tenant list contract (#1748) and catches JSON:API
+	// mapping regressions on the nested chip.
+	var charlie *jsonapi.AdminGroupListItem
+	for _, item := range body.Data {
+		if item.Name == "Charlie Group" {
+			charlie = item
+			break
+		}
+	}
+	c.Assert(charlie, qt.IsNotNil)
+	c.Assert(charlie.MemberCount, qt.Equals, 0)
+	c.Assert(charlie.Tenant, qt.IsNotNil)
+	c.Assert(charlie.Tenant.Name, qt.Equals, "Other Org")
+	c.Assert(charlie.Tenant.Slug, qt.Equals, "other-org")
+	c.Assert(charlie.Tenant.ID, qt.Equals, charlie.TenantID)
 }
 
 func TestAdminListGroups_DeniesNonAdmin(t *testing.T) {

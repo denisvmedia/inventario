@@ -1227,15 +1227,19 @@ type LocationGroupRegistry interface {
 
 	// ListAdmin returns a paginated, filtered, and sorted listing of every
 	// location group in the deployment alongside per-group computed
-	// member_count (accepted memberships only). The endpoint behind this
-	// method (/api/v1/admin/groups — #1748) crosses tenants by design, so
-	// implementations MUST return rows across all tenants regardless of
-	// caller membership. The postgres LocationGroupRegistry runs the cross-
-	// tenant read as the background-worker role (which carries RLS bypass
-	// policies); `SET LOCAL row_security = off` is added as defense-in-depth
-	// to make the cross-tenant read explicit, not as the primary guard.
-	// member_count is computed via a correlated subquery on
-	// group_memberships. Memory walks the in-memory stores.
+	// member_count (accepted memberships only) and the owning tenant. The
+	// endpoint behind this method (/api/v1/admin/groups — #1748) crosses
+	// tenants by design, so implementations MUST return rows across all
+	// tenants regardless of caller membership. The postgres
+	// LocationGroupRegistry runs the cross-tenant read as the background-
+	// worker role (which carries RLS bypass policies); `SET LOCAL
+	// row_security = off` is added as defense-in-depth to make the cross-
+	// tenant read explicit, not as the primary guard. member_count is
+	// computed via a correlated subquery on group_memberships, and the
+	// owning tenant is resolved per row (postgres JOINs tenants in the same
+	// tx; memory looks it up via the tenant registry) so the FE renders an
+	// owning-tenant chip per row without an N+1 lookup. Memory walks the
+	// in-memory stores.
 	//
 	// Total is the count before LIMIT/OFFSET is applied.
 	ListAdmin(ctx context.Context, opts AdminGroupListOptions) (items []*AdminGroupListItem, total int, err error)
@@ -1322,10 +1326,16 @@ type AdminGroupListOptions struct {
 
 // AdminGroupListItem is the row shape returned by
 // LocationGroupRegistry.ListAdmin: the group row plus the computed
-// member_count the admin listing UI needs to render at a glance.
+// member_count and the owning tenant the admin listing UI needs to
+// render at a glance. Tenant is resolved per row (joined / looked up by
+// the registry) so the cross-tenant admin list can render an owning-
+// tenant chip without an FE N+1 lookup. Tenant may be nil if the join
+// row is somehow missing, but a group with a non-NULL tenant_id FK
+// should always resolve one.
 type AdminGroupListItem struct {
 	Group       *models.LocationGroup
 	MemberCount int
+	Tenant      *models.Tenant
 }
 
 // AdminGroupDetail is the row shape returned by

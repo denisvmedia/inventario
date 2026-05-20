@@ -56,7 +56,7 @@ const docTemplate = `{
         },
         "/admin/groups": {
             "get": {
-                "description": "Returns every location group with computed member_count. Pagination via ?page\u0026per_page; ?q matches name/slug (ILIKE).\n?tenantID and ?status are exact-match filters; ?sort=\u003cfield\u003e with optional ` + "`" + `-` + "`" + ` prefix for desc, or explicit ?order=asc|desc.",
+                "description": "Returns every location group with computed member_count and an owning-tenant chip (id, name, slug). Paginate via ?page\u0026per_page; ?q ILIKE-matches name/slug; ?tenantID/?status filter exactly; ?sort/?order set ordering.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -90,8 +90,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "enum": [
+                            "active",
+                            "pending_deletion"
+                        ],
                         "type": "string",
-                        "description": "Filter to groups in this status: active|pending_deletion (exact match)",
+                        "description": "Filter to groups in this status (exact match)",
                         "name": "status",
                         "in": "query"
                     },
@@ -102,8 +106,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
                         "type": "string",
-                        "description": "Sort direction override: asc|desc (wins over ` + "`" + `-` + "`" + ` prefix)",
+                        "description": "Sort direction override (wins over ` + "`" + `-` + "`" + ` prefix)",
                         "name": "order",
                         "in": "query"
                     }
@@ -177,7 +185,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Sets the group's status to ` + "`" + `pending_deletion` + "`" + `; the group purge worker finishes the hard-delete asynchronously.\nIdempotent — re-deleting an already-pending group returns 200 with the current status. Returns the post-transition group row.",
+                "description": "Sets the group's status to ` + "`" + `pending_deletion` + "`" + `; the group purge worker finishes the hard-delete asynchronously. Idempotent — re-deleting an already-pending group returns 200. Returns the post-transition group row.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -7475,6 +7483,9 @@ const docTemplate = `{
                 },
                 "status": {
                     "$ref": "#/definitions/models.LocationGroupStatus"
+                },
+                "tenant": {
+                    "$ref": "#/definitions/jsonapi.AdminGroupTenantChip"
                 },
                 "tenant_id": {
                     "type": "string"

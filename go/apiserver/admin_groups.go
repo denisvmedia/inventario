@@ -32,17 +32,16 @@ type adminGroupsAPI struct {
 // read is therefore unconditional, not gated on a fail-loud trip-wire.
 //
 // @Summary List groups (admin)
-// @Description Returns every location group with computed member_count. Pagination via ?page&per_page; ?q matches name/slug (ILIKE).
-// @Description ?tenantID and ?status are exact-match filters; ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
+// @Description Returns every location group with computed member_count and an owning-tenant chip (id, name, slug). Paginate via ?page&per_page; ?q ILIKE-matches name/slug; ?tenantID/?status filter exactly; ?sort/?order set ordering.
 // @Tags admin
 // @Produce json-api
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
 // @Param q query string false "Search term — ILIKE match on name/slug"
 // @Param tenantID query string false "Filter to groups belonging to this tenant ID (exact match)"
-// @Param status query string false "Filter to groups in this status: active|pending_deletion (exact match)"
+// @Param status query string false "Filter to groups in this status (exact match)" Enums(active,pending_deletion)
 // @Param sort query string false "Sort field: name|slug|created_at|status (prefix with - for desc)"
-// @Param order query string false "Sort direction override: asc|desc (wins over `-` prefix)"
+// @Param order query string false "Sort direction override (wins over `-` prefix)" Enums(asc,desc)
 // @Success 200 {object} jsonapi.AdminGroupsResponse "OK"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized"
 // @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
@@ -140,8 +139,7 @@ func (api *adminGroupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
 // operator clicking delete) is not surprised by a 4xx.
 //
 // @Summary Soft-delete a group (admin)
-// @Description Sets the group's status to `pending_deletion`; the group purge worker finishes the hard-delete asynchronously.
-// @Description Idempotent — re-deleting an already-pending group returns 200 with the current status. Returns the post-transition group row.
+// @Description Sets the group's status to `pending_deletion`; the group purge worker finishes the hard-delete asynchronously. Idempotent — re-deleting an already-pending group returns 200. Returns the post-transition group row.
 // @Tags admin
 // @Produce json-api
 // @Param groupID path string true "Group ID"

@@ -68,8 +68,7 @@ export type paths = {
         };
         /**
          * List groups (admin)
-         * @description Returns every location group with computed member_count. Pagination via ?page&per_page; ?q matches name/slug (ILIKE).
-         *     ?tenantID and ?status are exact-match filters; ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
+         * @description Returns every location group with computed member_count and an owning-tenant chip (id, name, slug). Paginate via ?page&per_page; ?q ILIKE-matches name/slug; ?tenantID/?status filter exactly; ?sort/?order set ordering.
          */
         get: {
             parameters: {
@@ -82,12 +81,12 @@ export type paths = {
                     q?: string;
                     /** @description Filter to groups belonging to this tenant ID (exact match) */
                     tenantID?: string;
-                    /** @description Filter to groups in this status: active|pending_deletion (exact match) */
-                    status?: string;
+                    /** @description Filter to groups in this status (exact match) */
+                    status?: "active" | "pending_deletion";
                     /** @description Sort field: name|slug|created_at|status (prefix with - for desc) */
                     sort?: string;
-                    /** @description Sort direction override: asc|desc (wins over `-` prefix) */
-                    order?: string;
+                    /** @description Sort direction override (wins over `-` prefix) */
+                    order?: "asc" | "desc";
                 };
                 header?: never;
                 path?: never;
@@ -197,8 +196,7 @@ export type paths = {
         post?: never;
         /**
          * Soft-delete a group (admin)
-         * @description Sets the group's status to `pending_deletion`; the group purge worker finishes the hard-delete asynchronously.
-         *     Idempotent — re-deleting an already-pending group returns 200 with the current status. Returns the post-transition group row.
+         * @description Sets the group's status to `pending_deletion`; the group purge worker finishes the hard-delete asynchronously. Idempotent — re-deleting an already-pending group returns 200. Returns the post-transition group row.
          */
         delete: {
             parameters: {
@@ -7872,6 +7870,7 @@ export type components = {
             name?: string;
             slug?: string;
             status?: components["schemas"]["models.LocationGroupStatus"];
+            tenant?: components["schemas"]["jsonapi.AdminGroupTenantChip"];
             tenant_id?: string;
             /**
              * @example admin_groups
