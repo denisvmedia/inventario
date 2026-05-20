@@ -37,13 +37,11 @@
     "loading": "Loading tenants…",
     "search": {
       "clear": "Clear search",
+      "label": "Search tenants",
       "placeholder": "Search by name, slug or domain…"
     },
     "stats": {
-      "active": "Active",
-      "tenants": "Tenants",
-      "totalGroups": "Total groups",
-      "totalUsers": "Total users"
+      "tenants": "Tenants"
     },
     "subtitle": "Organisations using Inventario across the platform.",
     "table": {

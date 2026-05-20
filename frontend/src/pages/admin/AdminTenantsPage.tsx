@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Activity, Building2, Layers, Search, Users, X } from "lucide-react"
+import { Building2, Search, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
@@ -39,15 +39,9 @@ function TenantStatusBadge({ status }: { status: string | undefined }) {
   )
 }
 
-interface StatTile {
-  labelKey: string
-  value: number
-  icon: typeof Building2
-}
-
 // AdminTenantsPage is the admin landing route (/admin/tenants). It lists
-// every tenant on the platform with a stats row, free-text search, and a
-// divide-y card list of rows.
+// every tenant on the platform with a total-count tile, free-text search,
+// and a divide-y card list of rows.
 //
 // The design-mock TenantsView uses shadcn `<Table>` + `<Pagination>`
 // primitives, neither of which exists in this frontend yet. To keep this
@@ -68,27 +62,13 @@ export function AdminTenantsPage() {
 
   const tenants = useMemo(() => query.data?.tenants ?? [], [query.data])
 
-  const stats = useMemo<StatTile[]>(
-    () => [
-      { labelKey: "tenants.stats.tenants", value: tenants.length, icon: Building2 },
-      {
-        labelKey: "tenants.stats.active",
-        value: tenants.filter((tenant) => tenant.status === "active").length,
-        icon: Activity,
-      },
-      {
-        labelKey: "tenants.stats.totalUsers",
-        value: tenants.reduce((sum, tenant) => sum + (tenant.user_count ?? 0), 0),
-        icon: Users,
-      },
-      {
-        labelKey: "tenants.stats.totalGroups",
-        value: tenants.reduce((sum, tenant) => sum + (tenant.group_count ?? 0), 0),
-        icon: Layers,
-      },
-    ],
-    [tenants]
-  )
+  // The total-tenants tile uses the server-provided pagination total so it
+  // stays accurate across pages. AdminListMeta fields are all optional, so
+  // fall back to the loaded page length when `meta.total` is absent.
+  // Active-tenant / user / group aggregates are intentionally NOT shown:
+  // they cannot be computed correctly from a single paginated page, and a
+  // later sub-issue will source them from a backend aggregate endpoint.
+  const totalTenants = query.data?.meta?.total ?? tenants.length
 
   return (
     <>
@@ -101,21 +81,14 @@ export function AdminTenantsPage() {
           <p className="mt-1 text-muted-foreground">{t("tenants.subtitle")}</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {stats.map((stat) => (
-            <div
-              key={stat.labelKey}
-              className="rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-3"
-            >
-              <div className="flex size-8 items-center justify-center rounded-lg bg-muted shrink-0">
-                <stat.icon className="size-4 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">{t(stat.labelKey)}</p>
-                <p className="text-lg font-semibold leading-tight tabular-nums">{stat.value}</p>
-              </div>
-            </div>
-          ))}
+        <div className="rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-3">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-muted shrink-0">
+            <Building2 className="size-4 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t("tenants.stats.tenants")}</p>
+            <p className="text-lg font-semibold leading-tight tabular-nums">{totalTenants}</p>
+          </div>
         </div>
 
         <div className="relative">
@@ -124,6 +97,7 @@ export function AdminTenantsPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t("tenants.search.placeholder")}
+            aria-label={t("tenants.search.label")}
             className="pl-8"
             data-testid="admin-tenants-search"
           />

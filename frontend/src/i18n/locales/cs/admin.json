@@ -37,13 +37,11 @@
     "loading": "Načítání nájemců…",
     "search": {
       "clear": "Vymazat hledání",
+      "label": "Hledat nájemce",
       "placeholder": "Hledat podle názvu, slugu nebo domény…"
     },
     "stats": {
-      "active": "Aktivní",
-      "tenants": "Nájemci",
-      "totalGroups": "Celkem skupin",
-      "totalUsers": "Celkem uživatelů"
+      "tenants": "Nájemci"
     },
     "subtitle": "Organizace používající Inventario napříč platformou.",
     "table": {
