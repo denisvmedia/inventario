@@ -172,8 +172,18 @@ type Params struct {
 	// ImpersonationTTL is the lifetime of an admin impersonation session
 	// (#1750). Operators tune it via INVENTARIO_RUN_IMPERSONATION_TTL;
 	// zero falls back to the 30-min default and any value above 30 min
-	// is clamped down inside the impersonation handler.
+	// is clamped down inside the impersonation handler. A negative value
+	// is rejected by Validate().
 	ImpersonationTTL time.Duration
+
+	// ImpersonationStore records the server-side return slots for active
+	// impersonation sessions (#1750). When nil, APIServer() falls back to
+	// an in-memory store — fine for single-replica deployments and tests.
+	// The same single instance is threaded into both AuthParams and
+	// AdminParams: `start` records a slot, `end`/`logout` read it, so they
+	// MUST share one store. Injectable so a future Redis-backed
+	// implementation can be wired without touching the apiserver.
+	ImpersonationStore services.ImpersonationStore
 }
 
 func (p *Params) Validate() error {
@@ -194,6 +204,10 @@ func (p *Params) Validate() error {
 		validation.Field(&p.JWTSecret, validation.Required, validation.Length(32, 0)),            // Require at least 32 bytes for security
 		validation.Field(&p.FileSigningKey, validation.Required, validation.Length(32, 0)),       // Require at least 32 bytes for security
 		validation.Field(&p.FileURLExpiration, validation.Required, validation.Min(time.Minute)), // Require at least 1 minute expiration
+		// ImpersonationTTL (#1750): zero is allowed (falls back to the
+		// 30-min default), but a negative duration would mint already-expired
+		// sessions — reject it. Not Required, so zero passes the check.
+		validation.Field(&p.ImpersonationTTL, validation.Min(time.Duration(0))),
 	)
 
 	return validation.ValidateStruct(p, fields...)
@@ -282,9 +296,13 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// /auth/logout consults the SAME store to revoke the operator's genuine
 	// refresh token when an impersonation session is ended via logout. Two
 	// separate stores would leave logout unable to see the slot a `start`
-	// recorded. In-memory is fine for single-replica deployments; a shared
-	// (Redis) implementation would be constructed here for multi-replica.
-	impersonationStore := services.NewInMemoryImpersonationStore()
+	// recorded. Injectable via Params.ImpersonationStore so a shared
+	// (Redis) implementation can be wired for multi-replica deployments;
+	// in-memory is the default for single-replica deployments and tests.
+	impersonationStore := params.ImpersonationStore
+	if impersonationStore == nil {
+		impersonationStore = services.NewInMemoryImpersonationStore()
+	}
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// Resolve tenant from request host and place it in context for all handlers,
@@ -379,6 +397,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			GroupService:     groupService,
 			JWTSecret:        params.JWTSecret,
 			RateLimiter:      rateLimiter,
+			CSRFService:      csrfSvc,
 			ImpersonationTTL: params.ImpersonationTTL,
 			// ImpersonationStore is the SAME instance /auth/logout
 			// receives, so logout can revoke the operator's genuine

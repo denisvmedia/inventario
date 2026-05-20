@@ -468,7 +468,7 @@ const docTemplate = `{
         },
         "/admin/impersonation/end": {
             "post": {
-                "description": "Ends the active impersonation session: blacklists the impersonation access token, restores the operator's\nown refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation\naccess token (the token carrying ` + "`" + `imp=true` + "`" + `). The token's signature is always verified; an expired\nimpersonation token is still accepted here so an operator can end an idle session without re-logging in.\nReturns 422 with ` + "`" + `admin.impersonate.not_active` + "`" + ` when the caller is not inside an impersonation session.\nThis endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the\nAuthorization header, so it never produces a middleware 401/403: a missing, malformed, forged, or\nnon-impersonation token (and a missing/mismatched return slot) all collapse to the 422\n` + "`" + `admin.impersonate.not_active` + "`" + ` response. A 500 is returned only on a genuine store or registry fault.",
+                "description": "Ends the active impersonation session: blacklists the impersonation access token, restores the operator's\nown refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation\naccess token (the token carrying ` + "`" + `imp=true` + "`" + `). The token's signature is always verified; an expired\nimpersonation token is still accepted here so an operator can end an idle session without re-logging in.\nThe request must also carry the httpOnly ` + "`" + `refresh_token` + "`" + ` cookie holding the ` + "`" + `imp:\u003cjti\u003e` + "`" + ` marker that\nimpersonation-start planted — proof the call comes from the operator's own browser. A stolen bearer\ntoken alone, without that cookie, cannot be redeemed for admin credentials.\nThis endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the\nAuthorization header. Returns 401 when the token is missing, malformed, forged, or not an impersonation\ntoken (an authentication failure). Returns 422 with ` + "`" + `admin.impersonate.not_active` + "`" + ` when the token is a\nvalidly-signed impersonation token but no active session backs it — the return slot is missing, the\nslot's operator disagrees with the token, or the operator's marker refresh cookie is absent/mismatched.\nA 500 is returned only on a genuine store or registry fault.",
                 "produces": [
                     "application/json"
                 ],
@@ -483,8 +483,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/apiserver.LoginResponse"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized - missing, malformed, forged, or non-impersonation token",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
-                        "description": "Unprocessable Entity - no active impersonation session (also covers a missing/invalid impersonation token)",
+                        "description": "Unprocessable Entity - no active impersonation session (missing/mismatched return slot or marker cookie)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

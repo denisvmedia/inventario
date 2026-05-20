@@ -77,10 +77,22 @@ var (
 	// "admin.impersonate.nested".
 	ErrNestedImpersonation = errx.NewSentinel("cannot start impersonation from an impersonated session")
 	// ErrNotImpersonating is returned by POST /admin/impersonation/end and
-	// GET /admin/impersonation/current when the caller's access token is
-	// not an impersonation token (`imp` is absent or false). 422 +
-	// JSON:API code "admin.impersonate.not_active".
+	// GET /admin/impersonation/current when the caller holds a validly
+	// signed impersonation token but no live server-side session backs it
+	// (the return slot is missing or its operator-of-record disagrees with
+	// the token). This is a business-rule outcome — the request
+	// authenticated fine, there is just nothing to end. 422 + JSON:API
+	// code "admin.impersonate.not_active".
 	ErrNotImpersonating = errx.NewSentinel("no active impersonation session")
+	// ErrImpersonationTokenInvalid is returned by POST /admin/impersonation/end
+	// when the Authorization header is missing/malformed, the token's
+	// signature or algorithm is invalid, or the token is not an
+	// impersonation token. The `end` route is mounted WITHOUT JWTMiddleware,
+	// so this sentinel re-introduces the authentication failure the
+	// middleware would otherwise raise: it is an AUTHENTICATION failure,
+	// not a business-rule violation, and maps to 401 — distinct from
+	// ErrNotImpersonating's 422. Surfaced via NewUnauthorizedError.
+	ErrImpersonationTokenInvalid = errx.NewSentinel("invalid or missing impersonation token")
 	// ErrImpersonationTokenCannotRefresh is returned by POST /auth/refresh
 	// when the caller presents an impersonation access token. Impersonation
 	// sessions are deliberately non-refreshable so they expire hard at the
@@ -356,6 +368,13 @@ func toJSONAPIError(err error) jsonapi.Error {
 	case errors.Is(err, services.ErrInvalidConfirmation),
 		errors.Is(err, services.ErrInvalidPassword):
 		return NewUnprocessableEntityError(err)
+	case errors.Is(err, ErrImpersonationTokenInvalid):
+		// #1750: POST /admin/impersonation/end self-validates the imp token
+		// off the Authorization header (the route is mounted without
+		// JWTMiddleware). A missing/malformed/forged/non-impersonation
+		// token is an authentication failure — 401, not the 422 reserved
+		// for a validly-signed token with no active session.
+		return NewUnauthorizedError(err)
 	case errors.Is(err, services.ErrTenantMismatch):
 		// #1749: an admin add-member request named a user whose tenant
 		// differs from the group's tenant. A membership crosses no

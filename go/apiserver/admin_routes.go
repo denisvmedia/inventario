@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/denisvmedia/inventario/csrf"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -93,6 +94,14 @@ type AdminParams struct {
 	// in-memory store — fine for single-replica deployments and tests.
 	ImpersonationStore services.ImpersonationStore
 
+	// CSRFService mints a fresh CSRF token for the new effective user when
+	// an impersonation session starts or ends (#1750). CSRF validation is
+	// per-user, so the identity swap (admin↔target) must rotate the token
+	// or the SPA's first mutating request under the swapped identity 403s.
+	// The same csrf.Service the rest of the apiserver uses; a nil value
+	// leaves the impersonation responses' csrf_token empty.
+	CSRFService csrf.Service
+
 	// ImpersonationTTL is the lifetime of an impersonation session
 	// (#1750). Zero falls back to the 30-min default; values above the
 	// 30-min ceiling are clamped down inside the handler.
@@ -165,6 +174,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		rateLimiter:  params.RateLimiter,
 		blacklist:    params.Blacklist,
 		auditService: params.AuditService,
+		csrfService:  params.CSRFService,
 		jwtSecret:    params.JWTSecret,
 		ttl:          params.ImpersonationTTL,
 	}

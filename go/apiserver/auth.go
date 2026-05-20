@@ -436,6 +436,46 @@ func (api *AuthAPI) accessTokenIsImpersonation(authHeader string) bool {
 	return imp
 }
 
+// impersonationClaimsFromAccessTokenHeader parses the Bearer token in
+// authHeader and returns its claims when — and only when — the token is
+// a verified impersonation token (`imp` true with a non-empty
+// `impersonated_by`). Expired tokens still count, mirroring
+// accessTokenIsImpersonation, so a logout with an only-just-expired
+// impersonation token still records the operator-of-record.
+//
+// It exists so the logout handler (#1750) can seed the impersonation
+// claims into the request context before logAuth runs — without that,
+// the logout-during-impersonation audit row would record the target
+// user but miss the ImpersonatedBy column. Returns (nil, false) when the
+// header is absent/malformed, the signature is invalid, or the token is
+// not an impersonation token.
+func (api *AuthAPI) impersonationClaimsFromAccessTokenHeader(authHeader string) (jwt.MapClaims, bool) {
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader || tokenString == "" {
+		return nil, false
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return api.jwtSecret, nil
+	})
+	if token == nil {
+		return nil, false
+	}
+	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
+		return nil, false
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, false
+	}
+	if !claimsAreImpersonation(claims) {
+		return nil, false
+	}
+	return claims, true
+}
+
 // blacklistAccessToken extracts claims from a Bearer token header and blacklists its JTI.
 func (api *AuthAPI) blacklistAccessToken(ctx context.Context, authHeader string) {
 	if api.blacklistService == nil {
@@ -566,6 +606,18 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 	if authHeader != "" {
 		api.blacklistAccessToken(r.Context(), authHeader)
 		userID, _ = api.userIDFromAccessTokenHeader(authHeader)
+
+		// Logout during an impersonation session (#1750): the bearer token
+		// is an impersonation token. logout runs WITHOUT RequireAuth, so
+		// the validated JWT claims are not in context — seed them here so
+		// the audit row's ImpersonatedBy column is auto-filled by LogAuth
+		// (impersonatorFromContext), exactly as it is on RequireAuth-backed
+		// routes and on POST /admin/impersonation/end. Without this the
+		// logout-during-impersonation audit row would record only the
+		// target user and lose the operator-of-record.
+		if claims, ok := api.impersonationClaimsFromAccessTokenHeader(authHeader); ok {
+			r = r.WithContext(appctx.WithJWTClaims(r.Context(), claims))
+		}
 	}
 
 	// Revoke the refresh token from the database. During an impersonation
@@ -647,10 +699,19 @@ func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request)
 // generateCSRFTokenForUser issues a new CSRF token for the given user.
 // Returns "" when csrfService is nil or on error (errors are logged).
 func (api *AuthAPI) generateCSRFTokenForUser(ctx context.Context, userID string) string {
-	if api.csrfService == nil {
+	return generateCSRFToken(ctx, api.csrfService, userID)
+}
+
+// generateCSRFToken issues a new CSRF token for the given user against
+// the supplied csrf service. Returns "" when the service is nil or on
+// error (errors are logged). Extracted as a free function so the
+// impersonation handlers (#1750) — which rotate the CSRF token across an
+// identity swap — can mint a token without depending on AuthAPI.
+func generateCSRFToken(ctx context.Context, csrfService csrf.Service, userID string) string {
+	if csrfService == nil {
 		return ""
 	}
-	token, err := api.csrfService.GenerateToken(ctx, userID)
+	token, err := csrfService.GenerateToken(ctx, userID)
 	if err != nil {
 		slog.Error("Failed to generate CSRF token", "user_id", userID, "error", err)
 		// Non-fatal: the middleware fails-open on storage errors.

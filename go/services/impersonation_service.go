@@ -19,9 +19,11 @@ import (
 // The slot carries the raw refresh-token *value* the admin's session
 // was using at start-time — not its hash — so `end` can re-set the
 // httpOnly refresh cookie and mint a fresh access token for the admin.
-// The raw value never leaves the server: it is held in memory only for
-// the lifetime of the impersonation session and is discarded the moment
-// the session ends or expires.
+// The raw value is held server-side only transiently: for the lifetime
+// of the impersonation session and no longer (it is discarded the moment
+// the session ends or expires). It is only ever re-emitted to the
+// original operator's browser — and to no other client — via the
+// httpOnly `refresh_token` cookie that `end` restores.
 type ImpersonationSlot struct {
 	// JTI is the impersonation access token's unique id — the slot key.
 	JTI string

@@ -574,11 +574,15 @@ export type paths = {
          *     own refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation
          *     access token (the token carrying `imp=true`). The token's signature is always verified; an expired
          *     impersonation token is still accepted here so an operator can end an idle session without re-logging in.
-         *     Returns 422 with `admin.impersonate.not_active` when the caller is not inside an impersonation session.
+         *     The request must also carry the httpOnly `refresh_token` cookie holding the `imp:<jti>` marker that
+         *     impersonation-start planted — proof the call comes from the operator's own browser. A stolen bearer
+         *     token alone, without that cookie, cannot be redeemed for admin credentials.
          *     This endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the
-         *     Authorization header, so it never produces a middleware 401/403: a missing, malformed, forged, or
-         *     non-impersonation token (and a missing/mismatched return slot) all collapse to the 422
-         *     `admin.impersonate.not_active` response. A 500 is returned only on a genuine store or registry fault.
+         *     Authorization header. Returns 401 when the token is missing, malformed, forged, or not an impersonation
+         *     token (an authentication failure). Returns 422 with `admin.impersonate.not_active` when the token is a
+         *     validly-signed impersonation token but no active session backs it — the return slot is missing, the
+         *     slot's operator disagrees with the token, or the operator's marker refresh cookie is absent/mismatched.
+         *     A 500 is returned only on a genuine store or registry fault.
          */
         post: {
             parameters: {
@@ -598,7 +602,16 @@ export type paths = {
                         "application/json": components["schemas"]["apiserver.LoginResponse"];
                     };
                 };
-                /** @description Unprocessable Entity - no active impersonation session (also covers a missing/invalid impersonation token) */
+                /** @description Unauthorized - missing, malformed, forged, or non-impersonation token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - no active impersonation session (missing/mismatched return slot or marker cookie) */
                 422: {
                     headers: {
                         [name: string]: unknown;

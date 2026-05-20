@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/csrf"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
@@ -102,8 +103,14 @@ type adminImpersonationAPI struct {
 	rateLimiter  services.AuthRateLimiter
 	blacklist    services.TokenBlacklister
 	auditService services.AuditLogger
-	jwtSecret    []byte
-	ttl          time.Duration
+	// csrfService mints a CSRF token for the new effective user across an
+	// identity swap (#1750): admin→target on start, target→admin on end.
+	// CSRF validation is per-user, so without a rotated token the SPA's
+	// first mutating request under the swapped identity would 403. May be
+	// nil (isolated unit tests); the response then carries an empty token.
+	csrfService csrf.Service
+	jwtSecret   []byte
+	ttl         time.Duration
 }
 
 // clampImpersonationTTL resolves the effective impersonation TTL:
@@ -266,9 +273,15 @@ func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http
 	// at which point the slot has been TTL-pruned anyway.
 	writeRefreshCookie(w, r, impersonationRefreshCookieMarker+jti, int(ttl.Seconds()))
 
+	// Rotate the CSRF token to the TARGET user: CSRF validation is
+	// per-user, so the impersonated session must carry a token minted for
+	// the target or its first mutating request 403s. Mirrors how login /
+	// refresh return a freshly-minted token.
+	csrfToken := generateCSRFToken(r.Context(), api.csrfService, target.ID)
+
 	// The impersonation token is set as the active session via the body
 	// (same LoginResponse shape the FE already handles).
-	writeImpersonationLoginResponse(w, tokenString, ttl, target)
+	writeImpersonationLoginResponse(w, tokenString, csrfToken, ttl, target)
 }
 
 // parseImpersonationEndToken extracts and verifies the impersonation
@@ -291,13 +304,21 @@ func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http
 // The authoritative authorization still happens in endImpersonation: the
 // jti-keyed server-side return slot must exist AND its AdminUserID must
 // equal the token's `impersonated_by`. The token here only identifies
-// WHICH slot; the slot is the proof. Returns (claims, true) on success,
-// (nil, false) when the header is absent/malformed, the signature is
-// invalid, or the token is not an impersonation token.
-func (api *adminImpersonationAPI) parseImpersonationEndToken(authHeader string) (jwt.MapClaims, bool) {
+// WHICH slot; the slot is the proof.
+//
+// Returns (claims, nil) on success. On failure it returns a non-nil
+// error so the caller can pick the right HTTP status:
+//   - ErrImpersonationTokenInvalid — the header is absent/malformed, the
+//     signature is bad, or the token is not an impersonation token. This
+//     is an AUTHENTICATION failure → endImpersonation maps it to 401.
+//
+// A validly-signed impersonation token whose server-side slot is missing
+// is NOT an error here — that case yields (claims, nil) and is handled
+// downstream as the 422 "not active" business-rule outcome.
+func (api *adminImpersonationAPI) parseImpersonationEndToken(authHeader string) (jwt.MapClaims, error) {
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 	if tokenString == authHeader || tokenString == "" {
-		return nil, false
+		return nil, ErrImpersonationTokenInvalid
 	}
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -306,21 +327,21 @@ func (api *adminImpersonationAPI) parseImpersonationEndToken(authHeader string) 
 		return api.jwtSecret, nil
 	})
 	if token == nil {
-		return nil, false
+		return nil, ErrImpersonationTokenInvalid
 	}
 	// Tolerate ONLY expiry — every other error (bad signature, wrong alg,
 	// malformed) means the token cannot be trusted and `end` must reject it.
 	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
-		return nil, false
+		return nil, ErrImpersonationTokenInvalid
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, false
+		return nil, ErrImpersonationTokenInvalid
 	}
 	if !claimsAreImpersonation(claims) {
-		return nil, false
+		return nil, ErrImpersonationTokenInvalid
 	}
-	return claims, true
+	return claims, nil
 }
 
 // endImpersonation revokes the impersonation access token and restores
@@ -331,26 +352,31 @@ func (api *adminImpersonationAPI) parseImpersonationEndToken(authHeader string) 
 // @Description own refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation
 // @Description access token (the token carrying `imp=true`). The token's signature is always verified; an expired
 // @Description impersonation token is still accepted here so an operator can end an idle session without re-logging in.
-// @Description Returns 422 with `admin.impersonate.not_active` when the caller is not inside an impersonation session.
+// @Description The request must also carry the httpOnly `refresh_token` cookie holding the `imp:<jti>` marker that
+// @Description impersonation-start planted — proof the call comes from the operator's own browser. A stolen bearer
+// @Description token alone, without that cookie, cannot be redeemed for admin credentials.
 // @Description This endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the
-// @Description Authorization header, so it never produces a middleware 401/403: a missing, malformed, forged, or
-// @Description non-impersonation token (and a missing/mismatched return slot) all collapse to the 422
-// @Description `admin.impersonate.not_active` response. A 500 is returned only on a genuine store or registry fault.
+// @Description Authorization header. Returns 401 when the token is missing, malformed, forged, or not an impersonation
+// @Description token (an authentication failure). Returns 422 with `admin.impersonate.not_active` when the token is a
+// @Description validly-signed impersonation token but no active session backs it — the return slot is missing, the
+// @Description slot's operator disagrees with the token, or the operator's marker refresh cookie is absent/mismatched.
+// @Description A 500 is returned only on a genuine store or registry fault.
 // @Tags admin
 // @Produce json
 // @Success 200 {object} LoginResponse "OK"
-// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - no active impersonation session (also covers a missing/invalid impersonation token)"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - missing, malformed, forged, or non-impersonation token"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - no active impersonation session (missing/mismatched return slot or marker cookie)"
 // @Failure 500 {object} jsonapi.Errors "Internal Server Error - return-slot store or registry fault"
 // @Router /admin/impersonation/end [post]
 func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *http.Request) {
 	// `end` is mounted WITHOUT JWTMiddleware (see Admin()), so the token is
 	// validated here: the signature is verified and `imp=true` is required;
-	// only an expired `exp` is tolerated. A non-impersonation token — even
-	// a valid admin one — yields ErrNotImpersonating (422), so this bare
-	// route never becomes a back door for plain admin sessions.
-	claims, ok := api.parseImpersonationEndToken(r.Header.Get("Authorization"))
-	if !ok {
-		_ = renderEntityError(w, r, ErrNotImpersonating)
+	// only an expired `exp` is tolerated. A missing/malformed/forged/
+	// non-impersonation token is an AUTHENTICATION failure → 401, distinct
+	// from the 422 reserved for "validly-signed token, no active session".
+	claims, perr := api.parseImpersonationEndToken(r.Header.Get("Authorization"))
+	if perr != nil {
+		_ = unauthorizedError(w, r, perr)
 		return
 	}
 
@@ -364,6 +390,36 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 	jti, _ := claims["jti"].(string)
 	adminID, _ := claims["impersonated_by"].(string)
 	targetID, _ := claims["user_id"].(string)
+
+	// A genuine impersonation token always carries a UUID jti (see
+	// signImpersonationToken). An empty jti would make the marker-cookie
+	// comparison below pass vacuously against an absent cookie, so reject
+	// it up front as malformed — an authentication failure (401).
+	if jti == "" {
+		slog.Warn("Impersonation end: token missing jti claim", "admin_id", adminID)
+		_ = unauthorizedError(w, r, ErrImpersonationTokenInvalid)
+		return
+	}
+
+	// SECURITY (#1750 / PR #1771 review): a valid impersonation bearer
+	// token is NOT sufficient to redeem `end` for admin credentials. The
+	// operator's browser holds the httpOnly `refresh_token` cookie that
+	// impersonation-start planted as `imp:<jti>`; require it here and
+	// require its jti to match the token's. A leaked bearer token without
+	// that browser-bound cookie then cannot be exchanged for the admin
+	// session. The marker cookie's max-age == the impersonation TTL, so it
+	// is still present on the only-just-expired-token `end` path.
+	if cookieJTI := markerCookieJTI(r); cookieJTI != jti {
+		slog.Warn("Impersonation end: marker refresh cookie absent or mismatched",
+			"jti", jti, "cookie_jti", cookieJTI, "admin_id", adminID)
+		// Audit the rejected attempt. The return slot is not yet loaded, so
+		// only the claim-derived fields are available — enough for the
+		// audit trail to record "an end was attempted and refused".
+		api.auditEnd(r, services.ImpersonationSlot{}, targetID, false,
+			"marker refresh cookie absent or mismatched")
+		_ = renderEntityError(w, r, ErrNotImpersonating)
+		return
+	}
 
 	slot, err := api.store.Get(r.Context(), jti)
 	if err != nil {
@@ -530,9 +586,15 @@ func (api *adminImpersonationAPI) restoreAdminSession(w http.ResponseWriter, r *
 		clearRefreshCookie(w, r)
 	}
 
+	// Rotate the CSRF token back to the ADMIN user: the identity swaps
+	// from target back to operator, and CSRF validation is per-user, so
+	// the restored admin session must carry a token minted for the admin
+	// or its first mutating request 403s. Mirrors login / refresh.
+	csrfToken := generateCSRFToken(r.Context(), api.csrfService, admin.ID)
+
 	// The FE swaps the in-memory access token back to the admin's and the
 	// operator is whole again.
-	writeImpersonationLoginResponse(w, tokenString, accessTokenExpiration, admin)
+	writeImpersonationLoginResponse(w, tokenString, csrfToken, accessTokenExpiration, admin)
 }
 
 // resolveAdminRefreshTokenID looks up the row id of the admin's captured
@@ -773,6 +835,30 @@ func refreshCookieValue(r *http.Request) string {
 	return cookie.Value
 }
 
+// markerCookieJTI returns the jti carried by the request's impersonation
+// marker refresh cookie, or "" when the request has no `refresh_token`
+// cookie or its value is not an `imp:<jti>` marker.
+//
+// It is the browser-bound proof endImpersonation requires (#1750 / PR
+// #1771 review): impersonation-start planted `imp:<jti>` into the
+// operator's httpOnly refresh cookie, so a genuine `end` call from that
+// same browser carries it. A stolen impersonation bearer token presented
+// from anywhere else has no such cookie, so markerCookieJTI returns ""
+// and the jti comparison in endImpersonation fails — the stolen token
+// cannot be exchanged for admin credentials. The marker cookie's max-age
+// equals the impersonation TTL, so the cookie is still present on the
+// legitimate only-just-expired-token `end` path.
+func markerCookieJTI(r *http.Request) string {
+	cookie, err := r.Cookie(refreshTokenCookieName)
+	if err != nil {
+		return ""
+	}
+	if !strings.HasPrefix(cookie.Value, impersonationRefreshCookieMarker) {
+		return ""
+	}
+	return strings.TrimPrefix(cookie.Value, impersonationRefreshCookieMarker)
+}
+
 // impersonationUserView projects a *models.User into the narrow
 // identity-only view embedded in the impersonation responses.
 func impersonationUserView(u *models.User) *ImpersonationUserView {
@@ -785,16 +871,25 @@ func impersonationUserView(u *models.User) *ImpersonationUserView {
 }
 
 // writeImpersonationLoginResponse writes a LoginResponse with the given
-// access token and TTL. Reuses the LoginResponse shape so the FE handles
-// the impersonation-start, impersonation-end, and normal-login responses
-// with one code path. CSRFToken is intentionally left empty — the
-// impersonation flow does not rotate CSRF tokens; the FE recovers the
-// CSRF token from the /auth/me header on the next navigation.
-func writeImpersonationLoginResponse(w http.ResponseWriter, accessToken string, ttl time.Duration, user *models.User) {
+// access token, TTL, and CSRF token. Reuses the LoginResponse shape so
+// the FE handles the impersonation-start, impersonation-end, and
+// normal-login responses with one code path.
+//
+// csrfToken MUST be a token freshly minted for the response's effective
+// user (the target on start, the admin on end): CSRF validation is
+// per-user, so after the identity swap the SPA cannot reuse the previous
+// identity's token — its first mutating request would 403. The handlers
+// also mirror the token into the X-CSRF-Token response header, matching
+// how /auth/me exposes it, so an FE that reads either source recovers.
+func writeImpersonationLoginResponse(w http.ResponseWriter, accessToken, csrfToken string, ttl time.Duration, user *models.User) {
+	if csrfToken != "" {
+		w.Header().Set(csrfHeaderName, csrfToken)
+	}
 	writeJSON(w, http.StatusOK, LoginResponse{
 		AccessToken: accessToken,
 		TokenType:   "Bearer",
 		ExpiresIn:   int(ttl.Seconds()),
+		CSRFToken:   csrfToken,
 		User:        user,
 	})
 }
