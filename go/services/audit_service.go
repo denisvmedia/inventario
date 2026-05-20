@@ -109,17 +109,26 @@ func NewAuditService(auditRegistry registry.AuditLogRegistry) *AuditService {
 // It is intentionally best-effort: if persisting the log entry fails the error is
 // logged with slog but not returned to the caller so that auth flows are never
 // blocked by audit-log write failures.
+//
+// When the request context carries impersonation claims (`imp` == true),
+// the persisted row's ImpersonatedBy column records the operator-of-record
+// — symmetric with LogAdmin. This is what makes "every action inside an
+// impersonated session is logged with actor=target AND impersonated_by=admin"
+// (#1750) hold for the LogAuth-based audit call sites (e.g. the group
+// endpoints' group_delete row) without the call site knowing whether an
+// impersonation session is active.
 func (s *AuditService) LogAuth(ctx context.Context, ev AuthEvent) {
 	if s == nil || s.auditRegistry == nil {
 		return
 	}
 
 	entry := models.AuditLog{
-		Action:       ev.Action,
-		UserID:       ev.UserID,
-		TenantID:     ev.TenantID,
-		Success:      ev.Success,
-		ErrorMessage: ev.ErrMsg,
+		Action:         ev.Action,
+		UserID:         ev.UserID,
+		TenantID:       ev.TenantID,
+		Success:        ev.Success,
+		ErrorMessage:   ev.ErrMsg,
+		ImpersonatedBy: impersonatorFromContext(ctx),
 	}
 
 	if ev.Request != nil {

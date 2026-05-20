@@ -42,6 +42,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.JWTSecret, "jwt-secret", cfg.JWTSecret, "JWT secret for authentication (minimum 32 characters, auto-generated if not provided)")
 	flags.StringVar(&cfg.FileSigningKey, "file-signing-key", cfg.FileSigningKey, "File signing key for secure file URLs (minimum 32 characters, auto-generated if not provided)")
 	flags.StringVar(&cfg.FileURLExpiration, "file-url-expiration", cfg.FileURLExpiration, "File URL expiration duration (e.g., 15m, 1h, 30s)")
+	flags.StringVar(&cfg.ImpersonationTTL, "impersonation-ttl", cfg.ImpersonationTTL, "Admin impersonation session lifetime (e.g., 30m, 15m); values above 30m are clamped down")
 	flags.StringVar(&cfg.TokenBlacklistRedisURL, "token-blacklist-redis-url", cfg.TokenBlacklistRedisURL, "Redis URL for token blacklist (e.g., redis://localhost:6379/0); omit to use in-memory blacklist")
 	flags.StringVar(&cfg.AuthRateLimitRedisURL, "auth-rate-limit-redis-url", cfg.AuthRateLimitRedisURL, "Redis URL for auth rate limiting/lockout (e.g., redis://localhost:6379/0); omit to use in-memory limiter")
 	flags.BoolVar(&cfg.AuthRateLimitDisabled, "no-auth-rate-limit", cfg.AuthRateLimitDisabled, "Disable auth rate limiting entirely (for testing only — do not use in production)")

@@ -8,9 +8,21 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/denisvmedia/inventario/csrf"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
+
+// defaultAdminImpersonationStore lets Admin() fall back to an in-memory
+// return-slot store when AdminParams.ImpersonationStore is unset (tests,
+// memory-mode bootstrap). Production wiring passes one explicitly so the
+// store lifetime is owned by the caller.
+func defaultAdminImpersonationStore(s services.ImpersonationStore) services.ImpersonationStore {
+	if s != nil {
+		return s
+	}
+	return services.NewInMemoryImpersonationStore()
+}
 
 // AdminPingResponse is the body returned by GET /admin/_ping. It is
 // intentionally tiny — the endpoint exists so the FE (and the swagger
@@ -65,6 +77,48 @@ type AdminParams struct {
 	// membership invariants (cap, ≥1 owner, ≥1 member) single-sourced
 	// instead of forking a parallel code path for admins.
 	GroupService *services.GroupService
+
+	// JWTSecret signs the impersonation access tokens issued by the
+	// #1750 impersonate endpoint. Same secret the rest of the apiserver
+	// uses so an impersonation token validates through the standard
+	// JWTMiddleware path.
+	JWTSecret []byte
+
+	// RateLimiter enforces the per-admin impersonation-start rate limit
+	// (#1750). The same AuthRateLimiter instance the auth endpoints use;
+	// a nil value disables the limit (the handler fails open).
+	RateLimiter services.AuthRateLimiter
+
+	// ImpersonationStore records the server-side return slots for active
+	// impersonation sessions (#1750). When nil, Admin() falls back to an
+	// in-memory store — fine for single-replica deployments and tests.
+	ImpersonationStore services.ImpersonationStore
+
+	// CSRFService mints a fresh CSRF token for the new effective user when
+	// an impersonation session starts or ends (#1750). CSRF validation is
+	// per-user, so the identity swap (admin↔target) must rotate the token
+	// or the SPA's first mutating request under the swapped identity 403s.
+	// The same csrf.Service the rest of the apiserver uses; a nil value
+	// leaves the impersonation responses' csrf_token empty.
+	CSRFService csrf.Service
+
+	// ImpersonationTTL is the lifetime of an impersonation session
+	// (#1750). Zero falls back to the 30-min default; values above the
+	// 30-min ceiling are clamped down inside the handler.
+	ImpersonationTTL time.Duration
+
+	// UserMiddlewares is the standard authenticated-route middleware chain
+	// (JWT + RLS + RegistrySet + CSRF). Admin() applies it to every admin
+	// route EXCEPT POST /admin/impersonation/end. That one endpoint is
+	// mounted bare so it stays reachable after the impersonation access
+	// token has expired — JWTMiddleware would otherwise 401 an expired
+	// token before endImpersonation runs, stranding the operator and
+	// orphaning the return slot. endImpersonation self-validates the imp
+	// token (signature + imp=true), tolerating only an expired `exp`, and
+	// the server-side slot is the real authorization. When nil (tests that
+	// build the admin router in isolation), Admin() applies no middleware
+	// — callers must wrap the result themselves.
+	UserMiddlewares []func(http.Handler) http.Handler
 }
 
 // Admin returns the router configurator for /api/v1/admin/*. Mounted
@@ -78,6 +132,22 @@ func Admin(params AdminParams) func(r chi.Router) {
 	// rather than a clear startup failure.
 	if params.GroupService == nil {
 		panic("apiserver.Admin requires non-nil AdminParams.GroupService")
+	}
+	// The #1750 impersonation endpoints sign tokens with JWTSecret and
+	// blacklist them on `end` via Blacklist — an AdminParams literal that
+	// omits either turns a wiring mistake into a runtime failure on
+	// impersonate start/end. Fail at startup instead. RateLimiter and
+	// ImpersonationStore are deliberately NOT required: a nil RateLimiter
+	// fails the limit open by design, and ImpersonationStore has the
+	// defaultAdminImpersonationStore in-memory fallback.
+	if len(params.JWTSecret) == 0 {
+		panic("apiserver.Admin requires non-empty AdminParams.JWTSecret")
+	}
+	if params.Blacklist == nil {
+		panic("apiserver.Admin requires non-nil AdminParams.Blacklist")
+	}
+	if params.AuditService == nil {
+		panic("apiserver.Admin requires non-nil AdminParams.AuditService")
 	}
 
 	tenantsAPI := &adminTenantsAPI{
@@ -98,9 +168,64 @@ func Admin(params AdminParams) func(r chi.Router) {
 		groupService: params.GroupService,
 		auditService: params.AuditService,
 	}
+	impersonationAPI := &adminImpersonationAPI{
+		factorySet:   params.FactorySet,
+		store:        defaultAdminImpersonationStore(params.ImpersonationStore),
+		rateLimiter:  params.RateLimiter,
+		blacklist:    params.Blacklist,
+		auditService: params.AuditService,
+		csrfService:  params.CSRFService,
+		jwtSecret:    params.JWTSecret,
+		ttl:          params.ImpersonationTTL,
+	}
 	return func(r chi.Router) {
-		// RequireSystemAdmin runs as the first per-subtree middleware so
-		// every handler below it can assume the caller is a system admin.
+		// POST /admin/impersonation/end is mounted FIRST and OUTSIDE the
+		// authenticated-middleware group on purpose. JWTMiddleware (part of
+		// UserMiddlewares) rejects an expired access token with 401 before
+		// any handler runs — which would make `end` unreachable the moment
+		// the (≤30-min) impersonation token lapses, stranding the operator
+		// on a re-login and orphaning the return slot until it is
+		// TTL-pruned. endImpersonation therefore self-validates the imp
+		// token straight off the Authorization header: it verifies the
+		// signature and the `imp=true` claim and tolerates ONLY an expired
+		// `exp`. The jti-keyed server-side slot plus the
+		// `slot.AdminUserID == impersonated_by` assertion are the real
+		// authorization — a forged/garbage token fails signature
+		// verification, and an expired NON-impersonation token fails the
+		// imp check, so neither is newly admitted. See endImpersonation.
+		r.Post("/impersonation/end", impersonationAPI.endImpersonation)
+
+		// Everything else lives behind the standard authenticated
+		// middleware chain (JWT + RLS + RegistrySet + CSRF). UserMiddlewares
+		// may be nil in isolated unit tests, in which case no middleware is
+		// applied and the caller is responsible for wrapping.
+		r.Group(func(r chi.Router) {
+			for _, mw := range params.UserMiddlewares {
+				r.Use(mw)
+			}
+			adminAuthenticatedRoutes(r, tenantsAPI, usersAPI, groupsAPI, groupMembersAPI, impersonationAPI)
+		})
+	}
+}
+
+// adminAuthenticatedRoutes registers every /api/v1/admin/* route that runs
+// behind the authenticated middleware chain (everything except POST
+// /admin/impersonation/end, which is mounted bare by Admin()). Extracted
+// from Admin() so that closure stays under the funlen budget.
+func adminAuthenticatedRoutes(
+	r chi.Router,
+	tenantsAPI *adminTenantsAPI,
+	usersAPI *adminUsersAPI,
+	groupsAPI *adminGroupsAPI,
+	groupMembersAPI *adminGroupMembersAPI,
+	impersonationAPI *adminImpersonationAPI,
+) {
+	// The bulk of the admin surface is gated by the strict
+	// RequireSystemAdmin middleware in a nested group so every handler
+	// inside it can assume the caller is a genuine system admin. GET
+	// /admin/impersonation/current is registered OUTSIDE this group with
+	// the wider RequireSystemAdminOrImpersonating gate — see below for why.
+	r.Group(func(r chi.Router) {
 		r.Use(RequireSystemAdmin)
 		r.Get("/_ping", adminPing)
 
@@ -137,7 +262,24 @@ func Admin(params AdminParams) func(r chi.Router) {
 		r.Post("/groups/{groupID}/members", groupMembersAPI.addMember)
 		r.Delete("/groups/{groupID}/members/{userID}", groupMembersAPI.removeMember)
 		r.Patch("/groups/{groupID}/members/{userID}", groupMembersAPI.updateMemberRole)
-	}
+
+		// #1750: starting an impersonation session is a privileged
+		// operation — it stays behind the strict gate. The
+		// nested-impersonation guard in the handler rejects a request
+		// already inside an impersonation session.
+		r.Post("/users/{userID}/impersonate", impersonationAPI.startImpersonation)
+	})
+
+	// #1750: GET /admin/impersonation/current must be reachable from
+	// INSIDE an impersonation session, whose access token deliberately
+	// carries is_system_admin=false — the strict RequireSystemAdmin gate
+	// would reject it. The wider RequireSystemAdminOrImpersonating gate
+	// admits both a genuine admin and an active (non-expired) impersonation
+	// token; the handler re-validates the impersonation claim. Unlike
+	// `end`, `current` is a harmless read and is fine to keep behind
+	// JWTMiddleware — an expired token simply means the FE banner reads
+	// inactive, which is the correct answer.
+	r.With(RequireSystemAdminOrImpersonating).Get("/impersonation/current", impersonationAPI.currentImpersonation)
 }
 
 // parseAdminSortAndOrder reconciles the dual sort conventions the

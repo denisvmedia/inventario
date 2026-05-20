@@ -168,6 +168,22 @@ type Params struct {
 	// 404s while the lock middleware no-ops. The Helm chart exposes this
 	// via `features.currencyMigration`.
 	FeatureCurrencyMigration bool
+
+	// ImpersonationTTL is the lifetime of an admin impersonation session
+	// (#1750). Operators tune it via INVENTARIO_RUN_IMPERSONATION_TTL;
+	// zero falls back to the 30-min default and any value above 30 min
+	// is clamped down inside the impersonation handler. A negative value
+	// is rejected by Validate().
+	ImpersonationTTL time.Duration
+
+	// ImpersonationStore records the server-side return slots for active
+	// impersonation sessions (#1750). When nil, APIServer() falls back to
+	// an in-memory store — fine for single-replica deployments and tests.
+	// The same single instance is threaded into both AuthParams and
+	// AdminParams: `start` records a slot, `end`/`logout` read it, so they
+	// MUST share one store. Injectable so a future Redis-backed
+	// implementation can be wired without touching the apiserver.
+	ImpersonationStore services.ImpersonationStore
 }
 
 func (p *Params) Validate() error {
@@ -188,6 +204,10 @@ func (p *Params) Validate() error {
 		validation.Field(&p.JWTSecret, validation.Required, validation.Length(32, 0)),            // Require at least 32 bytes for security
 		validation.Field(&p.FileSigningKey, validation.Required, validation.Length(32, 0)),       // Require at least 32 bytes for security
 		validation.Field(&p.FileURLExpiration, validation.Required, validation.Min(time.Minute)), // Require at least 1 minute expiration
+		// ImpersonationTTL (#1750): zero is allowed (falls back to the
+		// 30-min default), but a negative duration would mint already-expired
+		// sessions — reject it. Not Required, so zero passes the check.
+		validation.Field(&p.ImpersonationTTL, validation.Min(time.Duration(0))),
 	)
 
 	return validation.ValidateStruct(p, fields...)
@@ -271,6 +291,19 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// AcceptInvite / RemoveMember.
 	groupService.SetUserRegistry(params.FactorySet.UserRegistry)
 
+	// The impersonation return-slot store (#1750) MUST be a single shared
+	// instance: Admin()'s impersonation endpoints record/restore slots and
+	// /auth/logout consults the SAME store to revoke the operator's genuine
+	// refresh token when an impersonation session is ended via logout. Two
+	// separate stores would leave logout unable to see the slot a `start`
+	// recorded. Injectable via Params.ImpersonationStore so a shared
+	// (Redis) implementation can be wired for multi-replica deployments;
+	// in-memory is the default for single-replica deployments and tests.
+	impersonationStore := params.ImpersonationStore
+	if impersonationStore == nil {
+		impersonationStore = services.NewInMemoryImpersonationStore()
+	}
+
 	r.Route("/api/v1", func(r chi.Router) {
 		// Resolve tenant from request host and place it in context for all handlers,
 		// including public ones (login, registration, password reset).
@@ -302,6 +335,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			JWTSecret:               params.JWTSecret,
 			EmailService:            emailSvc,
 			MFAService:              mfaSvc,
+			ImpersonationStore:      impersonationStore,
 		}))
 
 		// Unauthenticated public routes: apply the global per-IP rate limit as a
@@ -356,11 +390,27 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// inside Admin() rejects non-admins before any handler runs. Mounting
 		// at the same level as /system keeps the surface tenant-agnostic —
 		// system admins are not scoped to a tenant.
-		r.With(userMiddlewares...).Route("/admin", Admin(AdminParams{
-			FactorySet:   params.FactorySet,
-			Blacklist:    blacklist,
-			AuditService: auditSvc,
-			GroupService: groupService,
+		r.Route("/admin", Admin(AdminParams{
+			FactorySet:       params.FactorySet,
+			Blacklist:        blacklist,
+			AuditService:     auditSvc,
+			GroupService:     groupService,
+			JWTSecret:        params.JWTSecret,
+			RateLimiter:      rateLimiter,
+			CSRFService:      csrfSvc,
+			ImpersonationTTL: params.ImpersonationTTL,
+			// ImpersonationStore is the SAME instance /auth/logout
+			// receives, so logout can revoke the operator's genuine
+			// refresh token when an impersonation session is ended via
+			// logout rather than POST /admin/impersonation/end (#1750).
+			ImpersonationStore: impersonationStore,
+			// UserMiddlewares is applied by Admin() to every admin route
+			// EXCEPT POST /admin/impersonation/end, which is deliberately
+			// mounted without JWTMiddleware so an operator can still end
+			// an impersonation session whose access token has expired —
+			// endImpersonation self-validates the (possibly expired) imp
+			// token. See Admin() for the full rationale.
+			UserMiddlewares: userMiddlewares,
 		}))
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives
