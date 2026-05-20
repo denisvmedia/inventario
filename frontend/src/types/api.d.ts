@@ -69,8 +69,7 @@ export type paths = {
         /**
          * List groups (admin)
          * @description Returns every location group with computed member_count. Pagination via ?page&per_page; ?q matches name/slug (ILIKE).
-         *     ?org_id and ?status are exact-match filters; ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
-         *     Note: the tenant filter is named `org_id` (not `tenantID`) because the global ValidateNoUserProvidedTenantID security middleware rejects any query parameter whose name contains "tenant".
+         *     ?tenantID and ?status are exact-match filters; ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
          */
         get: {
             parameters: {
@@ -81,8 +80,8 @@ export type paths = {
                     per_page?: number;
                     /** @description Search term — ILIKE match on name/slug */
                     q?: string;
-                    /** @description Filter to groups belonging to this tenant ID (exact match). Named org_id rather than tenantID — the security middleware blocks query params containing 'tenant'. */
-                    org_id?: string;
+                    /** @description Filter to groups belonging to this tenant ID (exact match) */
+                    tenantID?: string;
                     /** @description Filter to groups in this status: active|pending_deletion (exact match) */
                     status?: string;
                     /** @description Sort field: name|slug|created_at|status (prefix with - for desc) */

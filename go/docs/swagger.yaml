@@ -4062,8 +4062,7 @@ paths:
     get:
       description: |-
         Returns every location group with computed member_count. Pagination via ?page&per_page; ?q matches name/slug (ILIKE).
-        ?org_id and ?status are exact-match filters; ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
-        Note: the tenant filter is named `org_id` (not `tenantID`) because the global ValidateNoUserProvidedTenantID security middleware rejects any query parameter whose name contains "tenant".
+        ?tenantID and ?status are exact-match filters; ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
       parameters:
       - description: Page number (default 1)
         in: query
@@ -4077,11 +4076,9 @@ paths:
         in: query
         name: q
         type: string
-      - description: Filter to groups belonging to this tenant ID (exact match). Named
-          org_id rather than tenantID — the security middleware blocks query params
-          containing 'tenant'.
+      - description: Filter to groups belonging to this tenant ID (exact match)
         in: query
-        name: org_id
+        name: tenantID
         type: string
       - description: 'Filter to groups in this status: active|pending_deletion (exact
           match)'

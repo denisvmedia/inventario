@@ -49,7 +49,7 @@
         },
         "/admin/groups": {
             "get": {
-                "description": "Returns every location group with computed member_count. Pagination via ?page\u0026per_page; ?q matches name/slug (ILIKE).\n?org_id and ?status are exact-match filters; ?sort=\u003cfield\u003e with optional `-` prefix for desc, or explicit ?order=asc|desc.\nNote: the tenant filter is named `org_id` (not `tenantID`) because the global ValidateNoUserProvidedTenantID security middleware rejects any query parameter whose name contains \"tenant\".",
+                "description": "Returns every location group with computed member_count. Pagination via ?page\u0026per_page; ?q matches name/slug (ILIKE).\n?tenantID and ?status are exact-match filters; ?sort=\u003cfield\u003e with optional `-` prefix for desc, or explicit ?order=asc|desc.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -78,8 +78,8 @@
                     },
                     {
                         "type": "string",
-                        "description": "Filter to groups belonging to this tenant ID (exact match). Named org_id rather than tenantID — the security middleware blocks query params containing 'tenant'.",
-                        "name": "org_id",
+                        "description": "Filter to groups belonging to this tenant ID (exact match)",
+                        "name": "tenantID",
                         "in": "query"
                     },
                     {

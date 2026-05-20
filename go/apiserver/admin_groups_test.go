@@ -155,11 +155,12 @@ func TestAdminListGroups_FiltersAndPaginatesAndSorts(t *testing.T) {
 			expectedLen:   3,
 		},
 		{
-			// The tenant filter is `org_id`, not `tenantID` — the global
-			// ValidateNoUserProvidedTenantID middleware 403s any query
-			// param containing "tenant".
-			name:          "filter by org_id narrows to that tenant",
-			query:         "?org_id=" + otherTenant.ID,
+			// ?tenantID is the documented tenant filter. The global
+			// ValidateNoUserProvidedTenantID middleware would normally 403
+			// a query param containing "tenant", but it exempts the
+			// /api/v1/admin/* subtree — so this returns 200 and filters.
+			name:          "filter by tenantID narrows to that tenant",
+			query:         "?tenantID=" + otherTenant.ID,
 			expectedTotal: 1,
 			expectedLen:   1,
 		},

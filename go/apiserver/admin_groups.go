@@ -34,14 +34,13 @@ type adminGroupsAPI struct {
 //
 // @Summary List groups (admin)
 // @Description Returns every location group with computed member_count. Pagination via ?page&per_page; ?q matches name/slug (ILIKE).
-// @Description ?org_id and ?status are exact-match filters; ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
-// @Description Note: the tenant filter is named `org_id` (not `tenantID`) because the global ValidateNoUserProvidedTenantID security middleware rejects any query parameter whose name contains "tenant".
+// @Description ?tenantID and ?status are exact-match filters; ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
 // @Tags admin
 // @Produce json-api
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
 // @Param q query string false "Search term — ILIKE match on name/slug"
-// @Param org_id query string false "Filter to groups belonging to this tenant ID (exact match). Named org_id rather than tenantID — the security middleware blocks query params containing 'tenant'."
+// @Param tenantID query string false "Filter to groups belonging to this tenant ID (exact match)"
 // @Param status query string false "Filter to groups in this status: active|pending_deletion (exact match)"
 // @Param sort query string false "Sort field: name|slug|created_at|status (prefix with - for desc)"
 // @Param order query string false "Sort direction override: asc|desc (wins over `-` prefix)"
@@ -58,12 +57,12 @@ func (api *adminGroupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 		Page:    page,
 		PerPage: perPage,
 		Query:   q.Get("q"),
-		// The tenant filter is read from `org_id`, not `tenantID`: the
-		// global ValidateNoUserProvidedTenantID middleware rejects any
-		// query parameter whose name contains the substring "tenant"
-		// (case-insensitive) as a cross-tenant-injection guard, so the
-		// issue's literal `tenantID` name is unusable on a live route.
-		TenantID:  q.Get("org_id"),
+		// The tenant filter is read from `tenantID`. The global
+		// ValidateNoUserProvidedTenantID middleware normally rejects any
+		// query parameter whose name contains "tenant", but it exempts the
+		// /api/v1/admin/* subtree from that check by design — see the
+		// rationale in isAdminSubtreePath / ValidateNoUserProvidedTenantID.
+		TenantID:  q.Get("tenantID"),
 		Status:    q.Get("status"),
 		SortField: registry.AdminGroupSortField(sortField),
 		SortDesc:  sortDesc,
