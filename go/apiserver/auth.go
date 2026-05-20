@@ -44,12 +44,24 @@ const (
 	// the admin's real refresh cookie (no duplicate-cookie hazard that two
 	// cookies at different paths would create).
 	//
-	// Migration note: a session created before this widening keeps its old
-	// cookie pinned at /api/v1/auth until the next /auth/refresh re-issues
-	// it at /api/v1; the stale narrow-path cookie is then shadowed on
-	// /auth/* and expires on its own within the 30-day refresh TTL. No user
-	// is logged out by the change.
+	// Migration note: a session created before this widening still holds a
+	// refresh cookie pinned at the legacy /api/v1/auth path. Because the new
+	// cookie is written at /api/v1, a plain write does NOT overwrite that
+	// stale narrow-path cookie — the browser would carry two `refresh_token`
+	// cookies and, per RFC 6265, send the longer-Path (/api/v1/auth) one
+	// first, so the impersonation marker planted at /api/v1 would be shadowed
+	// on /auth/refresh (a real security hole, #1750/#1771). To prevent this,
+	// clearLegacyRefreshCookie actively deletes the /api/v1/auth cookie on
+	// every login, refresh-cookie write, impersonation start/end, logout,
+	// and on the /auth/refresh success path — so a stale session is cleaned
+	// up the next time it talks to the auth API. No user is logged out by
+	// the change.
 	refreshTokenCookiePath = "/api/v1" // #nosec G101 -- this is a URL path, not a credential
+	// legacyRefreshTokenCookiePath is the pre-#1750 path the refresh cookie
+	// was scoped to. New code never writes a live cookie here; it is only
+	// used to emit an explicit deletion (see clearLegacyRefreshCookie) so a
+	// browser holding a pre-upgrade cookie at this path drops it.
+	legacyRefreshTokenCookiePath = "/api/v1/auth" // #nosec G101 -- this is a URL path, not a credential
 	// impersonationRefreshCookieMarker is the sentinel prefix written into
 	// the refresh-token cookie for the duration of an impersonation session
 	// (#1750). Impersonation sessions are deliberately non-refreshable, so
@@ -385,6 +397,13 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 
 	// Re-generate the CSRF token so it stays in sync with the new access token.
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
+
+	// refresh() does not rotate the refresh cookie (writeLoginResponse writes
+	// no cookie), so a session that only ever refreshes would never evict a
+	// stale pre-#1750 cookie left at the legacy /api/v1/auth path. Clear it
+	// explicitly here — cheap, idempotent, and closes the migration window
+	// for refresh-only sessions (#1750/#1771).
+	clearLegacyRefreshCookie(w, r)
 
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
@@ -1246,6 +1265,11 @@ func (api *AuthAPI) setRefreshTokenCookie(w http.ResponseWriter, r *http.Request
 // the impersonation flow uses it both to plant the impersonation marker
 // (#1750) and to restore the admin's original token on `end`.
 func writeRefreshCookie(w http.ResponseWriter, r *http.Request, value string, maxAge int) {
+	// Evict any pre-#1750 cookie pinned at the legacy /api/v1/auth path so the
+	// browser does not end up carrying two `refresh_token` cookies (see the
+	// refreshTokenCookiePath migration note).
+	clearLegacyRefreshCookie(w, r)
+
 	// Set Secure flag only when the connection is already over HTTPS to allow
 	// local development over plain HTTP.
 	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
@@ -1256,6 +1280,31 @@ func writeRefreshCookie(w http.ResponseWriter, r *http.Request, value string, ma
 		Value:    value,
 		Path:     refreshTokenCookiePath,
 		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   secureCookie,
+		SameSite: http.SameSiteStrictMode,
+	})
+}
+
+// clearLegacyRefreshCookie emits a Set-Cookie that deletes the pre-#1750
+// refresh-token cookie scoped to the legacy /api/v1/auth path (MaxAge=-1,
+// empty value). New code writes the live refresh cookie at /api/v1; because
+// that is a different path, a plain write would not overwrite a stale
+// narrow-path cookie left over from a session created before the path was
+// widened. Without this deletion the browser would carry two `refresh_token`
+// cookies and send the longer-Path (/api/v1/auth) one first on /auth/refresh,
+// shadowing the impersonation marker planted at /api/v1 (#1750/#1771). It is
+// cheap and idempotent, so it runs on every refresh-cookie write/clear and on
+// the /auth/refresh success path. The cookie attributes match writeRefreshCookie
+// and clearRefreshCookie exactly, including the secureCookie computation.
+func clearLegacyRefreshCookie(w http.ResponseWriter, r *http.Request) {
+	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	// #nosec G124 -- HttpOnly + SameSiteStrict are set; Secure is true on HTTPS and intentionally false on plain-HTTP local dev.
+	http.SetCookie(w, &http.Cookie{
+		Name:     refreshTokenCookieName,
+		Value:    "",
+		Path:     legacyRefreshTokenCookiePath,
+		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   secureCookie,
 		SameSite: http.SameSiteStrictMode,
@@ -1312,6 +1361,9 @@ func writeLoginResponse(w http.ResponseWriter, accessToken, csrfToken string, us
 // where the cookie is present but invalid/expired/revoked, so that the browser
 // does not keep sending a stale token and causing repeated 401 loops.
 func clearRefreshCookie(w http.ResponseWriter, r *http.Request) {
+	// Also evict any stale pre-#1750 cookie at the legacy /api/v1/auth path.
+	clearLegacyRefreshCookie(w, r)
+
 	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 	// #nosec G124 -- HttpOnly + SameSiteStrict are set; Secure is true on HTTPS and intentionally false on plain-HTTP local dev.
 	http.SetCookie(w, &http.Cookie{

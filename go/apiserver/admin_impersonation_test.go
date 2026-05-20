@@ -454,14 +454,23 @@ func createAdminRefreshToken(c *qt.C, params apiserver.Params, user *models.User
 	return raw
 }
 
-// refreshCookieFromResponse extracts the value the response set the
+// refreshCookieFromResponse extracts the value the response set the LIVE
 // refresh_token cookie to (the part after "refresh_token=" up to the
-// first ';'). Returns ("", false) when the response sets no refresh
+// first ';'). Returns ("", false) when the response sets no live refresh
 // cookie. Used to follow the cookie a handler emitted into a subsequent
 // request, the way a browser would.
+//
+// writeRefreshCookie/clearRefreshCookie also emit a refresh_token
+// Set-Cookie that DELETES the legacy /api/v1/auth cookie (empty value,
+// Max-Age=0). This helper skips that deletion header so callers get the
+// value of the cookie the browser would actually carry forward.
 func refreshCookieFromResponse(rr *httptest.ResponseRecorder) (string, bool) {
 	for _, sc := range rr.Header().Values("Set-Cookie") {
 		if !strings.HasPrefix(sc, "refresh_token=") {
+			continue
+		}
+		// Skip the legacy-path deletion cookie (empty value, Max-Age=0).
+		if strings.HasPrefix(sc, "refresh_token=;") || strings.Contains(sc, "; Max-Age=0") {
 			continue
 		}
 		value := strings.TrimPrefix(sc, "refresh_token=")
@@ -511,16 +520,76 @@ func TestImpersonate_StartReplacesRefreshCookie(t *testing.T) {
 		qt.Commentf("refresh cookie should hold the impersonation marker, got %q", cookieValue))
 }
 
-// refreshCookiePathFromResponse extracts the Path attribute of the
+// TestImpersonate_StartDeletesLegacyPathCookie is the regression test for
+// the PR #1771 review bug (#1750): impersonation-start plants the marker
+// cookie at the widened /api/v1 path via writeRefreshCookie, which must
+// ALSO emit a Set-Cookie deleting the pre-upgrade refresh_token cookie at
+// the legacy /api/v1/auth path. Without that deletion a browser created
+// before the path widening keeps a stale real-token cookie at /api/v1/auth;
+// per RFC 6265 it is sent first on /auth/refresh, shadowing the marker and
+// reopening the refresh-during-impersonation bypass.
+func TestImpersonate_StartDeletesLegacyPathCookie(t *testing.T) {
+	c := qt.New(t)
+	params, admin, _ := newParams()
+	promoteToSystemAdmin(c, params, admin)
+	target := createTestUserDirect(c, params, admin.TenantID, "target@example.com", true, false)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	startRR := doImpersonateStart(c, handler, admin.ID, target.ID, nil)
+	c.Assert(startRR.Code, qt.Equals, http.StatusOK)
+
+	// Exactly one Set-Cookie must delete the legacy /api/v1/auth cookie
+	// (empty value, Max-Age=0 — the wire rendering of MaxAge=-1).
+	legacyDeleted := false
+	for _, sc := range startRR.Header().Values("Set-Cookie") {
+		if !strings.HasPrefix(sc, "refresh_token=") {
+			continue
+		}
+		hasLegacyPath := false
+		hasDeletion := false
+		for attr := range strings.SplitSeq(sc, ";") {
+			attr = strings.TrimSpace(attr)
+			if attr == "Path=/api/v1/auth" {
+				hasLegacyPath = true
+			}
+			if attr == "Max-Age=0" {
+				hasDeletion = true
+			}
+		}
+		if hasLegacyPath && hasDeletion {
+			legacyDeleted = true
+		}
+	}
+	c.Assert(legacyDeleted, qt.IsTrue,
+		qt.Commentf("impersonation start must emit a Set-Cookie deleting the legacy /api/v1/auth cookie; got %v",
+			startRR.Header().Values("Set-Cookie")))
+
+	// The live marker cookie must still be written at the new /api/v1 path.
+	cookiePath, ok := refreshCookiePathFromResponse(startRR)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(cookiePath, qt.Equals, "/api/v1")
+}
+
+// refreshCookiePathFromResponse extracts the Path attribute of the LIVE
 // refresh_token Set-Cookie header (the value after "Path=" up to the
-// next ';'). Returns ("", false) when the response sets no refresh
-// cookie or the cookie carries no Path attribute. Unlike
-// refreshCookieFromResponse this inspects the attribute STRING directly
-// — a httptest round-trip does not enforce cookie Path scoping, so the
-// only way to catch a path-scoping bug is to assert the attribute text.
+// next ';'). Returns ("", false) when the response sets no live refresh
+// cookie or it carries no Path attribute. Unlike refreshCookieFromResponse
+// this inspects the attribute STRING directly — a httptest round-trip does
+// not enforce cookie Path scoping, so the only way to catch a path-scoping
+// bug is to assert the attribute text.
+//
+// writeRefreshCookie/clearRefreshCookie also emit a SECOND refresh_token
+// Set-Cookie that DELETES the legacy /api/v1/auth cookie (empty value,
+// Max-Age=0); this helper skips that deletion header and reports the path
+// of the cookie carrying a real value, so callers see the live cookie's
+// scope.
 func refreshCookiePathFromResponse(rr *httptest.ResponseRecorder) (string, bool) {
 	for _, sc := range rr.Header().Values("Set-Cookie") {
 		if !strings.HasPrefix(sc, "refresh_token=") {
+			continue
+		}
+		// Skip the legacy-path deletion cookie (empty value, Max-Age=0).
+		if strings.HasPrefix(sc, "refresh_token=;") || strings.Contains(sc, "; Max-Age=0") {
 			continue
 		}
 		for attr := range strings.SplitSeq(sc, ";") {

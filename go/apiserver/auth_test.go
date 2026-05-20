@@ -783,6 +783,94 @@ func TestAuthAPI_Refresh(t *testing.T) {
 	})
 }
 
+// legacyRefreshCookieDeleted reports whether the response includes a
+// Set-Cookie header that deletes the refresh_token cookie pinned at the
+// legacy /api/v1/auth path. http.SetCookie with MaxAge=-1 renders as
+// "Max-Age=0" on the wire. This is the regression assertion for the PR
+// #1771 review bug (#1750): widening the refresh cookie path to /api/v1
+// without actively deleting a stale /api/v1/auth cookie leaves a browser
+// carrying two refresh_token cookies, reopening the
+// refresh-during-impersonation bypass for every pre-upgrade session.
+func legacyRefreshCookieDeleted(resp *httptest.ResponseRecorder) bool {
+	for _, sc := range resp.Header().Values("Set-Cookie") {
+		if !strings.HasPrefix(sc, "refresh_token=") {
+			continue
+		}
+		hasLegacyPath := false
+		hasDeletion := false
+		for attr := range strings.SplitSeq(sc, ";") {
+			attr = strings.TrimSpace(attr)
+			if attr == "Path=/api/v1/auth" {
+				hasLegacyPath = true
+			}
+			if attr == "Max-Age=0" {
+				hasDeletion = true
+			}
+		}
+		if hasLegacyPath && hasDeletion {
+			return true
+		}
+	}
+	return false
+}
+
+// TestAuthAPI_Refresh_DeletesLegacyPathCookie is the regression test for the
+// PR #1771 review bug (#1750): the /auth/refresh success path must emit a
+// Set-Cookie that deletes the pre-upgrade refresh_token cookie scoped to the
+// legacy /api/v1/auth path, so a browser holding a stale narrow-path cookie
+// drops it instead of carrying two refresh_token cookies.
+func TestAuthAPI_Refresh_DeletesLegacyPathCookie(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const (
+		userID   = "user-refresh-legacy"
+		tenantID = "test-tenant-id"
+	)
+
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{
+		userID: {
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: userID},
+				TenantID: tenantID,
+			},
+			Email:    "refresh-legacy@example.com",
+			Name:     "Refresh Legacy User",
+			IsActive: true,
+		},
+	}}
+	refreshReg := &mockRefreshTokenRegistryForAuth{tokensByHash: map[string]*models.RefreshToken{}}
+
+	raw, hash, err := models.GenerateRefreshToken()
+	c.Assert(err, qt.IsNil)
+	refreshReg.tokensByHash[hash] = &models.RefreshToken{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+			EntityID: models.EntityID{ID: "rt-legacy"},
+			TenantID: tenantID,
+			UserID:   userID,
+		},
+		TokenHash: hash,
+		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+		CreatedAt: time.Now(),
+	}
+
+	req := httptest.NewRequest("POST", "/refresh", nil)
+	// #nosec G124 -- test-only cookie added to a httptest.NewRequest; transport security is irrelevant here.
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: raw})
+	resp := httptest.NewRecorder()
+	router := chi.NewRouter()
+	apiserver.Auth(apiserver.AuthParams{
+		UserRegistry:         userReg,
+		RefreshTokenRegistry: refreshReg,
+		JWTSecret:            jwtSecret,
+	})(router)
+	router.ServeHTTP(resp, req)
+
+	c.Assert(resp.Code, qt.Equals, http.StatusOK)
+	c.Assert(legacyRefreshCookieDeleted(resp), qt.IsTrue,
+		qt.Commentf("refresh success path must emit a Set-Cookie deleting the legacy /api/v1/auth cookie; got %v",
+			resp.Header().Values("Set-Cookie")))
+}
+
 // refreshCookieCleared reports whether the response includes a Set-Cookie
 // header that deletes the refresh_token cookie. http.SetCookie with MaxAge=-1
 // is rendered as "Max-Age=0" on the wire, so that's what we match.
