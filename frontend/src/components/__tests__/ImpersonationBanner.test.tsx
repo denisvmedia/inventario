@@ -84,9 +84,7 @@ describe("ImpersonationBanner", () => {
       )
     )
     renderBanner()
-    await waitFor(() =>
-      expect(screen.getByTestId("impersonation-banner")).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByTestId("impersonation-banner")).toBeInTheDocument())
     expect(screen.getByText(/Target User/)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /end impersonation/i })).toBeInTheDocument()
   })

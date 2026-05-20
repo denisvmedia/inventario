@@ -41,7 +41,10 @@ interface ImpersonationProviderProps {
 // Normalizes the raw BE payload into the context value. The BE returns
 // `{ active: false }` with no other fields when no session is running, so
 // every field below is defensively defaulted.
-function toContextValue(state: ImpersonationState | undefined, isLoading: boolean): ImpersonationContextValue {
+function toContextValue(
+  state: ImpersonationState | undefined,
+  isLoading: boolean
+): ImpersonationContextValue {
   if (!state?.active) {
     return { ...INACTIVE, isLoading }
   }

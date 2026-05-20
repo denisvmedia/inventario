@@ -32,10 +32,7 @@ export function AdminForbiddenPage() {
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             403
           </p>
-          <h1
-            id="admin-forbidden-title"
-            className="text-2xl font-bold tracking-tight"
-          >
+          <h1 id="admin-forbidden-title" className="text-2xl font-bold tracking-tight">
             {t("forbidden.title")}
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">

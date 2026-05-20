@@ -16,7 +16,10 @@ interface QueryOptions {
 // Lists tenants for the admin Tenants page. Defaults to enabled only for
 // system admins so a non-admin who somehow mounts the page doesn't fire a
 // guaranteed-403 request.
-export function useAdminTenants(params: AdminTenantsParams = {}, { enabled = true }: QueryOptions = {}) {
+export function useAdminTenants(
+  params: AdminTenantsParams = {},
+  { enabled = true }: QueryOptions = {}
+) {
   const isSystemAdmin = useIsSystemAdmin()
   return useQuery<AdminTenantsResult>({
     queryKey: adminKeys.tenantList(params),
