@@ -72,8 +72,14 @@ type ImpersonationStore interface {
 }
 
 // InMemoryImpersonationStore is the default ImpersonationStore. Slots
-// are pruned lazily on every access so an abandoned session (admin
-// never calls `end`) cannot leak memory beyond one TTL window.
+// are pruned lazily — pruneLocked runs on every Put/Get, so an expired
+// slot is evicted the next time the store is touched, not at the moment
+// it expires. On a fully idle process (no further impersonation
+// activity) expired slots linger in the map past their TTL until the
+// next Put/Get. This is intentional: a slot is one tiny struct, slots
+// are ≤30-min lived, and any subsequent impersonation prunes them, so
+// the residual footprint is negligible and a background pruner
+// goroutine would not earn its keep.
 type InMemoryImpersonationStore struct {
 	now func() time.Time
 

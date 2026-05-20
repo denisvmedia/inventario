@@ -52,8 +52,13 @@ func RequireSystemAdmin(next http.Handler) http.Handler {
 	})
 }
 
-// RequireSystemAdminOrImpersonating gates the impersonation lifecycle
-// endpoints (POST /admin/impersonation/end, GET /admin/impersonation/current).
+// RequireSystemAdminOrImpersonating gates the JWT-middleware-backed
+// impersonation lifecycle endpoints — currently only GET
+// /admin/impersonation/current (see adminAuthenticatedRoutes). It does
+// NOT gate POST /admin/impersonation/end: that endpoint is mounted bare,
+// outside the JWT/middleware chain, and self-validates the impersonation
+// token and marker cookie itself (see Admin() and endImpersonation).
+//
 // It admits two callers:
 //
 //  1. A genuine system admin — the operator who has not yet started (or
@@ -62,13 +67,13 @@ func RequireSystemAdmin(next http.Handler) http.Handler {
 //     token carries `imp=true`. Such a token deliberately has
 //     `is_system_admin=false` (an impersonated session must never wield
 //     platform-admin authority), so plain RequireSystemAdmin would reject
-//     it — yet the operator must be able to *end* the very session they
-//     started. Admitting impersonation tokens here, and ONLY here, lets
-//     `end` and `current` work while keeping every state-changing admin
-//     endpoint behind the strict RequireSystemAdmin gate.
+//     it — yet the operator must still be able to read the impersonation
+//     state of the very session they started. Admitting impersonation
+//     tokens here lets `current` work while keeping every state-changing
+//     admin endpoint behind the strict RequireSystemAdmin gate.
 //
-// Like RequireSystemAdmin it MUST run after JWTMiddleware. The handlers
-// behind it re-validate the impersonation claim themselves, so this
+// Like RequireSystemAdmin it MUST run after JWTMiddleware. The handler
+// behind it re-validates the impersonation claim itself, so this
 // middleware only widens the gate — it does not weaken any handler-side
 // check.
 func RequireSystemAdminOrImpersonating(next http.Handler) http.Handler {
