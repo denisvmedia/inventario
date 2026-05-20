@@ -73,6 +73,10 @@ func Admin(params AdminParams) func(r chi.Router) {
 		blacklist:    params.Blacklist,
 		auditService: params.AuditService,
 	}
+	groupsAPI := &adminGroupsAPI{
+		factorySet:   params.FactorySet,
+		auditService: params.AuditService,
+	}
 	return func(r chi.Router) {
 		// RequireSystemAdmin runs as the first per-subtree middleware so
 		// every handler below it can assume the caller is a system admin.
@@ -94,6 +98,15 @@ func Admin(params AdminParams) func(r chi.Router) {
 		// audit-logs reason+forced via the breadcrumb in user_agent.
 		r.Post("/users/{userID}/block", usersAPI.blockUser)
 		r.Post("/users/{userID}/unblock", usersAPI.unblockUser)
+
+		// #1748: cross-tenant groups admin. List + detail bypass RLS at
+		// the registry layer (SET LOCAL row_security = off); DELETE flips
+		// status to pending_deletion (idempotent) and the existing
+		// group_purge_worker finishes the hard-delete. Each handler
+		// audit-logs via params.AuditService.
+		r.Get("/groups", groupsAPI.listGroups)
+		r.Get("/groups/{groupID}", groupsAPI.getGroup)
+		r.Delete("/groups/{groupID}", groupsAPI.deleteGroup)
 	}
 }
 

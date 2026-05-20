@@ -334,6 +334,58 @@ func TestGroupPurgeService_PurgeOnce_Reentrancy(t *testing.T) {
 	c.Assert(audits, qt.HasLen, 1)
 }
 
+// TestGroupPurgeService_PurgeOnce_AfterAdminSoftDelete is the #1748
+// integration check: an admin soft-delete (the registry-level
+// MarkPendingDeletionAdmin the admin DELETE handler calls) flips a group
+// to pending_deletion, and a subsequent purge worker sweep
+// (GroupPurgeService.PurgeOnce) hard-deletes the row. No parallel purge
+// code path — the admin DELETE only owns the status transition and the
+// existing worker finishes the job.
+func TestGroupPurgeService_PurgeOnce_AfterAdminSoftDelete(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	fs := memory.NewFactorySet()
+	fileSvc := services.NewFileService(fs, newFileUploadLocation(c))
+	svc := services.NewGroupPurgeService(fs, fileSvc)
+
+	// Start from an active group — the admin DELETE handler's input state.
+	group, err := fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		Slug:                "admin-deleted-slug-000000000",
+		Name:                "Admin Deleted Group",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           "user-admin",
+		GroupCurrency:       "USD",
+	})
+	c.Assert(err, qt.IsNil)
+
+	// A pre-purge sweep is a no-op: the group is still active.
+	purged, failed, err := svc.PurgeOnce(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(purged, qt.Equals, 0)
+	c.Assert(failed, qt.Equals, 0)
+
+	// Admin soft-delete — exactly what the /api/v1/admin/groups/{id}
+	// DELETE handler invokes.
+	alreadyPending, err := fs.LocationGroupRegistry.MarkPendingDeletionAdmin(ctx, group.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(alreadyPending, qt.IsFalse)
+
+	// Group is now pending_deletion but still present.
+	pending, err := fs.LocationGroupRegistry.Get(ctx, group.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(pending.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
+
+	// The purge worker's next sweep finishes the hard-delete.
+	purged, failed, err = svc.PurgeOnce(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(purged, qt.Equals, 1)
+	c.Assert(failed, qt.Equals, 0)
+
+	_, err = fs.LocationGroupRegistry.Get(ctx, group.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
 // TestGroupPurgeService_PurgeOnce_PartialFailure_NoDuplicateAudit drives the
 // re-entrancy contract on a hard case: the first sweep writes the invite
 // audit snapshot and then crashes during blob deletion, leaving the group

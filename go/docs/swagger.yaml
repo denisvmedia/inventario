@@ -383,6 +383,87 @@ definitions:
       operating_system:
         type: string
     type: object
+  jsonapi.AdminGroupDetail:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      currency:
+        type: string
+      id:
+        type: string
+      member_count:
+        type: integer
+      name:
+        type: string
+      slug:
+        type: string
+      status:
+        $ref: '#/definitions/models.LocationGroupStatus'
+      tenant:
+        $ref: '#/definitions/jsonapi.AdminGroupTenantChip'
+      tenant_id:
+        type: string
+      type:
+        enum:
+        - admin_groups
+        example: admin_groups
+        type: string
+      updated_at:
+        type: string
+    type: object
+  jsonapi.AdminGroupListItem:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      currency:
+        type: string
+      id:
+        type: string
+      member_count:
+        type: integer
+      name:
+        type: string
+      slug:
+        type: string
+      status:
+        $ref: '#/definitions/models.LocationGroupStatus'
+      tenant_id:
+        type: string
+      type:
+        enum:
+        - admin_groups
+        example: admin_groups
+        type: string
+      updated_at:
+        type: string
+    type: object
+  jsonapi.AdminGroupResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.AdminGroupDetail'
+    type: object
+  jsonapi.AdminGroupTenantChip:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+    type: object
+  jsonapi.AdminGroupsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.AdminGroupListItem'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.AdminListMeta'
+    type: object
   jsonapi.AdminListMeta:
     properties:
       page:
@@ -3975,6 +4056,126 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: System-admin ping
+      tags:
+      - admin
+  /admin/groups:
+    get:
+      description: |-
+        Returns every location group with computed member_count. Pagination via ?page&per_page; ?q matches name/slug (ILIKE).
+        ?org_id and ?status are exact-match filters; ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
+        Note: the tenant filter is named `org_id` (not `tenantID`) because the global ValidateNoUserProvidedTenantID security middleware rejects any query parameter whose name contains "tenant".
+      parameters:
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 50, max 100)
+        in: query
+        name: per_page
+        type: integer
+      - description: Search term — ILIKE match on name/slug
+        in: query
+        name: q
+        type: string
+      - description: Filter to groups belonging to this tenant ID (exact match). Named
+          org_id rather than tenantID — the security middleware blocks query params
+          containing 'tenant'.
+        in: query
+        name: org_id
+        type: string
+      - description: 'Filter to groups in this status: active|pending_deletion (exact
+          match)'
+        in: query
+        name: status
+        type: string
+      - description: 'Sort field: name|slug|created_at|status (prefix with - for desc)'
+        in: query
+        name: sort
+        type: string
+      - description: 'Sort direction override: asc|desc (wins over `-` prefix)'
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AdminGroupsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - system-admin required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List groups (admin)
+      tags:
+      - admin
+  /admin/groups/{groupID}:
+    delete:
+      description: |-
+        Sets the group's status to `pending_deletion`; the group purge worker finishes the hard-delete asynchronously.
+        Idempotent — re-deleting an already-pending group returns 200 with the current status. Returns the post-transition group row.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK - group marked pending_deletion (or already was)
+          schema:
+            $ref: '#/definitions/jsonapi.AdminGroupResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - system-admin required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Soft-delete a group (admin)
+      tags:
+      - admin
+    get:
+      description: Returns the group row with computed member_count and an owning-tenant
+        chip (tenant id, name, slug). Crosses tenants by design.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AdminGroupResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - system-admin required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get group (admin)
       tags:
       - admin
   /admin/tenants:

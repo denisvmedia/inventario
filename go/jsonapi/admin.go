@@ -272,3 +272,141 @@ func (*AdminUserResponse) Render(_ http.ResponseWriter, r *http.Request) error {
 	render.Status(r, http.StatusOK)
 	return nil
 }
+
+// AdminGroupListItem is the row shape returned by GET /admin/groups.
+// Mirrors the JSON-API flat-data convention used across the codebase
+// (resource fields hoisted to the top level alongside `id` + `type`).
+//
+// member_count is pre-computed by the registry layer via a correlated
+// subquery on group_memberships (accepted memberships only) so the FE
+// doesn't need a second roundtrip per row to render the at-a-glance
+// table.
+type AdminGroupListItem struct {
+	ID          string                     `json:"id"`
+	Type        string                     `json:"type" example:"admin_groups" enums:"admin_groups"`
+	Name        string                     `json:"name"`
+	Slug        string                     `json:"slug"`
+	Status      models.LocationGroupStatus `json:"status"`
+	Currency    models.Currency            `json:"currency"`
+	TenantID    string                     `json:"tenant_id"`
+	CreatedBy   string                     `json:"created_by"`
+	CreatedAt   time.Time                  `json:"created_at"`
+	UpdatedAt   time.Time                  `json:"updated_at"`
+	MemberCount int                        `json:"member_count"`
+}
+
+// AdminGroupsResponse is the JSON:API envelope for GET /admin/groups.
+type AdminGroupsResponse struct {
+	Data []*AdminGroupListItem `json:"data"`
+	Meta AdminListMeta         `json:"meta"`
+}
+
+// NewAdminGroupsResponse maps registry-layer rows into the wire-shape the
+// FE consumes. Page / PerPage / Total drive the meta block (with
+// total_pages computed via ComputeTotalPages so the FE never has to do
+// the ceil-divide).
+func NewAdminGroupsResponse(items []*registry.AdminGroupListItem, page, perPage, total int) *AdminGroupsResponse {
+	data := make([]*AdminGroupListItem, 0, len(items))
+	for _, it := range items {
+		if it == nil || it.Group == nil {
+			continue
+		}
+		g := it.Group
+		data = append(data, &AdminGroupListItem{
+			ID:          g.ID,
+			Type:        "admin_groups",
+			Name:        g.Name,
+			Slug:        g.Slug,
+			Status:      g.Status,
+			Currency:    g.GroupCurrency,
+			TenantID:    g.TenantID,
+			CreatedBy:   g.CreatedBy,
+			CreatedAt:   g.CreatedAt,
+			UpdatedAt:   g.UpdatedAt,
+			MemberCount: it.MemberCount,
+		})
+	}
+	return &AdminGroupsResponse{
+		Data: data,
+		Meta: AdminListMeta{
+			Page:       page,
+			PerPage:    perPage,
+			Total:      total,
+			TotalPages: ComputeTotalPages(total, perPage),
+		},
+	}
+}
+
+func (*AdminGroupsResponse) Render(_ http.ResponseWriter, r *http.Request) error {
+	render.Status(r, http.StatusOK)
+	return nil
+}
+
+// AdminGroupTenantChip is the compact tenant descriptor embedded on the
+// admin group-detail row so the FE can render an owning-tenant chip
+// (id + name + slug) without a second round-trip to /admin/tenants.
+type AdminGroupTenantChip struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+// AdminGroupDetail is the row shape returned by GET /admin/groups/{groupID}.
+// Compared to AdminGroupListItem this adds the resolved tenant chip.
+type AdminGroupDetail struct {
+	ID          string                     `json:"id"`
+	Type        string                     `json:"type" example:"admin_groups" enums:"admin_groups"`
+	Name        string                     `json:"name"`
+	Slug        string                     `json:"slug"`
+	Status      models.LocationGroupStatus `json:"status"`
+	Currency    models.Currency            `json:"currency"`
+	TenantID    string                     `json:"tenant_id"`
+	CreatedBy   string                     `json:"created_by"`
+	CreatedAt   time.Time                  `json:"created_at"`
+	UpdatedAt   time.Time                  `json:"updated_at"`
+	MemberCount int                        `json:"member_count"`
+	Tenant      *AdminGroupTenantChip      `json:"tenant,omitempty"`
+}
+
+// AdminGroupResponse is the JSON:API envelope for GET
+// /admin/groups/{groupID} and the DELETE soft-delete response — the
+// DELETE returns the post-transition row so the FE can render the
+// updated status without a follow-up GET.
+type AdminGroupResponse struct {
+	Data *AdminGroupDetail `json:"data"`
+}
+
+// NewAdminGroupResponse wraps a single group detail row (with tenant chip)
+// for the detail + soft-delete endpoints.
+func NewAdminGroupResponse(item *registry.AdminGroupDetail) *AdminGroupResponse {
+	if item == nil || item.Group == nil {
+		return &AdminGroupResponse{}
+	}
+	g := item.Group
+	detail := &AdminGroupDetail{
+		ID:          g.ID,
+		Type:        "admin_groups",
+		Name:        g.Name,
+		Slug:        g.Slug,
+		Status:      g.Status,
+		Currency:    g.GroupCurrency,
+		TenantID:    g.TenantID,
+		CreatedBy:   g.CreatedBy,
+		CreatedAt:   g.CreatedAt,
+		UpdatedAt:   g.UpdatedAt,
+		MemberCount: item.MemberCount,
+	}
+	if item.Tenant != nil {
+		detail.Tenant = &AdminGroupTenantChip{
+			ID:   item.Tenant.ID,
+			Name: item.Tenant.Name,
+			Slug: item.Tenant.Slug,
+		}
+	}
+	return &AdminGroupResponse{Data: detail}
+}
+
+func (*AdminGroupResponse) Render(_ http.ResponseWriter, r *http.Request) error {
+	render.Status(r, http.StatusOK)
+	return nil
+}

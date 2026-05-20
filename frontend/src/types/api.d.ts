@@ -59,6 +59,203 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/admin/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List groups (admin)
+         * @description Returns every location group with computed member_count. Pagination via ?page&per_page; ?q matches name/slug (ILIKE).
+         *     ?org_id and ?status are exact-match filters; ?sort=<field> with optional `-` prefix for desc, or explicit ?order=asc|desc.
+         *     Note: the tenant filter is named `org_id` (not `tenantID`) because the global ValidateNoUserProvidedTenantID security middleware rejects any query parameter whose name contains "tenant".
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Page number (default 1) */
+                    page?: number;
+                    /** @description Items per page (default 50, max 100) */
+                    per_page?: number;
+                    /** @description Search term — ILIKE match on name/slug */
+                    q?: string;
+                    /** @description Filter to groups belonging to this tenant ID (exact match). Named org_id rather than tenantID — the security middleware blocks query params containing 'tenant'. */
+                    org_id?: string;
+                    /** @description Filter to groups in this status: active|pending_deletion (exact match) */
+                    status?: string;
+                    /** @description Sort field: name|slug|created_at|status (prefix with - for desc) */
+                    sort?: string;
+                    /** @description Sort direction override: asc|desc (wins over `-` prefix) */
+                    order?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminGroupsResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/groups/{groupID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get group (admin)
+         * @description Returns the group row with computed member_count and an owning-tenant chip (tenant id, name, slug). Crosses tenants by design.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminGroupResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Group not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Soft-delete a group (admin)
+         * @description Sets the group's status to `pending_deletion`; the group purge worker finishes the hard-delete asynchronously.
+         *     Idempotent — re-deleting an already-pending group returns 200 with the current status. Returns the post-transition group row.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK - group marked pending_deletion (or already was) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminGroupResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Group not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants": {
         parameters: {
             query?: never;
@@ -7648,6 +7845,53 @@ export type components = {
             error?: unknown;
             file_storage_driver?: string;
             operating_system?: string;
+        };
+        "jsonapi.AdminGroupDetail": {
+            created_at?: string;
+            created_by?: string;
+            currency?: string;
+            id?: string;
+            member_count?: number;
+            name?: string;
+            slug?: string;
+            status?: components["schemas"]["models.LocationGroupStatus"];
+            tenant?: components["schemas"]["jsonapi.AdminGroupTenantChip"];
+            tenant_id?: string;
+            /**
+             * @example admin_groups
+             * @enum {string}
+             */
+            type?: "admin_groups";
+            updated_at?: string;
+        };
+        "jsonapi.AdminGroupListItem": {
+            created_at?: string;
+            created_by?: string;
+            currency?: string;
+            id?: string;
+            member_count?: number;
+            name?: string;
+            slug?: string;
+            status?: components["schemas"]["models.LocationGroupStatus"];
+            tenant_id?: string;
+            /**
+             * @example admin_groups
+             * @enum {string}
+             */
+            type?: "admin_groups";
+            updated_at?: string;
+        };
+        "jsonapi.AdminGroupResponse": {
+            data?: components["schemas"]["jsonapi.AdminGroupDetail"];
+        };
+        "jsonapi.AdminGroupTenantChip": {
+            id?: string;
+            name?: string;
+            slug?: string;
+        };
+        "jsonapi.AdminGroupsResponse": {
+            data?: components["schemas"]["jsonapi.AdminGroupListItem"][];
+            meta?: components["schemas"]["jsonapi.AdminListMeta"];
         };
         "jsonapi.AdminListMeta": {
             /** @example 1 */

@@ -1224,6 +1224,111 @@ type LocationGroupRegistry interface {
 
 	// ListByTenant returns all groups for a tenant.
 	ListByTenant(ctx context.Context, tenantID string) ([]*models.LocationGroup, error)
+
+	// ListAdmin returns a paginated, filtered, and sorted listing of every
+	// location group in the deployment alongside per-group computed
+	// member_count (accepted memberships only). The endpoint behind this
+	// method (/api/v1/admin/groups — #1748) crosses tenants by design, so
+	// implementations MUST return rows across all tenants regardless of
+	// caller membership. The postgres LocationGroupRegistry runs the cross-
+	// tenant read under `SET LOCAL row_security = off` as a fail-loud guard
+	// so a future loss of the connection role's RLS bypass produces a 5xx
+	// rather than a silently empty page; member_count is computed via a
+	// correlated subquery on group_memberships. Memory walks the in-memory
+	// stores.
+	//
+	// Total is the count before LIMIT/OFFSET is applied.
+	ListAdmin(ctx context.Context, opts AdminGroupListOptions) (items []*AdminGroupListItem, total int, err error)
+
+	// GetAdmin returns a single group detail row with the same computed
+	// member_count the listing surfaces, joined with the owning tenant so
+	// the detail handler can render the tenant chip without a second
+	// round-trip. Used by the `/api/v1/admin/groups/{groupID}` detail
+	// handler. Returns ErrNotFound when the group id doesn't exist.
+	GetAdmin(ctx context.Context, groupID string) (*AdminGroupDetail, error)
+
+	// MarkPendingDeletionAdmin flips a group's status to pending_deletion
+	// for the cross-tenant admin soft-delete (/api/v1/admin/groups/{groupID}
+	// DELETE — #1748). It bypasses RLS so a system admin can act on any
+	// tenant's group; the status-transition logic is identical to
+	// GroupService.InitiateGroupDeletion (Status = pending_deletion,
+	// UpdatedAt bumped) so the existing group_purge_worker finishes the
+	// hard-delete with no parallel code path.
+	//
+	// The call is idempotent: when the group is already pending_deletion
+	// it returns (alreadyPending=true, nil) without re-writing the row so
+	// the handler can render a 200 with the current status. On a genuine
+	// transition it returns (false, nil); on a missing group it returns
+	// (false, ErrNotFound).
+	MarkPendingDeletionAdmin(ctx context.Context, groupID string) (alreadyPending bool, err error)
+}
+
+// AdminGroupSortField names the columns the admin group listing endpoint
+// understands for sorting. Names are part of the public API surface; the
+// FE codegen treats them as opaque strings sent in `?sort`.
+type AdminGroupSortField string
+
+const (
+	AdminGroupSortName      AdminGroupSortField = "name"
+	AdminGroupSortSlug      AdminGroupSortField = "slug"
+	AdminGroupSortCreatedAt AdminGroupSortField = "created_at"
+	AdminGroupSortStatus    AdminGroupSortField = "status"
+)
+
+// IsValid reports whether s is a known admin group sort field. Callers
+// should fall back to AdminGroupSortName on invalid input rather than
+// 4xx — the FE may pass an unknown sort during a multi-version rollout.
+func (s AdminGroupSortField) IsValid() bool {
+	switch s {
+	case AdminGroupSortName, AdminGroupSortSlug, AdminGroupSortCreatedAt, AdminGroupSortStatus:
+		return true
+	}
+	return false
+}
+
+// AdminGroupListOptions narrows the result of LocationGroupRegistry.ListAdmin.
+// Page/PerPage are 1-based; PerPage <= 0 falls back to a sensible default
+// at the registry layer, and the handler caps it at 100.
+type AdminGroupListOptions struct {
+	// Page is the 1-based page index. Defaults to 1 when <= 0.
+	Page int
+	// PerPage is the requested page size. Defaults to 50 when <= 0.
+	PerPage int
+	// Query, when non-empty, narrows the result to groups whose name or
+	// slug ILIKE %query%. The match is case-insensitive and uses
+	// substring semantics.
+	Query string
+	// TenantID, when non-empty, narrows the result to groups belonging to
+	// that exact tenant.
+	TenantID string
+	// Status, when non-empty, narrows the result to groups in that exact
+	// status (active / pending_deletion).
+	Status string
+	// SortField is the column to sort by. Defaults to AdminGroupSortName
+	// when empty or invalid.
+	SortField AdminGroupSortField
+	// SortDesc reverses the natural order of the chosen field. Default
+	// is false (ascending).
+	SortDesc bool
+}
+
+// AdminGroupListItem is the row shape returned by
+// LocationGroupRegistry.ListAdmin: the group row plus the computed
+// member_count the admin listing UI needs to render at a glance.
+type AdminGroupListItem struct {
+	Group       *models.LocationGroup
+	MemberCount int
+}
+
+// AdminGroupDetail is the row shape returned by
+// LocationGroupRegistry.GetAdmin: the group row plus the computed
+// member_count and the owning tenant (resolved for the detail-page
+// tenant chip). Tenant may be nil if the join row is somehow missing,
+// but a group with a non-NULL tenant_id FK should always resolve one.
+type AdminGroupDetail struct {
+	Group       *models.LocationGroup
+	MemberCount int
+	Tenant      *models.Tenant
 }
 
 // GroupMembershipRegistry manages user memberships in location groups.
