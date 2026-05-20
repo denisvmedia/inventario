@@ -44,6 +44,18 @@ export function useCurrentUser() {
   })
 }
 
+// Reports whether the signed-in user carries the `is_system_admin` flag.
+// The flag rides on the /auth/me payload (models.User) — the admin BE
+// foundation (#1745) added it. Returns `false` while the boot probe is
+// still in flight or for any non-admin user, so callers can use it as a
+// plain boolean gate (sidebar entry visibility, route guard) without a
+// tri-state dance. Reads through useCurrentUser so it shares the same
+// cached query as the rest of the auth slice.
+export function useIsSystemAdmin(): boolean {
+  const { data: user } = useCurrentUser()
+  return user?.is_system_admin === true
+}
+
 // Optimistic logout: drop the cached user before the server confirms so the
 // UI can show the logged-out shell immediately. We `removeQueries` rather
 // than `setQueryData(..., null)` so the cache stays type-true to the query's

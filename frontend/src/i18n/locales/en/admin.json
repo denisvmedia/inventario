@@ -1,0 +1,56 @@
+{
+  "forbidden": {
+    "back": "Back to dashboard",
+    "description": "You do not have permission to view the admin area. This area is restricted to system administrators.",
+    "title": "Access denied"
+  },
+  "impersonation": {
+    "banner": {
+      "end": "End impersonation",
+      "label": "Impersonating {{name}}",
+      "sessionEndsIn": "Session ends in"
+    }
+  },
+  "layout": {
+    "breadcrumbRoot": "Admin"
+  },
+  "nav": {
+    "groups": "Groups",
+    "section": "Admin",
+    "tenants": "Tenants",
+    "users": "Users"
+  },
+  "placeholder": {
+    "comingSoon": "This admin page is coming soon.",
+    "groups": {
+      "subtitle": "Every group across all tenants.",
+      "title": "Groups"
+    },
+    "users": {
+      "subtitle": "Every Inventario account across all tenants.",
+      "title": "Users"
+    }
+  },
+  "tenants": {
+    "empty": "No tenants match your search.",
+    "loadError": "Could not load tenants. Please try again.",
+    "loading": "Loading tenants…",
+    "search": {
+      "clear": "Clear search",
+      "placeholder": "Search by name, slug or domain…"
+    },
+    "stats": {
+      "active": "Active",
+      "tenants": "Tenants",
+      "totalGroups": "Total groups",
+      "totalUsers": "Total users"
+    },
+    "subtitle": "Organisations using Inventario across the platform.",
+    "table": {
+      "created": "Created",
+      "groups": "Groups",
+      "users": "Users"
+    },
+    "title": "Tenants"
+  }
+}

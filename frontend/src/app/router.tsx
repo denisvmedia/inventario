@@ -5,6 +5,7 @@ import type { Location } from "react-router-dom"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
+import { RequireSystemAdmin } from "@/components/routing/RequireSystemAdmin"
 import { GroupRequiredRoute } from "@/components/routing/GroupRequiredRoute"
 import { UngroupedRedirect } from "@/components/routing/UngroupedRedirect"
 import { ComingSoonPage } from "@/components/coming-soon"
@@ -157,6 +158,21 @@ const ExportImportPage = lazy(() =>
 )
 const ExportRestorePage = lazy(() =>
   import("@/pages/exports/ExportRestorePage").then((m) => ({ default: m.ExportRestorePage }))
+)
+// Admin subtree (#1752). The layout shell + the three section pages are
+// each their own chunk so the admin code never weighs on a non-admin's
+// entry bundle.
+const AdminLayout = lazy(() =>
+  import("@/pages/admin/AdminLayout").then((m) => ({ default: m.AdminLayout }))
+)
+const AdminTenantsPage = lazy(() =>
+  import("@/pages/admin/AdminTenantsPage").then((m) => ({ default: m.AdminTenantsPage }))
+)
+const AdminUsersPage = lazy(() =>
+  import("@/pages/admin/AdminUsersPage").then((m) => ({ default: m.AdminUsersPage }))
+)
+const AdminGroupsPage = lazy(() =>
+  import("@/pages/admin/AdminGroupsPage").then((m) => ({ default: m.AdminGroupsPage }))
 )
 
 // AppRoutes is the full route tree for the new React frontend.
@@ -326,6 +342,28 @@ export function AppRoutes() {
                   Exports page. */}
               <Route path="backup" element={<BackupRedirect />} />
             </Route>
+          </Route>
+
+          {/* Admin subtree (#1752). Platform-wide — not group-scoped, so
+              it lives OUTSIDE GroupRequiredRoute (a system admin with
+              zero groups must still reach it). RequireSystemAdmin gates
+              every /admin/* page on the is_system_admin claim and renders
+              an in-place 403 page (not a redirect) for non-admins.
+              /admin redirects to the /admin/tenants landing route;
+              AdminLayout supplies the breadcrumb + secondary nav and
+              renders the section pages via <Outlet />. */}
+          <Route
+            path="/admin"
+            element={
+              <RequireSystemAdmin>
+                <AdminLayout />
+              </RequireSystemAdmin>
+            }
+          >
+            <Route index element={<Navigate to="/admin/tenants" replace />} />
+            <Route path="tenants" element={<AdminTenantsPage />} />
+            <Route path="users" element={<AdminUsersPage />} />
+            <Route path="groups" element={<AdminGroupsPage />} />
           </Route>
         </Route>
 
