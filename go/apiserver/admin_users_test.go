@@ -276,7 +276,8 @@ func TestAdminBlockUser_BadBodyVariants(t *testing.T) {
 		{"unknown_field", map[string]any{"reason": "ok", "extra": 1}, http.StatusBadRequest},
 		// Trailing tokens after a valid object must be rejected — the
 		// json.Decoder accepts the first value happily, so the handler
-		// has to call dec.More() to catch the concatenation attack.
+		// has to do a second Decode and require io.EOF (via the
+		// decoderAtEOF helper) to catch the concatenation attack.
 		{"multi_object_trailing", []byte(`{"reason":"x"}{"extra":1}`), http.StatusBadRequest},
 	}
 	for _, tc := range cases {
@@ -380,9 +381,10 @@ func TestAdminUnblockUser_AuditRowCarriesReason(t *testing.T) {
 
 // TestAdminUnblockUser_BadBodyVariants mirrors the block-side table but
 // stays narrow — just enough to pin the trailing-tokens regression that
-// dec.More() guards against. The other reason-validation paths are
-// already covered by the block-side table and by the
-// decodeUnblockRequest happy-path tests.
+// the decoderAtEOF helper (second Decode + io.EOF check) guards
+// against. The other reason-validation paths are already covered by
+// the block-side table and by the decodeUnblockRequest happy-path
+// tests.
 func TestAdminUnblockUser_BadBodyVariants(t *testing.T) {
 	cases := []struct {
 		name     string

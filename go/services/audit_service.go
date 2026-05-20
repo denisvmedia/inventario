@@ -237,21 +237,60 @@ func adminAuditBreadcrumb(ev AdminEvent, rawUA string) string {
 // the OpenAPI `maxLength` semantics on the request schema. The
 // truncation marker counts toward the cap so the returned string is
 // always ≤ adminBreadcrumbReasonMaxLen runes — never one rune over.
+//
+// Memory: scans the input once with utf8.DecodeRuneInString to find the
+// cutoff byte index without materialising a full []rune slice. Worst-
+// case allocation is bounded by the cap (~500 runes ≤ 2 KiB) rather
+// than the caller-supplied input size — important for the
+// defence-in-depth path against multi-MB strings from buggy callers.
 func truncateReason(reason string) string {
-	if utf8.RuneCountInString(reason) <= adminBreadcrumbReasonMaxLen {
-		return reason
-	}
 	markerRunes := utf8.RuneCountInString(adminBreadcrumbTruncateMarker)
 	keep := adminBreadcrumbReasonMaxLen - markerRunes
 	if keep <= 0 {
 		// Pathological config (marker alone exceeds the cap). Fall back
-		// to the marker truncated to the cap so the caller still gets
-		// a bounded string rather than a panic.
-		runes := []rune(adminBreadcrumbTruncateMarker)
-		return string(runes[:adminBreadcrumbReasonMaxLen])
+		// to a stable prefix of the marker so the caller still gets a
+		// bounded string rather than a panic. Scanned the same way so
+		// the multi-byte marker isn't sliced mid-codepoint.
+		return prefixUpToRuneCount(adminBreadcrumbTruncateMarker, adminBreadcrumbReasonMaxLen)
 	}
-	runes := []rune(reason)
-	return string(runes[:keep]) + adminBreadcrumbTruncateMarker
+	// Walk the input once. cutoff records the byte index just past the
+	// `keep`-th rune; once we cross that point we know the input is too
+	// long without ever counting all of it.
+	count := 0
+	cutoff := 0
+	for i := 0; i < len(reason); {
+		_, size := utf8.DecodeRuneInString(reason[i:])
+		i += size
+		count++
+		if count == keep {
+			cutoff = i
+		}
+		if count > keep {
+			return reason[:cutoff] + adminBreadcrumbTruncateMarker
+		}
+	}
+	// Input fits within the cap; no truncation needed.
+	return reason
+}
+
+// prefixUpToRuneCount returns the byte-prefix of s containing at most n
+// runes, scanning the string in a single pass. Used by truncateReason
+// for the pathological "marker alone exceeds cap" branch so the
+// fallback never panics on multi-byte markers.
+func prefixUpToRuneCount(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	count := 0
+	for i := 0; i < len(s); {
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		count++
+		if count == n {
+			return s[:i]
+		}
+	}
+	return s
 }
 
 // ImpersonatorIDFromContext returns the operator's user ID when the
