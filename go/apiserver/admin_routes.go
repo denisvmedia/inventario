@@ -49,9 +49,13 @@ func adminPing(w http.ResponseWriter, r *http.Request) {
 // cross tenants — using the user-aware registries would limit the
 // admin to their own tenant, defeating the surface. AuditService is
 // shared with the rest of the apiserver so the admin audit trail
-// lands in the same audit_logs table.
+// lands in the same audit_logs table. Blacklist is needed by the
+// block/unblock cascade (#1747) to bump the JWT-iat staleness
+// threshold so live access tokens minted before the block fail on
+// next use.
 type AdminParams struct {
 	FactorySet   *registry.FactorySet
+	Blacklist    services.TokenBlacklister
 	AuditService services.AuditLogger
 }
 
@@ -66,6 +70,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 	}
 	usersAPI := &adminUsersAPI{
 		factorySet:   params.FactorySet,
+		blacklist:    params.Blacklist,
 		auditService: params.AuditService,
 	}
 	return func(r chi.Router) {
@@ -83,6 +88,12 @@ func Admin(params AdminParams) func(r chi.Router) {
 		r.Get("/tenants/{tenantID}", tenantsAPI.getTenant)
 		r.Get("/tenants/{tenantID}/users", usersAPI.listTenantUsers)
 		r.Get("/users/{userID}", usersAPI.getUser)
+
+		// #1747: user block/unblock endpoints. Each transition cascades
+		// IsActive=false → refresh-token revoke → blacklist bump and
+		// audit-logs reason+forced via the breadcrumb in user_agent.
+		r.Post("/users/{userID}/block", usersAPI.blockUser)
+		r.Post("/users/{userID}/unblock", usersAPI.unblockUser)
 	}
 }
 
