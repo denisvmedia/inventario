@@ -47,6 +47,16 @@ var (
 	// ErrTooManyGroupMemberships is returned when CreateGroup, AddMember
 	// or AcceptInvite would push a user past MaxGroupMembershipsPerUser.
 	ErrTooManyGroupMemberships = errx.NewSentinel("user already belongs to the maximum number of groups")
+	// ErrTenantMismatch is returned by AdminAddMember when the target
+	// user's tenant differs from the group's tenant (#1749). A group
+	// membership crosses no tenant boundary: on PostgreSQL the RLS
+	// policy on group_memberships keys on tenant_id, so a cross-tenant
+	// row would either fail the WITH CHECK clause or — worse, on the
+	// in-memory backend — silently violate isolation. The admin
+	// add-member path crosses tenants by construction (a system admin
+	// is not scoped to one tenant), so the check is explicit here
+	// rather than delegated to RLS.
+	ErrTenantMismatch = errx.NewSentinel("user and group belong to different tenants")
 )
 
 // DefaultMaxGroupMembershipsPerUser caps how many groups a single
@@ -447,6 +457,71 @@ func (s *GroupService) AddMember(ctx context.Context, tenantID, groupID, userID 
 		return nil, errxtrace.Classify(ErrTooManyGroupMemberships)
 	}
 	return created, err
+}
+
+// AdminAddMember mints a membership on behalf of a system administrator
+// (#1749). It is the admin-facing twin of AddMember, with two
+// differences that the admin surface requires:
+//
+//  1. Cross-tenant safety. The system-admin caller is not scoped to a
+//     tenant, so the group and the target user are resolved from a
+//     cross-tenant registry by the handler and their tenants are passed
+//     in explicitly. A mismatch is rejected with ErrTenantMismatch
+//     rather than being left for the PostgreSQL RLS WITH CHECK clause
+//     (which the in-memory backend does not enforce).
+//  2. Membership row tenant. The new row is stamped with groupTenantID
+//     (== the target user's tenant once the mismatch check passes), not
+//     with whatever tenant the caller happens to sit in.
+//
+// The membership write still routes through createMembershipUnderCap so
+// the per-user cap invariant (ErrTooManyGroupMemberships) stays
+// single-sourced — there is no parallel cap code path for admins.
+// JoinedAt is a synthetic now(): an admin add is direct, with no invite
+// token to carry an acceptance timestamp.
+func (s *GroupService) AdminAddMember(
+	ctx context.Context,
+	groupID, groupTenantID, userID, userTenantID string,
+	role models.GroupRole,
+) (*models.GroupMembership, error) {
+	if groupTenantID != userTenantID {
+		return nil, errxtrace.Classify(ErrTenantMismatch)
+	}
+
+	// Reject a duplicate up front. Only swallow NotFound — any other
+	// registry error must surface, otherwise we'd fall through and try
+	// to insert a second membership row.
+	existing, err := s.membershipRegistry.GetByGroupAndUser(ctx, groupID, userID)
+	if err == nil && existing != nil {
+		return nil, errxtrace.Classify(ErrAlreadyMember)
+	}
+	if err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return nil, errxtrace.Wrap("failed to look up existing membership", err)
+	}
+
+	membership := models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: groupTenantID,
+		},
+		GroupID:      groupID,
+		MemberUserID: userID,
+		Role:         role,
+		JoinedAt:     time.Now(),
+	}
+
+	created, overCap, err := s.createMembershipUnderCap(ctx, membership, MaxGroupMembershipsPerUser())
+	if overCap {
+		return nil, errxtrace.Classify(ErrTooManyGroupMemberships)
+	}
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to create membership", err)
+	}
+
+	// Promote the freshly-created membership to the user's default if
+	// they don't have a valid one yet (#1592). Best-effort — see
+	// ensureDefaultGroupBestEffort.
+	s.ensureDefaultGroupBestEffort(ctx, userID)
+
+	return created, nil
 }
 
 // RemoveMember removes a user from a group. Enforces two
