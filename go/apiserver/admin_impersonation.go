@@ -114,10 +114,15 @@ type adminImpersonationAPI struct {
 }
 
 // clampImpersonationTTL resolves the effective impersonation TTL:
-// zero/negative falls back to the 30-min default, and any value above
-// the 30-min ceiling is clamped down so a misconfigured
+// zero falls back to the 30-min default, and any value above the 30-min
+// ceiling is clamped down so a misconfigured
 // INVENTARIO_RUN_IMPERSONATION_TTL cannot widen the borrowed-identity
 // window past what the #1750 spec allows.
+//
+// A negative TTL never reaches here in practice: Params.Validate()
+// rejects a negative ImpersonationTTL at startup. The `<= 0` branch
+// below still treats a negative value as "fall back to the default" —
+// defensive depth for any caller that bypasses Params.Validate().
 func clampImpersonationTTL(ttl time.Duration) time.Duration {
 	if ttl <= 0 {
 		return defaultImpersonationTTL

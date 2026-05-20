@@ -31,8 +31,25 @@ const (
 	refreshTokenExpiration = 30 * 24 * time.Hour
 	// refreshTokenCookieName is the name of the httpOnly cookie carrying the refresh token.
 	refreshTokenCookieName = "refresh_token"
-	// refreshTokenCookiePath limits the cookie to the auth endpoints only.
-	refreshTokenCookiePath = "/api/v1/auth" // #nosec G101 -- this is a URL path, not a credential
+	// refreshTokenCookiePath scopes the refresh cookie to the API namespace.
+	//
+	// It is intentionally `/api/v1` — the common ancestor of BOTH the
+	// /api/v1/auth/* endpoints (login, refresh, logout) and
+	// POST /api/v1/admin/impersonation/end — rather than the narrower
+	// /api/v1/auth. During impersonation the refresh cookie carries the
+	// `imp:<jti>` marker (#1750); /admin/impersonation/end requires that
+	// marker as browser-bound proof, so the cookie MUST reach a path that
+	// includes /api/v1/admin/impersonation/end. A single cookie at one
+	// path also means the impersonation-start overwrite genuinely replaces
+	// the admin's real refresh cookie (no duplicate-cookie hazard that two
+	// cookies at different paths would create).
+	//
+	// Migration note: a session created before this widening keeps its old
+	// cookie pinned at /api/v1/auth until the next /auth/refresh re-issues
+	// it at /api/v1; the stale narrow-path cookie is then shadowed on
+	// /auth/* and expires on its own within the 30-day refresh TTL. No user
+	// is logged out by the change.
+	refreshTokenCookiePath = "/api/v1" // #nosec G101 -- this is a URL path, not a credential
 	// impersonationRefreshCookieMarker is the sentinel prefix written into
 	// the refresh-token cookie for the duration of an impersonation session
 	// (#1750). Impersonation sessions are deliberately non-refreshable, so

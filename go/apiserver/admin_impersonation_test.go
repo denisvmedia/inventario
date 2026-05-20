@@ -511,6 +511,71 @@ func TestImpersonate_StartReplacesRefreshCookie(t *testing.T) {
 		qt.Commentf("refresh cookie should hold the impersonation marker, got %q", cookieValue))
 }
 
+// refreshCookiePathFromResponse extracts the Path attribute of the
+// refresh_token Set-Cookie header (the value after "Path=" up to the
+// next ';'). Returns ("", false) when the response sets no refresh
+// cookie or the cookie carries no Path attribute. Unlike
+// refreshCookieFromResponse this inspects the attribute STRING directly
+// — a httptest round-trip does not enforce cookie Path scoping, so the
+// only way to catch a path-scoping bug is to assert the attribute text.
+func refreshCookiePathFromResponse(rr *httptest.ResponseRecorder) (string, bool) {
+	for _, sc := range rr.Header().Values("Set-Cookie") {
+		if !strings.HasPrefix(sc, "refresh_token=") {
+			continue
+		}
+		for attr := range strings.SplitSeq(sc, ";") {
+			attr = strings.TrimSpace(attr)
+			if p, found := strings.CutPrefix(attr, "Path="); found {
+				return p, true
+			}
+		}
+		return "", false
+	}
+	return "", false
+}
+
+// TestImpersonate_StartMarkerCookieReachesEndEndpoint is the regression
+// test for the PR #1771 review bug (#1750): the impersonation marker
+// cookie planted by impersonation-start MUST be delivered by a real
+// browser to POST /api/v1/admin/impersonation/end, where endImpersonation
+// requires it as browser-bound proof. The earlier fix scoped the marker
+// to the refresh cookie, but the refresh cookie's Path was /api/v1/auth —
+// which does NOT cover /api/v1/admin/impersonation/end, so a real browser
+// would never send the cookie to `end` and endImpersonation would always
+// fail with admin.impersonate.not_active.
+//
+// A pure httptest round-trip cannot catch this: httptest does not enforce
+// cookie Path scoping. So this test asserts the Path ATTRIBUTE STRING
+// emitted by the handler is a prefix of /api/v1/admin/impersonation/end —
+// i.e. a conforming browser would send the cookie to `end`.
+func TestImpersonate_StartMarkerCookieReachesEndEndpoint(t *testing.T) {
+	c := qt.New(t)
+	params, admin, _ := newParams()
+	promoteToSystemAdmin(c, params, admin)
+	target := createTestUserDirect(c, params, admin.TenantID, "target@example.com", true, false)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	startRR := doImpersonateStart(c, handler, admin.ID, target.ID, nil)
+	c.Assert(startRR.Code, qt.Equals, http.StatusOK)
+
+	cookiePath, ok := refreshCookiePathFromResponse(startRR)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("start must Set-Cookie the refresh_token with a Path attribute"))
+
+	// The browser sends a cookie to a request URL only when the cookie's
+	// Path is a prefix of the request path. The `end` endpoint lives at
+	// /api/v1/admin/impersonation/end, so the marker cookie's Path must be
+	// a prefix of that — otherwise a real browser drops the cookie and
+	// endImpersonation always sees an empty marker.
+	const endPath = "/api/v1/admin/impersonation/end"
+	c.Assert(strings.HasPrefix(endPath, cookiePath), qt.IsTrue,
+		qt.Commentf("marker cookie Path %q must be a prefix of %q so the browser sends it to `end`", cookiePath, endPath))
+	// The same cookie must still reach /api/v1/auth/refresh and
+	// /api/v1/auth/logout, which depend on the marker to reject / unwind an
+	// impersonation session.
+	c.Assert(strings.HasPrefix("/api/v1/auth/refresh", cookiePath), qt.IsTrue,
+		qt.Commentf("marker cookie Path %q must also cover /api/v1/auth/refresh", cookiePath))
+}
+
 // TestImpersonate_RefreshRejectedDuringSession_CookieOnly is the core
 // regression test for the PR #1771 review bug: a refresh attempt made
 // from inside an impersonation session — cookie-based, with NO
