@@ -502,6 +502,141 @@ export type paths = {
         };
         trace?: never;
     };
+    "/admin/impersonation/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the active impersonation session (admin)
+         * @description Convenience read for the FE impersonation banner. Returns `active=false` with no other fields when the caller is not inside an impersonation session, and the target/admin/started_at/expires_at quartet when it is.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.ImpersonationStateResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin or active impersonation session required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/impersonation/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End an impersonation session (admin)
+         * @description Ends the active impersonation session: blacklists the impersonation access token, restores the operator's
+         *     own refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation
+         *     access token (the token carrying `imp=true`). The token's signature is always verified; an expired
+         *     impersonation token is still accepted here so an operator can end an idle session without re-logging in.
+         *     The request must also carry the httpOnly `refresh_token` cookie holding the `imp:<jti>` marker that
+         *     impersonation-start planted — proof the call comes from the operator's own browser. A stolen bearer
+         *     token alone, without that cookie, cannot be redeemed for admin credentials.
+         *     This endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the
+         *     Authorization header. Returns 401 when the token is missing, malformed, forged, or not an impersonation
+         *     token (an authentication failure). Returns 422 with `admin.impersonate.not_active` when the token is a
+         *     validly-signed impersonation token but no active session backs it — the return slot is missing, the
+         *     slot's operator disagrees with the token, or the operator's marker refresh cookie is absent/mismatched.
+         *     A 500 is returned only on a genuine store or registry fault.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.LoginResponse"];
+                    };
+                };
+                /** @description Unauthorized - missing, malformed, forged, or non-impersonation token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - no active impersonation session (missing/mismatched return slot or marker cookie) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Internal Server Error - return-slot store or registry fault */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants": {
         parameters: {
             query?: never;
@@ -874,6 +1009,115 @@ export type paths = {
                     };
                     content: {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{userID}/impersonate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an impersonation session (admin)
+         * @description Issues a short-lived impersonation access token for the target user and sets it as the active session.
+         *     The token carries `imp=true`, `impersonated_by=<adminID>`, and `is_system_admin=false`; it cannot be
+         *     refreshed and cannot start a nested impersonation. The admin's own refresh-token cookie is replaced
+         *     with a non-refreshable impersonation marker for the duration of the session; POST /admin/impersonation/end
+         *     restores the operator's original refresh cookie.
+         *     Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
+         *     `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
+         *     when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the
+         *     per-admin start rate limit (10/hour) is exceeded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Target user ID */
+                    userID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Optional impersonation reason */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.ImpersonateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.LoginResponse"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown user */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - target is admin / blocked / nested impersonation / reason too long */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Too Many Requests - per-admin rate limit */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };
@@ -7981,6 +8225,35 @@ export type components = {
         "apiserver.GroupNotificationsResponse": {
             warranty_expiring_alerts?: boolean;
             weekly_digest?: boolean;
+        };
+        "apiserver.ImpersonateRequest": {
+            /**
+             * @description Reason is the optional free-form justification for the
+             *     impersonation (max 500 chars). The maxLength struct tag surfaces
+             *     the cap into the generated OpenAPI schema; the handler enforces
+             *     the same bound at decode time (impersonationReasonMaxLen).
+             */
+            reason?: string;
+        };
+        "apiserver.ImpersonationStateResponse": {
+            /** @description Active reports whether the caller is inside an impersonation session. */
+            active?: boolean;
+            /**
+             * @description AdminUser is the operator who initiated the session — nil when
+             *     Active is false.
+             */
+            admin_user?: components["schemas"]["apiserver.ImpersonationUserView"];
+            expires_at?: string;
+            /** @description StartedAt / ExpiresAt bound the session — zero values when inactive. */
+            started_at?: string;
+            /** @description TargetUser is the impersonated user — nil when Active is false. */
+            target_user?: components["schemas"]["apiserver.ImpersonationUserView"];
+        };
+        "apiserver.ImpersonationUserView": {
+            email?: string;
+            id?: string;
+            name?: string;
+            tenant_id?: string;
         };
         "apiserver.LoginEventView": {
             created_at?: string;

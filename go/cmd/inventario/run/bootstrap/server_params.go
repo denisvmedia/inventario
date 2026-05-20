@@ -64,9 +64,19 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		return serverSetup{}, err
 	}
 
+	// Parse the admin impersonation-session TTL (#1750). The apiserver
+	// clamps any value above the 30-min spec ceiling, so an over-long
+	// duration here is not rejected — only a syntactically invalid one.
+	impersonationTTL, err := time.ParseDuration(cfg.ImpersonationTTL)
+	if err != nil {
+		slog.Error("Failed to parse impersonation TTL duration", "error", err, "duration", cfg.ImpersonationTTL)
+		return serverSetup{}, err
+	}
+
 	params.JWTSecret = jwtSecret
 	params.FileSigningKey = fileSigningKey
 	params.FileURLExpiration = fileURLExpiration
+	params.ImpersonationTTL = impersonationTTL
 	params.ThumbnailConfig = services.ThumbnailGenerationConfig{
 		MaxConcurrentPerUser: cfg.ThumbnailMaxConcurrentPerUser,
 		RateLimitPerMinute:   cfg.ThumbnailRateLimitPerMinute,

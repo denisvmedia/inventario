@@ -31,8 +31,48 @@ const (
 	refreshTokenExpiration = 30 * 24 * time.Hour
 	// refreshTokenCookieName is the name of the httpOnly cookie carrying the refresh token.
 	refreshTokenCookieName = "refresh_token"
-	// refreshTokenCookiePath limits the cookie to the auth endpoints only.
-	refreshTokenCookiePath = "/api/v1/auth" // #nosec G101 -- this is a URL path, not a credential
+	// refreshTokenCookiePath scopes the refresh cookie to the API namespace.
+	//
+	// It is intentionally `/api/v1` — the common ancestor of BOTH the
+	// /api/v1/auth/* endpoints (login, refresh, logout) and
+	// POST /api/v1/admin/impersonation/end — rather than the narrower
+	// /api/v1/auth. During impersonation the refresh cookie carries the
+	// `imp:<jti>` marker (#1750); /admin/impersonation/end requires that
+	// marker as browser-bound proof, so the cookie MUST reach a path that
+	// includes /api/v1/admin/impersonation/end. A single cookie at one
+	// path also means the impersonation-start overwrite genuinely replaces
+	// the admin's real refresh cookie (no duplicate-cookie hazard that two
+	// cookies at different paths would create).
+	//
+	// Migration note: a session created before this widening still holds a
+	// refresh cookie pinned at the legacy /api/v1/auth path. Because the new
+	// cookie is written at /api/v1, a plain write does NOT overwrite that
+	// stale narrow-path cookie — the browser would carry two `refresh_token`
+	// cookies and, per RFC 6265, send the longer-Path (/api/v1/auth) one
+	// first, so the impersonation marker planted at /api/v1 would be shadowed
+	// on /auth/refresh (a real security hole, #1750/#1771). To prevent this,
+	// clearLegacyRefreshCookie actively deletes the /api/v1/auth cookie on
+	// every login, refresh-cookie write, impersonation start/end, logout,
+	// and on the /auth/refresh success path — so a stale session is cleaned
+	// up the next time it talks to the auth API. No user is logged out by
+	// the change.
+	refreshTokenCookiePath = "/api/v1" // #nosec G101 -- this is a URL path, not a credential
+	// legacyRefreshTokenCookiePath is the pre-#1750 path the refresh cookie
+	// was scoped to. New code never writes a live cookie here; it is only
+	// used to emit an explicit deletion (see clearLegacyRefreshCookie) so a
+	// browser holding a pre-upgrade cookie at this path drops it.
+	legacyRefreshTokenCookiePath = "/api/v1/auth" // #nosec G101 -- this is a URL path, not a credential
+	// impersonationRefreshCookieMarker is the sentinel prefix written into
+	// the refresh-token cookie for the duration of an impersonation session
+	// (#1750). Impersonation sessions are deliberately non-refreshable, so
+	// the impersonation-start handler overwrites the admin's own refresh
+	// cookie with `impersonationRefreshCookieMarker + <jti>`; /auth/refresh
+	// detects the prefix and rejects the call on the cookie-based path —
+	// the realistic FE refresh request, which carries no Authorization
+	// header. Real refresh tokens are base64.RawURLEncoding values
+	// (alphabet [A-Za-z0-9_-]), so a value containing ':' can never be a
+	// genuine token: the marker cannot collide with a real refresh token.
+	impersonationRefreshCookieMarker = "imp:" // #nosec G101 -- a sentinel marker, not a credential
 )
 
 // AuthAPI handles authentication endpoints.
@@ -48,7 +88,17 @@ type AuthAPI struct {
 	auditService            services.AuditLogger
 	emailService            services.EmailService
 	mfaService              *services.MFAService
-	jwtSecret               []byte
+	// impersonationStore lets logout revoke the operator's GENUINE refresh
+	// token when the request runs during an impersonation session (#1750).
+	// During impersonation the refresh cookie holds the
+	// impersonationRefreshCookieMarker + <jti> sentinel rather than a real
+	// token; the admin's actual refresh token is held server-side in the
+	// return slot. Without this, a logout-during-impersonation would hash
+	// the marker, find no row, and silently leave the admin's real refresh
+	// token valid in the DB for its full lifetime. May be nil (tests /
+	// memory-mode bootstrap) — logout then falls back to the normal path.
+	impersonationStore services.ImpersonationStore
+	jwtSecret          []byte
 }
 
 func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
@@ -254,6 +304,33 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Refresh tokens not supported", http.StatusNotImplemented)
 		return
 	}
+
+	// Impersonation sessions (#1750) are deliberately non-refreshable:
+	// they must expire hard at the impersonation TTL so an operator can
+	// never extend a borrowed identity indefinitely. There are two ways an
+	// impersonation session can reach this endpoint, and both must be
+	// rejected:
+	//
+	//  1. Bearer-token path: the FE sends the impersonation access token
+	//     (the only artifact carrying the `imp` claim) on the Authorization
+	//     header. Caught by accessTokenIsImpersonation below.
+	//
+	//  2. Cookie path: the realistic FE refresh request posts to
+	//     /auth/refresh with NO Authorization header — the refresh
+	//     interceptor relies solely on the httpOnly cookie. To make this
+	//     path rejectable, impersonation-start overwrites the refresh
+	//     cookie with an impersonation marker value
+	//     (impersonationRefreshCookieMarker); refreshCookieIsImpersonation
+	//     detects it. Without this, the cookie would still carry the
+	//     admin's own refresh token and the server would silently mint a
+	//     fresh *admin* access token mid-impersonation — ending the session
+	//     outside /admin/impersonation/end and orphaning the return slot.
+	if api.accessTokenIsImpersonation(r.Header.Get("Authorization")) || refreshCookieIsImpersonation(r) {
+		slog.Warn("Refresh rejected: impersonation session cannot be refreshed")
+		http.Error(w, ErrImpersonationTokenCannotRefresh.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	cookie, err := r.Cookie(refreshTokenCookieName)
 	if err != nil {
 		// Cookie missing: nothing to clear — do not set MaxAge=-1 for a non-existent cookie.
@@ -321,6 +398,13 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// Re-generate the CSRF token so it stays in sync with the new access token.
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
 
+	// refresh() does not rotate the refresh cookie (writeLoginResponse writes
+	// no cookie), so a session that only ever refreshes would never evict a
+	// stale pre-#1750 cookie left at the legacy /api/v1/auth path. Clear it
+	// explicitly here — cheap, idempotent, and closes the migration window
+	// for refresh-only sessions (#1750/#1771).
+	clearLegacyRefreshCookie(w, r)
+
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
 
@@ -353,6 +437,79 @@ func (api *AuthAPI) userIDFromAccessTokenHeader(authHeader string) (string, bool
 	// Tokens are issued with "user_id" (see issueAccessToken); "sub" is not set.
 	userID, ok := claims["user_id"].(string)
 	return userID, ok && userID != ""
+}
+
+// accessTokenIsImpersonation reports whether the Bearer token in
+// authHeader is an impersonation access token (carries `imp` == true).
+// Used by the refresh endpoint to reject impersonation tokens (#1750).
+// Expired tokens still count — an expired impersonation token presented
+// at refresh must not be refreshable either. Returns false when the
+// header is absent, malformed, or the signature is invalid: a token we
+// cannot verify is treated as "not an impersonation token" so the
+// regular cookie-based refresh path handles (and rejects) it.
+func (api *AuthAPI) accessTokenIsImpersonation(authHeader string) bool {
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader || tokenString == "" {
+		return false
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return api.jwtSecret, nil
+	})
+	if token == nil {
+		return false
+	}
+	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
+		return false
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return false
+	}
+	imp, _ := claims["imp"].(bool)
+	return imp
+}
+
+// impersonationClaimsFromAccessTokenHeader parses the Bearer token in
+// authHeader and returns its claims when — and only when — the token is
+// a verified impersonation token (`imp` true with a non-empty
+// `impersonated_by`). Expired tokens still count, mirroring
+// accessTokenIsImpersonation, so a logout with an only-just-expired
+// impersonation token still records the operator-of-record.
+//
+// It exists so the logout handler (#1750) can seed the impersonation
+// claims into the request context before logAuth runs — without that,
+// the logout-during-impersonation audit row would record the target
+// user but miss the ImpersonatedBy column. Returns (nil, false) when the
+// header is absent/malformed, the signature is invalid, or the token is
+// not an impersonation token.
+func (api *AuthAPI) impersonationClaimsFromAccessTokenHeader(authHeader string) (jwt.MapClaims, bool) {
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader || tokenString == "" {
+		return nil, false
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return api.jwtSecret, nil
+	})
+	if token == nil {
+		return nil, false
+	}
+	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
+		return nil, false
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, false
+	}
+	if !claimsAreImpersonation(claims) {
+		return nil, false
+	}
+	return claims, true
 }
 
 // blacklistAccessToken extracts claims from a Bearer token header and blacklists its JTI.
@@ -422,6 +579,53 @@ func (api *AuthAPI) revokeRefreshToken(ctx context.Context, rawToken string) {
 	}
 }
 
+// revokeImpersonationRefreshToken handles the logout-during-impersonation
+// case (#1750). When cookieValue is an impersonation marker
+// (impersonationRefreshCookieMarker + <jti>) it resolves the return slot
+// by that jti, revokes the admin's GENUINE refresh token held in the slot
+// (slot.AdminRefreshTokenRaw), and deletes the slot so it is not orphaned.
+// Returns true when the cookie was a marker and this path handled it
+// (caller must NOT also run the plain revokeRefreshToken path), false when
+// the cookie is a normal refresh token the caller should revoke as before.
+//
+// Best-effort, mirroring the rest of logout: a missing store, a malformed
+// marker, an already-gone slot, or an empty captured token are all benign
+// — logout must still succeed. The genuine token is only ever revoked when
+// it is actually recoverable from a live slot; the slot is deleted on a
+// best-effort basis so a double logout/end is harmless.
+func (api *AuthAPI) revokeImpersonationRefreshToken(ctx context.Context, cookieValue string) bool {
+	if !strings.HasPrefix(cookieValue, impersonationRefreshCookieMarker) {
+		return false
+	}
+	// The cookie carries an impersonation marker rather than a real token,
+	// so the plain revoke path would hash a non-token and find nothing.
+	// Treat the marker as handled regardless of what we can recover below
+	// — there is no real refresh token in this cookie for the caller to
+	// fall back on.
+	if api.impersonationStore == nil {
+		slog.Warn("Logout during impersonation: no impersonation store configured, admin refresh token not revoked")
+		return true
+	}
+	jti := strings.TrimPrefix(cookieValue, impersonationRefreshCookieMarker)
+	if jti == "" {
+		return true
+	}
+	slot, err := api.impersonationStore.Get(ctx, jti)
+	if err != nil {
+		// Slot already ended/expired/never recorded — nothing to revoke.
+		slog.Warn("Logout during impersonation: return slot not found", "jti", jti)
+		return true
+	}
+	if slot.AdminRefreshTokenRaw != "" {
+		api.revokeRefreshToken(ctx, slot.AdminRefreshTokenRaw)
+	}
+	if delErr := api.impersonationStore.Delete(ctx, jti); delErr != nil {
+		slog.Warn("Logout during impersonation: failed to delete return slot", "jti", jti, "error", delErr)
+	}
+	slog.Info("Impersonation session ended via logout", "jti", jti, "admin_id", slot.AdminUserID)
+	return true
+}
+
 // logout revokes the current access token and refresh token.
 // @Summary Logout
 // @Description Revoke the current session's access token and clear the refresh token cookie.
@@ -438,11 +642,30 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 	if authHeader != "" {
 		api.blacklistAccessToken(r.Context(), authHeader)
 		userID, _ = api.userIDFromAccessTokenHeader(authHeader)
+
+		// Logout during an impersonation session (#1750): the bearer token
+		// is an impersonation token. logout runs WITHOUT RequireAuth, so
+		// the validated JWT claims are not in context — seed them here so
+		// the audit row's ImpersonatedBy column is auto-filled by LogAuth
+		// (impersonatorFromContext), exactly as it is on RequireAuth-backed
+		// routes and on POST /admin/impersonation/end. Without this the
+		// logout-during-impersonation audit row would record only the
+		// target user and lose the operator-of-record.
+		if claims, ok := api.impersonationClaimsFromAccessTokenHeader(authHeader); ok {
+			r = r.WithContext(appctx.WithJWTClaims(r.Context(), claims))
+		}
 	}
 
-	// Revoke the refresh token from the database.
+	// Revoke the refresh token from the database. During an impersonation
+	// session (#1750) the refresh cookie holds the impersonation marker
+	// (impersonationRefreshCookieMarker + <jti>) rather than a real token —
+	// revokeImpersonationRefreshToken detects that, resolves the return
+	// slot, and revokes the admin's GENUINE refresh token instead. A normal
+	// cookie takes the plain revokeRefreshToken path unchanged.
 	if cookie, err := r.Cookie(refreshTokenCookieName); err == nil {
-		api.revokeRefreshToken(r.Context(), cookie.Value)
+		if !api.revokeImpersonationRefreshToken(r.Context(), cookie.Value) {
+			api.revokeRefreshToken(r.Context(), cookie.Value)
+		}
 	}
 
 	// Revoke only the CSRF token of the current session so that other concurrent
@@ -512,10 +735,19 @@ func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request)
 // generateCSRFTokenForUser issues a new CSRF token for the given user.
 // Returns "" when csrfService is nil or on error (errors are logged).
 func (api *AuthAPI) generateCSRFTokenForUser(ctx context.Context, userID string) string {
-	if api.csrfService == nil {
+	return generateCSRFToken(ctx, api.csrfService, userID)
+}
+
+// generateCSRFToken issues a new CSRF token for the given user against
+// the supplied csrf service. Returns "" when the service is nil or on
+// error (errors are logged). Extracted as a free function so the
+// impersonation handlers (#1750) — which rotate the CSRF token across an
+// identity swap — can mint a token without depending on AuthAPI.
+func generateCSRFToken(ctx context.Context, csrfService csrf.Service, userID string) string {
+	if csrfService == nil {
 		return ""
 	}
-	token, err := api.csrfService.GenerateToken(ctx, userID)
+	token, err := csrfService.GenerateToken(ctx, userID)
 	if err != nil {
 		slog.Error("Failed to generate CSRF token", "user_id", userID, "error", err)
 		// Non-fatal: the middleware fails-open on storage errors.
@@ -564,7 +796,15 @@ type AuthParams struct {
 	AuditService            services.AuditLogger
 	EmailService            services.EmailService
 	MFAService              *services.MFAService
-	JWTSecret               []byte
+	// ImpersonationStore is the same return-slot store the /admin
+	// impersonation endpoints use (#1750). logout consults it to revoke
+	// the operator's genuine refresh token when a session is ended via
+	// logout (rather than POST /admin/impersonation/end) from inside an
+	// impersonation session. Must be the SAME instance Admin() receives so
+	// the slot a `start` recorded is visible here. nil disables the
+	// impersonation-aware logout branch.
+	ImpersonationStore services.ImpersonationStore
+	JWTSecret          []byte
 }
 
 // Auth sets up the authentication API routes.
@@ -581,6 +821,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		auditService:            params.AuditService,
 		emailService:            params.EmailService,
 		mfaService:              params.MFAService,
+		impersonationStore:      params.ImpersonationStore,
 		jwtSecret:               params.JWTSecret,
 	}
 
@@ -1013,6 +1254,22 @@ func (api *AuthAPI) setRefreshTokenCookie(w http.ResponseWriter, r *http.Request
 	if rawToken == "" {
 		return
 	}
+	writeRefreshCookie(w, r, rawToken, int(refreshTokenExpiration.Seconds()))
+}
+
+// writeRefreshCookie writes the refresh-token cookie with the given value
+// and max-age. It is the single place the refresh cookie's flags
+// (HttpOnly, Secure, SameSite, Path) are defined so login, refresh, and
+// the impersonation start/end flows all emit an identically-shaped
+// cookie. A negative maxAge deletes the cookie (see clearRefreshCookie);
+// the impersonation flow uses it both to plant the impersonation marker
+// (#1750) and to restore the admin's original token on `end`.
+func writeRefreshCookie(w http.ResponseWriter, r *http.Request, value string, maxAge int) {
+	// Evict any pre-#1750 cookie pinned at the legacy /api/v1/auth path so the
+	// browser does not end up carrying two `refresh_token` cookies (see the
+	// refreshTokenCookiePath migration note).
+	clearLegacyRefreshCookie(w, r)
+
 	// Set Secure flag only when the connection is already over HTTPS to allow
 	// local development over plain HTTP.
 	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
@@ -1020,13 +1277,53 @@ func (api *AuthAPI) setRefreshTokenCookie(w http.ResponseWriter, r *http.Request
 	// #nosec G124 -- HttpOnly + SameSiteStrict are set; Secure is true on HTTPS and intentionally false on plain-HTTP local dev.
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshTokenCookieName,
-		Value:    rawToken,
+		Value:    value,
 		Path:     refreshTokenCookiePath,
-		MaxAge:   int(refreshTokenExpiration.Seconds()),
+		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   secureCookie,
 		SameSite: http.SameSiteStrictMode,
 	})
+}
+
+// clearLegacyRefreshCookie emits a Set-Cookie that deletes the pre-#1750
+// refresh-token cookie scoped to the legacy /api/v1/auth path (MaxAge=-1,
+// empty value). New code writes the live refresh cookie at /api/v1; because
+// that is a different path, a plain write would not overwrite a stale
+// narrow-path cookie left over from a session created before the path was
+// widened. Without this deletion the browser would carry two `refresh_token`
+// cookies and send the longer-Path (/api/v1/auth) one first on /auth/refresh,
+// shadowing the impersonation marker planted at /api/v1 (#1750/#1771). It is
+// cheap and idempotent, so it runs on every refresh-cookie write/clear and on
+// the /auth/refresh success path. The cookie attributes match writeRefreshCookie
+// and clearRefreshCookie exactly, including the secureCookie computation.
+func clearLegacyRefreshCookie(w http.ResponseWriter, r *http.Request) {
+	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	// #nosec G124 -- HttpOnly + SameSiteStrict are set; Secure is true on HTTPS and intentionally false on plain-HTTP local dev.
+	http.SetCookie(w, &http.Cookie{
+		Name:     refreshTokenCookieName,
+		Value:    "",
+		Path:     legacyRefreshTokenCookiePath,
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   secureCookie,
+		SameSite: http.SameSiteStrictMode,
+	})
+}
+
+// refreshCookieIsImpersonation reports whether the request carries a
+// refresh-token cookie holding the impersonation marker value
+// (impersonationRefreshCookieMarker). The impersonation-start handler
+// plants this marker for the duration of an impersonation session so
+// /auth/refresh can reject a cookie-based refresh attempt — the path the
+// FE refresh interceptor actually takes, since it sends no Authorization
+// header. See the refresh() handler for the full rationale (#1750).
+func refreshCookieIsImpersonation(r *http.Request) bool {
+	cookie, err := r.Cookie(refreshTokenCookieName)
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(cookie.Value, impersonationRefreshCookieMarker)
 }
 
 // rollbackRefreshToken revokes a refresh-token row that was persisted
@@ -1064,6 +1361,9 @@ func writeLoginResponse(w http.ResponseWriter, accessToken, csrfToken string, us
 // where the cookie is present but invalid/expired/revoked, so that the browser
 // does not keep sending a stale token and causing repeated 401 loops.
 func clearRefreshCookie(w http.ResponseWriter, r *http.Request) {
+	// Also evict any stale pre-#1750 cookie at the legacy /api/v1/auth path.
+	clearLegacyRefreshCookie(w, r)
+
 	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 	// #nosec G124 -- HttpOnly + SameSiteStrict are set; Secure is true on HTTPS and intentionally false on plain-HTTP local dev.
 	http.SetCookie(w, &http.Cookie{

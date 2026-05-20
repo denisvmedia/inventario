@@ -434,6 +434,76 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/impersonation/current": {
+            "get": {
+                "description": "Convenience read for the FE impersonation banner. Returns ` + "`" + `active=false` + "`" + ` with no other fields when the caller is not inside an impersonation session, and the target/admin/started_at/expires_at quartet when it is.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Read the active impersonation session (admin)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ImpersonationStateResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - system-admin or active impersonation session required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/impersonation/end": {
+            "post": {
+                "description": "Ends the active impersonation session: blacklists the impersonation access token, restores the operator's\nown refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation\naccess token (the token carrying ` + "`" + `imp=true` + "`" + `). The token's signature is always verified; an expired\nimpersonation token is still accepted here so an operator can end an idle session without re-logging in.\nThe request must also carry the httpOnly ` + "`" + `refresh_token` + "`" + ` cookie holding the ` + "`" + `imp:\u003cjti\u003e` + "`" + ` marker that\nimpersonation-start planted — proof the call comes from the operator's own browser. A stolen bearer\ntoken alone, without that cookie, cannot be redeemed for admin credentials.\nThis endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the\nAuthorization header. Returns 401 when the token is missing, malformed, forged, or not an impersonation\ntoken (an authentication failure). Returns 422 with ` + "`" + `admin.impersonate.not_active` + "`" + ` when the token is a\nvalidly-signed impersonation token but no active session backs it — the return slot is missing, the\nslot's operator disagrees with the token, or the operator's marker refresh cookie is absent/mismatched.\nA 500 is returned only on a genuine store or registry fault.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "End an impersonation session (admin)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.LoginResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - missing, malformed, forged, or non-impersonation token",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - no active impersonation session (missing/mismatched return slot or marker cookie)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error - return-slot store or registry fault",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/tenants": {
             "get": {
                 "description": "Returns every tenant with computed user_count and group_count. Pagination via ?page\u0026per_page; ?q matches name/slug/domain (ILIKE); ?sort=\u003cfield\u003e with optional ` + "`" + `-` + "`" + ` prefix for desc, or explicit ?order=asc|desc.",
@@ -739,6 +809,82 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "Unprocessable Entity - self-block or admin-on-admin without force",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/users/{userID}/impersonate": {
+            "post": {
+                "description": "Issues a short-lived impersonation access token for the target user and sets it as the active session.\nThe token carries ` + "`" + `imp=true` + "`" + `, ` + "`" + `impersonated_by=\u003cadminID\u003e` + "`" + `, and ` + "`" + `is_system_admin=false` + "`" + `; it cannot be\nrefreshed and cannot start a nested impersonation. The admin's own refresh-token cookie is replaced\nwith a non-refreshable impersonation marker for the duration of the session; POST /admin/impersonation/end\nrestores the operator's original refresh cookie.\nReturns 422 with ` + "`" + `admin.impersonate.target_is_admin` + "`" + ` when the target is a system admin,\n` + "`" + `admin.impersonate.target_blocked` + "`" + ` when the target account is blocked, and ` + "`" + `admin.impersonate.nested` + "`" + `\nwhen the caller is already impersonating. Returns 429 with ` + "`" + `admin.impersonate.rate_limited` + "`" + ` when the\nper-admin start rate limit (10/hour) is exceeded.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Start an impersonation session (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target user ID",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional impersonation reason",
+                        "name": "data",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ImpersonateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.LoginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - system-admin required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown user",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - target is admin / blocked / nested impersonation / reason too long",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests - per-admin rate limit",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7332,6 +7478,65 @@ const docTemplate = `{
                 },
                 "weekly_digest": {
                     "type": "boolean"
+                }
+            }
+        },
+        "apiserver.ImpersonateRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "description": "Reason is the optional free-form justification for the\nimpersonation (max 500 chars). The maxLength struct tag surfaces\nthe cap into the generated OpenAPI schema; the handler enforces\nthe same bound at decode time (impersonationReasonMaxLen).",
+                    "type": "string",
+                    "maxLength": 500
+                }
+            }
+        },
+        "apiserver.ImpersonationStateResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "description": "Active reports whether the caller is inside an impersonation session.",
+                    "type": "boolean"
+                },
+                "admin_user": {
+                    "description": "AdminUser is the operator who initiated the session — nil when\nActive is false.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/apiserver.ImpersonationUserView"
+                        }
+                    ]
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "description": "StartedAt / ExpiresAt bound the session — zero values when inactive.",
+                    "type": "string"
+                },
+                "target_user": {
+                    "description": "TargetUser is the impersonated user — nil when Active is false.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/apiserver.ImpersonationUserView"
+                        }
+                    ]
+                }
+            }
+        },
+        "apiserver.ImpersonationUserView": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
                 }
             }
         },

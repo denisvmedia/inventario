@@ -112,6 +112,27 @@ Key properties of the refresh interceptor:
 - **Graceful degradation**: if the refresh call itself fails (cookie missing, token
   expired, revoked), the interceptor clears local auth state and redirects to `/login`.
 
+> **Impersonation sessions are not refreshable.** When an admin starts an impersonation
+> session (`POST /api/v1/admin/users/{userID}/impersonate`), the server replaces the admin's
+> `refresh_token` cookie with a non-refreshable impersonation marker value (prefix
+> `imp:`). `POST /auth/refresh` rejects the request with a `401` whenever the bearer
+> token carries the `imp` claim **or** the refresh cookie holds that marker — so the
+> cookie-based refresh path (the one the FE interceptor actually uses, with no
+> `Authorization` header) cannot silently mint a fresh *admin* access token mid-session.
+> The short-lived impersonation access token (≤ 30 min) therefore expires hard: the
+> operator ends the session via `POST /api/v1/admin/impersonation/end`, which restores the
+> admin's original refresh cookie from the server-side return slot.
+>
+> `POST /api/v1/admin/impersonation/end` is mounted **without** the JWT middleware and
+> self-validates the impersonation token off the `Authorization` header: it always
+> verifies the signature and requires the `imp=true` claim, but tolerates an expired
+> `exp`. This lets an operator who let the impersonation token lapse while idle still
+> end the session (and be restored) instead of being forced into a full re-login. The
+> relaxation is `exp`-only — a forged token fails signature verification and an expired
+> *non-impersonation* token fails the `imp` check, so neither is admitted; the
+> `jti`-keyed return slot plus the `slot.AdminUserID == impersonated_by` assertion
+> remain the real authorization.
+
 ---
 
 ### Logout
@@ -137,6 +158,15 @@ After logout:
 - The **refresh token** record in the database has its `revoked_at` timestamp set,
   preventing any future refresh using that cookie.
 - The browser cookie is deleted by sending a `Set-Cookie` with `MaxAge=-1`.
+
+> **Logout during an impersonation session.** While impersonating, the `refresh_token`
+> cookie holds the `imp:<jti>` marker, not a real token — hashing it would find no
+> database row. So logout detects the marker, resolves the server-side return slot by
+> its `jti`, and revokes the **operator's genuine refresh token** held in that slot
+> (then drops the slot). This guarantees an operator who logs out mid-impersonation
+> actually terminates their real admin credential rather than leaving it `valid` in the
+> database for its full lifetime. A normal (non-marker) cookie takes the plain
+> hash-then-revoke path unchanged.
 
 ---
 
@@ -220,6 +250,16 @@ Three implementations are provided:
   when this fallback is active.
 - **No-op** (development only) — never blocks any token. Useful when 15-minute TTLs
   are an acceptable trade-off and revocation is not needed.
+
+> **Impersonation tokens and blacklist durability.** Ending an admin impersonation
+> session (`POST /api/v1/admin/impersonation/end`) revokes the impersonation access token by
+> adding its `jti` to the blacklist. This revocation is durable only with a
+> Redis-backed blacklist. With the in-memory blacklist (the single-instance default),
+> a process restart loses the entry, so an already-ended impersonation token is
+> accepted again by the JWT middleware until its TTL expires — bounded by the
+> impersonation TTL ceiling of 30 minutes (`INVENTARIO_RUN_IMPERSONATION_TTL`).
+> Deployments that rely on instant, restart-proof impersonation revocation should
+> configure `INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL`.
 
 ---
 

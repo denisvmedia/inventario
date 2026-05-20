@@ -35,6 +35,7 @@ type Config struct {
 	JWTSecret                     string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
 	FileSigningKey                string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
 	FileURLExpiration             string `yaml:"file_url_expiration" env:"FILE_URL_EXPIRATION" env-default:"15m"`
+	ImpersonationTTL              string `yaml:"impersonation_ttl" env:"IMPERSONATION_TTL" env-default:"30m"`
 	ThumbnailMaxConcurrentPerUser int    `yaml:"thumbnail_max_concurrent_per_user" env:"THUMBNAIL_MAX_CONCURRENT_PER_USER" env-default:"0"`
 	ThumbnailRateLimitPerMinute   int    `yaml:"thumbnail_rate_limit_per_minute" env:"THUMBNAIL_RATE_LIMIT_PER_MINUTE" env-default:"0"`
 	ThumbnailSlotDuration         string `yaml:"thumbnail_slot_duration" env:"THUMBNAIL_SLOT_DURATION" env-default:"30m"`
@@ -144,6 +145,12 @@ func (c *Config) SetDefaults() {
 	}
 	if c.ProbeAddr == "" {
 		c.ProbeAddr = ":3334"
+	}
+	if c.ImpersonationTTL == "" {
+		// #1750: 30 min is the spec default and also the hard ceiling
+		// the apiserver clamps to. An empty value here just means the
+		// env-default did not apply (e.g. config loaded from YAML).
+		c.ImpersonationTTL = "30m"
 	}
 }
 

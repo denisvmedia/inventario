@@ -56,6 +56,76 @@ var (
 	// quietly disable a fellow operator. 422 + JSON:API code
 	// "admin.block.admin_requires_force" makes the FE branch trivial.
 	ErrAdminCannotBlockAdminWithoutForce = errx.NewSentinel("blocking another system administrator requires force=true")
+
+	// ErrCannotImpersonateAdmin rejects POST /admin/users/{id}/impersonate
+	// when the target user is itself a system administrator. Impersonating
+	// a peer admin would let an operator borrow another operator's
+	// platform-admin authority while the audit trail records only the
+	// borrowed identity — a privilege-escalation footgun the primitive
+	// (#1750) refuses outright (no `force` override, unlike block).
+	// 422 + JSON:API code "admin.impersonate.target_is_admin".
+	ErrCannotImpersonateAdmin = errx.NewSentinel("system administrators cannot be impersonated")
+	// ErrTargetBlocked rejects impersonation of a user whose account is
+	// blocked (IsActive=false). Impersonating a deactivated user would
+	// resurrect a session the block was meant to tear down. 422 +
+	// JSON:API code "admin.impersonate.target_blocked".
+	ErrTargetBlocked = errx.NewSentinel("cannot impersonate a blocked user")
+	// ErrNestedImpersonation rejects an impersonate request made through
+	// an already-impersonated session (the caller's access token carries
+	// `imp=true`). Nesting impersonation would make the audit chain
+	// ambiguous about who the operator-of-record is. 422 + JSON:API code
+	// "admin.impersonate.nested".
+	ErrNestedImpersonation = errx.NewSentinel("cannot start impersonation from an impersonated session")
+	// ErrNotImpersonating is returned by POST /admin/impersonation/end and
+	// GET /admin/impersonation/current when the caller holds a validly
+	// signed impersonation token but no live server-side session backs it
+	// (the return slot is missing or its operator-of-record disagrees with
+	// the token). This is a business-rule outcome — the request
+	// authenticated fine, there is just nothing to end. 422 + JSON:API
+	// code "admin.impersonate.not_active".
+	ErrNotImpersonating = errx.NewSentinel("no active impersonation session")
+	// ErrImpersonationTokenInvalid is returned by POST /admin/impersonation/end
+	// when the Authorization header is missing/malformed, the token's
+	// signature or algorithm is invalid, or the token is not an
+	// impersonation token. The `end` route is mounted WITHOUT JWTMiddleware,
+	// so this sentinel re-introduces the authentication failure the
+	// middleware would otherwise raise: it is an AUTHENTICATION failure,
+	// not a business-rule violation, and maps to 401 — distinct from
+	// ErrNotImpersonating's 422. Surfaced via NewUnauthorizedError.
+	ErrImpersonationTokenInvalid = errx.NewSentinel("invalid or missing impersonation token")
+	// ErrImpersonationTokenCannotRefresh is returned by POST /auth/refresh
+	// when the caller presents an impersonation access token. Impersonation
+	// sessions are deliberately non-refreshable so they expire hard at the
+	// TTL. Surfaces as 401 — the refresh endpoint already returns plain-text
+	// 401s, so this sentinel only documents the rejection in one place.
+	ErrImpersonationTokenCannotRefresh = errx.NewSentinel("impersonation tokens cannot be refreshed")
+)
+
+// JSON:API error codes returned by the impersonation endpoints (#1750).
+// Kept as constants so the swagger annotations, the FE branch table, and
+// the handler tests reference the same literals. Codes follow the
+// "admin.impersonate.*" family.
+const (
+	// AdminImpersonateTargetIsAdminCode signals "the impersonation target
+	// is a system administrator". Maps to a 422.
+	AdminImpersonateTargetIsAdminCode = "admin.impersonate.target_is_admin"
+	// AdminImpersonateTargetBlockedCode signals "the impersonation target
+	// account is blocked". Maps to a 422.
+	AdminImpersonateTargetBlockedCode = "admin.impersonate.target_blocked"
+	// AdminImpersonateNestedCode signals "the caller is already inside an
+	// impersonation session". Maps to a 422.
+	AdminImpersonateNestedCode = "admin.impersonate.nested"
+	// AdminImpersonateNotActiveCode signals "the caller is not in an
+	// impersonation session" — returned by end / current. Maps to a 422.
+	AdminImpersonateNotActiveCode = "admin.impersonate.not_active"
+	// AdminImpersonateRateLimitedCode signals "the per-admin impersonation
+	// start rate limit was exceeded". Maps to a 429.
+	AdminImpersonateRateLimitedCode = "admin.impersonate.rate_limited"
+	// AdminImpersonateReasonTooLongCode signals "the supplied impersonation
+	// reason exceeds the 500-character cap". Maps to a 422 — mirrors the
+	// admin.block.reason_too_long contract so the FE handles an over-long
+	// reason identically across the block and impersonate forms.
+	AdminImpersonateReasonTooLongCode = "admin.impersonate.reason_too_long"
 )
 
 func NewNotFoundError(err error) jsonapi.Error {
@@ -185,7 +255,76 @@ func adminMemberTenantMismatchError(err error) jsonapi.Error {
 	}
 }
 
+// adminImpersonationGuardError maps the #1750 impersonation guard
+// sentinels (target-is-admin, target-blocked, nested, not-active) to
+// their 422 + code wire shape. Extracted as a free function — like
+// adminBlockGuardError — so the toJSONAPIError switch stays under the
+// gocyclo budget while keeping the mapping explicit and grep-friendly.
+func adminImpersonationGuardError(err error) jsonapi.Error {
+	code := AdminImpersonateTargetIsAdminCode
+	switch {
+	case errors.Is(err, ErrTargetBlocked):
+		code = AdminImpersonateTargetBlockedCode
+	case errors.Is(err, ErrNestedImpersonation):
+		code = AdminImpersonateNestedCode
+	case errors.Is(err, ErrNotImpersonating):
+		code = AdminImpersonateNotActiveCode
+	}
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusUnprocessableEntity,
+		StatusText:     "Unprocessable Entity",
+		Code:           code,
+	}
+}
+
+// adminSentinelJSONAPIError maps the admin-only guard sentinels
+// (RequireSystemAdmin, the #1747 block guards, the #1750 impersonation
+// guards) to their JSON:API wire shape. Extracted as a single
+// early-return helper called before the toJSONAPIError switch so the
+// switch stays under the gocyclo budget; ok=false when err is not an
+// admin sentinel, leaving the switch to handle it.
+func adminSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
+	switch {
+	case errors.Is(err, ErrNotSystemAdmin):
+		// Reached via renderEntityError if a handler returns the sentinel
+		// instead of relying on RequireSystemAdmin (the middleware writes
+		// its own response). 403 + admin.forbidden code keeps the wire
+		// shape identical so the FE doesn't need a second branch.
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusForbidden,
+			StatusText:     "Forbidden",
+			Code:           adminForbiddenCode,
+		}, true
+	case errors.Is(err, ErrAdminCannotBlockSelf),
+		errors.Is(err, ErrAdminCannotBlockAdminWithoutForce):
+		// Admin block-guard rejections (#1747). Self-lockout and
+		// admin-on-admin without `force: true` both surface as 422 with
+		// a sentinel-specific JSON:API code so the FE can render
+		// targeted copy instead of a generic 422 toast.
+		return adminBlockGuardError(err), true
+	case errors.Is(err, ErrCannotImpersonateAdmin),
+		errors.Is(err, ErrTargetBlocked),
+		errors.Is(err, ErrNestedImpersonation),
+		errors.Is(err, ErrNotImpersonating):
+		// Impersonation guard rejections (#1750). Target-is-admin,
+		// target-blocked, nested-impersonation and not-active all surface
+		// as 422 with a sentinel-specific JSON:API code so the FE can
+		// render targeted copy. Extracted into a helper so the switch
+		// stays under the gocyclo budget.
+		return adminImpersonationGuardError(err), true
+	default:
+		return jsonapi.Error{}, false
+	}
+}
+
 func toJSONAPIError(err error) jsonapi.Error {
+	if jsErr, ok := adminSentinelJSONAPIError(err); ok {
+		return jsErr
+	}
 	switch {
 	case errors.Is(err, registry.ErrCannotDelete):
 		return NewUnprocessableEntityError(err)
@@ -229,6 +368,13 @@ func toJSONAPIError(err error) jsonapi.Error {
 	case errors.Is(err, services.ErrInvalidConfirmation),
 		errors.Is(err, services.ErrInvalidPassword):
 		return NewUnprocessableEntityError(err)
+	case errors.Is(err, ErrImpersonationTokenInvalid):
+		// #1750: POST /admin/impersonation/end self-validates the imp token
+		// off the Authorization header (the route is mounted without
+		// JWTMiddleware). A missing/malformed/forged/non-impersonation
+		// token is an authentication failure — 401, not the 422 reserved
+		// for a validly-signed token with no active session.
+		return NewUnauthorizedError(err)
 	case errors.Is(err, services.ErrTenantMismatch):
 		// #1749: an admin add-member request named a user whose tenant
 		// differs from the group's tenant. A membership crosses no
@@ -267,25 +413,6 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewBadRequestError(err)
 	case errors.Is(err, ErrInvalidUploadSlot):
 		return NewBadRequestError(err)
-	case errors.Is(err, ErrNotSystemAdmin):
-		// Reached via renderEntityError if a handler returns the sentinel
-		// instead of relying on RequireSystemAdmin (the middleware writes
-		// its own response). 403 + admin.forbidden code keeps the wire
-		// shape identical so the FE doesn't need a second branch.
-		return jsonapi.Error{
-			Err:            err,
-			UserError:      errormarshal.Marshal(err),
-			HTTPStatusCode: http.StatusForbidden,
-			StatusText:     "Forbidden",
-			Code:           adminForbiddenCode,
-		}
-	case errors.Is(err, ErrAdminCannotBlockSelf),
-		errors.Is(err, ErrAdminCannotBlockAdminWithoutForce):
-		// Admin block-guard rejections (#1747). Self-lockout and
-		// admin-on-admin without `force: true` both surface as 422 with
-		// a sentinel-specific JSON:API code so the FE can render
-		// targeted copy instead of a generic 422 toast.
-		return adminBlockGuardError(err)
 	default:
 		slog.Error("internal server error", "error", err)
 		return NewInternalServerError(err)

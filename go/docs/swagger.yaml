@@ -188,6 +188,50 @@ definitions:
       weekly_digest:
         type: boolean
     type: object
+  apiserver.ImpersonateRequest:
+    properties:
+      reason:
+        description: |-
+          Reason is the optional free-form justification for the
+          impersonation (max 500 chars). The maxLength struct tag surfaces
+          the cap into the generated OpenAPI schema; the handler enforces
+          the same bound at decode time (impersonationReasonMaxLen).
+        maxLength: 500
+        type: string
+    type: object
+  apiserver.ImpersonationStateResponse:
+    properties:
+      active:
+        description: Active reports whether the caller is inside an impersonation
+          session.
+        type: boolean
+      admin_user:
+        allOf:
+        - $ref: '#/definitions/apiserver.ImpersonationUserView'
+        description: |-
+          AdminUser is the operator who initiated the session — nil when
+          Active is false.
+      expires_at:
+        type: string
+      started_at:
+        description: StartedAt / ExpiresAt bound the session — zero values when inactive.
+        type: string
+      target_user:
+        allOf:
+        - $ref: '#/definitions/apiserver.ImpersonationUserView'
+        description: TargetUser is the impersonated user — nil when Active is false.
+    type: object
+  apiserver.ImpersonationUserView:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      tenant_id:
+        type: string
+    type: object
   apiserver.LoginEventView:
     properties:
       created_at:
@@ -4374,6 +4418,69 @@ paths:
       summary: Change a member's role (admin)
       tags:
       - admin
+  /admin/impersonation/current:
+    get:
+      description: Convenience read for the FE impersonation banner. Returns `active=false`
+        with no other fields when the caller is not inside an impersonation session,
+        and the target/admin/started_at/expires_at quartet when it is.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.ImpersonationStateResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - system-admin or active impersonation session required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Read the active impersonation session (admin)
+      tags:
+      - admin
+  /admin/impersonation/end:
+    post:
+      description: |-
+        Ends the active impersonation session: blacklists the impersonation access token, restores the operator's
+        own refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation
+        access token (the token carrying `imp=true`). The token's signature is always verified; an expired
+        impersonation token is still accepted here so an operator can end an idle session without re-logging in.
+        The request must also carry the httpOnly `refresh_token` cookie holding the `imp:<jti>` marker that
+        impersonation-start planted — proof the call comes from the operator's own browser. A stolen bearer
+        token alone, without that cookie, cannot be redeemed for admin credentials.
+        This endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the
+        Authorization header. Returns 401 when the token is missing, malformed, forged, or not an impersonation
+        token (an authentication failure). Returns 422 with `admin.impersonate.not_active` when the token is a
+        validly-signed impersonation token but no active session backs it — the return slot is missing, the
+        slot's operator disagrees with the token, or the operator's marker refresh cookie is absent/mismatched.
+        A 500 is returned only on a genuine store or registry fault.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.LoginResponse'
+        "401":
+          description: Unauthorized - missing, malformed, forged, or non-impersonation
+            token
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - no active impersonation session (missing/mismatched
+            return slot or marker cookie)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "500":
+          description: Internal Server Error - return-slot store or registry fault
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: End an impersonation session (admin)
+      tags:
+      - admin
   /admin/tenants:
     get:
       description: Returns every tenant with computed user_count and group_count.
@@ -4592,6 +4699,66 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Block (deactivate) a user account
+      tags:
+      - admin
+  /admin/users/{userID}/impersonate:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Issues a short-lived impersonation access token for the target user and sets it as the active session.
+        The token carries `imp=true`, `impersonated_by=<adminID>`, and `is_system_admin=false`; it cannot be
+        refreshed and cannot start a nested impersonation. The admin's own refresh-token cookie is replaced
+        with a non-refreshable impersonation marker for the duration of the session; POST /admin/impersonation/end
+        restores the operator's original refresh cookie.
+        Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
+        `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
+        when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the
+        per-admin start rate limit (10/hour) is exceeded.
+      parameters:
+      - description: Target user ID
+        in: path
+        name: userID
+        required: true
+        type: string
+      - description: Optional impersonation reason
+        in: body
+        name: data
+        schema:
+          $ref: '#/definitions/apiserver.ImpersonateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.LoginResponse'
+        "400":
+          description: Bad Request - invalid body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - system-admin required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found - unknown user
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - target is admin / blocked / nested impersonation
+            / reason too long
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "429":
+          description: Too Many Requests - per-admin rate limit
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Start an impersonation session (admin)
       tags:
       - admin
   /admin/users/{userID}/unblock:
