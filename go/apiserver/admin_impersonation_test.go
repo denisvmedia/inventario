@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,6 +109,22 @@ func TestImpersonate_StartWithoutBodySucceeds(t *testing.T) {
 	rr := doImpersonateStart(c, handler, admin.ID, target.ID, nil)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+}
+
+func TestImpersonate_RejectsOverLongReason(t *testing.T) {
+	c := qt.New(t)
+	params, admin, _ := newParams()
+	promoteToSystemAdmin(c, params, admin)
+	target := createTestUserDirect(c, params, admin.TenantID, "target@example.com", true, false)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	// An over-long reason is a 422 with admin.impersonate.reason_too_long
+	// — matching the admin block handler's reason-length contract.
+	rr := doImpersonateStart(c, handler, admin.ID, target.ID,
+		map[string]any{"reason": strings.Repeat("x", 501)})
+
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.AdminImpersonateReasonTooLongCode)
 }
 
 func TestImpersonate_RejectsNonAdmin(t *testing.T) {
@@ -298,6 +315,24 @@ func TestImpersonate_EndRestoresAdminContext(t *testing.T) {
 	// The restored admin token must NOT carry impersonation claims.
 	_, hasImp := claims["imp"]
 	c.Assert(hasImp, qt.IsFalse)
+
+	// The LogAdmin path that stamps the audit row: the
+	// admin.impersonate_end row must record actor = target (UserID) AND
+	// impersonated_by = admin — the end request runs under the imp token
+	// so LogAdmin auto-fills ImpersonatedBy from the claims.
+	rows := must2(params.FactorySet.AuditLogRegistry.List(context.Background()))
+	var endRow *models.AuditLog
+	for _, row := range rows {
+		if row.Action == apiserver.AuditActionAdminImpersonateEnd {
+			endRow = row
+			break
+		}
+	}
+	c.Assert(endRow, qt.IsNotNil, qt.Commentf("expected an admin.impersonate_end audit row"))
+	c.Assert(endRow.UserID, qt.IsNotNil)
+	c.Assert(*endRow.UserID, qt.Equals, target.ID)
+	c.Assert(endRow.ImpersonatedBy, qt.IsNotNil)
+	c.Assert(*endRow.ImpersonatedBy, qt.Equals, admin.ID)
 }
 
 func TestImpersonate_EndRejectsNonImpersonationToken(t *testing.T) {

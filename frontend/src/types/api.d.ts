@@ -1089,7 +1089,7 @@ export type paths = {
                         "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Unprocessable Entity - target is admin / blocked / nested impersonation */
+                /** @description Unprocessable Entity - target is admin / blocked / nested impersonation / reason too long */
                 422: {
                     headers: {
                         [name: string]: unknown;

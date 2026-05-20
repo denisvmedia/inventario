@@ -140,7 +140,7 @@ func clampImpersonationTTL(ttl time.Duration) time.Duration {
 // @Failure 401 {object} jsonapi.Errors "Unauthorized"
 // @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown user"
-// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - target is admin / blocked / nested impersonation"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - target is admin / blocked / nested impersonation / reason too long"
 // @Failure 429 {object} jsonapi.Errors "Too Many Requests - per-admin rate limit"
 // @Router /admin/users/{userID}/impersonate [post]
 func (api *adminImpersonationAPI) startImpersonation(w http.ResponseWriter, r *http.Request) {
@@ -197,7 +197,8 @@ func (api *adminImpersonationAPI) startImpersonation(w http.ResponseWriter, r *h
 // startImpersonation to keep that handler under the funlen budget.
 func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http.Request, admin, target *models.User, reason string) {
 	startedAt := time.Now()
-	expiresAt := startedAt.Add(clampImpersonationTTL(api.ttl))
+	ttl := clampImpersonationTTL(api.ttl)
+	expiresAt := startedAt.Add(ttl)
 	jti := uuid.New().String()
 
 	tokenString, err := api.signImpersonationToken(target, admin.ID, jti, startedAt, expiresAt)
@@ -239,7 +240,7 @@ func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http
 	// refresh cookie is intentionally left untouched: impersonation
 	// sessions are non-refreshable, and the cookie still belongs to the
 	// admin's own session — `end` consumes it to restore the operator.
-	writeImpersonationLoginResponse(w, tokenString, clampImpersonationTTL(api.ttl), target)
+	writeImpersonationLoginResponse(w, tokenString, ttl, target)
 }
 
 // endImpersonation revokes the impersonation access token and restores
@@ -276,8 +277,27 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// Defence-in-depth: the slot is jti-keyed and server-mutable, while
+	// `impersonated_by` comes from the signed (authoritative) token. If
+	// the two disagree, the slot belongs to a different operator — refuse
+	// rather than restore the wrong admin's session.
+	if slot.AdminUserID != adminID {
+		slog.Error("Impersonation end: slot/token admin mismatch",
+			"jti", jti, "slot_admin", slot.AdminUserID, "token_admin", adminID)
+		_ = renderEntityError(w, r, ErrNotImpersonating)
+		return
+	}
+
 	// Blacklist the impersonation token so it cannot be reused after the
 	// session is ended, and drop the return slot.
+	//
+	// NOTE: impersonation-token revocation is durable only with a
+	// Redis-backed token blacklist. With the default in-memory blacklist a
+	// process restart loses this entry, so an already-ended impersonation
+	// token is accepted again by JWTMiddleware until its (≤30-min TTL)
+	// ceiling expires. Operators running a single in-memory instance
+	// accept that ≤30-min window; multi-instance / production deployments
+	// should configure INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL.
 	api.blacklistImpersonationToken(r.Context(), jti, slot.ExpiresAt)
 	if delErr := api.store.Delete(r.Context(), jti); delErr != nil {
 		slog.Warn("Impersonation end: failed to delete return slot", "jti", jti, "error", delErr)
@@ -324,18 +344,32 @@ func (api *adminImpersonationAPI) currentImpersonation(w http.ResponseWriter, r 
 		return
 	}
 
-	resp := ImpersonationStateResponse{
-		Active:    true,
-		StartedAt: &slot.StartedAt,
-		ExpiresAt: &slot.ExpiresAt,
+	// A target (or admin) that cannot be resolved means the session is
+	// effectively broken — a vanished target is not a meaningful "active"
+	// impersonation. Report inactive so the FE clears its banner rather
+	// than rendering active=true with a nil user.
+	target, terr := api.factorySet.UserRegistry.Get(r.Context(), slot.TargetUserID)
+	if terr != nil {
+		slog.Warn("Impersonation current: failed to resolve target user, reporting inactive",
+			"jti", jti, "target_id", slot.TargetUserID, "error", terr)
+		writeJSON(w, http.StatusOK, ImpersonationStateResponse{Active: false})
+		return
 	}
-	if target, terr := api.factorySet.UserRegistry.Get(r.Context(), slot.TargetUserID); terr == nil {
-		resp.TargetUser = impersonationUserView(target)
+	admin, aerr := api.factorySet.UserRegistry.Get(r.Context(), slot.AdminUserID)
+	if aerr != nil {
+		slog.Warn("Impersonation current: failed to resolve admin user, reporting inactive",
+			"jti", jti, "admin_id", slot.AdminUserID, "error", aerr)
+		writeJSON(w, http.StatusOK, ImpersonationStateResponse{Active: false})
+		return
 	}
-	if admin, aerr := api.factorySet.UserRegistry.Get(r.Context(), slot.AdminUserID); aerr == nil {
-		resp.AdminUser = impersonationUserView(admin)
-	}
-	writeJSON(w, http.StatusOK, resp)
+
+	writeJSON(w, http.StatusOK, ImpersonationStateResponse{
+		Active:     true,
+		StartedAt:  &slot.StartedAt,
+		ExpiresAt:  &slot.ExpiresAt,
+		TargetUser: impersonationUserView(target),
+		AdminUser:  impersonationUserView(admin),
+	})
 }
 
 // restoreAdminSession re-issues the operator's own session after an
@@ -344,6 +378,11 @@ func (api *adminImpersonationAPI) currentImpersonation(w http.ResponseWriter, r 
 // captured one) and writes the LoginResponse. Extracted from
 // endImpersonation to stay under the funlen budget.
 func (api *adminImpersonationAPI) restoreAdminSession(w http.ResponseWriter, r *http.Request, admin *models.User, slot services.ImpersonationSlot) {
+	// No IsActive re-check on the admin here on purpose: JWTMiddleware's
+	// validateUser rejects a blocked (!IsActive) user on the very next
+	// request, so minting the token for a since-blocked admin is not an
+	// escalation — the middleware is the real gate.
+	//
 	// Resolve the rti claim from the admin's captured refresh token so
 	// /users/me/sessions can still flag the operator's own session. An
 	// empty rti is fine — issueAdminAccessToken omits the claim.
@@ -439,7 +478,8 @@ func (api *adminImpersonationAPI) blacklistImpersonationToken(ctx context.Contex
 // decodeImpersonateRequest parses the optional POST body. An empty body
 // is valid (the whole request body is optional) and yields a zero-value
 // request. A present-but-malformed body is a 400; an over-long reason is
-// a 422.
+// a 422 with code admin.impersonate.reason_too_long — matching the admin
+// block handler's reason-length contract exactly.
 func (api *adminImpersonationAPI) decodeImpersonateRequest(w http.ResponseWriter, r *http.Request) (ImpersonateRequest, bool) {
 	var req ImpersonateRequest
 	if r.Body == nil {
@@ -461,7 +501,7 @@ func (api *adminImpersonationAPI) decodeImpersonateRequest(w http.ResponseWriter
 	}
 	req.Reason = strings.TrimSpace(req.Reason)
 	if utf8.RuneCountInString(req.Reason) > impersonationReasonMaxLen {
-		_ = badRequest(w, r, errors.New("reason is too long"))
+		_ = codedUnprocessableEntityError(w, r, errors.New("reason is too long"), AdminImpersonateReasonTooLongCode)
 		return req, false
 	}
 	return req, true
@@ -517,17 +557,18 @@ func (api *adminImpersonationAPI) auditStart(r *http.Request, adminID, reason, t
 }
 
 // auditEnd writes the admin.impersonate_end audit row. The request runs
-// under the impersonation token, so LogAdmin auto-fills the
-// ImpersonatedBy column from the `imp`/`impersonated_by` claims — the
-// row records "admin acting as target" without the call site doing
-// anything special.
+// under the impersonation token, so the actor-of-record is the
+// impersonated target (ActorID → UserID = targetID) and LogAdmin
+// auto-fills the ImpersonatedBy column from the `imp`/`impersonated_by`
+// claims — the row records "admin acting as target" without the call
+// site doing anything special.
 func (api *adminImpersonationAPI) auditEnd(r *http.Request, slot services.ImpersonationSlot, targetID string, success bool, errMsg string) {
 	if api.auditService == nil {
 		return
 	}
 	ev := services.AdminEvent{
 		Action:      AuditActionAdminImpersonateEnd,
-		ActorID:     nullableString(slot.AdminUserID),
+		ActorID:     nullableString(targetID),
 		TenantID:    nullableString(slot.TargetTenantID),
 		SubjectType: stringPtr("user"),
 		SubjectID:   nullableString(targetID),

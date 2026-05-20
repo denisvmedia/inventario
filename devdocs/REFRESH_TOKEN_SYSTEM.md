@@ -221,6 +221,16 @@ Three implementations are provided:
 - **No-op** (development only) — never blocks any token. Useful when 15-minute TTLs
   are an acceptable trade-off and revocation is not needed.
 
+> **Impersonation tokens and blacklist durability.** Ending an admin impersonation
+> session (`POST /admin/impersonation/end`) revokes the impersonation access token by
+> adding its `jti` to the blacklist. This revocation is durable only with a
+> Redis-backed blacklist. With the in-memory blacklist (the single-instance default),
+> a process restart loses the entry, so an already-ended impersonation token is
+> accepted again by the JWT middleware until its TTL expires — bounded by the
+> impersonation TTL ceiling of 30 minutes (`INVENTARIO_RUN_IMPERSONATION_TTL`).
+> Deployments that rely on instant, restart-proof impersonation revocation should
+> configure `INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL`.
+
 ---
 
 ## Frontend Design

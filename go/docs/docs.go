@@ -878,7 +878,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity - target is admin / blocked / nested impersonation",
+                        "description": "Unprocessable Entity - target is admin / blocked / nested impersonation / reason too long",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

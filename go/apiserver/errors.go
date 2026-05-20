@@ -109,6 +109,11 @@ const (
 	// AdminImpersonateRateLimitedCode signals "the per-admin impersonation
 	// start rate limit was exceeded". Maps to a 429.
 	AdminImpersonateRateLimitedCode = "admin.impersonate.rate_limited"
+	// AdminImpersonateReasonTooLongCode signals "the supplied impersonation
+	// reason exceeds the 500-character cap". Maps to a 422 — mirrors the
+	// admin.block.reason_too_long contract so the FE handles an over-long
+	// reason identically across the block and impersonate forms.
+	AdminImpersonateReasonTooLongCode = "admin.impersonate.reason_too_long"
 )
 
 func NewNotFoundError(err error) jsonapi.Error {
