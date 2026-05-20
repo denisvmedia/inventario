@@ -18,6 +18,7 @@ import {
   LogOut,
   SlidersHorizontal,
   ChevronsUpDown,
+  Building2,
 } from "lucide-react"
 import {
   Sidebar,
@@ -72,6 +73,11 @@ const MANAGE_ITEMS = [
 const PERSONAL_ITEMS = [
   { id: "profile", label: "Profile", icon: User },
   { id: "settings", label: "Preferences", icon: Settings },
+]
+
+const ADMIN_ITEMS = [
+  { id: "admin-tenants", label: "Tenants", icon: Building2 },
+  { id: "admin-groups", label: "Groups", icon: Layers },
 ]
 
 const STATE_ITEMS = [
@@ -176,6 +182,31 @@ export function AppSidebar({ activeView, onNavigate, onAddItem, activeGroupId, o
                 <SidebarMenuItem key={item.id}>
                   <SidebarMenuButton
                     isActive={activeView === item.id}
+                    tooltip={item.label}
+                    onClick={() => handleNavigate(item.id)}
+                  >
+                    <item.icon className="size-4" />
+                    <span>{item.label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Admin</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {ADMIN_ITEMS.map((item) => (
+                <SidebarMenuItem key={item.id}>
+                  <SidebarMenuButton
+                    isActive={
+                      activeView === item.id ||
+                      (item.id === "admin-tenants" &&
+                        (activeView === "admin-tenant-detail" || activeView === "admin-user-detail")) ||
+                      (item.id === "admin-groups" && activeView === "admin-group-detail")
+                    }
                     tooltip={item.label}
                     onClick={() => handleNavigate(item.id)}
                   >

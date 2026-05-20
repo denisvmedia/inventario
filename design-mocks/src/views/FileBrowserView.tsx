@@ -39,8 +39,9 @@ import {
   PaginationEllipsis,
 } from "@/components/ui/pagination"
 import { FileDetailSheet } from "@/components/FileDetail"
-import { cn, makeId } from "@/lib/utils"
-import { MOCK_FILES, FILE_TAGS, type AttachedFile, type FileCategory } from "@/data/mock"
+import { cn } from "@/lib/utils"
+import { MOCK_FILES, FILE_TAGS, resolveTags, type AttachedFile, type FileCategory } from "@/data/mock"
+import { TagPill } from "@/components/TagPill"
 
 const PAGE_SIZE = 12
 
@@ -180,7 +181,7 @@ function UploadDialog({ open, onClose }: UploadDialogProps) {
     setPendingFiles((prev) => [
       ...prev,
       ...arr.map((f) => ({
-        id: makeId(),
+        id: crypto.randomUUID(),
         file: f,
         name: f.name.replace(/\.[^.]+$/, ""),
         category: guessCategoryFromMime(f.type),
@@ -701,7 +702,7 @@ export function FileBrowserView({ onOpenFile: _onOpenFile }: FileBrowserViewProp
               const group = mimeGroup(file.mimeType)
               const Icon = FILE_ICONS[group]
               const isSelected = selectedFile?.id === file.id
-              const fileTags = FILE_TAGS.filter((t) => file.tags.includes(t.id))
+              const fileTags = resolveTags(file.tags)
               const catTab = CATEGORY_TABS.find((t) => t.id === file.category)
               const CatIcon = catTab?.icon ?? File
               const dateStr = new Date(file.uploadedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
@@ -722,7 +723,7 @@ export function FileBrowserView({ onOpenFile: _onOpenFile }: FileBrowserViewProp
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <span className="text-xs text-muted-foreground truncate">{file.attachedTo.name}</span>
                         {fileTags.map((tag) => (
-                          <span key={tag.id} className={cn("text-[10px] font-medium", tag.color)}>#{tag.label}</span>
+                          <TagPill key={tag.id} tag={tag} size="xs" />
                         ))}
                       </div>
                     </div>
@@ -753,7 +754,7 @@ export function FileBrowserView({ onOpenFile: _onOpenFile }: FileBrowserViewProp
                           <span className={cn("text-[10px] font-medium", catTab?.color ?? "text-muted-foreground")}>{catTab?.label ?? file.category}</span>
                         </div>
                         {fileTags.map((tag) => (
-                          <span key={tag.id} className={cn("text-[10px] font-medium", tag.color)}>#{tag.label}</span>
+                          <TagPill key={tag.id} tag={tag} size="xs" />
                         ))}
                       </div>
                     </div>
@@ -773,7 +774,7 @@ export function FileBrowserView({ onOpenFile: _onOpenFile }: FileBrowserViewProp
             const group = mimeGroup(file.mimeType)
             const Icon = FILE_ICONS[group]
             const isSelected = selectedFile?.id === file.id
-            const fileTags = FILE_TAGS.filter((t) => file.tags.includes(t.id))
+            const fileTags = resolveTags(file.tags)
             const catTab = CATEGORY_TABS.find((t) => t.id === file.category)
             const CatIcon = catTab?.icon ?? File
             return (
@@ -820,9 +821,7 @@ export function FileBrowserView({ onOpenFile: _onOpenFile }: FileBrowserViewProp
                   </p>
                   <div className="flex items-center gap-x-2 gap-y-0.5 mt-1.5 flex-wrap">
                     {fileTags.map((tag) => (
-                      <span key={tag.id} className={cn("text-[10px] font-medium", tag.color)}>
-                        #{tag.label}
-                      </span>
+                      <TagPill key={tag.id} tag={tag} size="xs" />
                     ))}
                     <span className="text-[10px] text-muted-foreground ml-auto">{file.size}</span>
                   </div>

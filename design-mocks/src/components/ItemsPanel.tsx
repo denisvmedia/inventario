@@ -43,11 +43,13 @@ import {
   warrantyStatus,
   areaName,
   COMMODITY_STATUS_CONFIG,
+  resolveTags,
   type InventoryItem,
   type ItemCategory,
   type WarrantyStatus,
   type CommodityStatus,
 } from "@/data/mock"
+import { TagPill } from "@/components/TagPill"
 import { cn } from "@/lib/utils"
 
 const PAGE_SIZE = 8
@@ -465,10 +467,8 @@ export function ItemsPanel({
                   </div>
                   {item.tags.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {item.tags.slice(0, 3).map((tag) => (
-                        <Badge key={tag} variant="secondary" className="h-4 px-1.5 text-[10px]">
-                          {tag}
-                        </Badge>
+                      {resolveTags(item.tags).slice(0, 3).map((tag) => (
+                        <TagPill key={tag.id} tag={tag} size="xs" />
                       ))}
                     </div>
                   )}
