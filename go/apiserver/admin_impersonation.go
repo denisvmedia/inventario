@@ -60,8 +60,10 @@ const (
 // is persisted into the audit-log breadcrumb.
 type ImpersonateRequest struct {
 	// Reason is the optional free-form justification for the
-	// impersonation (max 500 chars).
-	Reason string `json:"reason,omitempty"`
+	// impersonation (max 500 chars). The maxLength struct tag surfaces
+	// the cap into the generated OpenAPI schema; the handler enforces
+	// the same bound at decode time (impersonationReasonMaxLen).
+	Reason string `json:"reason,omitempty" maxLength:"500"`
 }
 
 // ImpersonationStateResponse is returned by GET /admin/impersonation/current.
@@ -330,12 +332,15 @@ func (api *adminImpersonationAPI) parseImpersonationEndToken(authHeader string) 
 // @Description access token (the token carrying `imp=true`). The token's signature is always verified; an expired
 // @Description impersonation token is still accepted here so an operator can end an idle session without re-logging in.
 // @Description Returns 422 with `admin.impersonate.not_active` when the caller is not inside an impersonation session.
+// @Description This endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the
+// @Description Authorization header, so it never produces a middleware 401/403: a missing, malformed, forged, or
+// @Description non-impersonation token (and a missing/mismatched return slot) all collapse to the 422
+// @Description `admin.impersonate.not_active` response. A 500 is returned only on a genuine store or registry fault.
 // @Tags admin
 // @Produce json
 // @Success 200 {object} LoginResponse "OK"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
-// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - no active impersonation session"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - no active impersonation session (also covers a missing/invalid impersonation token)"
+// @Failure 500 {object} jsonapi.Errors "Internal Server Error - return-slot store or registry fault"
 // @Router /admin/impersonation/end [post]
 func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *http.Request) {
 	// `end` is mounted WITHOUT JWTMiddleware (see Admin()), so the token is
@@ -362,11 +367,20 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 
 	slot, err := api.store.Get(r.Context(), jti)
 	if err != nil {
-		// The token is a valid impersonation token but the slot is gone
-		// (already ended, or the process restarted). Treat as "not
-		// active" — the FE banner clears and the operator re-logs in.
-		slog.Warn("Impersonation end: return slot not found", "jti", jti, "admin_id", adminID)
-		_ = renderEntityError(w, r, ErrNotImpersonating)
+		if errors.Is(err, registry.ErrNotFound) {
+			// The token is a valid impersonation token but the slot is
+			// gone (already ended, or the process restarted). Treat as
+			// "not active" — the FE banner clears and the operator
+			// re-logs in.
+			slog.Warn("Impersonation end: return slot not found", "jti", jti, "admin_id", adminID)
+			_ = renderEntityError(w, r, ErrNotImpersonating)
+			return
+		}
+		// A non-not-found error is a genuine store fault (e.g. a
+		// Redis-backed store outage), not a missing slot — surface it as
+		// a 500 rather than masking it as "not active".
+		slog.Error("Impersonation end: failed to read return slot", "jti", jti, "admin_id", adminID, "error", err)
+		_ = internalServerError(w, r, err)
 		return
 	}
 
@@ -419,7 +433,7 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 // @Produce json
 // @Success 200 {object} ImpersonationStateResponse "OK"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin or active impersonation session required"
 // @Router /admin/impersonation/current [get]
 func (api *adminImpersonationAPI) currentImpersonation(w http.ResponseWriter, r *http.Request) {
 	claims := appctx.JWTClaimsFromContext(r.Context())
@@ -431,9 +445,17 @@ func (api *adminImpersonationAPI) currentImpersonation(w http.ResponseWriter, r 
 	jti, _ := claims["jti"].(string)
 	slot, err := api.store.Get(r.Context(), jti)
 	if err != nil {
-		// Token says impersonation, but the slot is gone — report
-		// inactive so the FE clears its banner.
-		writeJSON(w, http.StatusOK, ImpersonationStateResponse{Active: false})
+		if errors.Is(err, registry.ErrNotFound) {
+			// Token says impersonation, but the slot is gone — report
+			// inactive so the FE clears its banner.
+			writeJSON(w, http.StatusOK, ImpersonationStateResponse{Active: false})
+			return
+		}
+		// A non-not-found error is a genuine store fault, not a missing
+		// slot — surface it as a 500 rather than reporting a misleading
+		// inactive banner that masks a backend outage.
+		slog.Error("Impersonation current: failed to read return slot", "jti", jti, "error", err)
+		_ = internalServerError(w, r, err)
 		return
 	}
 

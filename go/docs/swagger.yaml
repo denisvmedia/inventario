@@ -193,7 +193,10 @@ definitions:
       reason:
         description: |-
           Reason is the optional free-form justification for the
-          impersonation (max 500 chars).
+          impersonation (max 500 chars). The maxLength struct tag surfaces
+          the cap into the generated OpenAPI schema; the handler enforces
+          the same bound at decode time (impersonationReasonMaxLen).
+        maxLength: 500
         type: string
     type: object
   apiserver.ImpersonationStateResponse:
@@ -4432,7 +4435,7 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Forbidden - system-admin or active impersonation session required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Read the active impersonation session (admin)
@@ -4446,6 +4449,10 @@ paths:
         access token (the token carrying `imp=true`). The token's signature is always verified; an expired
         impersonation token is still accepted here so an operator can end an idle session without re-logging in.
         Returns 422 with `admin.impersonate.not_active` when the caller is not inside an impersonation session.
+        This endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the
+        Authorization header, so it never produces a middleware 401/403: a missing, malformed, forged, or
+        non-impersonation token (and a missing/mismatched return slot) all collapse to the 422
+        `admin.impersonate.not_active` response. A 500 is returned only on a genuine store or registry fault.
       produces:
       - application/json
       responses:
@@ -4453,16 +4460,13 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/apiserver.LoginResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-        "403":
-          description: Forbidden - system-admin required
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
         "422":
-          description: Unprocessable Entity - no active impersonation session
+          description: Unprocessable Entity - no active impersonation session (also
+            covers a missing/invalid impersonation token)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "500":
+          description: Internal Server Error - return-slot store or registry fault
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: End an impersonation session (admin)

@@ -113,17 +113,17 @@ Key properties of the refresh interceptor:
   expired, revoked), the interceptor clears local auth state and redirects to `/login`.
 
 > **Impersonation sessions are not refreshable.** When an admin starts an impersonation
-> session (`POST /admin/users/{id}/impersonate`), the server replaces the admin's
+> session (`POST /api/v1/admin/users/{userID}/impersonate`), the server replaces the admin's
 > `refresh_token` cookie with a non-refreshable impersonation marker value (prefix
 > `imp:`). `POST /auth/refresh` rejects the request with a `401` whenever the bearer
 > token carries the `imp` claim **or** the refresh cookie holds that marker — so the
 > cookie-based refresh path (the one the FE interceptor actually uses, with no
 > `Authorization` header) cannot silently mint a fresh *admin* access token mid-session.
 > The short-lived impersonation access token (≤ 30 min) therefore expires hard: the
-> operator ends the session via `POST /admin/impersonation/end`, which restores the
+> operator ends the session via `POST /api/v1/admin/impersonation/end`, which restores the
 > admin's original refresh cookie from the server-side return slot.
 >
-> `POST /admin/impersonation/end` is mounted **without** the JWT middleware and
+> `POST /api/v1/admin/impersonation/end` is mounted **without** the JWT middleware and
 > self-validates the impersonation token off the `Authorization` header: it always
 > verifies the signature and requires the `imp=true` claim, but tolerates an expired
 > `exp`. This lets an operator who let the impersonation token lapse while idle still
@@ -252,7 +252,7 @@ Three implementations are provided:
   are an acceptable trade-off and revocation is not needed.
 
 > **Impersonation tokens and blacklist durability.** Ending an admin impersonation
-> session (`POST /admin/impersonation/end`) revokes the impersonation access token by
+> session (`POST /api/v1/admin/impersonation/end`) revokes the impersonation access token by
 > adding its `jti` to the blacklist. This revocation is durable only with a
 > Redis-backed blacklist. With the in-memory blacklist (the single-instance default),
 > a process restart loses the entry, so an already-ended impersonation token is

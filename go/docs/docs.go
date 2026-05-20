@@ -458,7 +458,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Forbidden - system-admin or active impersonation session required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -468,7 +468,7 @@ const docTemplate = `{
         },
         "/admin/impersonation/end": {
             "post": {
-                "description": "Ends the active impersonation session: blacklists the impersonation access token, restores the operator's\nown refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation\naccess token (the token carrying ` + "`" + `imp=true` + "`" + `). The token's signature is always verified; an expired\nimpersonation token is still accepted here so an operator can end an idle session without re-logging in.\nReturns 422 with ` + "`" + `admin.impersonate.not_active` + "`" + ` when the caller is not inside an impersonation session.",
+                "description": "Ends the active impersonation session: blacklists the impersonation access token, restores the operator's\nown refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation\naccess token (the token carrying ` + "`" + `imp=true` + "`" + `). The token's signature is always verified; an expired\nimpersonation token is still accepted here so an operator can end an idle session without re-logging in.\nReturns 422 with ` + "`" + `admin.impersonate.not_active` + "`" + ` when the caller is not inside an impersonation session.\nThis endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the\nAuthorization header, so it never produces a middleware 401/403: a missing, malformed, forged, or\nnon-impersonation token (and a missing/mismatched return slot) all collapse to the 422\n` + "`" + `admin.impersonate.not_active` + "`" + ` response. A 500 is returned only on a genuine store or registry fault.",
                 "produces": [
                     "application/json"
                 ],
@@ -483,20 +483,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/apiserver.LoginResponse"
                         }
                     },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden - system-admin required",
-                        "schema": {
-                            "$ref": "#/definitions/jsonapi.Errors"
-                        }
-                    },
                     "422": {
-                        "description": "Unprocessable Entity - no active impersonation session",
+                        "description": "Unprocessable Entity - no active impersonation session (also covers a missing/invalid impersonation token)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error - return-slot store or registry fault",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7485,8 +7479,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "reason": {
-                    "description": "Reason is the optional free-form justification for the\nimpersonation (max 500 chars).",
-                    "type": "string"
+                    "description": "Reason is the optional free-form justification for the\nimpersonation (max 500 chars). The maxLength struct tag surfaces\nthe cap into the generated OpenAPI schema; the handler enforces\nthe same bound at decode time (impersonationReasonMaxLen).",
+                    "type": "string",
+                    "maxLength": 500
                 }
             }
         },

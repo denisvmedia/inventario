@@ -124,6 +124,22 @@ func Admin(params AdminParams) func(r chi.Router) {
 	if params.GroupService == nil {
 		panic("apiserver.Admin requires non-nil AdminParams.GroupService")
 	}
+	// The #1750 impersonation endpoints sign tokens with JWTSecret and
+	// blacklist them on `end` via Blacklist — an AdminParams literal that
+	// omits either turns a wiring mistake into a runtime failure on
+	// impersonate start/end. Fail at startup instead. RateLimiter and
+	// ImpersonationStore are deliberately NOT required: a nil RateLimiter
+	// fails the limit open by design, and ImpersonationStore has the
+	// defaultAdminImpersonationStore in-memory fallback.
+	if len(params.JWTSecret) == 0 {
+		panic("apiserver.Admin requires non-empty AdminParams.JWTSecret")
+	}
+	if params.Blacklist == nil {
+		panic("apiserver.Admin requires non-nil AdminParams.Blacklist")
+	}
+	if params.AuditService == nil {
+		panic("apiserver.Admin requires non-nil AdminParams.AuditService")
+	}
 
 	tenantsAPI := &adminTenantsAPI{
 		factorySet:   params.FactorySet,
