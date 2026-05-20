@@ -360,6 +360,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			FactorySet:   params.FactorySet,
 			Blacklist:    blacklist,
 			AuditService: auditSvc,
+			GroupService: groupService,
 		}))
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives

@@ -57,6 +57,14 @@ type AdminParams struct {
 	FactorySet   *registry.FactorySet
 	Blacklist    services.TokenBlacklister
 	AuditService services.AuditLogger
+	// GroupService backs the #1749 group-membership admin endpoints
+	// (add / remove / role-change). The same instance the rest of the
+	// apiserver uses — its registries are the tenant-scoped (not
+	// user-aware) FactorySet ones, which is exactly what the admin
+	// surface needs to cross tenants. Reusing the service keeps the
+	// membership invariants (cap, ≥1 owner, ≥1 member) single-sourced
+	// instead of forking a parallel code path for admins.
+	GroupService *services.GroupService
 }
 
 // Admin returns the router configurator for /api/v1/admin/*. Mounted
@@ -64,6 +72,14 @@ type AdminParams struct {
 // CSRF) and the RequireSystemAdmin gate. Later admin issues hang their
 // endpoints off the same chi.Router this closure receives.
 func Admin(params AdminParams) func(r chi.Router) {
+	// Fail fast on a misconfigured wiring: the #1749 group-membership
+	// endpoints dereference GroupService on every request, so a nil
+	// here would otherwise surface as a confusing per-request panic
+	// rather than a clear startup failure.
+	if params.GroupService == nil {
+		panic("apiserver.Admin requires non-nil AdminParams.GroupService")
+	}
+
 	tenantsAPI := &adminTenantsAPI{
 		factorySet:   params.FactorySet,
 		auditService: params.AuditService,
@@ -75,6 +91,11 @@ func Admin(params AdminParams) func(r chi.Router) {
 	}
 	groupsAPI := &adminGroupsAPI{
 		factorySet:   params.FactorySet,
+		auditService: params.AuditService,
+	}
+	groupMembersAPI := &adminGroupMembersAPI{
+		factorySet:   params.FactorySet,
+		groupService: params.GroupService,
 		auditService: params.AuditService,
 	}
 	return func(r chi.Router) {
@@ -107,6 +128,15 @@ func Admin(params AdminParams) func(r chi.Router) {
 		r.Get("/groups", groupsAPI.listGroups)
 		r.Get("/groups/{groupID}", groupsAPI.getGroup)
 		r.Delete("/groups/{groupID}", groupsAPI.deleteGroup)
+
+		// #1749: group-membership admin endpoints. add / remove /
+		// role-change route through GroupService so the per-group
+		// invariants (cap, ≥1 owner, ≥1 member) stay single-sourced,
+		// bypassing only the per-group requireGroupAdmin middleware —
+		// the RequireSystemAdmin gate above is authorization enough.
+		r.Post("/groups/{groupID}/members", groupMembersAPI.addMember)
+		r.Delete("/groups/{groupID}/members/{userID}", groupMembersAPI.removeMember)
+		r.Patch("/groups/{groupID}/members/{userID}", groupMembersAPI.updateMemberRole)
 	}
 }
 

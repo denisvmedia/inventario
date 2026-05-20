@@ -230,6 +230,210 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/groups/{groupID}/members": {
+            "post": {
+                "description": "Adds a user to a group with the given role, bypassing the per-group admin check. The membership cap is still enforced — a user already at the cap is rejected with 422.\nReturns 422 with ` + "`" + `admin.member.tenant_mismatch` + "`" + ` when the target user's tenant differs from the group's tenant, ` + "`" + `admin.member.invalid_role` + "`" + ` for a missing or invalid role, and ` + "`" + `admin.member.user_required` + "`" + ` for a missing userID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Add a member to a group (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Add-member request",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminAddMemberRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminMemberEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - system-admin required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown group or user",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - tenant mismatch, cap reached, duplicate, or invalid role",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/groups/{groupID}/members/{userID}": {
+            "delete": {
+                "description": "Removes a user from a group, bypassing the per-group admin check. The ≥1-owner and ≥1-member invariants still apply — removing the last owner returns 422, removing the last member returns 422 with ` + "`" + `group.last_member` + "`" + `.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Remove a member from a group (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "User ID of the member to remove",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - system-admin required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - user is not a member of the group",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - removing the last owner or last member",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Changes a group member's role, bypassing the per-group admin check. Demoting the sole owner is rejected with 422 (` + "`" + `ErrLastOwner` + "`" + `). Returns 422 with ` + "`" + `admin.member.invalid_role` + "`" + ` for a missing or invalid role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Change a member's role (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "User ID of the member",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Role-change request",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminUpdateMemberRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminMemberEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - system-admin required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - user is not a member of the group",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - demoting the last owner or invalid role",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/tenants": {
             "get": {
                 "description": "Returns every tenant with computed user_count and group_count. Pagination via ?page\u0026per_page; ?q matches name/slug/domain (ILIKE); ?sort=\u003cfield\u003e with optional ` + "`" + `-` + "`" + ` prefix for desc, or explicit ?order=asc|desc.",
@@ -6874,6 +7078,27 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "apiserver.AdminAddMemberRequest": {
+            "type": "object",
+            "required": [
+                "role",
+                "userID"
+            ],
+            "properties": {
+                "role": {
+                    "description": "Role is the group role granted to the user: viewer|user|admin|owner.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.GroupRole"
+                        }
+                    ]
+                },
+                "userID": {
+                    "description": "UserID is the ID of the user being added to the group.",
+                    "type": "string"
+                }
+            }
+        },
         "apiserver.AdminBlockRequest": {
             "type": "object",
             "required": [
@@ -6888,6 +7113,48 @@ const docTemplate = `{
                     "description": "Reason is the free-form justification for the block (max 500 chars).",
                     "type": "string",
                     "maxLength": 500
+                }
+            }
+        },
+        "apiserver.AdminMemberEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/apiserver.AdminMemberResource"
+                }
+            }
+        },
+        "apiserver.AdminMemberResource": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/apiserver.AdminMemberView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.AdminMemberView": {
+            "type": "object",
+            "properties": {
+                "group_id": {
+                    "type": "string"
+                },
+                "joined_at": {
+                    "type": "string"
+                },
+                "member_user_id": {
+                    "type": "string"
+                },
+                "role": {
+                    "$ref": "#/definitions/models.GroupRole"
+                },
+                "tenant_id": {
+                    "type": "string"
                 }
             }
         },
@@ -6912,6 +7179,22 @@ const docTemplate = `{
                     "description": "Reason is the free-form justification for the unblock (max 500 chars).",
                     "type": "string",
                     "maxLength": 500
+                }
+            }
+        },
+        "apiserver.AdminUpdateMemberRoleRequest": {
+            "type": "object",
+            "required": [
+                "role"
+            ],
+            "properties": {
+                "role": {
+                    "description": "Role is the new group role: viewer|user|admin|owner.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.GroupRole"
+                        }
+                    ]
                 }
             }
         },

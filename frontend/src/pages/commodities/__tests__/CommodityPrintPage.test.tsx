@@ -82,6 +82,7 @@ describe("<CommodityPrintPage />", () => {
     expect(screen.getByText(/garage/i)).toBeInTheDocument()
     expect(screen.getByText(/\$2,400\.00/)).toBeInTheDocument()
     expect(screen.getByText(/daily driver/i)).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-print-header-date").textContent).toMatch(/\b20\d{2}\b/)
   })
 
   it("calls window.print when the Print button is clicked", async () => {
