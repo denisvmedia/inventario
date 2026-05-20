@@ -223,6 +223,11 @@ Support for multiple database backends via DSN:
 - React 19 with TypeScript (strict)
 - shadcn/ui components (Radix primitives) for consistent UI
 
+### Git Worktrees
+- **All git worktrees MUST be created inside the main project under `.claude/worktrees/<name>/`.** This is a hard requirement, not a suggestion — never create a worktree as a sibling directory of the repository (e.g. `../inventario-1748`) or anywhere else outside `.claude/worktrees/`.
+- Example: `git worktree add .claude/worktrees/issue-1748-admin-groups -b feat/1748-admin-groups-endpoints master`.
+- Keeping every worktree under `.claude/worktrees/` ensures tooling (SocratiCode indexing, linters, the file watcher) resolves a single canonical project root and that stray worktrees are never indexed or linted as if they were separate projects.
+
 ### Pointer Allocation Style
 - When code needs a pointer copy of an existing value, prefer the direct `new(value)` form at the use site (for example, `m.users[user.ID] = new(user)`) instead of copy-then-address patterns through intermediate locals.
 - Do not introduce `ptrTo`, `toPtr`, or similar helper wrappers whose only purpose is manufacturing pointers; prefer the direct allocation form unless the helper adds real behavior beyond pointer construction.
