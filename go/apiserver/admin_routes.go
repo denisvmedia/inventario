@@ -89,6 +89,10 @@ func Admin(params AdminParams) func(r chi.Router) {
 		blacklist:    params.Blacklist,
 		auditService: params.AuditService,
 	}
+	groupsAPI := &adminGroupsAPI{
+		factorySet:   params.FactorySet,
+		auditService: params.AuditService,
+	}
 	groupMembersAPI := &adminGroupMembersAPI{
 		factorySet:   params.FactorySet,
 		groupService: params.GroupService,
@@ -116,6 +120,15 @@ func Admin(params AdminParams) func(r chi.Router) {
 		r.Post("/users/{userID}/block", usersAPI.blockUser)
 		r.Post("/users/{userID}/unblock", usersAPI.unblockUser)
 
+		// #1748: cross-tenant groups admin. List + detail bypass RLS at
+		// the registry layer (SET LOCAL row_security = off); DELETE flips
+		// status to pending_deletion (idempotent) and the existing
+		// group_purge_worker finishes the hard-delete. Each handler
+		// audit-logs via params.AuditService.
+		r.Get("/groups", groupsAPI.listGroups)
+		r.Get("/groups/{groupID}", groupsAPI.getGroup)
+		r.Delete("/groups/{groupID}", groupsAPI.deleteGroup)
+
 		// #1749: group-membership admin endpoints. add / remove /
 		// role-change route through GroupService so the per-group
 		// invariants (cap, ≥1 owner, ≥1 member) stay single-sourced,
@@ -127,33 +140,27 @@ func Admin(params AdminParams) func(r chi.Router) {
 	}
 }
 
-// parseAdminSort splits a `?sort=<field>` query value into the (field, desc)
-// pair the registry layer expects. A leading `-` reverses the natural
-// order (e.g. `-created_at` → desc by created_at). Unknown fields are
-// left as-is and the registry layer falls back to its default sort —
-// surface drift across FE/BE versions is intentionally tolerated to
-// keep the listing endpoint responsive during deploys.
-func parseAdminSort(raw string) (field string, desc bool) {
-	if raw == "" {
-		return "", false
-	}
-	if raw[0] == '-' {
-		return raw[1:], true
-	}
-	return raw, false
-}
-
 // parseAdminSortAndOrder reconciles the dual sort conventions the
 // admin FE may send: the `?sort=-name` shorthand (consistent with the
 // rest of the API) or the explicit `?sort=name&order=desc` pair (which
-// some FE table libs prefer). An explicit `order=` param always wins
-// over a leading `-` prefix so the FE never has to strip the prefix
-// before re-sending the current sort with a flipped direction. Unknown
-// `order=` values (e.g. `?order=ascending`) are intentionally ignored
-// rather than rejected so the FE can drift slightly across versions —
-// the registry layer further whitelists the sort field via IsValid().
+// some FE table libs prefer).
+//
+// A leading `-` on `?sort` reverses the natural order (e.g. `-created_at`
+// → desc by created_at). An explicit `order=` param always wins over that
+// prefix so the FE never has to strip the prefix before re-sending the
+// current sort with a flipped direction. Unknown `order=` values (e.g.
+// `?order=ascending`) and unknown sort fields are intentionally tolerated
+// rather than rejected so the FE can drift slightly across versions — the
+// registry layer falls back to its default sort and whitelists the field
+// via IsValid().
 func parseAdminSortAndOrder(rawSort, rawOrder string) (field string, desc bool) {
-	field, desc = parseAdminSort(rawSort)
+	if rawSort != "" {
+		if rawSort[0] == '-' {
+			field, desc = rawSort[1:], true
+		} else {
+			field, desc = rawSort, false
+		}
+	}
 	switch strings.ToLower(strings.TrimSpace(rawOrder)) {
 	case "asc":
 		desc = false

@@ -2,7 +2,11 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -209,4 +213,313 @@ func (r *LocationGroupRegistry) ListByTenant(ctx context.Context, tenantID strin
 	}
 
 	return groups, nil
+}
+
+// ListAdmin returns paginated, filtered, sorted location groups for the
+// `/api/v1/admin/groups` listing (#1748) along with the per-row computed
+// member_count from a correlated subquery on group_memberships.
+//
+// The endpoint crosses tenants by design — a system admin lists every
+// tenant's groups. This registry runs in service mode as the
+// inventario_background_worker role, which already carries `using=true`
+// bypass policies on location_groups / group_memberships, so the
+// cross-tenant read works regardless of RLS. The `SET LOCAL row_security =
+// off` on the tx is defense-in-depth: it makes the intentional cross-tenant
+// read explicit at the call site and, on the bypass role, is effectively a
+// no-op rather than the primary guard. Same rationale as
+// TenantRegistry.ListAdmin / UserRegistry.ListAdminByTenant.
+//
+// Total is post-filter, pre-pagination.
+func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.AdminGroupListOptions) ([]*registry.AdminGroupListItem, int, error) {
+	page := opts.Page
+	if page <= 0 {
+		page = 1
+	}
+	perPage := opts.PerPage
+	if perPage <= 0 {
+		perPage = 50
+	}
+
+	sortField := opts.SortField
+	if !sortField.IsValid() {
+		sortField = registry.AdminGroupSortName
+	}
+	direction := "ASC"
+	if opts.SortDesc {
+		direction = "DESC"
+	}
+
+	groupsTable := r.tableNames.LocationGroups()
+	membershipsTable := r.tableNames.GroupMemberships()
+	tenantsTable := r.tableNames.Tenants()
+
+	args := make([]any, 0, 3)
+	whereClauses := make([]string, 0, 3)
+	if q := strings.TrimSpace(opts.Query); q != "" {
+		args = append(args, "%"+q+"%")
+		// The query arg is reused across name + slug.
+		whereClauses = append(whereClauses, fmt.Sprintf("(g.name ILIKE $%d OR g.slug ILIKE $%d)", len(args), len(args)))
+	}
+	if t := strings.TrimSpace(opts.TenantID); t != "" {
+		args = append(args, t)
+		whereClauses = append(whereClauses, fmt.Sprintf("g.tenant_id = $%d", len(args)))
+	}
+	if s := strings.TrimSpace(opts.Status); s != "" {
+		args = append(args, s)
+		whereClauses = append(whereClauses, fmt.Sprintf("g.status = $%d", len(args)))
+	}
+	where := ""
+	if len(whereClauses) > 0 {
+		where = "WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	var (
+		items []*registry.AdminGroupListItem
+		total int
+	)
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
+			return errxtrace.Wrap("failed to disable row_security for admin group listing", execErr)
+		}
+
+		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s AS g %s", groupsTable, where)
+		if scanErr := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); scanErr != nil {
+			return errxtrace.Wrap("failed to count admin groups", scanErr)
+		}
+
+		limitPos := len(args) + 1
+		offsetPos := len(args) + 2
+		offset := (page - 1) * perPage
+
+		// SECURITY: sortField is constrained to AdminGroupSortField via IsValid above,
+		// direction is "ASC"/"DESC" literals, and table-names come from r.tableNames —
+		// never user-supplied — so direct fmt.Sprintf interpolation is safe.
+		//
+		// tenants is JOINed (not a correlated subquery) so each row carries
+		// the owning-tenant chip — the cross-tenant admin list renders the
+		// tenant name per row without an FE N+1 lookup. Same tx, so the JOIN
+		// is read under the same `SET LOCAL row_security = off`.
+		//
+		// LEFT JOIN, not INNER: AdminGroupListItem.Tenant is *models.Tenant
+		// (nullable by contract). An INNER JOIN would silently DROP a group
+		// whose tenant row is missing/corrupt — the worst behavior for a
+		// cross-tenant admin debugging surface, where an admin most needs to
+		// SEE orphaned groups. With LEFT JOIN the tenant columns scan NULL
+		// and Tenant is left nil.
+		pageQuery := fmt.Sprintf(`
+			SELECT g.*,
+				(SELECT COUNT(*) FROM %s AS m WHERE m.group_id = g.id) AS _member_count,
+				t.id AS _tenant_id, t.name AS _tenant_name, t.slug AS _tenant_slug
+			FROM %s AS g
+			LEFT JOIN %s AS t ON t.id = g.tenant_id
+			%s
+			ORDER BY g.%s %s, g.id ASC
+			LIMIT $%d OFFSET $%d`,
+			membershipsTable, groupsTable, tenantsTable, where, string(sortField), direction, limitPos, offsetPos,
+		)
+		pageArgs := append(append([]any{}, args...), perPage, offset)
+
+		rows, err := tx.QueryxContext(ctx, pageQuery, pageArgs...)
+		if err != nil {
+			return errxtrace.Wrap("failed to list admin groups", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var row struct {
+				models.LocationGroup
+				MemberCount int            `db:"_member_count"`
+				TenantID    sql.NullString `db:"_tenant_id"`
+				TenantName  sql.NullString `db:"_tenant_name"`
+				TenantSlug  sql.NullString `db:"_tenant_slug"`
+			}
+			if scanErr := rows.StructScan(&row); scanErr != nil {
+				return errxtrace.Wrap("failed to scan admin group row", scanErr)
+			}
+			group := row.LocationGroup
+			items = append(items, &registry.AdminGroupListItem{
+				Group:       &group,
+				MemberCount: row.MemberCount,
+				Tenant:      tenantFromNullableColumns(row.TenantID, row.TenantName, row.TenantSlug),
+			})
+		}
+		if rowsErr := rows.Err(); rowsErr != nil {
+			return errxtrace.Wrap("failed during admin group row iteration", rowsErr)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+// GetAdmin returns a single group detail row with the computed
+// member_count plus the owning tenant (joined so the detail handler can
+// render the tenant chip in one round-trip). Runs under
+// `SET LOCAL row_security = off` for the same defense-in-depth
+// cross-tenant rationale as ListAdmin.
+func (r *LocationGroupRegistry) GetAdmin(ctx context.Context, groupID string) (*registry.AdminGroupDetail, error) {
+	if groupID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+
+	var detail *registry.AdminGroupDetail
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
+			return errxtrace.Wrap("failed to disable row_security for admin group detail", execErr)
+		}
+		var loadErr error
+		detail, loadErr = r.loadAdminGroupDetailTx(ctx, tx, groupID)
+		return loadErr
+	})
+	if err != nil {
+		return nil, err
+	}
+	if detail == nil {
+		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+			"entity_type", "LocationGroup",
+			"entity_id", groupID,
+		))
+	}
+	return detail, nil
+}
+
+// loadAdminGroupDetailTx loads the admin group detail row (group +
+// member_count + tenant chip) within the supplied tx. It is the shared
+// detail-shaping query used by both GetAdmin and MarkPendingDeletionAdmin
+// so the post-delete row carries exactly the shape the detail handler
+// renders without a second round-trip. Returns (nil, nil) when the group
+// id doesn't exist — callers map that to ErrNotFound. The caller is
+// responsible for the `SET LOCAL row_security = off` on the tx.
+func (r *LocationGroupRegistry) loadAdminGroupDetailTx(ctx context.Context, tx *sqlx.Tx, groupID string) (*registry.AdminGroupDetail, error) {
+	groupsTable := r.tableNames.LocationGroups()
+	membershipsTable := r.tableNames.GroupMemberships()
+	tenantsTable := r.tableNames.Tenants()
+
+	// LEFT JOIN, not INNER: AdminGroupDetail.Tenant is *models.Tenant
+	// (nullable by contract). An INNER JOIN would drop the row entirely
+	// when the group's tenant is missing/corrupt, making GetAdmin return
+	// ErrNotFound (404) for a group that genuinely exists — exactly the
+	// orphaned group an admin needs to see. With LEFT JOIN the group row
+	// is still returned; the tenant columns scan NULL and Tenant is nil.
+	// ErrNotFound stays reserved for a genuinely absent group row.
+	query := fmt.Sprintf(`
+		SELECT g.*,
+			(SELECT COUNT(*) FROM %s AS m WHERE m.group_id = g.id) AS _member_count,
+			t.id AS _tenant_id, t.name AS _tenant_name, t.slug AS _tenant_slug
+		FROM %s AS g
+		LEFT JOIN %s AS t ON t.id = g.tenant_id
+		WHERE g.id = $1`,
+		membershipsTable, groupsTable, tenantsTable,
+	)
+	var row struct {
+		models.LocationGroup
+		MemberCount int            `db:"_member_count"`
+		TenantID    sql.NullString `db:"_tenant_id"`
+		TenantName  sql.NullString `db:"_tenant_name"`
+		TenantSlug  sql.NullString `db:"_tenant_slug"`
+	}
+	scanErr := tx.QueryRowxContext(ctx, query, groupID).StructScan(&row)
+	if scanErr != nil {
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, errxtrace.Wrap("failed to load admin group detail", scanErr)
+	}
+	group := row.LocationGroup
+	return &registry.AdminGroupDetail{
+		Group:       &group,
+		MemberCount: row.MemberCount,
+		Tenant:      tenantFromNullableColumns(row.TenantID, row.TenantName, row.TenantSlug),
+	}, nil
+}
+
+// tenantFromNullableColumns builds the owning-tenant chip from the
+// LEFT-JOINed tenant columns of an admin group query. When the tenant row
+// is absent (group orphaned / tenant corrupt) the columns scan NULL and
+// this returns nil — never a synthesized empty &models.Tenant{} — so the
+// nullable AdminGroup*.Tenant contract holds and the FE omits the chip.
+func tenantFromNullableColumns(id, name, slug sql.NullString) *models.Tenant {
+	if !id.Valid {
+		return nil
+	}
+	return &models.Tenant{
+		EntityID: models.EntityID{ID: id.String},
+		Name:     name.String,
+		Slug:     slug.String,
+	}
+}
+
+// MarkPendingDeletionAdmin flips a group to pending_deletion for the
+// cross-tenant admin soft-delete (#1748). The status-transition logic is
+// identical to GroupService.InitiateGroupDeletion — Status set to
+// pending_deletion and UpdatedAt bumped — so the existing
+// group_purge_worker finishes the hard-delete with no parallel code path.
+//
+// The whole read-decide-write-reload runs inside one background-worker tx
+// so two concurrent admin deletes can't both observe `active` and race,
+// and the returned detail row is the committed post-transition state. The
+// in-tx reload (instead of a follow-up GetAdmin) closes a TOCTOU window:
+// between the soft-delete commit and a separate re-fetch the
+// group_purge_worker could hard-delete the now-pending row, turning a
+// successful DELETE into a spurious 404. Idempotent: an already-pending
+// group returns (detail, true, nil) without re-writing the row.
+func (r *LocationGroupRegistry) MarkPendingDeletionAdmin(ctx context.Context, groupID string) (*registry.AdminGroupDetail, bool, error) {
+	if groupID == "" {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+
+	groupsTable := r.tableNames.LocationGroups()
+
+	var (
+		alreadyPending bool
+		detail         *registry.AdminGroupDetail
+	)
+	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Defense-in-depth: like ListAdmin / GetAdmin, make the intentional
+		// cross-tenant write explicit at the call site. On the background-
+		// worker role (which carries RLS bypass policies on location_groups)
+		// this is effectively a no-op rather than the primary guard.
+		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
+			return errxtrace.Wrap("failed to disable row_security for admin group soft-delete", execErr)
+		}
+
+		var currentStatus string
+		selectQuery := fmt.Sprintf("SELECT status FROM %s WHERE id = $1 FOR UPDATE", groupsTable)
+		scanErr := tx.QueryRowContext(ctx, selectQuery, groupID).Scan(&currentStatus)
+		if scanErr != nil {
+			if errors.Is(scanErr, sql.ErrNoRows) {
+				return nil
+			}
+			return errxtrace.Wrap("failed to load location group for soft-delete", scanErr)
+		}
+		if currentStatus == string(models.LocationGroupStatusPendingDeletion) {
+			alreadyPending = true
+		} else {
+			updateQuery := fmt.Sprintf("UPDATE %s SET status = $1, updated_at = $2 WHERE id = $3", groupsTable)
+			if _, execErr := tx.ExecContext(ctx, updateQuery,
+				string(models.LocationGroupStatusPendingDeletion), time.Now(), groupID); execErr != nil {
+				return errxtrace.Wrap("failed to mark location group pending_deletion", execErr)
+			}
+		}
+		// Reload the post-transition detail row in the SAME tx — the row is
+		// still pinned by the FOR UPDATE lock above, so this reflects the
+		// committed state and cannot race the purge worker.
+		var loadErr error
+		detail, loadErr = r.loadAdminGroupDetailTx(ctx, tx, groupID)
+		return loadErr
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if detail == nil {
+		return nil, false, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+			"entity_type", "LocationGroup",
+			"entity_id", groupID,
+		))
+	}
+	return detail, alreadyPending, nil
 }
