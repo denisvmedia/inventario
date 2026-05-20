@@ -26,11 +26,10 @@ type adminGroupsAPI struct {
 // location group in the deployment along with each group's computed
 // member_count.
 //
-// The endpoint crosses tenants by design — see RequireSystemAdmin gate —
-// and the registry layer bypasses RLS via `SET LOCAL row_security = off`
-// on the listing tx so the cross-tenant read fails loud on a
-// misconfigured connection role rather than returning a silently empty
-// page.
+// The endpoint crosses tenants by design — see RequireSystemAdmin gate.
+// The registry layer runs the listing as the background-worker role,
+// which carries RLS bypass policies on location_groups; the cross-tenant
+// read is therefore unconditional, not gated on a fail-loud trip-wire.
 //
 // @Summary List groups (admin)
 // @Description Returns every location group with computed member_count. Pagination via ?page&per_page; ?q matches name/slug (ILIKE).
@@ -62,7 +61,14 @@ func (api *adminGroupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 		// query parameter whose name contains "tenant", but it exempts the
 		// /api/v1/admin/* subtree from that check by design — see the
 		// rationale in isAdminSubtreePath / ValidateNoUserProvidedTenantID.
-		TenantID:  q.Get("tenantID"),
+		TenantID: q.Get("tenantID"),
+		// Status is an exact-match filter. An unknown value (a status the
+		// model doesn't define) is passed straight through to the SQL
+		// `g.status = $N` predicate and simply matches no rows — the page
+		// comes back empty rather than 4xx. This is intentional and
+		// consistent with the ?sort "tolerate FE drift" rationale in
+		// parseAdminSortAndOrder: a FE drifting across versions never gets
+		// a hard error from a filter param.
 		Status:    q.Get("status"),
 		SortField: registry.AdminGroupSortField(sortField),
 		SortDesc:  sortDesc,
@@ -153,26 +159,20 @@ func (api *adminGroupsAPI) deleteGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// MarkPendingDeletionAdmin owns the status transition (identical to
-	// GroupService.InitiateGroupDeletion) and reports whether the group
-	// was already pending so the idempotent re-delete renders a plain
-	// 200 instead of a re-write. The bool is data, not control flow:
-	// either way the post-state is pending_deletion and we render it.
-	alreadyPending, err := api.factorySet.LocationGroupRegistry.MarkPendingDeletionAdmin(r.Context(), groupID)
+	// GroupService.InitiateGroupDeletion) and returns the post-transition
+	// detail row directly — group row + member_count + tenant chip,
+	// computed in the SAME transaction as the status write. There is no
+	// second GetAdmin round-trip: re-fetching after the soft-delete
+	// commits would race the group_purge_worker, which could hard-delete
+	// the now-pending row and turn a DELETE that actually succeeded into
+	// a spurious 404. alreadyPending reports whether the group was
+	// already pending so the idempotent re-delete renders a plain 200; it
+	// is data, not control flow — either way the post-state is
+	// pending_deletion and we render `item`.
+	item, alreadyPending, err := api.factorySet.LocationGroupRegistry.MarkPendingDeletionAdmin(r.Context(), groupID)
 	if err != nil {
 		api.auditDelete(r, groupID, "", err)
 		_ = renderEntityError(w, r, err)
-		return
-	}
-
-	// Re-fetch the post-transition row so the response carries the
-	// updated status + the tenant chip the FE renders. A read failure
-	// here is a 500 — the soft-delete already committed, but the client
-	// contract is "return the row", so we surface the read error rather
-	// than fabricating a partial body.
-	item, getErr := api.factorySet.LocationGroupRegistry.GetAdmin(r.Context(), groupID)
-	if getErr != nil {
-		api.auditDelete(r, groupID, "", getErr)
-		_ = renderEntityError(w, r, getErr)
 		return
 	}
 
@@ -180,7 +180,9 @@ func (api *adminGroupsAPI) deleteGroup(w http.ResponseWriter, r *http.Request) {
 	// group as subject, and the group's tenant — the spec's required
 	// trio. `already_pending` rides the breadcrumb so an operator can
 	// tell a genuine soft-delete from an idempotent no-op without
-	// re-deriving it from timestamps.
+	// re-deriving it from timestamps. The soft-delete already committed,
+	// so the audit row records Success=true on the happy path; only a
+	// render blip flips it to false.
 	renderErr := render.Render(w, r, jsonapi.NewAdminGroupResponse(item))
 	api.auditDeleteResult(r, groupID, tenantIDOfGroup(item), alreadyPending, renderErr)
 	if renderErr != nil {

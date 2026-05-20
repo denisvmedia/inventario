@@ -1231,11 +1231,11 @@ type LocationGroupRegistry interface {
 	// method (/api/v1/admin/groups — #1748) crosses tenants by design, so
 	// implementations MUST return rows across all tenants regardless of
 	// caller membership. The postgres LocationGroupRegistry runs the cross-
-	// tenant read under `SET LOCAL row_security = off` as a fail-loud guard
-	// so a future loss of the connection role's RLS bypass produces a 5xx
-	// rather than a silently empty page; member_count is computed via a
-	// correlated subquery on group_memberships. Memory walks the in-memory
-	// stores.
+	// tenant read as the background-worker role (which carries RLS bypass
+	// policies); `SET LOCAL row_security = off` is added as defense-in-depth
+	// to make the cross-tenant read explicit, not as the primary guard.
+	// member_count is computed via a correlated subquery on
+	// group_memberships. Memory walks the in-memory stores.
 	//
 	// Total is the count before LIMIT/OFFSET is applied.
 	ListAdmin(ctx context.Context, opts AdminGroupListOptions) (items []*AdminGroupListItem, total int, err error)
@@ -1255,12 +1255,20 @@ type LocationGroupRegistry interface {
 	// UpdatedAt bumped) so the existing group_purge_worker finishes the
 	// hard-delete with no parallel code path.
 	//
-	// The call is idempotent: when the group is already pending_deletion
-	// it returns (alreadyPending=true, nil) without re-writing the row so
+	// It returns the post-transition detail row (the same shape GetAdmin
+	// returns: group row + member_count + tenant chip) computed inside the
+	// SAME transaction as the status write, so the handler renders directly
+	// from it with NO second round-trip. Without this the handler would have
+	// to re-fetch via GetAdmin, which races the group_purge_worker — between
+	// the soft-delete commit and the re-fetch the worker can hard-delete the
+	// now-pending row, turning a DELETE that actually succeeded into a 404.
+	//
+	// The call is idempotent: when the group is already pending_deletion it
+	// returns (item, alreadyPending=true, nil) without re-writing the row so
 	// the handler can render a 200 with the current status. On a genuine
-	// transition it returns (false, nil); on a missing group it returns
-	// (false, ErrNotFound).
-	MarkPendingDeletionAdmin(ctx context.Context, groupID string) (alreadyPending bool, err error)
+	// transition it returns (item, false, nil); on a missing group it returns
+	// (nil, false, ErrNotFound).
+	MarkPendingDeletionAdmin(ctx context.Context, groupID string) (item *AdminGroupDetail, alreadyPending bool, err error)
 }
 
 // AdminGroupSortField names the columns the admin group listing endpoint

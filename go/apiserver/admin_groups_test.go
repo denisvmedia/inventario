@@ -305,6 +305,17 @@ func TestAdminDeleteGroup_IdempotentReDelete(t *testing.T) {
 	var body jsonapi.AdminGroupResponse
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &body), qt.IsNil)
 	c.Assert(body.Data.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
+
+	// An idempotent re-delete still records an admin.delete_group audit
+	// row — an operator auditing "did this delete happen?" must see the
+	// attempt — and its breadcrumb carries already_pending=true so the
+	// no-op is distinguishable from a genuine transition.
+	entries := must.Must(params.FactorySet.AuditLogRegistry.ListByAction(context.Background(), "admin.delete_group"))
+	c.Assert(entries, qt.HasLen, 1)
+	c.Assert(entries[0].Success, qt.IsTrue)
+	var bc map[string]any
+	c.Assert(json.Unmarshal([]byte(entries[0].UserAgent), &bc), qt.IsNil)
+	c.Assert(bc["already_pending"], qt.Equals, true)
 }
 
 func TestAdminDeleteGroup_404OnMissingID(t *testing.T) {
@@ -382,4 +393,10 @@ func TestAdminDeleteGroup_WritesAuditLogWithActorGroupAndTenant(t *testing.T) {
 	// Tenant ID of the group.
 	c.Assert(entry.TenantID, qt.IsNotNil)
 	c.Assert(*entry.TenantID, qt.Equals, user.TenantID)
+	// ids[0] was active, so a genuine first delete: the breadcrumb must
+	// carry already_pending=false to distinguish it from an idempotent
+	// no-op (see TestAdminDeleteGroup_IdempotentReDelete).
+	var bc map[string]any
+	c.Assert(json.Unmarshal([]byte(entry.UserAgent), &bc), qt.IsNil)
+	c.Assert(bc["already_pending"], qt.Equals, false)
 }

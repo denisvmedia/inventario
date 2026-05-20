@@ -204,7 +204,16 @@ func (r *LocationGroupRegistry) GetAdmin(ctx context.Context, groupID string) (*
 	if err != nil {
 		return nil, err
 	}
-	memberCount, err := r.countMembersForGroup(ctx, groupID)
+	return r.buildAdminGroupDetail(ctx, group)
+}
+
+// buildAdminGroupDetail shapes an AdminGroupDetail (group copy +
+// member_count + tenant chip) from an already-loaded group. Shared by
+// GetAdmin and MarkPendingDeletionAdmin so the post-delete row carries
+// exactly the shape the detail handler renders. The supplied group is
+// copied so callers don't share the registry's pointer.
+func (r *LocationGroupRegistry) buildAdminGroupDetail(ctx context.Context, group *models.LocationGroup) (*registry.AdminGroupDetail, error) {
+	memberCount, err := r.countMembersForGroup(ctx, group.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -229,25 +238,50 @@ func (r *LocationGroupRegistry) GetAdmin(ctx context.Context, groupID string) (*
 // identical to GroupService.InitiateGroupDeletion so the group_purge_worker
 // finishes the hard-delete with no parallel code path. The registry's
 // write lock is held for the whole read-decide-write so two concurrent
-// admin deletes can't both observe `active`. Idempotent: an already-pending
-// group returns (true, nil) without re-writing.
-func (r *LocationGroupRegistry) MarkPendingDeletionAdmin(_ context.Context, groupID string) (bool, error) {
+// admin deletes can't both observe `active`, and the returned detail row
+// is built from the post-transition copy under that same lock — no
+// follow-up GetAdmin that could race the purge worker. Idempotent: an
+// already-pending group returns (detail, true, nil) without re-writing.
+func (r *LocationGroupRegistry) MarkPendingDeletionAdmin(ctx context.Context, groupID string) (*registry.AdminGroupDetail, bool, error) {
 	if groupID == "" {
-		return false, registry.ErrFieldRequired
+		return nil, false, registry.ErrFieldRequired
 	}
+
+	post, alreadyPending, err := r.applyPendingDeletion(groupID)
+	if err != nil {
+		return nil, false, err
+	}
+	// buildAdminGroupDetail touches the membership / tenant registries
+	// (their own locks), never r.lock, so it is safe to call after the
+	// write lock above has been released.
+	detail, err := r.buildAdminGroupDetail(ctx, post)
+	if err != nil {
+		return nil, false, err
+	}
+	return detail, alreadyPending, nil
+}
+
+// applyPendingDeletion performs the locked read-decide-write half of the
+// admin soft-delete and returns a copy of the post-transition group. The
+// write lock is held only for the mutation; detail-shaping happens after
+// it is released so we don't hold r.lock across the membership / tenant
+// registry lookups.
+func (r *LocationGroupRegistry) applyPendingDeletion(groupID string) (*models.LocationGroup, bool, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	group, ok := r.items.Get(groupID)
 	if !ok {
-		return false, registry.ErrNotFound
+		return nil, false, registry.ErrNotFound
 	}
 	if group.Status == models.LocationGroupStatusPendingDeletion {
-		return true, nil
+		post := *group
+		return &post, true, nil
 	}
 	updated := *group
 	updated.Status = models.LocationGroupStatusPendingDeletion
 	updated.UpdatedAt = time.Now()
 	r.items.Set(groupID, &updated)
-	return false, nil
+	post := updated
+	return &post, false, nil
 }

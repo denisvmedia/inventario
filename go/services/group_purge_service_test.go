@@ -348,9 +348,20 @@ func TestGroupPurgeService_PurgeOnce_AfterAdminSoftDelete(t *testing.T) {
 	fileSvc := services.NewFileService(fs, newFileUploadLocation(c))
 	svc := services.NewGroupPurgeService(fs, fileSvc)
 
+	// MarkPendingDeletionAdmin returns the post-transition detail row,
+	// which JOINs the owning tenant for the chip — so the group's tenant
+	// must exist (it always does in production: tenant_id is a FK).
+	tenant, err := fs.TenantRegistry.Create(ctx, models.Tenant{
+		Name:   "Tenant A",
+		Slug:   "tenant-a",
+		Status: models.TenantStatusActive,
+		PlanID: models.PlanUnlimited.ID,
+	})
+	c.Assert(err, qt.IsNil)
+
 	// Start from an active group — the admin DELETE handler's input state.
 	group, err := fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenant.ID},
 		Slug:                "admin-deleted-slug-000000000",
 		Name:                "Admin Deleted Group",
 		Status:              models.LocationGroupStatusActive,
@@ -366,10 +377,12 @@ func TestGroupPurgeService_PurgeOnce_AfterAdminSoftDelete(t *testing.T) {
 	c.Assert(failed, qt.Equals, 0)
 
 	// Admin soft-delete — exactly what the /api/v1/admin/groups/{id}
-	// DELETE handler invokes.
-	alreadyPending, err := fs.LocationGroupRegistry.MarkPendingDeletionAdmin(ctx, group.ID)
+	// DELETE handler invokes. It returns the post-transition detail row.
+	detail, alreadyPending, err := fs.LocationGroupRegistry.MarkPendingDeletionAdmin(ctx, group.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(alreadyPending, qt.IsFalse)
+	c.Assert(detail, qt.IsNotNil)
+	c.Assert(detail.Group.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
 
 	// Group is now pending_deletion but still present.
 	pending, err := fs.LocationGroupRegistry.Get(ctx, group.ID)

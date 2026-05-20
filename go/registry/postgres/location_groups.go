@@ -220,14 +220,14 @@ func (r *LocationGroupRegistry) ListByTenant(ctx context.Context, tenantID strin
 // member_count from a correlated subquery on group_memberships.
 //
 // The endpoint crosses tenants by design — a system admin lists every
-// tenant's groups. location_groups has RLS enabled with a tenant-isolation
-// policy; `SET LOCAL row_security = off` on the tx is the fail-loud guard:
-// per postgres semantics a non-bypass role querying an RLS-protected table
-// with row_security=off ERRORs rather than silently filtering. The
-// background-worker connection role this registry runs as carries a bypass
-// policy, so the cross-tenant read succeeds; if that bypass is ever revoked
-// the endpoint 5xx-es loudly instead of returning a quietly empty page.
-// Same rationale as TenantRegistry.ListAdmin / UserRegistry.ListAdminByTenant.
+// tenant's groups. This registry runs in service mode as the
+// inventario_background_worker role, which already carries `using=true`
+// bypass policies on location_groups / group_memberships, so the
+// cross-tenant read works regardless of RLS. The `SET LOCAL row_security =
+// off` on the tx is defense-in-depth: it makes the intentional cross-tenant
+// read explicit at the call site and, on the bypass role, is effectively a
+// no-op rather than the primary guard. Same rationale as
+// TenantRegistry.ListAdmin / UserRegistry.ListAdminByTenant.
 //
 // Total is post-filter, pre-pagination.
 func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.AdminGroupListOptions) ([]*registry.AdminGroupListItem, int, error) {
@@ -339,74 +339,79 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 // GetAdmin returns a single group detail row with the computed
 // member_count plus the owning tenant (joined so the detail handler can
 // render the tenant chip in one round-trip). Runs under
-// `SET LOCAL row_security = off` for the same fail-loud cross-tenant
-// rationale as ListAdmin.
+// `SET LOCAL row_security = off` for the same defense-in-depth
+// cross-tenant rationale as ListAdmin.
 func (r *LocationGroupRegistry) GetAdmin(ctx context.Context, groupID string) (*registry.AdminGroupDetail, error) {
 	if groupID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
 	}
 
-	groupsTable := r.tableNames.LocationGroups()
-	membershipsTable := r.tableNames.GroupMemberships()
-	tenantsTable := r.tableNames.Tenants()
-
-	var (
-		group       models.LocationGroup
-		tenant      models.Tenant
-		memberCount int
-		found       bool
-	)
+	var detail *registry.AdminGroupDetail
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
 			return errxtrace.Wrap("failed to disable row_security for admin group detail", execErr)
 		}
-		query := fmt.Sprintf(`
-			SELECT g.*,
-				(SELECT COUNT(*) FROM %s AS m WHERE m.group_id = g.id) AS _member_count,
-				t.id AS _tenant_id, t.name AS _tenant_name, t.slug AS _tenant_slug
-			FROM %s AS g
-			JOIN %s AS t ON t.id = g.tenant_id
-			WHERE g.id = $1`,
-			membershipsTable, groupsTable, tenantsTable,
-		)
-		var row struct {
-			models.LocationGroup
-			MemberCount int    `db:"_member_count"`
-			TenantID    string `db:"_tenant_id"`
-			TenantName  string `db:"_tenant_name"`
-			TenantSlug  string `db:"_tenant_slug"`
-		}
-		scanErr := tx.QueryRowxContext(ctx, query, groupID).StructScan(&row)
-		if scanErr != nil {
-			if errors.Is(scanErr, sql.ErrNoRows) {
-				return nil
-			}
-			return errxtrace.Wrap("failed to load admin group detail", scanErr)
-		}
-		group = row.LocationGroup
-		memberCount = row.MemberCount
-		tenant = models.Tenant{
-			EntityID: models.EntityID{ID: row.TenantID},
-			Name:     row.TenantName,
-			Slug:     row.TenantSlug,
-		}
-		found = true
-		return nil
+		var loadErr error
+		detail, loadErr = r.loadAdminGroupDetailTx(ctx, tx, groupID)
+		return loadErr
 	})
 	if err != nil {
 		return nil, err
 	}
-	if !found {
+	if detail == nil {
 		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
 			"entity_type", "LocationGroup",
 			"entity_id", groupID,
 		))
 	}
+	return detail, nil
+}
+
+// loadAdminGroupDetailTx loads the admin group detail row (group +
+// member_count + tenant chip) within the supplied tx. It is the shared
+// detail-shaping query used by both GetAdmin and MarkPendingDeletionAdmin
+// so the post-delete row carries exactly the shape the detail handler
+// renders without a second round-trip. Returns (nil, nil) when the group
+// id doesn't exist — callers map that to ErrNotFound. The caller is
+// responsible for the `SET LOCAL row_security = off` on the tx.
+func (r *LocationGroupRegistry) loadAdminGroupDetailTx(ctx context.Context, tx *sqlx.Tx, groupID string) (*registry.AdminGroupDetail, error) {
+	groupsTable := r.tableNames.LocationGroups()
+	membershipsTable := r.tableNames.GroupMemberships()
+	tenantsTable := r.tableNames.Tenants()
+
+	query := fmt.Sprintf(`
+		SELECT g.*,
+			(SELECT COUNT(*) FROM %s AS m WHERE m.group_id = g.id) AS _member_count,
+			t.id AS _tenant_id, t.name AS _tenant_name, t.slug AS _tenant_slug
+		FROM %s AS g
+		JOIN %s AS t ON t.id = g.tenant_id
+		WHERE g.id = $1`,
+		membershipsTable, groupsTable, tenantsTable,
+	)
+	var row struct {
+		models.LocationGroup
+		MemberCount int    `db:"_member_count"`
+		TenantID    string `db:"_tenant_id"`
+		TenantName  string `db:"_tenant_name"`
+		TenantSlug  string `db:"_tenant_slug"`
+	}
+	scanErr := tx.QueryRowxContext(ctx, query, groupID).StructScan(&row)
+	if scanErr != nil {
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, errxtrace.Wrap("failed to load admin group detail", scanErr)
+	}
+	group := row.LocationGroup
 	return &registry.AdminGroupDetail{
 		Group:       &group,
-		MemberCount: memberCount,
-		Tenant:      &tenant,
+		MemberCount: row.MemberCount,
+		Tenant: &models.Tenant{
+			EntityID: models.EntityID{ID: row.TenantID},
+			Name:     row.TenantName,
+			Slug:     row.TenantSlug,
+		},
 	}, nil
 }
 
@@ -416,19 +421,24 @@ func (r *LocationGroupRegistry) GetAdmin(ctx context.Context, groupID string) (*
 // pending_deletion and UpdatedAt bumped — so the existing
 // group_purge_worker finishes the hard-delete with no parallel code path.
 //
-// The whole read-decide-write runs inside one background-worker tx so two
-// concurrent admin deletes can't both observe `active` and race. Idempotent:
-// an already-pending group returns (true, nil) without re-writing the row.
-func (r *LocationGroupRegistry) MarkPendingDeletionAdmin(ctx context.Context, groupID string) (bool, error) {
+// The whole read-decide-write-reload runs inside one background-worker tx
+// so two concurrent admin deletes can't both observe `active` and race,
+// and the returned detail row is the committed post-transition state. The
+// in-tx reload (instead of a follow-up GetAdmin) closes a TOCTOU window:
+// between the soft-delete commit and a separate re-fetch the
+// group_purge_worker could hard-delete the now-pending row, turning a
+// successful DELETE into a spurious 404. Idempotent: an already-pending
+// group returns (detail, true, nil) without re-writing the row.
+func (r *LocationGroupRegistry) MarkPendingDeletionAdmin(ctx context.Context, groupID string) (*registry.AdminGroupDetail, bool, error) {
 	if groupID == "" {
-		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
 	}
 
 	groupsTable := r.tableNames.LocationGroups()
 
 	var (
 		alreadyPending bool
-		found          bool
+		detail         *registry.AdminGroupDetail
 	)
 	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		var currentStatus string
@@ -440,26 +450,30 @@ func (r *LocationGroupRegistry) MarkPendingDeletionAdmin(ctx context.Context, gr
 			}
 			return errxtrace.Wrap("failed to load location group for soft-delete", scanErr)
 		}
-		found = true
 		if currentStatus == string(models.LocationGroupStatusPendingDeletion) {
 			alreadyPending = true
-			return nil
+		} else {
+			updateQuery := fmt.Sprintf("UPDATE %s SET status = $1, updated_at = $2 WHERE id = $3", groupsTable)
+			if _, execErr := tx.ExecContext(ctx, updateQuery,
+				string(models.LocationGroupStatusPendingDeletion), time.Now(), groupID); execErr != nil {
+				return errxtrace.Wrap("failed to mark location group pending_deletion", execErr)
+			}
 		}
-		updateQuery := fmt.Sprintf("UPDATE %s SET status = $1, updated_at = $2 WHERE id = $3", groupsTable)
-		if _, execErr := tx.ExecContext(ctx, updateQuery,
-			string(models.LocationGroupStatusPendingDeletion), time.Now(), groupID); execErr != nil {
-			return errxtrace.Wrap("failed to mark location group pending_deletion", execErr)
-		}
-		return nil
+		// Reload the post-transition detail row in the SAME tx — the row is
+		// still pinned by the FOR UPDATE lock above, so this reflects the
+		// committed state and cannot race the purge worker.
+		var loadErr error
+		detail, loadErr = r.loadAdminGroupDetailTx(ctx, tx, groupID)
+		return loadErr
 	})
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
-	if !found {
-		return false, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+	if detail == nil {
+		return nil, false, errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
 			"entity_type", "LocationGroup",
 			"entity_id", groupID,
 		))
 	}
-	return alreadyPending, nil
+	return detail, alreadyPending, nil
 }
