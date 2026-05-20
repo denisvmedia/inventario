@@ -25,6 +25,8 @@ const STATUS_TONE: Record<string, string> = {
   inactive: "text-status-none bg-status-none/10",
 }
 
+// Renders a tenant's lifecycle status as a tone-mapped outline badge.
+// An unknown or missing status falls back to the `inactive` tone.
 function TenantStatusBadge({ status }: { status: string | undefined }) {
   const tone = (status && STATUS_TONE[status]) || STATUS_TONE.inactive
   return (
@@ -167,6 +169,8 @@ export function AdminTenantsPage() {
   )
 }
 
+// A single tenant entry in the divide-y card list: identity (icon, name,
+// status, slug/domain) plus the user/group/created columns on wider viewports.
 function TenantRow({ tenant }: { tenant: AdminTenant }) {
   const { t } = useTranslation("admin")
   return (

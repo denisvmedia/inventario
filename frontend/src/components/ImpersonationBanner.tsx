@@ -15,6 +15,7 @@ function secondsUntil(expiresAt: string | null): number | null {
   return Math.max(0, Math.floor(diffMs / 1000))
 }
 
+// Formats a seconds count as a zero-padded MM:SS countdown string.
 function formatMMSS(totalSeconds: number): string {
   const safe = Math.max(0, totalSeconds)
   const mm = String(Math.floor(safe / 60)).padStart(2, "0")
