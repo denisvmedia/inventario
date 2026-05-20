@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -46,7 +45,8 @@ import {
   Layers,
 } from "lucide-react"
 import { FilePreviewDialog } from "@/components/FilePreviewDialog"
-import { FILE_TAGS, FILE_CATEGORY_CONFIG, type AttachedFile, type FileCategory } from "@/data/mock"
+import { FILE_TAGS, FILE_CATEGORY_CONFIG, resolveTags, type AttachedFile, type FileCategory } from "@/data/mock"
+import { TagPill } from "@/components/TagPill"
 import { cn } from "@/lib/utils"
 
 type MimeGroup = "pdf" | "image" | "archive" | "other"
@@ -227,7 +227,7 @@ export function FileDetailSheet({ file, onClose, onDelete }: FileDetailSheetProp
 
   const group = file ? mimeGroup(file.mimeType) : "other"
   const Icon = FILE_ICONS[group]
-  const fileTags = file ? FILE_TAGS.filter((t) => file.tags.includes(t.id)) : []
+  const fileTags = file ? resolveTags(file.tags) : []
 
   function handleDelete() {
     if (!file) return
@@ -274,9 +274,7 @@ export function FileDetailSheet({ file, onClose, onDelete }: FileDetailSheetProp
                 {fileTags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {fileTags.map((tag) => (
-                      <Badge key={tag.id} variant="secondary" className="h-5 px-1.5 text-xs">
-                        <span className={tag.color}>#{tag.label}</span>
-                      </Badge>
+                      <TagPill key={tag.id} tag={tag} size="sm" />
                     ))}
                   </div>
                 )}
@@ -366,9 +364,7 @@ export function FileDetailSheet({ file, onClose, onDelete }: FileDetailSheetProp
                       value={
                         <div className="flex flex-wrap gap-1 mt-0.5">
                           {fileTags.map((tag) => (
-                            <Badge key={tag.id} variant="secondary" className="h-5 px-1.5 text-xs">
-                              {tag.label}
-                            </Badge>
+                            <TagPill key={tag.id} tag={tag} size="xs" />
                           ))}
                         </div>
                       }

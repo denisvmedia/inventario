@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select"
 import { Upload, X, FileText, Image, File, Plus, Image as ImageIcon, Receipt, BookOpen, Sparkles, Camera, ScanText, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, ChevronDown, TriangleAlert, RefreshCw, ServerCrash } from "lucide-react"
 import { CATEGORIES, MOCK_LOCATIONS, MOCK_AREAS, CURRENCIES, type ItemCategory, type FileCategory } from "@/data/mock"
-import { cn, makeId } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 
 // ─── Brand / model data ───────────────────────────────────────
@@ -385,7 +385,7 @@ export function AddItemDialog({ open, onClose, defaultAreaId }: AddItemDialogPro
 
   function addFilesToList(files: File[], setter: React.Dispatch<React.SetStateAction<AttachedFileDraft[]>>, category: FileCategory) {
     const drafts: AttachedFileDraft[] = files.map((f) => ({
-      id: makeId(),
+      id: crypto.randomUUID(),
       name: f.name,
       size: formatFileSize(f.size),
       mimeType: f.type,
@@ -734,7 +734,7 @@ function AiPhotoStep({ phase, photos, setPhotos, filledName, filledBrand, filled
 }) {
   function handlePhotoFiles(files: File[]) {
     const previews = files.map((f) => ({
-      id: makeId(),
+      id: crypto.randomUUID(),
       name: f.name,
       preview: URL.createObjectURL(f),
     }))
@@ -1312,7 +1312,7 @@ function ExtrasStep({ notes, setNotes, tagInput, setTagInput, tags, setTags, add
           <button
             type="button"
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-            onClick={() => setUrls((prev: any[]) => [...prev, { id: makeId(), label: "", url: "" }])}
+            onClick={() => setUrls((prev: any[]) => [...prev, { id: crypto.randomUUID(), label: "", url: "" }])}
           >
             <Plus className="size-3" />Add
           </button>
@@ -1344,7 +1344,7 @@ function ExtrasStep({ notes, setNotes, tagInput, setTagInput, tags, setTags, add
           <button
             type="button"
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-            onClick={() => setSupplyLinks((prev: any[]) => [...prev, { id: makeId(), label: "", url: "" }])}
+            onClick={() => setSupplyLinks((prev: any[]) => [...prev, { id: crypto.randomUUID(), label: "", url: "" }])}
           >
             <Plus className="size-3" />Add
           </button>

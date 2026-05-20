@@ -11,4 +11,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    // Allow remote preview of the design mock over Tailscale MagicDNS
+    // (*.ts.net) only — keeps Vite's host-check protection on for every
+    // other host. Plain IP / localhost access is permitted by Vite by default.
+    allowedHosts: [".ts.net"],
+  },
 })

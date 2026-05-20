@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { OnboardingTour, RestartTourButton, TOUR_STEPS } from "@/components/OnboardingTour"
 import { useOnboarding } from "@/hooks/use-onboarding"
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
@@ -23,6 +23,13 @@ import { UIShowcaseView } from "@/views/UIShowcaseView"
 import { TagsView } from "@/views/TagsView"
 import { PlansView } from "@/views/PlansView"
 import { AuthView } from "@/views/AuthView"
+import { TenantsView } from "@/views/admin/TenantsView"
+import { TenantDetailView } from "@/views/admin/TenantDetailView"
+import { UserDetailView } from "@/views/admin/UserDetailView"
+import { GroupsView } from "@/views/admin/GroupsView"
+import { GroupDetailView } from "@/views/admin/GroupDetailView"
+import { ImpersonationBannerMock } from "@/views/admin/ImpersonationBannerMock"
+import { adminUserById } from "@/data/mock"
 import {
   NotFoundView,
   NoLocationGroupView,
@@ -33,6 +40,8 @@ import {
 } from "@/views/EmptyStatesView"
 import { InviteBanner } from "@/components/InviteBanner"
 import { ModeToggle } from "@/components/mode-toggle"
+import { CommandPalette, useCommandPalette } from "@/components/CommandPalette"
+import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog"
 import { Separator } from "@/components/ui/separator"
 import {
   Package,
@@ -55,7 +64,12 @@ import {
   Shield,
   Palette,
   Zap,
+  Search,
+  Building2,
+  UserCog,
 } from "lucide-react"
+import { Kbd, KbdGroup } from "@/components/ui/kbd"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 type View =
   | "dashboard"
@@ -82,6 +96,11 @@ type View =
   | "state-no-area"
   | "state-maintenance"
   | "state-no-group-onboarding"
+  | "admin-tenants"
+  | "admin-tenant-detail"
+  | "admin-user-detail"
+  | "admin-groups"
+  | "admin-group-detail"
 
 const VIEW_TITLES: Record<View, string> = {
   dashboard: "Dashboard",
@@ -108,6 +127,11 @@ const VIEW_TITLES: Record<View, string> = {
   "state-no-area": "No Area",
   "state-maintenance": "Maintenance",
   "state-no-group-onboarding": "Get Started",
+  "admin-tenants": "Tenants",
+  "admin-tenant-detail": "Tenant Detail",
+  "admin-user-detail": "User Detail",
+  "admin-groups": "Groups",
+  "admin-group-detail": "Group Detail",
 }
 
 const VIEW_ICONS: Record<View, React.ElementType> = {
@@ -135,6 +159,11 @@ const VIEW_ICONS: Record<View, React.ElementType> = {
   "state-no-area": LayoutGrid,
   "state-maintenance": Wrench,
   "state-no-group-onboarding": Layers,
+  "admin-tenants": Building2,
+  "admin-tenant-detail": Building2,
+  "admin-user-detail": UserCog,
+  "admin-groups": Layers,
+  "admin-group-detail": Layers,
 }
 
 
@@ -145,7 +174,40 @@ export function App() {
   const [activeGroupId, setActiveGroupId] = useState("g1")
   const [insuranceReportItemId, setInsuranceReportItemId] = useState<string | undefined>()
   const [insuranceReportLocationId, setInsuranceReportLocationId] = useState<string | undefined>()
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null)
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
+  const [impersonatingUserId, setImpersonatingUserId] = useState<string | null>(null)
+  // Remember which admin view a detail page was opened from, so "Back"
+  // returns to the originating context (tenant detail vs. a list view).
+  const [userDetailBackTo, setUserDetailBackTo] = useState<View>("admin-tenants")
+  const [groupDetailBackTo, setGroupDetailBackTo] = useState<View>("admin-groups")
   const onboarding = useOnboarding()
+  const palette = useCommandPalette()
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Cmd/Ctrl+/ → shortcuts dialog
+      if (e.key === "/" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setShortcutsOpen((o) => !o)
+        return
+      }
+      // Cmd/Ctrl+N → add item
+      if (e.key === "n" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setAddDialogOpen(true)
+        return
+      }
+      // G+x two-key nav (only when no input focused)
+      const tag = (document.activeElement as HTMLElement)?.tagName?.toLowerCase()
+      if (tag === "input" || tag === "textarea" || (document.activeElement as HTMLElement)?.isContentEditable) return
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [])
 
   const fullscreenViews: View[] = ["auth", "image-viewer", "pdf-viewer", "insurance-report"]
   const isFullscreen = fullscreenViews.includes(view)
@@ -172,6 +234,7 @@ export function App() {
   }
 
   const ViewIcon = VIEW_ICONS[view]
+  const impersonatingUser = impersonatingUserId ? adminUserById(impersonatingUserId) : undefined
 
   return (
     <SidebarProvider>
@@ -183,6 +246,14 @@ export function App() {
         onGroupChange={setActiveGroupId}
       />
       <SidebarInset>
+        {/* Impersonation banner — non-dismissible, sits above the topbar */}
+        {impersonatingUser && (
+          <ImpersonationBannerMock
+            userName={impersonatingUser.name}
+            userEmail={impersonatingUser.email}
+            onEnd={() => setImpersonatingUserId(null)}
+          />
+        )}
         {/* Topbar */}
         <header className="flex h-12 items-center gap-2 border-b border-border px-4 sticky top-0 bg-background z-10" data-tour="welcome">
           <SidebarTrigger className="-ml-1" />
@@ -209,6 +280,22 @@ export function App() {
                 )
               })}
             </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => palette.setOpen(true)}
+                  className="hidden sm:flex items-center gap-2 h-8 px-3 rounded-md border border-border bg-background text-muted-foreground text-sm hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <Search className="size-3.5 shrink-0" />
+                  <span className="text-xs">Search…</span>
+                  <KbdGroup className="ml-1">
+                    <Kbd className="text-[10px] h-4 min-w-4 px-1">⌘</Kbd>
+                    <Kbd className="text-[10px] h-4 min-w-4 px-1">K</Kbd>
+                  </KbdGroup>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Open command palette</TooltipContent>
+            </Tooltip>
             <RestartTourButton onRestart={onboarding.restart} />
             <ModeToggle />
           </div>
@@ -223,7 +310,7 @@ export function App() {
           {view === "items" && <ItemsView onItemClick={setSelectedItemId} onAddItem={() => setAddDialogOpen(true)} />}
           {view === "warranties" && <WarrantiesView onItemClick={setSelectedItemId} />}
           {view === "tags" && <TagsView />}
-          {view === "settings" && <SettingsView onNavigate={(v) => setView(v as View)} />}
+          {view === "settings" && <SettingsView onNavigate={(v) => setView(v as View)} onOpenShortcuts={() => setShortcutsOpen(true)} />}
           {view === "group-settings" && (
             <GroupSettingsView
               activeGroupId={activeGroupId}
@@ -268,6 +355,61 @@ export function App() {
           {view === "state-no-location" && <NoLocationView />}
           {view === "state-no-area" && <NoAreaView />}
           {view === "state-maintenance" && <MaintenanceView />}
+
+          {/* Admin views */}
+          {view === "admin-tenants" && (
+            <TenantsView
+              onSelectTenant={(id) => {
+                setSelectedTenantId(id)
+                setView("admin-tenant-detail")
+              }}
+            />
+          )}
+          {view === "admin-tenant-detail" && selectedTenantId && (
+            <TenantDetailView
+              tenantId={selectedTenantId}
+              onBack={() => setView("admin-tenants")}
+              onSelectUser={(id) => {
+                setSelectedUserId(id)
+                setUserDetailBackTo("admin-tenant-detail")
+                setView("admin-user-detail")
+              }}
+              onSelectGroup={(id) => {
+                setSelectedGroupId(id)
+                setGroupDetailBackTo("admin-tenant-detail")
+                setView("admin-group-detail")
+              }}
+            />
+          )}
+          {view === "admin-user-detail" && selectedUserId && (
+            <UserDetailView
+              key={selectedUserId}
+              userId={selectedUserId}
+              onBack={() => setView(userDetailBackTo)}
+              onSelectGroup={(id) => {
+                setSelectedGroupId(id)
+                setGroupDetailBackTo("admin-user-detail")
+                setView("admin-group-detail")
+              }}
+              onImpersonate={(id) => setImpersonatingUserId(id)}
+            />
+          )}
+          {view === "admin-groups" && (
+            <GroupsView
+              onSelectGroup={(id) => {
+                setSelectedGroupId(id)
+                setGroupDetailBackTo("admin-groups")
+                setView("admin-group-detail")
+              }}
+            />
+          )}
+          {view === "admin-group-detail" && selectedGroupId && (
+            <GroupDetailView
+              key={selectedGroupId}
+              groupId={selectedGroupId}
+              onBack={() => setView(groupDetailBackTo)}
+            />
+          )}
         </main>
       </SidebarInset>
 
@@ -292,6 +434,17 @@ export function App() {
           onSkip={onboarding.skip}
         />
       )}
+
+      <CommandPalette
+        open={palette.open}
+        onOpenChange={palette.setOpen}
+        onNavigate={(v) => setView(v as View)}
+        onItemClick={setSelectedItemId}
+      />
+      <KeyboardShortcutsDialog
+        open={shortcutsOpen}
+        onOpenChange={setShortcutsOpen}
+      />
     </SidebarProvider>
   )
 }

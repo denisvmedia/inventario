@@ -27,7 +27,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { ShieldCheck, ShieldAlert, ShieldOff, Shield, ExternalLink, MapPin, Calendar, Hash, Tag, Pencil, Trash2, DollarSign, FileText, Image as ImageIcon, File, Upload, X, ArrowLeft, Plus, Paperclip, ChartBar as FileBarChart2, Package, CircleDot, TriangleAlert as AlertTriangle, Link as LinkIcon, Layers } from "lucide-react"
+import { ShieldCheck, ShieldAlert, ShieldOff, Shield, ExternalLink, MapPin, Calendar, Hash, Tag, Pencil, Trash2, DollarSign, FileText, Image as ImageIcon, File, Upload, ArrowLeft, Paperclip, ChartBar as FileBarChart2, Package, CircleDot, TriangleAlert as AlertTriangle, Link as LinkIcon, Layers } from "lucide-react"
 import { WarrantyBadge } from "@/components/WarrantyBadge"
 import { FilePreviewDialog } from "@/components/FilePreviewDialog"
 import {
@@ -43,7 +43,8 @@ import {
 import {
   MOCK_ITEMS,
   MOCK_FILES,
-  FILE_TAGS,
+  MOCK_TAGS,
+  resolveTags,
   CATEGORIES,
   MOCK_LOCATIONS,
   MOCK_AREAS,
@@ -58,6 +59,7 @@ import {
   WARRANTY_STATUS_CONFIG,
   COMMODITY_STATUS_CONFIG,
 } from "@/data/mock"
+import { TagPill } from "@/components/TagPill"
 import { cn } from "@/lib/utils"
 
 interface ItemDetailProps {
@@ -330,7 +332,7 @@ function ItemFilesTab({ item }: { item: InventoryItem }) {
             {(activeCategory !== "image" && nonPhotos.length > 0) && (
               <ul className="flex flex-col gap-1.5">
                 {nonPhotos.map((f) => {
-                  const tagObjs = f.tags.map((tid) => FILE_TAGS.find((t) => t.id === tid)).filter(Boolean)
+                  const tagObjs = resolveTags(f.tags)
                   return (
                     <li key={f.id} className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
                       {fileIcon(f.mimeType)}
@@ -348,8 +350,8 @@ function ItemFilesTab({ item }: { item: InventoryItem }) {
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-xs text-muted-foreground">{f.size}</span>
-                          {tagObjs.map((t) => t && (
-                            <span key={t.id} className={`text-xs ${t.color}`}>{t.label}</span>
+                          {tagObjs.map((t) => (
+                            <TagPill key={t.id} tag={t} size="xs" />
                           ))}
                         </div>
                       </div>
@@ -443,17 +445,16 @@ function ItemEditForm({ item, onCancel }: { item: InventoryItem; onCancel: () =>
   const [warrantyNotes, setWarrantyNotes] = useState(item.warranty.notes)
 
   const [notes, setNotes] = useState(item.notes)
-  const [tagInput, setTagInput] = useState("")
   const [tags, setTags] = useState<string[]>(item.tags)
 
   const availableAreas = selectedLocationId
     ? MOCK_AREAS.filter((a) => a.locationId === selectedLocationId)
     : []
 
-  function addTag(raw: string) {
-    const newTags = raw.split(",").map((t) => t.trim().toLowerCase()).filter((t) => t && !tags.includes(t))
-    if (newTags.length) setTags((prev) => [...prev, ...newTags])
-    setTagInput("")
+  const itemTagPalette = MOCK_TAGS.filter((t) => t.id.startsWith("i"))
+
+  function toggleTag(id: string) {
+    setTags((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
   }
 
   return (
@@ -553,28 +554,30 @@ function ItemEditForm({ item, onCancel }: { item: InventoryItem; onCancel: () =>
 
         <div className="flex flex-col gap-1.5">
           <Label>Tags</Label>
-          <div className="flex gap-2">
-            <Input
-              placeholder="e.g. kitchen — comma to add"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(tagInput) }
-              }}
-            />
-            <Button type="button" variant="outline" size="sm" onClick={() => addTag(tagInput)} disabled={!tagInput.trim()}>
-              <Plus className="size-3.5" />
-            </Button>
+          <div className="flex flex-wrap gap-1.5">
+            {itemTagPalette.map((tag) => {
+              const active = tags.includes(tag.id)
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => toggleTag(tag.id)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+                    active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/50"
+                  )}
+                >
+                  #{tag.label}
+                </button>
+              )
+            })}
           </div>
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
-              {tags.map((t) => (
-                <Badge key={t} variant="secondary" className="gap-1 h-5 text-xs">
-                  {t}
-                  <button type="button" onClick={() => setTags((prev) => prev.filter((x) => x !== t))}>
-                    <X className="size-3" />
-                  </button>
-                </Badge>
+              {resolveTags(tags).map((tag) => (
+                <TagPill key={tag.id} tag={tag} size="xs" onRemove={() => toggleTag(tag.id)} />
               ))}
             </div>
           )}
@@ -877,8 +880,8 @@ function ItemDetailContent({ item, onOpenInsuranceReport }: { item: InventoryIte
                 label="Tags"
                 value={
                   <div className="flex flex-wrap gap-1 mt-0.5">
-                    {item.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="h-5 px-1.5 text-xs">{tag}</Badge>
+                    {resolveTags(item.tags).map((tag) => (
+                      <TagPill key={tag.id} tag={tag} size="xs" />
                     ))}
                   </div>
                 }
