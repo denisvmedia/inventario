@@ -300,12 +300,19 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 		// the owning-tenant chip — the cross-tenant admin list renders the
 		// tenant name per row without an FE N+1 lookup. Same tx, so the JOIN
 		// is read under the same `SET LOCAL row_security = off`.
+		//
+		// LEFT JOIN, not INNER: AdminGroupListItem.Tenant is *models.Tenant
+		// (nullable by contract). An INNER JOIN would silently DROP a group
+		// whose tenant row is missing/corrupt — the worst behavior for a
+		// cross-tenant admin debugging surface, where an admin most needs to
+		// SEE orphaned groups. With LEFT JOIN the tenant columns scan NULL
+		// and Tenant is left nil.
 		pageQuery := fmt.Sprintf(`
 			SELECT g.*,
 				(SELECT COUNT(*) FROM %s AS m WHERE m.group_id = g.id) AS _member_count,
 				t.id AS _tenant_id, t.name AS _tenant_name, t.slug AS _tenant_slug
 			FROM %s AS g
-			JOIN %s AS t ON t.id = g.tenant_id
+			LEFT JOIN %s AS t ON t.id = g.tenant_id
 			%s
 			ORDER BY g.%s %s, g.id ASC
 			LIMIT $%d OFFSET $%d`,
@@ -322,10 +329,10 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 		for rows.Next() {
 			var row struct {
 				models.LocationGroup
-				MemberCount int    `db:"_member_count"`
-				TenantID    string `db:"_tenant_id"`
-				TenantName  string `db:"_tenant_name"`
-				TenantSlug  string `db:"_tenant_slug"`
+				MemberCount int            `db:"_member_count"`
+				TenantID    sql.NullString `db:"_tenant_id"`
+				TenantName  sql.NullString `db:"_tenant_name"`
+				TenantSlug  sql.NullString `db:"_tenant_slug"`
 			}
 			if scanErr := rows.StructScan(&row); scanErr != nil {
 				return errxtrace.Wrap("failed to scan admin group row", scanErr)
@@ -334,11 +341,7 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 			items = append(items, &registry.AdminGroupListItem{
 				Group:       &group,
 				MemberCount: row.MemberCount,
-				Tenant: &models.Tenant{
-					EntityID: models.EntityID{ID: row.TenantID},
-					Name:     row.TenantName,
-					Slug:     row.TenantSlug,
-				},
+				Tenant:      tenantFromNullableColumns(row.TenantID, row.TenantName, row.TenantSlug),
 			})
 		}
 		if rowsErr := rows.Err(); rowsErr != nil {
@@ -396,21 +399,28 @@ func (r *LocationGroupRegistry) loadAdminGroupDetailTx(ctx context.Context, tx *
 	membershipsTable := r.tableNames.GroupMemberships()
 	tenantsTable := r.tableNames.Tenants()
 
+	// LEFT JOIN, not INNER: AdminGroupDetail.Tenant is *models.Tenant
+	// (nullable by contract). An INNER JOIN would drop the row entirely
+	// when the group's tenant is missing/corrupt, making GetAdmin return
+	// ErrNotFound (404) for a group that genuinely exists — exactly the
+	// orphaned group an admin needs to see. With LEFT JOIN the group row
+	// is still returned; the tenant columns scan NULL and Tenant is nil.
+	// ErrNotFound stays reserved for a genuinely absent group row.
 	query := fmt.Sprintf(`
 		SELECT g.*,
 			(SELECT COUNT(*) FROM %s AS m WHERE m.group_id = g.id) AS _member_count,
 			t.id AS _tenant_id, t.name AS _tenant_name, t.slug AS _tenant_slug
 		FROM %s AS g
-		JOIN %s AS t ON t.id = g.tenant_id
+		LEFT JOIN %s AS t ON t.id = g.tenant_id
 		WHERE g.id = $1`,
 		membershipsTable, groupsTable, tenantsTable,
 	)
 	var row struct {
 		models.LocationGroup
-		MemberCount int    `db:"_member_count"`
-		TenantID    string `db:"_tenant_id"`
-		TenantName  string `db:"_tenant_name"`
-		TenantSlug  string `db:"_tenant_slug"`
+		MemberCount int            `db:"_member_count"`
+		TenantID    sql.NullString `db:"_tenant_id"`
+		TenantName  sql.NullString `db:"_tenant_name"`
+		TenantSlug  sql.NullString `db:"_tenant_slug"`
 	}
 	scanErr := tx.QueryRowxContext(ctx, query, groupID).StructScan(&row)
 	if scanErr != nil {
@@ -423,12 +433,24 @@ func (r *LocationGroupRegistry) loadAdminGroupDetailTx(ctx context.Context, tx *
 	return &registry.AdminGroupDetail{
 		Group:       &group,
 		MemberCount: row.MemberCount,
-		Tenant: &models.Tenant{
-			EntityID: models.EntityID{ID: row.TenantID},
-			Name:     row.TenantName,
-			Slug:     row.TenantSlug,
-		},
+		Tenant:      tenantFromNullableColumns(row.TenantID, row.TenantName, row.TenantSlug),
 	}, nil
+}
+
+// tenantFromNullableColumns builds the owning-tenant chip from the
+// LEFT-JOINed tenant columns of an admin group query. When the tenant row
+// is absent (group orphaned / tenant corrupt) the columns scan NULL and
+// this returns nil — never a synthesized empty &models.Tenant{} — so the
+// nullable AdminGroup*.Tenant contract holds and the FE omits the chip.
+func tenantFromNullableColumns(id, name, slug sql.NullString) *models.Tenant {
+	if !id.Valid {
+		return nil
+	}
+	return &models.Tenant{
+		EntityID: models.EntityID{ID: id.String},
+		Name:     name.String,
+		Slug:     slug.String,
+	}
 }
 
 // MarkPendingDeletionAdmin flips a group to pending_deletion for the

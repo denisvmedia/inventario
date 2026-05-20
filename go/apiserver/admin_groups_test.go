@@ -256,6 +256,81 @@ func TestAdminGetGroup_ReturnsRowWithTenantChipAndMemberCount(t *testing.T) {
 	c.Assert(body.Data.Tenant.ID, qt.Equals, user.TenantID)
 }
 
+// TestAdminListGroups_OrphanedGroupStaysVisible proves a group whose
+// tenant row is missing/corrupt still appears in the cross-tenant admin
+// list with a nil Tenant chip — the LEFT JOIN (postgres) /
+// ErrNotFound-swallowing resolveTenant (memory) keep orphaned groups
+// visible instead of silently dropping them, which is exactly what an
+// admin debugging surface needs.
+func TestAdminListGroups_OrphanedGroupStaysVisible(t *testing.T) {
+	c := qt.New(t)
+	params, user, _ := newParams()
+	promoteToSystemAdmin(c, params, user)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	ctx := context.Background()
+	// A group pointing at a tenant id that has no tenants row.
+	orphan := must.Must(params.FactorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-does-not-exist"},
+		Name:                "Orphan Group",
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           user.ID,
+		GroupCurrency:       models.Currency("USD"),
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups", nil)
+	addTestUserAuthHeader(req, user.ID)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	var body jsonapi.AdminGroupsResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &body), qt.IsNil)
+
+	var found *jsonapi.AdminGroupListItem
+	for _, item := range body.Data {
+		if item.ID == orphan.ID {
+			found = item
+			break
+		}
+	}
+	c.Assert(found, qt.IsNotNil)
+	c.Assert(found.Tenant, qt.IsNil)
+}
+
+// TestAdminGetGroup_OrphanedGroupReturnedWithNilTenant proves GetAdmin
+// returns the group (not 404) when its tenant row is missing — ErrNotFound
+// is reserved for a genuinely absent group row, not an absent tenant.
+func TestAdminGetGroup_OrphanedGroupReturnedWithNilTenant(t *testing.T) {
+	c := qt.New(t)
+	params, user, _ := newParams()
+	promoteToSystemAdmin(c, params, user)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	ctx := context.Background()
+	orphan := must.Must(params.FactorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-does-not-exist"},
+		Name:                "Orphan Group",
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           user.ID,
+		GroupCurrency:       models.Currency("USD"),
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/admin/groups/%s", orphan.ID), nil)
+	addTestUserAuthHeader(req, user.ID)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	var body jsonapi.AdminGroupResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &body), qt.IsNil)
+	c.Assert(body.Data, qt.IsNotNil)
+	c.Assert(body.Data.ID, qt.Equals, orphan.ID)
+	c.Assert(body.Data.Tenant, qt.IsNil)
+}
+
 func TestAdminGetGroup_404OnMissingID(t *testing.T) {
 	c := qt.New(t)
 	params, user, _ := adminGroupFixture(c)

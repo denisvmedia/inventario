@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -120,12 +121,21 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 // pointer. Unwired (NewLocationGroupRegistry without
 // SetAdminListingRegistries) or an empty tenantID returns (nil, nil) by
 // design, mirroring the "empty join result" shape.
+//
+// A missing tenant row (group orphaned / tenant corrupt) also returns
+// (nil, nil) — this mirrors the postgres LEFT JOIN, which keeps the
+// orphaned group visible on the cross-tenant admin surface with a nil
+// Tenant rather than dropping it. ErrNotFound here is swallowed, not
+// propagated, so ListAdmin / GetAdmin still surface the group.
 func (r *LocationGroupRegistry) resolveTenant(ctx context.Context, tenantID string) (*models.Tenant, error) {
 	if r.tenantRegistry == nil || tenantID == "" {
 		return nil, nil
 	}
 	tenant, err := r.tenantRegistry.Get(ctx, tenantID)
 	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	t := *tenant
