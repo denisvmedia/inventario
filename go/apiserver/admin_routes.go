@@ -72,6 +72,14 @@ type AdminParams struct {
 // CSRF) and the RequireSystemAdmin gate. Later admin issues hang their
 // endpoints off the same chi.Router this closure receives.
 func Admin(params AdminParams) func(r chi.Router) {
+	// Fail fast on a misconfigured wiring: the #1749 group-membership
+	// endpoints dereference GroupService on every request, so a nil
+	// here would otherwise surface as a confusing per-request panic
+	// rather than a clear startup failure.
+	if params.GroupService == nil {
+		panic("apiserver.Admin requires non-nil AdminParams.GroupService")
+	}
+
 	tenantsAPI := &adminTenantsAPI{
 		factorySet:   params.FactorySet,
 		auditService: params.AuditService,

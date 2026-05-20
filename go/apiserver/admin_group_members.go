@@ -61,9 +61,9 @@ const (
 // step.
 type AdminAddMemberRequest struct {
 	// UserID is the ID of the user being added to the group.
-	UserID string `json:"userID"`
+	UserID string `json:"userID" validate:"required"`
 	// Role is the group role granted to the user: viewer|user|admin|owner.
-	Role models.GroupRole `json:"role"`
+	Role models.GroupRole `json:"role" validate:"required"`
 }
 
 // AdminUpdateMemberRoleRequest is the request body for
@@ -72,7 +72,7 @@ type AdminAddMemberRequest struct {
 // remove + add, not a patch.
 type AdminUpdateMemberRoleRequest struct {
 	// Role is the new group role: viewer|user|admin|owner.
-	Role models.GroupRole `json:"role"`
+	Role models.GroupRole `json:"role" validate:"required"`
 }
 
 // AdminMemberView is the JSON:API-style attributes block returned by
@@ -80,11 +80,11 @@ type AdminUpdateMemberRoleRequest struct {
 // identity (group, user, role) plus the synthetic joined_at. Richer
 // member detail (avatar / email) lives on the per-group members surface.
 type AdminMemberView struct {
-	GroupID      string `json:"group_id"`
-	MemberUserID string `json:"member_user_id"`
-	Role         string `json:"role"`
-	TenantID     string `json:"tenant_id"`
-	JoinedAt     string `json:"joined_at"`
+	GroupID      string           `json:"group_id"`
+	MemberUserID string           `json:"member_user_id"`
+	Role         models.GroupRole `json:"role"`
+	TenantID     string           `json:"tenant_id"`
+	JoinedAt     string           `json:"joined_at"`
 }
 
 // AdminMemberEnvelope is the JSON:API envelope returned by add /
@@ -356,7 +356,7 @@ func (api *adminGroupMembersAPI) writeMemberEnvelope(w http.ResponseWriter, stat
 			Attributes: AdminMemberView{
 				GroupID:      m.GroupID,
 				MemberUserID: m.MemberUserID,
-				Role:         string(m.Role),
+				Role:         m.Role,
 				TenantID:     m.TenantID,
 				JoinedAt:     m.JoinedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 			},

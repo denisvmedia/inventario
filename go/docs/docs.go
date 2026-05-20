@@ -6904,6 +6904,10 @@ const docTemplate = `{
     "definitions": {
         "apiserver.AdminAddMemberRequest": {
             "type": "object",
+            "required": [
+                "role",
+                "userID"
+            ],
             "properties": {
                 "role": {
                     "description": "Role is the group role granted to the user: viewer|user|admin|owner.",
@@ -6971,7 +6975,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "role": {
-                    "type": "string"
+                    "$ref": "#/definitions/models.GroupRole"
                 },
                 "tenant_id": {
                     "type": "string"
@@ -7004,6 +7008,9 @@ const docTemplate = `{
         },
         "apiserver.AdminUpdateMemberRoleRequest": {
             "type": "object",
+            "required": [
+                "role"
+            ],
             "properties": {
                 "role": {
                     "description": "Role is the new group role: viewer|user|admin|owner.",

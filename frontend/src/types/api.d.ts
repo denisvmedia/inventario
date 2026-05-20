@@ -7676,9 +7676,9 @@ export type components = {
     schemas: {
         "apiserver.AdminAddMemberRequest": {
             /** @description Role is the group role granted to the user: viewer|user|admin|owner. */
-            role?: components["schemas"]["models.GroupRole"];
+            role: components["schemas"]["models.GroupRole"];
             /** @description UserID is the ID of the user being added to the group. */
-            userID?: string;
+            userID: string;
         };
         "apiserver.AdminBlockRequest": {
             /**
@@ -7701,7 +7701,7 @@ export type components = {
             group_id?: string;
             joined_at?: string;
             member_user_id?: string;
-            role?: string;
+            role?: components["schemas"]["models.GroupRole"];
             tenant_id?: string;
         };
         "apiserver.AdminPingResponse": {
@@ -7714,7 +7714,7 @@ export type components = {
         };
         "apiserver.AdminUpdateMemberRoleRequest": {
             /** @description Role is the new group role: viewer|user|admin|owner. */
-            role?: components["schemas"]["models.GroupRole"];
+            role: components["schemas"]["models.GroupRole"];
         };
         "apiserver.AdminUserEnvelope": {
             data?: components["schemas"]["apiserver.AdminUserResource"];

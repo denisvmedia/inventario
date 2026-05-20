@@ -9,6 +9,9 @@ definitions:
       userID:
         description: UserID is the ID of the user being added to the group.
         type: string
+    required:
+    - role
+    - userID
     type: object
   apiserver.AdminBlockRequest:
     properties:
@@ -48,7 +51,7 @@ definitions:
       member_user_id:
         type: string
       role:
-        type: string
+        $ref: '#/definitions/models.GroupRole'
       tenant_id:
         type: string
     type: object
@@ -75,6 +78,8 @@ definitions:
         allOf:
         - $ref: '#/definitions/models.GroupRole'
         description: 'Role is the new group role: viewer|user|admin|owner.'
+    required:
+    - role
     type: object
   apiserver.AdminUserEnvelope:
     properties:
