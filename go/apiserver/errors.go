@@ -36,6 +36,26 @@ var (
 	// authorized for admin"; using the auth sentinel makes the 401 path
 	// readable in logs and avoids misleading clients with admin copy.
 	ErrMissingUserContext = errx.NewSentinel("authenticated user context required")
+
+	// ErrAdminCannotBlockSelf rejects POST /admin/users/{id}/block when
+	// the caller would deactivate their own account. Without this guard
+	// an operator can lock themselves out of every admin surface in a
+	// single request — the recovery path is hand-flipping is_active in
+	// the database, which is exactly the kind of lockout #1745 was
+	// designed to prevent (mirrors the "last system admin" invariant on
+	// revoke). 422 + JSON:API code "admin.block.self_blocked" lets the
+	// FE render specific copy and lets e2e assertions branch on the
+	// code rather than a generic 422.
+	ErrAdminCannotBlockSelf = errx.NewSentinel("system administrators cannot block their own account")
+	// ErrAdminCannotBlockAdminWithoutForce rejects blocking another
+	// system admin when the request body's `force` flag is absent or
+	// false. Symmetric with the "cannot impersonate another system
+	// admin without force" rule that lands with the impersonation
+	// primitive (#1750): blocking a peer admin is a sensitive action
+	// that demands an explicit override so a typo on a username can't
+	// quietly disable a fellow operator. 422 + JSON:API code
+	// "admin.block.admin_requires_force" makes the FE branch trivial.
+	ErrAdminCannotBlockAdminWithoutForce = errx.NewSentinel("blocking another system administrator requires force=true")
 )
 
 func NewNotFoundError(err error) jsonapi.Error {
@@ -132,6 +152,24 @@ func unprocessableEntityError(w http.ResponseWriter, r *http.Request, err error)
 	return render.Render(w, r, jsonapi.NewErrors(NewUnprocessableEntityError(err)))
 }
 
+// adminBlockGuardError maps the two #1747 admin-block guard sentinels
+// (self-block, admin-on-admin without force) to their 422 + code wire
+// shape. Extracted so the toJSONAPIError switch stays under the
+// gocyclo budget while keeping the mapping explicit and grep-friendly.
+func adminBlockGuardError(err error) jsonapi.Error {
+	code := AdminBlockSelfBlockedCode
+	if errors.Is(err, ErrAdminCannotBlockAdminWithoutForce) {
+		code = AdminBlockAdminRequiresForceCode
+	}
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusUnprocessableEntity,
+		StatusText:     "Unprocessable Entity",
+		Code:           code,
+	}
+}
+
 func toJSONAPIError(err error) jsonapi.Error {
 	switch {
 	case errors.Is(err, registry.ErrCannotDelete):
@@ -221,6 +259,13 @@ func toJSONAPIError(err error) jsonapi.Error {
 			StatusText:     "Forbidden",
 			Code:           adminForbiddenCode,
 		}
+	case errors.Is(err, ErrAdminCannotBlockSelf),
+		errors.Is(err, ErrAdminCannotBlockAdminWithoutForce):
+		// Admin block-guard rejections (#1747). Self-lockout and
+		// admin-on-admin without `force: true` both surface as 422 with
+		// a sentinel-specific JSON:API code so the FE can render
+		// targeted copy instead of a generic 422 toast.
+		return adminBlockGuardError(err)
 	default:
 		slog.Error("internal server error", "error", err)
 		return NewInternalServerError(err)

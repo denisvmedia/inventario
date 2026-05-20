@@ -358,6 +358,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// system admins are not scoped to a tenant.
 		r.With(userMiddlewares...).Route("/admin", Admin(AdminParams{
 			FactorySet:   params.FactorySet,
+			Blacklist:    blacklist,
 			AuditService: auditSvc,
 		}))
 		// The former /api/v1/users admin CRUD was removed together with the
