@@ -570,7 +570,10 @@ export type paths = {
         put?: never;
         /**
          * End an impersonation session (admin)
-         * @description Ends the active impersonation session: blacklists the impersonation access token and restores the operator's own session. Must be called with the impersonation access token (the token carrying `imp=true`).
+         * @description Ends the active impersonation session: blacklists the impersonation access token, restores the operator's
+         *     own refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation
+         *     access token (the token carrying `imp=true`). The token's signature is always verified; an expired
+         *     impersonation token is still accepted here so an operator can end an idle session without re-logging in.
          *     Returns 422 with `admin.impersonate.not_active` when the caller is not inside an impersonation session.
          */
         post: {
@@ -1021,7 +1024,9 @@ export type paths = {
          * Start an impersonation session (admin)
          * @description Issues a short-lived impersonation access token for the target user and sets it as the active session.
          *     The token carries `imp=true`, `impersonated_by=<adminID>`, and `is_system_admin=false`; it cannot be
-         *     refreshed and cannot start a nested impersonation.
+         *     refreshed and cannot start a nested impersonation. The admin's own refresh-token cookie is replaced
+         *     with a non-refreshable impersonation marker for the duration of the session; POST /admin/impersonation/end
+         *     restores the operator's original refresh cookie.
          *     Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
          *     `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
          *     when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the

@@ -267,7 +267,52 @@ func adminImpersonationGuardError(err error) jsonapi.Error {
 	}
 }
 
+// adminSentinelJSONAPIError maps the admin-only guard sentinels
+// (RequireSystemAdmin, the #1747 block guards, the #1750 impersonation
+// guards) to their JSON:API wire shape. Extracted as a single
+// early-return helper called before the toJSONAPIError switch so the
+// switch stays under the gocyclo budget; ok=false when err is not an
+// admin sentinel, leaving the switch to handle it.
+func adminSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
+	switch {
+	case errors.Is(err, ErrNotSystemAdmin):
+		// Reached via renderEntityError if a handler returns the sentinel
+		// instead of relying on RequireSystemAdmin (the middleware writes
+		// its own response). 403 + admin.forbidden code keeps the wire
+		// shape identical so the FE doesn't need a second branch.
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusForbidden,
+			StatusText:     "Forbidden",
+			Code:           adminForbiddenCode,
+		}, true
+	case errors.Is(err, ErrAdminCannotBlockSelf),
+		errors.Is(err, ErrAdminCannotBlockAdminWithoutForce):
+		// Admin block-guard rejections (#1747). Self-lockout and
+		// admin-on-admin without `force: true` both surface as 422 with
+		// a sentinel-specific JSON:API code so the FE can render
+		// targeted copy instead of a generic 422 toast.
+		return adminBlockGuardError(err), true
+	case errors.Is(err, ErrCannotImpersonateAdmin),
+		errors.Is(err, ErrTargetBlocked),
+		errors.Is(err, ErrNestedImpersonation),
+		errors.Is(err, ErrNotImpersonating):
+		// Impersonation guard rejections (#1750). Target-is-admin,
+		// target-blocked, nested-impersonation and not-active all surface
+		// as 422 with a sentinel-specific JSON:API code so the FE can
+		// render targeted copy. Extracted into a helper so the switch
+		// stays under the gocyclo budget.
+		return adminImpersonationGuardError(err), true
+	default:
+		return jsonapi.Error{}, false
+	}
+}
+
 func toJSONAPIError(err error) jsonapi.Error {
+	if jsErr, ok := adminSentinelJSONAPIError(err); ok {
+		return jsErr
+	}
 	switch {
 	case errors.Is(err, registry.ErrCannotDelete):
 		return NewUnprocessableEntityError(err)
@@ -349,35 +394,6 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewBadRequestError(err)
 	case errors.Is(err, ErrInvalidUploadSlot):
 		return NewBadRequestError(err)
-	case errors.Is(err, ErrNotSystemAdmin):
-		// Reached via renderEntityError if a handler returns the sentinel
-		// instead of relying on RequireSystemAdmin (the middleware writes
-		// its own response). 403 + admin.forbidden code keeps the wire
-		// shape identical so the FE doesn't need a second branch.
-		return jsonapi.Error{
-			Err:            err,
-			UserError:      errormarshal.Marshal(err),
-			HTTPStatusCode: http.StatusForbidden,
-			StatusText:     "Forbidden",
-			Code:           adminForbiddenCode,
-		}
-	case errors.Is(err, ErrAdminCannotBlockSelf),
-		errors.Is(err, ErrAdminCannotBlockAdminWithoutForce):
-		// Admin block-guard rejections (#1747). Self-lockout and
-		// admin-on-admin without `force: true` both surface as 422 with
-		// a sentinel-specific JSON:API code so the FE can render
-		// targeted copy instead of a generic 422 toast.
-		return adminBlockGuardError(err)
-	case errors.Is(err, ErrCannotImpersonateAdmin),
-		errors.Is(err, ErrTargetBlocked),
-		errors.Is(err, ErrNestedImpersonation),
-		errors.Is(err, ErrNotImpersonating):
-		// Impersonation guard rejections (#1750). Target-is-admin,
-		// target-blocked, nested-impersonation and not-active all surface
-		// as 422 with a sentinel-specific JSON:API code so the FE can
-		// render targeted copy. Extracted into a helper so the switch
-		// stays under the gocyclo budget.
-		return adminImpersonationGuardError(err)
 	default:
 		slog.Error("internal server error", "error", err)
 		return NewInternalServerError(err)

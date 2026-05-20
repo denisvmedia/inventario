@@ -97,6 +97,19 @@ type AdminParams struct {
 	// (#1750). Zero falls back to the 30-min default; values above the
 	// 30-min ceiling are clamped down inside the handler.
 	ImpersonationTTL time.Duration
+
+	// UserMiddlewares is the standard authenticated-route middleware chain
+	// (JWT + RLS + RegistrySet + CSRF). Admin() applies it to every admin
+	// route EXCEPT POST /admin/impersonation/end. That one endpoint is
+	// mounted bare so it stays reachable after the impersonation access
+	// token has expired — JWTMiddleware would otherwise 401 an expired
+	// token before endImpersonation runs, stranding the operator and
+	// orphaning the return slot. endImpersonation self-validates the imp
+	// token (signature + imp=true), tolerating only an expired `exp`, and
+	// the server-side slot is the real authorization. When nil (tests that
+	// build the admin router in isolation), Admin() applies no middleware
+	// — callers must wrap the result themselves.
+	UserMiddlewares []func(http.Handler) http.Handler
 }
 
 // Admin returns the router configurator for /api/v1/admin/*. Mounted
@@ -140,67 +153,107 @@ func Admin(params AdminParams) func(r chi.Router) {
 		ttl:          params.ImpersonationTTL,
 	}
 	return func(r chi.Router) {
-		// The bulk of the admin surface is gated by the strict
-		// RequireSystemAdmin middleware in a nested group so every
-		// handler inside it can assume the caller is a genuine system
-		// admin. The two impersonation-lifecycle routes (end / current)
-		// are registered OUTSIDE this group with the wider
-		// RequireSystemAdminOrImpersonating gate — see below for why.
+		// POST /admin/impersonation/end is mounted FIRST and OUTSIDE the
+		// authenticated-middleware group on purpose. JWTMiddleware (part of
+		// UserMiddlewares) rejects an expired access token with 401 before
+		// any handler runs — which would make `end` unreachable the moment
+		// the (≤30-min) impersonation token lapses, stranding the operator
+		// on a re-login and orphaning the return slot until it is
+		// TTL-pruned. endImpersonation therefore self-validates the imp
+		// token straight off the Authorization header: it verifies the
+		// signature and the `imp=true` claim and tolerates ONLY an expired
+		// `exp`. The jti-keyed server-side slot plus the
+		// `slot.AdminUserID == impersonated_by` assertion are the real
+		// authorization — a forged/garbage token fails signature
+		// verification, and an expired NON-impersonation token fails the
+		// imp check, so neither is newly admitted. See endImpersonation.
+		r.Post("/impersonation/end", impersonationAPI.endImpersonation)
+
+		// Everything else lives behind the standard authenticated
+		// middleware chain (JWT + RLS + RegistrySet + CSRF). UserMiddlewares
+		// may be nil in isolated unit tests, in which case no middleware is
+		// applied and the caller is responsible for wrapping.
 		r.Group(func(r chi.Router) {
-			r.Use(RequireSystemAdmin)
-			r.Get("/_ping", adminPing)
-
-			// #1746: tenants + users listing endpoints. Each handler
-			// audit-logs via params.AuditService and bypasses RLS at the
-			// registry layer (correlated COUNT subqueries on RLS-enabled
-			// tables run with `SET LOCAL row_security = off` for
-			// defense-in-depth).
-			r.Get("/tenants", tenantsAPI.listTenants)
-			r.Get("/tenants/{tenantID}", tenantsAPI.getTenant)
-			r.Get("/tenants/{tenantID}/users", usersAPI.listTenantUsers)
-			r.Get("/users/{userID}", usersAPI.getUser)
-
-			// #1747: user block/unblock endpoints. Each transition cascades
-			// IsActive=false → refresh-token revoke → blacklist bump and
-			// audit-logs reason+forced via the breadcrumb in user_agent.
-			r.Post("/users/{userID}/block", usersAPI.blockUser)
-			r.Post("/users/{userID}/unblock", usersAPI.unblockUser)
-
-			// #1748: cross-tenant groups admin. List + detail bypass RLS at
-			// the registry layer (SET LOCAL row_security = off); DELETE flips
-			// status to pending_deletion (idempotent) and the existing
-			// group_purge_worker finishes the hard-delete. Each handler
-			// audit-logs via params.AuditService.
-			r.Get("/groups", groupsAPI.listGroups)
-			r.Get("/groups/{groupID}", groupsAPI.getGroup)
-			r.Delete("/groups/{groupID}", groupsAPI.deleteGroup)
-
-			// #1749: group-membership admin endpoints. add / remove /
-			// role-change route through GroupService so the per-group
-			// invariants (cap, ≥1 owner, ≥1 member) stay single-sourced,
-			// bypassing only the per-group requireGroupAdmin middleware —
-			// the RequireSystemAdmin gate above is authorization enough.
-			r.Post("/groups/{groupID}/members", groupMembersAPI.addMember)
-			r.Delete("/groups/{groupID}/members/{userID}", groupMembersAPI.removeMember)
-			r.Patch("/groups/{groupID}/members/{userID}", groupMembersAPI.updateMemberRole)
-
-			// #1750: starting an impersonation session is a privileged
-			// operation — it stays behind the strict gate. The
-			// nested-impersonation guard in the handler rejects a request
-			// already inside an impersonation session.
-			r.Post("/users/{userID}/impersonate", impersonationAPI.startImpersonation)
+			for _, mw := range params.UserMiddlewares {
+				r.Use(mw)
+			}
+			adminAuthenticatedRoutes(r, tenantsAPI, usersAPI, groupsAPI, groupMembersAPI, impersonationAPI)
 		})
-
-		// #1750: the impersonation-lifecycle routes. `end` and `current`
-		// must be reachable from INSIDE an impersonation session, whose
-		// access token deliberately carries is_system_admin=false — the
-		// strict RequireSystemAdmin gate would reject it. The wider
-		// RequireSystemAdminOrImpersonating gate admits both a genuine
-		// admin and an active impersonation token; the handlers
-		// themselves re-validate the impersonation claim.
-		r.With(RequireSystemAdminOrImpersonating).Post("/impersonation/end", impersonationAPI.endImpersonation)
-		r.With(RequireSystemAdminOrImpersonating).Get("/impersonation/current", impersonationAPI.currentImpersonation)
 	}
+}
+
+// adminAuthenticatedRoutes registers every /api/v1/admin/* route that runs
+// behind the authenticated middleware chain (everything except POST
+// /admin/impersonation/end, which is mounted bare by Admin()). Extracted
+// from Admin() so that closure stays under the funlen budget.
+func adminAuthenticatedRoutes(
+	r chi.Router,
+	tenantsAPI *adminTenantsAPI,
+	usersAPI *adminUsersAPI,
+	groupsAPI *adminGroupsAPI,
+	groupMembersAPI *adminGroupMembersAPI,
+	impersonationAPI *adminImpersonationAPI,
+) {
+	// The bulk of the admin surface is gated by the strict
+	// RequireSystemAdmin middleware in a nested group so every handler
+	// inside it can assume the caller is a genuine system admin. GET
+	// /admin/impersonation/current is registered OUTSIDE this group with
+	// the wider RequireSystemAdminOrImpersonating gate — see below for why.
+	r.Group(func(r chi.Router) {
+		r.Use(RequireSystemAdmin)
+		r.Get("/_ping", adminPing)
+
+		// #1746: tenants + users listing endpoints. Each handler
+		// audit-logs via params.AuditService and bypasses RLS at the
+		// registry layer (correlated COUNT subqueries on RLS-enabled
+		// tables run with `SET LOCAL row_security = off` for
+		// defense-in-depth).
+		r.Get("/tenants", tenantsAPI.listTenants)
+		r.Get("/tenants/{tenantID}", tenantsAPI.getTenant)
+		r.Get("/tenants/{tenantID}/users", usersAPI.listTenantUsers)
+		r.Get("/users/{userID}", usersAPI.getUser)
+
+		// #1747: user block/unblock endpoints. Each transition cascades
+		// IsActive=false → refresh-token revoke → blacklist bump and
+		// audit-logs reason+forced via the breadcrumb in user_agent.
+		r.Post("/users/{userID}/block", usersAPI.blockUser)
+		r.Post("/users/{userID}/unblock", usersAPI.unblockUser)
+
+		// #1748: cross-tenant groups admin. List + detail bypass RLS at
+		// the registry layer (SET LOCAL row_security = off); DELETE flips
+		// status to pending_deletion (idempotent) and the existing
+		// group_purge_worker finishes the hard-delete. Each handler
+		// audit-logs via params.AuditService.
+		r.Get("/groups", groupsAPI.listGroups)
+		r.Get("/groups/{groupID}", groupsAPI.getGroup)
+		r.Delete("/groups/{groupID}", groupsAPI.deleteGroup)
+
+		// #1749: group-membership admin endpoints. add / remove /
+		// role-change route through GroupService so the per-group
+		// invariants (cap, ≥1 owner, ≥1 member) stay single-sourced,
+		// bypassing only the per-group requireGroupAdmin middleware —
+		// the RequireSystemAdmin gate above is authorization enough.
+		r.Post("/groups/{groupID}/members", groupMembersAPI.addMember)
+		r.Delete("/groups/{groupID}/members/{userID}", groupMembersAPI.removeMember)
+		r.Patch("/groups/{groupID}/members/{userID}", groupMembersAPI.updateMemberRole)
+
+		// #1750: starting an impersonation session is a privileged
+		// operation — it stays behind the strict gate. The
+		// nested-impersonation guard in the handler rejects a request
+		// already inside an impersonation session.
+		r.Post("/users/{userID}/impersonate", impersonationAPI.startImpersonation)
+	})
+
+	// #1750: GET /admin/impersonation/current must be reachable from
+	// INSIDE an impersonation session, whose access token deliberately
+	// carries is_system_admin=false — the strict RequireSystemAdmin gate
+	// would reject it. The wider RequireSystemAdminOrImpersonating gate
+	// admits both a genuine admin and an active (non-expired) impersonation
+	// token; the handler re-validates the impersonation claim. Unlike
+	// `end`, `current` is a harmless read and is fine to keep behind
+	// JWTMiddleware — an expired token simply means the FE banner reads
+	// inactive, which is the correct answer.
+	r.With(RequireSystemAdminOrImpersonating).Get("/impersonation/current", impersonationAPI.currentImpersonation)
 }
 
 // parseAdminSortAndOrder reconciles the dual sort conventions the

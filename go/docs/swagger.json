@@ -461,7 +461,7 @@
         },
         "/admin/impersonation/end": {
             "post": {
-                "description": "Ends the active impersonation session: blacklists the impersonation access token and restores the operator's own session. Must be called with the impersonation access token (the token carrying `imp=true`).\nReturns 422 with `admin.impersonate.not_active` when the caller is not inside an impersonation session.",
+                "description": "Ends the active impersonation session: blacklists the impersonation access token, restores the operator's\nown refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation\naccess token (the token carrying `imp=true`). The token's signature is always verified; an expired\nimpersonation token is still accepted here so an operator can end an idle session without re-logging in.\nReturns 422 with `admin.impersonate.not_active` when the caller is not inside an impersonation session.",
                 "produces": [
                     "application/json"
                 ],
@@ -811,7 +811,7 @@
         },
         "/admin/users/{userID}/impersonate": {
             "post": {
-                "description": "Issues a short-lived impersonation access token for the target user and sets it as the active session.\nThe token carries `imp=true`, `impersonated_by=\u003cadminID\u003e`, and `is_system_admin=false`; it cannot be\nrefreshed and cannot start a nested impersonation.\nReturns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,\n`admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`\nwhen the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the\nper-admin start rate limit (10/hour) is exceeded.",
+                "description": "Issues a short-lived impersonation access token for the target user and sets it as the active session.\nThe token carries `imp=true`, `impersonated_by=\u003cadminID\u003e`, and `is_system_admin=false`; it cannot be\nrefreshed and cannot start a nested impersonation. The admin's own refresh-token cookie is replaced\nwith a non-refreshable impersonation marker for the duration of the session; POST /admin/impersonation/end\nrestores the operator's original refresh cookie.\nReturns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,\n`admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`\nwhen the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the\nper-admin start rate limit (10/hour) is exceeded.",
                 "consumes": [
                     "application/json"
                 ],

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -125,7 +126,9 @@ func clampImpersonationTTL(ttl time.Duration) time.Duration {
 // @Summary Start an impersonation session (admin)
 // @Description Issues a short-lived impersonation access token for the target user and sets it as the active session.
 // @Description The token carries `imp=true`, `impersonated_by=<adminID>`, and `is_system_admin=false`; it cannot be
-// @Description refreshed and cannot start a nested impersonation.
+// @Description refreshed and cannot start a nested impersonation. The admin's own refresh-token cookie is replaced
+// @Description with a non-refreshable impersonation marker for the duration of the session; POST /admin/impersonation/end
+// @Description restores the operator's original refresh cookie.
 // @Description Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
 // @Description `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
 // @Description when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the
@@ -235,19 +238,97 @@ func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http
 	api.auditStart(r, admin.ID, reason, target.ID, target.TenantID, true, "")
 	slog.Info("Impersonation session started", "admin_id", admin.ID, "target_id", target.ID, "jti", jti)
 
+	// Replace the FULL active session, not just the access token. The
+	// admin's own refresh cookie must NOT survive into the impersonation
+	// session: if it did, the FE refresh interceptor — which posts to
+	// /auth/refresh with the cookie but no Authorization header — would
+	// silently mint a fresh *admin* access token the moment the
+	// (short-lived) impersonation token 401s, ending the session outside
+	// /admin/impersonation/end and orphaning this return slot.
+	//
+	// So overwrite the refresh cookie with the impersonation marker
+	// (impersonationRefreshCookieMarker + jti). /auth/refresh detects the
+	// marker and rejects the refresh on the cookie path. The admin's
+	// genuine refresh token is preserved server-side in slot.AdminRefreshTokenRaw
+	// and restored on `end`. The marker cookie's max-age matches the
+	// impersonation TTL.
+	//
+	// An operator who lets the impersonation access token expire (idle)
+	// is NOT stranded: POST /admin/impersonation/end self-validates the
+	// expired token and still restores the admin from the return slot
+	// (the slot outlives the access token up to the same TTL). The
+	// genuine admin refresh token also stays recoverable until then —
+	// either via that `end` call or, if the operator logs out instead,
+	// via the marker-aware logout path. Only an operator who neither ends
+	// nor logs out before the TTL elapses falls back to a fresh login,
+	// at which point the slot has been TTL-pruned anyway.
+	writeRefreshCookie(w, r, impersonationRefreshCookieMarker+jti, int(ttl.Seconds()))
+
 	// The impersonation token is set as the active session via the body
-	// (same LoginResponse shape the FE already handles). The httpOnly
-	// refresh cookie is intentionally left untouched: impersonation
-	// sessions are non-refreshable, and the cookie still belongs to the
-	// admin's own session — `end` consumes it to restore the operator.
+	// (same LoginResponse shape the FE already handles).
 	writeImpersonationLoginResponse(w, tokenString, ttl, target)
+}
+
+// parseImpersonationEndToken extracts and verifies the impersonation
+// access token from the request's Authorization header for the `end`
+// endpoint. It is the self-validation step that lets `end` run WITHOUT
+// JWTMiddleware (see Admin() for why the route is mounted bare):
+//
+//   - The HS256 signature is ALWAYS verified against the same jwtSecret
+//     the rest of the apiserver uses — a forged or garbage token is
+//     rejected here exactly as JWTMiddleware would reject it.
+//   - ONLY an expired `exp` is tolerated (jwt.ErrTokenExpired). Every
+//     other validation error — bad signature, wrong algorithm, malformed
+//     token — still fails. This is the single, deliberate relaxation:
+//     it lets an operator end a session whose impersonation token lapsed
+//     while idle instead of being forced into a full re-login.
+//   - The token MUST be an impersonation token (`imp=true` +
+//     non-empty `impersonated_by`). An expired NON-impersonation token is
+//     therefore NOT admitted — claimsAreImpersonation returns false for it.
+//
+// The authoritative authorization still happens in endImpersonation: the
+// jti-keyed server-side return slot must exist AND its AdminUserID must
+// equal the token's `impersonated_by`. The token here only identifies
+// WHICH slot; the slot is the proof. Returns (claims, true) on success,
+// (nil, false) when the header is absent/malformed, the signature is
+// invalid, or the token is not an impersonation token.
+func (api *adminImpersonationAPI) parseImpersonationEndToken(authHeader string) (jwt.MapClaims, bool) {
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader || tokenString == "" {
+		return nil, false
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return api.jwtSecret, nil
+	})
+	if token == nil {
+		return nil, false
+	}
+	// Tolerate ONLY expiry — every other error (bad signature, wrong alg,
+	// malformed) means the token cannot be trusted and `end` must reject it.
+	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
+		return nil, false
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, false
+	}
+	if !claimsAreImpersonation(claims) {
+		return nil, false
+	}
+	return claims, true
 }
 
 // endImpersonation revokes the impersonation access token and restores
 // the admin's original session.
 //
 // @Summary End an impersonation session (admin)
-// @Description Ends the active impersonation session: blacklists the impersonation access token and restores the operator's own session. Must be called with the impersonation access token (the token carrying `imp=true`).
+// @Description Ends the active impersonation session: blacklists the impersonation access token, restores the operator's
+// @Description own refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation
+// @Description access token (the token carrying `imp=true`). The token's signature is always verified; an expired
+// @Description impersonation token is still accepted here so an operator can end an idle session without re-logging in.
 // @Description Returns 422 with `admin.impersonate.not_active` when the caller is not inside an impersonation session.
 // @Tags admin
 // @Produce json
@@ -257,11 +338,23 @@ func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - no active impersonation session"
 // @Router /admin/impersonation/end [post]
 func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *http.Request) {
-	claims := appctx.JWTClaimsFromContext(r.Context())
-	if !claimsAreImpersonation(claims) {
+	// `end` is mounted WITHOUT JWTMiddleware (see Admin()), so the token is
+	// validated here: the signature is verified and `imp=true` is required;
+	// only an expired `exp` is tolerated. A non-impersonation token — even
+	// a valid admin one — yields ErrNotImpersonating (422), so this bare
+	// route never becomes a back door for plain admin sessions.
+	claims, ok := api.parseImpersonationEndToken(r.Header.Get("Authorization"))
+	if !ok {
 		_ = renderEntityError(w, r, ErrNotImpersonating)
 		return
 	}
+
+	// `end` runs without JWTMiddleware, so the validated claims are not in
+	// context. Plant them so auditEnd's LogAdmin can auto-fill the audit
+	// row's ImpersonatedBy column from `imp`/`impersonated_by` exactly as
+	// it does on every JWTMiddleware-backed route — the audit semantics
+	// stay single-sourced rather than forking a special end-only path.
+	r = r.WithContext(appctx.WithJWTClaims(r.Context(), claims))
 
 	jti, _ := claims["jti"].(string)
 	adminID, _ := claims["impersonated_by"].(string)
@@ -375,8 +468,10 @@ func (api *adminImpersonationAPI) currentImpersonation(w http.ResponseWriter, r 
 // restoreAdminSession re-issues the operator's own session after an
 // impersonation session ends: it mints a fresh admin access token bound
 // to the admin's existing refresh-token row (when the return slot
-// captured one) and writes the LoginResponse. Extracted from
-// endImpersonation to stay under the funlen budget.
+// captured one) and restores the admin's original refresh cookie, which
+// the impersonation-start handler had overwritten with the impersonation
+// marker. Extracted from endImpersonation to stay under the funlen
+// budget.
 func (api *adminImpersonationAPI) restoreAdminSession(w http.ResponseWriter, r *http.Request, admin *models.User, slot services.ImpersonationSlot) {
 	// No IsActive re-check on the admin here on purpose: JWTMiddleware's
 	// validateUser rejects a blocked (!IsActive) user on the very next
@@ -395,10 +490,26 @@ func (api *adminImpersonationAPI) restoreAdminSession(w http.ResponseWriter, r *
 		return
 	}
 
-	// The admin's refresh cookie was never touched by the impersonation
-	// start, so it is still valid and still in the browser — no Set-Cookie
-	// needed here. The FE swaps the in-memory access token back to the
-	// admin's and the operator is whole again.
+	// Restore the admin's full session. The impersonation-start handler
+	// overwrote the refresh cookie with the impersonation marker, so it
+	// must be put back here or the admin would be left unable to refresh.
+	//
+	//  - The admin had a refresh token at start-time: re-plant it (still
+	//    valid in the DB — impersonation never revoked it) so the operator
+	//    can transparently refresh again afterwards.
+	//  - The admin had no refresh cookie (a pure-bearer client, e.g. a
+	//    test or API caller): there is nothing to restore, so delete the
+	//    marker cookie. The operator continues on the freshly-minted
+	//    access token until it expires, then logs in again — the same
+	//    behaviour a pure-bearer client had before impersonation.
+	if slot.AdminRefreshTokenRaw != "" {
+		writeRefreshCookie(w, r, slot.AdminRefreshTokenRaw, int(refreshTokenExpiration.Seconds()))
+	} else {
+		clearRefreshCookie(w, r)
+	}
+
+	// The FE swaps the in-memory access token back to the admin's and the
+	// operator is whole again.
 	writeImpersonationLoginResponse(w, tokenString, accessTokenExpiration, admin)
 }
 
@@ -620,11 +731,21 @@ func claimsAreImpersonation(claims jwt.MapClaims) bool {
 	return ok && by != ""
 }
 
-// refreshCookieValue returns the raw refresh-token cookie value, or ""
-// when the request carries no refresh cookie (e.g. a pure-bearer client).
+// refreshCookieValue returns the raw refresh-token cookie value to capture
+// into the impersonation return slot, or "" when there is nothing genuine
+// to capture — the request carries no refresh cookie (a pure-bearer
+// client), or the cookie already holds an impersonation marker rather
+// than a real token. The marker case should be unreachable (the
+// nested-impersonation guard and RequireSystemAdmin both block starting
+// an impersonation from inside one), but treating a marker as "no token"
+// is defence-in-depth: it stops a marker value from being mistaken for
+// the admin's real refresh token and re-planted on `end`.
 func refreshCookieValue(r *http.Request) string {
 	cookie, err := r.Cookie(refreshTokenCookieName)
 	if err != nil {
+		return ""
+	}
+	if strings.HasPrefix(cookie.Value, impersonationRefreshCookieMarker) {
 		return ""
 	}
 	return cookie.Value

@@ -233,7 +233,15 @@ func TestImpersonate_NestedGuardRejectsWhenTokenReachesHandler(t *testing.T) {
 	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.AdminImpersonateNestedCode)
 }
 
-func TestImpersonate_ExpiredTokenRejectedAtEnd(t *testing.T) {
+// TestImpersonate_ExpiredTokenWithNoSlotEndsAsNotActive: an expired imp
+// token whose return slot was never recorded (here, a forged token) still
+// reaches endImpersonation now that `end` is mounted without JWTMiddleware
+// (#1750 / PR #1771 FIX 2) — but with no slot to restore, the only correct
+// answer is 422 not_active. The expiry relaxation does NOT turn a
+// slot-less token into a successful end; the server-side slot is still the
+// real proof. See TestImpersonate_EndAcceptsExpiredTokenWithLiveSlot for
+// the expired-but-restorable case.
+func TestImpersonate_ExpiredTokenWithNoSlotEndsAsNotActive(t *testing.T) {
 	c := qt.New(t)
 	params, admin, _ := newParams()
 	promoteToSystemAdmin(c, params, admin)
@@ -253,8 +261,8 @@ func TestImpersonate_ExpiredTokenRejectedAtEnd(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	// An expired token is rejected by JWTMiddleware before the handler runs.
-	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.AdminImpersonateNotActiveCode)
 }
 
 func TestImpersonate_RefreshRejectsImpersonationToken(t *testing.T) {
@@ -419,6 +427,160 @@ func TestImpersonate_RateLimitEnforced(t *testing.T) {
 		qt.Commentf("expected the per-admin impersonation rate limit to trip within 12 attempts"))
 }
 
+// createAdminRefreshToken persists a genuine refresh-token row for the
+// given user and returns the raw cookie value. Used by the cookie-flow
+// tests to give the admin a real, refreshable session before
+// impersonation starts — so the test can prove the cookie is replaced on
+// start and restored on end.
+func createAdminRefreshToken(c *qt.C, params apiserver.Params, user *models.User) string {
+	c.Helper()
+	raw, hash, err := models.GenerateRefreshToken()
+	c.Assert(err, qt.IsNil)
+	_, err = params.FactorySet.RefreshTokenRegistry.Create(context.Background(), models.RefreshToken{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		TokenHash: hash,
+		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+		CreatedAt: time.Now(),
+	})
+	c.Assert(err, qt.IsNil)
+	return raw
+}
+
+// refreshCookieFromResponse extracts the value the response set the
+// refresh_token cookie to (the part after "refresh_token=" up to the
+// first ';'). Returns ("", false) when the response sets no refresh
+// cookie. Used to follow the cookie a handler emitted into a subsequent
+// request, the way a browser would.
+func refreshCookieFromResponse(rr *httptest.ResponseRecorder) (string, bool) {
+	for _, sc := range rr.Header().Values("Set-Cookie") {
+		if !strings.HasPrefix(sc, "refresh_token=") {
+			continue
+		}
+		value := strings.TrimPrefix(sc, "refresh_token=")
+		if i := strings.IndexByte(value, ';'); i >= 0 {
+			value = value[:i]
+		}
+		return value, true
+	}
+	return "", false
+}
+
+// TestImpersonate_StartReplacesRefreshCookie proves the start handler
+// overwrites the admin's own refresh cookie with the impersonation
+// marker. Leaving the admin's refresh token in the browser would let the
+// FE's cookie-based refresh interceptor silently mint a fresh admin
+// access token mid-impersonation (#1750 / PR #1771 review).
+func TestImpersonate_StartReplacesRefreshCookie(t *testing.T) {
+	c := qt.New(t)
+	params, admin, _ := newParams()
+	promoteToSystemAdmin(c, params, admin)
+	target := createTestUserDirect(c, params, admin.TenantID, "target@example.com", true, false)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	rr := doImpersonateStart(c, handler, admin.ID, target.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+
+	cookieValue, ok := refreshCookieFromResponse(rr)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("start must Set-Cookie the refresh_token"))
+	// The cookie must carry the non-refreshable impersonation marker, not
+	// a genuine refresh token.
+	c.Assert(strings.HasPrefix(cookieValue, "imp:"), qt.IsTrue,
+		qt.Commentf("refresh cookie should hold the impersonation marker, got %q", cookieValue))
+}
+
+// TestImpersonate_RefreshRejectedDuringSession_CookieOnly is the core
+// regression test for the PR #1771 review bug: a refresh attempt made
+// from inside an impersonation session — cookie-based, with NO
+// Authorization header (the realistic FE refresh path) — must be
+// rejected and must not mint an access token.
+func TestImpersonate_RefreshRejectedDuringSession_CookieOnly(t *testing.T) {
+	c := qt.New(t)
+	params, admin, _ := newParams()
+	promoteToSystemAdmin(c, params, admin)
+	target := createTestUserDirect(c, params, admin.TenantID, "target@example.com", true, false)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	// Start a genuine impersonation session and follow the marker cookie
+	// the handler planted, exactly as a browser would.
+	startRR := doImpersonateStart(c, handler, admin.ID, target.ID, nil)
+	c.Assert(startRR.Code, qt.Equals, http.StatusOK)
+	markerCookie, ok := refreshCookieFromResponse(startRR)
+	c.Assert(ok, qt.IsTrue)
+
+	// Refresh with ONLY the cookie — no Authorization header, the way the
+	// FE refresh interceptor posts to /auth/refresh.
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
+	// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: markerCookie})
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
+	// No access token may be minted — the response body must not be a
+	// LoginResponse carrying one.
+	var resp apiserver.LoginResponse
+	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
+	c.Assert(resp.AccessToken, qt.Equals, "")
+}
+
+// TestImpersonate_EndRestoresRefreshCookie proves the end handler puts
+// the admin's original refresh cookie back, and that the restored
+// session is genuinely refreshable afterwards — i.e. the operator is
+// whole again, including the cookie-based refresh flow.
+func TestImpersonate_EndRestoresRefreshCookie(t *testing.T) {
+	c := qt.New(t)
+	params, admin, _ := newParams()
+	promoteToSystemAdmin(c, params, admin)
+	target := createTestUserDirect(c, params, admin.TenantID, "target@example.com", true, false)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	// Give the admin a real, refreshable session before impersonating.
+	adminRefreshRaw := createAdminRefreshToken(c, params, admin)
+
+	// Start: send the admin's refresh cookie so the return slot captures it.
+	startReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+target.ID+"/impersonate", bytes.NewReader(nil))
+	startReq.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(startReq, admin.ID)
+	// #nosec G124 -- test request cookie.
+	startReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: adminRefreshRaw})
+	startRR := httptest.NewRecorder()
+	handler.ServeHTTP(startRR, startReq)
+	c.Assert(startRR.Code, qt.Equals, http.StatusOK)
+	var startResp apiserver.LoginResponse
+	c.Assert(json.Unmarshal(startRR.Body.Bytes(), &startResp), qt.IsNil)
+
+	// End the session with the impersonation token.
+	endReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/impersonation/end", nil)
+	endReq.Header.Set("Authorization", "Bearer "+startResp.AccessToken)
+	endRR := httptest.NewRecorder()
+	handler.ServeHTTP(endRR, endReq)
+	c.Assert(endRR.Code, qt.Equals, http.StatusOK)
+
+	// The end response must restore the admin's ORIGINAL refresh token,
+	// not the marker.
+	restored, ok := refreshCookieFromResponse(endRR)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("end must Set-Cookie the refresh_token"))
+	c.Assert(restored, qt.Equals, adminRefreshRaw)
+
+	// The restored session must be genuinely refreshable: a cookie-based
+	// /auth/refresh with the restored token succeeds and mints an ADMIN
+	// access token.
+	refreshReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
+	// #nosec G124 -- test request cookie.
+	refreshReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: restored})
+	refreshRR := httptest.NewRecorder()
+	handler.ServeHTTP(refreshRR, refreshReq)
+	c.Assert(refreshRR.Code, qt.Equals, http.StatusOK)
+	var refreshResp apiserver.LoginResponse
+	c.Assert(json.Unmarshal(refreshRR.Body.Bytes(), &refreshResp), qt.IsNil)
+	c.Assert(refreshResp.AccessToken, qt.Not(qt.Equals), "")
+	refreshClaims := parseTestTokenClaims(c, refreshResp.AccessToken)
+	c.Assert(refreshClaims["user_id"], qt.Equals, admin.ID)
+}
+
 // parseTestTokenClaims parses a JWT signed with the shared test secret
 // and returns its claims. Used to assert the impersonation / restored
 // token shapes without going through the middleware.
@@ -524,4 +686,237 @@ func must2[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+// refreshCookieIsDeletion reports whether the response instructs the
+// browser to DELETE the refresh_token cookie — i.e. it Set-Cookie's
+// refresh_token with a non-positive Max-Age (the form clearRefreshCookie
+// emits, Max-Age=-1). Returns false when no refresh cookie is set at all.
+func refreshCookieIsDeletion(rr *httptest.ResponseRecorder) bool {
+	for _, sc := range rr.Result().Cookies() {
+		if sc.Name != "refresh_token" {
+			continue
+		}
+		// MaxAge < 0 means "delete now"; MaxAge == 0 with an empty value
+		// is also a deletion as emitted via http.Cookie.
+		return sc.MaxAge < 0 || (sc.MaxAge == 0 && sc.Value == "")
+	}
+	return false
+}
+
+// startImpersonationGetJTI runs a real impersonation start as admin→target
+// and returns the started session's access token and its jti claim. Used
+// by the FIX 2 test to forge an EXPIRED token bound to the SAME jti as a
+// live return slot.
+func startImpersonationGetJTI(c *qt.C, handler http.Handler, adminID, targetID string) (accessToken, jti string) {
+	c.Helper()
+	startRR := doImpersonateStart(c, handler, adminID, targetID, nil)
+	c.Assert(startRR.Code, qt.Equals, http.StatusOK)
+	var startResp apiserver.LoginResponse
+	c.Assert(json.Unmarshal(startRR.Body.Bytes(), &startResp), qt.IsNil)
+	claims := parseTestTokenClaims(c, startResp.AccessToken)
+	jtiClaim, ok := claims["jti"].(string)
+	c.Assert(ok, qt.IsTrue)
+	return startResp.AccessToken, jtiClaim
+}
+
+// TestImpersonate_LogoutDuringImpersonationRevokesAdminToken is the
+// regression test for PR #1771 FIX 1: an operator who logs out WHILE
+// impersonating must have their genuine admin refresh token revoked.
+// During impersonation the refresh cookie holds the `imp:<jti>` marker, so
+// the plain logout path would hash the marker, find no DB row, and leave
+// the admin's real refresh token valid for its full 30-day lifetime — a
+// live credential the operator believes they terminated. logout must
+// instead resolve the return slot and revoke slot.AdminRefreshTokenRaw.
+func TestImpersonate_LogoutDuringImpersonationRevokesAdminToken(t *testing.T) {
+	c := qt.New(t)
+	params, admin, _ := newParams()
+	promoteToSystemAdmin(c, params, admin)
+	target := createTestUserDirect(c, params, admin.TenantID, "target@example.com", true, false)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	// The admin has a genuine, refreshable session before impersonating.
+	adminRefreshRaw := createAdminRefreshToken(c, params, admin)
+
+	// Start: send the admin's refresh cookie so the return slot captures
+	// the genuine token; the start handler replies with the imp: marker.
+	startReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+target.ID+"/impersonate", bytes.NewReader(nil))
+	startReq.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(startReq, admin.ID)
+	// #nosec G124 -- test request cookie.
+	startReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: adminRefreshRaw})
+	startRR := httptest.NewRecorder()
+	handler.ServeHTTP(startRR, startReq)
+	c.Assert(startRR.Code, qt.Equals, http.StatusOK)
+	var startResp apiserver.LoginResponse
+	c.Assert(json.Unmarshal(startRR.Body.Bytes(), &startResp), qt.IsNil)
+	markerCookie, ok := refreshCookieFromResponse(startRR)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(strings.HasPrefix(markerCookie, "imp:"), qt.IsTrue)
+
+	// Sanity check: the admin's genuine token is refreshable RIGHT NOW.
+	preReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
+	// #nosec G124 -- test request cookie.
+	preReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: adminRefreshRaw})
+	preRR := httptest.NewRecorder()
+	handler.ServeHTTP(preRR, preReq)
+	c.Assert(preRR.Code, qt.Equals, http.StatusOK)
+
+	// The operator logs out from inside the impersonation session — the
+	// browser sends the imp: marker cookie, NOT the genuine token.
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	logoutReq.Header.Set("Authorization", "Bearer "+startResp.AccessToken)
+	// #nosec G124 -- test request cookie.
+	logoutReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: markerCookie})
+	logoutRR := httptest.NewRecorder()
+	handler.ServeHTTP(logoutRR, logoutReq)
+	c.Assert(logoutRR.Code, qt.Equals, http.StatusOK)
+
+	// The admin's GENUINE refresh token must now be revoked: a cookie-based
+	// /auth/refresh with the original raw token fails.
+	postReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
+	// #nosec G124 -- test request cookie.
+	postReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: adminRefreshRaw})
+	postRR := httptest.NewRecorder()
+	handler.ServeHTTP(postRR, postReq)
+	c.Assert(postRR.Code, qt.Equals, http.StatusUnauthorized,
+		qt.Commentf("admin's genuine refresh token must be revoked after logout-during-impersonation"))
+}
+
+// TestImpersonate_EndAcceptsExpiredTokenWithLiveSlot is the regression
+// test for PR #1771 FIX 2: an operator who lets the impersonation access
+// token expire (idle) must still be able to POST /admin/impersonation/end
+// and be restored — JWTMiddleware no longer 401s the expired token before
+// the handler runs, and endImpersonation tolerates an expired `exp` while
+// still verifying the signature + imp=true and proving authorization via
+// the live server-side slot.
+func TestImpersonate_EndAcceptsExpiredTokenWithLiveSlot(t *testing.T) {
+	c := qt.New(t)
+	params, admin, _ := newParams()
+	promoteToSystemAdmin(c, params, admin)
+	target := createTestUserDirect(c, params, admin.TenantID, "target@example.com", true, false)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	// Start a genuine session so the return slot exists, and capture its jti.
+	_, jti := startImpersonationGetJTI(c, handler, admin.ID, target.ID)
+
+	// Forge an EXPIRED impersonation token bound to the SAME jti — signed
+	// with the real test secret, so the signature is valid; only `exp` is
+	// in the past. This is the "operator went idle" shape.
+	expiredToken := makeImpersonationToken(c, impersonateClaims{
+		jti:            jti,
+		targetUserID:   target.ID,
+		targetTenantID: target.TenantID,
+		adminUserID:    admin.ID,
+		expiresAt:      time.Now().Add(-time.Minute),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/impersonation/end", nil)
+	req.Header.Set("Authorization", "Bearer "+expiredToken)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	// The expired token still ends the session and restores the admin.
+	c.Assert(rr.Code, qt.Equals, http.StatusOK,
+		qt.Commentf("expired imp token with a live slot must still end the session; body=%s", rr.Body.String()))
+	var endResp apiserver.LoginResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &endResp), qt.IsNil)
+	c.Assert(endResp.User, qt.IsNotNil)
+	c.Assert(endResp.User.ID, qt.Equals, admin.ID)
+	endClaims := parseTestTokenClaims(c, endResp.AccessToken)
+	c.Assert(endClaims["user_id"], qt.Equals, admin.ID)
+	_, hasImp := endClaims["imp"]
+	c.Assert(hasImp, qt.IsFalse)
+}
+
+// TestImpersonate_EndStillRejectsExpiredNonImpersonationToken guards the
+// FIX 2 security boundary: relaxing `exp` must NOT let an expired PLAIN
+// (non-imp) admin token reach a successful end. parseImpersonationEndToken
+// requires imp=true, so an expired admin token is rejected with 422
+// not_active just as a fresh one is.
+func TestImpersonate_EndStillRejectsExpiredNonImpersonationToken(t *testing.T) {
+	c := qt.New(t)
+	params, admin, _ := newParams()
+	promoteToSystemAdmin(c, params, admin)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	// A plain (non-imp) admin token that has already expired.
+	expiredAdmin := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"jti":             "expired-admin-jti",
+		"user_id":         admin.ID,
+		"is_system_admin": true,
+		"iat":             time.Now().Add(-2 * time.Hour).Unix(),
+		"exp":             time.Now().Add(-time.Hour).Unix(),
+	})
+	signed, err := expiredAdmin.SignedString(testJWTSecret)
+	c.Assert(err, qt.IsNil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/impersonation/end", nil)
+	req.Header.Set("Authorization", "Bearer "+signed)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.AdminImpersonateNotActiveCode)
+}
+
+// TestImpersonate_EndRejectsForgedToken guards the other FIX 2 security
+// boundary: a token with a BAD signature must be rejected even when it
+// claims imp=true. The expiry relaxation never bypasses signature
+// verification.
+func TestImpersonate_EndRejectsForgedToken(t *testing.T) {
+	c := qt.New(t)
+	params, admin, _ := newParams()
+	promoteToSystemAdmin(c, params, admin)
+	target := createTestUserDirect(c, params, admin.TenantID, "target@example.com", true, false)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	// An imp token signed with the WRONG secret — a forgery.
+	forged := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"jti":             "forged-jti",
+		"user_id":         target.ID,
+		"tenant_id":       target.TenantID,
+		"impersonated_by": admin.ID,
+		"imp":             true,
+		"is_system_admin": false,
+		"iat":             time.Now().Add(-time.Minute).Unix(),
+		"exp":             time.Now().Add(20 * time.Minute).Unix(),
+	})
+	signed, err := forged.SignedString([]byte("a-totally-different-32byte-secret-xx"))
+	c.Assert(err, qt.IsNil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/impersonation/end", nil)
+	req.Header.Set("Authorization", "Bearer "+signed)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.AdminImpersonateNotActiveCode)
+}
+
+// TestImpersonate_EndClearsMarkerCookieForPureBearerStart proves the
+// pure-bearer path: when the admin started impersonation WITHOUT a refresh
+// cookie (an API/test client), there is no genuine token to restore on
+// `end`, so the handler must instead DELETE the marker cookie it planted
+// at start — leaving no stale imp: marker in the client.
+func TestImpersonate_EndClearsMarkerCookieForPureBearerStart(t *testing.T) {
+	c := qt.New(t)
+	params, admin, _ := newParams()
+	promoteToSystemAdmin(c, params, admin)
+	target := createTestUserDirect(c, params, admin.TenantID, "target@example.com", true, false)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	// Start WITHOUT a refresh cookie — doImpersonateStart sends only the
+	// bearer auth header, so slot.AdminRefreshTokenRaw is empty.
+	accessToken, _ := startImpersonationGetJTI(c, handler, admin.ID, target.ID)
+
+	endReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/impersonation/end", nil)
+	endReq.Header.Set("Authorization", "Bearer "+accessToken)
+	endRR := httptest.NewRecorder()
+	handler.ServeHTTP(endRR, endReq)
+	c.Assert(endRR.Code, qt.Equals, http.StatusOK)
+
+	// With no genuine token to restore, `end` must clear the marker cookie.
+	c.Assert(refreshCookieIsDeletion(endRR), qt.IsTrue,
+		qt.Commentf("pure-bearer end must delete the marker refresh cookie"))
 }

@@ -87,6 +87,10 @@ func NewInMemoryImpersonationStore() *InMemoryImpersonationStore {
 	}
 }
 
+// Put records the slot keyed by slot.JTI, overwriting any existing slot
+// with the same JTI. Expired slots are pruned first so the map stays
+// bounded by the number of live impersonation sessions. See
+// ImpersonationStore.Put.
 func (s *InMemoryImpersonationStore) Put(_ context.Context, slot ImpersonationSlot) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -95,6 +99,9 @@ func (s *InMemoryImpersonationStore) Put(_ context.Context, slot ImpersonationSl
 	return nil
 }
 
+// Get returns the live slot for the given JTI, or registry.ErrNotFound
+// when no slot exists — never recorded, already ended, or pruned because
+// it expired. See ImpersonationStore.Get.
 func (s *InMemoryImpersonationStore) Get(_ context.Context, jti string) (ImpersonationSlot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -106,6 +113,9 @@ func (s *InMemoryImpersonationStore) Get(_ context.Context, jti string) (Imperso
 	return slot, nil
 }
 
+// Delete removes the slot for the given JTI. Idempotent: deleting a
+// missing slot is a no-op, so a double `end` call is harmless. See
+// ImpersonationStore.Delete.
 func (s *InMemoryImpersonationStore) Delete(_ context.Context, jti string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

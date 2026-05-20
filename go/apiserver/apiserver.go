@@ -277,6 +277,15 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// AcceptInvite / RemoveMember.
 	groupService.SetUserRegistry(params.FactorySet.UserRegistry)
 
+	// The impersonation return-slot store (#1750) MUST be a single shared
+	// instance: Admin()'s impersonation endpoints record/restore slots and
+	// /auth/logout consults the SAME store to revoke the operator's genuine
+	// refresh token when an impersonation session is ended via logout. Two
+	// separate stores would leave logout unable to see the slot a `start`
+	// recorded. In-memory is fine for single-replica deployments; a shared
+	// (Redis) implementation would be constructed here for multi-replica.
+	impersonationStore := services.NewInMemoryImpersonationStore()
+
 	r.Route("/api/v1", func(r chi.Router) {
 		// Resolve tenant from request host and place it in context for all handlers,
 		// including public ones (login, registration, password reset).
@@ -308,6 +317,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			JWTSecret:               params.JWTSecret,
 			EmailService:            emailSvc,
 			MFAService:              mfaSvc,
+			ImpersonationStore:      impersonationStore,
 		}))
 
 		// Unauthenticated public routes: apply the global per-IP rate limit as a
@@ -362,7 +372,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// inside Admin() rejects non-admins before any handler runs. Mounting
 		// at the same level as /system keeps the surface tenant-agnostic —
 		// system admins are not scoped to a tenant.
-		r.With(userMiddlewares...).Route("/admin", Admin(AdminParams{
+		r.Route("/admin", Admin(AdminParams{
 			FactorySet:       params.FactorySet,
 			Blacklist:        blacklist,
 			AuditService:     auditSvc,
@@ -370,9 +380,18 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			JWTSecret:        params.JWTSecret,
 			RateLimiter:      rateLimiter,
 			ImpersonationTTL: params.ImpersonationTTL,
-			// ImpersonationStore left nil — Admin() falls back to an
-			// in-memory store. A shared (Redis) store would be wired
-			// here for multi-replica deployments.
+			// ImpersonationStore is the SAME instance /auth/logout
+			// receives, so logout can revoke the operator's genuine
+			// refresh token when an impersonation session is ended via
+			// logout rather than POST /admin/impersonation/end (#1750).
+			ImpersonationStore: impersonationStore,
+			// UserMiddlewares is applied by Admin() to every admin route
+			// EXCEPT POST /admin/impersonation/end, which is deliberately
+			// mounted without JWTMiddleware so an operator can still end
+			// an impersonation session whose access token has expired —
+			// endImpersonation self-validates the (possibly expired) imp
+			// token. See Admin() for the full rationale.
+			UserMiddlewares: userMiddlewares,
 		}))
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives
