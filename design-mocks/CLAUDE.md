@@ -666,9 +666,11 @@ areaName("area-id")           // "Cabinet"
 
 | Do | Don't |
 |---|---|
-| `radix-ui` (umbrella) for all UI primitives | `@base-ui/react` — removed; not wired |
+| `radix-ui` (umbrella) for all UI primitives | `@base-ui/react` — **never add this**; it is not in package.json and must stay out |
 | `cmdk` for `<Command>` / searchable lists | Any other headless combobox library |
 | Add new primitives only from `radix-ui` or shadcn CLI | Pull in a competing primitive library for a single use case |
+
+> **Why no `@base-ui/react`:** The project uses `radix-ui` (the official shadcn/new-york primitive set). `@base-ui/react` is a separate, incompatible library that was considered but never wired. Keeping both would create two conflicting primitive sources, inflate the bundle, and confuse future contributors. If a specific primitive is ever needed that `radix-ui` cannot provide, file an explicit decision record here before installing anything.
 
 ### Interactions
 

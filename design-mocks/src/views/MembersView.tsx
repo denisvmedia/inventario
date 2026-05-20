@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { UserPlus, MoveHorizontal as MoreHorizontal, Shield, User, Mail, Crown, Trash2, Check, X, Users, Clock, Plus, Building2, Eye } from "lucide-react"
+import { UserPlus, Ellipsis, Shield, User, Mail, Crown, Trash2, Check, X, Users, Clock, Plus, Building2, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -218,7 +218,7 @@ export function MembersView({ activeGroupId }: MembersViewProps) {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="size-7">
-                            <MoreHorizontal className="size-4" />
+                            <Ellipsis className="size-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -389,7 +389,7 @@ function MemberRow({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="size-7">
-              <MoreHorizontal className="size-4" />
+              <Ellipsis className="size-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">

@@ -1,5 +1,5 @@
 import { useState, useRef } from "react"
-import { Tag, Plus, Pencil, Trash2, Hash, Package, Search, X, Check } from "lucide-react"
+import { Tag as TagIcon, Plus, Pencil, Trash2, Hash, Package, Search, X, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -14,72 +14,25 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
-import { MOCK_ITEMS } from "@/data/mock"
+import { MOCK_ITEMS, MOCK_TAGS, type Tag } from "@/data/mock"
+import { TagPill } from "@/components/TagPill"
 
 // ─── Tag color palette ────────────────────────────────────────
 
-const TAG_COLORS = [
-  { id: "amber",   dot: "bg-chart-1",        pill: "bg-chart-1/15 text-chart-1 border-chart-1/30" },
-  { id: "green",   dot: "bg-status-active",   pill: "bg-status-active/15 text-status-active border-status-active/30" },
-  { id: "blue",    dot: "bg-chart-3",         pill: "bg-chart-3/15 text-chart-3 border-chart-3/30" },
-  { id: "orange",  dot: "bg-chart-4",         pill: "bg-chart-4/15 text-chart-4 border-chart-4/30" },
-  { id: "red",     dot: "bg-chart-5",         pill: "bg-chart-5/15 text-chart-5 border-chart-5/30" },
-  { id: "muted",   dot: "bg-muted-foreground",pill: "bg-muted text-muted-foreground border-border" },
+const TAG_COLORS: Array<{ id: string; dot: string; color: string; bg: string; border: string }> = [
+  { id: "amber",   dot: "bg-chart-1",          color: "text-chart-1",         bg: "bg-chart-1/15",        border: "border-chart-1/30" },
+  { id: "green",   dot: "bg-status-active",     color: "text-status-active",   bg: "bg-status-active/15",  border: "border-status-active/30" },
+  { id: "blue",    dot: "bg-chart-3",           color: "text-chart-3",         bg: "bg-chart-3/15",        border: "border-chart-3/30" },
+  { id: "orange",  dot: "bg-chart-4",           color: "text-chart-4",         bg: "bg-chart-4/15",        border: "border-chart-4/30" },
+  { id: "red",     dot: "bg-chart-5",           color: "text-chart-5",         bg: "bg-chart-5/15",        border: "border-chart-5/30" },
+  { id: "muted",   dot: "bg-muted-foreground",  color: "text-muted-foreground",bg: "bg-muted",             border: "border-border" },
 ]
 
-interface TagDef {
-  id: string
-  label: string
-  colorId: string
-}
+// Seed initial state from MOCK_TAGS that are item tags (i-prefix)
+const INITIAL_TAGS: Tag[] = MOCK_TAGS.filter((t) => t.id.startsWith("i"))
 
-// Seed from items
-const seedTags = (): TagDef[] => {
-  const seen = new Set<string>()
-  const result: TagDef[] = []
-  const colors = TAG_COLORS.map((c) => c.id)
-  MOCK_ITEMS.forEach((item) => {
-    item.tags.forEach((t) => {
-      if (!seen.has(t)) {
-        seen.add(t)
-        result.push({ id: t, label: t, colorId: colors[result.length % colors.length] })
-      }
-    })
-  })
-  return result
-}
-
-const INITIAL_TAGS = seedTags()
-
-function itemCountForTag(tag: string) {
-  return MOCK_ITEMS.filter((item) => item.tags.includes(tag)).length
-}
-
-// ─── Tag pill (display) ───────────────────────────────────────
-
-function TagPill({ tag, onRemove }: { tag: TagDef; onRemove?: () => void }) {
-  const color = TAG_COLORS.find((c) => c.id === tag.colorId) ?? TAG_COLORS[5]
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium select-none",
-        color.pill
-      )}
-    >
-      <Hash className="size-2.5 shrink-0" />
-      {tag.label}
-      {onRemove && (
-        <button
-          type="button"
-          onClick={onRemove}
-          className="ml-0.5 rounded-full opacity-60 hover:opacity-100 transition-opacity"
-          aria-label="Remove tag"
-        >
-          <X className="size-2.5" />
-        </button>
-      )}
-    </span>
-  )
+function itemCountForTag(tagId: string) {
+  return MOCK_ITEMS.filter((item) => item.tags.includes(tagId)).length
 }
 
 // ─── Color picker dot row ─────────────────────────────────────
@@ -106,15 +59,18 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (id: string
 
 // ─── Inline edit row ──────────────────────────────────────────
 
-function EditRow({ tag, onSave, onCancel }: { tag: TagDef; onSave: (t: TagDef) => void; onCancel: () => void }) {
+function EditRow({ tag, onSave, onCancel }: { tag: Tag; onSave: (t: Tag) => void; onCancel: () => void }) {
   const [label, setLabel] = useState(tag.label)
-  const [colorId, setColorId] = useState(tag.colorId)
+  // find closest colorId by matching bg class
+  const initialColorId = TAG_COLORS.find((c) => c.bg === tag.bg)?.id ?? TAG_COLORS[0].id
+  const [colorId, setColorId] = useState(initialColorId)
   const inputRef = useRef<HTMLInputElement>(null)
 
   function submit() {
     const trimmed = label.trim().toLowerCase().replace(/\s+/g, "-")
     if (!trimmed) return
-    onSave({ ...tag, label: trimmed, colorId })
+    const c = TAG_COLORS.find((x) => x.id === colorId) ?? TAG_COLORS[0]
+    onSave({ ...tag, label: trimmed, color: c.color, bg: c.bg, border: c.border })
   }
 
   return (
@@ -147,7 +103,7 @@ function EditRow({ tag, onSave, onCancel }: { tag: TagDef; onSave: (t: TagDef) =
 
 // ─── Create row ───────────────────────────────────────────────
 
-function CreateRow({ existingLabels, onCreate }: { existingLabels: Set<string>; onCreate: (t: Omit<TagDef, "id">) => void }) {
+function CreateRow({ existingLabels, onCreate }: { existingLabels: Set<string>; onCreate: (t: Omit<Tag, "id">) => void }) {
   const [open, setOpen] = useState(false)
   const [label, setLabel] = useState("")
   const [colorId, setColorId] = useState(TAG_COLORS[0].id)
@@ -155,7 +111,8 @@ function CreateRow({ existingLabels, onCreate }: { existingLabels: Set<string>; 
   function submit() {
     const trimmed = label.trim().toLowerCase().replace(/\s+/g, "-")
     if (!trimmed || existingLabels.has(trimmed)) return
-    onCreate({ label: trimmed, colorId })
+    const c = TAG_COLORS.find((x) => x.id === colorId) ?? TAG_COLORS[0]
+    onCreate({ label: trimmed, color: c.color, bg: c.bg, border: c.border })
     setLabel("")
     setColorId(TAG_COLORS[0].id)
     setOpen(false)
@@ -201,7 +158,7 @@ function CreateRow({ existingLabels, onCreate }: { existingLabels: Set<string>; 
 // ─── Main view ────────────────────────────────────────────────
 
 export function TagsView() {
-  const [tags, setTags] = useState<TagDef[]>(INITIAL_TAGS)
+  const [tags, setTags] = useState<Tag[]>(INITIAL_TAGS)
   const [search, setSearch] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -212,12 +169,12 @@ export function TagsView() {
 
   const existingLabels = new Set(tags.map((t) => t.label))
 
-  function addTag(partial: Omit<TagDef, "id">) {
-    const id = partial.label.replace(/\s+/g, "-") + "-" + Date.now()
+  function addTag(partial: Omit<Tag, "id">) {
+    const id = "u-" + partial.label.replace(/\s+/g, "-") + "-" + Date.now()
     setTags((prev) => [...prev, { ...partial, id }])
   }
 
-  function saveTag(updated: TagDef) {
+  function saveTag(updated: Tag) {
     setTags((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
     setEditingId(null)
   }
@@ -230,21 +187,24 @@ export function TagsView() {
 
   const totalTagged = MOCK_ITEMS.filter((item) => item.tags.length > 0).length
 
+  // For the dot color in the row, find the closest TAG_COLORS entry
+  function dotClass(tag: Tag) {
+    return TAG_COLORS.find((c) => c.bg === tag.bg)?.dot ?? "bg-muted-foreground"
+  }
+
   return (
     <div className="flex flex-col gap-6 p-6 max-w-2xl mx-auto w-full">
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">Tags</h1>
-          <p className="mt-1 text-muted-foreground">Organise your inventory with custom labels.</p>
-        </div>
+      <div>
+        <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">Tags</h1>
+        <p className="mt-1 text-muted-foreground">Organise your inventory with custom labels.</p>
       </div>
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Total tags", value: tags.length, icon: Tag },
+          { label: "Total tags", value: tags.length, icon: TagIcon },
           { label: "Tagged items", value: totalTagged, icon: Package },
           { label: "Untagged items", value: MOCK_ITEMS.length - totalTagged, icon: Hash },
         ].map(({ label, value, icon: Icon }) => (
@@ -282,7 +242,7 @@ export function TagsView() {
 
       {/* Tag list */}
       <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-border">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             {search ? `${filtered.length} result${filtered.length !== 1 ? "s" : ""}` : `${tags.length} tag${tags.length !== 1 ? "s" : ""}`}
           </p>
@@ -290,7 +250,7 @@ export function TagsView() {
 
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-16">
-            <Tag className="size-8 text-muted-foreground/30" />
+            <TagIcon className="size-8 text-muted-foreground/30" />
             <p className="text-sm text-muted-foreground">
               {search ? "No tags match your search." : "No tags yet. Create your first tag below."}
             </p>
@@ -299,7 +259,6 @@ export function TagsView() {
           <ul className="divide-y divide-border">
             {filtered.map((tag) => {
               const count = itemCountForTag(tag.id)
-              const color = TAG_COLORS.find((c) => c.id === tag.colorId) ?? TAG_COLORS[5]
               const isEditing = editingId === tag.id
 
               return (
@@ -312,12 +271,10 @@ export function TagsView() {
                     />
                   ) : (
                     <div className="flex items-center gap-3 group">
-                      <div className={cn("size-2.5 rounded-full shrink-0", color.dot)} />
+                      <div className={cn("size-2.5 rounded-full shrink-0", dotClass(tag))} />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm font-medium truncate"># {tag.label}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+                        <TagPill tag={tag} size="sm" />
+                        <p className="text-xs text-muted-foreground mt-1">
                           {count === 0
                             ? "No items"
                             : `${count} item${count !== 1 ? "s" : ""}`}

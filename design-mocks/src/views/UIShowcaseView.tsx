@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
+import { SkeletonShowcase } from "@/components/SkeletonPatterns"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Select,
@@ -578,7 +579,7 @@ export function UIShowcaseView() {
             <Spinner className="size-4" />
             <Spinner className="size-6" />
           </DemoRow>
-          <DemoRow label="Skeleton">
+          <DemoRow label="Skeleton primitives">
             <div className="w-full space-y-2">
               <Skeleton className="h-5 w-1/2" />
               <Skeleton className="h-4 w-3/4" />
@@ -593,6 +594,16 @@ export function UIShowcaseView() {
             </div>
           </DemoRow>
         </div>
+      </Section>
+
+      <Separator />
+
+      {/* ── SKELETON PATTERNS ────────────────────────────────── */}
+      <Section
+        title="Skeleton Patterns"
+        subtitle="Loading state patterns for stat cards, tables, grids, and detail panels"
+      >
+        <SkeletonShowcase />
       </Section>
 
       <Separator />

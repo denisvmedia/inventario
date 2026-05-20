@@ -13,7 +13,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { cn, makeId } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import type { Location } from "@/data/mock"
 
 const LOCATION_ICONS = ["🏠", "🏡", "🏢", "🏗️", "🏚️", "🚗", "🌿", "🌊", "⛺", "🏕️", "🔑", "📦"]
@@ -64,7 +64,7 @@ export function LocationDialog({ open, onClose, location, onSave }: LocationDial
 
   function addFiles(files: File[]) {
     const drafts: AttachedFileDraft[] = files.map((f) => ({
-      id: makeId(),
+      id: crypto.randomUUID(),
       name: f.name,
       size: formatSize(f.size),
       mimeType: f.type,

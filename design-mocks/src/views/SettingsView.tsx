@@ -34,9 +34,10 @@ const SECTIONS = [
 
 interface SettingsViewProps {
   onNavigate?: (view: string) => void
+  onOpenShortcuts?: () => void
 }
 
-export function SettingsView({ onNavigate }: SettingsViewProps) {
+export function SettingsView({ onNavigate, onOpenShortcuts }: SettingsViewProps) {
   const [active, setActive] = useState<SettingsSection>("appearance")
 
   return (
@@ -86,7 +87,7 @@ export function SettingsView({ onNavigate }: SettingsViewProps) {
               {active === "notifications" && <NotificationsSection />}
               {active === "privacy" && <PrivacySection />}
               {active === "data" && <DataSection />}
-              {active === "help" && <HelpSection />}
+              {active === "help" && <HelpSection onOpenShortcuts={onOpenShortcuts} />}
             </div>
           </div>
         </div>
@@ -450,27 +451,30 @@ function DataSection() {
   )
 }
 
-function HelpSection() {
+function HelpSection({ onOpenShortcuts }: { onOpenShortcuts?: () => void }) {
+  const ROWS = [
+    { label: "Documentation", description: "Browse guides and tutorials", action: undefined },
+    { label: "Keyboard shortcuts", description: "View all available shortcuts", action: onOpenShortcuts },
+    { label: "What's new", description: "See latest features and updates", badge: "v1.2", action: undefined },
+    { label: "Send feedback", description: "Help us improve Inventario", action: undefined },
+    { label: "Contact support", description: "Get help from the team", action: undefined },
+  ]
+
   return (
     <div>
       <SectionTitle>Help & Support</SectionTitle>
       <div className="space-y-4">
         <div className="rounded-xl border border-border divide-y divide-border">
-          {[
-            { label: "Documentation", description: "Browse guides and tutorials" },
-            { label: "Keyboard shortcuts", description: "View all available shortcuts" },
-            { label: "What's new", description: "See latest features and updates", badge: "v1.2" },
-            { label: "Send feedback", description: "Help us improve Inventario" },
-            { label: "Contact support", description: "Get help from the team" },
-          ].map((row) => (
+          {ROWS.map((row) => (
             <button
               key={row.label}
+              onClick={row.action}
               className="flex w-full items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
             >
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium">{row.label}</p>
-                  {row.badge && (
+                  {"badge" in row && row.badge && (
                     <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
                       {row.badge}
                     </Badge>
