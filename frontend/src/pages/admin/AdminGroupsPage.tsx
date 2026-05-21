@@ -278,9 +278,7 @@ export function AdminGroupsPage() {
             <SelectContent>
               <SelectItem value="all">{t("groups.filter.allStatuses")}</SelectItem>
               <SelectItem value="active">{t("groups.filter.active")}</SelectItem>
-              <SelectItem value="pending_deletion">
-                {t("groups.filter.pendingDeletion")}
-              </SelectItem>
+              <SelectItem value="pending_deletion">{t("groups.filter.pendingDeletion")}</SelectItem>
             </SelectContent>
           </Select>
         </div>

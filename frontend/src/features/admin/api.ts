@@ -153,10 +153,9 @@ export async function getAdminGroup(
   groupId: string,
   signal?: AbortSignal
 ): Promise<AdminGroupDetail> {
-  const body = await http.get<AdminGroupResponse>(
-    `/admin/groups/${encodeURIComponent(groupId)}`,
-    { signal }
-  )
+  const body = await http.get<AdminGroupResponse>(`/admin/groups/${encodeURIComponent(groupId)}`, {
+    signal,
+  })
   // The BE returns HTTP 404 for a missing group; a 200 with no `data`
   // (or a `data` object lacking an `id`) would be a malformed response.
   // Fail fast instead of masking it — an empty `{}` would otherwise
@@ -177,10 +176,9 @@ export async function softDeleteAdminGroup(
   groupId: string,
   signal?: AbortSignal
 ): Promise<AdminGroupDetail> {
-  const body = await http.del<AdminGroupResponse>(
-    `/admin/groups/${encodeURIComponent(groupId)}`,
-    { signal }
-  )
+  const body = await http.del<AdminGroupResponse>(`/admin/groups/${encodeURIComponent(groupId)}`, {
+    signal,
+  })
   // Same fail-fast guard as getAdminGroup: a 200 with no usable `data` is
   // a malformed response, not a successful delete.
   if (!body.data || !body.data.id) {

@@ -105,9 +105,7 @@ describe("AdminGroupDetailPage", () => {
     await waitFor(() =>
       expect(screen.getByTestId("admin-group-members-placeholder")).toBeInTheDocument()
     )
-    expect(
-      screen.getByText("Member management ships in a follow-up update.")
-    ).toBeInTheDocument()
+    expect(screen.getByText("Member management ships in a follow-up update.")).toBeInTheDocument()
     // No add-member control — the editor is a later sub-issue.
     expect(screen.queryByRole("button", { name: /add member/i })).not.toBeInTheDocument()
   })
@@ -207,9 +205,7 @@ describe("AdminGroupDetailPage", () => {
     await userEvent.click(screen.getByTestId("admin-group-delete-button"))
     await userEvent.click(await screen.findByTestId("confirm-accept"))
 
-    await waitFor(() =>
-      expect(screen.getByTestId("admin-group-delete-error")).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByTestId("admin-group-delete-error")).toBeInTheDocument())
     // The group stayed active — the button is still actionable.
     expect(screen.getByTestId("admin-group-delete-button")).toHaveTextContent("Delete group")
   })

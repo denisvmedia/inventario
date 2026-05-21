@@ -37,8 +37,7 @@ export function AdminGroupDetailPage() {
   // found" (its own friendly empty state) and keep the generic load-error
   // card for every other failure — including a malformed 200-with-empty-
   // body, which `getAdminGroup` rejects as a thrown error.
-  const isNotFound =
-    group.isError && group.error instanceof HttpError && group.error.status === 404
+  const isNotFound = group.isError && group.error instanceof HttpError && group.error.status === 404
 
   const groupName = group.data?.name ?? t("groupDetail.fallbackName")
 

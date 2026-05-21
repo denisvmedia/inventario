@@ -120,7 +120,8 @@ export function useDeleteAdminGroup() {
       // above and flipping the page back to the pre-delete row. The
       // `"list"` segment scopes the invalidation to the list keys.
       qc.invalidateQueries({
-        predicate: (q) => q.queryKey[0] === "admin" && q.queryKey[1] === "groups" && q.queryKey[2] === "list",
+        predicate: (q) =>
+          q.queryKey[0] === "admin" && q.queryKey[1] === "groups" && q.queryKey[2] === "list",
       })
     },
   })
