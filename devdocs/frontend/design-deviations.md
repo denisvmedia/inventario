@@ -348,7 +348,7 @@ _None yet._
 
 #### 2026-05-20 — Admin layout shell: breadcrumb + secondary-nav strip
 
-- **Issue/PR**: #1752 / PR (pending)
+- **Issue/PR**: #1752
 - **Mock**: The admin surface mocks ([`design-mocks/src/views/admin/`](../../design-mocks/src/views/admin/) — `TenantsView`, `TenantDetailView`, `UserDetailView`, `GroupsView`, `GroupDetailView`, `admin-shared.tsx`) have **no layout shell**: each admin view is self-contained, navigates via a state string in the mock's `App.tsx`, and uses an `AdminBackButton` (ArrowLeft ghost button) for back-navigation. There is no breadcrumb and no secondary nav anywhere in the admin mock.
 - **Reality**: `frontend/src/pages/admin/AdminLayout.tsx` is a real layout route that supplies a breadcrumb (`Admin → <section>`, reusing the shared `LocationsBreadcrumb` primitive) and a secondary-nav strip (Tenants / Groups underline-tab pills) with the section pages rendered through `<Outlet />`. The strip carries no `Users` pill — there is no cross-tenant user list; users are reached through a tenant (the tenant-detail Users tab) and the per-user page lives at `/admin/users/:id`.
 - **Why**: Not present in mock. The frontend uses `react-router-dom`, not the mock's `view`-state machine — multiple admin pages need a shared chrome and a way to move between sub-sections, which issue #1752 explicitly mandates ("layout shell — breadcrumbs, secondary nav"). The layout reuses existing design-language tokens (overline breadcrumb, `border-b-2` active-tab treatment) and the existing `LocationsBreadcrumb` component rather than inventing new chrome.
