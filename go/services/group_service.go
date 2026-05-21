@@ -662,10 +662,13 @@ func (s *GroupService) ListMembersWithUsers(ctx context.Context, groupID string)
 // ListMembersWithUsers (#1756 admin membership editor). It is
 // cross-tenant by design: a system administrator is not scoped to a
 // tenant, so the membership↔user join routes through the registry's
-// RLS-bypass path (ListByGroupWithUsersAdmin) and a group in ANY tenant
-// lists fine. The non-admin ListMembersWithUsers stays RLS-scoped — this
-// method is only reachable behind the RequireSystemAdmin gate, which is
-// authorization enough for the cross-tenant read.
+// explicit RLS-bypass path (ListByGroupWithUsersAdmin) and a group in
+// ANY tenant lists fine. By contrast, the non-admin
+// ListMembersWithUsers path relies on the normal request authorization
+// chain plus the tenant-aware group↔user join; in the Postgres service
+// registry it is not DB-layer RLS-scoped. This method is only reachable
+// behind the RequireSystemAdmin gate, which is authorization enough for
+// the cross-tenant read.
 func (s *GroupService) AdminListMembersWithUsers(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
 	return s.membershipRegistry.ListByGroupWithUsersAdmin(ctx, groupID)
 }
