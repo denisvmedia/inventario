@@ -441,6 +441,42 @@ _None yet._
 - **Approved by**: user (explicit) — issue #1753 spec mandates the `/admin/users/:id` and `/admin/groups/:id` link targets.
 - **Reversion plan**: Resolved when #1754 / #1755 add the `users/:userId` and `groups/:groupId` route entries under `/admin` in `router.tsx`; the links then resolve to real detail pages.
 
+#### 2026-05-21 — Admin user detail Sessions section is a count summary, not a per-session table
+
+- **Issue/PR**: #1754 / PR (pending)
+- **Mock**: [`design-mocks/src/views/admin/UserDetailView.tsx`](../../design-mocks/src/views/admin/UserDetailView.tsx) renders a Sessions section as a shadcn `<Table>` with one row per active session — columns Device, IP address, Location, Last active — driven by a per-session `user.sessions[]` array in `mock.ts`.
+- **Reality**: `frontend/src/pages/admin/AdminUserDetailPage.tsx` renders the Sessions section as a single count summary — an icon-headed block reading "N active sessions" — with the centred icon + muted-text empty state when the count is 0. No per-session table.
+- **Why**: Backend shape. `GET /api/v1/admin/users/{id}` (`jsonapi.AdminUserDetail`) returns only `active_session_count` — an integer derived from unrevoked refresh tokens — and exposes **no per-session detail** (no device / IP / location / last-active list). There is no admin endpoint that lists another user's sessions, so the table cannot be populated; rendering a count is the honest representation of the data the API provides.
+- **Approved by**: agent-suggested-then-user-confirmed — the issue #1754 brief explicitly calls out this BE limitation and instructs the count-summary substitution plus this log entry.
+- **Reversion plan**: If a future admin endpoint returns per-session detail for an arbitrary user, replace the count summary with the mock's `<Table>` layout (Device / IP / Location / Last active) and resolve this entry.
+
+#### 2026-05-21 — Admin user detail block/unblock confirm uses `Dialog`, not `AlertDialog`
+
+- **Issue/PR**: #1754 / PR (pending)
+- **Mock**: [`design-mocks/src/views/admin/UserDetailView.tsx`](../../design-mocks/src/views/admin/UserDetailView.tsx) wraps the block confirmation in the shadcn `<AlertDialog>` primitive (AlertDialogContent / AlertDialogAction / AlertDialogCancel).
+- **Reality**: `frontend/src/pages/admin/AdminUserDetailPage.tsx` hosts the block/unblock confirmation in the generic shadcn `<Dialog>` primitive with a `<Textarea>` for the required `reason` and inline typed-error banner.
+- **Why**: Two constraints. (1) The frontend has no `alert-dialog.tsx` primitive — only `dialog.tsx` is vendored; the established codebase confirmation pattern (`hooks/useConfirm.tsx`) deliberately uses `Dialog`, not `AlertDialog`. (2) The issue brief points at the `ConfirmProvider`/`useConfirm` pattern, but that provider only renders a title + description and cannot host a `<textarea>`; the required free-form `reason` field forces a bespoke dialog. Using `Dialog` keeps it consistent with the in-repo confirmation convention. Visual anatomy (header, description, footer, destructive confirm button) still matches the mock's confirmation shape.
+- **Approved by**: agent-suggested-then-user-confirmed — the issue #1754 brief instructs the agent to build a dedicated dialog if `ConfirmProvider` cannot host a textarea and to explain the choice.
+- **Reversion plan**: If `alert-dialog.tsx` is later vendored via the shadcn CLI, the confirmation can be ported to `<AlertDialog>` for closer 1:1 with the mock. The textarea-hosting requirement remains regardless.
+
+#### 2026-05-21 — Admin user detail group memberships render as a link list, not a `<Table>`
+
+- **Issue/PR**: #1754 / PR (pending)
+- **Mock**: [`design-mocks/src/views/admin/UserDetailView.tsx`](../../design-mocks/src/views/admin/UserDetailView.tsx) renders the user's group memberships as a shadcn `<Table>` — one row per group with column headers (Group, Role, Joined).
+- **Reality**: `frontend/src/pages/admin/AdminUserDetailPage.tsx` renders group memberships as a vertical link list — each row is an icon-headed card (`<Link>` to `/admin/groups/{id}`, or a non-interactive `<div>` when `group_id` is absent) with the group name, relative join time, and a `RoleBadge`. No tabular header row.
+- **Why**: Component-composition choice. The membership row's primary affordance is navigation to the group-detail page; a clickable link-list row communicates that affordance more directly than a `<Table>` row, and the section is a short, scannable list (a user typically belongs to a handful of groups) rather than a sortable/paginated dataset. The link-list also degrades gracefully when `group_id` is missing — the row simply becomes non-interactive — whereas a `<Table>` row would still look like tabular data. Visual anatomy (group name, role badge, join time) still matches the mock's information set.
+- **Approved by**: agent-suggested-then-user-confirmed — flagged in the #1754 code review (N5) with an explicit instruction to log the deviation.
+- **Reversion plan**: If the memberships section grows sorting / pagination / multi-column needs, port it to the shared admin `<Table>` primitives used by `AdminTenantsPage` / `AdminTenantDetailPage`.
+
+#### 2026-05-21 — Admin user detail page naming follows the `Admin*Page` convention
+
+- **Issue/PR**: #1754 / PR (pending)
+- **Mock**: The issue text proposes `UserDetailPage.tsx`; the mock view file is `design-mocks/src/views/admin/UserDetailView.tsx`.
+- **Reality**: The page ships as `frontend/src/pages/admin/AdminUserDetailPage.tsx`.
+- **Why**: Code-organisation choice, not a visual deviation. The #1752 foundation established the `Admin*Page` convention (`AdminTenantsPage`, `AdminTenantDetailPage`, `AdminUsersPage`, `AdminGroupsPage`, `AdminLayout`, `AdminForbiddenPage`); the issue text predates that foundation. Logged for traceability — there is no visual drift.
+- **Approved by**: agent-suggested-then-user-confirmed — same rationale as the #1753 `AdminTenantDetailPage` naming entry above.
+- **Reversion plan**: Permanent — the `Admin*Page` convention is the established pattern for this subtree.
+
 ### Empty / Error / Loading states
 
 #### 2026-05-20 — Admin 403 page reuses the 404 empty-state pattern
