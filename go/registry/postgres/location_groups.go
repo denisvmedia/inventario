@@ -220,14 +220,12 @@ func (r *LocationGroupRegistry) ListByTenant(ctx context.Context, tenantID strin
 // member_count from a correlated subquery on group_memberships.
 //
 // The endpoint crosses tenants by design — a system admin lists every
-// tenant's groups. This registry runs in service mode as the
-// inventario_background_worker role, which already carries `using=true`
-// bypass policies on location_groups / group_memberships, so the
-// cross-tenant read works regardless of RLS. The `SET LOCAL row_security =
-// off` on the tx is defense-in-depth: it makes the intentional cross-tenant
-// read explicit at the call site and, on the bypass role, is effectively a
-// no-op rather than the primary guard. Same rationale as
-// TenantRegistry.ListAdmin / UserRegistry.ListAdminByTenant.
+// tenant's groups. The query runs inside store.DoAsAdmin, i.e. under the
+// inventario_admin role, which carries the BYPASSRLS attribute so the
+// per-tenant isolation policies on location_groups / group_memberships /
+// tenants are skipped for this transaction only. Normal inventario_app
+// traffic never assumes that role and stays RLS-enforced. Same rationale
+// as TenantRegistry.ListAdmin / UserRegistry.ListAdminByTenant.
 //
 // Total is post-filter, pre-pagination.
 func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.AdminGroupListOptions) ([]*registry.AdminGroupListItem, int, error) {
@@ -277,12 +275,7 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 		items []*registry.AdminGroupListItem
 		total int
 	)
-	reg := r.newSQLRegistry()
-	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
-			return errxtrace.Wrap("failed to disable row_security for admin group listing", execErr)
-		}
-
+	err := store.DoAsAdmin(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s AS g %s", groupsTable, where)
 		if scanErr := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); scanErr != nil {
 			return errxtrace.Wrap("failed to count admin groups", scanErr)
@@ -299,7 +292,7 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 		// tenants is JOINed (not a correlated subquery) so each row carries
 		// the owning-tenant chip — the cross-tenant admin list renders the
 		// tenant name per row without an FE N+1 lookup. Same tx, so the JOIN
-		// is read under the same `SET LOCAL row_security = off`.
+		// is read under the same inventario_admin (BYPASSRLS) role.
 		//
 		// LEFT JOIN, not INNER: AdminGroupListItem.Tenant is *models.Tenant
 		// (nullable by contract). An INNER JOIN would silently DROP a group
@@ -357,20 +350,16 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 
 // GetAdmin returns a single group detail row with the computed
 // member_count plus the owning tenant (joined so the detail handler can
-// render the tenant chip in one round-trip). Runs under
-// `SET LOCAL row_security = off` for the same defense-in-depth
-// cross-tenant rationale as ListAdmin.
+// render the tenant chip in one round-trip). Runs under the
+// inventario_admin (BYPASSRLS) role for the same cross-tenant rationale
+// as ListAdmin.
 func (r *LocationGroupRegistry) GetAdmin(ctx context.Context, groupID string) (*registry.AdminGroupDetail, error) {
 	if groupID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
 	}
 
 	var detail *registry.AdminGroupDetail
-	reg := r.newSQLRegistry()
-	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
-			return errxtrace.Wrap("failed to disable row_security for admin group detail", execErr)
-		}
+	err := store.DoAsAdmin(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		var loadErr error
 		detail, loadErr = r.loadAdminGroupDetailTx(ctx, tx, groupID)
 		return loadErr
@@ -393,7 +382,8 @@ func (r *LocationGroupRegistry) GetAdmin(ctx context.Context, groupID string) (*
 // so the post-delete row carries exactly the shape the detail handler
 // renders without a second round-trip. Returns (nil, nil) when the group
 // id doesn't exist — callers map that to ErrNotFound. The caller is
-// responsible for the `SET LOCAL row_security = off` on the tx.
+// responsible for running the tx under the inventario_admin (BYPASSRLS)
+// role via store.DoAsAdmin.
 func (r *LocationGroupRegistry) loadAdminGroupDetailTx(ctx context.Context, tx *sqlx.Tx, groupID string) (*registry.AdminGroupDetail, error) {
 	groupsTable := r.tableNames.LocationGroups()
 	membershipsTable := r.tableNames.GroupMemberships()
@@ -478,15 +468,10 @@ func (r *LocationGroupRegistry) MarkPendingDeletionAdmin(ctx context.Context, gr
 		alreadyPending bool
 		detail         *registry.AdminGroupDetail
 	)
-	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Defense-in-depth: like ListAdmin / GetAdmin, make the intentional
-		// cross-tenant write explicit at the call site. On the background-
-		// worker role (which carries RLS bypass policies on location_groups)
-		// this is effectively a no-op rather than the primary guard.
-		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
-			return errxtrace.Wrap("failed to disable row_security for admin group soft-delete", execErr)
-		}
-
+	err := store.DoAsAdmin(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Cross-tenant admin write: the system admin soft-deletes a group
+		// in any tenant. Runs under the inventario_admin (BYPASSRLS) role
+		// like ListAdmin / GetAdmin.
 		var currentStatus string
 		selectQuery := fmt.Sprintf("SELECT status FROM %s WHERE id = $1 FOR UPDATE", groupsTable)
 		scanErr := tx.QueryRowContext(ctx, selectQuery, groupID).Scan(&currentStatus)

@@ -335,13 +335,11 @@ func (r *UserRegistry) ListSystemAdmins(ctx context.Context) ([]*models.User, er
 // computed from a correlated subquery on group_memberships.
 //
 // The endpoint crosses tenants by design — the admin caller may not be
-// a member of the target tenant. The postgres UserRegistry uses
-// NonRLSRepository (no role switch); the cross-tenant read relies on
-// the connection role's bypass (table-owner or BYPASSRLS). `SET LOCAL
-// row_security = off` on the tx is a fail-loud guard — if the bypass
-// is ever revoked, the query ERRORs instead of silently filtering, so
-// a misconfiguration surfaces as a 5xx rather than a quietly empty
-// admin page (see TenantRegistry.ListAdmin for the same rationale).
+// a member of the target tenant. The query runs inside store.DoAsAdmin,
+// under the inventario_admin role, whose BYPASSRLS attribute skips the
+// tenant-isolation policy on `users` and `group_memberships` for this
+// transaction only. inventario_app traffic never assumes that role and
+// stays RLS-enforced (see TenantRegistry.ListAdmin for the same model).
 //
 // Total is post-filter, pre-pagination, matching TenantRegistry.ListAdmin.
 func (r *UserRegistry) ListAdminByTenant(ctx context.Context, tenantID string, opts registry.AdminUserListOptions) ([]*registry.AdminUserListItem, int, error) {
@@ -387,12 +385,7 @@ func (r *UserRegistry) ListAdminByTenant(ctx context.Context, tenantID string, o
 		items []*registry.AdminUserListItem
 		total int
 	)
-	reg := r.newSQLRegistry()
-	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
-			return errxtrace.Wrap("failed to disable row_security for admin user listing", execErr)
-		}
-
+	err := store.DoAsAdmin(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s AS u %s", usersTable, where)
 		if scanErr := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); scanErr != nil {
 			return errxtrace.Wrap("failed to count admin users", scanErr)
@@ -457,11 +450,10 @@ func (r *UserRegistry) ListAdminByTenant(ctx context.Context, tenantID string, o
 // user that are neither revoked nor expired. Backs the
 // `active_session_count` field on the admin user-detail endpoint
 // (#1746). The lookup crosses tenants intentionally — the admin caller
-// may not be a member of the target user's tenant — and runs under the
-// default connection role, which bypasses RLS on refresh_tokens. SET
-// LOCAL row_security = off is the same fail-loud guard the other admin
-// listings carry: if the role's bypass is revoked the query ERRORs
-// instead of silently returning 0 (see TenantRegistry.ListAdmin).
+// may not be a member of the target user's tenant — and runs inside
+// store.DoAsAdmin, under the inventario_admin (BYPASSRLS) role, so the
+// refresh_tokens RLS policy is skipped for this transaction only (see
+// TenantRegistry.ListAdmin for the same model).
 //
 // Note on the handler contract: admin handler degrades a CountSessionsByUser
 // failure to 0 + a separate audit row (admin.get_user_sessions, success=false)
@@ -474,11 +466,7 @@ func (r *UserRegistry) CountSessionsByUser(ctx context.Context, userID string) (
 	}
 
 	var count int
-	reg := r.newSQLRegistry()
-	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
-			return errxtrace.Wrap("failed to disable row_security for active-session count", execErr)
-		}
+	err := store.DoAsAdmin(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
 			`SELECT COUNT(*) FROM %s WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > $2`,
 			r.tableNames.RefreshTokens(),
