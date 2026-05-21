@@ -4,12 +4,15 @@ import {
   clearAuth,
   getAccessToken,
   getCsrfToken,
+  getImpersonationReturn,
   setAccessToken,
   setCsrfToken,
+  setImpersonationReturn,
 } from "@/lib/auth-storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 import {
   __resetNavigationForTests,
+  setHardRedirect,
   setNavigateToLogin,
   setNavigateToMaintenance,
 } from "@/lib/navigation"
@@ -471,5 +474,107 @@ describe("401 flow", () => {
     expect(refreshCalls).toBe(1)
     expect(r1.ok).toBe("first")
     expect(r2.ok).toBe("second")
+  })
+})
+
+describe("impersonation auto-expiry (#1757)", () => {
+  it("a 401 with a return-slot set recovers via POST /admin/impersonation/end, not /auth/refresh", async () => {
+    setAccessToken("expired-impersonation-token")
+    setImpersonationReturn({ targetUserId: "t1" })
+    let refreshCalls = 0
+    let endCalls = 0
+    server.use(
+      msw.get(api("/groups"), () => HttpResponse.json(null, { status: 401 })),
+      msw.post(api("/auth/refresh"), () => {
+        refreshCalls++
+        return HttpResponse.json({ access_token: "fresh" })
+      }),
+      msw.post(api("/admin/impersonation/end"), () => {
+        endCalls++
+        return HttpResponse.json({ access_token: "admin-token", csrf_token: "admin-csrf" })
+      })
+    )
+    const redirect = vi.fn()
+    setHardRedirect(redirect)
+
+    await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
+
+    expect(endCalls).toBe(1)
+    expect(refreshCalls).toBe(0)
+    // The admin's restored tokens replaced the expired impersonation ones,
+    // the return-slot was cleared, and the browser hard-redirected back to
+    // the impersonated user's admin detail page.
+    expect(getAccessToken()).toBe("admin-token")
+    expect(getImpersonationReturn()).toBeNull()
+    expect(redirect).toHaveBeenCalledWith("/admin/users/t1")
+  })
+
+  it("when the end call fails: clears auth and redirects to /login", async () => {
+    setAccessToken("expired-impersonation-token")
+    setImpersonationReturn({ targetUserId: "t1" })
+    server.use(
+      msw.get(api("/groups"), () => HttpResponse.json(null, { status: 401 })),
+      msw.post(api("/admin/impersonation/end"), () => HttpResponse.json(null, { status: 500 }))
+    )
+    const navigate = vi.fn()
+    setNavigateToLogin(navigate)
+    setHardRedirect(vi.fn())
+
+    await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
+
+    expect(getAccessToken()).toBeNull()
+    expect(getImpersonationReturn()).toBeNull()
+    expect(navigate).toHaveBeenCalledOnce()
+  })
+
+  it("when the end call 200s without an access_token: clears auth and redirects to /login", async () => {
+    setAccessToken("expired-impersonation-token")
+    setImpersonationReturn({ targetUserId: "t1" })
+    server.use(
+      msw.get(api("/groups"), () => HttpResponse.json(null, { status: 401 })),
+      // A 2xx that lacks `access_token` cannot restore the admin session —
+      // it must take the same terminal fallback as the non-ok branch
+      // rather than falling through as "success" into a reload/401 loop.
+      msw.post(api("/admin/impersonation/end"), () => HttpResponse.json({}))
+    )
+    const navigate = vi.fn()
+    setNavigateToLogin(navigate)
+    const redirect = vi.fn()
+    setHardRedirect(redirect)
+
+    await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
+
+    // The expired impersonation token is gone (cleared via clearAuth,
+    // which also drops the return-slot), and there is no hard-redirect
+    // into a tokenless session — just the /login bounce.
+    expect(getAccessToken()).toBeNull()
+    expect(getImpersonationReturn()).toBeNull()
+    expect(redirect).not.toHaveBeenCalled()
+    expect(navigate).toHaveBeenCalledOnce()
+  })
+
+  it("single-flight: concurrent 401s during impersonation share one POST /admin/impersonation/end", async () => {
+    setAccessToken("expired-impersonation-token")
+    setImpersonationReturn({ targetUserId: "t1" })
+    let endCalls = 0
+    server.use(
+      msw.get(api("/groups"), () => HttpResponse.json(null, { status: 401 })),
+      msw.get(api("/profile"), () => HttpResponse.json(null, { status: 401 })),
+      msw.post(api("/admin/impersonation/end"), async () => {
+        endCalls++
+        // A small delay keeps the `end` call in-flight while the second
+        // 401 lands, so both requests observe the same shared promise.
+        await new Promise((r) => setTimeout(r, 20))
+        return HttpResponse.json({ access_token: "admin-token", csrf_token: "admin-csrf" })
+      })
+    )
+    setHardRedirect(vi.fn())
+
+    // Both requests 401 while the return-slot is set; the impersonation-end
+    // single-flight must dedup them into a single backend `end` call.
+    const results = await Promise.allSettled([http.get("/groups"), http.get("/profile")])
+
+    expect(results.every((r) => r.status === "rejected")).toBe(true)
+    expect(endCalls).toBe(1)
   })
 })
