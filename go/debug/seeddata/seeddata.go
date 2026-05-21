@@ -114,6 +114,23 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 		if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
 			return false, err
 		}
+		// Two more fixtures dedicated to the admin-section e2e suite
+		// (#1758), provisioned here — before the location-count
+		// idempotency gate — so they survive a re-seed:
+		//   - sysadmin@test-org.com carries is_system_admin so the
+		//     Playwright spec reaches /api/v1/admin/* and /admin/*
+		//     without a per-lane `inventario admin grant-system-admin`
+		//     CLI step.
+		//   - blocktarget@test-org.com is a disposable plain user the
+		//     block/unblock spec deactivates then reactivates; no
+		//     other spec references it, so a parallel run never
+		//     observes it mid-block.
+		if err := ensureSystemAdminUser(ctx, registrySet, tenant, users); err != nil {
+			return false, err
+		}
+		if err := ensureBlockTargetUser(ctx, registrySet, tenant, users); err != nil {
+			return false, err
+		}
 	}
 
 	// Ensure user1 has a default group valued in CZK.
@@ -355,6 +372,85 @@ func ensureOrphanUser(ctx context.Context, registrySet *registry.Set, tenant *mo
 	}
 	if _, err := registrySet.UserRegistry.Create(ctx, orphan); err != nil {
 		return fmt.Errorf("failed to create orphan test user: %w", err)
+	}
+	return nil
+}
+
+// ensureSystemAdminUser idempotently provisions `sysadmin@test-org.com`,
+// a platform system administrator (IsSystemAdmin = true) the
+// admin-section e2e suite (#1758) authenticates as. This mirrors the
+// production `inventario admin grant-system-admin` CLI bootstrap, but
+// runs inside /api/v1/seed so every harness lane (memory-mode tests,
+// docker init-data, native-binary macOS lane) gets the fixture without
+// a bespoke CLI step. The tenant.Slug gate keeps the well-known-password
+// admin account out of arbitrary external tenants.
+//
+// The system admin also gets a USD-valued default group so login lands
+// cleanly (no /no-group race) and so it never collides with the CZK/EUR
+// groups the user-isolation specs depend on.
+func ensureSystemAdminUser(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User) error {
+	const sysadminEmail = "sysadmin@test-org.com"
+
+	var sysadmin *models.User
+	for _, user := range users {
+		if user.TenantID == tenant.ID && user.Email == sysadminEmail {
+			sysadmin = user
+			break
+		}
+	}
+
+	if sysadmin == nil {
+		newUser := models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				TenantID: tenant.ID,
+			},
+			Email:         sysadminEmail,
+			Name:          "Test System Admin",
+			IsActive:      true,
+			IsSystemAdmin: true,
+		}
+		if err := newUser.SetPassword("TestPassword123"); err != nil {
+			return err
+		}
+		created, err := registrySet.UserRegistry.Create(ctx, newUser)
+		if err != nil {
+			return fmt.Errorf("failed to create system-admin test user: %w", err)
+		}
+		sysadmin = created
+	}
+
+	if _, err := findOrCreateDefaultGroup(ctx, registrySet, sysadmin, models.Currency("USD")); err != nil {
+		return fmt.Errorf("failed to create system-admin default group: %w", err)
+	}
+	return nil
+}
+
+// ensureBlockTargetUser idempotently provisions `blocktarget@test-org.com`,
+// a disposable plain (non-admin) test user the admin-section e2e suite
+// (#1758) blocks then unblocks. It is intentionally referenced by no
+// other spec so the parallel Playwright run never observes it while it
+// is mid-block.
+func ensureBlockTargetUser(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User) error {
+	const blockTargetEmail = "blocktarget@test-org.com"
+	for _, user := range users {
+		if user.TenantID == tenant.ID && user.Email == blockTargetEmail {
+			return nil
+		}
+	}
+
+	target := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: tenant.ID,
+		},
+		Email:    blockTargetEmail,
+		Name:     "Test Block Target",
+		IsActive: true,
+	}
+	if err := target.SetPassword("TestPassword123"); err != nil {
+		return err
+	}
+	if _, err := registrySet.UserRegistry.Create(ctx, target); err != nil {
+		return fmt.Errorf("failed to create block-target test user: %w", err)
 	}
 	return nil
 }

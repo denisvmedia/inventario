@@ -57,15 +57,16 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	c.Assert(testTenant.Status, qt.Equals, models.TenantStatusActive)
 
 	// Verify that users were created with the correct tenant ID.
-	// Five well-known fixture users land in test-org after #1658:
+	// Seven well-known fixture users land in test-org after #1758:
 	// admin, user2, orphan, family (owner of the secondary group),
-	// teammate (second member of admin's primary group).
+	// teammate (second member of admin's primary group), sysadmin
+	// (platform system admin) and blocktarget (block/unblock fixture).
 	users, err := registrySet.UserRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(users) >= 5, qt.IsTrue, qt.Commentf("Expected at least 5 users, got %d", len(users)))
+	c.Assert(len(users) >= 7, qt.IsTrue, qt.Commentf("Expected at least 7 users, got %d", len(users)))
 
 	// Find the test users
-	var adminUser, regularUser, orphanUser, familyUser *models.User
+	var adminUser, regularUser, orphanUser, familyUser, sysadminUser *models.User
 	for _, user := range users {
 		switch user.Email {
 		case "admin@test-org.com":
@@ -76,6 +77,8 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 			orphanUser = user
 		case "family@test-org.com":
 			familyUser = user
+		case "sysadmin@test-org.com":
+			sysadminUser = user
 		}
 	}
 
@@ -102,12 +105,19 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	c.Assert(familyUser, qt.IsNotNil, qt.Commentf("family user not found"))
 	c.Assert(familyUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(familyUser.IsActive, qt.IsTrue)
+
+	// Sysadmin: the is_system_admin flag must round-trip through the
+	// Postgres INSERT/SELECT path (issue #1758).
+	c.Assert(sysadminUser, qt.IsNotNil, qt.Commentf("sysadmin user not found"))
+	c.Assert(sysadminUser.TenantID, qt.Equals, testTenant.ID)
+	c.Assert(sysadminUser.IsActive, qt.IsTrue)
+	c.Assert(sysadminUser.IsSystemAdmin, qt.IsTrue)
 }
 
 func cleanupTestData(c *qt.C, db *sqlx.DB) {
 	// Clean up in reverse order of dependencies
 	queries := []string{
-		"DELETE FROM users WHERE email IN ('admin@test-org.com', 'user2@test-org.com', 'orphan@test-org.com', 'family@test-org.com', 'teammate@test-org.com')",
+		"DELETE FROM users WHERE email IN ('admin@test-org.com', 'user2@test-org.com', 'orphan@test-org.com', 'family@test-org.com', 'teammate@test-org.com', 'sysadmin@test-org.com', 'blocktarget@test-org.com')",
 		"DELETE FROM tenants WHERE slug = 'test-org'",
 	}
 

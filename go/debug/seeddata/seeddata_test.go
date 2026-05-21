@@ -37,7 +37,7 @@ func TestSeedData(t *testing.T) {
 	c.Assert(tenant.Slug, qt.Equals, "test-org")
 	c.Assert(tenant.Status, qt.Equals, models.TenantStatusActive)
 
-	// Five well-known users land in the test-org tenant:
+	// Seven well-known users land in the test-org tenant:
 	//   admin / user2 — currency-different default groups (CZK + EUR);
 	//                   user2 stays in its OWN group so user-isolation
 	//                   e2e specs keep working.
@@ -46,9 +46,13 @@ func TestSeedData(t *testing.T) {
 	//   teammate     — second member of admin's primary group (#1658
 	//                   multi-member demo). Lives apart from user2 by
 	//                   design.
+	//   sysadmin     — platform system admin (is_system_admin) for the
+	//                  admin-section e2e suite (issue #1758).
+	//   blocktarget  — disposable plain user the block/unblock spec
+	//                  deactivates then reactivates (issue #1758).
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(users, qt.HasLen, 5)
+	c.Assert(users, qt.HasLen, 7)
 
 	for _, user := range users {
 		c.Assert(user.TenantID, qt.Equals, tenant.ID)
@@ -81,6 +85,25 @@ func TestSeedData(t *testing.T) {
 	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(ctx, tenant.ID, orphan.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(memberships, qt.HasLen, 0)
+
+	// The sysadmin fixture carries the platform-admin flag; every other
+	// seeded user must not (issue #1758).
+	sysadmin := emails["sysadmin@test-org.com"]
+	c.Assert(sysadmin, qt.IsNotNil)
+	c.Assert(sysadmin.IsActive, qt.IsTrue)
+	c.Assert(sysadmin.IsSystemAdmin, qt.IsTrue)
+	for _, u := range users {
+		if u.Email != "sysadmin@test-org.com" {
+			c.Assert(u.IsSystemAdmin, qt.IsFalse,
+				qt.Commentf("%s must not be a system admin", u.Email))
+		}
+	}
+
+	// The block-target fixture is a plain active user.
+	blockTarget := emails["blocktarget@test-org.com"]
+	c.Assert(blockTarget, qt.IsNotNil)
+	c.Assert(blockTarget.IsActive, qt.IsTrue)
+	c.Assert(blockTarget.IsSystemAdmin, qt.IsFalse)
 }
 
 // TestSeedDataSurfaceCoverage asserts that every feature surface called
@@ -295,7 +318,7 @@ func TestSeedDataIdempotent(t *testing.T) {
 
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(users, qt.HasLen, 5)
+	c.Assert(users, qt.HasLen, 7)
 
 	locations, err := registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
@@ -348,6 +371,9 @@ func TestSeedDataDoesNotCreateFixturesInNonTestTenant(t *testing.T) {
 		c.Assert(u.Email, qt.Not(qt.Equals), "orphan@test-org.com")
 		c.Assert(u.Email, qt.Not(qt.Equals), "family@test-org.com")
 		c.Assert(u.Email, qt.Not(qt.Equals), "teammate@test-org.com")
+		c.Assert(u.Email, qt.Not(qt.Equals), "sysadmin@test-org.com")
+		c.Assert(u.Email, qt.Not(qt.Equals), "blocktarget@test-org.com")
+		c.Assert(u.IsSystemAdmin, qt.IsFalse)
 	}
 }
 
