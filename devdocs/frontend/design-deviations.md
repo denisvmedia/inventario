@@ -477,6 +477,51 @@ _None yet._
 - **Approved by**: agent-suggested-then-user-confirmed — same rationale as the #1753 `AdminTenantDetailPage` naming entry above.
 - **Reversion plan**: Permanent — the `Admin*Page` convention is the established pattern for this subtree.
 
+#### 2026-05-21 — Admin Groups list / detail page naming follows the `Admin*Page` convention
+
+- **Issue/PR**: #1755 / PR (pending)
+- **Mock**: [`design-mocks/src/views/admin/GroupsView.tsx`](../../design-mocks/src/views/admin/GroupsView.tsx) and [`GroupDetailView.tsx`](../../design-mocks/src/views/admin/GroupDetailView.tsx) are named `*View` per the mock's `view`-state-machine convention.
+- **Reality**: `frontend/src/pages/admin/AdminGroupsPage.tsx` and `AdminGroupDetailPage.tsx` follow the `Admin*Page` naming the #1752 foundation established for this subtree (AdminTenantsPage / AdminTenantDetailPage / AdminUsersPage).
+- **Why**: Codebase convention — `pages/admin/*` are routed React Router pages, not mock `view` states. Consistent with the prior admin entries in this log.
+- **Approved by**: agent-suggested — same rationale as the #1753 AdminTenants naming entry.
+- **Reversion plan**: Permanent; this is a frontend↔mock structural difference, not a visual one.
+
+#### 2026-05-21 — Admin Groups list + detail add controls (search, filters, sortable headers, pagination) the mock lacks
+
+- **Issue/PR**: #1755 / PR (pending)
+- **Mock**: `GroupsView.tsx` filters/paginates a client-side `MOCK_ADMIN_GROUPS` array (search + tenant Select + status Select + numbered pager, no sortable headers). `GroupDetailView.tsx` has no URL state.
+- **Reality**: `AdminGroupsPage.tsx` drives every control server-side via `?q`, `?tenantID`, `?status`, `?sort`, `?order`, `?page` on the URL — debounced search, sortable column headers (name/slug/created_at/status, the BE-supported `?sort` set), windowed `AdminPagination`, and out-of-range page recovery. The mock's table has no sortable headers; the frontend adds the asc/desc affordance to match the rest of the admin surface (AdminTenantsPage).
+- **Why**: Backend reality — `GET /admin/groups` is a real paginated/sortable/searchable endpoint, not a static array. URL-persisted state is an issue #1755 acceptance criterion. The sortable-header mechanism mirrors the canonical AdminTenantsPage pattern.
+- **Approved by**: user (explicit) — issue #1755 spec mandates URL-persisted filters + sortable columns.
+- **Reversion plan**: Permanent; the controls reflect the live BE contract.
+
+#### 2026-05-21 — Admin Groups list adds a dedicated sortable Slug column
+
+- **Issue/PR**: #1755 / PR (pending)
+- **Mock**: `GroupsView.tsx` shows six columns — Group, Tenant, Status, Currency, Members, Created — with the slug not surfaced as its own column (the mock row shows only the group name).
+- **Reality**: `AdminGroupsPage.tsx` shows only the group name in the Group cell (matching the mock) AND adds a separate, sortable `Slug` column. Seven columns total — one more than the mock.
+- **Why**: Issue #1755 explicitly requires sortable headers for the full BE-supported `?sort` set, which includes `slug`. A sortable header needs a column to attach to; the dedicated Slug column is the affordance for the `slug` sort.
+- **Approved by**: agent-suggested — the issue mandates `slug` sortability without specifying the column; a dedicated column is the minimal, consistent way to expose it.
+- **Reversion plan**: If `slug` sort is dropped from the BE or deemed redundant, remove the Slug column and the `slug` entry from the page's `SORTABLE` set; the Group cell stays name-only as in the mock.
+
+#### 2026-05-21 — Admin Groups tenant filter is fetched as one large page (per_page=100)
+
+- **Issue/PR**: #1755 / PR (pending)
+- **Mock**: `GroupsView.tsx` maps the in-memory `MOCK_TENANTS` array directly into the tenant-filter `<Select>` — no pagination, every tenant is always available.
+- **Reality**: `AdminGroupsPage.tsx` populates the tenant-filter `<Select>` from `useAdminTenants({ page: 1, perPage: 100, sort: "name" })` — a single first page at the BE's `per_page` cap. A deployment with more than 100 tenants would not list tenants 101+ in the dropdown.
+- **Why**: Backend reality — tenants come from a paginated endpoint. A searchable combobox would be the fully-correct fix but is heavier than #1755's scope; one 100-row page covers every realistic deployment today. A deep-linked `?tenantID` still filters correctly even when that tenant is absent from the dropdown options (the filter value round-trips through the URL independently of the option list).
+- **Approved by**: agent-suggested — pragmatic scoping for #1755; flagged here for a future combobox upgrade.
+- **Reversion plan**: Swap the `<Select>` for a `cmdk`-backed searchable combobox with server-side tenant search when a >100-tenant deployment appears, or when umbrella #1744 adds a shared admin tenant-picker.
+
+#### 2026-05-21 — Admin Group detail: Members panel is a placeholder; soft-delete confirm uses `useConfirm`, not `AlertDialog`
+
+- **Issue/PR**: #1755 / PR (pending)
+- **Mock**: `GroupDetailView.tsx` renders a full Members panel — add-member dialog, per-row role `<Select>`, remove-member `AlertDialog` — and the Danger-zone soft-delete confirm is a shadcn `AlertDialog`.
+- **Reality**: `AdminGroupDetailPage.tsx` renders the Members panel as a clearly-labelled **placeholder** card (dashed border, `Users` glyph, "Member management ships in a follow-up update.") — the real add/remove/role editor is a later sub-issue of umbrella #1744, out of #1755's scope. The Danger-zone soft-delete confirm uses the codebase's `useConfirm()` primitive (a root-mounted `Dialog` exposing a promise-based `confirm()`), not a per-call `AlertDialog`.
+- **Why**: (1) Members editor — scoped out of #1755 by the issue text; shipping a placeholder keeps the page coherent without pre-empting the follow-up. (2) `AlertDialog` — the frontend has **no `AlertDialog` primitive**; `frontend/src/hooks/useConfirm.tsx` is the established destructive-confirm pattern (see its own header comment) and is already mounted by Shell's `ConfirmProvider`. The confirm body still explains the two-phase async purge as the issue requires.
+- **Approved by**: user (explicit) — issue #1755 spec mandates the Members placeholder and a soft-delete confirm dialog; the `useConfirm` substitution follows the documented codebase convention.
+- **Reversion plan**: Members placeholder is replaced by the real editor in the follow-up sub-issue. The `useConfirm` choice is permanent unless the codebase adopts a shadcn `AlertDialog` primitive repo-wide.
+
 ### Empty / Error / Loading states
 
 #### 2026-05-20 — Admin 403 page reuses the 404 empty-state pattern

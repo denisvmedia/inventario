@@ -23,6 +23,11 @@ export type AdminTenantUser = Schema<"jsonapi.AdminUserListItem">
 // member_count and an owning-tenant chip.
 export type AdminGroup = Schema<"jsonapi.AdminGroupListItem">
 
+// A single group as returned by GET /admin/groups/{id} (and by the
+// soft-delete DELETE, which echoes the post-transition row). Carries the
+// same computed member_count / tenant chip as a list row plus created_by.
+export type AdminGroupDetail = Schema<"jsonapi.AdminGroupDetail">
+
 // The full per-user admin detail as returned by GET /admin/users/{id} —
 // identity, is_active, last_login_at, group memberships, and the
 // `active_session_count` (the BE returns a count, not a session list).
@@ -53,6 +58,7 @@ type AdminTenantsResponse = Schema<"jsonapi.AdminTenantsResponse">
 type AdminTenantResponse = Schema<"jsonapi.AdminTenantResponse">
 type AdminUsersResponse = Schema<"jsonapi.AdminUsersResponse">
 type AdminGroupsResponse = Schema<"jsonapi.AdminGroupsResponse">
+type AdminGroupResponse = Schema<"jsonapi.AdminGroupResponse">
 type AdminUserResponse = Schema<"jsonapi.AdminUserResponse">
 type AdminUserEnvelope = Schema<"apiserver.AdminUserEnvelope">
 
@@ -161,6 +167,27 @@ export async function listAdminGroups(
   }
 }
 
+// Reads a single location group by ID. The BE returns the AdminGroupDetail
+// shape — the same computed member_count / tenant chip as a list row, plus
+// created_by.
+export async function getAdminGroup(
+  groupId: string,
+  signal?: AbortSignal
+): Promise<AdminGroupDetail> {
+  const body = await http.get<AdminGroupResponse>(`/admin/groups/${encodeURIComponent(groupId)}`, {
+    signal,
+  })
+  // The BE returns HTTP 404 for a missing group; a 200 with no `data`
+  // (or a `data` object lacking an `id`) would be a malformed response.
+  // Fail fast instead of masking it — an empty `{}` would otherwise
+  // silently render as not-found, hiding a backend bug behind a 404-like
+  // UI.
+  if (!body.data || !body.data.id) {
+    throw new Error(`Admin group response for "${groupId}" is missing its payload`)
+  }
+  return body.data
+}
+
 // Reads a single user's full admin detail by ID (GET /admin/users/{id}):
 // identity, is_active, last_login_at, group memberships, and the
 // active-session count. The BE returns HTTP 404 for a missing user; a 200
@@ -173,6 +200,26 @@ export async function getAdminUser(userId: string, signal?: AbortSignal): Promis
   })
   if (!body.data || !body.data.id) {
     throw new Error(`Admin user response for "${userId}" is missing its payload`)
+  }
+  return body.data
+}
+
+// Soft-deletes a location group. The BE flips the group to
+// `pending_deletion` and returns HTTP 200 with the post-transition
+// AdminGroupDetail row — the same shape getAdminGroup returns. The call is
+// idempotent: re-deleting an already-`pending_deletion` group also returns
+// 200 with the unchanged row, so the caller never has to special-case it.
+export async function softDeleteAdminGroup(
+  groupId: string,
+  signal?: AbortSignal
+): Promise<AdminGroupDetail> {
+  const body = await http.del<AdminGroupResponse>(`/admin/groups/${encodeURIComponent(groupId)}`, {
+    signal,
+  })
+  // Same fail-fast guard as getAdminGroup: a 200 with no usable `data` is
+  // a malformed response, not a successful delete.
+  if (!body.data || !body.data.id) {
+    throw new Error(`Admin group delete response for "${groupId}" is missing its payload`)
   }
   return body.data
 }

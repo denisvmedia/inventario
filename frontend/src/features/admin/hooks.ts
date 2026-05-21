@@ -4,14 +4,17 @@ import { useIsSystemAdmin } from "@/features/auth/hooks"
 
 import {
   blockAdminUser,
+  getAdminGroup,
   getAdminTenant,
   getAdminUser,
   getImpersonationState,
   listAdminGroups,
   listAdminTenants,
   listAdminTenantUsers,
+  softDeleteAdminGroup,
   unblockAdminUser,
   type AdminBlockRequest,
+  type AdminGroupDetail,
   type AdminGroupsResult,
   type AdminTenant,
   type AdminTenantsResult,
@@ -86,6 +89,47 @@ export function useAdminGroups(
     queryKey: adminKeys.groupList(params),
     queryFn: ({ signal }) => listAdminGroups(params, signal),
     enabled: enabled && isSystemAdmin,
+  })
+}
+
+// Reads a single location group for the admin Group detail page header.
+// Like useAdminTenant this is gated on is_system_admin so a non-admin who
+// somehow deep-links the page never fires a guaranteed-403 request.
+export function useAdminGroup(groupId: string, { enabled = true }: QueryOptions = {}) {
+  const isSystemAdmin = useIsSystemAdmin()
+  return useQuery<AdminGroupDetail>({
+    queryKey: adminKeys.groupDetail(groupId),
+    queryFn: ({ signal }) => getAdminGroup(groupId, signal),
+    enabled: enabled && isSystemAdmin && !!groupId,
+  })
+}
+
+// Soft-deletes a location group from the admin Group detail page. On
+// success the BE echoes the post-transition (pending_deletion) row; we
+// write it straight into the detail cache so the page flips read-only
+// without a refetch, and invalidate the cross-tenant group LIST queries so
+// the status badge there refreshes too. The mutation surfaces errors to
+// the caller (via `isError` / `error`) so the page can show a failure
+// notice; an idempotent re-delete returns HTTP 200 and resolves cleanly.
+export function useDeleteAdminGroup() {
+  const qc = useQueryClient()
+  return useMutation<AdminGroupDetail, Error, string>({
+    mutationFn: (groupId) => softDeleteAdminGroup(groupId),
+    onSuccess: (group) => {
+      if (group.id) {
+        qc.setQueryData(adminKeys.groupDetail(group.id), group)
+      }
+      // Invalidate only the LIST queries, not the whole `groups()`
+      // subtree: a blanket invalidate would also mark the detail query
+      // (a child key) stale and — because the detail page is an active
+      // observer — immediately refetch it, racing the `setQueryData`
+      // above and flipping the page back to the pre-delete row. Using
+      // the shared key factory plus the `"list"` prefix scopes the
+      // invalidation to list keys without hardcoding queryKey positions.
+      qc.invalidateQueries({
+        queryKey: [...adminKeys.groups(), "list"],
+      })
+    },
   })
 }
 

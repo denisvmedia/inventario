@@ -44,6 +44,7 @@ export const adminKeys = {
     [...adminKeys.tenants(), "detail", id, "users", params] as const,
   groups: () => [...adminKeys.all, "groups"] as const,
   groupList: (params: AdminGroupsParams) => [...adminKeys.groups(), "list", params] as const,
+  groupDetail: (id: string) => [...adminKeys.groups(), "detail", id] as const,
   // Per-user admin detail (GET /admin/users/{id}). Keyed by the user id
   // so block/unblock mutations can invalidate exactly this entry.
   users: () => [...adminKeys.all, "users"] as const,

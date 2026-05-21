@@ -184,6 +184,11 @@ const AdminUserDetailPage = lazy(() =>
 const AdminGroupsPage = lazy(() =>
   import("@/pages/admin/AdminGroupsPage").then((m) => ({ default: m.AdminGroupsPage }))
 )
+const AdminGroupDetailPage = lazy(() =>
+  import("@/pages/admin/AdminGroupDetailPage").then((m) => ({
+    default: m.AdminGroupDetailPage,
+  }))
+)
 
 // AppRoutes is the full route tree for the new React frontend.
 //
@@ -376,6 +381,7 @@ export function AppRoutes() {
             <Route path="users" element={<AdminUsersPage />} />
             <Route path="users/:userId" element={<AdminUserDetailPage />} />
             <Route path="groups" element={<AdminGroupsPage />} />
+            <Route path="groups/:groupId" element={<AdminGroupDetailPage />} />
           </Route>
         </Route>
 
