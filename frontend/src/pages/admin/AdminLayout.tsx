@@ -6,16 +6,20 @@ import { LocationsBreadcrumb } from "@/components/locations/LocationsBreadcrumb"
 import { cn } from "@/lib/utils"
 
 // The /admin/* sub-routes that get a secondary-nav pill. `end` keeps the
-// match exact so /admin/tenants/:id (later sub-issues) doesn't double-
-// highlight. Labels resolve against the `admin` i18n namespace.
+// match exact so /admin/tenants/:id doesn't double-highlight. Labels
+// resolve against the `admin` i18n namespace. There is no Users pill:
+// users are reached through a tenant (the tenant-detail Users tab) and
+// the per-user page lives at /admin/users/:id — there is no cross-tenant
+// user list, so a top-level Users section would lead nowhere.
 const ADMIN_NAV = [
   { to: "/admin/tenants", labelKey: "nav.tenants" },
-  { to: "/admin/users", labelKey: "nav.users" },
   { to: "/admin/groups", labelKey: "nav.groups" },
 ] as const
 
-// Resolves the current section label key for the breadcrumb tail. Falls
-// back to the Tenants section for an unrecognised /admin/* path.
+// Resolves the current section label key for the breadcrumb tail. The
+// per-user page (/admin/users/:id) has no pill of its own, so it is
+// mapped to the Tenants section it is reached from; any other
+// unrecognised /admin/* path also falls back to Tenants.
 function currentNavLabelKey(pathname: string): string {
   const match = ADMIN_NAV.find((e) => pathname === e.to || pathname.startsWith(`${e.to}/`))
   return match?.labelKey ?? ADMIN_NAV[0].labelKey
