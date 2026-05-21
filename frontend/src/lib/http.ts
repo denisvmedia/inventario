@@ -285,7 +285,25 @@ async function recoverFromImpersonationExpiry(url: string): Promise<never> {
         )
       }
       const payload = (await response.json()) as ImpersonationEndResponse
-      if (payload.access_token) setAccessToken(payload.access_token)
+      // A 2xx without an access token is a malformed response — it cannot
+      // restore the admin session, so do the same terminal fallback as the
+      // non-ok branch instead of falling through as "success" (which would
+      // keep the expired impersonation token, clear the return slot, and
+      // hard-redirect into a reload/401 loop). Mirrors the fail-fast guards
+      // in startImpersonation / endImpersonation.
+      if (!payload.access_token) {
+        clearAuth()
+        if (shouldRedirectFromCurrentPath()) {
+          navigateToLogin(currentReturnTo(), "session_expired")
+        }
+        throw new HttpError(
+          "Impersonation-end recovery returned no access_token",
+          response.status,
+          endUrl,
+          payload
+        )
+      }
+      setAccessToken(payload.access_token)
       if (payload.csrf_token) setCsrfToken(payload.csrf_token)
       // Read the return target BEFORE clearing the slot.
       const targetUserId = getImpersonationReturn()?.targetUserId

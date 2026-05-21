@@ -153,12 +153,12 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
 
   const [dialog, setDialog] = useState<"block" | "unblock" | "impersonate" | null>(null)
   const [reason, setReason] = useState("")
-  // Inline error banner state for a failed block / unblock. A single
-  // discriminated value: `{ kind: "typed", key }` carries a known 422
-  // `admin.block.*` code mapped to its i18n key suffix (see
-  // BLOCK_ERROR_KEY); `{ kind: "generic" }` is the catch-all; `null` is
-  // "no error". This replaces the earlier `errorKey` + `genericError`
-  // pair so the two can never disagree.
+  // Inline error banner state for a failed block / unblock / impersonate.
+  // A single discriminated value: `{ kind: "typed", key }` carries a known
+  // typed code (`admin.block.*` / `admin.impersonate.*`) mapped to its i18n
+  // key suffix (see ACTION_ERROR_KEY); `{ kind: "generic" }` is the
+  // catch-all; `null` is "no error". This replaces the earlier `errorKey` +
+  // `genericError` pair so the two can never disagree.
   const [actionError, setActionError] = useState<
     { kind: "typed"; key: string } | { kind: "generic" } | null
   >(null)
@@ -192,9 +192,10 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
     setDialog(null)
   }
 
-  // Maps a thrown mutation error to the inline banner state: a known
-  // 422 `admin.block.*` code surfaces as a specific localized message;
-  // anything else surfaces as the generic banner.
+  // Maps a thrown mutation error to the inline banner state: any known
+  // typed code (`admin.block.*` / `admin.impersonate.*`) present in
+  // ACTION_ERROR_KEY surfaces as a specific localized message; anything
+  // else surfaces as the generic banner.
   function applyError(err: unknown) {
     const code = getServerErrorCode(err)
     const key = code ? ACTION_ERROR_KEY[code] : undefined
@@ -268,7 +269,7 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
   const impersonateDisabledTitle =
     user.is_system_admin === true
       ? t("userDetail.impersonateAdminHint")
-      : active !== true
+      : active === false
         ? t("userDetail.impersonateBlockedHint")
         : undefined
 

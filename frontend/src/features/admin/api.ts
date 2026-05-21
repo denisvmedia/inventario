@@ -310,8 +310,8 @@ export async function getImpersonationState(signal?: AbortSignal): Promise<Imper
 // a full-page reload so the app re-mounts as the target user.
 //
 // Typed 422 codes the caller branches on: `admin.impersonate.target_is_admin`,
-// `admin.impersonate.target_blocked`, `admin.impersonate.nested`,
-// `admin.impersonate.reason_too_long`; 429 `admin.impersonate.rate_limited`.
+// `admin.impersonate.target_blocked`, `admin.impersonate.nested`;
+// 429 `admin.impersonate.rate_limited`.
 export async function startImpersonation(userId: string): Promise<LoginResponse> {
   const body = await http.post<LoginResponse>(
     `/admin/users/${encodeURIComponent(userId)}/impersonate`,

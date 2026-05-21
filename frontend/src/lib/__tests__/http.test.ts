@@ -527,6 +527,32 @@ describe("impersonation auto-expiry (#1757)", () => {
     expect(navigate).toHaveBeenCalledOnce()
   })
 
+  it("when the end call 200s without an access_token: clears auth and redirects to /login", async () => {
+    setAccessToken("expired-impersonation-token")
+    setImpersonationReturn({ targetUserId: "t1" })
+    server.use(
+      msw.get(api("/groups"), () => HttpResponse.json(null, { status: 401 })),
+      // A 2xx that lacks `access_token` cannot restore the admin session —
+      // it must take the same terminal fallback as the non-ok branch
+      // rather than falling through as "success" into a reload/401 loop.
+      msw.post(api("/admin/impersonation/end"), () => HttpResponse.json({}))
+    )
+    const navigate = vi.fn()
+    setNavigateToLogin(navigate)
+    const redirect = vi.fn()
+    setHardRedirect(redirect)
+
+    await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
+
+    // The expired impersonation token is gone (cleared via clearAuth,
+    // which also drops the return-slot), and there is no hard-redirect
+    // into a tokenless session — just the /login bounce.
+    expect(getAccessToken()).toBeNull()
+    expect(getImpersonationReturn()).toBeNull()
+    expect(redirect).not.toHaveBeenCalled()
+    expect(navigate).toHaveBeenCalledOnce()
+  })
+
   it("single-flight: concurrent 401s during impersonation share one POST /admin/impersonation/end", async () => {
     setAccessToken("expired-impersonation-token")
     setImpersonationReturn({ targetUserId: "t1" })
