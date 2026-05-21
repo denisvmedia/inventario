@@ -1405,6 +1405,15 @@ type GroupMembershipRegistry interface {
 	// instead of a follow-up users:included fetch per row.
 	ListByGroupWithUsers(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error)
 
+	// ListByGroupWithUsersAdmin is the cross-tenant twin of
+	// ListByGroupWithUsers, backing the #1756 admin membership editor.
+	// A system administrator is not tenant-scoped, so the postgres
+	// backend runs the join under `SET LOCAL row_security = off` — the
+	// same defense-in-depth RLS bypass LocationGroupRegistry.GetAdmin /
+	// ListAdmin use — so a group in ANY tenant lists fine. The memory
+	// backend has no RLS and simply delegates to the same join logic.
+	ListByGroupWithUsersAdmin(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error)
+
 	// CreateUnderCap mints a membership only if the target user holds
 	// fewer than maxMemberships rows in the same tenant. The check
 	// and the insert run inside one transaction with a per-(tenant,

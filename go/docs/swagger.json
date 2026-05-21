@@ -224,6 +224,51 @@
             }
         },
         "/admin/groups/{groupID}/members": {
+            "get": {
+                "description": "Returns the group's memberships joined with each member user's id / name / email, cross-tenant. An unknown group ID is a 404; an existing group with no members is a 200 with an empty `data` array.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List a group's members (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminGroupMembersResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - system-admin required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown group",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
             "post": {
                 "description": "Adds a user to a group with the given role, bypassing the per-group admin check. The membership cap is still enforced — a user already at the cap is rejected with 422.\nReturns 422 with `admin.member.tenant_mismatch` when the target user's tenant differs from the group's tenant, `admin.member.invalid_role` for a missing or invalid role, and `admin.member.user_required` for a missing userID.",
                 "consumes": [
@@ -7980,6 +8025,61 @@
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "jsonapi.AdminGroupMember": {
+            "type": "object",
+            "properties": {
+                "group_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "joined_at": {
+                    "type": "string"
+                },
+                "member_user_id": {
+                    "type": "string"
+                },
+                "role": {
+                    "$ref": "#/definitions/models.GroupRole"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "admin_group_members"
+                    ],
+                    "example": "admin_group_members"
+                },
+                "user": {
+                    "$ref": "#/definitions/jsonapi.AdminGroupMemberUser"
+                }
+            }
+        },
+        "jsonapi.AdminGroupMemberUser": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.AdminGroupMembersResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.AdminGroupMember"
+                    }
                 }
             }
         },

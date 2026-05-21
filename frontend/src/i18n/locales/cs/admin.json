@@ -55,10 +55,39 @@
     "loadError": "Nepodařilo se načíst tuto skupinu. Zkuste to prosím znovu.",
     "loading": "Načítání skupiny…",
     "members": {
-      "count_few": "{{count}} členové",
-      "count_one": "{{count}} člen",
-      "count_other": "{{count}} členů",
-      "placeholder": "Správa členů bude doplněna v navazující aktualizaci.",
+      "add": {
+        "button": "Přidat člena",
+        "confirm": "Přidat člena",
+        "description": "Přidejte do této skupiny existující účet nájemce {{tenant}} podle e-mailové adresy.",
+        "emailLabel": "E-mailová adresa",
+        "emailPlaceholder": "kolega@example.com",
+        "found": "Přidá se {{name}} ({{email}}).",
+        "lookupError": "E-mail se nepodařilo vyhledat. Zkuste to prosím znovu.",
+        "notFound": "V tomto nájemci není žádný uživatel s touto e-mailovou adresou.",
+        "roleLabel": "Role",
+        "searching": "Hledání…",
+        "title": "Přidat člena"
+      },
+      "colMember": "Člen",
+      "colRole": "Role",
+      "empty": "V této skupině nejsou žádní členové.",
+      "errors": {
+        "generic": "Něco se pokazilo. Zkuste to prosím znovu.",
+        "invalidRole": "Tato role není platná.",
+        "lastMember": "Toto je poslední člen skupiny. Místo toho skupinu smažte.",
+        "lastOwner": "Toto je poslední vlastník skupiny. Nejprve převeďte vlastnictví.",
+        "tenantMismatch": "Tento uživatel patří k jinému nájemci než tato skupina."
+      },
+      "loadError": "Nepodařilo se načíst členy. Zkuste to prosím znovu.",
+      "loading": "Načítání členů…",
+      "remove": {
+        "action": "Odebrat ze skupiny",
+        "body": "{{name}} ztratí přístup ke skupině {{group}}. Lze ji přidat znovu později.",
+        "cancel": "Zrušit",
+        "confirm": "Odebrat",
+        "title": "Odebrat člena?"
+      },
+      "rowActions": "Akce člena",
       "title": "Členové"
     },
     "notFound": "Skupina nebyla nalezena.",

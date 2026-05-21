@@ -337,8 +337,18 @@ func toJSONAPIError(err error) jsonapi.Error {
 		// Both invariants surface as 422 business-rule violations. After
 		// the #1533 role-taxonomy expansion the live sentinel is
 		// ErrLastOwner; ErrLastAdmin stays for backwards compatibility
-		// with any caller that hasn't migrated.
-		return NewUnprocessableEntityError(err)
+		// with any caller that hasn't migrated. The `group.last_owner`
+		// JSON:API code is symmetric to `group.last_member` below — it
+		// lets the admin FE (#1756) surface distinct copy ("transfer
+		// ownership first") instead of a generic 422. The `code` field
+		// is purely additive — message-based consumers are unaffected.
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusUnprocessableEntity,
+			StatusText:     "Unprocessable Entity",
+			Code:           "group.last_owner",
+		}
 	case errors.Is(err, services.ErrLastMember):
 		// #1652 defense-in-depth: removing the last member of any role
 		// is rejected even when the owner check would pass vacuously.

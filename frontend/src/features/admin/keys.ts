@@ -45,6 +45,12 @@ export const adminKeys = {
   groups: () => [...adminKeys.all, "groups"] as const,
   groupList: (params: AdminGroupsParams) => [...adminKeys.groups(), "list", params] as const,
   groupDetail: (id: string) => [...adminKeys.groups(), "detail", id] as const,
+  // Members of one group (GET /admin/groups/{id}/members). Nested *under*
+  // the `groupDetail` subtree so a mutation can invalidate the members
+  // list and the detail header (which carries `member_count`) together —
+  // and so the existing `[...groups(), "list"]`-scoped soft-delete
+  // invalidation in `useDeleteAdminGroup` never touches it.
+  groupMembers: (id: string) => [...adminKeys.groupDetail(id), "members"] as const,
   // Per-user admin detail (GET /admin/users/{id}). Keyed by the user id
   // so block/unblock mutations can invalidate exactly this entry.
   users: () => [...adminKeys.all, "users"] as const,

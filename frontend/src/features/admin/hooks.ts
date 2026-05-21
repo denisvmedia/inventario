@@ -5,20 +5,26 @@ import { clearAuth } from "@/lib/auth-storage"
 import { hardRedirect } from "@/lib/navigation"
 
 import {
+  addAdminGroupMember,
   blockAdminUser,
   endImpersonation,
   getAdminGroup,
   getAdminTenant,
   getAdminUser,
   getImpersonationState,
+  listAdminGroupMembers,
   listAdminGroups,
   listAdminTenants,
   listAdminTenantUsers,
+  removeAdminGroupMember,
   softDeleteAdminGroup,
   startImpersonation,
   unblockAdminUser,
+  updateAdminGroupMemberRole,
+  type AdminAddMemberRequest,
   type AdminBlockRequest,
   type AdminGroupDetail,
+  type AdminGroupMember,
   type AdminGroupsResult,
   type AdminTenant,
   type AdminTenantsResult,
@@ -26,6 +32,7 @@ import {
   type AdminUnblockRequest,
   type AdminUserDetail,
   type EndImpersonationResult,
+  type GroupRole,
   type LoginResponse,
 } from "./api"
 import {
@@ -136,6 +143,64 @@ export function useDeleteAdminGroup() {
         queryKey: [...adminKeys.groups(), "list"],
       })
     },
+  })
+}
+
+// Lists the members of one location group for the membership editor on
+// the admin Group detail page. Gated on is_system_admin like the sibling
+// reads — a non-admin who somehow deep-links the page never fires a
+// guaranteed-403 request.
+export function useAdminGroupMembers(groupId: string, { enabled = true }: QueryOptions = {}) {
+  const isSystemAdmin = useIsSystemAdmin()
+  return useQuery<AdminGroupMember[]>({
+    queryKey: adminKeys.groupMembers(groupId),
+    queryFn: ({ signal }) => listAdminGroupMembers(groupId, signal),
+    enabled: enabled && isSystemAdmin && !!groupId,
+  })
+}
+
+// Invalidates the two queries an add / remove / role-change mutation
+// affects: the members list itself, and the group-detail header (whose
+// `member_count` stat drifts the moment the roster changes). Both keys
+// sit under the `groupDetail(groupId)` subtree, so a single invalidate of
+// that prefix would catch them — but invalidating the precise keys keeps
+// the intent explicit and matches the targeted style of useDeleteAdminGroup.
+function invalidateGroupMembership(qc: ReturnType<typeof useQueryClient>, groupId: string) {
+  qc.invalidateQueries({ queryKey: adminKeys.groupMembers(groupId) })
+  qc.invalidateQueries({ queryKey: adminKeys.groupDetail(groupId) })
+}
+
+// Adds a user to a group. On success the members list and the group-detail
+// header are invalidated so the roster and the `member_count` stat both
+// re-fetch. Errors surface to the caller (`isError` / `error`) so the
+// editor's add dialog can branch on the typed 422 codes.
+export function useAddAdminGroupMember(groupId: string) {
+  const qc = useQueryClient()
+  return useMutation<void, Error, AdminAddMemberRequest>({
+    mutationFn: (payload) => addAdminGroupMember(groupId, payload),
+    onSuccess: () => invalidateGroupMembership(qc, groupId),
+  })
+}
+
+// Removes a user from a group — symmetric to useAddAdminGroupMember. The
+// mutation variable is the target user's id.
+export function useRemoveAdminGroupMember(groupId: string) {
+  const qc = useQueryClient()
+  return useMutation<void, Error, string>({
+    mutationFn: (userId) => removeAdminGroupMember(groupId, userId),
+    onSuccess: () => invalidateGroupMembership(qc, groupId),
+  })
+}
+
+// Changes a member's role. The mutation variable carries both the target
+// user id and the new role; on success the same two queries are
+// invalidated (a role change does not move `member_count`, but the
+// detail-query invalidation is harmless and keeps the helper uniform).
+export function useUpdateAdminGroupMemberRole(groupId: string) {
+  const qc = useQueryClient()
+  return useMutation<void, Error, { userId: string; role: GroupRole }>({
+    mutationFn: ({ userId, role }) => updateAdminGroupMemberRole(groupId, userId, role),
+    onSuccess: () => invalidateGroupMembership(qc, groupId),
   })
 }
 

@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/render"
 
+	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
@@ -30,6 +32,11 @@ const (
 	// AuditActionAdminMemberRoleChange is the audit-row Action emitted
 	// when a system admin changes a member's role.
 	AuditActionAdminMemberRoleChange = "admin.group_member_role_change"
+	// AuditActionAdminMemberList is the audit-row Action emitted when a
+	// system admin lists a group's members (#1756). The read is audited
+	// like the admin group GET handlers (admin.get_group) — the group is
+	// the subject and the group's tenant lands in the TenantID column.
+	AuditActionAdminMemberList = "admin.group_member_list"
 )
 
 // JSON:API error codes returned by the admin group-membership
@@ -113,6 +120,70 @@ type adminGroupMembersAPI struct {
 	auditService services.AuditLogger
 }
 
+// listMembers returns a group's memberships joined with each member
+// user's identity (id, name, email) for the #1756 admin membership
+// editor. Cross-tenant by design: the read routes through
+// GroupService.AdminListMembersWithUsers, whose registry path bypasses
+// Postgres RLS, so a system admin can list members of a group in ANY
+// tenant. The RequireSystemAdmin gate is authorization enough.
+//
+// An empty group is a 200 with `{"data": []}`, not a 404 — the group
+// exists, it just has no members yet.
+//
+// @Summary List a group's members (admin)
+// @Description Returns the group's memberships joined with each member user's id / name / email, cross-tenant. An unknown group ID is a 404; an existing group with no members is a 200 with an empty `data` array.
+// @Tags admin
+// @Produce json-api
+// @Param groupID path string true "Group ID"
+// @Success 200 {object} jsonapi.AdminGroupMembersResponse "OK"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized"
+// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 404 {object} jsonapi.Errors "Not Found - unknown group"
+// @Router /admin/groups/{groupID}/members [get]
+func (api *adminGroupMembersAPI) listMembers(w http.ResponseWriter, r *http.Request) {
+	groupID := chi.URLParam(r, "groupID")
+	if strings.TrimSpace(groupID) == "" {
+		api.auditMemberList(r, "", groupID, registry.ErrNotFound)
+		_ = renderEntityError(w, r, registry.ErrNotFound)
+		return
+	}
+
+	// Resolve the group first so a typo in the URL surfaces as a clean
+	// 404 (mirrors removeMember / updateMemberRole) and the audit row
+	// carries the group's tenant ID. GetAdmin is the RLS-bypass lookup —
+	// the tenant-scoped Get would 404 on a group in any tenant other than
+	// the admin's own under the Postgres backend, breaking the cross-tenant
+	// admin surface.
+	detail, err := api.factorySet.LocationGroupRegistry.GetAdmin(r.Context(), groupID)
+	if err != nil {
+		api.auditMemberList(r, "", groupID, err)
+		_ = renderEntityError(w, r, err)
+		return
+	}
+	group, ok := adminGroupOrNotFound(detail)
+	if !ok {
+		api.auditMemberList(r, "", groupID, registry.ErrNotFound)
+		_ = renderEntityError(w, r, registry.ErrNotFound)
+		return
+	}
+
+	rows, err := api.groupService.AdminListMembersWithUsers(r.Context(), group.ID)
+	if err != nil {
+		api.auditMemberList(r, group.TenantID, group.ID, err)
+		_ = renderEntityError(w, r, err)
+		return
+	}
+
+	// Audit AFTER render so a JSON-encoding failure turns into a
+	// Success=false row instead of silently claiming the client got
+	// their data — see adminGroupsAPI.listGroups for the full rationale.
+	renderErr := render.Render(w, r, jsonapi.NewAdminGroupMembersResponse(rows))
+	api.auditMemberList(r, group.TenantID, group.ID, renderErr)
+	if renderErr != nil {
+		_ = internalServerError(w, r, renderErr)
+	}
+}
+
 // addMember admits a user to a group on behalf of a system
 // administrator, bypassing the per-group requireGroupAdmin middleware
 // but still enforcing the per-user membership cap (the registry's
@@ -147,7 +218,10 @@ func (api *adminGroupMembersAPI) addMember(w http.ResponseWriter, r *http.Reques
 
 	// Resolve the group first so a typo in the URL surfaces as 404
 	// rather than a confusing tenant-mismatch or membership error.
-	group, err := api.factorySet.LocationGroupRegistry.Get(r.Context(), groupID)
+	// GetAdmin is the RLS-bypass lookup — the tenant-scoped Get would 404
+	// on a group in any tenant other than the admin's own under the
+	// Postgres backend, breaking the cross-tenant admin surface.
+	detail, err := api.factorySet.LocationGroupRegistry.GetAdmin(r.Context(), groupID)
 	if err != nil {
 		// The group lookup failed, so its tenant is unknown — pass an
 		// empty tenant for the failed-add audit row but keep the
@@ -155,6 +229,12 @@ func (api *adminGroupMembersAPI) addMember(w http.ResponseWriter, r *http.Reques
 		// admin tried to add.
 		api.auditAdd(r, "", groupID, req.UserID, req.Role, err)
 		_ = renderEntityError(w, r, err)
+		return
+	}
+	group, ok := adminGroupOrNotFound(detail)
+	if !ok {
+		api.auditAdd(r, "", groupID, req.UserID, req.Role, registry.ErrNotFound)
+		_ = renderEntityError(w, r, registry.ErrNotFound)
 		return
 	}
 
@@ -206,11 +286,20 @@ func (api *adminGroupMembersAPI) removeMember(w http.ResponseWriter, r *http.Req
 	}
 
 	// Resolve the group up front so the audit row carries the group's
-	// tenant ID and a typo in the URL surfaces as a clean 404.
-	group, err := api.factorySet.LocationGroupRegistry.Get(r.Context(), groupID)
+	// tenant ID and a typo in the URL surfaces as a clean 404. GetAdmin
+	// is the RLS-bypass lookup — the tenant-scoped Get would 404 on a
+	// group in any tenant other than the admin's own under the Postgres
+	// backend, breaking the cross-tenant admin surface.
+	detail, err := api.factorySet.LocationGroupRegistry.GetAdmin(r.Context(), groupID)
 	if err != nil {
 		api.auditRemove(r, "", groupID, userID, err)
 		_ = renderEntityError(w, r, err)
+		return
+	}
+	group, ok := adminGroupOrNotFound(detail)
+	if !ok {
+		api.auditRemove(r, "", groupID, userID, registry.ErrNotFound)
+		_ = renderEntityError(w, r, registry.ErrNotFound)
 		return
 	}
 
@@ -266,11 +355,20 @@ func (api *adminGroupMembersAPI) updateMemberRole(w http.ResponseWriter, r *http
 	}
 
 	// Resolve the group up front so the audit row carries the group's
-	// tenant ID and a typo in the URL surfaces as a clean 404.
-	group, err := api.factorySet.LocationGroupRegistry.Get(r.Context(), groupID)
+	// tenant ID and a typo in the URL surfaces as a clean 404. GetAdmin
+	// is the RLS-bypass lookup — the tenant-scoped Get would 404 on a
+	// group in any tenant other than the admin's own under the Postgres
+	// backend, breaking the cross-tenant admin surface.
+	detail, err := api.factorySet.LocationGroupRegistry.GetAdmin(r.Context(), groupID)
 	if err != nil {
 		api.auditRoleChange(r, "", groupID, userID, req.Role, err)
 		_ = renderEntityError(w, r, err)
+		return
+	}
+	group, ok := adminGroupOrNotFound(detail)
+	if !ok {
+		api.auditRoleChange(r, "", groupID, userID, req.Role, registry.ErrNotFound)
+		_ = renderEntityError(w, r, registry.ErrNotFound)
 		return
 	}
 
@@ -389,6 +487,30 @@ func (api *adminGroupMembersAPI) auditRemove(r *http.Request, tenantID, groupID,
 // auditRoleChange records an admin.group_member_role_change audit row.
 func (api *adminGroupMembersAPI) auditRoleChange(r *http.Request, tenantID, groupID, userID string, role models.GroupRole, opErr error) {
 	api.logMemberEvent(r, AuditActionAdminMemberRoleChange, tenantID, groupID, userID, role, opErr)
+}
+
+// auditMemberList records an admin.group_member_list audit row for the
+// #1756 members listing. Unlike the add / remove / role-change events
+// there is no single target user, so this does NOT route through
+// logMemberEvent (whose subject is always a user). It mirrors
+// adminGroupsAPI.auditGet instead: the group is the subject and the
+// group's tenant lands in the TenantID column. `tenantID` is "" when the
+// group lookup failed and the tenant is therefore unknown. A 404 on the
+// group lookup records Success=false — same Success rule as auditGet.
+func (api *adminGroupMembersAPI) auditMemberList(r *http.Request, tenantID, groupID string, opErr error) {
+	if api.auditService == nil {
+		return
+	}
+	api.auditService.LogAdmin(r.Context(), services.AdminEvent{
+		Action:      AuditActionAdminMemberList,
+		ActorID:     actorIDFromRequest(r),
+		TenantID:    nullableString(tenantID),
+		SubjectType: stringPtr("group"),
+		SubjectID:   nullableString(groupID),
+		Success:     opErr == nil,
+		Request:     r,
+		ErrMsg:      strPtrFromErr(opErr),
+	})
 }
 
 // logMemberEvent is the shared audit-row writer for the three

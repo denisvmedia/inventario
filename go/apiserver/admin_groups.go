@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/render"
 
 	"github.com/denisvmedia/inventario/jsonapi"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -197,6 +198,21 @@ func tenantIDOfGroup(item *registry.AdminGroupDetail) string {
 		return ""
 	}
 	return item.Group.TenantID
+}
+
+// adminGroupOrNotFound unwraps the *models.LocationGroup out of an
+// AdminGroupDetail returned by LocationGroupRegistry.GetAdmin, treating a
+// nil detail or nil .Group as a not-found result. GetAdmin's contract is
+// to return (nil, registry.ErrNotFound) for an unknown group, but a
+// defensively nil-checked unwrap keeps the admin group-membership
+// handlers from dereferencing a nil group should a backend ever hand back
+// a (nil-bearing detail, nil err) pair. ok=false means "render
+// registry.ErrNotFound as a clean 404".
+func adminGroupOrNotFound(detail *registry.AdminGroupDetail) (*models.LocationGroup, bool) {
+	if detail == nil || detail.Group == nil {
+		return nil, false
+	}
+	return detail.Group, true
 }
 
 // auditList records an `admin.list_groups` audit row regardless of
