@@ -45,6 +45,8 @@ export function useNavLabel(labelKey: string): string {
       return t("common:nav.preferences")
     case "common:nav.search":
       return t("common:nav.search")
+    case "admin:nav.tenants":
+      return t("admin:nav.tenants")
     default:
       return labelKey
   }

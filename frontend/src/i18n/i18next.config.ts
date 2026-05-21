@@ -3,6 +3,7 @@ import LanguageDetector from "i18next-browser-languagedetector"
 import resourcesToBackend from "i18next-resources-to-backend"
 import { initReactI18next } from "react-i18next"
 
+import * as enAdmin from "./locales/en/admin.json"
 import * as enAuth from "./locales/en/auth.json"
 import * as enCommodities from "./locales/en/commodities.json"
 import * as enCommon from "./locales/en/common.json"
@@ -54,6 +55,7 @@ export const I18N_NAMESPACES = [
   "errors",
   "warranties",
   "feedback",
+  "admin",
 ] as const
 export type I18nNamespace = (typeof I18N_NAMESPACES)[number]
 
@@ -82,6 +84,7 @@ const enResources = {
   errors: enErrors,
   warranties: enWarranties,
   feedback: enFeedback,
+  admin: enAdmin,
 } as const
 
 // Lazy backend for cs/ru only. We list cs and ru explicitly via

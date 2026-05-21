@@ -4,11 +4,13 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/AppSidebar"
 import { CommandPalette } from "@/components/CommandPalette"
 import { CurrencyMigrationBanner } from "@/components/CurrencyMigrationBanner"
+import { ImpersonationBanner } from "@/components/ImpersonationBanner"
 import { InviteBanner } from "@/components/InviteBanner"
 import { OnboardingTour, TOUR_STEPS } from "@/components/OnboardingTour"
 import { TopBar } from "@/components/TopBar"
 import { Toaster } from "@/components/ui/sonner"
 import { useAuth } from "@/features/auth/AuthContext"
+import { ImpersonationProvider } from "@/features/admin/impersonation/ImpersonationContext"
 import { NumberFormatLocaleSync } from "@/features/settings/NumberFormatLocaleSync"
 import { KeyboardShortcutsProvider } from "@/features/shortcuts"
 import { ConfirmProvider } from "@/hooks/useConfirm"
@@ -49,33 +51,41 @@ export function Shell() {
       <ConfirmProvider>
         <NumberFormatLocaleSync />
         <KeyboardShortcutsProvider>
-          <SidebarProvider>
-            <AppSidebar onRestartTour={tour.restart} />
-            <SidebarInset>
-              <TopBar />
-              <CurrencyMigrationBanner />
-              {/* count=0 today — once the invites query lands (#1413) it will
-                  read from the user's pending-invites list. */}
-              <InviteBanner count={0} />
-              <main className="flex-1 overflow-y-auto">
-                <div className="container mx-auto p-6">
-                  <Outlet />
-                </div>
-              </main>
-            </SidebarInset>
-            <CommandPalette />
-            <Toaster />
-            {tour.isOpen ? (
-              <OnboardingTour
-                step={tour.step}
-                totalSteps={TOUR_STEPS.length}
-                onNext={tour.next}
-                onPrev={tour.prev}
-                onFinish={tour.finish}
-                onSkip={tour.skip}
-              />
-            ) : null}
-          </SidebarProvider>
+          {/* ImpersonationProvider tracks the active admin-impersonation
+              session (#1752) so the ImpersonationBanner below can render
+              whenever a session is in progress, regardless of route. */}
+          <ImpersonationProvider>
+            <SidebarProvider>
+              <AppSidebar onRestartTour={tour.restart} />
+              <SidebarInset>
+                {/* Persistent impersonation banner — sits above the
+                    TopBar; renders only when a session is active. */}
+                <ImpersonationBanner />
+                <TopBar />
+                <CurrencyMigrationBanner />
+                {/* count=0 today — once the invites query lands (#1413) it will
+                    read from the user's pending-invites list. */}
+                <InviteBanner count={0} />
+                <main className="flex-1 overflow-y-auto">
+                  <div className="container mx-auto p-6">
+                    <Outlet />
+                  </div>
+                </main>
+              </SidebarInset>
+              <CommandPalette />
+              <Toaster />
+              {tour.isOpen ? (
+                <OnboardingTour
+                  step={tour.step}
+                  totalSteps={TOUR_STEPS.length}
+                  onNext={tour.next}
+                  onPrev={tour.prev}
+                  onFinish={tour.finish}
+                  onSkip={tour.skip}
+                />
+              ) : null}
+            </SidebarProvider>
+          </ImpersonationProvider>
         </KeyboardShortcutsProvider>
       </ConfirmProvider>
     </RouteTitleProvider>

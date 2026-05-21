@@ -332,6 +332,15 @@ export default defineConfig({
       //   `t(entry.labelKey)`, so the extractor sees only the lookup.
       "common:shortcuts.categories.*",
       "common:shortcuts.entries.*",
+      // admin:nav.* — AdminLayout's secondary nav resolves each entry via
+      //   `t(entry.labelKey)` over the ADMIN_NAV const array (tenants /
+      //   users / groups). admin:nav.tenants is also reached statically
+      //   through useNavLabel's switch; the users / groups labels are
+      //   reachable only through the template-literal lookup.
+      // admin:tenants.stats.* — AdminTenantsPage maps over a STAT_TILES
+      //   const array and resolves each label via `t(stat.labelKey)`.
+      "admin:nav.*",
+      "admin:tenants.stats.*",
     ],
   },
 })
