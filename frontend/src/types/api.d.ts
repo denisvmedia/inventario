@@ -260,7 +260,60 @@ export type paths = {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List a group's members (admin)
+         * @description Returns the group's memberships joined with each member user's id / name / email, cross-tenant. An unknown group ID is a 404; an existing group with no members is a 200 with an empty `data` array.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminGroupMembersResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - system-admin required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown group */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
         put?: never;
         /**
          * Add a member to a group (admin)
@@ -8425,6 +8478,27 @@ export type components = {
              */
             type?: "admin_groups";
             updated_at?: string;
+        };
+        "jsonapi.AdminGroupMember": {
+            group_id?: string;
+            id?: string;
+            joined_at?: string;
+            member_user_id?: string;
+            role?: components["schemas"]["models.GroupRole"];
+            /**
+             * @example admin_group_members
+             * @enum {string}
+             */
+            type?: "admin_group_members";
+            user?: components["schemas"]["jsonapi.AdminGroupMemberUser"];
+        };
+        "jsonapi.AdminGroupMemberUser": {
+            email?: string;
+            id?: string;
+            name?: string;
+        };
+        "jsonapi.AdminGroupMembersResponse": {
+            data?: components["schemas"]["jsonapi.AdminGroupMember"][];
         };
         "jsonapi.AdminGroupResponse": {
             data?: components["schemas"]["jsonapi.AdminGroupDetail"];

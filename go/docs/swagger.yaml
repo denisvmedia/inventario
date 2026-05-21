@@ -536,6 +536,42 @@ definitions:
       updated_at:
         type: string
     type: object
+  jsonapi.AdminGroupMember:
+    properties:
+      group_id:
+        type: string
+      id:
+        type: string
+      joined_at:
+        type: string
+      member_user_id:
+        type: string
+      role:
+        $ref: '#/definitions/models.GroupRole'
+      type:
+        enum:
+        - admin_group_members
+        example: admin_group_members
+        type: string
+      user:
+        $ref: '#/definitions/jsonapi.AdminGroupMemberUser'
+    type: object
+  jsonapi.AdminGroupMemberUser:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  jsonapi.AdminGroupMembersResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.AdminGroupMember'
+        type: array
+    type: object
   jsonapi.AdminGroupResponse:
     properties:
       data:
@@ -4276,6 +4312,38 @@ paths:
       tags:
       - admin
   /admin/groups/{groupID}/members:
+    get:
+      description: Returns the group's memberships joined with each member user's
+        id / name / email, cross-tenant. An unknown group ID is a 404; an existing
+        group with no members is a 200 with an empty `data` array.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AdminGroupMembersResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - system-admin required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found - unknown group
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List a group's members (admin)
+      tags:
+      - admin
     post:
       consumes:
       - application/json

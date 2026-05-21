@@ -662,15 +662,74 @@ func (r *GroupMembershipRegistry) UpdateRoleWithMemberInvariants(ctx context.Con
 
 // ListByGroupWithUsers joins group_memberships with users so the
 // members list endpoint can serve avatar/name/email in a single
-// round-trip. The JOIN also matches tenant_id on both sides as a
-// defense-in-depth guard against cross-tenant leakage — RLS already
-// scopes the membership rows, but pinning the user row's tenant_id
-// keeps the contract explicit at the SQL layer.
+// round-trip. The JOIN matches tenant_id on both sides as a
+// defense-in-depth guard against cross-tenant leakage. Note the query
+// rows are NOT RLS-scoped here: this registry runs in service mode on
+// the background-worker role, which bypasses the tenant-isolation
+// policy. The tenant gate for the non-admin /groups/{id}/members
+// surface is the requireGroupMembership HTTP middleware upstream;
+// pinning the user row's tenant_id to the membership's keeps the
+// SQL-layer contract explicit on top of that.
 func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
 	if groupID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
 	}
 
+	var out []*models.MembershipWithUser
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		var loadErr error
+		out, loadErr = r.loadMembersWithUsersTx(ctx, tx, groupID)
+		return loadErr
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list memberships with users", err)
+	}
+	return out, nil
+}
+
+// ListByGroupWithUsersAdmin is the cross-tenant twin of
+// ListByGroupWithUsers, backing the #1756 admin membership editor. The
+// system-admin caller is not tenant-scoped, so the join runs under
+// `SET LOCAL row_security = off` — the same defense-in-depth RLS bypass
+// LocationGroupRegistry.GetAdmin / ListAdmin use. The membership rows
+// already run via the background-worker role (bypass policy on
+// group_memberships); the explicit `row_security = off` additionally
+// covers the JOINed users table so a group in ANY tenant lists fine.
+func (r *GroupMembershipRegistry) ListByGroupWithUsersAdmin(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
+	if groupID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+
+	var out []*models.MembershipWithUser
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
+			return errxtrace.Wrap("failed to disable row_security for admin members listing", execErr)
+		}
+		var loadErr error
+		out, loadErr = r.loadMembersWithUsersTx(ctx, tx, groupID)
+		return loadErr
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list memberships with users", err)
+	}
+	return out, nil
+}
+
+// loadMembersWithUsersTx runs the group_memberships↔users join within
+// the supplied tx. It is the shared query body for ListByGroupWithUsers
+// and its admin twin so the two surfaces ship an identical row shape.
+// The query rows are never RLS-scoped at this layer — the registry runs
+// in service mode on the background-worker role, which bypasses the
+// tenant-isolation policy. The only difference between the two callers
+// is whether the admin twin additionally issues `SET LOCAL row_security
+// = off` first as documented defense-in-depth covering the JOINed users
+// table; the non-admin caller is tenant-gated upstream by the
+// requireGroupMembership HTTP middleware. The JOIN matches tenant_id on
+// both sides as a further defense-in-depth guard against cross-tenant
+// leakage.
+func (r *GroupMembershipRegistry) loadMembersWithUsersTx(ctx context.Context, tx *sqlx.Tx, groupID string) ([]*models.MembershipWithUser, error) {
 	type row struct {
 		// membership fields
 		MID           string    `db:"m_id"`
@@ -704,50 +763,44 @@ func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, grou
 		ORDER BY m.joined_at ASC
 	`, r.tableNames.GroupMemberships(), r.tableNames.Users())
 
-	var out []*models.MembershipWithUser
-	reg := r.newSQLRegistry()
-	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		rows, err := tx.QueryxContext(ctx, query, groupID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var r row
-			if err := rows.StructScan(&r); err != nil {
-				return err
-			}
-			m := &models.GroupMembership{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: r.MID},
-					TenantID: r.MTenantID,
-				},
-				GroupID:      r.MGroupID,
-				MemberUserID: r.MMemberUserID,
-				Role:         models.GroupRole(r.MRole),
-				JoinedAt:     r.MJoinedAt,
-			}
-			m.UUID = r.MUUID
-			u := &models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: r.UID},
-					TenantID: r.UTenantID,
-				},
-				Email:     r.UEmail,
-				Name:      r.UName,
-				IsActive:  r.UIsActive,
-				CreatedAt: r.UCreatedAt,
-			}
-			u.UUID = r.UUUID
-			out = append(out, &models.MembershipWithUser{
-				Membership: m,
-				User:       u,
-			})
-		}
-		return rows.Err()
-	})
+	rows, err := tx.QueryxContext(ctx, query, groupID)
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to list memberships with users", err)
+		return nil, err
 	}
-	return out, nil
+	defer rows.Close()
+
+	var out []*models.MembershipWithUser
+	for rows.Next() {
+		var r row
+		if err := rows.StructScan(&r); err != nil {
+			return nil, err
+		}
+		m := &models.GroupMembership{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: r.MID},
+				TenantID: r.MTenantID,
+			},
+			GroupID:      r.MGroupID,
+			MemberUserID: r.MMemberUserID,
+			Role:         models.GroupRole(r.MRole),
+			JoinedAt:     r.MJoinedAt,
+		}
+		m.UUID = r.MUUID
+		u := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: r.UID},
+				TenantID: r.UTenantID,
+			},
+			Email:     r.UEmail,
+			Name:      r.UName,
+			IsActive:  r.UIsActive,
+			CreatedAt: r.UCreatedAt,
+		}
+		u.UUID = r.UUUID
+		out = append(out, &models.MembershipWithUser{
+			Membership: m,
+			User:       u,
+		})
+	}
+	return out, rows.Err()
 }

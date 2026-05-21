@@ -368,6 +368,10 @@ func (m *mockGroupMembershipRegistryForAuth) ListByGroupWithUsers(_ context.Cont
 	return nil, nil
 }
 
+func (m *mockGroupMembershipRegistryForAuth) ListByGroupWithUsersAdmin(_ context.Context, _ string) ([]*models.MembershipWithUser, error) {
+	return nil, nil
+}
+
 func (m *mockGroupMembershipRegistryForAuth) CreateUnderCap(_ context.Context, _ models.GroupMembership, _ int) (*models.GroupMembership, bool, error) {
 	return nil, false, nil
 }
@@ -451,6 +455,10 @@ func (m *erroringGroupMembershipRegistry) CountByGroups(_ context.Context, ids [
 }
 
 func (m *erroringGroupMembershipRegistry) ListByGroupWithUsers(_ context.Context, _ string) ([]*models.MembershipWithUser, error) {
+	return nil, m.err
+}
+
+func (m *erroringGroupMembershipRegistry) ListByGroupWithUsersAdmin(_ context.Context, _ string) ([]*models.MembershipWithUser, error) {
 	return nil, m.err
 }
 
