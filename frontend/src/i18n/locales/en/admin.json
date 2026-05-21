@@ -50,7 +50,8 @@
       "allTenants": "All tenants",
       "pendingDeletion": "Pending deletion",
       "statusLabel": "Filter groups by status",
-      "tenantLabel": "Filter groups by tenant"
+      "tenantLabel": "Filter groups by tenant",
+      "unknownTenant": "Unknown tenant ({{id}})"
     },
     "loadError": "Could not load groups. Please try again.",
     "loading": "Loading groups…",

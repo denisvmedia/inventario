@@ -141,6 +141,19 @@ export function AdminGroupsPage() {
   const totalGroups = meta.total ?? groups.length
   const totalPages = meta.total_pages ?? 1
 
+  // When the URL pins a `tenantID` that isn't among the fetched tenant
+  // options — a deep link to a tenant past the first TENANT_FILTER_PER_PAGE,
+  // or the tenants query failed — the <Select> would render a blank trigger
+  // and silently hide the active filter. Inject a fallback option so the
+  // filter state stays visible: prefer a real tenant name lifted from the
+  // loaded group rows, falling back to the raw ID.
+  const missingTenant = useMemo(() => {
+    if (!tenantID) return null
+    if (tenantOptions.some((tenant) => tenant.id === tenantID)) return null
+    const named = groups.find((group) => group.tenant?.id === tenantID)?.tenant?.name
+    return { id: tenantID, name: named }
+  }, [tenantID, tenantOptions, groups])
+
   // Out-of-range recovery: if the URL carries a ?page beyond the last page
   // the server reports (a deep link, or a filter narrowed the result set
   // after the page was set), snap back to the last real page so the user
@@ -265,6 +278,11 @@ export function AdminGroupsPage() {
                   </SelectItem>
                 ) : null
               )}
+              {missingTenant ? (
+                <SelectItem value={missingTenant.id}>
+                  {missingTenant.name ?? t("groups.filter.unknownTenant", { id: missingTenant.id })}
+                </SelectItem>
+              ) : null}
             </SelectContent>
           </Select>
           <Select value={status ?? "all"} onValueChange={setStatusFilter}>

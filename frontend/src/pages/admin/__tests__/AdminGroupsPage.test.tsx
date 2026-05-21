@@ -237,6 +237,42 @@ describe("AdminGroupsPage", () => {
     await waitFor(() => expect(locationSearch().get("tenantID")).toBe("t2"))
   })
 
+  it("shows a fallback tenant option when the URL pins a tenant absent from the dropdown", async () => {
+    server.use(
+      http.get(api("/auth/me"), () => HttpResponse.json(adminUser)),
+      http.get(api("/admin/tenants"), () =>
+        HttpResponse.json({
+          data: [{ id: "t1", name: "Acme Inc", slug: "acme", status: "active" }],
+          meta: { total: 1, page: 1, per_page: 100, total_pages: 1 },
+        })
+      ),
+      http.get(api("/admin/groups"), () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: "g1",
+              name: "HQ Inventory",
+              slug: "hq",
+              currency: "USD",
+              status: "active",
+              member_count: 4,
+              tenant_id: "t99",
+              tenant: { id: "t99", name: "Hidden Tenant", slug: "hidden" },
+            },
+          ],
+          meta: { total: 1, page: 1, per_page: 20, total_pages: 1 },
+        })
+      )
+    )
+    renderPage("/admin/groups?tenantID=t99")
+
+    await waitFor(() => expect(screen.getByText("HQ Inventory")).toBeInTheDocument())
+    // The tenants dropdown only carries t1, yet the URL pins t99. The
+    // filter trigger must still show the active selection — sourced from
+    // the loaded group row — rather than rendering blank.
+    expect(screen.getByTestId("admin-groups-tenant-filter")).toHaveTextContent("Hidden Tenant")
+  })
+
   it("paginates and persists the page in the URL", async () => {
     const seen: SeenRequest[] = []
     seedGroups(seen, { total: 50 })

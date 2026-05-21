@@ -74,7 +74,8 @@
       "allTenants": "Všichni nájemci",
       "pendingDeletion": "Čeká na smazání",
       "statusLabel": "Filtrovat skupiny podle stavu",
-      "tenantLabel": "Filtrovat skupiny podle nájemce"
+      "tenantLabel": "Filtrovat skupiny podle nájemce",
+      "unknownTenant": "Neznámý nájemce ({{id}})"
     },
     "loadError": "Nepodařilo se načíst skupiny. Zkuste to prosím znovu.",
     "loading": "Načítání skupin…",
