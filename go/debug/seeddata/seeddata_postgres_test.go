@@ -13,24 +13,35 @@ import (
 
 	"github.com/denisvmedia/inventario/debug/seeddata"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
 )
 
-// postgresTestDSN resolves the integration-test database DSN. CI sets
-// POSTGRES_TEST_DSN (see .github/workflows/go-test-postgres.yml); a local
-// run without it falls back to the docker-compose.yaml postgres service.
-func postgresTestDSN() string {
-	if dsn := os.Getenv("POSTGRES_TEST_DSN"); dsn != "" {
-		return dsn
+// postgresTestDSN resolves the integration-test database DSN. CI always
+// sets POSTGRES_TEST_DSN (see .github/workflows/go-test-postgres.yml).
+//
+// When it is unset the test skips rather than falling back to a hard-coded
+// local DSN: this matches the prevailing convention in the repo's other
+// integration tests (registry/postgres/posgres_utils_test.go's
+// skipIfNoPostgreSQL, which also has its local-DSN fallback deliberately
+// commented out). A silent fallback is risky — a developer running the
+// integration tag without POSTGRES_TEST_DSN could unknowingly point the
+// destructive cleanup at a real local database. Skipping makes the
+// requirement explicit instead.
+func postgresTestDSN(t *testing.T) string {
+	t.Helper()
+	dsn := os.Getenv("POSTGRES_TEST_DSN")
+	if dsn == "" {
+		t.Skip("Skipping PostgreSQL tests: POSTGRES_TEST_DSN environment variable not set")
 	}
-	return "postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable"
+	return dsn
 }
 
 func TestSeedDataPostgreSQL(t *testing.T) {
 	c := qt.New(t)
 
 	// Connect to test database
-	dsn := postgresTestDSN()
+	dsn := postgresTestDSN(t)
 	db, err := sqlx.Open("postgres", dsn)
 	c.Assert(err, qt.IsNil)
 	defer db.Close()
@@ -42,17 +53,43 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	// Create factory set with PostgreSQL
 	factorySet := postgres.NewFactorySet(db)
 
-	// Clean up any existing test data first
+	// Wipe any pre-existing test-org object graph (including the tenant
+	// row) so the seed below runs against a known-clean slate. The
+	// test-postgres CI job runs many integration packages against one
+	// shared database, so a sibling test may have left a stale `test-org`
+	// tenant whose users own locations (and other child rows) — without
+	// this cleanup the seed would attach to that stale tenant and the
+	// fixture-user assertions would fail.
 	cleanupTestData(c, db)
 
-	// Test that seed data creation works without errors
-	// SeedSystemAdmin opts into the sysadmin fixture (#1758) so the
-	// is_system_admin round-trip is exercised against Postgres.
-	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{SeedSystemAdmin: true})
+	// Re-create the test-org tenant deterministically. SeedData's
+	// empty-slug path returns existingTenants[0], which — with other
+	// packages' tenants possibly still present in the shared DB — is not
+	// guaranteed to be test-org. Passing TenantSlug routes
+	// findOrCreateTenant through GetBySlug, which errors if the tenant is
+	// absent, so the test must ensure it exists first. Creating it here
+	// (rather than leaving it in cleanup) keeps cleanupTestData purely
+	// destructive and the seeding path deterministic.
+	registrySet := factorySet.CreateServiceRegistrySet()
+	_, err = registrySet.TenantRegistry.Create(context.Background(), models.Tenant{
+		Name:   "Test Organization",
+		Slug:   "test-org",
+		Status: models.TenantStatusActive,
+	})
 	c.Assert(err, qt.IsNil)
 
-	// Verify that a tenant was created
-	registrySet := factorySet.CreateServiceRegistrySet()
+	// Pin the tenant explicitly so findOrCreateTenant takes the
+	// deterministic GetBySlug path.
+	//
+	// SeedSystemAdmin opts into the sysadmin fixture (#1758) so the
+	// is_system_admin round-trip is exercised against Postgres.
+	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{
+		TenantSlug:      "test-org",
+		SeedSystemAdmin: true,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Verify that the tenant is present
 	tenants, err := registrySet.TenantRegistry.List(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(tenants) >= 1, qt.IsTrue, qt.Commentf("Expected at least 1 tenant, got %d", len(tenants)))
@@ -74,8 +111,9 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	// admin, user2, orphan, family (owner of the secondary group),
 	// teammate (second member of admin's primary group), sysadmin
 	// (platform system admin) and blocktarget (block/unblock fixture).
-	users, err := registrySet.UserRegistry.List(context.Background())
-	c.Assert(err, qt.IsNil)
+	// Scoped to the test tenant so rows left by sibling integration
+	// packages in the shared DB do not skew the count.
+	users := usersForTenant(c, registrySet, testTenant.ID)
 	c.Assert(len(users) >= 7, qt.IsTrue, qt.Commentf("Expected at least 7 users, got %d", len(users)))
 
 	// Find the test users
@@ -136,16 +174,130 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	c.Assert(blockTargetUser.IsSystemAdmin, qt.IsFalse)
 }
 
+// usersForTenant returns the users belonging to a single tenant. The
+// test-postgres CI job shares one database across many integration
+// packages, so a global UserRegistry.List would mix in unrelated rows;
+// scoping by tenant keeps the fixture-user count assertion deterministic.
+func usersForTenant(c *qt.C, registrySet *registry.Set, tenantID string) []*models.User {
+	all, err := registrySet.UserRegistry.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	scoped := make([]*models.User, 0, len(all))
+	for _, u := range all {
+		if u.TenantID == tenantID {
+			scoped = append(scoped, u)
+		}
+	}
+	return scoped
+}
+
+// cleanupTestData wipes the `test-org` tenant's entire object graph —
+// including the tenant row itself — so TestSeedDataPostgreSQL always
+// starts from a clean slate.
+//
+// It is deliberately scoped to the test-org tenant only. The test-postgres
+// CI job runs integration packages in parallel against one shared
+// database, so a global TRUNCATE — or deleting other tenants' rows — would
+// corrupt a concurrently-running package. Every table in the schema
+// (except `tenants` itself) carries a tenant_id column, so each child
+// DELETE is filtered by the resolved test-org tenant id(s); the tenant
+// rows are then deleted by slug.
+//
+// Deletes run inside a single transaction in FK-dependency order
+// (children before parents). The three nullable self-referential /
+// cyclic columns (commodities.cover_file_id, users.default_group_id,
+// location_groups.currency_migration_id) are NULLed first so the cycles
+// break cleanly. Errors are asserted, not swallowed: if cleanup silently
+// fails the next run rots exactly the way this fix is repairing.
 func cleanupTestData(c *qt.C, db *sqlx.DB) {
-	// Clean up in reverse order of dependencies
-	queries := []string{
-		"DELETE FROM users WHERE email IN ('admin@test-org.com', 'user2@test-org.com', 'orphan@test-org.com', 'family@test-org.com', 'teammate@test-org.com', 'sysadmin@test-org.com', 'blocktarget@test-org.com')",
-		"DELETE FROM tenants WHERE slug = 'test-org'",
+	tx, err := db.Beginx()
+	c.Assert(err, qt.IsNil)
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// Resolve the test-org tenant id(s). If none exist there is nothing
+	// to clean — the seed will create the tenant from scratch.
+	var tenantIDs []string
+	err = tx.Select(&tenantIDs, "SELECT id FROM tenants WHERE slug = 'test-org'")
+	c.Assert(err, qt.IsNil)
+	if len(tenantIDs) == 0 {
+		c.Assert(tx.Commit(), qt.IsNil)
+		committed = true
+		return
 	}
 
-	for _, query := range queries {
-		_, err := db.Exec(query)
-		// Ignore errors as tables might not exist or be empty
-		_ = err
+	// Break the cyclic FKs first by NULLing the nullable referencing
+	// columns, so the ordered DELETEs below never trip a cycle.
+	cyclicNulls := []string{
+		"UPDATE commodities SET cover_file_id = NULL WHERE tenant_id = ANY($1)",
+		"UPDATE location_groups SET currency_migration_id = NULL WHERE tenant_id = ANY($1)",
+		"UPDATE users SET default_group_id = NULL WHERE tenant_id = ANY($1)",
 	}
+	for _, q := range cyclicNulls {
+		_, err = tx.Exec(q, tenantIDs)
+		c.Assert(err, qt.IsNil, qt.Commentf("cleanup pre-step failed: %s", q))
+	}
+
+	// Tables in FK-dependency order: every table must be deleted before
+	// any table it references. Leaf/child tables first, parents last.
+	// `tenants` is omitted on purpose (see the doc comment above).
+	orderedTables := []string{
+		// Leaf tables — reference commodities / files / schedules / etc.
+		"user_concurrency_slots",
+		"commodity_events",
+		"commodity_loans",
+		"commodity_services",
+		"warranty_reminders",
+		"currency_migration_audit_rows",
+		"maintenance_reminders",
+		"commodity_supply_links",
+		"restore_steps",
+		"thumbnail_generation_jobs",
+		"group_memberships",
+		"group_invites",
+		"group_invites_audit",
+		"group_notification_prefs",
+		"storage_quota_reminders",
+		"tags",
+		"login_events",
+		"email_verifications",
+		"password_resets",
+		"refresh_tokens",
+		"user_mfa_secrets",
+		"operation_slots",
+		"settings",
+		"audit_logs",
+		// Mid-tier — reference commodities / exports.
+		"maintenance_schedules",
+		"restore_operations",
+		// Inventory tree — commodities -> areas -> locations.
+		"commodities",
+		"areas",
+		"locations",
+		// File-owning + currency rows.
+		"exports",
+		"files",
+		"currency_migrations",
+		// Parents last. location_groups before users: location_groups.created_by
+		// points at users (and users.default_group_id was NULLed above), so the
+		// dependency now runs one way — location_groups -> users — and the
+		// groups must be deleted first.
+		"location_groups",
+		"users",
+	}
+	for _, table := range orderedTables {
+		_, err = tx.Exec("DELETE FROM "+table+" WHERE tenant_id = ANY($1)", tenantIDs)
+		c.Assert(err, qt.IsNil, qt.Commentf("cleanup DELETE FROM %s failed", table))
+	}
+
+	// Finally drop the tenant row(s) themselves. All tenant_id-bearing
+	// children are gone, so the fk_entity_tenant constraints are satisfied.
+	_, err = tx.Exec("DELETE FROM tenants WHERE id = ANY($1)", tenantIDs)
+	c.Assert(err, qt.IsNil, qt.Commentf("cleanup DELETE FROM tenants failed"))
+
+	c.Assert(tx.Commit(), qt.IsNil)
+	committed = true
 }

@@ -112,41 +112,13 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 		return false, err
 	}
 
-	// Inside the well-known `test-org` test tenant, provision a third
-	// zero-group test user so e2e tests can authenticate against the
-	// real `/api/v1/groups` empty-collection response (#1277). Both
-	// seed entry points (no-opts memory-mode tests AND init-data's
-	// email-pinned /api/v1/seed call) take this branch — keeping it
-	// inside the seed means the e2e workflow doesn't need a separate
-	// CLI step to provision the fixture. The tenant.Slug gate keeps
-	// the well-known-password orphan account out of arbitrary
-	// external tenants.
+	// Inside the well-known `test-org` test tenant, provision the extra
+	// fixture users (orphan / block-target / opt-in sysadmin) the e2e
+	// suite depends on. Extracted into seedTestOrgFixtures so SeedData
+	// itself stays under the gocognit budget.
 	if tenant.Slug == "test-org" {
-		if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
+		if err := seedTestOrgFixtures(ctx, registrySet, tenant, users, opts); err != nil {
 			return false, err
-		}
-		// blocktarget@test-org.com — a disposable plain user the
-		// block/unblock spec (#1758) deactivates then reactivates. No
-		// other spec references it, so a parallel run never observes
-		// it mid-block. It carries no elevated privileges, so it is in
-		// the same (accepted) risk class as the orphan fixture and is
-		// provisioned unconditionally for the test-org tenant.
-		if err := ensureBlockTargetUser(ctx, registrySet, tenant, users); err != nil {
-			return false, err
-		}
-		// sysadmin@test-org.com — carries is_system_admin so the
-		// admin-section e2e suite (#1758) reaches /api/v1/admin/* and
-		// /admin/*. Minting a *cross-tenant* admin from the
-		// unauthenticated /api/v1/seed endpoint would be a privilege-
-		// escalation hole in any deployment where /seed is reachable,
-		// so it is gated behind an explicit opt-in (opts.SeedSystemAdmin,
-		// set from INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE by the seed
-		// handler — see apiserver/seed.go). It is OFF by default; only
-		// the e2e harness turns it on.
-		if opts.SeedSystemAdmin {
-			if err := ensureSystemAdminUser(ctx, registrySet, tenant, users); err != nil {
-				return false, err
-			}
 		}
 	}
 
@@ -247,6 +219,49 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 	}
 
 	return false, nil
+}
+
+// seedTestOrgFixtures provisions the extra fixture users that only the
+// well-known `test-org` tenant gets. The caller gates this on the tenant
+// slug; every helper here is independently idempotent.
+//
+// Both seed entry points (no-opts memory-mode tests AND init-data's
+// email-pinned /api/v1/seed call) reach this for test-org — keeping it
+// inside the seed means the e2e workflow doesn't need a separate CLI step
+// to provision the fixtures, while the tenant.Slug gate keeps these
+// well-known-password accounts out of arbitrary external tenants.
+//
+//   - orphan@test-org.com — a zero-group user so e2e tests can
+//     authenticate against the real `/api/v1/groups` empty-collection
+//     response (#1277).
+//   - blocktarget@test-org.com — a disposable plain user the
+//     block/unblock spec (#1758) deactivates then reactivates. No other
+//     spec references it, so a parallel run never observes it mid-block.
+//     It carries no elevated privileges, so it is in the same (accepted)
+//     risk class as the orphan fixture and is provisioned unconditionally
+//     for the test-org tenant.
+//   - sysadmin@test-org.com — carries is_system_admin so the
+//     admin-section e2e suite (#1758) reaches /api/v1/admin/* and
+//     /admin/*. Minting a *cross-tenant* admin from the unauthenticated
+//     /api/v1/seed endpoint would be a privilege-escalation hole in any
+//     deployment where /seed is reachable, so it is gated behind an
+//     explicit opt-in (opts.SeedSystemAdmin, set from
+//     INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE by the seed handler — see
+//     apiserver/seed.go). It is OFF by default; only the e2e harness
+//     turns it on.
+func seedTestOrgFixtures(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User, opts SeedOptions) error {
+	if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
+		return err
+	}
+	if err := ensureBlockTargetUser(ctx, registrySet, tenant, users); err != nil {
+		return err
+	}
+	if opts.SeedSystemAdmin {
+		if err := ensureSystemAdminUser(ctx, registrySet, tenant, users); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // findOrCreateTenant finds an existing tenant by slug or creates a new
