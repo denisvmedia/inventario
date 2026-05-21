@@ -375,6 +375,12 @@ export function AppRoutes() {
             <Route index element={<Navigate to="/admin/tenants" replace />} />
             <Route path="tenants" element={<AdminTenantsPage />} />
             <Route path="tenants/:tenantId" element={<AdminTenantDetailPage />} />
+            {/* `/admin/users` has no list page (there is no cross-tenant
+                user list). Redirect the bare path — reachable via a stale
+                bookmark from when the placeholder existed — to the admin
+                landing instead of falling through to the 404. The
+                per-user detail route below is unaffected. */}
+            <Route path="users" element={<Navigate to="/admin/tenants" replace />} />
             <Route path="users/:userId" element={<AdminUserDetailPage />} />
             <Route path="groups" element={<AdminGroupsPage />} />
             <Route path="groups/:groupId" element={<AdminGroupDetailPage />} />

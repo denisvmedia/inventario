@@ -104,11 +104,13 @@ non-admin, or an injection could widen a query.
   `SET LOCAL row_security = off` approach was abandoned: under a
   non-`BYPASSRLS` role Postgres raises `SQLSTATE 42501`, so it 500'd on
   every standard deployment — see the `store.DoAsAdmin` doc comment.)
-- Only the documented admin registry methods (`*Admin`-suffixed:
-  `TenantRegistry.ListAdmin`/`GetAdmin`, `UserRegistry.ListAdminByTenant`,
+- Only a small, fixed set of registry methods route through
+  `store.DoAsAdmin`: `TenantRegistry.ListAdmin`/`GetAdmin`,
+  `UserRegistry.ListAdminByTenant`/`CountSessionsByUser`,
   `LocationGroupRegistry.ListAdmin`/`GetAdmin`/`MarkPendingDeletionAdmin`,
-  `GroupMembershipRegistry.AdminListMembersWithUsers`) route through
-  `store.DoAsAdmin`, and every caller sits behind `RequireSystemAdmin`.
+  and `GroupMembershipRegistry.ListByGroupWithUsersAdmin` (surfaced as
+  `GroupService.AdminListMembersWithUsers`). Every caller sits behind
+  `RequireSystemAdmin`.
 - `SET LOCAL ROLE` is transaction-scoped — Postgres resets it on commit
   or rollback, so the bypass cannot leak past the request transaction.
   `BYPASSRLS` lives nowhere but `inventario_admin`: a plain
@@ -123,8 +125,8 @@ non-admin, or an injection could widen a query.
   future change that drops the `inventario_admin` role or the
   `DoAsAdmin` wrapper fails CI.
 
-**Residual risk.** A future admin handler that adds a non-`*Admin`
-query, or a new `*Admin` method mounted on a route that forgets
+**Residual risk.** A future admin handler that adds a query outside
+this set, or a new `DoAsAdmin` method mounted on a route that forgets
 `RequireSystemAdmin`. Guarded by the security checklist in the PR and by
 the e2e 403 test.
 
@@ -216,9 +218,10 @@ Verified by the security checklist below.
 Tracked in the PR for #1758; each item is verified against the code
 and/or an automated test.
 
-- [ ] **RLS bypass surface** — only the documented `*Admin` registry
-      methods route through `store.DoAsAdmin` (the `inventario_admin`
-      `BYPASSRLS` role), all behind `RequireSystemAdmin`. *(T3)*
+- [ ] **RLS bypass surface** — only the documented fixed set of
+      registry methods route through `store.DoAsAdmin` (the
+      `inventario_admin` `BYPASSRLS` role), all behind
+      `RequireSystemAdmin`. *(T3)*
 - [ ] **JWT claim layout** — `is_system_admin` / `impersonated_by`
       cannot be self-signed by a non-admin (signature verification +
       the request-DTO allow-list: the field is absent from the request
