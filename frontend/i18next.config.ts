@@ -339,8 +339,18 @@ export default defineConfig({
       //   reachable only through the template-literal lookup.
       // admin:tenants.stats.* — AdminTenantsPage maps over a STAT_TILES
       //   const array and resolves each label via `t(stat.labelKey)`.
+      // admin:tenants.status.* — admin-shared.tsx's TenantStatusBadge
+      //   resolves the label via `t(\`tenants.status.${status}\`)` over the
+      //   closed tenant-status union (active/inactive/suspended). Dynamic
+      //   key; the extractor sees only the template literal.
+      // admin:tenantDetail.groups.status.* — admin-shared.tsx's
+      //   GroupStatusBadge resolves the label via
+      //   `t(\`tenantDetail.groups.status.${status}\`)` over the closed
+      //   group-status union (active/pending_deletion). Same pattern.
       "admin:nav.*",
       "admin:tenants.stats.*",
+      "admin:tenants.status.*",
+      "admin:tenantDetail.groups.status.*",
     ],
   },
 })

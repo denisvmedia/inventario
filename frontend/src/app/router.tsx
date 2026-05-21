@@ -168,6 +168,11 @@ const AdminLayout = lazy(() =>
 const AdminTenantsPage = lazy(() =>
   import("@/pages/admin/AdminTenantsPage").then((m) => ({ default: m.AdminTenantsPage }))
 )
+const AdminTenantDetailPage = lazy(() =>
+  import("@/pages/admin/AdminTenantDetailPage").then((m) => ({
+    default: m.AdminTenantDetailPage,
+  }))
+)
 const AdminUsersPage = lazy(() =>
   import("@/pages/admin/AdminUsersPage").then((m) => ({ default: m.AdminUsersPage }))
 )
@@ -362,6 +367,7 @@ export function AppRoutes() {
           >
             <Route index element={<Navigate to="/admin/tenants" replace />} />
             <Route path="tenants" element={<AdminTenantsPage />} />
+            <Route path="tenants/:tenantId" element={<AdminTenantDetailPage />} />
             <Route path="users" element={<AdminUsersPage />} />
             <Route path="groups" element={<AdminGroupsPage />} />
           </Route>

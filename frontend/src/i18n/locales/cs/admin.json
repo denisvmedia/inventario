@@ -20,6 +20,13 @@
     "tenants": "Nájemci",
     "users": "Uživatelé"
   },
+  "pagination": {
+    "next": "Další stránka",
+    "nextLabel": "Další",
+    "previous": "Předchozí stránka",
+    "previousLabel": "Předchozí",
+    "showing": "Zobrazeno {{from}}–{{to}} z {{total}}"
+  },
   "placeholder": {
     "comingSoon": "Tato stránka správy je připravována.",
     "groups": {
@@ -29,6 +36,71 @@
     "users": {
       "subtitle": "Všechny účty Inventario napříč všemi nájemci.",
       "title": "Uživatelé"
+    }
+  },
+  "tenantDetail": {
+    "back": "Zpět na nájemce",
+    "fallbackName": "Nájemce",
+    "groups": {
+      "col": {
+        "currency": "Měna",
+        "group": "Skupina",
+        "members": "Členové",
+        "status": "Stav"
+      },
+      "empty": "Tento nájemce nemá žádné skupiny.",
+      "filter": {
+        "active": "Aktivní",
+        "all": "Všechny stavy",
+        "pendingDeletion": "Čeká na smazání"
+      },
+      "filterLabel": "Filtrovat skupiny podle stavu",
+      "loadError": "Nepodařilo se načíst skupiny. Zkuste to prosím znovu.",
+      "loading": "Načítání skupin…",
+      "status": {
+        "active": "Aktivní",
+        "pending_deletion": "Čeká na smazání"
+      }
+    },
+    "header": {
+      "created": "Vytvořeno",
+      "groups": "Skupiny",
+      "plan": "Tarif",
+      "users": "Uživatelé"
+    },
+    "loadError": "Nepodařilo se načíst tohoto nájemce. Zkuste to prosím znovu.",
+    "loading": "Načítání nájemce…",
+    "notFound": "Nájemce nebyl nalezen.",
+    "tabs": {
+      "groups": "Skupiny",
+      "users": "Uživatelé"
+    },
+    "users": {
+      "col": {
+        "email": "E-mail",
+        "groups": "Skupiny",
+        "lastLogin": "Poslední přihlášení",
+        "name": "Jméno",
+        "state": "Stav"
+      },
+      "empty": "Tento nájemce nemá žádné uživatele.",
+      "filter": {
+        "active": "Pouze aktivní",
+        "all": "Všichni uživatelé",
+        "blocked": "Pouze zablokovaní"
+      },
+      "filterLabel": "Filtrovat uživatele podle stavu",
+      "loadError": "Nepodařilo se načíst uživatele. Zkuste to prosím znovu.",
+      "loading": "Načítání uživatelů…",
+      "neverLoggedIn": "Nikdy",
+      "searchClear": "Vymazat hledání",
+      "searchLabel": "Hledat uživatele",
+      "searchPlaceholder": "Hledat podle jména nebo e-mailu…",
+      "state": {
+        "active": "Aktivní",
+        "blocked": "Zablokovaný",
+        "unknown": "Neznámý"
+      }
     }
   },
   "tenants": {
@@ -43,10 +115,18 @@
     "stats": {
       "tenants": "Nájemci"
     },
+    "status": {
+      "active": "Aktivní",
+      "inactive": "Neaktivní",
+      "suspended": "Pozastavený"
+    },
     "subtitle": "Organizace používající Inventario napříč platformou.",
     "table": {
       "created": "Vytvořeno",
+      "domain": "Doména",
       "groups": "Skupiny",
+      "name": "Název",
+      "status": "Stav",
       "users": "Uživatelé"
     },
     "title": "Nájemci"

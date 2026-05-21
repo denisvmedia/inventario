@@ -20,6 +20,13 @@
     "tenants": "Tenants",
     "users": "Users"
   },
+  "pagination": {
+    "next": "Next page",
+    "nextLabel": "Next",
+    "previous": "Previous page",
+    "previousLabel": "Previous",
+    "showing": "Showing {{from}}–{{to}} of {{total}}"
+  },
   "placeholder": {
     "comingSoon": "This admin page is coming soon.",
     "groups": {
@@ -29,6 +36,71 @@
     "users": {
       "subtitle": "Every Inventario account across all tenants.",
       "title": "Users"
+    }
+  },
+  "tenantDetail": {
+    "back": "Back to tenants",
+    "fallbackName": "Tenant",
+    "groups": {
+      "col": {
+        "currency": "Currency",
+        "group": "Group",
+        "members": "Members",
+        "status": "Status"
+      },
+      "empty": "No groups in this tenant.",
+      "filter": {
+        "active": "Active",
+        "all": "All statuses",
+        "pendingDeletion": "Pending deletion"
+      },
+      "filterLabel": "Filter groups by status",
+      "loadError": "Could not load groups. Please try again.",
+      "loading": "Loading groups…",
+      "status": {
+        "active": "Active",
+        "pending_deletion": "Pending deletion"
+      }
+    },
+    "header": {
+      "created": "Created",
+      "groups": "Groups",
+      "plan": "Plan",
+      "users": "Users"
+    },
+    "loadError": "Could not load this tenant. Please try again.",
+    "loading": "Loading tenant…",
+    "notFound": "Tenant not found.",
+    "tabs": {
+      "groups": "Groups",
+      "users": "Users"
+    },
+    "users": {
+      "col": {
+        "email": "Email",
+        "groups": "Groups",
+        "lastLogin": "Last login",
+        "name": "Name",
+        "state": "State"
+      },
+      "empty": "No users in this tenant.",
+      "filter": {
+        "active": "Active only",
+        "all": "All users",
+        "blocked": "Blocked only"
+      },
+      "filterLabel": "Filter users by state",
+      "loadError": "Could not load users. Please try again.",
+      "loading": "Loading users…",
+      "neverLoggedIn": "Never",
+      "searchClear": "Clear search",
+      "searchLabel": "Search users",
+      "searchPlaceholder": "Search by name or email…",
+      "state": {
+        "active": "Active",
+        "blocked": "Blocked",
+        "unknown": "Unknown"
+      }
     }
   },
   "tenants": {
@@ -43,10 +115,18 @@
     "stats": {
       "tenants": "Tenants"
     },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "suspended": "Suspended"
+    },
     "subtitle": "Organisations using Inventario across the platform.",
     "table": {
       "created": "Created",
+      "domain": "Domain",
       "groups": "Groups",
+      "name": "Name",
+      "status": "Status",
       "users": "Users"
     },
     "title": "Tenants"
