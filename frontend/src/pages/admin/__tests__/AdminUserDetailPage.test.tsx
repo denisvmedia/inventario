@@ -159,6 +159,26 @@ describe("AdminUserDetailPage", () => {
     expect(within(identity).getByText("Blocked")).toBeInTheDocument()
   })
 
+  it("keeps the confirm button disabled for a whitespace-only reason", async () => {
+    seedDetail()
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId("admin-user-block")).toBeInTheDocument())
+    await userEvent.click(screen.getByTestId("admin-user-block"))
+
+    const confirm = screen.getByTestId("admin-user-action-confirm")
+    expect(confirm).toBeDisabled()
+
+    // A whitespace-only reason trims to empty — the BE would reject it with
+    // `reason_required`, so the gate must keep the confirm button disabled.
+    await userEvent.type(screen.getByTestId("admin-user-action-reason"), "   ")
+    expect(confirm).toBeDisabled()
+
+    // A real reason re-enables it.
+    await userEvent.type(screen.getByTestId("admin-user-action-reason"), "Policy violation")
+    expect(confirm).toBeEnabled()
+  })
+
   it("surfaces a typed 422 error inline and keeps the user active on block failure", async () => {
     seedDetail()
     server.use(

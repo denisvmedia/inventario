@@ -157,11 +157,14 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
   const memberships = user.group_memberships ?? []
   const sessionCount = user.active_session_count ?? 0
 
-  // Code-point length of the reason — `String.prototype.length` counts
-  // UTF-16 code units, which over-counts non-BMP input (emoji, rare CJK)
-  // versus the BE's `utf8.RuneCountInString`. Spreading into an array
-  // iterates by code point, matching the server-side rule exactly.
-  const reasonLength = [...reason].length
+  // Code-point length of the *trimmed* reason — `String.prototype.length`
+  // counts UTF-16 code units, which over-counts non-BMP input (emoji, rare
+  // CJK) versus the BE's `utf8.RuneCountInString`. Spreading into an array
+  // iterates by code point, matching the server-side rule exactly. The
+  // trim mirrors the handler (`reason.trim()`) and the BE, so a
+  // whitespace-only reason keeps the confirm button disabled and the
+  // counter shows the value the server will actually receive.
+  const reasonLength = [...reason.trim()].length
   const reasonInvalid = reasonLength === 0 || reasonLength > REASON_MAX
 
   function openDialog(kind: "block" | "unblock") {
@@ -276,7 +279,10 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
             <UserCog className="size-3.5" />
             {t("userDetail.impersonate")}
           </Button>
-          {active ? (
+          {/* Explicit tri-state: an active user gets Block, an inactive
+              user gets Unblock, and an unknown `is_active` (a malformed
+              response) renders neither rather than defaulting to Unblock. */}
+          {active === true ? (
             <Button
               size="sm"
               variant="outline"
@@ -287,7 +293,7 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
               <Ban className="size-3.5" />
               {t("userDetail.block.action")}
             </Button>
-          ) : (
+          ) : active === false ? (
             <Button
               size="sm"
               variant="outline"
@@ -298,7 +304,7 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
               <CircleCheck className="size-3.5" />
               {t("userDetail.unblock.action")}
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
 

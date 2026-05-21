@@ -191,7 +191,15 @@ export async function blockAdminUser(
     `/admin/users/${encodeURIComponent(userId)}/block`,
     payload
   )
-  return body.data?.attributes ?? {}
+  // The BE returns the post-transition snapshot in `data.attributes`. A
+  // 200 with a missing/incomplete envelope is a malformed response — fail
+  // fast rather than yielding `{}`, which would otherwise be patched into
+  // the user-detail cache as `is_active: undefined` (mirrors getAdminUser).
+  const attributes = body.data?.attributes
+  if (!attributes || !attributes.id || typeof attributes.is_active !== "boolean") {
+    throw new Error(`Admin block response for "${userId}" is missing its payload`)
+  }
+  return attributes
 }
 
 // Unblocks a user (POST /admin/users/{id}/unblock). `reason` is required
@@ -205,7 +213,12 @@ export async function unblockAdminUser(
     `/admin/users/${encodeURIComponent(userId)}/unblock`,
     payload
   )
-  return body.data?.attributes ?? {}
+  // Fail fast on a missing/incomplete envelope — see blockAdminUser.
+  const attributes = body.data?.attributes
+  if (!attributes || !attributes.id || typeof attributes.is_active !== "boolean") {
+    throw new Error(`Admin unblock response for "${userId}" is missing its payload`)
+  }
+  return attributes
 }
 
 // Reads the active impersonation session for the current caller. The BE
