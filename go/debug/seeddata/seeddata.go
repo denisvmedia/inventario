@@ -387,6 +387,14 @@ func ensureOrphanUser(ctx context.Context, registrySet *registry.Set, tenant *mo
 	const orphanEmail = "orphan@test-org.com"
 	for _, user := range users {
 		if user.TenantID == tenant.ID && user.Email == orphanEmail {
+			// Reconcile drift: force the fixture back to active so the
+			// next run starts from a clean state.
+			if !user.IsActive {
+				user.IsActive = true
+				if _, err := registrySet.UserRegistry.Update(ctx, *user); err != nil {
+					return errxtrace.Wrap("failed to reconcile orphan test user", err)
+				}
+			}
 			return nil
 		}
 	}

@@ -168,39 +168,35 @@ test.describe('System admin section (#1744 / #1758)', () => {
     await page.goto(`/admin/users/${target.userId}`);
     await expect(page.getByTestId('admin-user-detail-page')).toBeVisible();
 
-    // Block via the user-detail UI.
-    await page.getByTestId('admin-user-block').click();
-    await expect(page.getByTestId('admin-user-action-dialog')).toBeVisible();
-    await page.getByTestId('admin-user-action-reason').fill('e2e block/unblock coverage (#1758)');
-    const blockResp = page.waitForResponse(
-      (r) => r.url().includes(`/users/${target.userId}/block`) && r.request().method() === 'POST',
-    );
-    await page.getByTestId('admin-user-action-confirm').click();
-    expect((await blockResp).status()).toBe(200);
+    try {
+      // Block via the user-detail UI.
+      await page.getByTestId('admin-user-block').click();
+      await expect(page.getByTestId('admin-user-action-dialog')).toBeVisible();
+      await page.getByTestId('admin-user-action-reason').fill('e2e block/unblock coverage (#1758)');
+      const blockResp = page.waitForResponse(
+        (r) => r.url().includes(`/users/${target.userId}/block`) && r.request().method() === 'POST',
+      );
+      await page.getByTestId('admin-user-action-confirm').click();
+      expect((await blockResp).status()).toBe(200);
 
-    // The UI now offers "unblock", confirming the state flipped.
-    await expect(page.getByTestId('admin-user-unblock')).toBeVisible();
+      // The UI now offers "unblock", confirming the state flipped.
+      await expect(page.getByTestId('admin-user-unblock')).toBeVisible();
 
-    // The token issued before the block is now rejected — block bumps
-    // the JWT-blacklist iat-staleness threshold for the user.
-    const after = await request.get('/api/v1/auth/me', {
-      headers: authHeaders(target.token),
-    });
-    expect(after.status()).toBe(401);
-
-    // Unblock restores the account.
-    await page.getByTestId('admin-user-unblock').click();
-    await expect(page.getByTestId('admin-user-action-dialog')).toBeVisible();
-    const unblockReason = page.getByTestId('admin-user-action-reason');
-    if (await unblockReason.isVisible()) {
-      await unblockReason.fill('e2e unblock (#1758)');
+      // The token issued before the block is now rejected — block bumps
+      // the JWT-blacklist iat-staleness threshold for the user.
+      const after = await request.get('/api/v1/auth/me', {
+        headers: authHeaders(target.token),
+      });
+      expect(after.status()).toBe(401);
+    } finally {
+      // Unblock restores the account — always runs even if assertions fail.
+      const { token, csrf } = await pageTokens(page);
+      const unblockResp = await request.post(`/api/v1/admin/users/${target.userId}/unblock`, {
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token, csrf) },
+        data: { reason: 'e2e cleanup (#1758)' },
+      });
+      expect(unblockResp.status()).toBe(200);
     }
-    const unblockResp = page.waitForResponse(
-      (r) => r.url().includes(`/users/${target.userId}/unblock`) && r.request().method() === 'POST',
-    );
-    await page.getByTestId('admin-user-action-confirm').click();
-    expect((await unblockResp).status()).toBe(200);
-    await expect(page.getByTestId('admin-user-block')).toBeVisible();
 
     // A fresh login succeeds again now that the account is active.
     const relogin = await request.post('/api/v1/auth/login', {
