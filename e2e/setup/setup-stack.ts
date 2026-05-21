@@ -97,6 +97,13 @@ export async function startBackend(): Promise<void> {
       // this value just satisfies the "configured?" check so the e2e
       // flow can exercise the happy path.
       INVENTARIO_RUN_SUPPORT_EMAIL: process.env.INVENTARIO_RUN_SUPPORT_EMAIL ?? 'support@e2e.test',
+      // Opt the seed into the system-admin fixture (sysadmin@test-org.com)
+      // so the admin-section e2e suite (#1758) can authenticate as a
+      // platform admin. OFF by default in the binary — the /api/v1/seed
+      // endpoint is unauthenticated, so this must never be set in a real
+      // deployment.
+      INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE:
+        process.env.INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE ?? 'true',
       // Currency-migration surface defaults on in the binary now
       // (Config.FeatureCurrencyMigration env-default since #1612). Pass
       // an explicit override through only if the operator wants to flip

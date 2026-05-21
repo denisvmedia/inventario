@@ -20,8 +20,9 @@ func TestSeedData(t *testing.T) {
 	// Create an in-memory registry for testing
 	factorySet := memory.NewFactorySet()
 
-	// Test that seed data creation works without errors
-	alreadySeeded, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{})
+	// Test that seed data creation works without errors. SeedSystemAdmin
+	// opts into the sysadmin fixture (#1758) — gated off by default.
+	alreadySeeded, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{SeedSystemAdmin: true})
 	c.Assert(err, qt.IsNil)
 	c.Assert(alreadySeeded, qt.IsFalse)
 
@@ -37,7 +38,7 @@ func TestSeedData(t *testing.T) {
 	c.Assert(tenant.Slug, qt.Equals, "test-org")
 	c.Assert(tenant.Status, qt.Equals, models.TenantStatusActive)
 
-	// Five well-known users land in the test-org tenant:
+	// Seven well-known users land in the test-org tenant:
 	//   admin / user2 — currency-different default groups (CZK + EUR);
 	//                   user2 stays in its OWN group so user-isolation
 	//                   e2e specs keep working.
@@ -46,9 +47,13 @@ func TestSeedData(t *testing.T) {
 	//   teammate     — second member of admin's primary group (#1658
 	//                   multi-member demo). Lives apart from user2 by
 	//                   design.
+	//   sysadmin     — platform system admin (is_system_admin) for the
+	//                  admin-section e2e suite (issue #1758).
+	//   blocktarget  — disposable plain user the block/unblock spec
+	//                  deactivates then reactivates (issue #1758).
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(users, qt.HasLen, 5)
+	c.Assert(users, qt.HasLen, 7)
 
 	for _, user := range users {
 		c.Assert(user.TenantID, qt.Equals, tenant.ID)
@@ -81,6 +86,25 @@ func TestSeedData(t *testing.T) {
 	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(ctx, tenant.ID, orphan.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(memberships, qt.HasLen, 0)
+
+	// The sysadmin fixture carries the platform-admin flag; every other
+	// seeded user must not (issue #1758).
+	sysadmin := emails["sysadmin@test-org.com"]
+	c.Assert(sysadmin, qt.IsNotNil)
+	c.Assert(sysadmin.IsActive, qt.IsTrue)
+	c.Assert(sysadmin.IsSystemAdmin, qt.IsTrue)
+	for _, u := range users {
+		if u.Email != "sysadmin@test-org.com" {
+			c.Assert(u.IsSystemAdmin, qt.IsFalse,
+				qt.Commentf("%s must not be a system admin", u.Email))
+		}
+	}
+
+	// The block-target fixture is a plain active user.
+	blockTarget := emails["blocktarget@test-org.com"]
+	c.Assert(blockTarget, qt.IsNotNil)
+	c.Assert(blockTarget.IsActive, qt.IsTrue)
+	c.Assert(blockTarget.IsSystemAdmin, qt.IsFalse)
 }
 
 // TestSeedDataSurfaceCoverage asserts that every feature surface called
@@ -267,7 +291,7 @@ func TestSeedDataIdempotent(t *testing.T) {
 
 	factorySet := memory.NewFactorySet()
 
-	alreadySeeded, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{})
+	alreadySeeded, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{SeedSystemAdmin: true})
 	c.Assert(err, qt.IsNil)
 	c.Assert(alreadySeeded, qt.IsFalse)
 
@@ -285,7 +309,7 @@ func TestSeedDataIdempotent(t *testing.T) {
 	loansAfterFirst, _, err := registrySet.CommodityLoanRegistry.ListPaginated(ctx, 0, 1000, registry.LoanListOptions{})
 	c.Assert(err, qt.IsNil)
 
-	alreadySeeded, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{})
+	alreadySeeded, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{SeedSystemAdmin: true})
 	c.Assert(err, qt.IsNil)
 	c.Assert(alreadySeeded, qt.IsTrue)
 
@@ -295,7 +319,7 @@ func TestSeedDataIdempotent(t *testing.T) {
 
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(users, qt.HasLen, 5)
+	c.Assert(users, qt.HasLen, 7)
 
 	locations, err := registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
@@ -339,7 +363,10 @@ func TestSeedDataDoesNotCreateFixturesInNonTestTenant(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{TenantSlug: "acme"})
+	// SeedSystemAdmin is opted in here on purpose: the tenant.Slug gate
+	// must still keep the sysadmin fixture (and every other well-known
+	// fixture) out of a non-test-org tenant even when the flag is set.
+	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{TenantSlug: "acme", SeedSystemAdmin: true})
 	c.Assert(err, qt.IsNil)
 
 	users, err := registrySet.UserRegistry.List(context.Background())
@@ -348,7 +375,39 @@ func TestSeedDataDoesNotCreateFixturesInNonTestTenant(t *testing.T) {
 		c.Assert(u.Email, qt.Not(qt.Equals), "orphan@test-org.com")
 		c.Assert(u.Email, qt.Not(qt.Equals), "family@test-org.com")
 		c.Assert(u.Email, qt.Not(qt.Equals), "teammate@test-org.com")
+		c.Assert(u.Email, qt.Not(qt.Equals), "sysadmin@test-org.com")
+		c.Assert(u.Email, qt.Not(qt.Equals), "blocktarget@test-org.com")
+		c.Assert(u.IsSystemAdmin, qt.IsFalse)
 	}
+}
+
+// TestSeedDataSystemAdminGate asserts the sysadmin fixture is NOT
+// provisioned unless SeedSystemAdmin is explicitly set — the security
+// gate that keeps an unauthenticated /api/v1/seed call from minting a
+// cross-tenant admin (#1758).
+func TestSeedDataSystemAdminGate(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	factorySet := memory.NewFactorySet()
+	_, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{}) // opt-in OFF
+	c.Assert(err, qt.IsNil)
+
+	registrySet := factorySet.CreateServiceRegistrySet()
+	users, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+
+	for _, u := range users {
+		c.Assert(u.Email, qt.Not(qt.Equals), "sysadmin@test-org.com",
+			qt.Commentf("sysadmin fixture must not be seeded without the opt-in"))
+		c.Assert(u.IsSystemAdmin, qt.IsFalse)
+	}
+	// The non-privileged block-target fixture is still provisioned.
+	emails := map[string]bool{}
+	for _, u := range users {
+		emails[u.Email] = true
+	}
+	c.Assert(emails["blocktarget@test-org.com"], qt.IsTrue)
 }
 
 // referenceNow returns the wall-clock value used by warranty-bucket

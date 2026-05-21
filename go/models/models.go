@@ -237,7 +237,15 @@ func (s *StringSlice) Scan(value any) error {
 	}
 }
 
-func (s *StringSlice) Value() (driver.Value, error) {
+// Value implements driver.Valuer. The receiver is intentionally a value,
+// not a pointer: a pointer receiver leaves a non-addressable StringSlice
+// field (the common case when a struct is passed by value into the
+// registry layer) without a driver.Valuer, so database/sql hands the raw
+// []string to lib/pq, which encodes it as a Postgres array literal
+// (`{a,b}`) — invalid input for a JSONB column. A value receiver makes
+// both StringSlice and *StringSlice satisfy driver.Valuer, matching
+// every other Valuer in this package.
+func (s StringSlice) Value() (driver.Value, error) {
 	if s == nil {
 		return nil, nil
 	}

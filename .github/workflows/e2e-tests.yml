@@ -282,6 +282,12 @@ jobs:
             --admin-name="Test Administrator"
 
       - name: Start inventario
+        env:
+          # Opt the seed into the system-admin fixture (sysadmin@test-org.com)
+          # so the admin-section e2e suite (#1758) can authenticate as a
+          # platform admin. OFF by default in the binary — /api/v1/seed is
+          # unauthenticated, so this must never be set in a real deployment.
+          INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE: "true"
         run: |
           mkdir -p /tmp/inventario-uploads
           nohup ./bin/inventario run > /tmp/inventario.log 2>&1 &

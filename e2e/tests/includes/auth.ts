@@ -53,6 +53,28 @@ export const ORPHAN_TEST_CREDENTIALS = {
 };
 
 /**
+ * Platform system-admin credentials. Seeded by debug/seeddata
+ * (`sysadmin@test-org.com`, IsSystemAdmin = true) so the admin-section
+ * e2e suite can reach `/api/v1/admin/*` and the `/admin/*` UI without a
+ * separate `inventario admin grant-system-admin` CLI step. See #1758.
+ */
+export const SYSADMIN_TEST_CREDENTIALS = {
+  email: 'sysadmin@test-org.com',
+  password: 'TestPassword123'
+};
+
+/**
+ * Disposable plain (non-admin) user the block/unblock spec deactivates
+ * then reactivates. Seeded by debug/seeddata as `blocktarget@test-org.com`
+ * and referenced by no other spec, so a parallel run never observes it
+ * mid-block. See #1758.
+ */
+export const BLOCK_TARGET_TEST_CREDENTIALS = {
+  email: 'blocktarget@test-org.com',
+  password: 'TestPassword123'
+};
+
+/**
  * Check if the current page is the login page
  */
 export async function isLoginPage(page: Page): Promise<boolean> {

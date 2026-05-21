@@ -3,6 +3,7 @@ package apiserver
 import (
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -10,6 +11,13 @@ import (
 	"github.com/denisvmedia/inventario/debug/seeddata"
 	"github.com/denisvmedia/inventario/registry"
 )
+
+// envSeedSystemAdminFixture is the opt-in env var that lets the seed
+// provision the `sysadmin@test-org.com` fixture with the platform-wide
+// is_system_admin flag (#1758). It is OFF by default: /api/v1/seed is
+// unauthenticated, so minting a cross-tenant admin from it would be a
+// privilege-escalation hole. Only the e2e harness sets it.
+const envSeedSystemAdminFixture = "INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE"
 
 type seedAPI struct {
 	factorySet     *registry.FactorySet
@@ -68,6 +76,10 @@ func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 		UserEmail:      req.UserEmail,
 		TenantSlug:     req.TenantSlug,
 		UploadLocation: api.uploadLocation,
+		// Opt-in only — see envSeedSystemAdminFixture. Read server-side
+		// from the environment, never from the (attacker-controllable)
+		// request body.
+		SeedSystemAdmin: os.Getenv(envSeedSystemAdminFixture) == "true",
 	}
 
 	alreadySeeded, err := seeddata.SeedData(api.factorySet, opts)

@@ -34,6 +34,16 @@ services:
 
   inventario-init-data:
     image: ${INVENTARIO_IMAGE:?INVENTARIO_IMAGE must be set}
+    environment:
+      # The seed runs HERE, not in the `inventario` service:
+      # scripts/init-data.sh boots its own `inventario run` inside this
+      # container and POSTs /api/v1/seed to localhost, so the seed
+      # handler reads this env from the init-data process. Opt the seed
+      # into the system-admin fixture (sysadmin@test-org.com) so the
+      # admin-section e2e suite (#1758) can authenticate as a platform
+      # admin. OFF by default in the binary — /api/v1/seed is
+      # unauthenticated, so this must never be set in a real deployment.
+      INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE: "true"
 
   inventario:
     image: ${INVENTARIO_IMAGE:?INVENTARIO_IMAGE must be set}
