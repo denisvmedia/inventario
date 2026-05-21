@@ -200,7 +200,7 @@ func usersForTenant(c *qt.C, registrySet *registry.Set, tenantID string) []*mode
 // corrupt a concurrently-running package. Every table in the schema
 // (except `tenants` itself) carries a tenant_id column, so each child
 // DELETE is filtered by the resolved test-org tenant id(s); the tenant
-// rows are then deleted by slug.
+// rows are then deleted by those resolved id(s).
 //
 // Deletes run inside a single transaction in FK-dependency order
 // (children before parents). The three nullable self-referential /
