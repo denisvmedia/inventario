@@ -440,9 +440,11 @@ type AdminGroupMemberUser struct {
 // AdminGroupMember is the per-membership row returned by GET
 // /admin/groups/{groupID}/members. It carries the membership identity
 // (id, member_user_id, role, joined_at) plus the resolved member-user
-// block. `joined_at` is an RFC3339 timestamp. The `user` block is
-// omitted only when the join could not resolve the user row (an orphaned
-// membership) — a case the admin FE renders defensively.
+// block. `joined_at` is an RFC3339 timestamp. The `user` block is in
+// practice always populated: the backing query INNER-joins the users
+// table, so an orphaned membership (no matching user row) produces no
+// row at all rather than a row with a nil user. The `omitempty` tag is
+// kept only as defensive serialization.
 type AdminGroupMember struct {
 	ID           string                `json:"id"`
 	Type         string                `json:"type" example:"admin_group_members" enums:"admin_group_members"`
@@ -465,7 +467,9 @@ type AdminGroupMembersResponse struct {
 // membership↔user join rows into the wire-shape the admin FE consumes.
 // Rows whose Membership is nil are skipped; the `data` array is always
 // serialised (never null) so the FE can safely .map(...) over an empty
-// group.
+// group. The `row.User != nil` guard is defensive only: the backing
+// INNER join drops orphaned memberships, so a returned row always has
+// its user populated in practice.
 func NewAdminGroupMembersResponse(rows []*models.MembershipWithUser) *AdminGroupMembersResponse {
 	data := make([]*AdminGroupMember, 0, len(rows))
 	for _, row := range rows {

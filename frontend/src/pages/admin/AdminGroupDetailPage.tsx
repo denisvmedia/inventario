@@ -111,6 +111,11 @@ function GroupDetailBody({ group }: { group: AdminGroupDetail }) {
         groupId={group.id ?? ""}
         groupName={group.name ?? t("groupDetail.fallbackName")}
         tenantId={group.tenant_id ?? ""}
+        // Human-readable tenant name for the add-member dialog copy —
+        // same resolution the header card's tenant chip uses.
+        tenantName={
+          group.tenant?.name ?? group.tenant?.slug ?? t("groupDetail.header.unknownTenant")
+        }
         readOnly={isPendingDeletion}
       />
       <DangerZone group={group} />

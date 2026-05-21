@@ -48,7 +48,6 @@
       "colRole": "Role",
       "empty": "No members in this group.",
       "errors": {
-        "capReached": "This group cannot take more members.",
         "generic": "Something went wrong. Please try again.",
         "invalidRole": "That role is not valid.",
         "lastMember": "This is the group's last member. Delete the group instead.",

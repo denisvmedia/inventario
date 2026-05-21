@@ -89,6 +89,10 @@ interface MembershipEditorProps {
   // cross-tenant adds from the UI (the BE still rejects them with
   // `admin.member.tenant_mismatch`, surfaced defensively).
   tenantId: string
+  // The owning tenant's human-readable display name — used only in the
+  // add-member dialog copy, so the operator reads a tenant name rather
+  // than the raw `tenantId` UUID. `tenantId` is still the lookup key.
+  tenantName: string
   // When the group is `pending_deletion` the whole page is read-only:
   // Add / Remove / role-change controls are suppressed, mirroring how the
   // page's DangerZone disables itself.
@@ -111,6 +115,7 @@ export function MembershipEditor({
   groupId,
   groupName,
   tenantId,
+  tenantName,
   readOnly = false,
 }: MembershipEditorProps) {
   const { t } = useTranslation("admin")
@@ -223,7 +228,7 @@ export function MembershipEditor({
                     key={member.id ?? member.member_user_id}
                     member={member}
                     readOnly={readOnly}
-                    pending={updateRole.isPending || removeMember.isPending}
+                    anyMutationPending={updateRole.isPending || removeMember.isPending}
                     onChangeRole={handleChangeRole}
                     onRemove={handleRemove}
                   />
@@ -240,6 +245,7 @@ export function MembershipEditor({
           open={addOpen}
           onOpenChange={setAddOpen}
           tenantId={tenantId}
+          tenantName={tenantName}
           isAdding={addMember.isPending}
           onAdd={(userID, role, onError) =>
             addMember.mutate({ userID, role }, { onSuccess: () => setAddOpen(false), onError })
@@ -256,13 +262,16 @@ export function MembershipEditor({
 function MemberRow({
   member,
   readOnly,
-  pending,
+  anyMutationPending,
   onChangeRole,
   onRemove,
 }: {
   member: AdminGroupMember
   readOnly: boolean
-  pending: boolean
+  // True while a role-change OR remove mutation is in flight for ANY row —
+  // editor-global, not row-local. It disables every row's role <Select> so
+  // concurrent mutations can't race.
+  anyMutationPending: boolean
   onChangeRole: (member: AdminGroupMember, role: GroupRole) => void
   onRemove: (member: AdminGroupMember) => void
 }) {
@@ -270,6 +279,11 @@ function MemberRow({
   const name = member.user?.name || member.user?.email || "—"
   const email = member.user?.email ?? ""
   const role = member.role
+  // `role` is free-form TEXT on the BE and the enum can evolve, so a value
+  // outside viewer|user|admin|owner leaves `ROLE_CONFIG[role]` undefined.
+  // Guard both — mirrors RoleBadge in admin-shared.tsx — so an unknown role
+  // renders the em-dash fallback instead of crashing on `.i18nKey`.
+  const roleConfig = role ? ROLE_CONFIG[role] : undefined
 
   return (
     <TableRow className="hover:bg-transparent" data-testid="admin-group-member-row">
@@ -285,15 +299,15 @@ function MemberRow({
         </div>
       </TableCell>
       <TableCell className="py-3.5">
-        {readOnly || !role ? (
+        {readOnly || !roleConfig ? (
           <span className="text-sm text-muted-foreground">
-            {role ? t(ROLE_CONFIG[role].i18nKey) : "—"}
+            {roleConfig ? t(roleConfig.i18nKey) : "—"}
           </span>
         ) : (
           <Select
             value={role}
             onValueChange={(v) => onChangeRole(member, v as GroupRole)}
-            disabled={pending}
+            disabled={anyMutationPending}
           >
             <SelectTrigger size="sm" className="w-40" data-testid="admin-group-member-role">
               <SelectValue />
@@ -356,12 +370,16 @@ function AddMemberDialog({
   open,
   onOpenChange,
   tenantId,
+  tenantName,
   isAdding,
   onAdd,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  // The tenant the email lookup is scoped to (the raw id).
   tenantId: string
+  // The tenant's human-readable name, shown in the dialog description copy.
+  tenantName: string
   isAdding: boolean
   onAdd: (userID: string, role: GroupRole, onError: (err: unknown) => void) => void
 }) {
@@ -428,7 +446,7 @@ function AddMemberDialog({
             {t("groupDetail.members.add.title")}
           </DialogTitle>
           <DialogDescription>
-            {t("groupDetail.members.add.description", { tenant: tenantId })}
+            {t("groupDetail.members.add.description", { tenant: tenantName })}
           </DialogDescription>
         </DialogHeader>
 

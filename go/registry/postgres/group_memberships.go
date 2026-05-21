@@ -662,10 +662,14 @@ func (r *GroupMembershipRegistry) UpdateRoleWithMemberInvariants(ctx context.Con
 
 // ListByGroupWithUsers joins group_memberships with users so the
 // members list endpoint can serve avatar/name/email in a single
-// round-trip. The JOIN also matches tenant_id on both sides as a
-// defense-in-depth guard against cross-tenant leakage — RLS already
-// scopes the membership rows, but pinning the user row's tenant_id
-// keeps the contract explicit at the SQL layer.
+// round-trip. The JOIN matches tenant_id on both sides as a
+// defense-in-depth guard against cross-tenant leakage. Note the query
+// rows are NOT RLS-scoped here: this registry runs in service mode on
+// the background-worker role, which bypasses the tenant-isolation
+// policy. The tenant gate for the non-admin /groups/{id}/members
+// surface is the requireGroupMembership HTTP middleware upstream;
+// pinning the user row's tenant_id to the membership's keeps the
+// SQL-layer contract explicit on top of that.
 func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
 	if groupID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
@@ -715,10 +719,16 @@ func (r *GroupMembershipRegistry) ListByGroupWithUsersAdmin(ctx context.Context,
 
 // loadMembersWithUsersTx runs the group_memberships↔users join within
 // the supplied tx. It is the shared query body for ListByGroupWithUsers
-// and its admin twin so the two surfaces ship an identical row shape —
-// the only difference between them is whether the caller disables RLS
-// on the tx first. The JOIN matches tenant_id on both sides as a
-// defense-in-depth guard against cross-tenant leakage.
+// and its admin twin so the two surfaces ship an identical row shape.
+// The query rows are never RLS-scoped at this layer — the registry runs
+// in service mode on the background-worker role, which bypasses the
+// tenant-isolation policy. The only difference between the two callers
+// is whether the admin twin additionally issues `SET LOCAL row_security
+// = off` first as documented defense-in-depth covering the JOINed users
+// table; the non-admin caller is tenant-gated upstream by the
+// requireGroupMembership HTTP middleware. The JOIN matches tenant_id on
+// both sides as a further defense-in-depth guard against cross-tenant
+// leakage.
 func (r *GroupMembershipRegistry) loadMembersWithUsersTx(ctx context.Context, tx *sqlx.Tx, groupID string) ([]*models.MembershipWithUser, error) {
 	type row struct {
 		// membership fields

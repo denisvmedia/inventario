@@ -68,7 +68,13 @@ function renderEditor(props: Partial<Parameters<typeof MembershipEditor>[0]> = {
     withAuth: true,
     children: (
       <ConfirmProvider>
-        <MembershipEditor groupId="g1" groupName="HQ Inventory" tenantId="t1" {...props} />
+        <MembershipEditor
+          groupId="g1"
+          groupName="HQ Inventory"
+          tenantId="t1"
+          tenantName="Acme Corp"
+          {...props}
+        />
       </ConfirmProvider>
     ),
   })

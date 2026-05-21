@@ -71,7 +71,6 @@
       "colRole": "Role",
       "empty": "V této skupině nejsou žádní členové.",
       "errors": {
-        "capReached": "Tato skupina nemůže přijmout další členy.",
         "generic": "Něco se pokazilo. Zkuste to prosím znovu.",
         "invalidRole": "Tato role není platná.",
         "lastMember": "Toto je poslední člen skupiny. Místo toho skupinu smažte.",
