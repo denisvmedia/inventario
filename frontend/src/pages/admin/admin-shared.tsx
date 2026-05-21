@@ -29,10 +29,7 @@ export function TenantStatusBadge({ status }: { status: TenantStatus | undefined
   const { t } = useTranslation("admin")
   const tone = (status && TENANT_STATUS_TONE[status]) || TENANT_STATUS_TONE.inactive
   return (
-    <Badge
-      variant="outline"
-      className={cn("h-5 text-xs border-current/20 font-medium", tone)}
-    >
+    <Badge variant="outline" className={cn("h-5 text-xs border-current/20 font-medium", tone)}>
       {status ? t(`tenants.status.${status}`) : "—"}
     </Badge>
   )
@@ -50,10 +47,7 @@ export function GroupStatusBadge({ status }: { status: GroupStatus | undefined }
   const { t } = useTranslation("admin")
   const tone = (status && GROUP_STATUS_TONE[status]) || GROUP_STATUS_TONE.active
   return (
-    <Badge
-      variant="outline"
-      className={cn("h-5 text-xs border-current/20 font-medium", tone)}
-    >
+    <Badge variant="outline" className={cn("h-5 text-xs border-current/20 font-medium", tone)}>
       {status ? t(`tenantDetail.groups.status.${status}`) : "—"}
     </Badge>
   )

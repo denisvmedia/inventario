@@ -205,9 +205,7 @@ describe("AdminTenantDetailPage", () => {
     renderPage()
 
     await waitFor(() =>
-      expect(
-        screen.getByText("Could not load this tenant. Please try again.")
-      ).toBeInTheDocument()
+      expect(screen.getByText("Could not load this tenant. Please try again.")).toBeInTheDocument()
     )
   })
 
@@ -218,9 +216,7 @@ describe("AdminTenantDetailPage", () => {
     // generic "Could not load" error card.
     server.use(
       http.get(api("/auth/me"), () => HttpResponse.json(adminUser)),
-      http.get(api("/admin/tenants/t1"), () =>
-        HttpResponse.json({ errors: [] }, { status: 404 })
-      )
+      http.get(api("/admin/tenants/t1"), () => HttpResponse.json({ errors: [] }, { status: 404 }))
     )
     renderPage()
 

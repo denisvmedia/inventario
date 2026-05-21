@@ -75,10 +75,7 @@ export async function listAdminTenants(
 // Reads a single tenant by ID. The BE returns the same AdminTenantListItem
 // shape as a list row (computed user_count / group_count, no nested
 // users/groups) — those listings live behind their own endpoints.
-export async function getAdminTenant(
-  tenantId: string,
-  signal?: AbortSignal
-): Promise<AdminTenant> {
+export async function getAdminTenant(tenantId: string, signal?: AbortSignal): Promise<AdminTenant> {
   const body = await http.get<AdminTenantResponse>(
     `/admin/tenants/${encodeURIComponent(tenantId)}`,
     { signal }

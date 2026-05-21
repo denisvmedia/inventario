@@ -236,7 +236,10 @@ export function AdminTenantsPage() {
                 <TableBody>
                   {query.isLoading ? (
                     <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={6} className="h-32 text-center text-sm text-muted-foreground">
+                      <TableCell
+                        colSpan={6}
+                        className="h-32 text-center text-sm text-muted-foreground"
+                      >
                         {t("tenants.loading")}
                       </TableCell>
                     </TableRow>
@@ -332,9 +335,7 @@ function TenantRow({ tenant, onSelect }: { tenant: AdminTenant; onSelect: () => 
           <span className="font-mono text-xs text-muted-foreground">{tenant.slug ?? ""}</span>
         </div>
       </TableCell>
-      <TableCell className="py-3.5 text-sm text-muted-foreground">
-        {tenant.domain || "—"}
-      </TableCell>
+      <TableCell className="py-3.5 text-sm text-muted-foreground">{tenant.domain || "—"}</TableCell>
       <TableCell className="py-3.5">
         <TenantStatusBadge status={tenant.status} />
       </TableCell>

@@ -1,14 +1,5 @@
 import { useEffect, useState } from "react"
-import {
-  ArrowLeft,
-  Building2,
-  Globe,
-  Hash,
-  Layers,
-  Search,
-  Users,
-  X,
-} from "lucide-react"
+import { ArrowLeft, Building2, Globe, Hash, Layers, Search, Users, X } from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
@@ -83,9 +74,7 @@ export function AdminTenantDetailPage() {
   // `!tenant.data?.id` branch below still covers a hypothetical
   // 200-with-empty-body response.
   const isNotFound =
-    (tenant.isError &&
-      tenant.error instanceof HttpError &&
-      tenant.error.status === 404) ||
+    (tenant.isError && tenant.error instanceof HttpError && tenant.error.status === 404) ||
     (!tenant.isLoading && !tenant.isError && !tenant.data?.id)
 
   function setTab(next: string) {
@@ -161,9 +150,7 @@ export function AdminTenantDetailPage() {
                   tenantId={tenantId}
                   searchParams={searchParams}
                   setSearchParams={setSearchParams}
-                  onSelectUser={(userId) =>
-                    navigate(`/admin/users/${encodeURIComponent(userId)}`)
-                  }
+                  onSelectUser={(userId) => navigate(`/admin/users/${encodeURIComponent(userId)}`)}
                 />
               </TabsContent>
               <TabsContent value="groups">
@@ -392,13 +379,19 @@ function TenantUsersTab({
               <TableBody>
                 {query.isLoading ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
+                    <TableCell
+                      colSpan={5}
+                      className="h-24 text-center text-sm text-muted-foreground"
+                    >
                       {t("tenantDetail.users.loading")}
                     </TableCell>
                   </TableRow>
                 ) : users.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
+                    <TableCell
+                      colSpan={5}
+                      className="h-24 text-center text-sm text-muted-foreground"
+                    >
                       {t("tenantDetail.users.empty")}
                     </TableCell>
                   </TableRow>
@@ -461,8 +454,7 @@ function TenantGroupsTab({
   const { t } = useTranslation("admin")
 
   const statusRaw = searchParams.get("status")
-  const status =
-    statusRaw === "active" || statusRaw === "pending_deletion" ? statusRaw : undefined
+  const status = statusRaw === "active" || statusRaw === "pending_deletion" ? statusRaw : undefined
   const page = parsePage(searchParams.get("page"))
 
   const query = useAdminGroups({
@@ -552,13 +544,19 @@ function TenantGroupsTab({
               <TableBody>
                 {query.isLoading ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={4} className="h-24 text-center text-sm text-muted-foreground">
+                    <TableCell
+                      colSpan={4}
+                      className="h-24 text-center text-sm text-muted-foreground"
+                    >
                       {t("tenantDetail.groups.loading")}
                     </TableCell>
                   </TableRow>
                 ) : groups.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={4} className="h-24 text-center text-sm text-muted-foreground">
+                    <TableCell
+                      colSpan={4}
+                      className="h-24 text-center text-sm text-muted-foreground"
+                    >
                       {t("tenantDetail.groups.empty")}
                     </TableCell>
                   </TableRow>
