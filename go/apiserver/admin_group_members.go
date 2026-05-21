@@ -150,11 +150,20 @@ func (api *adminGroupMembersAPI) listMembers(w http.ResponseWriter, r *http.Requ
 
 	// Resolve the group first so a typo in the URL surfaces as a clean
 	// 404 (mirrors removeMember / updateMemberRole) and the audit row
-	// carries the group's tenant ID.
-	group, err := api.factorySet.LocationGroupRegistry.Get(r.Context(), groupID)
+	// carries the group's tenant ID. GetAdmin is the RLS-bypass lookup —
+	// the tenant-scoped Get would 404 on a group in any tenant other than
+	// the admin's own under the Postgres backend, breaking the cross-tenant
+	// admin surface.
+	detail, err := api.factorySet.LocationGroupRegistry.GetAdmin(r.Context(), groupID)
 	if err != nil {
 		api.auditMemberList(r, "", groupID, err)
 		_ = renderEntityError(w, r, err)
+		return
+	}
+	group, ok := adminGroupOrNotFound(detail)
+	if !ok {
+		api.auditMemberList(r, "", groupID, registry.ErrNotFound)
+		_ = renderEntityError(w, r, registry.ErrNotFound)
 		return
 	}
 
@@ -209,7 +218,10 @@ func (api *adminGroupMembersAPI) addMember(w http.ResponseWriter, r *http.Reques
 
 	// Resolve the group first so a typo in the URL surfaces as 404
 	// rather than a confusing tenant-mismatch or membership error.
-	group, err := api.factorySet.LocationGroupRegistry.Get(r.Context(), groupID)
+	// GetAdmin is the RLS-bypass lookup — the tenant-scoped Get would 404
+	// on a group in any tenant other than the admin's own under the
+	// Postgres backend, breaking the cross-tenant admin surface.
+	detail, err := api.factorySet.LocationGroupRegistry.GetAdmin(r.Context(), groupID)
 	if err != nil {
 		// The group lookup failed, so its tenant is unknown — pass an
 		// empty tenant for the failed-add audit row but keep the
@@ -217,6 +229,12 @@ func (api *adminGroupMembersAPI) addMember(w http.ResponseWriter, r *http.Reques
 		// admin tried to add.
 		api.auditAdd(r, "", groupID, req.UserID, req.Role, err)
 		_ = renderEntityError(w, r, err)
+		return
+	}
+	group, ok := adminGroupOrNotFound(detail)
+	if !ok {
+		api.auditAdd(r, "", groupID, req.UserID, req.Role, registry.ErrNotFound)
+		_ = renderEntityError(w, r, registry.ErrNotFound)
 		return
 	}
 
@@ -268,11 +286,20 @@ func (api *adminGroupMembersAPI) removeMember(w http.ResponseWriter, r *http.Req
 	}
 
 	// Resolve the group up front so the audit row carries the group's
-	// tenant ID and a typo in the URL surfaces as a clean 404.
-	group, err := api.factorySet.LocationGroupRegistry.Get(r.Context(), groupID)
+	// tenant ID and a typo in the URL surfaces as a clean 404. GetAdmin
+	// is the RLS-bypass lookup — the tenant-scoped Get would 404 on a
+	// group in any tenant other than the admin's own under the Postgres
+	// backend, breaking the cross-tenant admin surface.
+	detail, err := api.factorySet.LocationGroupRegistry.GetAdmin(r.Context(), groupID)
 	if err != nil {
 		api.auditRemove(r, "", groupID, userID, err)
 		_ = renderEntityError(w, r, err)
+		return
+	}
+	group, ok := adminGroupOrNotFound(detail)
+	if !ok {
+		api.auditRemove(r, "", groupID, userID, registry.ErrNotFound)
+		_ = renderEntityError(w, r, registry.ErrNotFound)
 		return
 	}
 
@@ -328,11 +355,20 @@ func (api *adminGroupMembersAPI) updateMemberRole(w http.ResponseWriter, r *http
 	}
 
 	// Resolve the group up front so the audit row carries the group's
-	// tenant ID and a typo in the URL surfaces as a clean 404.
-	group, err := api.factorySet.LocationGroupRegistry.Get(r.Context(), groupID)
+	// tenant ID and a typo in the URL surfaces as a clean 404. GetAdmin
+	// is the RLS-bypass lookup — the tenant-scoped Get would 404 on a
+	// group in any tenant other than the admin's own under the Postgres
+	// backend, breaking the cross-tenant admin surface.
+	detail, err := api.factorySet.LocationGroupRegistry.GetAdmin(r.Context(), groupID)
 	if err != nil {
 		api.auditRoleChange(r, "", groupID, userID, req.Role, err)
 		_ = renderEntityError(w, r, err)
+		return
+	}
+	group, ok := adminGroupOrNotFound(detail)
+	if !ok {
+		api.auditRoleChange(r, "", groupID, userID, req.Role, registry.ErrNotFound)
+		_ = renderEntityError(w, r, registry.ErrNotFound)
 		return
 	}
 

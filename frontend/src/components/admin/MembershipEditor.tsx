@@ -58,10 +58,11 @@ import { ROLE_CONFIG, ROLE_ORDER } from "@/pages/admin/admin-shared"
 const MEMBER_ERROR_KEY: Record<string, string> = {
   "admin.member.tenant_mismatch": "tenantMismatch",
   "admin.member.invalid_role": "invalidRole",
-  // `admin.member.user_required` should be unreachable from the UI (the
-  // Add button is gated on a resolved user), but map it so a defensive
-  // surface still shows a typed message instead of the generic catch-all.
-  "admin.member.user_required": "invalidRole",
+  // `admin.member.user_required` is a missing-user error, not a role
+  // error — it should be unreachable from the UI anyway (the Add button is
+  // gated on a resolved user), so the generic catch-all is the safe
+  // defensive mapping rather than the (wrong) `invalidRole` copy.
+  "admin.member.user_required": "generic",
   "group.last_owner": "lastOwner",
   "group.last_member": "lastMember",
 }
@@ -336,6 +337,7 @@ function MemberRow({
                 size="icon"
                 className="size-7"
                 aria-label={t("groupDetail.members.rowActions")}
+                disabled={anyMutationPending}
                 data-testid="admin-group-member-actions"
               >
                 <Ellipsis className="size-4" />
@@ -345,6 +347,7 @@ function MemberRow({
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onClick={() => onRemove(member)}
+                disabled={anyMutationPending}
                 data-testid="admin-group-member-remove"
               >
                 <Trash2 className="size-4 mr-2" />
