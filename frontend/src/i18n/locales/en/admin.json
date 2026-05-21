@@ -195,5 +195,66 @@
       "users": "Users"
     },
     "title": "Tenants"
+  },
+  "userDetail": {
+    "back": "Back to users",
+    "block": {
+      "action": "Block user",
+      "confirmBody": "{{name}} will be signed out of all sessions and cannot sign in until unblocked. This does not delete their data.",
+      "confirmTitle": "Block this user?",
+      "success": "{{name}} has been blocked."
+    },
+    "dialog": {
+      "cancel": "Cancel"
+    },
+    "errors": {
+      "adminRequiresForce": "This account is a system administrator. Blocking another administrator is not supported from this screen.",
+      "generic": "Something went wrong. Please try again.",
+      "reasonRequired": "A reason is required.",
+      "reasonTooLong": "The reason is too long. Keep it under 500 characters.",
+      "selfBlocked": "You cannot block your own account."
+    },
+    "fallbackName": "User",
+    "groups": {
+      "empty": "Not a member of any group.",
+      "joined": "Joined {{date}}",
+      "title": "Group memberships"
+    },
+    "impersonate": "Impersonate",
+    "impersonateSoon": "Impersonation is coming soon.",
+    "loadError": "Could not load this user. Please try again.",
+    "loading": "Loading user…",
+    "meta": {
+      "created": "created",
+      "lastLogin": "Last login"
+    },
+    "neverLoggedIn": "Never",
+    "notFound": "User not found.",
+    "reason": {
+      "counter": "{{current}}/{{max}}",
+      "label": "Reason",
+      "placeholder": "Why is this action being taken?"
+    },
+    "roles": {
+      "admin": "Administrator",
+      "owner": "Owner",
+      "user": "User",
+      "viewer": "Viewer"
+    },
+    "sessions": {
+      "count_one": "{{count}} active session",
+      "count_other": "{{count}} active sessions",
+      "countHint": "Counted from unrevoked refresh tokens.",
+      "empty": "No active sessions.",
+      "title": "Sessions"
+    },
+    "systemAdminBadge": "System admin",
+    "unblock": {
+      "action": "Unblock user",
+      "confirmBody": "{{name}} will be able to sign in again. They will need to start a new session — existing sessions are not restored.",
+      "confirmTitle": "Unblock this user?",
+      "success": "{{name}} has been unblocked."
+    },
+    "unknownTenant": "Unknown tenant"
   }
 }

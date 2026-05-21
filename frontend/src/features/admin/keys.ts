@@ -45,6 +45,10 @@ export const adminKeys = {
   groups: () => [...adminKeys.all, "groups"] as const,
   groupList: (params: AdminGroupsParams) => [...adminKeys.groups(), "list", params] as const,
   groupDetail: (id: string) => [...adminKeys.groups(), "detail", id] as const,
+  // Per-user admin detail (GET /admin/users/{id}). Keyed by the user id
+  // so block/unblock mutations can invalidate exactly this entry.
+  users: () => [...adminKeys.all, "users"] as const,
+  userDetail: (id: string) => [...adminKeys.users(), "detail", id] as const,
   impersonation: () => [...adminKeys.all, "impersonation"] as const,
   impersonationCurrent: () => [...adminKeys.impersonation(), "current"] as const,
 }

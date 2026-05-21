@@ -351,6 +351,22 @@ export default defineConfig({
       "admin:tenants.stats.*",
       "admin:tenants.status.*",
       "admin:tenantDetail.groups.status.*",
+      // admin:userDetail.errors.* — AdminUserDetailPage resolves the inline
+      //   block/unblock error banner via `t(\`userDetail.errors.${errorKey}\`)`
+      //   where errorKey is a flat segment mapped from the BE's dotted 422
+      //   codes (BLOCK_ERROR_KEY: selfBlocked / adminRequiresForce /
+      //   reasonRequired / reasonTooLong). Dynamic key; the extractor sees
+      //   only the template literal.
+      // admin:userDetail.roles.* — admin-shared.tsx's RoleBadge resolves the
+      //   membership-role label via `t(ROLE_CONFIG[role].i18nKey)` over the
+      //   closed models.GroupRole union (viewer/user/admin/owner).
+      // admin:userDetail.sessions.count* — the session-count summary calls
+      //   `t("userDetail.sessions.count", { count })`; i18next re-stamps the
+      //   `_one` / `_other` plural suffixes on every extract, so the wildcard
+      //   keeps them stable.
+      "admin:userDetail.errors.*",
+      "admin:userDetail.roles.*",
+      "admin:userDetail.sessions.count*",
     ],
   },
 })

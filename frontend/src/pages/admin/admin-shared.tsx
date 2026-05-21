@@ -1,3 +1,4 @@
+import { Building2, Crown, Eye, Shield, User } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +13,7 @@ import type { Schema } from "@/types"
 
 type TenantStatus = Schema<"models.TenantStatus">
 type GroupStatus = Schema<"models.LocationGroupStatus">
+type GroupRole = Schema<"models.GroupRole">
 
 // Per-status badge tone. Mirrors the design-mock TENANT_STATUS_CONFIG
 // palette: status tokens, never raw colors. The BE TenantStatus enum is
@@ -91,6 +93,71 @@ export function AccountStateBadge({ active }: { active: boolean | undefined }) {
         className={cn("size-1.5 rounded-full", active ? "bg-status-active" : "bg-status-expired")}
       />
       {active ? t("tenantDetail.users.state.active") : t("tenantDetail.users.state.blocked")}
+    </Badge>
+  )
+}
+
+// Compact, non-interactive tenant indicator used on admin detail surfaces.
+// Mirrors the design-mock TenantChip; the mock resolves a tenant name from
+// its id, but the admin user-detail BE only carries `tenant_id`, so this
+// renders the id verbatim (see devdocs/frontend/design-deviations.md).
+export function TenantChip({ tenantId }: { tenantId: string | undefined }) {
+  const { t } = useTranslation("admin")
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground select-none">
+      <Building2 className="size-3 shrink-0" />
+      <span className="truncate max-w-40">{tenantId || t("userDetail.unknownTenant")}</span>
+    </span>
+  )
+}
+
+// Per-role badge config. Mirrors the design-mock ADMIN_ROLE_CONFIG (which
+// itself mirrors MembersView role styling): role-tinted, borderless
+// secondary badges. Literal labels are swapped for `admin` namespace i18n
+// keys so the chip translates.
+const ROLE_CONFIG: Record<GroupRole, { i18nKey: string; icon: typeof Eye; badgeClass: string }> = {
+  viewer: {
+    i18nKey: "userDetail.roles.viewer",
+    icon: Eye,
+    badgeClass: "bg-muted text-muted-foreground border-0",
+  },
+  user: {
+    i18nKey: "userDetail.roles.user",
+    icon: User,
+    badgeClass: "bg-chart-3/10 text-chart-3 border-0",
+  },
+  admin: {
+    i18nKey: "userDetail.roles.admin",
+    icon: Shield,
+    badgeClass: "bg-primary/10 text-primary border-0",
+  },
+  owner: {
+    i18nKey: "userDetail.roles.owner",
+    icon: Crown,
+    badgeClass: "bg-accent text-accent-foreground border-0",
+  },
+}
+
+// Renders a group-membership role as a role-tinted secondary badge. An
+// unknown or missing role renders a neutral em-dash badge.
+export function RoleBadge({ role }: { role: GroupRole | undefined }) {
+  const { t } = useTranslation("admin")
+  if (!role || !ROLE_CONFIG[role]) {
+    return (
+      <Badge
+        variant="secondary"
+        className="h-5 text-xs gap-1 bg-muted text-muted-foreground border-0"
+      >
+        —
+      </Badge>
+    )
+  }
+  const cfg = ROLE_CONFIG[role]
+  const Icon = cfg.icon
+  return (
+    <Badge variant="secondary" className={cn("h-5 text-xs gap-1", cfg.badgeClass)}>
+      <Icon className="size-3" />
+      {t(cfg.i18nKey)}
     </Badge>
   )
 }
