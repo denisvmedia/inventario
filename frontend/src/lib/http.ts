@@ -9,13 +9,15 @@
 //   - Surfaces non-2xx as `HttpError` so React Query can react via onError
 import {
   clearAuth,
+  clearImpersonationReturn,
   getAccessToken,
   getCsrfToken,
+  getImpersonationReturn,
   setAccessToken,
   setCsrfToken,
 } from "./auth-storage"
 import { getCurrentGroupSlug } from "./group-context"
-import { navigateToLogin, navigateToMaintenance } from "./navigation"
+import { hardRedirect, navigateToLogin, navigateToMaintenance } from "./navigation"
 
 const BASE_URL = "/api/v1"
 
@@ -111,6 +113,19 @@ interface RefreshResponse {
 // Single-flight refresh: concurrent 401s wait on the same in-flight refresh
 // promise so the backend sees one /auth/refresh call, not N.
 let refreshInFlight: Promise<string> | null = null
+
+// Single-flight impersonation-expiry recovery: 401s that overlap the
+// in-flight `end` call's window all wait on the same promise, so the
+// backend sees one POST /admin/impersonation/end per in-flight burst rather
+// than one per concurrent 401. This dedups requests that overlap the
+// in-flight window — it does NOT dedup a request that arrives in the gap
+// between the `end` succeeding and the browser navigating away; that gap is
+// closed by the hard-redirect tearing the page down, not by this guard.
+let impersonationEndInFlight: Promise<void> | null = null
+
+// The /admin/impersonation/end path — kept as a constant so handle401 can
+// recognise (and skip recovery for) the `end` call itself.
+const IMPERSONATION_END_PATH = "/admin/impersonation/end"
 
 function applyGroupRewrite(path: string): string {
   const slug = getCurrentGroupSlug()
@@ -224,6 +239,71 @@ async function refreshAccessToken(): Promise<string> {
   }
 }
 
+interface ImpersonationEndResponse {
+  access_token?: string
+  csrf_token?: string
+}
+
+// Recovers the admin session when an impersonation access token has
+// auto-expired (#1757). The marker refresh cookie is a non-refreshable
+// primitive, so the normal /auth/refresh path cannot help here — instead
+// we call POST /admin/impersonation/end, which the BE deliberately
+// tolerates being called with an EXPIRED impersonation token (it
+// self-validates off the Authorization header + the httpOnly marker
+// cookie). On success the admin's fresh tokens are stored and the browser
+// hard-redirects back to the impersonated user's admin detail page; on
+// failure the session is unrecoverable so we clear auth and bounce to
+// /login. Either way this throws — the original request's promise must
+// reject because the page is being replaced (mirrors refreshAccessToken's
+// failure path). A raw `fetch` keeps lib/http.ts free of a layering
+// inversion into features/admin (mirrors refreshAccessToken).
+async function recoverFromImpersonationExpiry(url: string): Promise<never> {
+  if (!impersonationEndInFlight) {
+    impersonationEndInFlight = (async () => {
+      const endUrl = `${BASE_URL}${IMPERSONATION_END_PATH}`
+      const headers = new Headers({ Accept: "application/json" })
+      const accessToken = getAccessToken()
+      if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`)
+      const csrf = getCsrfToken()
+      if (csrf) headers.set("X-CSRF-Token", csrf)
+      const response = await fetch(endUrl, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers,
+      })
+      if (!response.ok) {
+        clearAuth()
+        if (shouldRedirectFromCurrentPath()) {
+          navigateToLogin(currentReturnTo(), "session_expired")
+        }
+        throw new HttpError(
+          `Impersonation-end recovery failed with ${response.status}`,
+          response.status,
+          endUrl,
+          await parseBody(response).catch(() => null)
+        )
+      }
+      const payload = (await response.json()) as ImpersonationEndResponse
+      if (payload.access_token) setAccessToken(payload.access_token)
+      if (payload.csrf_token) setCsrfToken(payload.csrf_token)
+      // Read the return target BEFORE clearing the slot.
+      const targetUserId = getImpersonationReturn()?.targetUserId
+      clearImpersonationReturn()
+      hardRedirect(
+        targetUserId ? `/admin/users/${encodeURIComponent(targetUserId)}` : "/admin/users"
+      )
+    })()
+  }
+  try {
+    await impersonationEndInFlight
+  } finally {
+    impersonationEndInFlight = null
+  }
+  // The page is being replaced — reject the original request's promise.
+  throw new HttpError("Impersonation session ended", 401, url, null)
+}
+
 function shouldRedirectFromCurrentPath(): boolean {
   if (typeof window === "undefined") return false
   return !PUBLIC_PATHS.some((p) => window.location.pathname.startsWith(p))
@@ -249,9 +329,25 @@ async function handle401(
   // For login/register/refresh, a 401 is an application-level error (bad
   // credentials, invalid refresh token) — surface the body so callers can
   // render the actual server message instead of a generic "unauthorized".
+  // This check runs BEFORE the impersonation-expiry branch below so that a
+  // `skipAuthRefresh` request (including `endImpersonation` itself) always
+  // deterministically bypasses impersonation recovery — it must never be
+  // ambiguous which 401 path a refresh-opted-out request takes.
   if (NON_REFRESHABLE_AUTH_PATHS.has(originalPath) || init.skipAuthRefresh) {
     const data = await parseBody(response).catch(() => null)
     throw new HttpError("Unauthorized", 401, url, data)
+  }
+  // Impersonation auto-expiry (#1757): if a return-slot is recorded the
+  // browser is inside an impersonation session. When its short-lived
+  // access token expires a normal /auth/refresh cannot help — the marker
+  // refresh cookie is non-refreshable — so recover the admin session via
+  // POST /admin/impersonation/end instead. The `skipAuthRefresh` /
+  // non-refreshable check above already excludes the `end` call and any
+  // refresh-opted-out request; the explicit `IMPERSONATION_END_PATH` guard
+  // here is belt-and-suspenders in case `end` is ever issued without
+  // `skipAuthRefresh`.
+  if (getImpersonationReturn() !== null && originalPath !== IMPERSONATION_END_PATH) {
+    return recoverFromImpersonationExpiry(url)
   }
   try {
     await refreshAccessToken()
@@ -364,4 +460,5 @@ export const http = {
 // Test-only: reset module state between cases.
 export function __resetHttpForTests(): void {
   refreshInFlight = null
+  impersonationEndInFlight = null
 }

@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 // The global test setup mocks sonner to a no-op (renders nothing). Re-mock
 // it locally with a spy so the block / unblock success-toast assertions can
@@ -15,9 +15,10 @@ import { toast } from "sonner"
 
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { initI18n } from "@/i18n"
-import { clearAuth, setAccessToken } from "@/lib/auth-storage"
+import { clearAuth, getImpersonationReturn, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
+import { __resetNavigationForTests, setHardRedirect } from "@/lib/navigation"
 import { AdminUserDetailPage } from "@/pages/admin/AdminUserDetailPage"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
@@ -63,8 +64,13 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+  __resetNavigationForTests()
   setAccessToken("good-token")
   vi.mocked(toast.success).mockClear()
+})
+
+afterEach(() => {
+  __resetNavigationForTests()
 })
 
 // Seeds /auth/me + the user-detail endpoint. `detail` overrides let a
@@ -348,5 +354,87 @@ describe("AdminUserDetailPage", () => {
     renderPage()
 
     await waitFor(() => expect(screen.getByText("User not found.")).toBeInTheDocument())
+  })
+
+  describe("impersonation", () => {
+    it("disables the Impersonate button for a blocked user", async () => {
+      seedDetail({ is_active: false })
+      renderPage()
+
+      await waitFor(() => expect(screen.getByTestId("admin-user-impersonate")).toBeInTheDocument())
+      expect(screen.getByTestId("admin-user-impersonate")).toBeDisabled()
+    })
+
+    it("disables the Impersonate button for a system-admin user", async () => {
+      seedDetail({ is_system_admin: true })
+      renderPage()
+
+      await waitFor(() => expect(screen.getByTestId("admin-user-impersonate")).toBeInTheDocument())
+      expect(screen.getByTestId("admin-user-impersonate")).toBeDisabled()
+    })
+
+    it("enables the Impersonate button for a normal active user", async () => {
+      seedDetail()
+      renderPage()
+
+      await waitFor(() => expect(screen.getByTestId("admin-user-impersonate")).toBeEnabled())
+    })
+
+    it("confirms an impersonation: POST /impersonate → hard redirect to /", async () => {
+      let impersonateCalls = 0
+      seedDetail()
+      server.use(
+        http.post(api("/admin/users/user-1/impersonate"), () => {
+          impersonateCalls++
+          return HttpResponse.json({
+            access_token: "target-token",
+            csrf_token: "target-csrf",
+            user: { id: "user-1", email: "ada@northwind.example.com", name: "Ada Lovelace" },
+          })
+        })
+      )
+      const redirect = vi.fn()
+      setHardRedirect(redirect)
+      renderPage()
+
+      await waitFor(() => expect(screen.getByTestId("admin-user-impersonate")).toBeEnabled())
+      await userEvent.click(screen.getByTestId("admin-user-impersonate"))
+
+      // The impersonate dialog has NO reason textarea.
+      const dialog = screen.getByTestId("admin-user-action-dialog")
+      expect(within(dialog).queryByTestId("admin-user-action-reason")).not.toBeInTheDocument()
+
+      await userEvent.click(screen.getByTestId("admin-user-action-confirm"))
+
+      await waitFor(() => expect(impersonateCalls).toBe(1))
+      await waitFor(() => expect(redirect).toHaveBeenCalledWith("/"))
+      expect(getImpersonationReturn()).toEqual({ targetUserId: "user-1" })
+    })
+
+    // Each typed impersonate error code surfaces its own localized banner.
+    it.each([
+      ["admin.impersonate.target_is_admin", 422, "cannot be impersonated"],
+      ["admin.impersonate.target_blocked", 422, "is blocked"],
+      ["admin.impersonate.nested", 422, "already impersonating"],
+      ["admin.impersonate.rate_limited", 429, "Too many impersonation attempts"],
+    ])("surfaces the localized banner for %s", async (code, status, fragment) => {
+      seedDetail()
+      server.use(
+        http.post(api("/admin/users/user-1/impersonate"), () =>
+          HttpResponse.json({ errors: [{ code, detail: "rejected" }] }, { status })
+        )
+      )
+      setHardRedirect(vi.fn())
+      renderPage()
+
+      await waitFor(() => expect(screen.getByTestId("admin-user-impersonate")).toBeEnabled())
+      await userEvent.click(screen.getByTestId("admin-user-impersonate"))
+      await userEvent.click(screen.getByTestId("admin-user-action-confirm"))
+
+      await waitFor(() =>
+        expect(screen.getByTestId("admin-user-action-error")).toHaveTextContent(fragment)
+      )
+      expect(screen.getByTestId("admin-user-action-dialog")).toBeInTheDocument()
+    })
   })
 })
