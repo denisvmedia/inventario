@@ -15,6 +15,7 @@
  *   4. admin group membership add / role-change / remove + soft-delete
  *   5. impersonation: start → banner → navigate → end → admin restored
  *   6. impersonation safety: no nested impersonation, no token refresh
+ *   7. impersonation safety: a system admin cannot be impersonated
  *
  * Cross-tenant rejection (`admin.member.tenant_mismatch`) is not
  * reachable here — the e2e database holds a single tenant — and is
@@ -346,5 +347,22 @@ test.describe('System admin section (#1744 / #1758)', () => {
       headers: authHeaders(impToken, impCsrf),
     });
     expect(end.ok()).toBeTruthy();
+  });
+
+  test('impersonation safety: a system admin cannot be impersonated', async ({ request }) => {
+    const sysadmin = await apiLogin(request, SYSADMIN_TEST_CREDENTIALS);
+
+    // No admin targets: impersonating a system admin is rejected. The
+    // seeded fixtures hold a single system admin (sysadmin@test-org.com),
+    // so it doubles as the target — impersonationTargetGuard rejects on
+    // `target.IsSystemAdmin` regardless of whether the target is the
+    // caller or a different admin, which is exactly the guard under test.
+    const resp = await request.post(`/api/v1/admin/users/${sysadmin.userId}/impersonate`, {
+      headers: { 'Content-Type': 'application/json', ...authHeaders(sysadmin.token, sysadmin.csrf) },
+      data: { reason: 'e2e admin-target rejection check (#1758)' },
+    });
+    expect(resp.status(), 'impersonating a system admin must be rejected').toBe(422);
+    // The JSON:API error envelope pins the specific guard that fired.
+    expect(await resp.text()).toContain('admin.impersonate.target_is_admin');
   });
 });

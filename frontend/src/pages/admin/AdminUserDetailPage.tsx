@@ -79,7 +79,7 @@ function initialsOf(name: string | undefined): string {
 //
 // Naming: the issue text proposed `UserDetailPage.tsx`, but the #1752
 // foundation established the `Admin*Page` convention for this surface
-// (AdminTenantsPage / AdminTenantDetailPage / AdminUsersPage); this page
+// (AdminTenantsPage / AdminTenantDetailPage / AdminGroupsPage); this page
 // follows the codebase convention. See devdocs/frontend/design-deviations.md.
 //
 // Sessions: the design mock renders a per-session table (device / IP /
@@ -108,7 +108,7 @@ export function AdminUserDetailPage() {
           asChild
           className="gap-1.5 -ml-2 self-start text-muted-foreground hover:text-foreground"
         >
-          <Link to="/admin/users">
+          <Link to="/admin/tenants">
             <ArrowLeft className="size-4" />
             {t("userDetail.back")}
           </Link>

@@ -117,8 +117,7 @@
   "nav": {
     "groups": "Groups",
     "section": "Admin",
-    "tenants": "Tenants",
-    "users": "Users"
+    "tenants": "Tenants"
   },
   "pagination": {
     "next": "Next page",
@@ -126,13 +125,6 @@
     "previous": "Previous page",
     "previousLabel": "Previous",
     "showing": "Showing {{from}}–{{to}} of {{total}}"
-  },
-  "placeholder": {
-    "comingSoon": "This admin page is coming soon.",
-    "users": {
-      "subtitle": "Every Inventario account across all tenants.",
-      "title": "Users"
-    }
   },
   "tenantDetail": {
     "back": "Back to tenants",
@@ -228,7 +220,7 @@
     "title": "Tenants"
   },
   "userDetail": {
-    "back": "Back to users",
+    "back": "Back to tenants",
     "block": {
       "action": "Block user",
       "confirmBody": "{{name}} will be signed out of all sessions and cannot sign in until unblocked. This does not delete their data.",

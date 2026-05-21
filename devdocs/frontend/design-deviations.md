@@ -350,7 +350,7 @@ _None yet._
 
 - **Issue/PR**: #1752 / PR (pending)
 - **Mock**: The admin surface mocks ([`design-mocks/src/views/admin/`](../../design-mocks/src/views/admin/) — `TenantsView`, `TenantDetailView`, `UserDetailView`, `GroupsView`, `GroupDetailView`, `admin-shared.tsx`) have **no layout shell**: each admin view is self-contained, navigates via a state string in the mock's `App.tsx`, and uses an `AdminBackButton` (ArrowLeft ghost button) for back-navigation. There is no breadcrumb and no secondary nav anywhere in the admin mock.
-- **Reality**: `frontend/src/pages/admin/AdminLayout.tsx` is a real layout route that supplies a breadcrumb (`Admin → <section>`, reusing the shared `LocationsBreadcrumb` primitive) and a secondary-nav strip (Tenants / Users / Groups underline-tab pills) with the section pages rendered through `<Outlet />`.
+- **Reality**: `frontend/src/pages/admin/AdminLayout.tsx` is a real layout route that supplies a breadcrumb (`Admin → <section>`, reusing the shared `LocationsBreadcrumb` primitive) and a secondary-nav strip (Tenants / Groups underline-tab pills) with the section pages rendered through `<Outlet />`. The strip carries no `Users` pill — there is no cross-tenant user list; users are reached through a tenant (the tenant-detail Users tab) and the per-user page lives at `/admin/users/:id`.
 - **Why**: Not present in mock. The frontend uses `react-router-dom`, not the mock's `view`-state machine — multiple admin pages need a shared chrome and a way to move between sub-sections, which issue #1752 explicitly mandates ("layout shell — breadcrumbs, secondary nav"). The layout reuses existing design-language tokens (overline breadcrumb, `border-b-2` active-tab treatment) and the existing `LocationsBreadcrumb` component rather than inventing new chrome.
 - **Approved by**: agent-suggested-then-user-confirmed — issue #1752 spec calls for the layout shell directly.
 - **Reversion plan**: Permanent until/unless the upstream design adds an admin layout; if it does, this layout adopts the mock's chrome.
@@ -359,7 +359,7 @@ _None yet._
 
 - **Issue/PR**: #1752 / PR (pending)
 - **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) renders an `Admin` `SidebarGroup` with **two** entries — `Tenants` and `Groups` — both always visible (the mock has no auth/permission model).
-- **Reality**: `frontend/src/components/AppSidebar.tsx` renders the `Admin` section with a **single** top-level entry → `/admin/tenants`, and only when `useIsSystemAdmin()` is true. Sub-section navigation (Users / Groups) lives in the `AdminLayout` secondary nav instead of the sidebar.
+- **Reality**: `frontend/src/components/AppSidebar.tsx` renders the `Admin` section with a **single** top-level entry → `/admin/tenants`, and only when `useIsSystemAdmin()` is true. Sub-section navigation (Groups) lives in the `AdminLayout` secondary nav instead of the sidebar.
 - **Why**: Issue #1752 specifies "a new 'ADMIN' section … Top-level link → `/admin/tenants`" — one sidebar entry, with the AdminLayout owning sub-navigation. The conditional render is required because the mock has no permission gating; non-admins must not see the section.
 - **Approved by**: agent-suggested-then-user-confirmed — issue #1752 spec dictates both the single-link shape and the conditional render.
 - **Reversion plan**: Permanent — the single-link + secondary-nav split is the intended IA for the React app.

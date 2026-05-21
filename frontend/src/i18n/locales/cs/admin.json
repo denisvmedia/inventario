@@ -18,8 +18,7 @@
   "nav": {
     "groups": "Skupiny",
     "section": "Správa",
-    "tenants": "Nájemci",
-    "users": "Uživatelé"
+    "tenants": "Nájemci"
   },
   "pagination": {
     "next": "Další stránka",
@@ -127,13 +126,6 @@
     "title": "Skupiny",
     "unknownTenant": "Neznámý nájemce"
   },
-  "placeholder": {
-    "comingSoon": "Tato stránka správy je připravována.",
-    "users": {
-      "subtitle": "Všechny účty Inventario napříč všemi nájemci.",
-      "title": "Uživatelé"
-    }
-  },
   "tenantDetail": {
     "back": "Zpět na nájemce",
     "fallbackName": "Nájemce",
@@ -228,7 +220,7 @@
     "title": "Nájemci"
   },
   "userDetail": {
-    "back": "Zpět na uživatele",
+    "back": "Zpět na nájemce",
     "block": {
       "action": "Zablokovat uživatele",
       "confirmBody": "Uživatel {{name}} bude odhlášen ze všech relací a nebude se moci přihlásit, dokud nebude odblokován. Tato akce nesmaže jeho data.",

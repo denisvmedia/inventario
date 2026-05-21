@@ -55,8 +55,8 @@ function parsePage(raw: string | null): number {
 //
 // Naming: the issue text proposed `TenantDetailPage.tsx`, but the #1752
 // foundation established the `Admin*Page` convention for this surface
-// (AdminTenantsPage / AdminUsersPage / AdminGroupsPage); this page
-// follows the codebase convention. See devdocs/frontend/design-deviations.md.
+// (AdminTenantsPage / AdminGroupsPage); this page follows the codebase
+// convention. See devdocs/frontend/design-deviations.md.
 export function AdminTenantDetailPage() {
   const { t } = useTranslation("admin")
   const navigate = useNavigate()
