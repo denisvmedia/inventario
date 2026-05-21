@@ -145,13 +145,14 @@ export function AdminGroupsPage() {
   // options — a deep link to a tenant past the first TENANT_FILTER_PER_PAGE,
   // or the tenants query failed — the <Select> would render a blank trigger
   // and silently hide the active filter. Inject a fallback option so the
-  // filter state stays visible: prefer a real tenant name lifted from the
-  // loaded group rows, falling back to the raw ID.
+  // filter state stays visible: prefer a real tenant label lifted from the
+  // loaded group rows, falling back to slug / ID as needed.
   const missingTenant = useMemo(() => {
     if (!tenantID) return null
     if (tenantOptions.some((tenant) => tenant.id === tenantID)) return null
-    const named = groups.find((group) => group.tenant?.id === tenantID)?.tenant?.name
-    return { id: tenantID, name: named }
+    const tenant = groups.find((group) => group.tenant?.id === tenantID)?.tenant
+    const name = tenant?.name ?? tenant?.slug ?? tenant?.id ?? tenantID
+    return { id: tenantID, name }
   }, [tenantID, tenantOptions, groups])
 
   // Out-of-range recovery: if the URL carries a ?page beyond the last page

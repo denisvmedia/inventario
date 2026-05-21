@@ -138,7 +138,7 @@ function GroupHeaderCard({ group }: { group: AdminGroupDetail }) {
             <span className="inline-flex max-w-48 items-center gap-1.5 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
               <Building2 className="size-3 shrink-0" />
               <span className="truncate">
-                {group.tenant?.name || t("groupDetail.header.unknownTenant")}
+                {group.tenant?.name ?? group.tenant?.slug ?? t("groupDetail.header.unknownTenant")}
               </span>
             </span>
           </div>
