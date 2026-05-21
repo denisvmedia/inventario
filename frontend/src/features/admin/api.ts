@@ -7,6 +7,13 @@
 // so the http client's group rewrite leaves them untouched (no /admin
 // prefix in GROUP_SCOPED_PREFIXES).
 import { http, HttpError } from "@/lib/http"
+import {
+  clearImpersonationReturn,
+  getImpersonationReturn,
+  setAccessToken,
+  setCsrfToken,
+  setImpersonationReturn,
+} from "@/lib/auth-storage"
 import type { Schema } from "@/types"
 import type { AdminGroupsParams, AdminTenantsParams, AdminTenantUsersParams } from "./keys"
 
@@ -53,6 +60,11 @@ export type AdminListMeta = Schema<"jsonapi.AdminListMeta">
 // The active-impersonation snapshot powering the persistent banner.
 export type ImpersonationState = Schema<"apiserver.ImpersonationStateResponse">
 export type ImpersonationUser = Schema<"apiserver.ImpersonationUserView">
+
+// The login envelope returned by POST /admin/users/{id}/impersonate (user =
+// the TARGET) and POST /admin/impersonation/end (user = the ADMIN). Same
+// shape as the auth login response — { access_token, csrf_token, user, … }.
+export type LoginResponse = Schema<"apiserver.LoginResponse">
 
 type AdminTenantsResponse = Schema<"jsonapi.AdminTenantsResponse">
 type AdminTenantResponse = Schema<"jsonapi.AdminTenantResponse">
@@ -287,4 +299,74 @@ export async function getImpersonationState(signal?: AbortSignal): Promise<Imper
     }
     throw error
   }
+}
+
+// Starts an impersonation session (POST /admin/users/{id}/impersonate). The
+// BE issues a fresh, short-lived (≤30m, non-refreshable) access token bound
+// to the TARGET user plus an httpOnly marker refresh cookie; the response
+// `user` is the target. On success the new tokens replace the admin's in
+// localStorage and the impersonated user's id is recorded so the End / auto-
+// expiry flows can route back to /admin/users/{id}. The caller then triggers
+// a full-page reload so the app re-mounts as the target user.
+//
+// Typed 422 codes the caller branches on: `admin.impersonate.target_is_admin`,
+// `admin.impersonate.target_blocked`, `admin.impersonate.nested`;
+// 429 `admin.impersonate.rate_limited`.
+export async function startImpersonation(userId: string): Promise<LoginResponse> {
+  const body = await http.post<LoginResponse>(
+    `/admin/users/${encodeURIComponent(userId)}/impersonate`,
+    undefined
+  )
+  // A 200 without an access token is a malformed response — fail fast
+  // rather than silently navigating into a tokenless (broken) session.
+  if (!body.access_token) {
+    throw new Error(`Impersonate response for "${userId}" is missing its access token`)
+  }
+  setAccessToken(body.access_token)
+  if (body.csrf_token) setCsrfToken(body.csrf_token)
+  // The `userId` path param is the authoritative impersonation target — it
+  // is what the BE keyed the session on. `body.user?.id` is normally the
+  // same value; falling back to `userId` on a (malformed) response that
+  // lacks `user.id` is therefore deliberate and correct, never a guess.
+  setImpersonationReturn({ targetUserId: body.user?.id ?? userId })
+  return body
+}
+
+// The result of ending an impersonation session: just the impersonated
+// user's id (or null when the slot was missing/malformed) so the hook can
+// route back to that user's admin detail page. The raw LoginResponse is
+// deliberately NOT returned — its tokens are already applied to storage
+// here, and the slot is cleared atomically with the swap, so callers have
+// nothing left to do with the envelope.
+export interface EndImpersonationResult {
+  targetUserId: string | null
+}
+
+// Ends the active impersonation session (POST /admin/impersonation/end). The
+// BE self-validates the impersonation token off the Authorization header
+// (tolerating an expired one) plus the httpOnly marker refresh cookie, and
+// returns the ADMIN's restored session with fresh tokens. `skipAuthRefresh`
+// is critical: a 401 from `end` itself must NOT kick off the normal refresh
+// dance (the marker cookie is non-refreshable).
+//
+// The token swap, the return-target capture, and `clearImpersonationReturn`
+// all happen here, inside the mutationFn — so they are atomic with respect
+// to React Query's call-site `onSuccess` callbacks (which are skipped if the
+// caller component unmounts before the mutation settles). A missed callback
+// can therefore never leave the admin live under the wrong identity or
+// orphan the return-slot.
+export async function endImpersonation(): Promise<EndImpersonationResult> {
+  const body = await http.post<LoginResponse>("/admin/impersonation/end", undefined, {
+    skipAuthRefresh: true,
+  })
+  if (!body.access_token) {
+    throw new Error("Impersonation-end response is missing its access token")
+  }
+  setAccessToken(body.access_token)
+  if (body.csrf_token) setCsrfToken(body.csrf_token)
+  // Capture the return target, then clear the slot atomically with the
+  // token swap above — see the function comment.
+  const targetUserId = getImpersonationReturn()?.targetUserId ?? null
+  clearImpersonationReturn()
+  return { targetUserId }
 }

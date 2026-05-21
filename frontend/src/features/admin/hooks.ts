@@ -1,9 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useIsSystemAdmin } from "@/features/auth/hooks"
+import { clearAuth } from "@/lib/auth-storage"
+import { hardRedirect } from "@/lib/navigation"
 
 import {
   blockAdminUser,
+  endImpersonation,
   getAdminGroup,
   getAdminTenant,
   getAdminUser,
@@ -12,6 +15,7 @@ import {
   listAdminTenants,
   listAdminTenantUsers,
   softDeleteAdminGroup,
+  startImpersonation,
   unblockAdminUser,
   type AdminBlockRequest,
   type AdminGroupDetail,
@@ -21,6 +25,8 @@ import {
   type AdminTenantUsersResult,
   type AdminUnblockRequest,
   type AdminUserDetail,
+  type EndImpersonationResult,
+  type LoginResponse,
 } from "./api"
 import {
   adminKeys,
@@ -190,6 +196,51 @@ export function useUnblockAdminUser(userId: string) {
       patchUserDetailActive(qc, userId, view.is_active)
       qc.invalidateQueries({ queryKey: adminKeys.userDetail(userId) })
       qc.invalidateQueries({ queryKey: adminKeys.tenants() })
+    },
+  })
+}
+
+// Starts an impersonation session for a target user. No cache work — a
+// successful start is immediately followed by a full-page reload (the app
+// re-mounts as the target user, rebuilding every cache), so invalidating
+// React Query keys here would be pointless. The page consumes `isPending`
+// to gate the confirm dialog and `error` to surface a typed 422/429 banner.
+//
+// The post-success hard reload lives in the hook-level `onSuccess` (not a
+// call-site one): hook-level callbacks always run, whereas a call-site
+// `mutate(vars, { onSuccess })` is silently skipped if the calling
+// component unmounts before the mutation settles — which would leave the
+// app live under the target's tokens but still rendering the admin UI.
+export function useStartImpersonation() {
+  return useMutation<LoginResponse, Error, string>({
+    mutationFn: (userId) => startImpersonation(userId),
+    onSuccess: () => hardRedirect("/"),
+  })
+}
+
+// Ends the active impersonation session. Like the start hook this does no
+// cache work — the hook-level callbacks perform a full-page reload, which
+// rebuilds the cache from scratch.
+//
+// Both side effects are hook-level for the same reason as
+// useStartImpersonation: a call-site callback would be skipped on unmount,
+// stranding the operator on a half-swapped identity. On success we route
+// to the impersonated user's admin detail page (or the list if the slot
+// was missing); on failure the admin session is unrecoverable from the FE,
+// so we clear auth and bounce to /login with the `session_expired` reason —
+// consistent with the auto-expiry recovery path (review item M1).
+export function useEndImpersonation() {
+  return useMutation<EndImpersonationResult, Error, void>({
+    mutationFn: () => endImpersonation(),
+    onSuccess: (result) =>
+      hardRedirect(
+        result.targetUserId
+          ? "/admin/users/" + encodeURIComponent(result.targetUserId)
+          : "/admin/users"
+      ),
+    onError: () => {
+      clearAuth()
+      hardRedirect("/login?reason=session_expired")
     },
   })
 }

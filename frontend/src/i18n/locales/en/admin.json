@@ -76,6 +76,7 @@
   "impersonation": {
     "banner": {
       "end": "End impersonation",
+      "ending": "Ending…",
       "label": "Impersonating {{name}}",
       "sessionEndsIn": "Session ends in"
     }
@@ -210,9 +211,13 @@
     "errors": {
       "adminRequiresForce": "This account is a system administrator. Blocking another administrator is not supported from this screen.",
       "generic": "Something went wrong. Please try again.",
+      "nested": "You are already impersonating someone. End the current session before starting another.",
+      "rateLimited": "Too many impersonation attempts. Please wait a moment and try again.",
       "reasonRequired": "A reason is required.",
       "reasonTooLong": "The reason is too long. Keep it under 500 characters.",
-      "selfBlocked": "You cannot block your own account."
+      "selfBlocked": "You cannot block your own account.",
+      "targetBlocked": "This account is blocked. Unblock the user before impersonating them.",
+      "targetIsAdmin": "System administrators cannot be impersonated."
     },
     "fallbackName": "User",
     "groups": {
@@ -221,7 +226,13 @@
       "title": "Group memberships"
     },
     "impersonate": "Impersonate",
-    "impersonateSoon": "Impersonation is coming soon.",
+    "impersonateAdminHint": "System administrators cannot be impersonated.",
+    "impersonateBlockedHint": "This account is blocked. Unblock the user before impersonating them.",
+    "impersonateDialog": {
+      "body": "You will see the app as this user. The audit log records both your actions and theirs. You can end the session at any time.",
+      "confirm": "Start impersonation",
+      "title": "Impersonate this user?"
+    },
     "loadError": "Could not load this user. Please try again.",
     "loading": "Loading user…",
     "meta": {

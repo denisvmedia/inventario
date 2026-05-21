@@ -65,8 +65,10 @@ function toContextValue(
 //
 // Mirrors the AuthProvider / GroupProvider pattern: a query hook drives a
 // memoized context value, consumers read it through a `useImpersonation()`
-// hook. The "End impersonation" action is wired in a later sub-issue
-// (#1750 ships the BE primitive); this issue ships the read-only state.
+// hook. This provider ships the read-only `current` probe that gates the
+// banner; #1750 shipped the BE `end` primitive, and #1757 wired the FE
+// start / "End impersonation" / auto-expiry flows on top of it (see
+// `useStartImpersonation` / `useEndImpersonation` in ../hooks.ts).
 export function ImpersonationProvider({ children }: ImpersonationProviderProps) {
   const auth = useOptionalAuth()
   const isAuthenticated = auth?.isAuthenticated ?? false

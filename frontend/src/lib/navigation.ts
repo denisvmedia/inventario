@@ -66,8 +66,34 @@ export function setNavigateToMaintenance(fn: NavigateToMaintenance): void {
   maintenanceNavigator = fn
 }
 
+// Hard, full-page redirect (#1757). Unlike navigateToLogin — which is a
+// soft SPA navigation deliberately avoiding a reload — the impersonation
+// start/end flows REQUIRE a full document reload so the new identity
+// (admin ⇄ target user) takes effect cleanly: every in-memory cache,
+// context, and query observer is rebuilt from scratch. The default impl
+// is `window.location.assign`; jsdom cannot navigate, so tests override
+// it via `setHardRedirect` (mirrors the `setNavigateToLogin` indirection).
+export type HardRedirect = (path: string) => void
+
+const defaultHardRedirect: HardRedirect = (path) => {
+  if (typeof window !== "undefined") {
+    window.location.assign(path)
+  }
+}
+
+let hardRedirector: HardRedirect = defaultHardRedirect
+
+export function hardRedirect(path: string): void {
+  hardRedirector(path)
+}
+
+export function setHardRedirect(fn: HardRedirect): void {
+  hardRedirector = fn
+}
+
 // Test-only: restore the default navigators between cases.
 export function __resetNavigationForTests(): void {
   navigator = defaultNavigateToLogin
   maintenanceNavigator = defaultNavigateToMaintenance
+  hardRedirector = defaultHardRedirect
 }

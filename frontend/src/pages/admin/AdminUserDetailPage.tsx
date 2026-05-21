@@ -18,7 +18,12 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { RouteTitle } from "@/components/routing/RouteTitle"
-import { useAdminUser, useBlockAdminUser, useUnblockAdminUser } from "@/features/admin/hooks"
+import {
+  useAdminUser,
+  useBlockAdminUser,
+  useStartImpersonation,
+  useUnblockAdminUser,
+} from "@/features/admin/hooks"
 import type { AdminUserDetail } from "@/features/admin/api"
 import { HttpError } from "@/lib/http"
 import { formatDateTime, formatRelative } from "@/lib/intl"
@@ -41,11 +46,19 @@ const REASON_MAX = 500
 // criteria). The BE codes are dotted (`admin.block.self_blocked`); i18n
 // keys must NOT contain dots (the catalog uses `.` as the nesting
 // separator), so this map translates each code to a flat key segment.
-const BLOCK_ERROR_KEY: Record<string, string> = {
+//
+// The impersonate codes (`admin.impersonate.*`) are merged into the same
+// map: the BE codes are globally unique, so a single lookup table covers
+// every dialog and `applyError` need not know which dialog is open.
+const ACTION_ERROR_KEY: Record<string, string> = {
   "admin.block.self_blocked": "selfBlocked",
   "admin.block.admin_requires_force": "adminRequiresForce",
   "admin.block.reason_required": "reasonRequired",
   "admin.block.reason_too_long": "reasonTooLong",
+  "admin.impersonate.target_is_admin": "targetIsAdmin",
+  "admin.impersonate.target_blocked": "targetBlocked",
+  "admin.impersonate.nested": "nested",
+  "admin.impersonate.rate_limited": "rateLimited",
 }
 
 // Builds an avatar initials string from a display name — first letters of
@@ -138,21 +151,23 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
   const [optimisticActive, setOptimisticActive] = useState<boolean | undefined>(undefined)
   const active = optimisticActive ?? user.is_active
 
-  const [dialog, setDialog] = useState<"block" | "unblock" | null>(null)
+  const [dialog, setDialog] = useState<"block" | "unblock" | "impersonate" | null>(null)
   const [reason, setReason] = useState("")
-  // Inline error banner state for a failed block / unblock. A single
-  // discriminated value: `{ kind: "typed", key }` carries a known 422
-  // `admin.block.*` code mapped to its i18n key suffix (see
-  // BLOCK_ERROR_KEY); `{ kind: "generic" }` is the catch-all; `null` is
-  // "no error". This replaces the earlier `errorKey` + `genericError`
-  // pair so the two can never disagree.
+  // Inline error banner state for a failed block / unblock / impersonate.
+  // A single discriminated value: `{ kind: "typed", key }` carries a known
+  // typed code (`admin.block.*` / `admin.impersonate.*`) mapped to its i18n
+  // key suffix (see ACTION_ERROR_KEY); `{ kind: "generic" }` is the
+  // catch-all; `null` is "no error". This replaces the earlier `errorKey` +
+  // `genericError` pair so the two can never disagree.
   const [actionError, setActionError] = useState<
     { kind: "typed"; key: string } | { kind: "generic" } | null
   >(null)
 
   const blockMutation = useBlockAdminUser(userId)
   const unblockMutation = useUnblockAdminUser(userId)
-  const pending = blockMutation.isPending || unblockMutation.isPending
+  const impersonateMutation = useStartImpersonation()
+  const pending =
+    blockMutation.isPending || unblockMutation.isPending || impersonateMutation.isPending
 
   const memberships = user.group_memberships ?? []
   const sessionCount = user.active_session_count ?? 0
@@ -167,7 +182,7 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
   const reasonLength = [...reason.trim()].length
   const reasonInvalid = reasonLength === 0 || reasonLength > REASON_MAX
 
-  function openDialog(kind: "block" | "unblock") {
+  function openDialog(kind: "block" | "unblock" | "impersonate") {
     setReason("")
     setActionError(null)
     setDialog(kind)
@@ -177,12 +192,13 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
     setDialog(null)
   }
 
-  // Maps a thrown mutation error to the inline banner state: a known
-  // 422 `admin.block.*` code surfaces as a specific localized message;
-  // anything else surfaces as the generic banner.
+  // Maps a thrown mutation error to the inline banner state: any known
+  // typed code (`admin.block.*` / `admin.impersonate.*`) present in
+  // ACTION_ERROR_KEY surfaces as a specific localized message; anything
+  // else surfaces as the generic banner.
   function applyError(err: unknown) {
     const code = getServerErrorCode(err)
-    const key = code ? BLOCK_ERROR_KEY[code] : undefined
+    const key = code ? ACTION_ERROR_KEY[code] : undefined
     setActionError(key ? { kind: "typed", key } : { kind: "generic" })
   }
 
@@ -231,6 +247,32 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
     )
   }
 
+  // Confirms an impersonation start. On success the api layer has already
+  // swapped the localStorage tokens for the target user's, and the hook's
+  // own `onSuccess` performs the full-page reload to "/" (the app re-mounts
+  // as that user; the banner appears via the `current` probe). The redirect
+  // lives in the hook — not here — so it still fires if this page unmounts
+  // before the mutation settles. The call-site `onError` only maps a typed
+  // 422/429 into the inline banner and always runs while the page is alive.
+  function handleImpersonate() {
+    setActionError(null)
+    impersonateMutation.mutate(userId, {
+      onError: (err) => applyError(err),
+    })
+  }
+
+  // The Impersonate button is enabled only for an active, non-system-admin
+  // user. A system admin cannot be impersonated by the BE — and since the
+  // only account that can reach this page is itself a system admin, that
+  // guard also covers "cannot impersonate yourself".
+  const canImpersonate = active === true && user.is_system_admin !== true
+  const impersonateDisabledTitle =
+    user.is_system_admin === true
+      ? t("userDetail.impersonateAdminHint")
+      : active === false
+        ? t("userDetail.impersonateBlockedHint")
+        : undefined
+
   return (
     <>
       {/* Identity card */}
@@ -267,13 +309,16 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
         <Separator className="my-5" />
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Impersonate is a placeholder in #1754 — full wiring is #1757. */}
+          {/* Impersonate — enabled only for an active, non-system-admin
+              user (#1757). A disabled button carries a localized hint
+              explaining which guard tripped. */}
           <Button
             size="sm"
             variant="outline"
             className="gap-1.5"
-            disabled
-            title={t("userDetail.impersonateSoon")}
+            disabled={!canImpersonate}
+            title={impersonateDisabledTitle}
+            onClick={() => openDialog("impersonate")}
             data-testid="admin-user-impersonate"
           >
             <UserCog className="size-3.5" />
@@ -421,10 +466,10 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
         ) : null}
       </p>
 
-      {/* Block / unblock confirmation with required reason textarea. The
-          shared ConfirmProvider only supports title + description text, so
-          a dedicated Dialog hosts the textarea (see the page header comment
-          + the final report). */}
+      {/* Block / unblock / impersonate confirmation. The block & unblock
+          variants host a required reason textarea (the shared
+          ConfirmProvider only supports title + description text); the
+          impersonate variant has no reason input — it is a plain confirm. */}
       <Dialog
         open={dialog !== null}
         onOpenChange={(open) => {
@@ -434,36 +479,42 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
         <DialogContent data-testid="admin-user-action-dialog">
           <DialogHeader>
             <DialogTitle>
-              {dialog === "unblock"
-                ? t("userDetail.unblock.confirmTitle")
-                : t("userDetail.block.confirmTitle")}
+              {dialog === "impersonate"
+                ? t("userDetail.impersonateDialog.title")
+                : dialog === "unblock"
+                  ? t("userDetail.unblock.confirmTitle")
+                  : t("userDetail.block.confirmTitle")}
             </DialogTitle>
             <DialogDescription>
-              {dialog === "unblock"
-                ? t("userDetail.unblock.confirmBody", { name: user.name ?? "" })
-                : t("userDetail.block.confirmBody", { name: user.name ?? "" })}
+              {dialog === "impersonate"
+                ? t("userDetail.impersonateDialog.body")
+                : dialog === "unblock"
+                  ? t("userDetail.unblock.confirmBody", { name: user.name ?? "" })
+                  : t("userDetail.block.confirmBody", { name: user.name ?? "" })}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="admin-user-action-reason">{t("userDetail.reason.label")}</Label>
-            <Textarea
-              id="admin-user-action-reason"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              rows={3}
-              placeholder={t("userDetail.reason.placeholder")}
-              data-testid="admin-user-action-reason"
-            />
-            <p
-              className={cn(
-                "text-xs text-muted-foreground",
-                reasonLength > REASON_MAX && "text-destructive"
-              )}
-            >
-              {t("userDetail.reason.counter", { current: reasonLength, max: REASON_MAX })}
-            </p>
-          </div>
+          {dialog !== "impersonate" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="admin-user-action-reason">{t("userDetail.reason.label")}</Label>
+              <Textarea
+                id="admin-user-action-reason"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                rows={3}
+                placeholder={t("userDetail.reason.placeholder")}
+                data-testid="admin-user-action-reason"
+              />
+              <p
+                className={cn(
+                  "text-xs text-muted-foreground",
+                  reasonLength > REASON_MAX && "text-destructive"
+                )}
+              >
+                {t("userDetail.reason.counter", { current: reasonLength, max: REASON_MAX })}
+              </p>
+            </div>
+          ) : null}
 
           {actionError ? (
             <div
@@ -486,7 +537,15 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
             >
               {t("userDetail.dialog.cancel")}
             </Button>
-            {dialog === "unblock" ? (
+            {dialog === "impersonate" ? (
+              <Button
+                onClick={handleImpersonate}
+                disabled={pending}
+                data-testid="admin-user-action-confirm"
+              >
+                {t("userDetail.impersonateDialog.confirm")}
+              </Button>
+            ) : dialog === "unblock" ? (
               <Button
                 onClick={handleUnblock}
                 disabled={pending || reasonInvalid}
