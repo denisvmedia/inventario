@@ -209,22 +209,12 @@ func (r *TenantRegistry) GetBySlug(ctx context.Context, slug string) (*models.Te
 // `/api/v1/admin/tenants` listing (#1746) along with per-row computed
 // user_count and group_count.
 //
-// The `tenants` table has no RLS enabled (it IS the tenant boundary), so
-// the cross-tenant read works through the existing NonRLSRepository
-// without a role switch — the correlated COUNT subqueries on the
-// RLS-enabled `users` / `location_groups` tables rely on the connection
-// role's bypass (table-owner or BYPASSRLS attribute) to produce the
-// cross-tenant counts the admin UI needs.
-//
-// `SET LOCAL row_security = off` on the tx is a fail-loud guard: per
-// the postgres semantics, queries against an RLS-protected table by a
-// non-bypass role with row_security=off ERROR out rather than silently
-// filtering. If the connection role's bypass is ever revoked this
-// endpoint will start 5xx-ing loudly instead of returning honest-looking
-// "0" counts that mask a misconfiguration. That matches the issue
-// spec's "Endpoints bypass RLS via SET LOCAL row_security = off inside
-// the handler's tx" — the bypass narrative is "fail loud on
-// misconfiguration", not "produce rows the role couldn't otherwise see".
+// The `tenants` table has no RLS enabled (it IS the tenant boundary),
+// but the correlated COUNT subqueries hit the RLS-enabled `users` /
+// `location_groups` tables. To make those counts cross-tenant the whole
+// query runs inside store.DoAsAdmin — under the inventario_admin role,
+// which carries the BYPASSRLS attribute. inventario_app traffic never
+// assumes that role, so per-tenant isolation is unaffected.
 //
 // Two queries are issued under the same tx so total + page rows stay
 // consistent with one another. The COUNT/page split exists because
@@ -266,18 +256,7 @@ func (r *TenantRegistry) ListAdmin(ctx context.Context, opts registry.AdminTenan
 		items []*registry.AdminTenantListItem
 		total int
 	)
-	reg := r.newSQLRegistry()
-	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		// SET LOCAL row_security = off scopes the override to this tx.
-		// Postgres semantics: with row_security=off, any non-bypass role
-		// querying an RLS-protected table ERRORs instead of silently
-		// filtering. That's the fail-loud guard — if this connection
-		// role ever loses its bypass we want a 5xx, not a quietly empty
-		// page. See the function godoc for the full reasoning.
-		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
-			return errxtrace.Wrap("failed to disable row_security for admin tenant listing", execErr)
-		}
-
+	err := store.DoAsAdmin(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s AS t %s", tenantsTable, where)
 		if err := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 			return errxtrace.Wrap("failed to count admin tenants", err)
@@ -341,10 +320,10 @@ func (r *TenantRegistry) ListAdmin(ctx context.Context, opts registry.AdminTenan
 }
 
 // GetAdmin returns a single tenant detail row with the same computed
-// counts the listing surfaces. Runs one tx with row_security=off plus
-// COUNT subqueries instead of materialising the full user / group
-// row sets — keeps the detail endpoint O(constant) regardless of
-// tenant size.
+// counts the listing surfaces. Runs one tx under the inventario_admin
+// (BYPASSRLS) role with COUNT subqueries instead of materialising the
+// full user / group row sets — keeps the detail endpoint O(constant)
+// regardless of tenant size.
 func (r *TenantRegistry) GetAdmin(ctx context.Context, tenantID string) (*registry.AdminTenantListItem, error) {
 	if tenantID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
@@ -360,11 +339,7 @@ func (r *TenantRegistry) GetAdmin(ctx context.Context, tenantID string) (*regist
 		groupCount int
 		found      bool
 	)
-	reg := r.newSQLRegistry()
-	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
-			return errxtrace.Wrap("failed to disable row_security for admin tenant detail", execErr)
-		}
+	err := store.DoAsAdmin(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(`
 			SELECT t.*,
 				(SELECT COUNT(*) FROM %s AS u WHERE u.tenant_id = t.id) AS _user_count,
