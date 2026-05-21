@@ -305,11 +305,12 @@ async function recoverFromImpersonationExpiry(url: string): Promise<never> {
       }
       setAccessToken(payload.access_token)
       if (payload.csrf_token) setCsrfToken(payload.csrf_token)
-      // Read the return target BEFORE clearing the slot.
+      // Read the return target BEFORE clearing the slot. With no stored
+      // target, fall back to the admin landing route.
       const targetUserId = getImpersonationReturn()?.targetUserId
       clearImpersonationReturn()
       hardRedirect(
-        targetUserId ? `/admin/users/${encodeURIComponent(targetUserId)}` : "/admin/users"
+        targetUserId ? `/admin/users/${encodeURIComponent(targetUserId)}` : "/admin/tenants"
       )
     })()
   }

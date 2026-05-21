@@ -159,7 +159,7 @@ const ExportImportPage = lazy(() =>
 const ExportRestorePage = lazy(() =>
   import("@/pages/exports/ExportRestorePage").then((m) => ({ default: m.ExportRestorePage }))
 )
-// Admin subtree (#1752). The layout shell + the three section pages are
+// Admin subtree (#1752). The layout shell + the section/detail pages are
 // each their own chunk so the admin code never weighs on a non-admin's
 // entry bundle.
 const AdminLayout = lazy(() =>
@@ -172,9 +172,6 @@ const AdminTenantDetailPage = lazy(() =>
   import("@/pages/admin/AdminTenantDetailPage").then((m) => ({
     default: m.AdminTenantDetailPage,
   }))
-)
-const AdminUsersPage = lazy(() =>
-  import("@/pages/admin/AdminUsersPage").then((m) => ({ default: m.AdminUsersPage }))
 )
 const AdminUserDetailPage = lazy(() =>
   import("@/pages/admin/AdminUserDetailPage").then((m) => ({
@@ -378,7 +375,12 @@ export function AppRoutes() {
             <Route index element={<Navigate to="/admin/tenants" replace />} />
             <Route path="tenants" element={<AdminTenantsPage />} />
             <Route path="tenants/:tenantId" element={<AdminTenantDetailPage />} />
-            <Route path="users" element={<AdminUsersPage />} />
+            {/* `/admin/users` has no list page (there is no cross-tenant
+                user list). Redirect the bare path — reachable via a stale
+                bookmark from when the placeholder existed — to the admin
+                landing instead of falling through to the 404. The
+                per-user detail route below is unaffected. */}
+            <Route path="users" element={<Navigate to="/admin/tenants" replace />} />
             <Route path="users/:userId" element={<AdminUserDetailPage />} />
             <Route path="groups" element={<AdminGroupsPage />} />
             <Route path="groups/:groupId" element={<AdminGroupDetailPage />} />

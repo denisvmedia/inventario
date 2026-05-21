@@ -290,10 +290,11 @@ export function useStartImpersonation() {
 // Both side effects are hook-level for the same reason as
 // useStartImpersonation: a call-site callback would be skipped on unmount,
 // stranding the operator on a half-swapped identity. On success we route
-// to the impersonated user's admin detail page (or the list if the slot
-// was missing); on failure the admin session is unrecoverable from the FE,
-// so we clear auth and bounce to /login with the `session_expired` reason —
-// consistent with the auto-expiry recovery path (review item M1).
+// to the impersonated user's admin detail page (or the admin landing if
+// the slot was missing); on failure the admin session is unrecoverable
+// from the FE, so we clear auth and bounce to /login with the
+// `session_expired` reason — consistent with the auto-expiry recovery
+// path (review item M1).
 export function useEndImpersonation() {
   return useMutation<EndImpersonationResult, Error, void>({
     mutationFn: () => endImpersonation(),
@@ -301,7 +302,7 @@ export function useEndImpersonation() {
       hardRedirect(
         result.targetUserId
           ? "/admin/users/" + encodeURIComponent(result.targetUserId)
-          : "/admin/users"
+          : "/admin/tenants"
       ),
     onError: () => {
       clearAuth()
