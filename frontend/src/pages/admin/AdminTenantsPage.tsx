@@ -75,6 +75,13 @@ export function AdminTenantsPage() {
   // the debounced value is what reaches the URL + the server. Seeded from
   // the URL so a deep-link with ?q lands with the box pre-filled.
   const [search, setSearch] = useState(urlQ)
+  // Re-seed the input when the URL `q` changes via back/forward (or a
+  // deep-link nav) — a controlled-input sync from URL state. The cascade
+  // is bounded by URL changes; it does not fight the debounced
+  // search → URL effect below, which only fires when the typed value
+  // differs from the URL. Mirrors TagsListPage.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setSearch(urlQ), [urlQ])
   const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS)
 
   // Push the debounced search term into the URL. Clearing it also drops
@@ -325,10 +332,23 @@ function SortableHead({
 }
 
 // A single tenant row. The whole row is a navigation affordance — clicking
-// it drills into /admin/tenants/{id}.
+// it (or pressing Enter / Space while it has focus) drills into
+// /admin/tenants/{id}.
 function TenantRow({ tenant, onSelect }: { tenant: AdminTenant; onSelect: () => void }) {
   return (
-    <TableRow className="cursor-pointer" onClick={onSelect} data-testid="admin-tenant-row">
+    <TableRow
+      className="cursor-pointer"
+      onClick={onSelect}
+      tabIndex={0}
+      role="button"
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onSelect()
+        }
+      }}
+      data-testid="admin-tenant-row"
+    >
       <TableCell className="pl-4 py-3.5">
         <div className="flex flex-col">
           <span className="text-sm font-medium">{tenant.name ?? "—"}</span>

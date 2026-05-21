@@ -385,7 +385,7 @@ _None yet._
 - **Why**: The frontend has **no `table.tsx` or `pagination.tsx` shadcn primitive** yet. Pulling two new primitives in a foundation issue widens the blast radius beyond the issue's scope; the `divide-y` card list is the pattern every other list page in `frontend/` already uses, so it's the lower-drift choice. The pagination data layer is ready for a later sub-issue to add the UI.
 - **Approved by**: agent-suggested — foundation-issue scope decision; the visual rhythm (cards, tokens, badges) still matches the mock.
 - **Reversion plan**: When a later admin sub-issue needs the full table/pagination treatment, add `table.tsx` + `pagination.tsx` via the shadcn CLI and port `TenantsView` 1:1. Resolve this entry then.
-- **Resolved**: 2026-05-21, PR #1753 (pending) — back to 1:1. `#1753` added `frontend/src/components/ui/table.tsx` + `pagination.tsx` (ported from the mock's shadcn primitives) and rebuilt `AdminTenantsPage` as the mock's `<Table>` + `<Pagination>` layout. The list is now a sortable, server-paginated table matching `TenantsView.tsx`.
+- **Resolved**: 2026-05-21, PR #1774 — back to 1:1. `#1753` added `frontend/src/components/ui/table.tsx` + `pagination.tsx` (ported from the mock's shadcn primitives) and rebuilt `AdminTenantsPage` as the mock's `<Table>` + `<Pagination>` layout. The list is now a sortable, server-paginated table matching `TenantsView.tsx`.
 
 #### 2026-05-21 — Admin Tenants stat row shows one tile (Tenants), not four
 

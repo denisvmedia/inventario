@@ -54,24 +54,37 @@ export function GroupStatusBadge({ status }: { status: GroupStatus | undefined }
 }
 
 // Renders a user's active/blocked state as a dot-prefixed outline badge.
-// Mirrors the design-mock AccountStateBadge.
+// Mirrors the design-mock AccountStateBadge. `is_active` is optional in
+// the API schema, so `undefined` is a genuine runtime possibility — it
+// renders as a neutral "unknown" badge rather than silently claiming the
+// account is active.
 export function AccountStateBadge({ active }: { active: boolean | undefined }) {
   const { t } = useTranslation("admin")
-  const isActive = active !== false
+  if (active === undefined) {
+    return (
+      <Badge
+        variant="outline"
+        className="h-5 text-xs border-current/20 font-medium gap-1 text-status-none bg-status-none/10"
+      >
+        <span className="size-1.5 rounded-full bg-status-none" />
+        {t("tenantDetail.users.state.unknown")}
+      </Badge>
+    )
+  }
   return (
     <Badge
       variant="outline"
       className={cn(
         "h-5 text-xs border-current/20 font-medium gap-1",
-        isActive
+        active
           ? "text-status-active bg-status-active/10"
           : "text-status-expired bg-status-expired/10"
       )}
     >
       <span
-        className={cn("size-1.5 rounded-full", isActive ? "bg-status-active" : "bg-status-expired")}
+        className={cn("size-1.5 rounded-full", active ? "bg-status-active" : "bg-status-expired")}
       />
-      {isActive ? t("tenantDetail.users.state.active") : t("tenantDetail.users.state.blocked")}
+      {active ? t("tenantDetail.users.state.active") : t("tenantDetail.users.state.blocked")}
     </Badge>
   )
 }

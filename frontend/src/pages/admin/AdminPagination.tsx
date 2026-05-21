@@ -77,6 +77,8 @@ export function AdminPagination({
               href="#"
               aria-label={t("pagination.previous")}
               label={t("pagination.previousLabel")}
+              aria-disabled={page <= 1}
+              tabIndex={page <= 1 ? -1 : undefined}
               onClick={(e) => {
                 e.preventDefault()
                 if (page > 1) onPageChange(page - 1)
@@ -109,6 +111,8 @@ export function AdminPagination({
               href="#"
               aria-label={t("pagination.next")}
               label={t("pagination.nextLabel")}
+              aria-disabled={page >= totalPages}
+              tabIndex={page >= totalPages ? -1 : undefined}
               onClick={(e) => {
                 e.preventDefault()
                 if (page < totalPages) onPageChange(page + 1)

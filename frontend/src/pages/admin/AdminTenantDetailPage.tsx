@@ -251,6 +251,12 @@ function TenantUsersTab({
   const page = parsePage(searchParams.get("page"))
 
   const [search, setSearch] = useState(urlQ)
+  // Re-seed the input when the URL `q` changes via back/forward (or a
+  // tab switch that clears ?q) — a controlled-input sync from URL state.
+  // Bounded by URL changes; does not fight the debounced search → URL
+  // effect below. Mirrors TagsListPage.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setSearch(urlQ), [urlQ])
   const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS)
 
   useEffect(() => {
@@ -401,6 +407,14 @@ function TenantUsersTab({
                       key={user.id}
                       className="cursor-pointer"
                       onClick={() => user.id && onSelectUser(user.id)}
+                      tabIndex={0}
+                      role="button"
+                      onKeyDown={(event) => {
+                        if (user.id && (event.key === "Enter" || event.key === " ")) {
+                          event.preventDefault()
+                          onSelectUser(user.id)
+                        }
+                      }}
                       data-testid="admin-tenant-user-row"
                     >
                       <TableCell className="pl-4 py-3.5 text-sm font-medium">
@@ -566,6 +580,14 @@ function TenantGroupsTab({
                       key={group.id}
                       className="cursor-pointer"
                       onClick={() => group.id && onSelectGroup(group.id)}
+                      tabIndex={0}
+                      role="button"
+                      onKeyDown={(event) => {
+                        if (group.id && (event.key === "Enter" || event.key === " ")) {
+                          event.preventDefault()
+                          onSelectGroup(group.id)
+                        }
+                      }}
                       data-testid="admin-tenant-group-row"
                     >
                       <TableCell className="pl-4 py-3.5">

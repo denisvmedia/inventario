@@ -80,7 +80,13 @@ export async function getAdminTenant(tenantId: string, signal?: AbortSignal): Pr
     `/admin/tenants/${encodeURIComponent(tenantId)}`,
     { signal }
   )
-  return body.data ?? {}
+  // The BE returns HTTP 404 for a missing tenant; a 200 with no `data`
+  // would be a malformed response. Fail fast instead of masking it with
+  // an empty object — an empty `{}` would silently render as not-found.
+  if (!body.data) {
+    throw new Error(`Admin tenant response for "${tenantId}" is missing its payload`)
+  }
+  return body.data
 }
 
 // Lists the users belonging to one tenant. Pagination + free-text search

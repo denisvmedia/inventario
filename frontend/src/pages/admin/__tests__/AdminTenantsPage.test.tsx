@@ -73,11 +73,17 @@ function seedTenants(seen: SeenRequest[], opts: { total?: number } = {}) {
   )
 }
 
-// Surfaces the live router search string into the DOM so tests can
-// assert that sort / page / search state round-trips through the URL.
+// Surfaces the live router search string + pathname into the DOM so
+// tests can assert that sort / page / search state round-trips through
+// the URL and that row activation navigates.
 function LocationProbe() {
   const location = useLocation()
-  return <div data-testid="location-search">{location.search}</div>
+  return (
+    <>
+      <div data-testid="location-search">{location.search}</div>
+      <div data-testid="location-pathname">{location.pathname}</div>
+    </>
+  )
 }
 
 function locationSearch(): URLSearchParams {
@@ -88,17 +94,30 @@ function renderPage(initialPath = "/admin/tenants") {
   return renderWithProviders({
     initialPath,
     routes: (
-      <Route
-        path="/admin/tenants"
-        element={
-          <AuthProvider>
+      <>
+        <Route
+          path="/admin/tenants"
+          element={
+            <AuthProvider>
+              <main>
+                <AdminTenantsPage />
+                <LocationProbe />
+              </main>
+            </AuthProvider>
+          }
+        />
+        {/* The tenant-detail route is a stub here — the click/keyboard
+            navigation tests only assert the destination pathname. */}
+        <Route
+          path="/admin/tenants/:tenantId"
+          element={
             <main>
-              <AdminTenantsPage />
+              <div data-testid="tenant-detail-stub" />
               <LocationProbe />
             </main>
-          </AuthProvider>
-        }
-      />
+          }
+        />
+      </>
     ),
   })
 }
@@ -241,6 +260,52 @@ describe("AdminTenantsPage", () => {
     await waitFor(() => expect(locationSearch().get("page")).toBe("2"))
     await waitFor(() => expect(screen.getByText("Acme Inc")).toBeInTheDocument())
     await waitFor(() => expect(seen.some((r) => r.page === "2")).toBe(true))
+  })
+
+  it("navigates to the tenant detail when a row is clicked", async () => {
+    seedTenants([])
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText("Acme Inc")).toBeInTheDocument())
+    await userEvent.click(screen.getByTestId("admin-tenant-row"))
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location-pathname")).toHaveTextContent("/admin/tenants/t1")
+    )
+  })
+
+  it("activates a tenant row from the keyboard via Enter and Space", async () => {
+    seedTenants([])
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText("Acme Inc")).toBeInTheDocument())
+
+    // The row is focusable and exposes a button role for assistive tech.
+    const row = screen.getByTestId("admin-tenant-row")
+    expect(row).toHaveAttribute("role", "button")
+    expect(row).toHaveAttribute("tabindex", "0")
+
+    // Enter on the focused row drills into the detail route.
+    row.focus()
+    expect(row).toHaveFocus()
+    await userEvent.keyboard("{Enter}")
+    await waitFor(() =>
+      expect(screen.getByTestId("location-pathname")).toHaveTextContent("/admin/tenants/t1")
+    )
+  })
+
+  it("activates a tenant row with the Space key", async () => {
+    seedTenants([])
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText("Acme Inc")).toBeInTheDocument())
+
+    const row = screen.getByTestId("admin-tenant-row")
+    row.focus()
+    await userEvent.keyboard("[Space]")
+    await waitFor(() =>
+      expect(screen.getByTestId("location-pathname")).toHaveTextContent("/admin/tenants/t1")
+    )
   })
 
   it("renders the empty state when no tenants match", async () => {

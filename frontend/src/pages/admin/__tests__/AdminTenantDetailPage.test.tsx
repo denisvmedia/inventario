@@ -226,14 +226,20 @@ describe("AdminTenantDetailPage", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("renders the not-found state for a 200-with-empty-body tenant response", async () => {
+  it("renders the generic error state for a malformed 200-with-empty-body tenant response", async () => {
+    // `getAdminTenant` fails fast when a 200 carries no `data` payload —
+    // a malformed response is an error, not a not-found. The page shows
+    // the generic load-error card, not the friendly not-found copy.
     server.use(
       http.get(api("/auth/me"), () => HttpResponse.json(adminUser)),
-      http.get(api("/admin/tenants/t1"), () => HttpResponse.json({ data: {} }))
+      http.get(api("/admin/tenants/t1"), () => HttpResponse.json({}))
     )
     renderPage()
 
-    await waitFor(() => expect(screen.getByText("Tenant not found.")).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText("Could not load this tenant. Please try again.")).toBeInTheDocument()
+    )
+    expect(screen.queryByText("Tenant not found.")).not.toBeInTheDocument()
   })
 
   it("recovers from a deep link to an out-of-range Users-tab page", async () => {

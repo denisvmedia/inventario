@@ -98,7 +98,8 @@
       "searchPlaceholder": "Hledat podle jména nebo e-mailu…",
       "state": {
         "active": "Aktivní",
-        "blocked": "Zablokovaný"
+        "blocked": "Zablokovaný",
+        "unknown": "Neznámý"
       }
     }
   },
