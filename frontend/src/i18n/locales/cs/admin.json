@@ -196,5 +196,68 @@
       "users": "Uživatelé"
     },
     "title": "Nájemci"
+  },
+  "userDetail": {
+    "back": "Zpět na uživatele",
+    "block": {
+      "action": "Zablokovat uživatele",
+      "confirmBody": "Uživatel {{name}} bude odhlášen ze všech relací a nebude se moci přihlásit, dokud nebude odblokován. Tato akce nesmaže jeho data.",
+      "confirmTitle": "Zablokovat tohoto uživatele?",
+      "success": "Uživatel {{name}} byl zablokován."
+    },
+    "dialog": {
+      "cancel": "Zrušit"
+    },
+    "errors": {
+      "adminRequiresForce": "Tento účet je systémový administrátor. Zablokování jiného administrátora není z této obrazovky podporováno.",
+      "generic": "Něco se pokazilo. Zkuste to prosím znovu.",
+      "reasonRequired": "Důvod je povinný.",
+      "reasonTooLong": "Důvod je příliš dlouhý. Zkraťte jej pod 500 znaků.",
+      "selfBlocked": "Nemůžete zablokovat svůj vlastní účet."
+    },
+    "fallbackName": "Uživatel",
+    "groups": {
+      "empty": "Není členem žádné skupiny.",
+      "joined": "Připojeno {{date}}",
+      "title": "Členství ve skupinách"
+    },
+    "impersonate": "Vystupovat jako",
+    "impersonateSoon": "Vystupování bude brzy k dispozici.",
+    "loadError": "Nepodařilo se načíst tohoto uživatele. Zkuste to prosím znovu.",
+    "loading": "Načítání uživatele…",
+    "meta": {
+      "created": "vytvořeno",
+      "lastLogin": "Poslední přihlášení"
+    },
+    "neverLoggedIn": "Nikdy",
+    "notFound": "Uživatel nebyl nalezen.",
+    "reason": {
+      "counter": "{{current}}/{{max}}",
+      "label": "Důvod",
+      "placeholder": "Proč je tato akce prováděna?"
+    },
+    "roles": {
+      "admin": "Administrátor",
+      "owner": "Vlastník",
+      "user": "Uživatel",
+      "viewer": "Pozorovatel"
+    },
+    "sessions": {
+      "count_one": "{{count}} aktivní relace",
+      "count_few": "{{count}} aktivní relace",
+      "count_many": "{{count}} aktivních relací",
+      "count_other": "{{count}} aktivních relací",
+      "countHint": "Počítáno z neodvolaných obnovovacích tokenů.",
+      "empty": "Žádné aktivní relace.",
+      "title": "Relace"
+    },
+    "systemAdminBadge": "Systémový administrátor",
+    "unblock": {
+      "action": "Odblokovat uživatele",
+      "confirmBody": "Uživatel {{name}} se bude moci znovu přihlásit. Bude muset zahájit novou relaci — stávající relace nejsou obnoveny.",
+      "confirmTitle": "Odblokovat tohoto uživatele?",
+      "success": "Uživatel {{name}} byl odblokován."
+    },
+    "unknownTenant": "Neznámý nájemce"
   }
 }

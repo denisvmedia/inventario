@@ -28,6 +28,25 @@ export type AdminGroup = Schema<"jsonapi.AdminGroupListItem">
 // same computed member_count / tenant chip as a list row plus created_by.
 export type AdminGroupDetail = Schema<"jsonapi.AdminGroupDetail">
 
+// The full per-user admin detail as returned by GET /admin/users/{id} —
+// identity, is_active, last_login_at, group memberships, and the
+// `active_session_count` (the BE returns a count, not a session list).
+export type AdminUserDetail = Schema<"jsonapi.AdminUserDetail">
+
+// A single group-membership row inside AdminUserDetail.
+export type AdminUserGroupMembership = Schema<"jsonapi.AdminUserGroupMembership">
+
+// Body for POST /admin/users/{id}/block — `reason` is required (max 500
+// chars); `force` overrides the "cannot block another system admin" guard.
+export type AdminBlockRequest = Schema<"apiserver.AdminBlockRequest">
+
+// Body for POST /admin/users/{id}/unblock — `reason` is required (max 500).
+export type AdminUnblockRequest = Schema<"apiserver.AdminUnblockRequest">
+
+// The post-mutation user snapshot returned by block / unblock — a narrower
+// identity view (id, email, name, is_active, is_system_admin, tenant_id).
+export type AdminUserView = Schema<"apiserver.AdminUserView">
+
 // Pagination envelope shared by the admin list endpoints.
 export type AdminListMeta = Schema<"jsonapi.AdminListMeta">
 
@@ -40,6 +59,8 @@ type AdminTenantResponse = Schema<"jsonapi.AdminTenantResponse">
 type AdminUsersResponse = Schema<"jsonapi.AdminUsersResponse">
 type AdminGroupsResponse = Schema<"jsonapi.AdminGroupsResponse">
 type AdminGroupResponse = Schema<"jsonapi.AdminGroupResponse">
+type AdminUserResponse = Schema<"jsonapi.AdminUserResponse">
+type AdminUserEnvelope = Schema<"apiserver.AdminUserEnvelope">
 
 export interface AdminTenantsResult {
   tenants: AdminTenant[]
@@ -167,6 +188,22 @@ export async function getAdminGroup(
   return body.data
 }
 
+// Reads a single user's full admin detail by ID (GET /admin/users/{id}):
+// identity, is_active, last_login_at, group memberships, and the
+// active-session count. The BE returns HTTP 404 for a missing user; a 200
+// with no `data` (or a `data` object lacking an `id`) is a malformed
+// response — fail fast rather than masking it as a 404-like empty state
+// (mirrors getAdminTenant).
+export async function getAdminUser(userId: string, signal?: AbortSignal): Promise<AdminUserDetail> {
+  const body = await http.get<AdminUserResponse>(`/admin/users/${encodeURIComponent(userId)}`, {
+    signal,
+  })
+  if (!body.data || !body.data.id) {
+    throw new Error(`Admin user response for "${userId}" is missing its payload`)
+  }
+  return body.data
+}
+
 // Soft-deletes a location group. The BE flips the group to
 // `pending_deletion` and returns HTTP 200 with the post-transition
 // AdminGroupDetail row — the same shape getAdminGroup returns. The call is
@@ -185,6 +222,50 @@ export async function softDeleteAdminGroup(
     throw new Error(`Admin group delete response for "${groupId}" is missing its payload`)
   }
   return body.data
+}
+
+// Blocks a user (POST /admin/users/{id}/block). `reason` is required and
+// capped at 500 chars by the BE; `force` overrides the "cannot block
+// another system admin" guard. Returns the post-transition user snapshot.
+// Typed 422 codes the caller branches on: `admin.block.self_blocked`,
+// `admin.block.admin_requires_force`, `admin.block.reason_required`,
+// `admin.block.reason_too_long`.
+export async function blockAdminUser(
+  userId: string,
+  payload: AdminBlockRequest
+): Promise<AdminUserView> {
+  const body = await http.post<AdminUserEnvelope>(
+    `/admin/users/${encodeURIComponent(userId)}/block`,
+    payload
+  )
+  // The BE returns the post-transition snapshot in `data.attributes`. A
+  // 200 with a missing/incomplete envelope is a malformed response — fail
+  // fast rather than yielding `{}`, which would otherwise be patched into
+  // the user-detail cache as `is_active: undefined` (mirrors getAdminUser).
+  const attributes = body.data?.attributes
+  if (!attributes || !attributes.id || typeof attributes.is_active !== "boolean") {
+    throw new Error(`Admin block response for "${userId}" is missing its payload`)
+  }
+  return attributes
+}
+
+// Unblocks a user (POST /admin/users/{id}/unblock). `reason` is required
+// and capped at 500 chars; reason-validation 422 codes are shared with the
+// block endpoint (`admin.block.reason_required` / `admin.block.reason_too_long`).
+export async function unblockAdminUser(
+  userId: string,
+  payload: AdminUnblockRequest
+): Promise<AdminUserView> {
+  const body = await http.post<AdminUserEnvelope>(
+    `/admin/users/${encodeURIComponent(userId)}/unblock`,
+    payload
+  )
+  // Fail fast on a missing/incomplete envelope — see blockAdminUser.
+  const attributes = body.data?.attributes
+  if (!attributes || !attributes.id || typeof attributes.is_active !== "boolean") {
+    throw new Error(`Admin unblock response for "${userId}" is missing its payload`)
+  }
+  return attributes
 }
 
 // Reads the active impersonation session for the current caller. The BE

@@ -3,18 +3,24 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useIsSystemAdmin } from "@/features/auth/hooks"
 
 import {
+  blockAdminUser,
   getAdminGroup,
   getAdminTenant,
+  getAdminUser,
   getImpersonationState,
   listAdminGroups,
   listAdminTenants,
   listAdminTenantUsers,
   softDeleteAdminGroup,
+  unblockAdminUser,
+  type AdminBlockRequest,
   type AdminGroupDetail,
   type AdminGroupsResult,
   type AdminTenant,
   type AdminTenantsResult,
   type AdminTenantUsersResult,
+  type AdminUnblockRequest,
+  type AdminUserDetail,
 } from "./api"
 import {
   adminKeys,
@@ -123,6 +129,67 @@ export function useDeleteAdminGroup() {
       qc.invalidateQueries({
         queryKey: [...adminKeys.groups(), "list"],
       })
+    },
+  })
+}
+
+// Reads a single user's full admin detail for the Admin user detail page.
+// Gated on is_system_admin like the other admin reads — a non-admin who
+// somehow deep-links the page never fires a guaranteed-403 request.
+export function useAdminUser(userId: string, { enabled = true }: QueryOptions = {}) {
+  const isSystemAdmin = useIsSystemAdmin()
+  return useQuery<AdminUserDetail>({
+    queryKey: adminKeys.userDetail(userId),
+    queryFn: ({ signal }) => getAdminUser(userId, signal),
+    enabled: enabled && isSystemAdmin && !!userId,
+  })
+}
+
+// Patches the cached user-detail entry with the authoritative `is_active`
+// returned by a block / unblock mutation. Writing the fresh value into
+// the cache *before* invalidating closes the window where the detail page
+// would otherwise read the stale pre-mutation value between dropping its
+// optimistic flag and the refetch settling (no Blocked→Active→Blocked
+// badge flash). The block/unblock endpoints return an `AdminUserView`
+// (a narrower identity view) — only `is_active` is merged.
+function patchUserDetailActive(
+  qc: ReturnType<typeof useQueryClient>,
+  userId: string,
+  isActive: boolean | undefined
+) {
+  qc.setQueryData<AdminUserDetail>(adminKeys.userDetail(userId), (prev) =>
+    prev ? { ...prev, is_active: isActive } : prev
+  )
+}
+
+// Blocks a user. On success the authoritative `is_active` from the
+// mutation response is written straight into the user-detail cache, then
+// the entry is invalidated so the identity card also re-fetches the
+// session count; the tenant-scoped user listings are invalidated too
+// since the blocked row's state changes there as well. The page applies
+// an optimistic badge flip only to bridge the in-flight / rollback
+// window — these hooks own the post-success cache state.
+export function useBlockAdminUser(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: AdminBlockRequest) => blockAdminUser(userId, payload),
+    onSuccess: (view) => {
+      patchUserDetailActive(qc, userId, view.is_active)
+      qc.invalidateQueries({ queryKey: adminKeys.userDetail(userId) })
+      qc.invalidateQueries({ queryKey: adminKeys.tenants() })
+    },
+  })
+}
+
+// Unblocks a user — symmetric to useBlockAdminUser.
+export function useUnblockAdminUser(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: AdminUnblockRequest) => unblockAdminUser(userId, payload),
+    onSuccess: (view) => {
+      patchUserDetailActive(qc, userId, view.is_active)
+      qc.invalidateQueries({ queryKey: adminKeys.userDetail(userId) })
+      qc.invalidateQueries({ queryKey: adminKeys.tenants() })
     },
   })
 }

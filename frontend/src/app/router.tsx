@@ -176,6 +176,11 @@ const AdminTenantDetailPage = lazy(() =>
 const AdminUsersPage = lazy(() =>
   import("@/pages/admin/AdminUsersPage").then((m) => ({ default: m.AdminUsersPage }))
 )
+const AdminUserDetailPage = lazy(() =>
+  import("@/pages/admin/AdminUserDetailPage").then((m) => ({
+    default: m.AdminUserDetailPage,
+  }))
+)
 const AdminGroupsPage = lazy(() =>
   import("@/pages/admin/AdminGroupsPage").then((m) => ({ default: m.AdminGroupsPage }))
 )
@@ -374,6 +379,7 @@ export function AppRoutes() {
             <Route path="tenants" element={<AdminTenantsPage />} />
             <Route path="tenants/:tenantId" element={<AdminTenantDetailPage />} />
             <Route path="users" element={<AdminUsersPage />} />
+            <Route path="users/:userId" element={<AdminUserDetailPage />} />
             <Route path="groups" element={<AdminGroupsPage />} />
             <Route path="groups/:groupId" element={<AdminGroupDetailPage />} />
           </Route>
