@@ -118,7 +118,7 @@ export function AdminUserDetailPage() {
             {t("userDetail.loading")}
           </div>
         ) : (
-          <UserDetailContent user={user.data} />
+          <UserDetailContent key={user.data.id} user={user.data} />
         )}
       </div>
     </>
