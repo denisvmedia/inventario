@@ -68,14 +68,13 @@ export function AdminTenantDetailPage() {
 
   // GET /admin/tenants/{id} returns HTTP 404 for a missing tenant
   // (apiserver maps registry.ErrNotFound → NewNotFoundError), so a
-  // genuine not-found surfaces as a query error, not 200-with-empty.
-  // Treat a 404 as "not found" (its own friendly empty state) and keep
-  // the generic load-error card for every other failure. The
-  // `!tenant.data?.id` branch below still covers a hypothetical
-  // 200-with-empty-body response.
+  // genuine not-found surfaces as a query error. Treat that 404 as "not
+  // found" (its own friendly empty state) and keep the generic
+  // load-error card for every other failure — including a malformed
+  // 200-with-empty-body, which `getAdminTenant` now rejects as a thrown
+  // error rather than letting an id-less object through.
   const isNotFound =
-    (tenant.isError && tenant.error instanceof HttpError && tenant.error.status === 404) ||
-    (!tenant.isLoading && !tenant.isError && !tenant.data?.id)
+    tenant.isError && tenant.error instanceof HttpError && tenant.error.status === 404
 
   function setTab(next: string) {
     setSearchParams(

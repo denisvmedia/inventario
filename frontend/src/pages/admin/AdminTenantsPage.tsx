@@ -35,8 +35,8 @@ const PAGE_SIZE = 20
 // Sortable columns the BE accepts on GET /admin/tenants (?sort=). The
 // table header cells are keyed by these; non-listed columns render as
 // plain headers.
-type SortField = "name" | "slug" | "status" | "created_at"
-const SORTABLE: readonly SortField[] = ["name", "slug", "status", "created_at"]
+type SortField = "name" | "status" | "created_at"
+const SORTABLE: readonly SortField[] = ["name", "status", "created_at"]
 const DEFAULT_SORT: SortField = "name"
 const DEFAULT_ORDER: "asc" | "desc" = "asc"
 

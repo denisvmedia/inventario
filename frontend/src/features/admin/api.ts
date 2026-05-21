@@ -81,9 +81,11 @@ export async function getAdminTenant(tenantId: string, signal?: AbortSignal): Pr
     { signal }
   )
   // The BE returns HTTP 404 for a missing tenant; a 200 with no `data`
-  // would be a malformed response. Fail fast instead of masking it with
-  // an empty object — an empty `{}` would silently render as not-found.
-  if (!body.data) {
+  // (or a `data` object lacking an `id`) would be a malformed response.
+  // Fail fast instead of masking it — an empty `{}` would otherwise
+  // silently render as not-found, hiding a backend bug behind a 404-like
+  // UI.
+  if (!body.data || !body.data.id) {
     throw new Error(`Admin tenant response for "${tenantId}" is missing its payload`)
   }
   return body.data

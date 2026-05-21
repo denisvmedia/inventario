@@ -42,10 +42,16 @@ const GROUP_STATUS_TONE: Record<GroupStatus, string> = {
   pending_deletion: "text-status-expired bg-status-expired/10",
 }
 
-// Renders a group's lifecycle status as a tone-mapped outline badge.
+// Neutral tone for an unknown/missing group status — mirrors the
+// `inactive` fallback tone TenantStatusBadge uses. An undefined status
+// renders an em-dash label, so the tone must be neutral, not active-green.
+const GROUP_STATUS_TONE_NONE = "text-status-none bg-status-none/10"
+
+// Renders a group's lifecycle status as a tone-mapped outline badge. An
+// unknown or missing status falls back to the neutral tone + an em-dash.
 export function GroupStatusBadge({ status }: { status: GroupStatus | undefined }) {
   const { t } = useTranslation("admin")
-  const tone = (status && GROUP_STATUS_TONE[status]) || GROUP_STATUS_TONE.active
+  const tone = (status && GROUP_STATUS_TONE[status]) || GROUP_STATUS_TONE_NONE
   return (
     <Badge variant="outline" className={cn("h-5 text-xs border-current/20 font-medium", tone)}>
       {status ? t(`tenantDetail.groups.status.${status}`) : "—"}

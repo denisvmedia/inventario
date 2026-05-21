@@ -226,13 +226,14 @@ describe("AdminTenantDetailPage", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("renders the generic error state for a malformed 200-with-empty-body tenant response", async () => {
-    // `getAdminTenant` fails fast when a 200 carries no `data` payload —
-    // a malformed response is an error, not a not-found. The page shows
-    // the generic load-error card, not the friendly not-found copy.
+  it("renders the generic error state for a malformed 200 tenant response with an id-less data object", async () => {
+    // `getAdminTenant` fails fast when a 200 carries a `data` object that
+    // lacks an `id` — a malformed response is an error, not a not-found.
+    // The page shows the generic load-error card, not the friendly
+    // not-found copy (which would mask a backend bug as a 404-like UI).
     server.use(
       http.get(api("/auth/me"), () => HttpResponse.json(adminUser)),
-      http.get(api("/admin/tenants/t1"), () => HttpResponse.json({}))
+      http.get(api("/admin/tenants/t1"), () => HttpResponse.json({ data: {} }))
     )
     renderPage()
 
