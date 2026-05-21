@@ -385,6 +385,61 @@ _None yet._
 - **Why**: The frontend has **no `table.tsx` or `pagination.tsx` shadcn primitive** yet. Pulling two new primitives in a foundation issue widens the blast radius beyond the issue's scope; the `divide-y` card list is the pattern every other list page in `frontend/` already uses, so it's the lower-drift choice. The pagination data layer is ready for a later sub-issue to add the UI.
 - **Approved by**: agent-suggested — foundation-issue scope decision; the visual rhythm (cards, tokens, badges) still matches the mock.
 - **Reversion plan**: When a later admin sub-issue needs the full table/pagination treatment, add `table.tsx` + `pagination.tsx` via the shadcn CLI and port `TenantsView` 1:1. Resolve this entry then.
+- **Resolved**: 2026-05-21, PR #1753 (pending) — back to 1:1. `#1753` added `frontend/src/components/ui/table.tsx` + `pagination.tsx` (ported from the mock's shadcn primitives) and rebuilt `AdminTenantsPage` as the mock's `<Table>` + `<Pagination>` layout. The list is now a sortable, server-paginated table matching `TenantsView.tsx`.
+
+#### 2026-05-21 — Admin Tenants stat row shows one tile (Tenants), not four
+
+- **Issue/PR**: #1753 / PR (pending)
+- **Mock**: [`design-mocks/src/views/admin/TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx) renders a 4-up stat grid above the table — Tenants, Active, Total users, Total groups — each computed by reducing over the full `MOCK_TENANTS` array.
+- **Reality**: `frontend/src/pages/admin/AdminTenantsPage.tsx` renders a single "Tenants" tile, fed by the server-provided `meta.total`.
+- **Why**: Backend constraint. The list endpoint is paginated — Active / Total users / Total groups cannot be computed correctly from one page, and the BE exposes no platform-wide aggregate endpoint. Showing a per-page sum would be misleading. The total-tenants count is the one figure the pagination envelope (`meta.total`) makes correct. (This carries forward the same decision the #1752 foundation took.)
+- **Approved by**: agent-suggested — backend-shape constraint, same rationale as the #1752 foundation.
+- **Reversion plan**: Restore the 4-up grid when a BE aggregate endpoint (platform-wide active-tenant / user / group totals) lands.
+
+#### 2026-05-21 — Tenant detail header has no Plan-name lookup; row navigation replaces mock callbacks
+
+- **Issue/PR**: #1753 / PR (pending)
+- **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) shows the Plan stat as a human label via `TENANT_PLAN_CONFIG[tenant.plan].label` ("Business", "Enterprise", …) and the Users tab carries a `Role` column + per-user avatar initials; navigation is via `onSelectUser` / `onSelectGroup` prop callbacks.
+- **Reality**: `frontend/src/pages/admin/AdminTenantDetailPage.tsx` renders the raw `plan_id` string in the Plan tile, drops the Users-tab `Role` column and the avatar-initials chip, and navigates with `react-router-dom` (`/admin/users/{id}`, `/admin/groups/{id}`).
+- **Why**: Backend shape. `jsonapi.AdminTenantListItem` carries `plan_id` (an opaque identifier), not a resolved plan name, and there is no plan-catalog endpoint to map it — so the raw id is shown until one exists. `jsonapi.AdminUserListItem` has **no `role` field** (role is per-group-membership, not tenant-wide) and **no avatar field**, so the Role column and initials chip are omitted rather than faked. Router navigation replacing the mock's prop callbacks is the standard mock→frontend translation, not a visual deviation.
+- **Approved by**: agent-suggested — backend-shape constraints; the column omissions track missing data, not a design choice.
+- **Reversion plan**: Restore the Plan label when a plan-catalog lookup ships; the Users `Role` column stays out unless the BE adds a tenant-scoped role to the user list item.
+
+#### 2026-05-21 — Admin Tenants list / detail page naming follows the `Admin*Page` convention
+
+- **Issue/PR**: #1753 / PR (pending)
+- **Mock**: The mock view files are `TenantsView.tsx` / `TenantDetailView.tsx`; issue #1753's text proposed `TenantsListPage.tsx` / `TenantDetailPage.tsx`.
+- **Reality**: The list upgrades `AdminTenantsPage.tsx` in place and the detail page is `AdminTenantDetailPage.tsx`.
+- **Why**: Code-organisation choice, not a visual deviation. The #1752 foundation established the `Admin*Page` convention (`AdminTenantsPage`, `AdminUsersPage`, `AdminGroupsPage`, `AdminLayout`, `AdminForbiddenPage`); the issue text predates that foundation. Logged here only for traceability — there is no visual drift.
+- **Approved by**: agent-suggested — follows the established codebase convention.
+- **Reversion plan**: Permanent.
+
+#### 2026-05-21 — Admin Tenants list drops the mock's `Plan` column
+
+- **Issue/PR**: #1753 / PR (pending)
+- **Mock**: [`design-mocks/src/views/admin/TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx) renders a `Plan` `TableHead` + per-row cell, showing the plan as a human label via `TENANT_PLAN_CONFIG[tenant.plan].label` ("Business", "Enterprise", …).
+- **Reality**: `frontend/src/pages/admin/AdminTenantsPage.tsx` omits the `Plan` column entirely — the table is Name / Domain / Status / Users / Groups / Created.
+- **Why**: Backend shape. `jsonapi.AdminTenantListItem` carries only `plan_id` — an opaque identifier — and there is no plan-catalog endpoint to resolve it to a name. The tenant **detail** tile has the same constraint (logged in "Tenant detail header has no Plan-name lookup" above), where it falls back to the raw id; the list column is a separate surface, so dropping it outright (rather than showing a column of opaque ids) is the lower-noise choice for a wide table. Logged separately from the detail-tile entry because it is its own surface.
+- **Approved by**: agent-suggested — backend-shape constraint; same `plan_id`-is-opaque rationale as the detail tile.
+- **Reversion plan**: Restore the `Plan` column when a plan-catalog lookup ships and `plan_id` can be resolved to a label.
+
+#### 2026-05-21 — Admin Tenants list + detail add controls (search, filters, pagination, sortable headers) the mock lacks
+
+- **Issue/PR**: #1753 / PR (pending)
+- **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) renders the tenant-detail Users / Groups tabs as plain static `<Table>`s — no search box, no filter dropdown, no pagination footer. [`design-mocks/src/views/admin/TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx) renders the tenant-list table with plain (non-sortable) column headers.
+- **Reality**: `frontend/src/pages/admin/AdminTenantDetailPage.tsx` adds a debounced search box + tri-state `isActive` filter + pagination footer to the Users tab, a status filter + pagination footer to the Groups tab; `frontend/src/pages/admin/AdminTenantsPage.tsx` adds sortable column headers (Name / Status / Created) with `aria-sort`.
+- **Why**: Issue #1753 mandates these controls — the issue text predates the mock, which was vendored before the admin surface grew its server-side list semantics. The lists are server-paginated/-searched/-sorted (the BE endpoints accept `?q`, `?sort`, `?order`, `?page`, `?per_page`, `?is_active`, `?status`), so the UI must surface the controls that drive those params. This entry exists so the doc is honest that the shipped admin tables are not 1:1 with the mock's static tables — the divergence is issue-mandated, not a taste call.
+- **Approved by**: user (explicit) — issue #1753 acceptance criteria mandate the search / filter / sort / pagination controls.
+- **Reversion plan**: Permanent — the controls are load-bearing for the server-side list endpoints. If the upstream mock adds equivalent controls, this entry is resolved by reconciling visual details.
+
+#### 2026-05-21 — Tenant-detail Users / Groups rows link to `/admin/users/:id` and `/admin/groups/:id` (forward reference)
+
+- **Issue/PR**: #1753 / PR (pending)
+- **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) drills into a user / group via `onSelectUser` / `onSelectGroup` prop callbacks (the mock is a `view`-state machine with no router).
+- **Reality**: `frontend/src/pages/admin/AdminTenantDetailPage.tsx` navigates row clicks to `/admin/users/{userID}` and `/admin/groups/{groupID}` with `react-router-dom`. Those routes have **no element in `src/app/router.tsx` yet** — they are delivered by sibling sub-issues #1754 (admin user detail) and #1755 (admin group detail) of the same umbrella #1744, landing next in order. Until #1754 / #1755 merge, clicking such a row falls through the `/admin/*` subtree to the top-level `*` catch-all route and renders the standard `NotFoundPage` (`src/pages/NotFound.tsx`) — no crash, no blank screen.
+- **Why**: Issue #1753 explicitly mandates these link targets; the route components are a deliberate forward reference to #1754 / #1755. The link targets are committed now so the detail page is feature-complete per its spec and the sibling issues only need to add the route entries.
+- **Approved by**: user (explicit) — issue #1753 spec mandates the `/admin/users/:id` and `/admin/groups/:id` link targets.
+- **Reversion plan**: Resolved when #1754 / #1755 add the `users/:userId` and `groups/:groupId` route entries under `/admin` in `router.tsx`; the links then resolve to real detail pages.
 
 ### Empty / Error / Loading states
 
