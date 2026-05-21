@@ -604,3 +604,12 @@ _None yet._
 - **Why**: Required by #1628 acceptance criteria — the existing flat list mixed commodity and file tags in one namespace, which was confusing once the autocomplete pool was scoped. Tabs were chosen over a sidebar filter because Tabs is the dominant scope-affordance pattern in this app (Files page, Warranties page, Loans page) and the existing Tabs primitive is well-tested.
 - **Approved by**: user (explicit) — issue request.
 - **Reversion plan**: Remove the `Tabs` block + the `urlTab` / `scopeForTab` derivations + the `scope` option from `listOpts`. Revert i18n keys under `tags:tabs`. Page falls back to the merged flat list.
+
+#### 2026-05-21 — Impersonation FE keeps only the impersonated user's id, not an `admin_return_token`
+
+- **Issue/PR**: #1757 / PR (this branch)
+- **Mock**: Not a visual deviation. The issue text for #1757 proposed an `admin_return_token` localStorage slot — the frontend would cache the admin's access token before starting impersonation and restore it when the session ended.
+- **Reality**: `frontend/src/lib/auth-storage.ts` persists only `inventario_impersonation` = `{ targetUserId }` — the impersonated user's id. It does NOT store the admin's token. `POST /admin/impersonation/end` returns the admin's freshly minted `access_token` / `csrf_token` in the response body, so the frontend simply adopts those. The stored target id exists solely so the End flow (and the auto-expiry recovery) can route back to `/admin/users/{thatId}`.
+- **Why**: Backend design changed after the issue was written. The final BE keeps the admin's "return slot" server-side (jti-keyed) plus an httpOnly marker refresh cookie; `end` self-validates and hands the admin tokens back. A frontend-cached admin token would be redundant and a security liability (a long-lived admin credential sitting in localStorage during an impersonation session). Relatedly, auto-expiry recovery (`recoverFromImpersonationExpiry` in `lib/http.ts`) does NOT restore a cached admin token — it calls `POST /admin/impersonation/end` with the now-expired impersonation token, which the BE deliberately tolerates, and adopts the admin tokens from that response.
+- **Approved by**: agent-suggested-then-user-confirmed — the issue brief explicitly instructed this deviation and required it logged here.
+- **Reversion plan**: Permanent. The `admin_return_token` approach is incompatible with the shipped backend contract; it would only return if the BE dropped the server-side return slot.

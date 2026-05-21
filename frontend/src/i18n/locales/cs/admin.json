@@ -7,6 +7,7 @@
   "impersonation": {
     "banner": {
       "end": "Ukončit vystupování",
+      "ending": "Ukončování…",
       "label": "Vystupujete jako {{name}}",
       "sessionEndsIn": "Relace končí za"
     }
@@ -240,9 +241,13 @@
     "errors": {
       "adminRequiresForce": "Tento účet je systémový administrátor. Zablokování jiného administrátora není z této obrazovky podporováno.",
       "generic": "Něco se pokazilo. Zkuste to prosím znovu.",
+      "nested": "Již za někoho vystupujete. Před zahájením dalšího vystupování ukončete aktuální relaci.",
+      "rateLimited": "Příliš mnoho pokusů o vystupování. Chvíli počkejte a zkuste to znovu.",
       "reasonRequired": "Důvod je povinný.",
       "reasonTooLong": "Důvod je příliš dlouhý. Zkraťte jej pod 500 znaků.",
-      "selfBlocked": "Nemůžete zablokovat svůj vlastní účet."
+      "selfBlocked": "Nemůžete zablokovat svůj vlastní účet.",
+      "targetBlocked": "Tento účet je zablokovaný. Před vystupováním jako tento uživatel jej odblokujte.",
+      "targetIsAdmin": "Za systémové administrátory nelze vystupovat."
     },
     "fallbackName": "Uživatel",
     "groups": {
@@ -251,7 +256,13 @@
       "title": "Členství ve skupinách"
     },
     "impersonate": "Vystupovat jako",
-    "impersonateSoon": "Vystupování bude brzy k dispozici.",
+    "impersonateAdminHint": "Za systémové administrátory nelze vystupovat.",
+    "impersonateBlockedHint": "Tento účet je zablokovaný. Před vystupováním jako tento uživatel jej odblokujte.",
+    "impersonateDialog": {
+      "body": "Aplikaci uvidíte jako tento uživatel. Auditní záznam zaznamenává jak vaše akce, tak akce tohoto uživatele. Relaci můžete kdykoli ukončit.",
+      "confirm": "Zahájit vystupování",
+      "title": "Vystupovat jako tento uživatel?"
+    },
     "loadError": "Nepodařilo se načíst tohoto uživatele. Zkuste to prosím znovu.",
     "loading": "Načítání uživatele…",
     "meta": {

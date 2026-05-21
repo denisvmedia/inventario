@@ -1,6 +1,7 @@
-import { describe, expect, it, beforeEach } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 
 import { server } from "@/test/server"
 import { renderWithProviders } from "@/test/render"
@@ -9,7 +10,13 @@ import { AuthProvider } from "@/features/auth/AuthContext"
 import { ImpersonationProvider } from "@/features/admin/impersonation/ImpersonationContext"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
-import { clearAuth, setAccessToken } from "@/lib/auth-storage"
+import {
+  clearAuth,
+  getImpersonationReturn,
+  setAccessToken,
+  setImpersonationReturn,
+} from "@/lib/auth-storage"
+import { __resetNavigationForTests, setHardRedirect } from "@/lib/navigation"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
@@ -17,6 +24,11 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+  __resetNavigationForTests()
+})
+
+afterEach(() => {
+  __resetNavigationForTests()
 })
 
 // Mounts the banner under a real AuthProvider + ImpersonationProvider so
@@ -86,7 +98,7 @@ describe("ImpersonationBanner", () => {
     expect(screen.queryByTestId("impersonation-banner")).toBeNull()
   })
 
-  it("renders the banner with the target name and an End button when active", async () => {
+  it("renders the banner with the target name and an enabled End button when active", async () => {
     setAccessToken("good-token")
     const expiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString()
     server.use(
@@ -106,6 +118,69 @@ describe("ImpersonationBanner", () => {
     renderBanner()
     await waitFor(() => expect(screen.getByTestId("impersonation-banner")).toBeInTheDocument())
     expect(screen.getByText(/Target User/)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /end impersonation/i })).toBeInTheDocument()
+    expect(screen.getByTestId("impersonation-end")).toBeEnabled()
+  })
+
+  // Seeds an active impersonation session — used by the End-button cases.
+  function seedActiveSession() {
+    server.use(
+      msw.get(api("/auth/me"), () =>
+        HttpResponse.json({ id: "t1", email: "target@example.com", name: "Target User" })
+      ),
+      msw.get(api("/admin/impersonation/current"), () =>
+        HttpResponse.json({
+          active: true,
+          target_user: { id: "t1", name: "Target User", email: "target@example.com" },
+          admin_user: { id: "u1", name: "Admin", email: "admin@example.com" },
+          started_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+        })
+      )
+    )
+  }
+
+  it("ends the session: POST /end → clears the return slot → redirects to the target user", async () => {
+    setAccessToken("good-token")
+    setImpersonationReturn({ targetUserId: "t1" })
+    let endCalls = 0
+    seedActiveSession()
+    server.use(
+      msw.post(api("/admin/impersonation/end"), () => {
+        endCalls++
+        return HttpResponse.json({ access_token: "admin-token", csrf_token: "admin-csrf" })
+      })
+    )
+    const redirect = vi.fn()
+    setHardRedirect(redirect)
+
+    renderBanner()
+    await waitFor(() => expect(screen.getByTestId("impersonation-end")).toBeEnabled())
+    await userEvent.click(screen.getByTestId("impersonation-end"))
+
+    await waitFor(() => expect(endCalls).toBe(1))
+    await waitFor(() => expect(redirect).toHaveBeenCalledWith("/admin/users/t1"))
+    expect(getImpersonationReturn()).toBeNull()
+  })
+
+  it("on End failure: clears auth and redirects to /login with the session_expired reason", async () => {
+    setAccessToken("good-token")
+    setImpersonationReturn({ targetUserId: "t1" })
+    seedActiveSession()
+    server.use(
+      msw.post(api("/admin/impersonation/end"), () =>
+        HttpResponse.json({ errors: [{ code: "admin.impersonate.not_active" }] }, { status: 422 })
+      )
+    )
+    const redirect = vi.fn()
+    setHardRedirect(redirect)
+
+    renderBanner()
+    await waitFor(() => expect(screen.getByTestId("impersonation-end")).toBeEnabled())
+    await userEvent.click(screen.getByTestId("impersonation-end"))
+
+    // The hook-level onError carries the `reason` param so /login renders
+    // the "session expired" notice — consistent with the auto-expiry path.
+    await waitFor(() => expect(redirect).toHaveBeenCalledWith("/login?reason=session_expired"))
+    expect(getImpersonationReturn()).toBeNull()
   })
 })

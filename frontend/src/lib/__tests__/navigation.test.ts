@@ -1,6 +1,12 @@
 import { describe, expect, it, vi, afterEach } from "vitest"
 
-import { __resetNavigationForTests, navigateToLogin, setNavigateToLogin } from "@/lib/navigation"
+import {
+  __resetNavigationForTests,
+  hardRedirect,
+  navigateToLogin,
+  setHardRedirect,
+  setNavigateToLogin,
+} from "@/lib/navigation"
 
 afterEach(() => {
   __resetNavigationForTests()
@@ -56,5 +62,35 @@ describe("navigation", () => {
     expect(spy).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalled()
     warnSpy.mockRestore()
+  })
+
+  it("setHardRedirect replaces the active hard-redirect; reset restores the default", () => {
+    const spy = vi.fn()
+    setHardRedirect(spy)
+    hardRedirect("/admin/users/t1")
+    expect(spy).toHaveBeenCalledWith("/admin/users/t1")
+
+    // After a reset the spy is detached — the default impl takes over,
+    // which would call window.location.assign in a real browser.
+    __resetNavigationForTests()
+    spy.mockClear()
+    const assignSpy = vi.fn()
+    const original = window.location
+    Object.defineProperty(window, "location", {
+      writable: true,
+      configurable: true,
+      value: { ...original, assign: assignSpy },
+    })
+    try {
+      hardRedirect("/login")
+      expect(spy).not.toHaveBeenCalled()
+      expect(assignSpy).toHaveBeenCalledWith("/login")
+    } finally {
+      Object.defineProperty(window, "location", {
+        writable: true,
+        configurable: true,
+        value: original,
+      })
+    }
   })
 })

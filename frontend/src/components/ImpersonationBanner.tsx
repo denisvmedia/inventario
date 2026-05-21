@@ -3,6 +3,7 @@ import { LogOut, UserCog } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
+import { useEndImpersonation } from "@/features/admin/hooks"
 import { useOptionalImpersonation } from "@/features/admin/impersonation/ImpersonationContext"
 import { cn } from "@/lib/utils"
 
@@ -31,13 +32,16 @@ function formatMMSS(totalSeconds: number): string {
 // Replicates design-mocks/src/views/admin/ImpersonationBannerMock.tsx.
 // The mock drove its countdown from a `durationSeconds` prop; here the
 // countdown is derived from the session's `expires_at` so it stays
-// truthful across reloads. The "End impersonation" button is a shell —
-// full BE wiring of POST /admin/impersonation/end lands in a later
-// sub-issue (#1750 shipped the BE primitive).
+// truthful across reloads. The "End impersonation" button just fires the
+// `useEndImpersonation` mutation (#1757); that hook owns every side effect
+// — POST /admin/impersonation/end, the token swap, and the success /
+// failure hard-redirects — so they run even if this banner unmounts mid-
+// flight.
 export function ImpersonationBanner() {
   const { t } = useTranslation("admin")
   const impersonation = useOptionalImpersonation()
   const expiresAt = impersonation?.expiresAt ?? null
+  const endImpersonation = useEndImpersonation()
 
   // A once-per-second tick drives a re-render; `remaining` itself is
   // derived at render time from the absolute expiry timestamp (a
@@ -58,6 +62,15 @@ export function ImpersonationBanner() {
   const name = impersonation.targetUser?.name?.trim() || impersonation.targetUser?.email || ""
   const email = impersonation.targetUser?.email ?? ""
   const low = remaining !== null && remaining <= 60
+
+  // Ends the session. All side effects — the token swap, clearing the
+  // return-slot, and the success / failure redirects — live in the
+  // `useEndImpersonation` hook itself, so they fire even if this banner
+  // unmounts before the request settles (a call-site callback would not).
+  // Here we just trigger the mutation.
+  function handleEnd() {
+    endImpersonation.mutate()
+  }
 
   return (
     <div
@@ -90,18 +103,21 @@ export function ImpersonationBanner() {
           </span>
         </div>
       ) : null}
-      {/* "End impersonation" is a shell — POST /admin/impersonation/end
-          wiring lands in a later sub-issue. The button is rendered
-          disabled so the chrome is complete without claiming a working
-          action it can't yet perform. */}
+      {/* "End impersonation" — POST /admin/impersonation/end (#1757). While
+          the request is in flight the button is disabled and shows an
+          "Ending…" label. */}
       <Button
         size="xs"
         variant="outline"
-        disabled
+        disabled={endImpersonation.isPending}
+        onClick={handleEnd}
+        data-testid="impersonation-end"
         className="gap-1.5 shrink-0 border-accent-foreground/20 bg-background"
       >
         <LogOut className="size-3" />
-        {t("impersonation.banner.end")}
+        {endImpersonation.isPending
+          ? t("impersonation.banner.ending")
+          : t("impersonation.banner.end")}
       </Button>
     </div>
   )
