@@ -4,6 +4,7 @@ package seeddata_test
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -15,11 +16,21 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres"
 )
 
+// postgresTestDSN resolves the integration-test database DSN. CI sets
+// POSTGRES_TEST_DSN (see .github/workflows/go-test-postgres.yml); a local
+// run without it falls back to the docker-compose.yaml postgres service.
+func postgresTestDSN() string {
+	if dsn := os.Getenv("POSTGRES_TEST_DSN"); dsn != "" {
+		return dsn
+	}
+	return "postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable"
+}
+
 func TestSeedDataPostgreSQL(t *testing.T) {
 	c := qt.New(t)
 
 	// Connect to test database
-	dsn := "postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable"
+	dsn := postgresTestDSN()
 	db, err := sqlx.Open("postgres", dsn)
 	c.Assert(err, qt.IsNil)
 	defer db.Close()
