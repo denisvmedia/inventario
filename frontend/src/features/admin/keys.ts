@@ -44,6 +44,7 @@ export const adminKeys = {
     [...adminKeys.tenants(), "detail", id, "users", params] as const,
   groups: () => [...adminKeys.all, "groups"] as const,
   groupList: (params: AdminGroupsParams) => [...adminKeys.groups(), "list", params] as const,
+  groupDetail: (id: string) => [...adminKeys.groups(), "detail", id] as const,
   impersonation: () => [...adminKeys.all, "impersonation"] as const,
   impersonationCurrent: () => [...adminKeys.impersonation(), "current"] as const,
 }

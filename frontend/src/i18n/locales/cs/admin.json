@@ -27,12 +27,78 @@
     "previousLabel": "Předchozí",
     "showing": "Zobrazeno {{from}}–{{to}} z {{total}}"
   },
+  "groupDetail": {
+    "back": "Zpět na skupiny",
+    "danger": {
+      "deleteButton": "Smazat skupinu",
+      "deleteError": "Nepodařilo se smazat tuto skupinu. Zkuste to prosím znovu.",
+      "deletionPending": "Čeká na smazání",
+      "description": "Měkce smazat tuto skupinu. Přejde do stavu čekání na smazání a poté ji úloha pro vyčištění trvale odstraní.",
+      "descriptionPending": "Tato skupina je zařazena ke smazání. Úloha pro vyčištění trvale odstraní skupinu i všechna její data.",
+      "dialog": {
+        "body": "{{name}} bude přesunuta do stavu čekání na smazání. Členové okamžitě ztratí přístup; skupina a všechna její data jsou poté asynchronně trvale odstraněny úlohou pro vyčištění.",
+        "cancel": "Zrušit",
+        "confirm": "Smazat skupinu",
+        "title": "Smazat tuto skupinu?"
+      },
+      "title": "Nebezpečná zóna"
+    },
+    "fallbackName": "Skupina",
+    "header": {
+      "created": "Vytvořeno",
+      "createdBy": "Vytvořil",
+      "currency": "Měna",
+      "members": "Členové",
+      "unknownTenant": "Neznámý nájemce"
+    },
+    "loadError": "Nepodařilo se načíst tuto skupinu. Zkuste to prosím znovu.",
+    "loading": "Načítání skupiny…",
+    "members": {
+      "count_few": "{{count}} členové",
+      "count_one": "{{count}} člen",
+      "count_other": "{{count}} členů",
+      "placeholder": "Správa členů bude doplněna v navazující aktualizaci.",
+      "title": "Členové"
+    },
+    "notFound": "Skupina nebyla nalezena.",
+    "pendingBanner": {
+      "body": "Tato skupina je zařazena ke smazání. Úloha pro vyčištění trvale odstraní skupinu i všechna její data asynchronně — může to chvíli trvat. Do té doby je stránka pouze pro čtení.",
+      "title": "Skupina zařazena ke smazání"
+    }
+  },
+  "groups": {
+    "empty": "Žádné skupiny neodpovídají filtrům.",
+    "filter": {
+      "active": "Aktivní",
+      "allStatuses": "Všechny stavy",
+      "allTenants": "Všichni nájemci",
+      "pendingDeletion": "Čeká na smazání",
+      "statusLabel": "Filtrovat skupiny podle stavu",
+      "tenantLabel": "Filtrovat skupiny podle nájemce",
+      "unknownTenant": "Neznámý nájemce ({{id}})"
+    },
+    "loadError": "Nepodařilo se načíst skupiny. Zkuste to prosím znovu.",
+    "loading": "Načítání skupin…",
+    "search": {
+      "clear": "Vymazat hledání",
+      "label": "Hledat skupiny",
+      "placeholder": "Hledat podle názvu nebo slugu…"
+    },
+    "subtitle": "Všechny inventární skupiny napříč všemi nájemci.",
+    "table": {
+      "created": "Vytvořeno",
+      "currency": "Měna",
+      "members": "Členové",
+      "name": "Skupina",
+      "slug": "Slug",
+      "status": "Stav",
+      "tenant": "Nájemce"
+    },
+    "title": "Skupiny",
+    "unknownTenant": "Neznámý nájemce"
+  },
   "placeholder": {
     "comingSoon": "Tato stránka správy je připravována.",
-    "groups": {
-      "subtitle": "Všechny skupiny napříč všemi nájemci.",
-      "title": "Skupiny"
-    },
     "users": {
       "subtitle": "Všechny účty Inventario napříč všemi nájemci.",
       "title": "Uživatelé"
