@@ -346,3 +346,13 @@ func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, grou
 	}
 	return out, nil
 }
+
+// ListByGroupWithUsersAdmin is the cross-tenant twin of
+// ListByGroupWithUsers (#1756 admin membership editor). The memory
+// backend has no row-level security, so the per-group join is already
+// cross-tenant — this simply delegates. The dedicated method exists so
+// the registry interface stays symmetric with the postgres backend,
+// which DOES need a distinct RLS-bypass code path.
+func (r *GroupMembershipRegistry) ListByGroupWithUsersAdmin(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
+	return r.ListByGroupWithUsers(ctx, groupID)
+}

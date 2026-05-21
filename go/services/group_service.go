@@ -658,6 +658,18 @@ func (s *GroupService) ListMembersWithUsers(ctx context.Context, groupID string)
 	return s.membershipRegistry.ListByGroupWithUsers(ctx, groupID)
 }
 
+// AdminListMembersWithUsers is the admin-facing twin of
+// ListMembersWithUsers (#1756 admin membership editor). It is
+// cross-tenant by design: a system administrator is not scoped to a
+// tenant, so the membership↔user join routes through the registry's
+// RLS-bypass path (ListByGroupWithUsersAdmin) and a group in ANY tenant
+// lists fine. The non-admin ListMembersWithUsers stays RLS-scoped — this
+// method is only reachable behind the RequireSystemAdmin gate, which is
+// authorization enough for the cross-tenant read.
+func (s *GroupService) AdminListMembersWithUsers(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
+	return s.membershipRegistry.ListByGroupWithUsersAdmin(ctx, groupID)
+}
+
 // LeaveGroup removes the current user from a group. Delegates to
 // RemoveMember, which enforces the ≥1 owner invariant — leaving as the
 // sole owner is rejected with ErrLastOwner. Other members can leave

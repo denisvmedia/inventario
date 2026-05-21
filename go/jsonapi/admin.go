@@ -423,3 +423,77 @@ func (*AdminGroupResponse) Render(_ http.ResponseWriter, r *http.Request) error 
 	render.Status(r, http.StatusOK)
 	return nil
 }
+
+// AdminGroupMemberUser is the resolved member-identity block embedded on
+// an AdminGroupMember row (#1756 admin membership editor). The id / name
+// / email are denormalised off the joined users row so the FE can render
+// the membership table — avatar initials, display name, email — without
+// a second round-trip per row. Mirrors jsonapi.MembershipUserView on the
+// non-admin members surface but kept as a dedicated Admin* type so the
+// admin OpenAPI surface stays self-contained.
+type AdminGroupMemberUser struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+// AdminGroupMember is the per-membership row returned by GET
+// /admin/groups/{groupID}/members. It carries the membership identity
+// (id, member_user_id, role, joined_at) plus the resolved member-user
+// block. `joined_at` is an RFC3339 timestamp. The `user` block is
+// omitted only when the join could not resolve the user row (an orphaned
+// membership) — a case the admin FE renders defensively.
+type AdminGroupMember struct {
+	ID           string                `json:"id"`
+	Type         string                `json:"type" example:"admin_group_members" enums:"admin_group_members"`
+	GroupID      string                `json:"group_id"`
+	MemberUserID string                `json:"member_user_id"`
+	Role         models.GroupRole      `json:"role"`
+	JoinedAt     time.Time             `json:"joined_at"`
+	User         *AdminGroupMemberUser `json:"user,omitempty"`
+}
+
+// AdminGroupMembersResponse is the JSON:API list envelope for GET
+// /admin/groups/{groupID}/members. There is no pagination meta — a
+// single group's membership list is bounded by the per-user / per-group
+// caps, so the admin editor renders it in full.
+type AdminGroupMembersResponse struct {
+	Data []*AdminGroupMember `json:"data"`
+}
+
+// NewAdminGroupMembersResponse maps the registry-layer
+// membership↔user join rows into the wire-shape the admin FE consumes.
+// Rows whose Membership is nil are skipped; the `data` array is always
+// serialised (never null) so the FE can safely .map(...) over an empty
+// group.
+func NewAdminGroupMembersResponse(rows []*models.MembershipWithUser) *AdminGroupMembersResponse {
+	data := make([]*AdminGroupMember, 0, len(rows))
+	for _, row := range rows {
+		if row == nil || row.Membership == nil {
+			continue
+		}
+		m := row.Membership
+		item := &AdminGroupMember{
+			ID:           m.ID,
+			Type:         "admin_group_members",
+			GroupID:      m.GroupID,
+			MemberUserID: m.MemberUserID,
+			Role:         m.Role,
+			JoinedAt:     m.JoinedAt,
+		}
+		if row.User != nil {
+			item.User = &AdminGroupMemberUser{
+				ID:    row.User.ID,
+				Name:  row.User.Name,
+				Email: row.User.Email,
+			}
+		}
+		data = append(data, item)
+	}
+	return &AdminGroupMembersResponse{Data: data}
+}
+
+func (*AdminGroupMembersResponse) Render(_ http.ResponseWriter, r *http.Request) error {
+	render.Status(r, http.StatusOK)
+	return nil
+}

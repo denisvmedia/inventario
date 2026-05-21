@@ -259,6 +259,10 @@ func adminAuthenticatedRoutes(
 		// invariants (cap, ≥1 owner, ≥1 member) stay single-sourced,
 		// bypassing only the per-group requireGroupAdmin middleware —
 		// the RequireSystemAdmin gate above is authorization enough.
+		// #1756: GET /members lists the group's members joined with
+		// each member's identity for the admin membership editor;
+		// cross-tenant via the registry's RLS-bypass path.
+		r.Get("/groups/{groupID}/members", groupMembersAPI.listMembers)
 		r.Post("/groups/{groupID}/members", groupMembersAPI.addMember)
 		r.Delete("/groups/{groupID}/members/{userID}", groupMembersAPI.removeMember)
 		r.Patch("/groups/{groupID}/members/{userID}", groupMembersAPI.updateMemberRole)

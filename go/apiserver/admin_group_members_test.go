@@ -348,3 +348,90 @@ func TestAdminUpdateMemberRole_NotAMemberReturns404(t *testing.T) {
 		env.admin.ID, map[string]any{"role": "admin"})
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
+
+// Admin members-listing handler tests (#1756). GET
+// /admin/groups/{groupID}/members backs the admin membership editor:
+// it returns the group's memberships joined with each member's resolved
+// identity, cross-tenant.
+
+func TestAdminListMembers_HappyPath(t *testing.T) {
+	c := qt.New(t)
+	env := newAdminEnv(c)
+	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
+	owner := createTestUserDirect(c, env.params, env.admin.TenantID, "listowner@example.com", true, false)
+	member := createTestUserDirect(c, env.params, env.admin.TenantID, "listmember@example.com", true, false)
+	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, owner.ID, models.GroupRoleOwner)
+	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, member.ID, models.GroupRoleUser)
+
+	rr := doAdminJSONRequest(t, env.handler, http.MethodGet,
+		"/api/v1/admin/groups/"+group.ID+"/members", env.admin.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 2)
+	// joined_at ASC ordering: the owner was seeded first.
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].type"), "admin_group_members")
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].member_user_id"), owner.ID)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].role"), "owner")
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].user.id"), owner.ID)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].user.name"), "listowner@example.com")
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].user.email"), "listowner@example.com")
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[1].member_user_id"), member.ID)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[1].role"), "user")
+}
+
+func TestAdminListMembers_UnknownGroupReturns404(t *testing.T) {
+	c := qt.New(t)
+	env := newAdminEnv(c)
+
+	rr := doAdminJSONRequest(t, env.handler, http.MethodGet,
+		"/api/v1/admin/groups/does-not-exist/members", env.admin.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+}
+
+func TestAdminListMembers_EmptyGroupReturns200(t *testing.T) {
+	c := qt.New(t)
+	env := newAdminEnv(c)
+	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
+
+	// An existing group with no members is a 200 with an empty data
+	// array — not a 404.
+	rr := doAdminJSONRequest(t, env.handler, http.MethodGet,
+		"/api/v1/admin/groups/"+group.ID+"/members", env.admin.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 0)
+}
+
+func TestAdminListMembers_CrossTenant(t *testing.T) {
+	c := qt.New(t)
+	env := newAdminEnv(c)
+
+	// A group AND its members live in a tenant other than the admin's
+	// own. The RLS-bypass listing path must still surface them — this is
+	// the cross-tenant proof for the #1756 admin editor.
+	otherTenant := must.Must(env.params.FactorySet.TenantRegistry.Create(context.Background(), models.Tenant{
+		Name:   "Other Org",
+		Slug:   "other-org",
+		Status: models.TenantStatusActive,
+	}))
+	group := createAdminTestGroup(c, env.params, otherTenant.ID)
+	member := createTestUserDirect(c, env.params, otherTenant.ID, "crosstenant@example.com", true, false)
+	addMembershipRow(c, env.params, otherTenant.ID, group.ID, member.ID, models.GroupRoleOwner)
+
+	rr := doAdminJSONRequest(t, env.handler, http.MethodGet,
+		"/api/v1/admin/groups/"+group.ID+"/members", env.admin.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 1)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].member_user_id"), member.ID)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].user.email"), "crosstenant@example.com")
+}
+
+func TestAdminListMembers_NonAdminForbidden(t *testing.T) {
+	c := qt.New(t)
+	params, user, _ := newParams() // not promoted
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	group := createAdminTestGroup(c, params, user.TenantID)
+
+	rr := doAdminJSONRequest(t, handler, http.MethodGet,
+		"/api/v1/admin/groups/"+group.ID+"/members", user.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
+	c.Assert(rr.Body.String(), qt.Contains, "admin.forbidden")
+}

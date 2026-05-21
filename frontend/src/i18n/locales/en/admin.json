@@ -31,9 +31,40 @@
     "loadError": "Could not load this group. Please try again.",
     "loading": "Loading group…",
     "members": {
-      "count_one": "{{count}} member",
-      "count_other": "{{count}} members",
-      "placeholder": "Member management ships in a follow-up update.",
+      "add": {
+        "button": "Add member",
+        "confirm": "Add member",
+        "description": "Add an existing {{tenant}} account to this group by email address.",
+        "emailLabel": "Email address",
+        "emailPlaceholder": "colleague@example.com",
+        "found": "Adding {{name}} ({{email}}).",
+        "lookupError": "Could not look up that email. Please try again.",
+        "notFound": "No user with that email in this tenant.",
+        "roleLabel": "Role",
+        "searching": "Searching…",
+        "title": "Add member"
+      },
+      "colMember": "Member",
+      "colRole": "Role",
+      "empty": "No members in this group.",
+      "errors": {
+        "capReached": "This group cannot take more members.",
+        "generic": "Something went wrong. Please try again.",
+        "invalidRole": "That role is not valid.",
+        "lastMember": "This is the group's last member. Delete the group instead.",
+        "lastOwner": "This is the group's last owner. Transfer ownership first.",
+        "tenantMismatch": "That user belongs to a different tenant than this group."
+      },
+      "loadError": "Could not load members. Please try again.",
+      "loading": "Loading members…",
+      "remove": {
+        "action": "Remove from group",
+        "body": "{{name}} will lose access to {{group}}. They can be re-added later.",
+        "cancel": "Cancel",
+        "confirm": "Remove",
+        "title": "Remove member?"
+      },
+      "rowActions": "Member actions",
       "title": "Members"
     },
     "notFound": "Group not found.",

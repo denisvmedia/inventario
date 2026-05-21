@@ -111,11 +111,23 @@ export function TenantChip({ tenantId }: { tenantId: string | undefined }) {
   )
 }
 
+// Canonical role ordering — viewer → user → admin → owner, ascending in
+// privilege. Mirrors the design-mock `ROLE_OPTIONS` in GroupDetailView and
+// the role taxonomy of the per-group MembersPage. Drives the inline role
+// <Select> in the admin membership editor so its option order is stable
+// and shared rather than re-derived per call site.
+export const ROLE_ORDER: GroupRole[] = ["viewer", "user", "admin", "owner"]
+
 // Per-role badge config. Mirrors the design-mock ADMIN_ROLE_CONFIG (which
 // itself mirrors MembersView role styling): role-tinted, borderless
 // secondary badges. Literal labels are swapped for `admin` namespace i18n
-// keys so the chip translates.
-const ROLE_CONFIG: Record<GroupRole, { i18nKey: string; icon: typeof Eye; badgeClass: string }> = {
+// keys so the chip translates. Exported so the membership editor's inline
+// role <Select> can reuse the same i18n key + icon per option rather than
+// duplicating the taxonomy.
+export const ROLE_CONFIG: Record<
+  GroupRole,
+  { i18nKey: string; icon: typeof Eye; badgeClass: string }
+> = {
   viewer: {
     i18nKey: "userDetail.roles.viewer",
     icon: Eye,

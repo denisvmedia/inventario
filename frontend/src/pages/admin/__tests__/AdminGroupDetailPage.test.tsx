@@ -47,9 +47,11 @@ beforeEach(() => {
   setAccessToken("good-token")
 })
 
-// Seeds GET /admin/groups/g1 and the soft-delete DELETE. `deleteCalls`
-// counts how many times DELETE fired; the DELETE always echoes a
-// pending_deletion row (matching the BE's idempotent contract).
+// Seeds GET /admin/groups/g1, the embedded membership editor's
+// GET /admin/groups/g1/members (an empty roster — the editor's own test
+// file exercises a populated one), and the soft-delete DELETE.
+// `deleteCalls` counts how many times DELETE fired; the DELETE always
+// echoes a pending_deletion row (matching the BE's idempotent contract).
 function seedDetail(opts: { getStatus?: number; deleteCalls?: number[] } = {}) {
   server.use(
     http.get(api("/auth/me"), () => HttpResponse.json(adminUser)),
@@ -59,6 +61,7 @@ function seedDetail(opts: { getStatus?: number; deleteCalls?: number[] } = {}) {
       }
       return HttpResponse.json({ data: activeGroup })
     }),
+    http.get(api("/admin/groups/g1/members"), () => HttpResponse.json({ data: [] })),
     http.delete(api("/admin/groups/g1"), () => {
       opts.deleteCalls?.push(1)
       return HttpResponse.json({ data: { ...activeGroup, status: "pending_deletion" } })
@@ -98,16 +101,15 @@ describe("AdminGroupDetailPage", () => {
     expect(screen.getByText("owner@acme.example.com")).toBeInTheDocument()
   })
 
-  it("renders the Members panel as a labelled placeholder, not an editor", async () => {
+  it("renders the embedded membership editor with an add-member control", async () => {
     seedDetail()
     renderPage()
 
-    await waitFor(() =>
-      expect(screen.getByTestId("admin-group-members-placeholder")).toBeInTheDocument()
-    )
-    expect(screen.getByText("Member management ships in a follow-up update.")).toBeInTheDocument()
-    // No add-member control — the editor is a later sub-issue.
-    expect(screen.queryByRole("button", { name: /add member/i })).not.toBeInTheDocument()
+    // The #1755 placeholder is gone — the real <MembershipEditor> renders
+    // its Members table and an Add member button.
+    await waitFor(() => expect(screen.getByTestId("admin-group-members")).toBeInTheDocument())
+    expect(screen.getByTestId("admin-group-members-add")).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText("No members in this group.")).toBeInTheDocument())
   })
 
   it("renders the not-found state when the group request 404s", async () => {
@@ -162,7 +164,8 @@ describe("AdminGroupDetailPage", () => {
       http.get(api("/auth/me"), () => HttpResponse.json(adminUser)),
       http.get(api("/admin/groups/g1"), () =>
         HttpResponse.json({ data: { ...activeGroup, status: "pending_deletion" } })
-      )
+      ),
+      http.get(api("/admin/groups/g1/members"), () => HttpResponse.json({ data: [] }))
     )
     renderPage()
 
@@ -196,6 +199,7 @@ describe("AdminGroupDetailPage", () => {
     server.use(
       http.get(api("/auth/me"), () => HttpResponse.json(adminUser)),
       http.get(api("/admin/groups/g1"), () => HttpResponse.json({ data: activeGroup })),
+      http.get(api("/admin/groups/g1/members"), () => HttpResponse.json({ data: [] })),
       http.delete(api("/admin/groups/g1"), () => HttpResponse.json({ errors: [] }, { status: 500 }))
     )
     renderPage()

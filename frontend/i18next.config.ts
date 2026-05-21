@@ -367,6 +367,14 @@ export default defineConfig({
       "admin:userDetail.errors.*",
       "admin:userDetail.roles.*",
       "admin:userDetail.sessions.count*",
+      // admin:groupDetail.members.errors.* — MembershipEditor.tsx resolves
+      //   the inline add / remove / role-change error banners via
+      //   `t(\`groupDetail.members.errors.${suffix}\`)` where `suffix` is a
+      //   flat segment mapped from the BE's dotted 422 codes (MEMBER_ERROR_KEY:
+      //   tenantMismatch / invalidRole / lastOwner / lastMember) plus a
+      //   `generic` catch-all. Dynamic key; the extractor sees only the
+      //   template literal.
+      "admin:groupDetail.members.errors.*",
     ],
   },
 })

@@ -1,7 +1,8 @@
-import { ArrowLeft, Building2, Hash, Layers, Trash2, TriangleAlert, Users } from "lucide-react"
+import { ArrowLeft, Building2, Hash, Layers, Trash2, TriangleAlert } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
+import { MembershipEditor } from "@/components/admin/MembershipEditor"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -15,13 +16,15 @@ import { GroupStatusBadge } from "./admin-shared"
 
 // AdminGroupDetailPage is /admin/groups/:groupId — a read-only group
 // header (name, slug, owning-tenant chip, status, currency, member count,
-// created_by) plus a Members panel and a Danger zone with a soft-delete
-// action.
+// created_by), the embedded membership editor, and a Danger zone with a
+// soft-delete action.
 //
-// The Members panel is a deliberate PLACEHOLDER: the real add/remove/role
-// editor ships in a later sub-issue. The Danger zone soft-deletes the
-// group via DELETE /admin/groups/{id}; on success the group flips to
-// `pending_deletion` and the whole page becomes read-only.
+// The membership editor (#1756) is the embedded <MembershipEditor> —
+// add/remove members and change roles inline. Once the group is
+// `pending_deletion` the whole page is read-only: the editor's controls
+// are suppressed and the Danger zone's delete button is disabled. The
+// Danger zone soft-deletes the group via DELETE /admin/groups/{id}; on
+// success the group flips to `pending_deletion`.
 //
 // Naming follows the #1752 `Admin*Page` convention (see AdminTenantsPage /
 // AdminTenantDetailPage), not the issue text's `GroupDetailPage`.
@@ -81,9 +84,9 @@ export function AdminGroupDetailPage() {
   )
 }
 
-// The loaded-state body: pending-deletion banner, header card, Members
-// placeholder, and Danger zone. Split out so the loading / error / 404
-// branches above stay flat.
+// The loaded-state body: pending-deletion banner, header card, the
+// membership editor, and the Danger zone. Split out so the loading /
+// error / 404 branches above stay flat.
 function GroupDetailBody({ group }: { group: AdminGroupDetail }) {
   const { t } = useTranslation("admin")
   const isPendingDeletion = group.status === "pending_deletion"
@@ -99,7 +102,17 @@ function GroupDetailBody({ group }: { group: AdminGroupDetail }) {
       ) : null}
 
       <GroupHeaderCard group={group} />
-      <MembersPlaceholder memberCount={group.member_count ?? 0} />
+      {/* A `pending_deletion` group is read-only — the editor suppresses
+          its Add / Remove / role-change controls, mirroring the Danger
+          zone's disabled state below. `member_count` on the header card
+          stays correct because every member mutation invalidates the
+          group-detail query (see useAddAdminGroupMember et al.). */}
+      <MembershipEditor
+        groupId={group.id ?? ""}
+        groupName={group.name ?? t("groupDetail.fallbackName")}
+        tenantId={group.tenant_id ?? ""}
+        readOnly={isPendingDeletion}
+      />
       <DangerZone group={group} />
     </>
   )
@@ -154,28 +167,6 @@ function GroupHeaderCard({ group }: { group: AdminGroupDetail }) {
             <p className="mt-0.5 truncate text-sm font-semibold">{s.value}</p>
           </div>
         ))}
-      </div>
-    </div>
-  )
-}
-
-// PLACEHOLDER Members panel. The real add/remove/role editor — which the
-// design mock shows in full — ships in a later sub-issue (#1755 is
-// list + detail + soft-delete only). This card makes the gap explicit so
-// nobody mistakes it for an unfinished feature.
-function MembersPlaceholder({ memberCount }: { memberCount: number }) {
-  const { t } = useTranslation("admin")
-  return (
-    <div data-testid="admin-group-members-placeholder">
-      <h2 className="mb-3 text-base font-semibold">{t("groupDetail.members.title")}</h2>
-      <div className="rounded-xl border border-dashed border-border bg-card p-6">
-        <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
-          <Users className="size-8 text-muted-foreground/30" />
-          <p className="text-sm font-medium">
-            {t("groupDetail.members.count", { count: memberCount })}
-          </p>
-          <p className="text-sm text-muted-foreground">{t("groupDetail.members.placeholder")}</p>
-        </div>
       </div>
     </div>
   )
