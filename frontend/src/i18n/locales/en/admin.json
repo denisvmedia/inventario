@@ -4,6 +4,74 @@
     "description": "You do not have permission to view the admin area. This area is restricted to system administrators.",
     "title": "Access denied"
   },
+  "groupDetail": {
+    "back": "Back to groups",
+    "danger": {
+      "deleteButton": "Delete group",
+      "deleteError": "Could not delete this group. Please try again.",
+      "deletionPending": "Deletion pending",
+      "description": "Soft-delete this group. It enters a pending-deletion state and is then permanently removed by the purge worker.",
+      "descriptionPending": "This group is queued for deletion. The purge worker will permanently remove it and all of its data.",
+      "dialog": {
+        "body": "{{name}} will be moved to a pending-deletion state. Members lose access immediately; the group and all of its data are then permanently removed asynchronously by the purge worker.",
+        "cancel": "Cancel",
+        "confirm": "Delete group",
+        "title": "Delete this group?"
+      },
+      "title": "Danger zone"
+    },
+    "fallbackName": "Group",
+    "header": {
+      "created": "Created",
+      "createdBy": "Created by",
+      "currency": "Currency",
+      "members": "Members",
+      "unknownTenant": "Unknown tenant"
+    },
+    "loadError": "Could not load this group. Please try again.",
+    "loading": "Loading group…",
+    "members": {
+      "count_one": "{{count}} member",
+      "count_other": "{{count}} members",
+      "placeholder": "Member management ships in a follow-up update.",
+      "title": "Members"
+    },
+    "notFound": "Group not found.",
+    "pendingBanner": {
+      "body": "This group is queued for deletion. The purge worker permanently removes the group and all of its data asynchronously — this can take a while. The page is read-only until then.",
+      "title": "Group queued for deletion"
+    }
+  },
+  "groups": {
+    "empty": "No groups match your filters.",
+    "filter": {
+      "active": "Active",
+      "allStatuses": "All statuses",
+      "allTenants": "All tenants",
+      "pendingDeletion": "Pending deletion",
+      "statusLabel": "Filter groups by status",
+      "tenantLabel": "Filter groups by tenant"
+    },
+    "loadError": "Could not load groups. Please try again.",
+    "loading": "Loading groups…",
+    "search": {
+      "clear": "Clear search",
+      "label": "Search groups",
+      "placeholder": "Search by name or slug…"
+    },
+    "subtitle": "Every inventory group across all tenants.",
+    "table": {
+      "created": "Created",
+      "currency": "Currency",
+      "members": "Members",
+      "name": "Group",
+      "slug": "Slug",
+      "status": "Status",
+      "tenant": "Tenant"
+    },
+    "title": "Groups",
+    "unknownTenant": "Unknown tenant"
+  },
   "impersonation": {
     "banner": {
       "end": "End impersonation",
@@ -29,10 +97,6 @@
   },
   "placeholder": {
     "comingSoon": "This admin page is coming soon.",
-    "groups": {
-      "subtitle": "Every group across all tenants.",
-      "title": "Groups"
-    },
     "users": {
       "subtitle": "Every Inventario account across all tenants.",
       "title": "Users"
