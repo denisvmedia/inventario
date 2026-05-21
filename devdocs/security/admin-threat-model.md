@@ -30,18 +30,38 @@ General application threats are out of scope.
 `is_system_admin` reads `true`.
 
 **Mitigations.**
-- `is_system_admin` is a database column carrying the model tag
-  `userinput:"false"` — it is never bound from a user-supplied request
-  body, so no normal user/profile endpoint can set it.
-- The flag is only ever written by the CLI (`admin grant-system-admin`)
-  or the seed harness — both require direct database access.
+- `is_system_admin` is never present in any request DTO: the binding
+  structs for the user-facing write paths (`RegisterRequest`,
+  `UpdateProfileRequest`, …) simply do not declare the field, and
+  handlers assign `models.User` fields by name — there is no blind
+  `json.Decode(&user)` into the model. The combination of the
+  request-DTO allow-list and explicit per-field assignment is the
+  actual control. The model field also carries a `userinput:"false"`
+  tag, but that tag is a **non-enforced marker** — neither the registry
+  layer nor request binding checks it — and must not be relied on as a
+  control.
+- The flag is written by the CLI (`admin grant-system-admin`, which
+  needs a database DSN) or by the seed. The seed reaches the flag only
+  through the `ensureSystemAdminUser` fixture, which is gated behind the
+  `INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE` opt-in (off by default) — so
+  the unauthenticated `/api/v1/seed` endpoint cannot mint a cross-tenant
+  admin in a production deployment.
 - The JWT `is_system_admin` claim is signed (HS256) with the server
   secret; a tampered claim fails signature verification.
 - `RequireSystemAdmin` re-reads the flag from the authenticated user
   context; a stale or self-asserted claim alone does not pass.
 
-**Residual risk.** Compromise of the JWT signing secret (see T2) or of
-the database. Both are pre-existing platform-level risks.
+**Residual risk.**
+- Compromise of the JWT signing secret (see T2) or of the database —
+  pre-existing platform-level risks.
+- **Architectural:** the privilege lives on the `users` row, so a
+  single future handler doing a blind decode (`json.Decode(&user)` +
+  `registry.Update`) would be a full privilege escalation. Today this
+  is held only by code-review discipline, not structurally. #1784
+  tracks moving the privilege off the `users` row into a dedicated
+  `system_admin_grants` table, which would remove this class of risk;
+  until then it must be re-checked on every change to user-write
+  handlers.
 
 ---
 
@@ -186,7 +206,8 @@ and/or an automated test.
       `RequireSystemAdmin`. *(T3)*
 - [ ] **JWT claim layout** — `is_system_admin` / `impersonated_by`
       cannot be self-signed by a non-admin (signature verification +
-      `userinput:"false"`). *(T1, T2)*
+      the request-DTO allow-list: the field is absent from the request
+      structs). *(T1, T2)*
 - [ ] **Impersonation no-chain** — e2e + integration test assert nested
       impersonation is rejected. *(T4)*
 - [ ] **Impersonation no-refresh** — e2e + integration test assert the

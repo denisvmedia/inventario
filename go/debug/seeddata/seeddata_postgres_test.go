@@ -35,7 +35,9 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	cleanupTestData(c, db)
 
 	// Test that seed data creation works without errors
-	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{})
+	// SeedSystemAdmin opts into the sysadmin fixture (#1758) so the
+	// is_system_admin round-trip is exercised against Postgres.
+	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{SeedSystemAdmin: true})
 	c.Assert(err, qt.IsNil)
 
 	// Verify that a tenant was created
@@ -66,7 +68,7 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	c.Assert(len(users) >= 7, qt.IsTrue, qt.Commentf("Expected at least 7 users, got %d", len(users)))
 
 	// Find the test users
-	var adminUser, regularUser, orphanUser, familyUser, sysadminUser *models.User
+	var adminUser, regularUser, orphanUser, familyUser, sysadminUser, blockTargetUser *models.User
 	for _, user := range users {
 		switch user.Email {
 		case "admin@test-org.com":
@@ -79,6 +81,8 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 			familyUser = user
 		case "sysadmin@test-org.com":
 			sysadminUser = user
+		case "blocktarget@test-org.com":
+			blockTargetUser = user
 		}
 	}
 
@@ -112,6 +116,13 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	c.Assert(sysadminUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(sysadminUser.IsActive, qt.IsTrue)
 	c.Assert(sysadminUser.IsSystemAdmin, qt.IsTrue)
+
+	// Block-target: a plain active fixture — asserted explicitly so a
+	// broken insert can't be masked by unrelated rows (issue #1758).
+	c.Assert(blockTargetUser, qt.IsNotNil, qt.Commentf("blocktarget user not found"))
+	c.Assert(blockTargetUser.TenantID, qt.Equals, testTenant.ID)
+	c.Assert(blockTargetUser.IsActive, qt.IsTrue)
+	c.Assert(blockTargetUser.IsSystemAdmin, qt.IsFalse)
 }
 
 func cleanupTestData(c *qt.C, db *sqlx.DB) {

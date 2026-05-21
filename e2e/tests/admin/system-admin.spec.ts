@@ -60,7 +60,11 @@ async function apiLogin(
   const body = await resp.json();
   expect(body.access_token, `access_token for ${credentials.email}`).toBeTruthy();
   expect(body.user?.id, `user id for ${credentials.email}`).toBeTruthy();
-  return { token: body.access_token, csrf: body.csrf_token ?? '', userId: body.user.id };
+  // CSRF is required for every mutating admin endpoint this spec hits.
+  // Fail fast here with a clear message rather than letting a missing
+  // token surface as a confusing 403 far downstream.
+  expect(body.csrf_token, `csrf_token for ${credentials.email}`).toBeTruthy();
+  return { token: body.access_token, csrf: body.csrf_token, userId: body.user.id };
 }
 
 /** Log in as the seeded system admin through the real login form. */

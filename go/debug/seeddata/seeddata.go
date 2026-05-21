@@ -48,6 +48,8 @@ import (
 	"log/slog"
 	"time"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
+
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -57,6 +59,15 @@ import (
 type SeedOptions struct {
 	UserEmail  string // Optional: email of user to seed for
 	TenantSlug string // Optional: slug of tenant to seed for
+
+	// SeedSystemAdmin opts into provisioning the `sysadmin@test-org.com`
+	// fixture with the platform-wide is_system_admin flag (#1758). It is
+	// OFF by default: the /api/v1/seed endpoint is unauthenticated, so
+	// minting a cross-tenant admin from it would be a privilege-
+	// escalation hole. Only the e2e harness sets it (the seed handler
+	// reads INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE). Has effect only for
+	// the well-known `test-org` tenant.
+	SeedSystemAdmin bool
 
 	// UploadLocation is the gocloud-style blob URL the seed uses to
 	// publish bundled file fixtures (photos, invoices, manuals). When
@@ -114,22 +125,28 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 		if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
 			return false, err
 		}
-		// Two more fixtures dedicated to the admin-section e2e suite
-		// (#1758), provisioned here — before the location-count
-		// idempotency gate — so they survive a re-seed:
-		//   - sysadmin@test-org.com carries is_system_admin so the
-		//     Playwright spec reaches /api/v1/admin/* and /admin/*
-		//     without a per-lane `inventario admin grant-system-admin`
-		//     CLI step.
-		//   - blocktarget@test-org.com is a disposable plain user the
-		//     block/unblock spec deactivates then reactivates; no
-		//     other spec references it, so a parallel run never
-		//     observes it mid-block.
-		if err := ensureSystemAdminUser(ctx, registrySet, tenant, users); err != nil {
-			return false, err
-		}
+		// blocktarget@test-org.com — a disposable plain user the
+		// block/unblock spec (#1758) deactivates then reactivates. No
+		// other spec references it, so a parallel run never observes
+		// it mid-block. It carries no elevated privileges, so it is in
+		// the same (accepted) risk class as the orphan fixture and is
+		// provisioned unconditionally for the test-org tenant.
 		if err := ensureBlockTargetUser(ctx, registrySet, tenant, users); err != nil {
 			return false, err
+		}
+		// sysadmin@test-org.com — carries is_system_admin so the
+		// admin-section e2e suite (#1758) reaches /api/v1/admin/* and
+		// /admin/*. Minting a *cross-tenant* admin from the
+		// unauthenticated /api/v1/seed endpoint would be a privilege-
+		// escalation hole in any deployment where /seed is reachable,
+		// so it is gated behind an explicit opt-in (opts.SeedSystemAdmin,
+		// set from INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE by the seed
+		// handler — see apiserver/seed.go). It is OFF by default; only
+		// the e2e harness turns it on.
+		if opts.SeedSystemAdmin {
+			if err := ensureSystemAdminUser(ctx, registrySet, tenant, users); err != nil {
+				return false, err
+			}
 		}
 	}
 
@@ -378,12 +395,17 @@ func ensureOrphanUser(ctx context.Context, registrySet *registry.Set, tenant *mo
 
 // ensureSystemAdminUser idempotently provisions `sysadmin@test-org.com`,
 // a platform system administrator (IsSystemAdmin = true) the
-// admin-section e2e suite (#1758) authenticates as. This mirrors the
+// admin-section e2e suite (#1758) authenticates as. It mirrors the
 // production `inventario admin grant-system-admin` CLI bootstrap, but
-// runs inside /api/v1/seed so every harness lane (memory-mode tests,
-// docker init-data, native-binary macOS lane) gets the fixture without
-// a bespoke CLI step. The tenant.Slug gate keeps the well-known-password
-// admin account out of arbitrary external tenants.
+// runs inside the seed so the e2e harness (whose local stack is
+// memory-mode — the admin CLI rejects memory:// DSNs) gets the fixture.
+// The caller gates this on opts.SeedSystemAdmin so an unauthenticated
+// /api/v1/seed call cannot mint a cross-tenant admin in production.
+//
+// The helper is fully idempotent and self-healing: it runs before the
+// location-count gate, and on a re-seed it reconciles a drifted fixture
+// (deactivated, or stripped of the flag) back to the expected state
+// rather than no-op'ing.
 //
 // The system admin also gets a USD-valued default group so login lands
 // cleanly (no /no-group race) and so it never collides with the CZK/EUR
@@ -399,7 +421,8 @@ func ensureSystemAdminUser(ctx context.Context, registrySet *registry.Set, tenan
 		}
 	}
 
-	if sysadmin == nil {
+	switch {
+	case sysadmin == nil:
 		newUser := models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				TenantID: tenant.ID,
@@ -414,13 +437,23 @@ func ensureSystemAdminUser(ctx context.Context, registrySet *registry.Set, tenan
 		}
 		created, err := registrySet.UserRegistry.Create(ctx, newUser)
 		if err != nil {
-			return fmt.Errorf("failed to create system-admin test user: %w", err)
+			return errxtrace.Wrap("failed to create system-admin test user", err)
 		}
 		sysadmin = created
+	case !sysadmin.IsActive || !sysadmin.IsSystemAdmin:
+		// Reconcile drift: a prior run (or a manual edit) may have left
+		// the fixture deactivated or without the flag.
+		sysadmin.IsActive = true
+		sysadmin.IsSystemAdmin = true
+		updated, err := registrySet.UserRegistry.Update(ctx, *sysadmin)
+		if err != nil {
+			return errxtrace.Wrap("failed to reconcile system-admin test user", err)
+		}
+		sysadmin = updated
 	}
 
 	if _, err := findOrCreateDefaultGroup(ctx, registrySet, sysadmin, models.Currency("USD")); err != nil {
-		return fmt.Errorf("failed to create system-admin default group: %w", err)
+		return errxtrace.Wrap("failed to create system-admin default group", err)
 	}
 	return nil
 }
@@ -429,11 +462,21 @@ func ensureSystemAdminUser(ctx context.Context, registrySet *registry.Set, tenan
 // a disposable plain (non-admin) test user the admin-section e2e suite
 // (#1758) blocks then unblocks. It is intentionally referenced by no
 // other spec so the parallel Playwright run never observes it while it
-// is mid-block.
+// is mid-block. It is self-healing: a failed block/unblock run can leave
+// the fixture deactivated, so a re-seed reconciles it back to active.
 func ensureBlockTargetUser(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User) error {
 	const blockTargetEmail = "blocktarget@test-org.com"
 	for _, user := range users {
 		if user.TenantID == tenant.ID && user.Email == blockTargetEmail {
+			// Reconcile drift: force the fixture back to a plain,
+			// active account so the next run starts from a clean state.
+			if !user.IsActive || user.IsSystemAdmin {
+				user.IsActive = true
+				user.IsSystemAdmin = false
+				if _, err := registrySet.UserRegistry.Update(ctx, *user); err != nil {
+					return errxtrace.Wrap("failed to reconcile block-target test user", err)
+				}
+			}
 			return nil
 		}
 	}
@@ -450,7 +493,7 @@ func ensureBlockTargetUser(ctx context.Context, registrySet *registry.Set, tenan
 		return err
 	}
 	if _, err := registrySet.UserRegistry.Create(ctx, target); err != nil {
-		return fmt.Errorf("failed to create block-target test user: %w", err)
+		return errxtrace.Wrap("failed to create block-target test user", err)
 	}
 	return nil
 }
