@@ -690,23 +690,18 @@ func (r *GroupMembershipRegistry) ListByGroupWithUsers(ctx context.Context, grou
 
 // ListByGroupWithUsersAdmin is the cross-tenant twin of
 // ListByGroupWithUsers, backing the #1756 admin membership editor. The
-// system-admin caller is not tenant-scoped, so the join runs under
-// `SET LOCAL row_security = off` — the same defense-in-depth RLS bypass
-// LocationGroupRegistry.GetAdmin / ListAdmin use. The membership rows
-// already run via the background-worker role (bypass policy on
-// group_memberships); the explicit `row_security = off` additionally
-// covers the JOINed users table so a group in ANY tenant lists fine.
+// system-admin caller is not tenant-scoped, so the membership↔users
+// join runs inside store.DoAsAdmin — under the inventario_admin role,
+// whose BYPASSRLS attribute skips the tenant-isolation policies on both
+// group_memberships and the JOINed users table, so a group in ANY
+// tenant lists fine.
 func (r *GroupMembershipRegistry) ListByGroupWithUsersAdmin(ctx context.Context, groupID string) ([]*models.MembershipWithUser, error) {
 	if groupID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
 	}
 
 	var out []*models.MembershipWithUser
-	reg := r.newSQLRegistry()
-	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		if _, execErr := tx.ExecContext(ctx, "SET LOCAL row_security = off"); execErr != nil {
-			return errxtrace.Wrap("failed to disable row_security for admin members listing", execErr)
-		}
+	err := store.DoAsAdmin(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		var loadErr error
 		out, loadErr = r.loadMembersWithUsersTx(ctx, tx, groupID)
 		return loadErr
@@ -722,13 +717,14 @@ func (r *GroupMembershipRegistry) ListByGroupWithUsersAdmin(ctx context.Context,
 // and its admin twin so the two surfaces ship an identical row shape.
 // The query rows are never RLS-scoped at this layer — the registry runs
 // in service mode on the background-worker role, which bypasses the
-// tenant-isolation policy. The only difference between the two callers
-// is whether the admin twin additionally issues `SET LOCAL row_security
-// = off` first as documented defense-in-depth covering the JOINed users
-// table; the non-admin caller is tenant-gated upstream by the
-// requireGroupMembership HTTP middleware. The JOIN matches tenant_id on
-// both sides as a further defense-in-depth guard against cross-tenant
-// leakage.
+// tenant-isolation policy. The two callers differ only in the role the
+// surrounding tx runs under: ListByGroupWithUsers stays on the
+// background-worker role (and is tenant-gated upstream by the
+// requireGroupMembership HTTP middleware), while ListByGroupWithUsersAdmin
+// runs under store.DoAsAdmin / inventario_admin (BYPASSRLS) so the
+// JOINed users table is also reachable cross-tenant. The JOIN matches
+// tenant_id on both sides as a further defense-in-depth guard against
+// cross-tenant leakage.
 func (r *GroupMembershipRegistry) loadMembersWithUsersTx(ctx context.Context, tx *sqlx.Tx, groupID string) ([]*models.MembershipWithUser, error) {
 	type row struct {
 		// membership fields
