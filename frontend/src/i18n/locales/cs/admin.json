@@ -1,0 +1,54 @@
+{
+  "forbidden": {
+    "back": "Zpět na přehled",
+    "description": "Nemáte oprávnění zobrazit oblast správy. Tato oblast je vyhrazena pro systémové administrátory.",
+    "title": "Přístup odepřen"
+  },
+  "impersonation": {
+    "banner": {
+      "end": "Ukončit vystupování",
+      "label": "Vystupujete jako {{name}}",
+      "sessionEndsIn": "Relace končí za"
+    }
+  },
+  "layout": {
+    "breadcrumbRoot": "Správa"
+  },
+  "nav": {
+    "groups": "Skupiny",
+    "section": "Správa",
+    "tenants": "Nájemci",
+    "users": "Uživatelé"
+  },
+  "placeholder": {
+    "comingSoon": "Tato stránka správy je připravována.",
+    "groups": {
+      "subtitle": "Všechny skupiny napříč všemi nájemci.",
+      "title": "Skupiny"
+    },
+    "users": {
+      "subtitle": "Všechny účty Inventario napříč všemi nájemci.",
+      "title": "Uživatelé"
+    }
+  },
+  "tenants": {
+    "empty": "Žádní nájemci neodpovídají hledání.",
+    "loadError": "Nepodařilo se načíst nájemce. Zkuste to prosím znovu.",
+    "loading": "Načítání nájemců…",
+    "search": {
+      "clear": "Vymazat hledání",
+      "label": "Hledat nájemce",
+      "placeholder": "Hledat podle názvu, slugu nebo domény…"
+    },
+    "stats": {
+      "tenants": "Nájemci"
+    },
+    "subtitle": "Organizace používající Inventario napříč platformou.",
+    "table": {
+      "created": "Vytvořeno",
+      "groups": "Skupiny",
+      "users": "Uživatelé"
+    },
+    "title": "Nájemci"
+  }
+}

@@ -346,6 +346,24 @@ _None yet._
 - **Approved by**: user (explicit) — issue #1553 §5.4.
 - **Reversion plan**: Permanent. The lock is BE-driven and non-negotiable while a migration runs.
 
+#### 2026-05-20 — Admin layout shell: breadcrumb + secondary-nav strip
+
+- **Issue/PR**: #1752 / PR (pending)
+- **Mock**: The admin surface mocks ([`design-mocks/src/views/admin/`](../../design-mocks/src/views/admin/) — `TenantsView`, `TenantDetailView`, `UserDetailView`, `GroupsView`, `GroupDetailView`, `admin-shared.tsx`) have **no layout shell**: each admin view is self-contained, navigates via a state string in the mock's `App.tsx`, and uses an `AdminBackButton` (ArrowLeft ghost button) for back-navigation. There is no breadcrumb and no secondary nav anywhere in the admin mock.
+- **Reality**: `frontend/src/pages/admin/AdminLayout.tsx` is a real layout route that supplies a breadcrumb (`Admin → <section>`, reusing the shared `LocationsBreadcrumb` primitive) and a secondary-nav strip (Tenants / Users / Groups underline-tab pills) with the section pages rendered through `<Outlet />`.
+- **Why**: Not present in mock. The frontend uses `react-router-dom`, not the mock's `view`-state machine — multiple admin pages need a shared chrome and a way to move between sub-sections, which issue #1752 explicitly mandates ("layout shell — breadcrumbs, secondary nav"). The layout reuses existing design-language tokens (overline breadcrumb, `border-b-2` active-tab treatment) and the existing `LocationsBreadcrumb` component rather than inventing new chrome.
+- **Approved by**: agent-suggested-then-user-confirmed — issue #1752 spec calls for the layout shell directly.
+- **Reversion plan**: Permanent until/unless the upstream design adds an admin layout; if it does, this layout adopts the mock's chrome.
+
+#### 2026-05-20 — Admin sidebar section is a single top-level link
+
+- **Issue/PR**: #1752 / PR (pending)
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) renders an `Admin` `SidebarGroup` with **two** entries — `Tenants` and `Groups` — both always visible (the mock has no auth/permission model).
+- **Reality**: `frontend/src/components/AppSidebar.tsx` renders the `Admin` section with a **single** top-level entry → `/admin/tenants`, and only when `useIsSystemAdmin()` is true. Sub-section navigation (Users / Groups) lives in the `AdminLayout` secondary nav instead of the sidebar.
+- **Why**: Issue #1752 specifies "a new 'ADMIN' section … Top-level link → `/admin/tenants`" — one sidebar entry, with the AdminLayout owning sub-navigation. The conditional render is required because the mock has no permission gating; non-admins must not see the section.
+- **Approved by**: agent-suggested-then-user-confirmed — issue #1752 spec dictates both the single-link shape and the conditional render.
+- **Reversion plan**: Permanent — the single-link + secondary-nav split is the intended IA for the React app.
+
 ### i18n & Formatting
 
 #### 2026-05-16 — Dashboard hero: K/M/B compact-notation fallback at ≥1e7
@@ -359,11 +377,25 @@ _None yet._
 
 ### Tables & Lists
 
-_None yet._
+#### 2026-05-20 — Admin Tenants list is a divide-y card list, not a `<Table>`
+
+- **Issue/PR**: #1752 / PR (pending)
+- **Mock**: [`design-mocks/src/views/admin/TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx) renders the tenant list with the shadcn `<Table>` primitive (TableHeader/TableBody/TableRow/TableCell) and a shadcn `<Pagination>` control below it.
+- **Reality**: `frontend/src/pages/admin/AdminTenantsPage.tsx` renders the tenant list as a `divide-y divide-border` card list of rows (the established frontend convention — see `LoginHistoryPage`, `SessionsPage`). The header card + stat tiles + search input + status-badge palette all match the mock. The search box is wired to the server: the debounced input feeds `?q` (the BE matches it against name/slug/domain) via `features/admin/api.ts` + `keys.ts`, so search stays correct across pages. The remaining pagination params (`page`/`per_page`/`sort`) are plumbed through the data layer but no `<Pagination>` UI ships in this foundation issue.
+- **Why**: The frontend has **no `table.tsx` or `pagination.tsx` shadcn primitive** yet. Pulling two new primitives in a foundation issue widens the blast radius beyond the issue's scope; the `divide-y` card list is the pattern every other list page in `frontend/` already uses, so it's the lower-drift choice. The pagination data layer is ready for a later sub-issue to add the UI.
+- **Approved by**: agent-suggested — foundation-issue scope decision; the visual rhythm (cards, tokens, badges) still matches the mock.
+- **Reversion plan**: When a later admin sub-issue needs the full table/pagination treatment, add `table.tsx` + `pagination.tsx` via the shadcn CLI and port `TenantsView` 1:1. Resolve this entry then.
 
 ### Empty / Error / Loading states
 
-_None yet._
+#### 2026-05-20 — Admin 403 page reuses the 404 empty-state pattern
+
+- **Issue/PR**: #1752 / PR (pending)
+- **Mock**: [`design-mocks/src/views/EmptyStatesView.tsx`](../../design-mocks/src/views/EmptyStatesView.tsx) ships `NotFoundView` (404), `NoLocationGroupView`, `NoGroupOnboardingView`, `NoLocationView`, `NoAreaView`, `MaintenanceView` — but **no 403 / "access denied" surface**.
+- **Reality**: `frontend/src/pages/admin/AdminForbiddenPage.tsx` (shown in-place by the `RequireSystemAdmin` guard for a signed-in non-admin) replicates the `NotFoundView` anatomy exactly — concentric muted circles + centred Lucide glyph (`ShieldAlert` instead of `SearchX`), `403` overline, bold heading, muted lede, single primary action — swapping only the glyph and copy.
+- **Why**: Not present in mock. Issue #1752 requires a "403-style page (NOT a crash, NOT a silent redirect)". The closest analogue in the mock is the 404 empty state, so the page ports that pattern verbatim per the design-mock-fidelity fallback rule.
+- **Approved by**: agent-suggested-then-user-confirmed — issue #1752 spec mandates the 403 page; the showcase-fallback pattern is the documented recipe for mock-silent surfaces.
+- **Reversion plan**: If the upstream design adds a dedicated 403/forbidden empty state, port it and resolve this entry.
 
 ### Cross-cutting (theme, density, a11y, performance)
 

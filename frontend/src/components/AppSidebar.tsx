@@ -51,6 +51,7 @@ import { cn } from "@/lib/utils"
 import { withGroupQuery } from "@/lib/group-aware-url"
 import { useNavLabel } from "@/lib/nav-labels"
 import { useAuth } from "@/features/auth/AuthContext"
+import { useIsSystemAdmin } from "@/features/auth/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import type { LocationGroup } from "@/features/group/api"
@@ -171,10 +172,44 @@ const PERSONAL: NavEntry[] = [
   },
 ]
 
+// Admin section (#1752). Rendered only for system administrators. The
+// single top-level entry lands on the /admin/tenants route; AdminLayout's
+// secondary nav handles the users/groups sub-navigation from there. Unlike
+// Inventory/Manage entries, admin doesn't need an active group — the
+// /admin/* subtree is platform-wide.
+const ADMIN: AdminNavEntry[] = [
+  { labelKey: "admin:nav.tenants", to: "/admin/tenants", icon: ShieldCheck },
+]
+
+interface AdminNavEntry {
+  labelKey: string
+  to: string
+  icon: LucideIcon
+}
+
 interface NavRowProps {
   entry: NavEntry
   group: LocationGroup | null
   onNavigate: () => void
+}
+
+// AdminNavRow is a sibling of NavRow for the static, group-independent
+// admin entries. The row stays highlighted across the whole /admin/*
+// subtree (the AdminLayout secondary nav owns sub-section selection).
+function AdminNavRow({ entry, onNavigate }: { entry: AdminNavEntry; onNavigate: () => void }) {
+  const match = useMatch("/admin/*")
+  const label = useNavLabel(entry.labelKey)
+  const Icon = entry.icon
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild tooltip={label} isActive={!!match}>
+        <NavLink to={entry.to} onClick={onNavigate}>
+          <Icon className="size-4" />
+          <span>{label}</span>
+        </NavLink>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  )
 }
 
 // A "section root" is a top-level entry whose target has subroutes that
@@ -239,6 +274,7 @@ interface AppSidebarProps {
 export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
   const { isMobile, setOpenMobile, state } = useSidebar()
   const { user, logout } = useAuth()
+  const isSystemAdmin = useIsSystemAdmin()
   const { currentGroup } = useCurrentGroup()
   const migrationLock = useGroupMigrationLock()
   const navigate = useNavigate()
@@ -382,6 +418,22 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Admin section — rendered only for system administrators
+            (#1752). useIsSystemAdmin() returns false for every non-admin
+            and during the boot probe, so the whole group stays hidden. */}
+        {isSystemAdmin ? (
+          <SidebarGroup data-testid="sidebar-admin-group">
+            <SidebarGroupLabel>{t("admin:nav.section")}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {ADMIN.map((e) => (
+                  <AdminNavRow key={e.labelKey} entry={e} onNavigate={closeMobileSidebar} />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
