@@ -191,6 +191,31 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 
 **Important**: User and tenant commands only work with PostgreSQL databases. Memory databases are not supported for persistent operations.
 
+#### System Administrators
+
+System administrators are platform operators with cross-tenant privileges
+(access to the `/api/v1/admin/*` API and the `/admin/*` UI). The flag is
+distinct from per-group roles and is managed with the `admin` command group:
+
+```bash
+# Grant platform-wide system-admin to a user
+./inventario admin grant-system-admin --email="admin@acme.com"
+
+# Revoke system-admin (refuses to revoke the last remaining admin)
+./inventario admin revoke-system-admin --email="admin@acme.com"
+
+# Revoke even if it would leave zero admins (deliberate decommission)
+./inventario admin revoke-system-admin --email="admin@acme.com" --allow-zero
+
+# List current system administrators
+./inventario admin list-system-admins
+```
+
+These commands require a PostgreSQL DSN (`--db-dsn` or `INVENTARIO_DB_DSN`).
+See the [System Admin Operations Runbook](devdocs/admin-runbook.md) for
+bootstrapping the first admin, audit-log inspection, lockout recovery, and
+the [admin threat model](devdocs/security/admin-threat-model.md).
+
 #### Command Options
 
 **Tenant Commands:**
@@ -392,6 +417,8 @@ This test validates:
 ## Documentation
 
 - [Signed URLs for Secure File Access](SIGNED_URLS.md) - Comprehensive guide to the secure file access system
+- [System Admin Operations Runbook](devdocs/admin-runbook.md) - Bootstrapping system admins, audit-log inspection, lockout recovery
+- [Admin Section Threat Model](devdocs/security/admin-threat-model.md) - Security model for the cross-tenant admin surface
 
 ## License
 This module is licensed under the MIT License. See the [LICENSE](LICENSE) file for details. You are free to use, modify, and distribute this software in accordance with the terms of the license.

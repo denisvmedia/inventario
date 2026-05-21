@@ -146,3 +146,14 @@ jobs:
           echo "Limited DSN: $POSTGRES_LIMITED_TEST_DSN"
           go test -v -race ./schema/bootstrap
         working-directory: go
+
+      - name: Run seed data integration tests
+        # seeddata's Postgres test sits behind the `integration` build tag
+        # and was previously not run by any workflow. It exercises the full
+        # seed against a real database — the only coverage that catches
+        # driver.Valuer / JSONB-encoding regressions the in-memory registry
+        # cannot.
+        env:
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
+        run: go test -v -race -tags integration ./debug/seeddata/...
+        working-directory: go
