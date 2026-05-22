@@ -82,8 +82,9 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 
 	// Create JWT token for tenant 2 user
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": u2.ID,
-		"exp":     time.Now().Add(time.Hour).Unix(),
+		"user_id":    u2.ID,
+		"token_type": "access",
+		"exp":        time.Now().Add(time.Hour).Unix(),
 	})
 	tokenString, err := token.SignedString(jwtSecret)
 	c.Assert(err, qt.IsNil)
@@ -195,8 +196,9 @@ func TestAPISecurity_InvalidUserContexts(t *testing.T) {
 
 			// Create JWT token
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-				"user_id": user.ID,
-				"exp":     time.Now().Add(time.Hour).Unix(),
+				"user_id":    user.ID,
+				"token_type": "access",
+				"exp":        time.Now().Add(time.Hour).Unix(),
 			})
 			tokenString, err := token.SignedString(jwtSecret)
 			c.Assert(err, qt.IsNil)

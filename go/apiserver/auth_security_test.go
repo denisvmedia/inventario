@@ -344,9 +344,10 @@ func TestAuthSecurity_JWTTokenSecurity(t *testing.T) {
 		{
 			name: "valid token",
 			tokenClaims: jwt.MapClaims{
-				"user_id": "user-123",
-				"role":    "user",
-				"exp":     time.Now().Add(time.Hour).Unix(),
+				"user_id":    "user-123",
+				"role":       "user",
+				"token_type": "access",
+				"exp":        time.Now().Add(time.Hour).Unix(),
 			},
 			secret:      jwtSecret,
 			expectValid: true,
@@ -509,9 +510,10 @@ func TestAuthSecurity_UserStatusValidation(t *testing.T) {
 
 			// Create valid token for the user
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-				"user_id": tt.userID,
-				"role":    "user",
-				"exp":     time.Now().Add(time.Hour).Unix(),
+				"user_id":    tt.userID,
+				"role":       "user",
+				"token_type": "access",
+				"exp":        time.Now().Add(time.Hour).Unix(),
 			})
 			tokenString, err := token.SignedString(jwtSecret)
 			c.Assert(err, qt.IsNil)

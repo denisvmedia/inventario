@@ -137,10 +137,13 @@ func TestGroupSlugResolver_StaleUserToken(t *testing.T) {
 
 	params, _, testGroup := newParams()
 
-	// Build a JWT for a user that does not exist in the registry.
+	// Build a JWT for a user that does not exist in the registry. The token
+	// carries token_type=access so the 401 comes from the stale-user guard
+	// under test, not from the token-type enforcement (#1778).
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": "user-does-not-exist",
-		"exp":     time.Now().Add(24 * time.Hour).Unix(),
+		"user_id":    "user-does-not-exist",
+		"token_type": "access",
+		"exp":        time.Now().Add(24 * time.Hour).Unix(),
 	})
 	tokenString := must.Must(token.SignedString(testJWTSecret))
 

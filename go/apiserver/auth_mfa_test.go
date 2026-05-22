@@ -119,10 +119,11 @@ func (f *authMFAFixture) call(t *testing.T, method, path string, body any) *http
 func (f *authMFAFixture) bearerToken(t *testing.T) string {
 	t.Helper()
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"jti":     uuid.New().String(),
-		"user_id": f.user.ID,
-		"iat":     time.Now().Unix(),
-		"exp":     time.Now().Add(5 * time.Minute).Unix(),
+		"jti":        uuid.New().String(),
+		"user_id":    f.user.ID,
+		"token_type": "access",
+		"iat":        time.Now().Unix(),
+		"exp":        time.Now().Add(5 * time.Minute).Unix(),
 	})
 	signed, err := token.SignedString(f.jwtSecret)
 	if err != nil {
