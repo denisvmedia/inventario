@@ -342,15 +342,17 @@ func (api *exportsAPI) generateExportSignedURL(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Check if export is deleted
+	// Check if export is deleted. Render a JSON:API 404 (not http.NotFound's
+	// plain-text body) so the frontend's JSON http wrapper parses a
+	// structured error instead of throwing on a non-JSON response.
 	if exp.IsDeleted() {
-		http.NotFound(w, r)
+		renderEntityError(w, r, ErrNotFound)
 		return
 	}
 
 	// Only completed exports can be downloaded
 	if exp.Status != models.ExportStatusCompleted {
-		http.NotFound(w, r)
+		renderEntityError(w, r, ErrNotFound)
 		return
 	}
 
@@ -359,7 +361,7 @@ func (api *exportsAPI) generateExportSignedURL(w http.ResponseWriter, r *http.Re
 	// (see go/backup/export/service.go), so a nil FileID here is an old
 	// record that simply cannot be served via a signed URL.
 	if exp.FileID == nil || *exp.FileID == "" {
-		http.NotFound(w, r)
+		renderEntityError(w, r, ErrNotFound)
 		return
 	}
 
@@ -381,7 +383,20 @@ func (api *exportsAPI) generateExportSignedURL(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	signedURL, err := api.fileSigningService.GenerateSignedURL(file.ID, strings.TrimPrefix(file.Ext, "."), user.ID)
+	// GenerateSignedURL requires a non-empty extension purely as a sanity
+	// check — it never appears in the signed path, which keys on the file
+	// ID. Fall back to the original path's extension, then to "xml" (export
+	// artifacts are XML), so minting never 500s on a FileEntity whose Ext
+	// happens to be empty.
+	fileExt := strings.TrimPrefix(file.Ext, ".")
+	if fileExt == "" {
+		fileExt = strings.TrimPrefix(path.Ext(file.OriginalPath), ".")
+	}
+	if fileExt == "" {
+		fileExt = "xml"
+	}
+
+	signedURL, err := api.fileSigningService.GenerateSignedURL(file.ID, fileExt, user.ID)
 	if err != nil {
 		internalServerError(w, r, errxtrace.Wrap("failed to generate signed URL", err))
 		return

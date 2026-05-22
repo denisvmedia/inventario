@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { type Export, isExportTerminal } from "@/features/export/api"
+import { type Export } from "@/features/export/api"
 import {
   useDeleteExport,
   useDownloadExport,
@@ -41,7 +41,6 @@ export function ExportDetailPage() {
 
   const exp = exportQuery.data
   const isCompleted = exp?.status === "completed"
-  const isTerminal = isExportTerminal(exp?.status)
   const isDeleted = !!exp?.deleted_at
 
   async function onDelete() {
@@ -129,7 +128,7 @@ export function ExportDetailPage() {
             type="button"
             variant="outline"
             onClick={onDownload}
-            disabled={!isTerminal || !isCompleted || isDeleted || downloadMutation.isPending}
+            disabled={!isCompleted || isDeleted || downloadMutation.isPending}
             data-testid="export-detail-download"
           >
             {downloadMutation.isPending ? (
