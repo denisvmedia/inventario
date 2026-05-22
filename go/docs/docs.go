@@ -9756,10 +9756,6 @@ const docTemplate = `{
                     "description": "commodity, export, or empty",
                     "type": "string"
                 },
-                "path": {
-                    "description": "Only for updates",
-                    "type": "string"
-                },
                 "tags": {
                     "type": "array",
                     "items": {

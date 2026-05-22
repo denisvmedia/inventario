@@ -197,6 +197,112 @@ func TestSecurityIDRejection(t *testing.T) {
 	}
 }
 
+// TestSecurityFileCreatePathNotHonored verifies that a client-supplied
+// `data.attributes.path` on POST /files is ignored. The create endpoint is
+// metadata-only; the blob key is populated server-side by the upload flow.
+// Honoring a client path would let an attacker create a row in their own
+// tenant pointing at another tenant's blob key in the flat blob namespace,
+// then leak its content via a signed download URL (#1779).
+//
+// The `path` field has been removed from jsonapi.FileRequestData, so the
+// hostile value is injected via a raw JSON body to exercise the real decode
+// path (an unknown key must be silently dropped, not honored).
+func TestSecurityFileCreatePathNotHonored(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		IsActive: true,
+	}
+	err := testUser.SetPassword("TestPassword123")
+	c.Assert(err, qt.IsNil)
+	createdUser, err := factorySet.UserRegistry.Create(context.Background(), testUser)
+	c.Assert(err, qt.IsNil)
+
+	group := createTestGroupForUser(factorySet, createdUser.TenantID, createdUser.ID)
+
+	testCases := []struct {
+		name        string
+		hostilePath string
+	}{
+		{
+			name:        "cross-tenant thumbnail blob key is not honored",
+			hostilePath: "thumbnails/00000000-0000-0000-0000-000000000000_medium.jpg",
+		},
+		{
+			name:        "path traversal value is not honored",
+			hostilePath: "../../etc/passwd",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			r := chi.NewRouter()
+			r.Use(render.SetContentType(render.ContentTypeJSON))
+
+			params := apiserver.Params{
+				FactorySet:     factorySet,
+				UploadLocation: "memory://",
+				JWTSecret:      testJWTSecret,
+			}
+
+			withTestGroup := func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					next.ServeHTTP(w, r.WithContext(appctx.WithGroup(r.Context(), group)))
+				})
+			}
+
+			r.With(apiserver.RequireAuth(testJWTSecret, factorySet.UserRegistry, nil)).With(withTestGroup).With(apiserver.RegistrySetMiddleware(factorySet)).Route("/files", apiserver.Files(params))
+
+			// Raw JSON body: the hostile `path` key is no longer part of the
+			// FileRequestData struct, so it must be decoded-and-dropped.
+			rawBody := map[string]any{
+				"data": map[string]any{
+					"type": "files",
+					"attributes": map[string]any{
+						"title":       "Hostile File",
+						"description": "attempts to point at another tenant's blob",
+						"tags":        []string{"test"},
+						"path":        tc.hostilePath,
+					},
+				},
+			}
+			requestBodyBytes, err := json.Marshal(rawBody)
+			c.Assert(err, qt.IsNil)
+
+			req := httptest.NewRequest("POST", "/files", bytes.NewReader(requestBodyBytes))
+			req.Header.Set("Content-Type", "application/json")
+			addTestUserAuthHeader(req, createdUser.ID)
+
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			c.Assert(w.Code, qt.Equals, http.StatusCreated)
+
+			var resp struct {
+				Attributes struct {
+					Path         string `json:"path"`
+					OriginalPath string `json:"original_path"`
+				} `json:"attributes"`
+			}
+			err = json.Unmarshal(w.Body.Bytes(), &resp)
+			c.Assert(err, qt.IsNil)
+
+			// The client-supplied path must not be honored: both blob-key
+			// fields come back empty, to be filled server-side on upload.
+			c.Assert(resp.Attributes.Path, qt.Equals, "")
+			c.Assert(resp.Attributes.OriginalPath, qt.Equals, "")
+		})
+	}
+}
+
 // TestSecurityServerGeneratedIDs tests that server-generated IDs are always used
 func TestSecurityServerGeneratedIDs(t *testing.T) {
 	c := qt.New(t)

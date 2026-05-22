@@ -1770,9 +1770,6 @@ definitions:
       linked_entity_type:
         description: commodity, export, or empty
         type: string
-      path:
-        description: Only for updates
-        type: string
       tags:
         items:
           type: string
