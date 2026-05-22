@@ -261,6 +261,21 @@ func TestJWTMiddleware(t *testing.T) {
 			},
 			expectedStatus: http.StatusUnauthorized,
 		},
+		{
+			// #1780 regression test: a valid access token passed via the
+			// `?token=` query parameter (with NO Authorization header) must
+			// be rejected. The query-parameter fallback was removed because
+			// full-scope JWTs in URLs leak via Referer headers, proxy/access
+			// logs and browser history.
+			name: "valid token via ?token= query param without header is rejected",
+			setupRequest: func(req *http.Request) {
+				token := createToken("user-123")
+				q := req.URL.Query()
+				q.Set("token", token)
+				req.URL.RawQuery = q.Encode()
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
 	}
 
 	// Test successful authentication cases
@@ -325,6 +340,68 @@ func TestJWTMiddleware(t *testing.T) {
 			c.Assert(resp.Code, qt.Equals, tt.expectedStatus)
 		})
 	}
+}
+
+// TestJWTMiddleware_QueryParamTokenRejected is a focused #1780 regression
+// test: it asserts that a valid access token supplied ONLY via the
+// `?token=` query parameter is rejected with 401, while the same token in
+// the Authorization Bearer header is still accepted.
+func TestJWTMiddleware_QueryParamTokenRejected(t *testing.T) {
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+
+	testUser := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "user-123"},
+			TenantID: "test-tenant-id",
+		},
+		Email:    "test@example.com",
+		Name:     "Test User",
+		IsActive: true,
+	}
+
+	userRegistry := &mockUserRegistryForAuth{
+		users: map[string]*models.User{"user-123": testUser},
+	}
+
+	createToken := func(userID string) string {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"user_id":    userID,
+			"role":       "user",
+			"token_type": "access",
+			"exp":        time.Now().Add(24 * time.Hour).Unix(),
+		})
+		tokenString, _ := token.SignedString(jwtSecret)
+		return tokenString
+	}
+
+	middleware := apiserver.JWTMiddleware(jwtSecret, userRegistry, nil)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	wrappedHandler := middleware(handler)
+
+	t.Run("token via query param without Authorization header is rejected", func(t *testing.T) {
+		c := qt.New(t)
+
+		token := createToken("user-123")
+		req := httptest.NewRequest("GET", "/test?token="+token, nil)
+		resp := httptest.NewRecorder()
+		wrappedHandler.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	})
+
+	t.Run("token via Authorization header still works", func(t *testing.T) {
+		c := qt.New(t)
+
+		token := createToken("user-123")
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp := httptest.NewRecorder()
+		wrappedHandler.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+	})
 }
 
 func TestRequireAuth(t *testing.T) {
