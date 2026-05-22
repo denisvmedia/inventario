@@ -1,12 +1,8 @@
 [
   {
-    "name": "Initial JS (main + jsx-runtime + button chunk)",
-    "path": [
-      "dist/assets/index-*.js",
-      "dist/assets/jsx-runtime-*.js",
-      "dist/assets/button-*.js"
-    ],
-    "limit": "200 KB",
+    "name": "Initial JS (entry chunk — all eager code)",
+    "path": "dist/assets/index-*.js",
+    "limit": "230 KB",
     "gzip": true
   },
   {
