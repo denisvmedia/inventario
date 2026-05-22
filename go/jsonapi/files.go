@@ -230,12 +230,14 @@ func (fr *FileRequest) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, fr, fields...)
 }
 
-// FileRequestData contains the attributes for creating/updating a file.
+// FileRequestData contains the attributes for creating a file entity.
+// It is metadata-only: the blob path is never accepted from the client.
+// The physical blob key is populated server-side by the upload flow
+// (/uploads/file). See updateFile for the separate update request struct.
 type FileRequestData struct {
 	Title            string   `json:"title"`
 	Description      string   `json:"description"`
 	Tags             []string `json:"tags"`
-	Path             string   `json:"path,omitempty"`               // Only for updates
 	LinkedEntityType string   `json:"linked_entity_type,omitempty"` // commodity, export, or empty
 	LinkedEntityID   string   `json:"linked_entity_id,omitempty"`   // ID of linked entity
 	LinkedEntityMeta string   `json:"linked_entity_meta,omitempty"` // metadata about the link

@@ -324,9 +324,15 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 		LinkedEntityMeta: input.Data.Attributes.LinkedEntityMeta,
 		CreatedAt:        now,
 		UpdatedAt:        now,
+		// The blob Path/OriginalPath are intentionally left empty here.
+		// This is a metadata-only create endpoint; the physical blob key
+		// is populated server-side by the upload flow (/uploads/file)
+		// once a real blob exists. A client-supplied path must never be
+		// honored — it would let a caller point a row in their own tenant
+		// at another tenant's blob key in the flat blob namespace (#1779).
 		File: &models.File{
-			Path:         input.Data.Attributes.Path,
-			OriginalPath: input.Data.Attributes.Path,
+			Path:         "",
+			OriginalPath: "",
 			Ext:          "",
 			MIMEType:     "",
 		},
