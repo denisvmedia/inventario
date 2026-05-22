@@ -193,11 +193,15 @@ func TestJWTMiddleware(t *testing.T) {
 			expectedStatus: http.StatusUnauthorized,
 		},
 		{
+			// token_type=access is set so the token clears the #1778
+			// token-type gate and the 401 is genuinely attributable to the
+			// missing user_id claim — the branch this case is meant to cover.
 			name: "token without user_id claim",
 			setupRequest: func(req *http.Request) {
 				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-					"role": "user",
-					"exp":  time.Now().Add(24 * time.Hour).Unix(),
+					"role":       "user",
+					"token_type": "access",
+					"exp":        time.Now().Add(24 * time.Hour).Unix(),
 				})
 				tokenString, _ := token.SignedString(jwtSecret)
 				req.Header.Set("Authorization", "Bearer "+tokenString)
