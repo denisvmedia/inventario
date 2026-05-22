@@ -5,7 +5,7 @@ import {
   createExport,
   createRestore,
   deleteExport,
-  exportDownloadPath,
+  fetchExportDownloadUrl,
   getExport,
   getRestore,
   importBackup,
@@ -266,17 +266,26 @@ describe("features/export/api", () => {
     expect(isRestoreTerminal("pending")).toBe(false)
   })
 
-  it("exportDownloadPath builds the absolute /api/v1/g/<slug>/ download URL", () => {
-    expect(exportDownloadPath("e1", "household", null)).toBe(
-      "/api/v1/g/household/exports/e1/download"
+  it("fetchExportDownloadUrl GETs /exports/:id/signed-url and returns attributes.url", async () => {
+    server.use(
+      http.get(apiUrl("/g/g1/exports/e1/signed-url"), () =>
+        HttpResponse.json({
+          id: "f1",
+          type: "urls",
+          attributes: { url: "/api/v1/files/download/files/f1?sig=abc&exp=123&uid=u&fid=f1" },
+        })
+      )
     )
+    const url = await fetchExportDownloadUrl("g1", "e1")
+    expect(url).toBe("/api/v1/files/download/files/f1?sig=abc&exp=123&uid=u&fid=f1")
   })
 
-  it("exportDownloadPath appends the access token as ?token= for <a href> downloads", () => {
-    // The BE accepts JWT via Authorization or ?token=; <a href> doesn't
-    // send Authorization, so the wrapper has to attach the token.
-    expect(exportDownloadPath("e1", "household", "tok-abc")).toBe(
-      "/api/v1/g/household/exports/e1/download?token=tok-abc"
+  it("fetchExportDownloadUrl throws when the signed-url response has no attributes.url", async () => {
+    server.use(
+      http.get(apiUrl("/g/g1/exports/e1/signed-url"), () =>
+        HttpResponse.json({ id: "f1", type: "urls", attributes: {} })
+      )
     )
+    await expect(fetchExportDownloadUrl("g1", "e1")).rejects.toThrow(/attributes\.url/)
   })
 })

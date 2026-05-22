@@ -37,6 +37,7 @@
   "errors": {
     "createFailed": "Could not create export: {{error}}",
     "deleteFailed": "Could not delete export: {{error}}",
+    "downloadFailed": "Could not download export: {{error}}",
     "importFailed": "Could not import backup: {{error}}",
     "loadFailed": "Could not load exports: {{error}}",
     "restoreCreateFailed": "Could not start restore: {{error}}",

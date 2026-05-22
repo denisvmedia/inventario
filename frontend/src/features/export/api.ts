@@ -1,9 +1,7 @@
 // Pure data-layer functions for the exports / imports / restores feature
 // slice. Hooks live in `./hooks.ts`. Backed by the `/exports`, `/exports/{id}`,
-// `/exports/{id}/restores`, `/exports/import` and `/uploads/restores` surfaces.
-import { useMemo } from "react"
-
-import { getAccessToken } from "@/lib/auth-storage"
+// `/exports/{id}/restores`, `/exports/{id}/signed-url`, `/exports/import` and
+// `/uploads/restores` surfaces.
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -170,30 +168,30 @@ export async function deleteExport(id: string): Promise<void> {
   await http.del<void>(`/exports/${encodeURIComponent(id)}`)
 }
 
-// Internal builder. The BE accepts JWT either as `Authorization: Bearer
-// …` or as `?token=…` (see go/apiserver/jwt_middleware.go). Plain
-// `<a href>` clicks do not send Authorization (the access token lives
-// in localStorage), so we append the token as a query param so the
-// browser's native download UX still works. The token leaks into
-// referer / browser history — acceptable for short-lived JWTs but
-// callers must not surface this URL outside of the download CTA.
-export function exportDownloadPath(id: string, slug: string, accessToken: string | null): string {
-  const path = `/api/v1/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(id)}/download`
-  if (!accessToken) return path
-  return `${path}?token=${encodeURIComponent(accessToken)}`
-}
+// Downloads no longer put a JWT in the URL (#1780). Instead we ask the BE
+// to mint a short-lived HMAC-signed, app-absolute download URL via an
+// authenticated request; the browser then navigates to that signed URL,
+// which streams the file with `Content-Disposition: attachment`. No
+// session token ever appears in referer / history / proxy logs.
+type SignedFileURLResponse = Schema<"jsonapi.SignedFileURLResponse">
 
-// React hook variant that pulls the current access token from storage.
-// Returns null when either the id or slug is missing so callers can
-// gate the download CTA on a usable href.
-export function useExportDownloadHref(
-  id: string | undefined,
-  slug: string | undefined
-): string | null {
-  return useMemo(() => {
-    if (!id || !slug) return null
-    return exportDownloadPath(id, slug, getAccessToken())
-  }, [id, slug])
+// fetchExportDownloadUrl performs an authenticated GET to mint a
+// short-lived signed download URL for a completed export. The returned
+// string is an app-absolute URL (`/api/v1/...`) ready to navigate to.
+// It is a GET because minting the URL is side-effect-free — and because
+// the group-scoped write gate is admin-only for non-GET methods, so a
+// GET keeps export downloads available to every group member.
+// Throws on a malformed response or a BE error (404 when the export is
+// deleted, not completed, or has no backing file entity).
+export async function fetchExportDownloadUrl(slug: string, id: string): Promise<string> {
+  const body = await http.get<SignedFileURLResponse>(
+    `/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(id)}/signed-url`
+  )
+  const url = body.attributes?.url
+  if (!url) {
+    throw new Error("Malformed signed-url response: missing attributes.url")
+  }
+  return url
 }
 
 export interface UploadRestoreFileResult {

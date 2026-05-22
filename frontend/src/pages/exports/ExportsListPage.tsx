@@ -179,7 +179,6 @@ export function ExportsListPage() {
               <ExportRow
                 export={exp}
                 detailHref={exportUrl(slug, exp.id)}
-                groupSlug={slug}
                 onDelete={() => onDelete(exp)}
                 onRestore={migrationLock.locked ? undefined : () => setRestoreTarget(exp)}
               />

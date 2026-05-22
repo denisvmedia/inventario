@@ -13,14 +13,16 @@ import { Link } from "react-router-dom"
 import { ExportStatusBadge } from "@/components/exports/ExportStatusBadge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { type Export, isExportTerminal, useExportDownloadHref } from "@/features/export/api"
+import { type Export, isExportTerminal } from "@/features/export/api"
+import { useDownloadExport } from "@/features/export/hooks"
+import { useAppToast } from "@/hooks/useAppToast"
 import { formatBytes, formatDateTime } from "@/lib/intl"
+import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 
 export interface ExportRowProps {
   export: Export
   detailHref: string
-  groupSlug: string
   onDelete: () => void
   onRestore?: () => void
 }
@@ -33,23 +35,25 @@ function totalItemCount(e: Export): number {
 
 // Mock-spec row: tinted leading icon tile + (title row + date + stats
 // line + error footer) + hover-revealed action cluster. The download CTA
-// stays an `<a>` so the browser streams the JWT-protected file natively;
-// the token is appended as `?token=…` (BE accepts that in addition to
-// Authorization headers).
-export function ExportRow({
-  export: exp,
-  detailHref,
-  groupSlug,
-  onDelete,
-  onRestore,
-}: ExportRowProps) {
+// is a real button: clicking it mints a short-lived server-signed URL
+// (no JWT in the URL, #1780) and triggers a native browser download.
+export function ExportRow({ export: exp, detailHref, onDelete, onRestore }: ExportRowProps) {
   const { t } = useTranslation(["exports"])
+  const toast = useAppToast()
+  const downloadMutation = useDownloadExport()
   const isDeleted = !!exp.deleted_at
   const isTerminal = isExportTerminal(exp.status)
   const isCompleted = exp.status === "completed"
   const isFailed = exp.status === "failed"
   const isInFlight = exp.status === "in_progress" || exp.status === "pending"
-  const downloadHref = useExportDownloadHref(exp.id, groupSlug)
+
+  async function onDownload() {
+    try {
+      await downloadMutation.mutateAsync(exp.id)
+    } catch (err) {
+      toast.error(t("exports:errors.downloadFailed", { error: parseServerError(err, String(err)) }))
+    }
+  }
   const scopeLabel =
     exp.type === "selected_items"
       ? t("exports:detail.scopeSelectedItems", { count: exp.selected_items?.length ?? 0 })
@@ -171,16 +175,20 @@ export function ExportRow({
             </Button>
           )}
           <Button
-            asChild
+            type="button"
             size="sm"
             variant="outline"
-            aria-disabled={!downloadHref}
-            className={cn("flex-1 gap-1.5 sm:flex-none", !downloadHref && "pointer-events-none")}
+            onClick={onDownload}
+            disabled={downloadMutation.isPending}
+            data-testid={`export-row-${exp.id}-download`}
+            className="flex-1 gap-1.5 sm:flex-none"
           >
-            <a href={downloadHref ?? "#"} data-testid={`export-row-${exp.id}-download`}>
+            {downloadMutation.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
               <Download className="size-3.5" aria-hidden="true" />
-              {t("exports:actions.download")}
-            </a>
+            )}
+            {t("exports:actions.download")}
           </Button>
         </div>
       )}

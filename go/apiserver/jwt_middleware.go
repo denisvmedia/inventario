@@ -17,22 +17,21 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
-// extractTokenFromRequest extracts JWT token from Authorization header or query parameter
+// extractTokenFromRequest extracts the JWT token from the Authorization
+// Bearer header. The token is taken ONLY from the header — a previously
+// supported `?token=` query-parameter fallback was removed (#1780) because
+// full-scope access tokens in URLs leak via Referer headers, proxy/access
+// logs and browser history. Genuine browser file/thumbnail downloads use
+// HMAC-signed URLs (SignedURLMiddleware), not JWTs.
 func extractTokenFromRequest(r *http.Request) (string, error) {
-	// Try to get token from Authorization header first
 	authHeader := r.Header.Get("Authorization")
-	if authHeader != "" {
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader {
-			return "", fmt.Errorf("bearer token required")
-		}
-		return tokenString, nil
+	if authHeader == "" {
+		return "", fmt.Errorf("authorization header required")
 	}
 
-	// If no Authorization header, try to get token from query parameter
-	tokenString := r.URL.Query().Get("token")
-	if tokenString == "" {
-		return "", fmt.Errorf("authorization header or token query parameter required")
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == authHeader {
+		return "", fmt.Errorf("bearer token required")
 	}
 	return tokenString, nil
 }
@@ -88,7 +87,7 @@ func validateJWTToken(ctx context.Context, tokenString string, jwtSecret []byte,
 	//
 	// Everything else — a missing token_type, the mfa_challenge type, or
 	// any future special-purpose JWT — is rejected, which makes
-	// JWTMiddleware / FileAccessMiddleware respond 401.
+	// JWTMiddleware respond 401.
 	tokenType, _ := claims["token_type"].(string)
 	imp, _ := claims["imp"].(bool)
 	if tokenType != accessTokenType && !imp {
@@ -230,11 +229,5 @@ func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry, blackli
 
 // RequireAuth is an alias for JWTMiddleware.
 func RequireAuth(jwtSecret []byte, userRegistry registry.UserRegistry, blacklist services.TokenBlacklister) func(http.Handler) http.Handler {
-	return JWTMiddleware(jwtSecret, userRegistry, blacklist)
-}
-
-// FileAccessMiddleware creates middleware specifically for file access that supports both
-// Authorization header and query parameter authentication for direct browser access.
-func FileAccessMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry, blacklist services.TokenBlacklister) func(http.Handler) http.Handler {
 	return JWTMiddleware(jwtSecret, userRegistry, blacklist)
 }

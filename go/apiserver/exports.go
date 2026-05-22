@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -31,8 +32,9 @@ func exportFromContext(ctx context.Context) *models.Export {
 }
 
 type exportsAPI struct {
-	uploadLocation string
-	entityService  *services.EntityService
+	uploadLocation     string
+	entityService      *services.EntityService
+	fileSigningService *services.FileSigningService
 }
 
 // listExports lists all exports.
@@ -311,6 +313,101 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// generateExportSignedURL returns a signed URL for downloading an export file.
+// @Summary Get signed URL for export download
+// @Description Return a secure HMAC-signed URL for downloading a completed
+// @Description export file without putting a JWT in the URL. Minting the URL
+// @Description is side-effect-free, so this is a GET available to any group
+// @Description member (the same audience as the export download route). The
+// @Description signed URL targets the file-download route and is consumed by
+// @Description the frontend export-download CTA.
+// @Tags exports
+// @Produce json-api
+// @Param groupSlug path string true "Group slug"
+// @Param id path string true "Export ID"
+// @Success 200 {object} jsonapi.SignedFileURLResponse "Signed URL"
+// @Failure 404 {object} jsonapi.Errors "Not Found"
+// @Router /g/{groupSlug}/exports/{id}/signed-url [get].
+func (api *exportsAPI) generateExportSignedURL(w http.ResponseWriter, r *http.Request) {
+	// Get user-aware settings registry from context
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	exp := exportFromContext(r.Context())
+	if exp == nil {
+		unprocessableEntityError(w, r, errors.New("export not found in context"))
+		return
+	}
+
+	// Check if export is deleted. Render a JSON:API 404 (not http.NotFound's
+	// plain-text body) so the frontend's JSON http wrapper parses a
+	// structured error instead of throwing on a non-JSON response.
+	if exp.IsDeleted() {
+		renderEntityError(w, r, ErrNotFound)
+		return
+	}
+
+	// Only completed exports can be downloaded
+	if exp.Status != models.ExportStatusCompleted {
+		renderEntityError(w, r, ErrNotFound)
+		return
+	}
+
+	// Legacy FilePath-only exports have no FileEntity to sign. Completed
+	// exports produced by the current export service always set FileID
+	// (see go/backup/export/service.go), so a nil FileID here is an old
+	// record that simply cannot be served via a signed URL.
+	if exp.FileID == nil || *exp.FileID == "" {
+		renderEntityError(w, r, ErrNotFound)
+		return
+	}
+
+	user := GetUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "User context required", http.StatusInternalServerError)
+		return
+	}
+
+	// Load the file entity backing the export
+	file, err := registrySet.FileRegistry.Get(r.Context(), *exp.FileID)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	if file.File == nil {
+		renderEntityError(w, r, ErrNotFound)
+		return
+	}
+
+	// GenerateSignedURL requires a non-empty extension purely as a sanity
+	// check — it never appears in the signed path, which keys on the file
+	// ID. Fall back to the original path's extension, then to "xml" (export
+	// artifacts are XML), so minting never 500s on a FileEntity whose Ext
+	// happens to be empty.
+	fileExt := strings.TrimPrefix(file.Ext, ".")
+	if fileExt == "" {
+		fileExt = strings.TrimPrefix(path.Ext(file.OriginalPath), ".")
+	}
+	if fileExt == "" {
+		fileExt = "xml"
+	}
+
+	signedURL, err := api.fileSigningService.GenerateSignedURL(file.ID, fileExt, user.ID)
+	if err != nil {
+		internalServerError(w, r, errxtrace.Wrap("failed to generate signed URL", err))
+		return
+	}
+
+	if err := render.Render(w, r, jsonapi.NewSignedFileURLResponse(file.ID, signedURL)); err != nil {
+		internalServerError(w, r, errxtrace.Wrap("failed to render response", err))
+		return
+	}
+}
+
 // importExport imports an XML export file and creates an export record
 // @Summary Import XML export
 // @Description Import an uploaded XML export file and create an export record
@@ -411,8 +508,9 @@ func exportCtx() func(next http.Handler) http.Handler {
 // Exports sets up the exports API routes.
 func Exports(params Params, restoreStatus RestoreStatusQuerier) func(r chi.Router) {
 	api := &exportsAPI{
-		uploadLocation: params.UploadLocation,
-		entityService:  params.EntityService,
+		uploadLocation:     params.UploadLocation,
+		entityService:      params.EntityService,
+		fileSigningService: services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 	}
 
 	return func(r chi.Router) {
@@ -425,6 +523,7 @@ func Exports(params Params, restoreStatus RestoreStatusQuerier) func(r chi.Route
 			r.Get("/", api.apiGetExport)
 			r.Delete("/", api.deleteExport)
 			r.Get("/download", api.downloadExport)
+			r.Get("/signed-url", api.generateExportSignedURL)
 			r.Route("/restores", ExportRestores(restoreStatus, params.FeatureCurrencyMigration))
 		})
 	}
