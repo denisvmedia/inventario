@@ -424,10 +424,11 @@ func mintAccessTokenForUser(t *testing.T, userID string, iatOffset time.Duration
 	t.Helper()
 	iat := time.Now().Add(iatOffset)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": userID,
-		"jti":     "test-jti-" + userID,
-		"iat":     iat.Unix(),
-		"exp":     iat.Add(24 * time.Hour).Unix(),
+		"user_id":    userID,
+		"jti":        "test-jti-" + userID,
+		"token_type": "access",
+		"iat":        iat.Unix(),
+		"exp":        iat.Add(24 * time.Hour).Unix(),
 	})
 	signed, err := token.SignedString(testJWTSecret)
 	if err != nil {
@@ -578,6 +579,12 @@ func createTestJWTTokenWithClaims(t *testing.T, claims jwt.MapClaims) string {
 	t.Helper()
 	if _, ok := claims["exp"]; !ok {
 		claims["exp"] = time.Now().Add(24 * time.Hour).Unix()
+	}
+	// Default to an access token so the forged token clears the
+	// token-type enforcement in validateJWTToken (#1778). Callers can
+	// override token_type explicitly to test the rejection path.
+	if _, ok := claims["token_type"]; !ok {
+		claims["token_type"] = "access"
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString(testJWTSecret)

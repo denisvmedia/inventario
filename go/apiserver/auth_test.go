@@ -948,9 +948,10 @@ func TestAuthAPI_GetCurrentUser(t *testing.T) {
 
 		// Create valid JWT token
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"user_id": "user-123",
-			"role":    "user",
-			"exp":     time.Now().Add(24 * time.Hour).Unix(),
+			"user_id":    "user-123",
+			"role":       "user",
+			"token_type": "access",
+			"exp":        time.Now().Add(24 * time.Hour).Unix(),
 		})
 		tokenString, err := token.SignedString(jwtSecret)
 		c.Assert(err, qt.IsNil)
@@ -1012,9 +1013,10 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 		t.Helper()
 		c := qt.New(t)
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"user_id": "user-123",
-			"role":    "user",
-			"exp":     time.Now().Add(24 * time.Hour).Unix(),
+			"user_id":    "user-123",
+			"role":       "user",
+			"token_type": "access",
+			"exp":        time.Now().Add(24 * time.Hour).Unix(),
 		})
 		tokenString, err := token.SignedString(jwtSecret)
 		c.Assert(err, qt.IsNil)
@@ -1428,10 +1430,11 @@ func TestAuthAPI_ChangePassword(t *testing.T) {
 		t.Helper()
 		c := qt.New(t)
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"user_id": "user-123",
-			"role":    "user",
-			"exp":     time.Now().Add(24 * time.Hour).Unix(),
-			"jti":     "test-change-pw-jti",
+			"user_id":    "user-123",
+			"role":       "user",
+			"token_type": "access",
+			"exp":        time.Now().Add(24 * time.Hour).Unix(),
+			"jti":        "test-change-pw-jti",
 		})
 		tokenString, err := token.SignedString(jwtSecret)
 		c.Assert(err, qt.IsNil)
@@ -1631,11 +1634,12 @@ func TestCheckTokenBlacklist_IatBased(t *testing.T) {
 		t.Helper()
 		c := qt.New(t)
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"user_id": "user-iat-test",
-			"role":    "user",
-			"exp":     time.Now().Add(24 * time.Hour).Unix(),
-			"iat":     iat.Unix(),
-			"jti":     "jti-" + iat.String(),
+			"user_id":    "user-iat-test",
+			"role":       "user",
+			"token_type": "access",
+			"exp":        time.Now().Add(24 * time.Hour).Unix(),
+			"iat":        iat.Unix(),
+			"jti":        "jti-" + iat.String(),
 		})
 		tokenString, err := token.SignedString(jwtSecret)
 		c.Assert(err, qt.IsNil)
