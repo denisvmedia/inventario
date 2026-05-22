@@ -9349,8 +9349,6 @@ export type components = {
             linked_entity_meta?: string;
             /** @description commodity, export, or empty */
             linked_entity_type?: string;
-            /** @description Only for updates */
-            path?: string;
             tags?: string[];
             title?: string;
         };
