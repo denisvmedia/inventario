@@ -47,6 +47,7 @@ func makeImpersonationToken(c *qt.C, cl impersonateClaims) string {
 		"impersonated_by": cl.adminUserID,
 		"imp":             true,
 		"is_system_admin": false,
+		"token_type":      "access",
 		"iat":             time.Now().Add(-time.Minute).Unix(),
 		"exp":             cl.expiresAt.Unix(),
 	})

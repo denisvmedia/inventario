@@ -633,8 +633,12 @@ func (api *adminImpersonationAPI) signImpersonationToken(target *models.User, ad
 		"impersonated_by": adminID,
 		"imp":             true,
 		"is_system_admin": false,
-		"iat":             issuedAt.Unix(),
-		"exp":             expiresAt.Unix(),
+		// The impersonation token is consumed on the standard access path
+		// by JWTMiddleware, so it must carry token_type=access like any
+		// other access token (#1778). The imp=true claim is unchanged.
+		"token_type": accessTokenType,
+		"iat":        issuedAt.Unix(),
+		"exp":        expiresAt.Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(api.jwtSecret)
@@ -650,6 +654,7 @@ func (api *adminImpersonationAPI) signAdminAccessToken(admin *models.User, rti s
 		"jti":             uuid.New().String(),
 		"user_id":         admin.ID,
 		"is_system_admin": admin.IsSystemAdmin,
+		"token_type":      accessTokenType,
 		"iat":             now.Unix(),
 		"exp":             now.Add(accessTokenExpiration).Unix(),
 	}

@@ -27,6 +27,12 @@ import (
 const (
 	// accessTokenExpiration defines how long access JWT tokens remain valid.
 	accessTokenExpiration = 15 * time.Minute
+	// accessTokenType is the "token_type" claim stamped into every access
+	// JWT (regular, restored-admin, and impersonation). validateJWTToken
+	// only admits tokens carrying this type, so special-purpose JWTs signed
+	// with the same secret — notably the step-1 mfa_token (mfaTokenType) —
+	// cannot be replayed on the authenticated access path (#1778).
+	accessTokenType = "access"
 	// refreshTokenExpiration defines how long refresh tokens remain valid.
 	refreshTokenExpiration = 30 * 24 * time.Hour
 	// refreshTokenCookieName is the name of the httpOnly cookie carrying the refresh token.
@@ -1197,6 +1203,7 @@ func (api *AuthAPI) issueAccessToken(user *models.User, rti string) (string, tim
 		"jti":             uuid.New().String(),
 		"user_id":         user.ID,
 		"is_system_admin": user.IsSystemAdmin,
+		"token_type":      accessTokenType,
 		"exp":             expiresAt.Unix(),
 		"iat":             time.Now().Unix(),
 	}

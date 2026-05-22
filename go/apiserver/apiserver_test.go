@@ -93,11 +93,14 @@ func getRegistrySetFromParams(params apiserver.Params, user *models.User) *regis
 	return must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
 }
 
-// createTestJWTToken creates a JWT token for testing
+// createTestJWTToken creates an access JWT token for testing. It carries
+// token_type=access so it survives the token-type enforcement in
+// validateJWTToken (#1778), matching real access tokens.
 func createTestJWTToken(userID string) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": userID,
-		"exp":     time.Now().Add(24 * time.Hour).Unix(),
+		"user_id":    userID,
+		"token_type": "access",
+		"exp":        time.Now().Add(24 * time.Hour).Unix(),
 	})
 
 	tokenString, err := token.SignedString(testJWTSecret)

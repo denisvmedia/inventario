@@ -54,8 +54,9 @@ func makeCSRFTestUser(t *testing.T, jwtSecret []byte) (*models.User, string) {
 		IsActive: true,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": user.ID,
-		"exp":     time.Now().Add(time.Hour).Unix(),
+		"user_id":    user.ID,
+		"token_type": "access",
+		"exp":        time.Now().Add(time.Hour).Unix(),
 	})
 	tokenString, err := token.SignedString(jwtSecret)
 	if err != nil {

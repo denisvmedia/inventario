@@ -45,12 +45,15 @@ func TestJWTMiddleware(t *testing.T) {
 		},
 	}
 
-	// Helper function to create a valid JWT token
+	// Helper function to create a valid JWT token. Carries token_type=access
+	// to match real access tokens — validateJWTToken rejects tokens without
+	// it (#1778).
 	createToken := func(userID string) string {
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"user_id": userID,
-			"role":    "user",
-			"exp":     time.Now().Add(24 * time.Hour).Unix(),
+			"user_id":    userID,
+			"role":       "user",
+			"token_type": "access",
+			"exp":        time.Now().Add(24 * time.Hour).Unix(),
 		})
 		tokenString, _ := token.SignedString(jwtSecret)
 		return tokenString
@@ -59,9 +62,10 @@ func TestJWTMiddleware(t *testing.T) {
 	// Helper function to create an expired JWT token
 	createExpiredToken := func(userID string) string {
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"user_id": userID,
-			"role":    "user",
-			"exp":     time.Now().Add(-1 * time.Hour).Unix(), // Expired 1 hour ago
+			"user_id":    userID,
+			"role":       "user",
+			"token_type": "access",
+			"exp":        time.Now().Add(-1 * time.Hour).Unix(), // Expired 1 hour ago
 		})
 		tokenString, _ := token.SignedString(jwtSecret)
 		return tokenString
@@ -85,6 +89,49 @@ func TestJWTMiddleware(t *testing.T) {
 				c.Assert(user, qt.IsNotNil)
 				c.Assert(user.ID, qt.Equals, "user-123")
 				c.Assert(user.Email, qt.Equals, "test@example.com")
+			},
+		},
+		{
+			// #1778: an impersonation token issued before the token_type
+			// change lacks the claim but carries imp=true. The explicit
+			// imp allowance keeps such in-flight tokens working across a
+			// deploy.
+			name: "legacy impersonation token (imp=true, no token_type)",
+			setupRequest: func(req *http.Request) {
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+					"user_id": "user-123",
+					"imp":     true,
+					"exp":     time.Now().Add(24 * time.Hour).Unix(),
+				})
+				tokenString, _ := token.SignedString(jwtSecret)
+				req.Header.Set("Authorization", "Bearer "+tokenString)
+			},
+			checkContext: func(t *testing.T, r *http.Request) {
+				c := qt.New(t)
+				user := appctx.UserFromContext(r.Context())
+				c.Assert(user, qt.IsNotNil)
+				c.Assert(user.ID, qt.Equals, "user-123")
+			},
+		},
+		{
+			// Steady-state impersonation token: carries both imp=true and
+			// token_type=access. Accepted via the token_type check.
+			name: "impersonation token with imp=true and token_type=access",
+			setupRequest: func(req *http.Request) {
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+					"user_id":    "user-123",
+					"imp":        true,
+					"token_type": "access",
+					"exp":        time.Now().Add(24 * time.Hour).Unix(),
+				})
+				tokenString, _ := token.SignedString(jwtSecret)
+				req.Header.Set("Authorization", "Bearer "+tokenString)
+			},
+			checkContext: func(t *testing.T, r *http.Request) {
+				c := qt.New(t)
+				user := appctx.UserFromContext(r.Context())
+				c.Assert(user, qt.IsNotNil)
+				c.Assert(user.ID, qt.Equals, "user-123")
 			},
 		},
 	}
@@ -172,6 +219,43 @@ func TestJWTMiddleware(t *testing.T) {
 				req.Header.Set("Authorization", "Bearer "+token)
 			},
 			expectedStatus: http.StatusForbidden,
+		},
+		{
+			// #1778 regression test: the step-1 mfa_token is signed with
+			// the same secret as access tokens. Replaying it verbatim as a
+			// Bearer token must be rejected — otherwise an attacker with
+			// only username+password (no TOTP code) bypasses the second
+			// factor for the token's ~5-minute TTL.
+			name: "mfa_token replayed as access token is rejected",
+			setupRequest: func(req *http.Request) {
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+					"jti":        "mfa-jti",
+					"user_id":    "user-123",
+					"tenant_id":  "test-tenant-id",
+					"token_type": "mfa_challenge",
+					"exp":        time.Now().Add(5 * time.Minute).Unix(),
+					"iat":        time.Now().Unix(),
+				})
+				tokenString, _ := token.SignedString(jwtSecret)
+				req.Header.Set("Authorization", "Bearer "+tokenString)
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			// A token missing the token_type claim entirely is rejected:
+			// genuine access tokens always stamp it, so its absence means
+			// the token was not minted for the access path (#1778).
+			name: "token without token_type claim is rejected",
+			setupRequest: func(req *http.Request) {
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+					"user_id": "user-123",
+					"role":    "user",
+					"exp":     time.Now().Add(24 * time.Hour).Unix(),
+				})
+				tokenString, _ := token.SignedString(jwtSecret)
+				req.Header.Set("Authorization", "Bearer "+tokenString)
+			},
+			expectedStatus: http.StatusUnauthorized,
 		},
 	}
 
