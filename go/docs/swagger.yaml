@@ -6953,6 +6953,40 @@ paths:
       summary: Get export restore operation
       tags:
       - exports
+  /g/{groupSlug}/exports/{id}/signed-url:
+    get:
+      description: |-
+        Return a secure HMAC-signed URL for downloading a completed
+        export file without putting a JWT in the URL. Minting the URL
+        is side-effect-free, so this is a GET available to any group
+        member (the same audience as the export download route). The
+        signed URL targets the file-download route and is consumed by
+        the frontend export-download CTA.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Signed URL
+          schema:
+            $ref: '#/definitions/jsonapi.SignedFileURLResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get signed URL for export download
+      tags:
+      - exports
   /g/{groupSlug}/exports/import:
     post:
       consumes:

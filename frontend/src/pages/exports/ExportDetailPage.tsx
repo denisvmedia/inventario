@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, RotateCcw, Trash2 } from "lucide-react"
+import { ArrowLeft, Download, Loader2, RotateCcw, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Link, useNavigate, useParams } from "react-router-dom"
 
@@ -8,8 +8,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { type Export, isExportTerminal, useExportDownloadHref } from "@/features/export/api"
-import { useDeleteExport, useExport, useExportRestores } from "@/features/export/hooks"
+import { type Export } from "@/features/export/api"
+import {
+  useDeleteExport,
+  useDownloadExport,
+  useExport,
+  useExportRestores,
+} from "@/features/export/hooks"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -32,11 +37,10 @@ export function ExportDetailPage() {
   const exportQuery = useExport(exportId, { enabled: groupReady && !!exportId })
   const restoresQuery = useExportRestores(exportId, { enabled: groupReady && !!exportId })
   const deleteMutation = useDeleteExport()
-  const downloadHref = useExportDownloadHref(exportId, slug)
+  const downloadMutation = useDownloadExport()
 
   const exp = exportQuery.data
   const isCompleted = exp?.status === "completed"
-  const isTerminal = isExportTerminal(exp?.status)
   const isDeleted = !!exp?.deleted_at
 
   async function onDelete() {
@@ -58,6 +62,15 @@ export function ExportDetailPage() {
       // restore in progress") instead of the bare HTTP wrapper.
       const message = parseServerError(err, String(err))
       toast.error(t("exports:errors.deleteFailed", { error: message }))
+    }
+  }
+
+  async function onDownload() {
+    if (!exp) return
+    try {
+      await downloadMutation.mutateAsync(exp.id)
+    } catch (err) {
+      toast.error(t("exports:errors.downloadFailed", { error: parseServerError(err, String(err)) }))
     }
   }
 
@@ -112,15 +125,18 @@ export function ExportDetailPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
-            asChild
+            type="button"
             variant="outline"
-            disabled={!isTerminal || !isCompleted || isDeleted || !downloadHref}
-            aria-disabled={!isTerminal || !isCompleted || isDeleted || !downloadHref}
+            onClick={onDownload}
+            disabled={!isCompleted || isDeleted || downloadMutation.isPending}
+            data-testid="export-detail-download"
           >
-            <a href={downloadHref ?? "#"} data-testid="export-detail-download">
+            {downloadMutation.isPending ? (
+              <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" />
+            ) : (
               <Download className="mr-1.5 size-4" aria-hidden="true" />
-              {t("exports:actions.download")}
-            </a>
+            )}
+            {t("exports:actions.download")}
           </Button>
           <Button
             asChild

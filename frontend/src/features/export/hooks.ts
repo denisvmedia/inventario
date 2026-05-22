@@ -13,6 +13,7 @@ import {
   createExport,
   createRestore,
   deleteExport,
+  fetchExportDownloadUrl,
   getExport,
   getRestore,
   importBackup,
@@ -164,6 +165,32 @@ export function useImportBackup() {
   return useMutation<Export, Error, ImportBackupRequest>({
     mutationFn: (req) => importBackup(req),
     onSuccess: () => invalidate.all(),
+  })
+}
+
+// Triggers a native browser download of a signed URL. The signed-url
+// response carries `Content-Disposition: attachment`, so navigating a
+// transient anchor to it streams the file without unloading the SPA.
+function triggerBrowserDownload(url: string): void {
+  const a = document.createElement("a")
+  a.href = url
+  a.rel = "noopener"
+  a.download = ""
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+// useDownloadExport mints a short-lived signed download URL for a
+// completed export (authenticated request — no JWT in the URL, #1780)
+// and triggers a native browser download of it. No cache invalidation:
+// minting a signed URL does not mutate any exports/restores state.
+export function useDownloadExport() {
+  const { currentGroup } = useCurrentGroup()
+  const slug = currentGroup?.slug ?? ""
+  return useMutation<string, Error, string>({
+    mutationFn: (exportId) => fetchExportDownloadUrl(slug, exportId),
+    onSuccess: (url) => triggerBrowserDownload(url),
   })
 }
 

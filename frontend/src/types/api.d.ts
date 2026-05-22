@@ -4672,6 +4672,64 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/exports/{id}/signed-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get signed URL for export download
+         * @description Return a secure HMAC-signed URL for downloading a completed
+         *     export file without putting a JWT in the URL. Minting the URL
+         *     is side-effect-free, so this is a GET available to any group
+         *     member (the same audience as the export download route). The
+         *     signed URL targets the file-download route and is consumed by
+         *     the frontend export-download CTA.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Export ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Signed URL */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SignedFileURLResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/files": {
         parameters: {
             query?: never;
