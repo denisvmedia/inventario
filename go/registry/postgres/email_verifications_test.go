@@ -15,8 +15,9 @@ import (
 // newTestEmailVerification builds a valid EmailVerification for the postgres
 // backend. The user/tenant IDs must reference real rows (FK constraints
 // fk_email_verification_user / fk_email_verification_tenant), and token must be
-// unique per record (UNIQUE index). UUID is left empty so the DB default
-// (gen_random_uuid()) fills it.
+// unique per record (UNIQUE index). UUID is left empty so the registry layer
+// fills it: store.NonRLSRepository.Create generates one server-side, with the
+// DB gen_random_uuid() default as a fallback.
 func newTestEmailVerification(user *models.User, token string) models.EmailVerification {
 	return models.EmailVerification{
 		UserID:    user.ID,
