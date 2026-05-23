@@ -1,0 +1,60 @@
+name: Markdown Lint
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      markdown: ${{ steps.filter.outputs.markdown }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: .github/filters.yml
+
+  markdownlint:
+    name: markdownlint-cli2
+    runs-on: ubuntu-latest
+    needs: changes
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.markdown == 'true' ||
+      needs.changes.outputs.ci == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # Major-version pin keeps CI deterministic while letting dependabot
+      # cleanly bump the action alongside other workflow upgrades.
+      # v23.x ships markdownlint-cli2 v0.22.x (markdownlint v0.40.x), the
+      # same versions developers get from `brew install markdownlint-cli2`.
+      #
+      # `globs: ''` explicitly overrides the action's default
+      # `*.{md,markdown}` (which would only walk the repo root), forcing the
+      # CLI to fall back to the `globs:` field in `.markdownlint-cli2.jsonc`.
+      # The rule set is auto-loaded from `.markdownlint.jsonc`. Both files
+      # live at the repo root and are the single source of truth — running
+      # `markdownlint-cli2` locally with no arguments produces the same
+      # result as this CI job.
+      - name: Run markdownlint-cli2
+        uses: DavidAnson/markdownlint-cli2-action@v23
+        with:
+          globs: ''

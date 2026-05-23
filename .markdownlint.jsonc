@@ -1,0 +1,80 @@
+// Markdownlint rule configuration for the Inventario repository.
+//
+// This file is honored by both `markdownlint-cli2` (used in CI by
+// `.github/workflows/markdown-lint.yml`) and editor integrations such as
+// VS Code's `DavidAnson.vscode-markdownlint` extension.
+//
+// The matching tool config (globs, ignore list) lives in
+// `.markdownlint-cli2.jsonc`. See devdocs/ci/conditional-execution.md for
+// the rationale of running this linter on doc-only PRs.
+//
+// Policy: start deliberately permissive. We disable everything by default
+// and then opt in to the rules that catch real defects with effectively
+// zero false-positive churn on the current corpus (~400 markdown files).
+// Tracked under https://github.com/denisvmedia/inventario/issues/1817.
+// Rules can be added incrementally as the repo's docs are cleaned up.
+{
+  // Disable all rules; we opt in below.
+  "default": false,
+
+  // -- Required by issue #1817 ---------------------------------------------
+
+  // MD001 — heading levels only increment by one at a time
+  // (catches skipping H2 → H4, which usually indicates a copy/paste mistake).
+  "MD001": true,
+
+  // MD009 — no trailing spaces. The classic "two-space line break" is still
+  // permitted via br_spaces: 2 so prose that relies on hard line breaks
+  // doesn't have to be rewritten.
+  "MD009": {
+    "br_spaces": 2,
+    "list_item_empty_lines": false,
+    "strict": false
+  },
+
+  // MD010 — no hard tabs. Code blocks are exempt so embedded Makefiles,
+  // Go snippets, etc. don't have to be reformatted away from their source.
+  "MD010": {
+    "code_blocks": false
+  },
+
+  // MD041 — first line of every file must be a top-level heading.
+  // Front-matter is rare in this repo but allowed via the standard regex.
+  "MD041": {
+    "level": 1,
+    "front_matter_title": "^\\s*title\\s*[:=]"
+  },
+
+  // -- Low-noise, high-signal bug catchers ---------------------------------
+
+  // MD011 — reversed link syntax (e.g. `(text)[url]`); always a typo.
+  "MD011": true,
+
+  // MD018 — missing space after ATX-style hash (e.g. `##foo`); always a typo.
+  "MD018": true,
+
+  // MD019 — multiple spaces after ATX-style hash (e.g. `##  foo`).
+  "MD019": true,
+
+  // MD023 — headings must start at the beginning of the line; indented
+  // headings are almost always an accidental indentation bug.
+  "MD023": true,
+
+  // MD037 — spurious spaces inside emphasis markers (e.g. `* foo *`).
+  "MD037": true,
+
+  // MD038 — spurious spaces inside code spans (e.g. `` ` foo ` ``).
+  "MD038": true,
+
+  // MD039 — spurious spaces inside link text (e.g. `[ foo ](url)`).
+  "MD039": true,
+
+  // MD042 — no empty links (`[text]()` or `[text](#)`); always a defect.
+  "MD042": true,
+
+  // MD045 — images must have alt text. Accessibility floor.
+  "MD045": true,
+
+  // MD047 — files must end with a single trailing newline. POSIX hygiene.
+  "MD047": true
+}
