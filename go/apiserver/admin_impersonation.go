@@ -321,8 +321,8 @@ func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http
 // is NOT an error here — that case yields (claims, nil) and is handled
 // downstream as the 422 "not active" business-rule outcome.
 func (api *adminImpersonationAPI) parseImpersonationEndToken(authHeader string) (jwt.MapClaims, error) {
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader || tokenString == "" {
+	tokenString, ok := parseBearerToken(authHeader)
+	if !ok {
 		return nil, ErrImpersonationTokenInvalid
 	}
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
