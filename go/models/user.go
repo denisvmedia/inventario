@@ -49,6 +49,23 @@ type User struct {
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
+
+	// IsSystemAdmin is a transient wire-only field reflecting the user's
+	// entry in `system_admin_grants` (#1784). It is NEVER persisted on the
+	// users row — the privilege lives in the grant table. Handlers that
+	// emit a /auth/me-style payload (the authenticated user reading their
+	// own identity) populate it from `SystemAdminGrantRegistry.Exists`
+	// before encoding; the FE uses it as an advisory hint to gate sidebar
+	// and route visibility (the backend re-checks via `RequireSystemAdmin`
+	// on every /admin/* request).
+	//
+	// Persistence safety: there is no `//migrator:schema:field` annotation
+	// so the migration generator never re-adds the column, and the `db:"-"`
+	// tag tells sqlx to skip the field in both SELECT and INSERT/UPDATE,
+	// so this stays purely in-memory. A caller that smuggles `true` here
+	// gains nothing — Go authorization paths never read the field; they
+	// all consult the grant registry directly.
+	IsSystemAdmin bool `json:"is_system_admin" db:"-" userinput:"false"`
 }
 
 // PostgreSQL-specific indexes for users

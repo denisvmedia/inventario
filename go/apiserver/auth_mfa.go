@@ -617,6 +617,10 @@ func (api *AuthAPI) issueMFALoginSession(w http.ResponseWriter, r *http.Request,
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
 	api.logAuth(r.Context(), "login_mfa", &user.ID, &user.TenantID, true, r, nil)
 	api.recordLoginEvent(r.Context(), claims.TenantID, user.Email, &user.ID, models.LoginOutcomeOK, r)
+
+	// Stamp the wire-only is_system_admin advisory flag (#1784).
+	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, user)
+
 	writeLoginResponse(w, accessToken, csrfToken, user)
 	return true
 }

@@ -285,6 +285,13 @@ func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http
 	// refresh return a freshly-minted token.
 	csrfToken := generateCSRFToken(r.Context(), api.csrfService, target.ID)
 
+	// Stamp the wire-only is_system_admin advisory flag (#1784). Computed
+	// from the grants table just like everywhere else — the target guard
+	// already refuses to impersonate a system admin, so this will always
+	// be false in practice, but the rule "this field is set from grants,
+	// nowhere else" stays single-sourced.
+	populateUserSystemAdminFlag(r.Context(), api.factorySet.SystemAdminGrantRegistry, target)
+
 	// The impersonation token is set as the active session via the body
 	// (same LoginResponse shape the FE already handles).
 	writeImpersonationLoginResponse(w, tokenString, csrfToken, ttl, target)
@@ -597,6 +604,16 @@ func (api *adminImpersonationAPI) restoreAdminSession(w http.ResponseWriter, r *
 	// the restored admin session must carry a token minted for the admin
 	// or its first mutating request 403s. Mirrors login / refresh.
 	csrfToken := generateCSRFToken(r.Context(), api.csrfService, admin.ID)
+
+	// Stamp the wire-only is_system_admin advisory flag (#1784). The
+	// restored identity is the operator — by definition an admin, but we
+	// still resolve it from grants so the rule "this field is set from
+	// grants, nowhere else" stays single-sourced. If the operator's grant
+	// was revoked WHILE they were impersonating, the FE correctly sees
+	// is_system_admin=false on `end` and renders the non-admin shell;
+	// RequireSystemAdmin will likewise reject any subsequent /admin/*
+	// request.
+	populateUserSystemAdminFlag(r.Context(), api.factorySet.SystemAdminGrantRegistry, admin)
 
 	// The FE swaps the in-memory access token back to the admin's and the
 	// operator is whole again.

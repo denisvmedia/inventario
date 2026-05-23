@@ -302,6 +302,11 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// Generate a CSRF token for this session.
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
 
+	// Stamp the wire-only is_system_admin advisory flag (#1784) so the
+	// FE can render the admin chrome on first paint without an extra
+	// /auth/me round-trip. Best-effort — see populateUserSystemAdminFlag.
+	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, user)
+
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
 
@@ -419,6 +424,9 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// explicitly here — cheap, idempotent, and closes the migration window
 	// for refresh-only sessions (#1750/#1771).
 	clearLegacyRefreshCookie(w, r)
+
+	// Stamp the wire-only is_system_admin advisory flag (#1784).
+	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, user)
 
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
@@ -762,6 +770,12 @@ func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request)
 	// after a page reload where the in-memory token was lost).
 	api.writeCSRFHeader(w, r.Context(), user.ID)
 
+	// Stamp the wire-only is_system_admin advisory flag (#1784) so the
+	// FE's `useIsSystemAdmin()` hook receives the current truth on the
+	// canonical boot probe. Authorization is still enforced server-side
+	// via RequireSystemAdmin on every /admin/* request.
+	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, user)
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(user); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
@@ -937,6 +951,12 @@ func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
 		return
 	}
+
+	// Stamp the wire-only is_system_admin advisory flag (#1784) so the
+	// FE keeps the correct sidebar/route gating after a profile update —
+	// otherwise the cached user object would briefly read the zero-value
+	// false until the next /auth/me poll.
+	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, updated)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(updated); err != nil {
@@ -1411,6 +1431,39 @@ func writeLoginResponse(w http.ResponseWriter, accessToken, csrfToken string, us
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+// populateUserSystemAdminFlag stamps user.IsSystemAdmin from the grant
+// registry just before a /auth/me-style payload is encoded (#1784). The
+// flag is a wire-only FE hint — gateway authorization is owned by
+// RequireSystemAdmin, which consults the grant store directly on every
+// /admin/* request — so this helper is best-effort: a nil registry or a
+// transient lookup error leaves the flag false and logs at warn level.
+// The FE then renders the non-admin chrome (graceful degradation) and
+// any actual admin operation surfaces the real privilege on the next
+// admin request via the middleware re-check.
+//
+// Call this immediately before json-encoding a *models.User to the
+// authenticated owner of that identity (handlers like /auth/me,
+// /auth/login, /auth/refresh, /auth/mfa/verify, impersonation
+// start/end). Do NOT call it from registry / service layers — the rule
+// is that no authorization code path reads this struct field.
+func populateUserSystemAdminFlag(ctx context.Context, grants registry.SystemAdminGrantRegistry, user *models.User) {
+	if user == nil {
+		return
+	}
+	if grants == nil {
+		user.IsSystemAdmin = false
+		return
+	}
+	ok, err := grants.Exists(ctx, user.ID)
+	if err != nil {
+		slog.Warn("populateUserSystemAdminFlag: grant lookup failed; emitting is_system_admin=false",
+			"user_id", user.ID, "error", err)
+		user.IsSystemAdmin = false
+		return
+	}
+	user.IsSystemAdmin = ok
 }
 
 // clearRefreshCookie instructs the browser to delete the refresh token cookie
