@@ -272,27 +272,41 @@ definitions:
         maxLength: 500
         type: string
     type: object
+  apiserver.ImpersonationOperatorView:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      role:
+        type: string
+    type: object
   apiserver.ImpersonationStateResponse:
     properties:
       active:
         description: Active reports whether the caller is inside an impersonation
           session.
         type: boolean
-      admin_user:
-        allOf:
-        - $ref: '#/definitions/apiserver.ImpersonationUserView'
-        description: |-
-          AdminUser is the operator who initiated the session — nil when
-          Active is false.
       expires_at:
         type: string
+      operator:
+        allOf:
+        - $ref: '#/definitions/apiserver.ImpersonationOperatorView'
+        description: |-
+          Operator is the back-office operator who initiated the session —
+          nil when Active is false. Renamed from `admin_user` at #1785
+          Phase 5 to reflect that the operator-of-record now lives in the
+          back-office identity plane.
       started_at:
         description: StartedAt / ExpiresAt bound the session — zero values when inactive.
         type: string
       target_user:
         allOf:
         - $ref: '#/definitions/apiserver.ImpersonationUserView'
-        description: TargetUser is the impersonated user — nil when Active is false.
+        description: TargetUser is the impersonated tenant user — nil when Active
+          is false.
     type: object
   apiserver.ImpersonationUserView:
     properties:
@@ -4635,9 +4649,10 @@ paths:
       - admin
   /admin/impersonation/current:
     get:
-      description: Convenience read for the FE impersonation banner. Returns `active=false`
-        with no other fields when the caller is not inside an impersonation session,
-        and the target/admin/started_at/expires_at quartet when it is.
+      description: |-
+        Convenience read for the FE impersonation banner. Returns `active=false` with no other fields when the
+        caller is not inside an impersonation session, and the target/operator/started_at/expires_at quartet when
+        it is. Reachable from EITHER the operator's back-office session OR the impersonated tenant session.
       produces:
       - application/json
       responses:
@@ -4649,36 +4664,29 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/jsonapi.Errors'
-        "403":
-          description: Forbidden - system-admin or active impersonation session required
-          schema:
-            $ref: '#/definitions/jsonapi.Errors'
-      summary: Read the active impersonation session (admin)
+      summary: Read the active impersonation session
       tags:
       - admin
   /admin/impersonation/end:
     post:
       description: |-
-        Ends the active impersonation session: blacklists the impersonation access token, restores the operator's
-        own refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation
-        access token (the token carrying `imp=true`). The token's signature is always verified; an expired
-        impersonation token is still accepted here so an operator can end an idle session without re-logging in.
-        The request must also carry the httpOnly `refresh_token` cookie holding the `imp:<jti>` marker that
-        impersonation-start planted — proof the call comes from the operator's own browser. A stolen bearer
-        token alone, without that cookie, cannot be redeemed for admin credentials.
+        Ends the active impersonation session: blacklists the impersonation access token, mints a fresh back-office
+        access token, and re-plants the operator's `backoffice_refresh_token` cookie (when one was captured at
+        start). Must be called with the impersonation access token (the token carrying `imp=true`). The token's
+        signature is always verified; an expired impersonation token is still accepted so an operator can end an
+        idle session without re-logging in.
         This endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the
         Authorization header. Returns 401 when the token is missing, malformed, forged, or not an impersonation
         token (an authentication failure). Returns 422 with `admin.impersonate.not_active` when the token is a
-        validly-signed impersonation token but no active session backs it — the return slot is missing, the
-        slot's operator disagrees with the token, or the operator's marker refresh cookie is absent/mismatched.
-        A 500 is returned only on a genuine store or registry fault.
+        validly-signed impersonation token but no active session backs it — the return slot is missing or its
+        operator-of-record disagrees with the token. A 500 is returned only on a genuine store or registry fault.
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/apiserver.LoginResponse'
+            $ref: '#/definitions/apiserver.BackofficeLoginResponse'
         "401":
           description: Unauthorized - missing, malformed, forged, or non-impersonation
             token
@@ -4686,14 +4694,14 @@ paths:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: Unprocessable Entity - no active impersonation session (missing/mismatched
-            return slot or marker cookie)
+            return slot)
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "500":
           description: Internal Server Error - return-slot store or registry fault
           schema:
             $ref: '#/definitions/jsonapi.Errors'
-      summary: End an impersonation session (admin)
+      summary: End an impersonation session (back-office operator)
       tags:
       - admin
   /admin/tenants:
@@ -4921,17 +4929,16 @@ paths:
       consumes:
       - application/json
       description: |-
-        Issues a short-lived impersonation access token for the target user and sets it as the active session.
-        The token carries `imp=true`, `impersonated_by=<adminID>`, and `is_system_admin=false`; it cannot be
-        refreshed and cannot start a nested impersonation. The admin's own refresh-token cookie is replaced
-        with a non-refreshable impersonation marker for the duration of the session; POST /admin/impersonation/end
-        restores the operator's original refresh cookie.
+        Issues a short-lived impersonation access token for the target tenant user on behalf of the calling back-office operator.
+        The token carries `imp=true`, `impersonator_id=<backoffice user id>`, `impersonator_type=backoffice_user`, and
+        `is_system_admin=false`; it cannot be refreshed and cannot start a nested impersonation. The operator's own
+        `backoffice_refresh_token` cookie is captured server-side at start and restored by POST /admin/impersonation/end.
         Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
         `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
         when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the
-        per-admin start rate limit (10/hour) is exceeded.
+        per-operator start rate limit (10/hour) is exceeded.
       parameters:
-      - description: Target user ID
+      - description: Target tenant user ID
         in: path
         name: userID
         required: true
@@ -4957,11 +4964,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Forbidden - platform_admin role required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
-          description: Not Found - unknown user
+          description: Not Found - unknown tenant user
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -4970,10 +4977,10 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "429":
-          description: Too Many Requests - per-admin rate limit
+          description: Too Many Requests - per-operator rate limit
           schema:
             $ref: '#/definitions/jsonapi.Errors'
-      summary: Start an impersonation session (admin)
+      summary: Start an impersonation session (back-office operator)
       tags:
       - admin
   /admin/users/{userID}/unblock:
