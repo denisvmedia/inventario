@@ -145,6 +145,9 @@ func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*mod
 
 	err := reg.Update(ctx, tenant, nil)
 	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Tenant", "entity_id", tenant.GetID()))
+		}
 		return nil, errxtrace.Wrap("failed to update tenant", err)
 	}
 
