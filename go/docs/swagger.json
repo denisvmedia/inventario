@@ -2213,6 +2213,93 @@
                 }
             }
         },
+        "/g/{groupSlug}/commodities/scan": {
+            "post": {
+                "description": "Extract structured commodity field guesses from 1..N product photos. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Run an AI vision scan on uploaded photos",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts).",
+                        "name": "photos",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional free-form hint (brand, category guess)",
+                        "name": "hint",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityScanResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Photo too large",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported MIME type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Too many photos / no photos",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limited",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "502": {
+                        "description": "Provider unavailable / parse error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "503": {
+                        "description": "Provider disabled",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "504": {
+                        "description": "Provider timed out",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/commodities/values": {
             "get": {
                 "description": "Get the total value of commodities globally, by location, and by area",
@@ -9088,6 +9175,86 @@
             "properties": {
                 "cover": {
                     "$ref": "#/definitions/jsonapi.CommodityCover"
+                }
+            }
+        },
+        "jsonapi.CommodityScanAttributes": {
+            "type": "object",
+            "properties": {
+                "fields": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
+                    }
+                },
+                "latency_ms": {
+                    "type": "integer"
+                },
+                "used_tokens": {
+                    "type": "integer"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanWarning"
+                    }
+                }
+            }
+        },
+        "jsonapi.CommodityScanFieldGuess": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number"
+                },
+                "value": {
+                    "description": "Value is polymorphic — see the type-level doc comment.",
+                    "type": "object"
+                }
+            }
+        },
+        "jsonapi.CommodityScanResource": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityScanAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_scan"
+                    ],
+                    "example": "commodity_scan"
+                }
+            }
+        },
+        "jsonapi.CommodityScanResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityScanResource"
+                }
+            }
+        },
+        "jsonapi.CommodityScanWarning": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "enum": [
+                        "low_confidence",
+                        "unreadable_serial",
+                        "ambiguous_price",
+                        "currency_inferred",
+                        "no_photo_text"
+                    ],
+                    "example": "low_confidence"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "field": {
+                    "type": "string"
                 }
             }
         },

@@ -271,11 +271,29 @@
     "serverError": "Something went wrong. Please try again.",
     "step": {
       "ai": {
-        "comingSoon": "AI photo-scan is on the roadmap — tracked in",
         "description": "Photograph the item and its label — AI will pre-fill the form for you.",
         "dropzone": {
           "hint": "JPG, PNG, HEIC — up to 5 photos",
           "primary": "Drop photos here or browse"
+        },
+        "errors": {
+          "photoTooLarge": "One of the photos is too large to scan. Try a smaller file.",
+          "providerDisabled": {
+            "detail": "AI vision isn't enabled on this server right now. Use Fill manually to continue.",
+            "title": "AI vision is unavailable"
+          },
+          "providerError": {
+            "title": "AI vision couldn't process those photos"
+          },
+          "providerTimeout": {
+            "title": "AI vision took too long to respond"
+          },
+          "rateLimited": {
+            "detail": "Too many scan requests. Try again in a moment.",
+            "title": "Hold on — too many scans"
+          },
+          "tooManyPhotos": "You can attach up to 5 photos per scan.",
+          "unsupportedMime": "Only JPG, PNG, WEBP, HEIC, and HEIF photos can be scanned."
         },
         "fullItem": {
           "description": "Photograph the whole item clearly so AI can identify it",
@@ -285,10 +303,41 @@
           "description": "Photograph the information label with model & serial numbers",
           "title": "Label / rating plate"
         },
-        "scanDisabledTitle": "AI photo-scan is on the roadmap — tracked in issue #1720.",
+        "offer": {
+          "dropzone": {
+            "activeHint": "Release to add photos"
+          },
+          "staged": {
+            "remove": "Remove",
+            "title_one": "{{count}} photo staged",
+            "title_other": "{{count}} photos staged"
+          }
+        },
+        "review": {
+          "confidence": {
+            "high": "{{percent}}% confident",
+            "low": "{{percent}}% guess",
+            "medium": "{{percent}}% likely"
+          },
+          "currencyInferred": "Currency wasn't on the server's supported list — it won't be pre-filled.",
+          "retake": "Re-take photos",
+          "subtitle": "Untick anything that looks wrong before we prefill the form.",
+          "title": "Review extracted details",
+          "useValues": "Use these values",
+          "warning": {
+            "ambiguousPrice": "Price looks ambiguous",
+            "currencyInferred": "Currency was inferred",
+            "lowConfidence": "Low confidence",
+            "unreadableSerial": "Serial number was hard to read"
+          }
+        },
+        "scanning": {
+          "cancel": "Cancel",
+          "subtitle": "AI is reading the label and identifying the item.",
+          "title": "Scanning your photos…"
+        },
         "scanPhotos": "Scan photos",
-        "title": "Fill with AI",
-        "trackerLink": "issue #1720"
+        "title": "Fill with AI"
       },
       "basics": {
         "title": "Basics"

@@ -77,4 +77,17 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 
 	flags.StringVar(&cfg.MandrillAPIKey, "mandrill-api-key", cfg.MandrillAPIKey, "Mandrill/Mailchimp Transactional API key")
 	flags.StringVar(&cfg.MandrillBaseURL, "mandrill-base-url", cfg.MandrillBaseURL, "Mandrill API base URL")
+
+	// AI vision photo-scan tunables (issue #1720).
+	flags.StringVar(&cfg.AIVisionProvider, "ai-vision-provider", cfg.AIVisionProvider, "AI vision provider: none, mock, anthropic, openai")
+	flags.StringVar(&cfg.AIVisionAnthropicAPIKey, "ai-vision-anthropic-api-key", cfg.AIVisionAnthropicAPIKey, "Anthropic API key for the AI vision provider")
+	flags.StringVar(&cfg.AIVisionAnthropicModel, "ai-vision-anthropic-model", cfg.AIVisionAnthropicModel, "Anthropic model id (defaults to claude-sonnet-4-6)")
+	flags.StringVar(&cfg.AIVisionAnthropicBaseURL, "ai-vision-anthropic-base-url", cfg.AIVisionAnthropicBaseURL, "Anthropic API base URL override (default https://api.anthropic.com)")
+	flags.StringVar(&cfg.AIVisionOpenAIAPIKey, "ai-vision-openai-api-key", cfg.AIVisionOpenAIAPIKey, "OpenAI API key for the AI vision provider")
+	flags.StringVar(&cfg.AIVisionOpenAIModel, "ai-vision-openai-model", cfg.AIVisionOpenAIModel, "OpenAI model id (defaults to gpt-4o)")
+	flags.StringVar(&cfg.AIVisionOpenAIBaseURL, "ai-vision-openai-base-url", cfg.AIVisionOpenAIBaseURL, "OpenAI API base URL override (default https://api.openai.com)")
+	flags.StringVar(&cfg.AIVisionTimeout, "ai-vision-timeout", cfg.AIVisionTimeout, "AI vision provider per-call timeout (e.g. 20s)")
+	flags.IntVar(&cfg.AIVisionMaxPhotos, "ai-vision-max-photos", cfg.AIVisionMaxPhotos, "Maximum number of photos accepted per scan request")
+	flags.IntVar(&cfg.AIVisionMaxPhotoBytes, "ai-vision-max-photo-bytes", cfg.AIVisionMaxPhotoBytes, "Maximum bytes accepted per photo (defaults to 10 MiB)")
+	flags.IntVar(&cfg.AIVisionRateLimitPerHour, "ai-vision-rate-limit-per-hour", cfg.AIVisionRateLimitPerHour, "Per-user hourly scan rate limit (0 disables the limit)")
 }

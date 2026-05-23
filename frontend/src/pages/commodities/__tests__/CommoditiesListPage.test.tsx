@@ -287,11 +287,11 @@ describe("<CommoditiesListPage />", () => {
     await screen.findByTestId("commodities-empty")
     await user.click(screen.getByTestId("commodities-add-button"))
     // Create mode opens on the AI step first (see CommodityFormDialog
-    // `initialStep`). Walk past it via "Fill manually" — the testid is
-    // the same Next-button id we use on the form steps. Once we're on
-    // Basics the numbered stepper renders with the `Form steps`
-    // aria-label.
-    await user.click(await screen.findByTestId("commodity-form-next"))
+    // `initialStep`). Walk past it via the AI step's inline "Fill
+    // manually" affordance (`commodity-form-ai-fill-manually` testid,
+    // distinct from the form-step Next button). Once we're on Basics
+    // the numbered stepper renders with the `Form steps` aria-label.
+    await user.click(await screen.findByTestId("commodity-form-ai-fill-manually"))
     expect(await screen.findByLabelText(/form steps/i)).toBeInTheDocument()
   })
 
@@ -516,8 +516,10 @@ describe("<CommoditiesListPage />", () => {
     })
     await screen.findByTestId("commodities-empty")
     await user.click(screen.getByTestId("commodities-add-button"))
-    // Past the AI placeholder step → Basics.
-    await user.click(await screen.findByTestId("commodity-form-next"))
+    // Past the AI placeholder step → Basics. Post-#1720 the AI step
+    // owns its own primary actions inline; `commodity-form-ai-fill-manually`
+    // is the canonical "skip the scanner" affordance.
+    await user.click(await screen.findByTestId("commodity-form-ai-fill-manually"))
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
     await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
