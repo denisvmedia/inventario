@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -49,17 +50,19 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 	middleware.AllowContentType("application/json", "application/vnd.api+json"),
 }
 
-// Install the JSON:API-aware decoder on the package-global `render.Decode`
-// at package load time rather than on every APIServer() construction. The
-// previous per-call assignment was racy under `go test -race`: two parallel
-// tests calling APIServer() concurrently both wrote to the same package
-// variable, and the race detector flagged whichever pair of tests happened
-// to be running when the second write landed. init() runs exactly once,
-// before any test goroutine exists, so the write is unconditionally
-// well-ordered against every reader.
-func init() {
-	render.Decode = JSONAPIAwareDecoder
-}
+// renderDecodeOnce guards the package-global `render.Decode` swap so it
+// happens at most once across every APIServer() call. The previous
+// per-call assignment was racy under `go test -race`: two parallel tests
+// calling APIServer() concurrently both wrote to the same package
+// variable, and the race detector flagged whichever pair of tests
+// happened to be running when the second write landed.
+//
+// sync.Once gives the lazy "first-APIServer-call wins, the rest are
+// no-ops" semantics without an init() side-effect at import time —
+// packages that import apiserver but never call APIServer() (e.g. some
+// table-driven tests of helper functions) leave render.Decode at its
+// upstream default.
+var renderDecodeOnce sync.Once
 
 // createUserAwareMiddlewares creates middleware stack with user authentication and RLS context.
 // For non-group-scoped routes. Group-scoped routes need GroupSlugResolverMiddleware
@@ -226,6 +229,10 @@ func (p *Params) Validate() error {
 }
 
 func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
+	renderDecodeOnce.Do(func() {
+		render.Decode = JSONAPIAwareDecoder
+	})
+
 	r := chi.NewRouter()
 	// CORS middleware — strict and explicit origin-based policy.
 	r.Use(NewCORSMiddleware(params.CORSConfig).Handler)
