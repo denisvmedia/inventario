@@ -1,6 +1,9 @@
 ---
 description: Go review/edit guidance for GitHub Copilot in the Inventario repository. Tells Copilot to trust go.mod over its training data and not re-flag known false positives.
-applyTo: "go/**/*.go,go/go.mod,go/go.sum"
+applyTo:
+  - "go/**/*.go"
+  - "go/go.mod"
+  - "go/go.sum"
 ---
 
 # Go instructions for Copilot
@@ -144,7 +147,7 @@ bodies, query parameters, or headers**. It comes only from the authenticated
 user's context (`appctx.UserFromContext(ctx).TenantID`), and the
 `TenantMiddleware` validates that the user's tenant matches the resolved
 tenant. Suggesting otherwise is a security regression. See
-`apiserver/tenant_context.go` and `apiserver/jwt_middleware.go`.
+`go/apiserver/tenant_context.go` and `go/apiserver/jwt_middleware.go`.
 
 Registries come in two flavors:
 
