@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -40,33 +41,51 @@ func NewBackofficeUserRegistry() *BackofficeUserRegistry {
 // time so callers don't need to populate them. Returns ErrFieldRequired,
 // ErrInvalidBackofficeRole, or ErrBackofficeEmailAlreadyExists when
 // applicable.
-func (r *BackofficeUserRegistry) Create(ctx context.Context, user models.BackofficeUser) (*models.BackofficeUser, error) {
+//
+// The email uniqueness check AND the insert happen under a single
+// write-lock acquisition — the previous shape released the lock between
+// the check and the underlying Registry.Create's own re-acquisition,
+// leaving a race window where two concurrent calls with the same email
+// could both observe "no collision". Holding the lock across both ops
+// matches the postgres backend's "check + insert in one tx" contract.
+func (r *BackofficeUserRegistry) Create(_ context.Context, user models.BackofficeUser) (*models.BackofficeUser, error) {
 	if err := r.validateForCreate(user); err != nil {
 		return nil, err
 	}
 	user.Email = normaliseBackofficeEmail(user.Email)
 
-	// Email uniqueness check has to happen under the write lock or two
-	// concurrent Creates with the same email could both pass the
-	// existence check. Using the underlying Registry's exposed lock keeps
-	// the contention scope tight.
-	r.lock.Lock()
-	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
-		if pair.Value.Email == user.Email {
-			r.lock.Unlock()
-			return nil, errxtrace.Classify(registry.ErrBackofficeEmailAlreadyExists, errx.Attrs("email", user.Email))
-		}
-	}
-	r.lock.Unlock()
-
 	now := time.Now()
-	user.CreatedAt = now
-	user.UpdatedAt = now
+	if user.CreatedAt.IsZero() {
+		user.CreatedAt = now
+	}
+	if user.UpdatedAt.IsZero() {
+		user.UpdatedAt = now
+	}
 	if user.LastLoginAt != nil && user.LastLoginAt.IsZero() {
 		user.LastLoginAt = nil
 	}
 
-	return r.baseBackofficeUserRegistry.Create(ctx, user)
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		if pair.Value.Email == user.Email {
+			return nil, errxtrace.Classify(registry.ErrBackofficeEmailAlreadyExists, errx.Attrs("email", user.Email))
+		}
+	}
+
+	// Mint server-side ID + UUID inline so the whole "check uniqueness,
+	// assign id, insert" sequence runs under the single lock. Mirrors
+	// the base memory Registry's Create body — duplicated here so we
+	// don't have to release the lock to call into it.
+	user.ID = uuid.New().String()
+	if user.UUID == "" {
+		user.UUID = uuid.New().String()
+	}
+	stored := user
+	r.items.Set(stored.ID, &stored)
+
+	return &stored, nil
 }
 
 // Get returns the row by id. Translates the generic ErrNotFound to the

@@ -177,6 +177,16 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 		MFAEnforced:  true,
 	}
 
+	// Run the model's full validation (length caps, EmailPattern match)
+	// before handing the row to the registry. The registry's
+	// validateCommonBackofficeFields only checks "not empty" + role
+	// membership, so without this an invocation like
+	// `--email "not-an-email"` would round-trip cleanly. Mirrors
+	// services/admin.Service.CreateUser.
+	if err := user.ValidateWithContext(ctx); err != nil {
+		return nil, fmt.Errorf("user validation failed: %w", err)
+	}
+
 	created, err := s.factorySet.BackofficeUserRegistry.Create(ctx, user)
 	if err != nil {
 		// A concurrent caller could have inserted the same email

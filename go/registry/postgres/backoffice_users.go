@@ -60,11 +60,29 @@ func (r *BackofficeUserRegistry) newSQLRegistry() *store.NonRLSRepository[models
 // commits, the second rolls back on the unique-index violation; the
 // pre-check turns "lost insert" into the friendlier
 // ErrBackofficeEmailAlreadyExists sentinel).
+//
+// CreatedAt / UpdatedAt are stamped here (when zero) — the store layer's
+// Insert (txexec.go) uses typekit.ExtractDBFields which includes every
+// db-tagged column, so leaving them at zero would override the column
+// DEFAULT CURRENT_TIMESTAMP and persist year-0001 timestamps. Mirrors
+// the pattern in email_verifications / commodity_loans / login_events /
+// user_mfa_secrets. The IsZero guard lets tests that pin a specific
+// timestamp keep their override.
 func (r *BackofficeUserRegistry) Create(ctx context.Context, user models.BackofficeUser) (*models.BackofficeUser, error) {
 	if err := r.validateForCreate(user); err != nil {
 		return nil, err
 	}
 	user.Email = normaliseBackofficeEmail(user.Email)
+	now := time.Now().UTC()
+	if user.CreatedAt.IsZero() {
+		user.CreatedAt = now
+	}
+	if user.UpdatedAt.IsZero() {
+		user.UpdatedAt = now
+	}
+	if user.LastLoginAt != nil && user.LastLoginAt.IsZero() {
+		user.LastLoginAt = nil
+	}
 
 	reg := r.newSQLRegistry()
 	created, err := reg.Create(ctx, user, func(ctx context.Context, tx *sqlx.Tx) error {
@@ -80,6 +98,16 @@ func (r *BackofficeUserRegistry) Create(ctx context.Context, user models.Backoff
 		return nil
 	})
 	if err != nil {
+		// Close the race window between the pre-SELECT and the INSERT
+		// by re-classifying a Postgres unique-violation on the email
+		// index as ErrBackofficeEmailAlreadyExists so callers (and
+		// Service.Bootstrap's idempotent-rerun branch) can branch on
+		// the canonical sentinel even when the loser of a parallel
+		// Create surfaces the SQLSTATE rather than the application-
+		// level pre-check.
+		if isBackofficeEmailUniqueViolation(err) {
+			return nil, errxtrace.Classify(registry.ErrBackofficeEmailAlreadyExists, errx.Attrs("email", user.Email))
+		}
 		return nil, errxtrace.Wrap("failed to create backoffice user", err)
 	}
 	return &created, nil
@@ -202,6 +230,14 @@ func (r *BackofficeUserRegistry) Update(ctx context.Context, user models.Backoff
 		if _, execErr := tx.ExecContext(ctx, updateQuery,
 			user.Email, user.Name, string(user.Role), user.IsActive, user.MFAEnforced, user.GetID(),
 		); execErr != nil {
+			// Re-classify a Postgres unique-violation on the email
+			// index as ErrBackofficeEmailAlreadyExists — mirrors the
+			// Create path so callers get the canonical sentinel even
+			// when a concurrent insert wins the race between this
+			// transaction's pre-SELECT and its UPDATE.
+			if isBackofficeEmailUniqueViolation(execErr) {
+				return errxtrace.Classify(registry.ErrBackofficeEmailAlreadyExists, errx.Attrs("email", user.Email))
+			}
 			return errxtrace.Wrap("failed to update backoffice user", execErr)
 		}
 
@@ -210,7 +246,7 @@ func (r *BackofficeUserRegistry) Update(ctx context.Context, user models.Backoff
 		user.CreatedAt = existing.CreatedAt
 		user.PasswordHash = existing.PasswordHash
 		user.LastLoginAt = existing.LastLoginAt
-		user.UpdatedAt = time.Now()
+		user.UpdatedAt = time.Now().UTC()
 		return nil
 	})
 	if err != nil {
@@ -219,15 +255,20 @@ func (r *BackofficeUserRegistry) Update(ctx context.Context, user models.Backoff
 	return &user, nil
 }
 
-// Delete removes the row by id. Idempotent at the SQL layer — Delete on
-// a missing id is a no-op rather than an error, matching every other
-// postgres registry in the project.
+// Delete removes the row by id. Idempotent — a Delete on a missing id
+// is a no-op rather than an error, matching the memory backend and
+// keeping the cross-backend contract uniform. NonRLSRepository.Delete
+// returns a wrapped store.ErrNotFound when the row doesn't exist; we
+// swallow it here so callers can re-run Delete safely.
 func (r *BackofficeUserRegistry) Delete(ctx context.Context, id string) error {
 	if id == "" {
 		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
 	reg := r.newSQLRegistry()
 	if err := reg.Delete(ctx, id, nil); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
 		return errxtrace.Wrap("failed to delete backoffice user", err)
 	}
 	return nil
@@ -357,4 +398,39 @@ func validateCommonBackofficeFields(user models.BackofficeUser) error {
 // helper — kept private per package to keep dependency direction clean.
 func normaliseBackofficeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// backofficeEmailUniqueIndexName is the postgres unique index on the
+// email column. The Create / Update paths translate violations on
+// this index into ErrBackofficeEmailAlreadyExists so the loser of a
+// concurrent insert race surfaces the same canonical sentinel as the
+// application-level pre-check. Any OTHER unique violation (e.g. on
+// the uuid index) is re-raised as-is — it would indicate a programmer
+// error rather than a legitimate domain conflict.
+const backofficeEmailUniqueIndexName = "idx_backoffice_users_email"
+
+// isBackofficeEmailUniqueViolation reports whether err corresponds to a
+// Postgres unique-violation (SQLSTATE 23505) on the backoffice email
+// index. Mirrors the helpers in warranty_reminders / currency_migration
+// — kept locally so this registry stays self-contained, and string-based
+// for the SQLSTATE so we don't pull in lib/pq just for the constant.
+func isBackofficeEmailUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	type sqlStater interface{ SQLState() string }
+	type constrainter interface{ ConstraintName() string }
+
+	var s sqlStater
+	if !errors.As(err, &s) || s.SQLState() != "23505" {
+		// Fall back to substring match against the index name when
+		// the underlying error doesn't expose SQLState (defence in
+		// depth — current drivers do, but the helper stays robust).
+		return strings.Contains(err.Error(), backofficeEmailUniqueIndexName)
+	}
+	var c constrainter
+	if errors.As(err, &c) && c.ConstraintName() == backofficeEmailUniqueIndexName {
+		return true
+	}
+	return strings.Contains(err.Error(), backofficeEmailUniqueIndexName)
 }

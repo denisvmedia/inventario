@@ -231,6 +231,22 @@ func TestBackofficeUserRegistryPostgres_Delete(t *testing.T) {
 	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
 }
 
+// TestBackofficeUserRegistryPostgres_Delete_Idempotent pins the cross-
+// backend idempotency contract: Delete on a missing id is a no-op
+// rather than an error. The postgres backend's NonRLSRepository.Delete
+// returns store.ErrNotFound on a missing row; the registry swallows it
+// so the contract matches the memory backend.
+func TestBackofficeUserRegistryPostgres_Delete_Idempotent(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+	bo := getBackofficeRegistry(t, registrySet)
+
+	c := qt.New(t)
+	ctx := context.Background()
+
+	c.Assert(bo.Delete(ctx, "no-such-id"), qt.IsNil)
+}
+
 func TestBackofficeUserRegistryPostgres_Count(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
