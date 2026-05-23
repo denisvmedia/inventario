@@ -51,10 +51,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // effect's cleanup restores it when the provider unmounts so tests don't
   // leak navigators between cases.
   useEffect(() => {
-    setHttpNavigateToLogin((currentPath, reason) => {
+    setHttpNavigateToLogin((currentPath, reason, plane) => {
       const params = new URLSearchParams({ redirect: currentPath })
       if (reason) params.set("reason", reason)
-      navigate(`/login?${params.toString()}`)
+      // `plane` (#1785 Phase 6) selects which login surface to bounce to:
+      // a back-office 401 (a refresh on /admin/* or /backoffice/* that
+      // failed) routes the operator to /backoffice/login; everything
+      // else stays on the tenant /login. Defaulting to "tenant" keeps
+      // the legacy single-plane callers unchanged.
+      const target = plane === "backoffice" ? "/backoffice/login" : "/login"
+      navigate(`${target}?${params.toString()}`)
     })
     // The http client (#1403) bounces here on a 503 from the API; the
     // Retry-After + X-Maintenance-Status headers carry the operator's

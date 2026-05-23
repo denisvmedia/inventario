@@ -3,12 +3,14 @@ import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-r
 import type { Location } from "react-router-dom"
 
 import { AuthProvider } from "@/features/auth/AuthContext"
+import { BackofficeAuthProvider } from "@/features/backoffice/auth/context"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
-import { RequireSystemAdmin } from "@/components/routing/RequireSystemAdmin"
+import { RequireBackofficeAuth } from "@/components/routing/RequireBackofficeAuth"
 import { GroupRequiredRoute } from "@/components/routing/GroupRequiredRoute"
 import { UngroupedRedirect } from "@/components/routing/UngroupedRedirect"
 import { ComingSoonPage } from "@/components/coming-soon"
+import { AdminShell } from "@/app/AdminShell"
 import { Shell } from "@/app/Shell"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 
@@ -186,6 +188,17 @@ const AdminGroupDetailPage = lazy(() =>
     default: m.AdminGroupDetailPage,
   }))
 )
+// Back-office auth plane pages (#1785 Phase 6). The login page is a
+// public route; the operator-card lives under the same guard as
+// /admin/*.
+const BackofficeLoginPage = lazy(() =>
+  import("@/pages/backoffice/BackofficeLoginPage").then((m) => ({
+    default: m.BackofficeLoginPage,
+  }))
+)
+const BackofficeMePage = lazy(() =>
+  import("@/pages/backoffice/BackofficeMePage").then((m) => ({ default: m.BackofficeMePage }))
+)
 
 // AppRoutes is the full route tree for the new React frontend.
 //
@@ -355,35 +368,51 @@ export function AppRoutes() {
               <Route path="backup" element={<BackupRedirect />} />
             </Route>
           </Route>
+        </Route>
 
-          {/* Admin subtree (#1752). Platform-wide — not group-scoped, so
-              it lives OUTSIDE GroupRequiredRoute (a system admin with
-              zero groups must still reach it). RequireSystemAdmin gates
-              every /admin/* page on the is_system_admin claim and renders
-              an in-place 403 page (not a redirect) for non-admins.
-              /admin redirects to the /admin/tenants landing route;
-              AdminLayout supplies the breadcrumb + secondary nav and
-              renders the section pages via <Outlet />. */}
+        {/* Back-office (platform-operator) plane (#1785 Phase 6). Mounted
+            OUTSIDE the tenant ProtectedRoute because a back-office
+            operator is NOT required to also have a tenant session — the
+            two auth planes are independent (Phase 3 hardened /admin/*
+            to require a back-office plane token, rejecting tenant
+            tokens). BackofficeAuthProvider wraps both the public login
+            page and the gated subtree so each can read the back-office
+            session state; the public page only redirects when the
+            operator is already signed in. */}
+        <Route element={<BackofficeProviderRoute />}>
+          {/* Public login page — own URL, own layout (slate brand,
+              "Back-office sign in" copy, RESTRICTED chip), own MFA
+              challenge surface bound to /backoffice/auth/login/mfa. */}
+          <Route path="/backoffice/login" element={<BackofficeLoginPage />} />
+          {/* Gated /admin/* subtree + /backoffice/me. RequireBackofficeAuth
+              replaces the previous RequireSystemAdmin guard: it bounces
+              unauthenticated operators to /backoffice/login. AdminShell
+              supplies the back-office chrome (operator chip, sign-out,
+              impersonation banner) since the tenant Shell is unavailable
+              here. AdminLayout under <Outlet /> still owns the breadcrumb
+              + secondary nav. */}
           <Route
-            path="/admin"
             element={
-              <RequireSystemAdmin>
-                <AdminLayout />
-              </RequireSystemAdmin>
+              <RequireBackofficeAuth>
+                <AdminShell />
+              </RequireBackofficeAuth>
             }
           >
-            <Route index element={<Navigate to="/admin/tenants" replace />} />
-            <Route path="tenants" element={<AdminTenantsPage />} />
-            <Route path="tenants/:tenantId" element={<AdminTenantDetailPage />} />
-            {/* `/admin/users` has no list page (there is no cross-tenant
-                user list). Redirect the bare path — reachable via a stale
-                bookmark from when the placeholder existed — to the admin
-                landing instead of falling through to the 404. The
-                per-user detail route below is unaffected. */}
-            <Route path="users" element={<Navigate to="/admin/tenants" replace />} />
-            <Route path="users/:userId" element={<AdminUserDetailPage />} />
-            <Route path="groups" element={<AdminGroupsPage />} />
-            <Route path="groups/:groupId" element={<AdminGroupDetailPage />} />
+            <Route path="/backoffice/me" element={<BackofficeMePage />} />
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<Navigate to="/admin/tenants" replace />} />
+              <Route path="tenants" element={<AdminTenantsPage />} />
+              <Route path="tenants/:tenantId" element={<AdminTenantDetailPage />} />
+              {/* `/admin/users` has no list page (there is no cross-tenant
+                  user list). Redirect the bare path — reachable via a stale
+                  bookmark from when the placeholder existed — to the admin
+                  landing instead of falling through to the 404. The
+                  per-user detail route below is unaffected. */}
+              <Route path="users" element={<Navigate to="/admin/tenants" replace />} />
+              <Route path="users/:userId" element={<AdminUserDetailPage />} />
+              <Route path="groups" element={<AdminGroupsPage />} />
+              <Route path="groups/:groupId" element={<AdminGroupDetailPage />} />
+            </Route>
           </Route>
         </Route>
 
@@ -447,6 +476,21 @@ function BackupRedirect() {
   const params = useParams()
   const slug = params.groupSlug ?? ""
   return <Navigate to={`/g/${encodeURIComponent(slug)}/exports`} replace />
+}
+
+// BackofficeProviderRoute mounts BackofficeAuthProvider for the entire
+// back-office subtree (#1785 Phase 6) — both the public /backoffice/login
+// and the gated /admin/* + /backoffice/me. A layout route element rather
+// than a wrapper on the routes themselves so the provider is created once
+// for the subtree (one boot probe shared by every child page) instead of
+// re-instantiated per navigation. Mirrors how AuthProvider mounts at the
+// providers.tsx root for the tenant plane.
+function BackofficeProviderRoute() {
+  return (
+    <BackofficeAuthProvider>
+      <Outlet />
+    </BackofficeAuthProvider>
+  )
 }
 
 // Re-export AuthProvider so providers.tsx wires it once at the app root.

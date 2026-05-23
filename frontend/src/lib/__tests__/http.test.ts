@@ -9,6 +9,7 @@ import {
   setCsrfToken,
   setImpersonationReturn,
 } from "@/lib/auth-storage"
+import { clearBackofficeAuth, getBackofficeAccessToken } from "@/features/backoffice/auth/storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 import {
   __resetNavigationForTests,
@@ -26,6 +27,7 @@ const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
 beforeEach(() => {
   clearAuth()
+  clearBackofficeAuth()
   __resetGroupContextForTests()
   __resetNavigationForTests()
   __resetHttpForTests()
@@ -501,10 +503,14 @@ describe("impersonation auto-expiry (#1757)", () => {
 
     expect(endCalls).toBe(1)
     expect(refreshCalls).toBe(0)
-    // The admin's restored tokens replaced the expired impersonation ones,
-    // the return-slot was cleared, and the browser hard-redirected back to
-    // the impersonated user's admin detail page.
-    expect(getAccessToken()).toBe("admin-token")
+    // The operator's restored BACK-OFFICE tokens land in back-office
+    // storage (Phase 5/6 #1785) — the expired impersonation token stays
+    // in tenant storage but is no longer used because the page is about
+    // to hard-redirect anyway. The return-slot was cleared and the
+    // browser hard-redirected back to the impersonated user's admin
+    // detail page.
+    expect(getBackofficeAccessToken()).toBe("admin-token")
+    expect(getAccessToken()).toBe("expired-impersonation-token")
     expect(getImpersonationReturn()).toBeNull()
     expect(redirect).toHaveBeenCalledWith("/admin/users/t1")
   })

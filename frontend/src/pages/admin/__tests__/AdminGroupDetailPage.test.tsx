@@ -5,12 +5,15 @@ import { Route } from "react-router-dom"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import { AuthProvider } from "@/features/auth/AuthContext"
+import { BackofficeAuthProvider } from "@/features/backoffice/auth/context"
+import { clearBackofficeAuth, setBackofficeAccessToken } from "@/features/backoffice/auth/storage"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { AdminGroupDetailPage } from "@/pages/admin/AdminGroupDetailPage"
+import { backofficeAuthHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -42,9 +45,12 @@ beforeAll(async () => {
 
 beforeEach(() => {
   clearAuth()
+  clearBackofficeAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
   setAccessToken("good-token")
+  setBackofficeAccessToken("good-bo-token")
+  server.use(...backofficeAuthHandlers.signedIn())
 })
 
 // Seeds GET /admin/groups/g1, the embedded membership editor's
@@ -77,11 +83,13 @@ function renderPage(initialPath = "/admin/groups/g1") {
         path="/admin/groups/:groupId"
         element={
           <AuthProvider>
-            <ConfirmProvider>
-              <main>
-                <AdminGroupDetailPage />
-              </main>
-            </ConfirmProvider>
+            <BackofficeAuthProvider>
+              <ConfirmProvider>
+                <main>
+                  <AdminGroupDetailPage />
+                </main>
+              </ConfirmProvider>
+            </BackofficeAuthProvider>
           </AuthProvider>
         }
       />

@@ -5,6 +5,7 @@ import { initReactI18next } from "react-i18next"
 
 import * as enAdmin from "./locales/en/admin.json"
 import * as enAuth from "./locales/en/auth.json"
+import * as enBackoffice from "./locales/en/backoffice.json"
 import * as enCommodities from "./locales/en/commodities.json"
 import * as enCommon from "./locales/en/common.json"
 import * as enDashboard from "./locales/en/dashboard.json"
@@ -56,6 +57,7 @@ export const I18N_NAMESPACES = [
   "warranties",
   "feedback",
   "admin",
+  "backoffice",
 ] as const
 export type I18nNamespace = (typeof I18N_NAMESPACES)[number]
 
@@ -85,6 +87,7 @@ const enResources = {
   warranties: enWarranties,
   feedback: enFeedback,
   admin: enAdmin,
+  backoffice: enBackoffice,
 } as const
 
 // Lazy backend for cs/ru only. We list cs and ru explicitly via

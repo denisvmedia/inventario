@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { useIsSystemAdmin } from "@/features/auth/hooks"
+import { useOptionalBackofficeAuth } from "@/features/backoffice/auth/context"
+import { clearBackofficeAuth } from "@/features/backoffice/auth/storage"
 import { clearAuth } from "@/lib/auth-storage"
 import { hardRedirect } from "@/lib/navigation"
 
@@ -43,11 +44,23 @@ import {
 } from "./keys"
 
 interface QueryOptions {
-  // Gate the query. The admin endpoints 403 for non-admin users, so the
-  // hooks default to firing only when the caller is a system admin —
-  // pass `enabled: false` to suppress further (e.g. while a parent guard
-  // is still resolving).
+  // Gate the query. The admin endpoints 401/403 for non-back-office
+  // callers (Phase 3 hardened /admin/* to require a back-office plane
+  // token), so the hooks default to firing only when the caller is
+  // signed into the back-office plane — pass `enabled: false` to
+  // suppress further (e.g. while a parent guard is still resolving).
   enabled?: boolean
+}
+
+// useIsBackofficeAuthed reports whether the current browser is signed
+// into the back-office plane. Used to gate admin queries so they never
+// fire a guaranteed-401 request from outside the /admin/* subtree (e.g.
+// from the tenant shell, where the back-office provider isn't mounted).
+// `useOptionalBackofficeAuth` returns undefined when the provider is
+// absent, which correctly reads as "not authenticated" for the gate.
+function useIsBackofficeAuthed(): boolean {
+  const ctx = useOptionalBackofficeAuth()
+  return !!ctx?.isAuthenticated
 }
 
 // Lists tenants for the admin Tenants page. Defaults to enabled only for
@@ -57,11 +70,11 @@ export function useAdminTenants(
   params: AdminTenantsParams = {},
   { enabled = true }: QueryOptions = {}
 ) {
-  const isSystemAdmin = useIsSystemAdmin()
+  const isBackofficeAuthed = useIsBackofficeAuthed()
   return useQuery<AdminTenantsResult>({
     queryKey: adminKeys.tenantList(params),
     queryFn: ({ signal }) => listAdminTenants(params, signal),
-    enabled: enabled && isSystemAdmin,
+    enabled: enabled && isBackofficeAuthed,
   })
 }
 
@@ -69,11 +82,11 @@ export function useAdminTenants(
 // useAdminTenants this is gated on is_system_admin — a non-admin who
 // somehow deep-links the page never fires a guaranteed-403 request.
 export function useAdminTenant(tenantId: string, { enabled = true }: QueryOptions = {}) {
-  const isSystemAdmin = useIsSystemAdmin()
+  const isBackofficeAuthed = useIsBackofficeAuthed()
   return useQuery<AdminTenant>({
     queryKey: adminKeys.tenantDetail(tenantId),
     queryFn: ({ signal }) => getAdminTenant(tenantId, signal),
-    enabled: enabled && isSystemAdmin && !!tenantId,
+    enabled: enabled && isBackofficeAuthed && !!tenantId,
   })
 }
 
@@ -83,11 +96,11 @@ export function useAdminTenantUsers(
   params: AdminTenantUsersParams = {},
   { enabled = true }: QueryOptions = {}
 ) {
-  const isSystemAdmin = useIsSystemAdmin()
+  const isBackofficeAuthed = useIsBackofficeAuthed()
   return useQuery<AdminTenantUsersResult>({
     queryKey: adminKeys.tenantUsers(tenantId, params),
     queryFn: ({ signal }) => listAdminTenantUsers(tenantId, params, signal),
-    enabled: enabled && isSystemAdmin && !!tenantId,
+    enabled: enabled && isBackofficeAuthed && !!tenantId,
   })
 }
 
@@ -97,11 +110,11 @@ export function useAdminGroups(
   params: AdminGroupsParams = {},
   { enabled = true }: QueryOptions = {}
 ) {
-  const isSystemAdmin = useIsSystemAdmin()
+  const isBackofficeAuthed = useIsBackofficeAuthed()
   return useQuery<AdminGroupsResult>({
     queryKey: adminKeys.groupList(params),
     queryFn: ({ signal }) => listAdminGroups(params, signal),
-    enabled: enabled && isSystemAdmin,
+    enabled: enabled && isBackofficeAuthed,
   })
 }
 
@@ -109,11 +122,11 @@ export function useAdminGroups(
 // Like useAdminTenant this is gated on is_system_admin so a non-admin who
 // somehow deep-links the page never fires a guaranteed-403 request.
 export function useAdminGroup(groupId: string, { enabled = true }: QueryOptions = {}) {
-  const isSystemAdmin = useIsSystemAdmin()
+  const isBackofficeAuthed = useIsBackofficeAuthed()
   return useQuery<AdminGroupDetail>({
     queryKey: adminKeys.groupDetail(groupId),
     queryFn: ({ signal }) => getAdminGroup(groupId, signal),
-    enabled: enabled && isSystemAdmin && !!groupId,
+    enabled: enabled && isBackofficeAuthed && !!groupId,
   })
 }
 
@@ -151,11 +164,11 @@ export function useDeleteAdminGroup() {
 // reads — a non-admin who somehow deep-links the page never fires a
 // guaranteed-403 request.
 export function useAdminGroupMembers(groupId: string, { enabled = true }: QueryOptions = {}) {
-  const isSystemAdmin = useIsSystemAdmin()
+  const isBackofficeAuthed = useIsBackofficeAuthed()
   return useQuery<AdminGroupMember[]>({
     queryKey: adminKeys.groupMembers(groupId),
     queryFn: ({ signal }) => listAdminGroupMembers(groupId, signal),
-    enabled: enabled && isSystemAdmin && !!groupId,
+    enabled: enabled && isBackofficeAuthed && !!groupId,
   })
 }
 
@@ -208,11 +221,11 @@ export function useUpdateAdminGroupMemberRole(groupId: string) {
 // Gated on is_system_admin like the other admin reads — a non-admin who
 // somehow deep-links the page never fires a guaranteed-403 request.
 export function useAdminUser(userId: string, { enabled = true }: QueryOptions = {}) {
-  const isSystemAdmin = useIsSystemAdmin()
+  const isBackofficeAuthed = useIsBackofficeAuthed()
   return useQuery<AdminUserDetail>({
     queryKey: adminKeys.userDetail(userId),
     queryFn: ({ signal }) => getAdminUser(userId, signal),
-    enabled: enabled && isSystemAdmin && !!userId,
+    enabled: enabled && isBackofficeAuthed && !!userId,
   })
 }
 
@@ -291,10 +304,12 @@ export function useStartImpersonation() {
 // useStartImpersonation: a call-site callback would be skipped on unmount,
 // stranding the operator on a half-swapped identity. On success we route
 // to the impersonated user's admin detail page (or the admin landing if
-// the slot was missing); on failure the admin session is unrecoverable
-// from the FE, so we clear auth and bounce to /login with the
-// `session_expired` reason — consistent with the auto-expiry recovery
-// path (review item M1).
+// the slot was missing); on failure the operator's back-office session is
+// unrecoverable from the FE, so we clear BOTH planes (the impersonation
+// token in tenant storage is stale, and the back-office state is what
+// matters here) and bounce to /backoffice/login with the `session_expired`
+// reason — Phase 5/6 moved end onto the back-office plane (#1785), so the
+// recovery surface is the back-office login screen, not the tenant /login.
 export function useEndImpersonation() {
   return useMutation<EndImpersonationResult, Error, void>({
     mutationFn: () => endImpersonation(),
@@ -305,8 +320,12 @@ export function useEndImpersonation() {
           : "/admin/tenants"
       ),
     onError: () => {
+      // Clear both planes: the tenant slot held the impersonation token
+      // which is now stale, and the back-office plane is the actual
+      // identity we failed to restore.
       clearAuth()
-      hardRedirect("/login?reason=session_expired")
+      clearBackofficeAuth()
+      hardRedirect("/backoffice/login?reason=session_expired")
     },
   })
 }

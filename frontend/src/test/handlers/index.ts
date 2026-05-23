@@ -9,6 +9,7 @@
 // of `msw` handlers — never a single handler — so a test can compose
 // multiple slice variants without juggling spreads at the call site.
 export * as authHandlers from "./auth"
+export * as backofficeAuthHandlers from "./backoffice"
 export * as groupHandlers from "./groups"
 export * as commodityHandlers from "./commodities"
 export * as commodityScanHandlers from "./commodityScan"

@@ -8,9 +8,14 @@
 // (boot-time `/auth/me` probe handles its own retry); if one slips through
 // it stays on the current view and the next `setNavigateToLogin` install
 // from AuthProvider takes over for subsequent calls.
-export type NavigateToLogin = (currentPath: string, reason?: string) => void
+//
+// `plane` (#1785 Phase 6) routes the redirect to /backoffice/login vs the
+// tenant /login depending on which plane's 401 fired. Default "tenant"
+// preserves backward-compat for every existing call site.
+export type AuthPlane = "tenant" | "backoffice"
+export type NavigateToLogin = (currentPath: string, reason?: string, plane?: AuthPlane) => void
 
-const defaultNavigateToLogin: NavigateToLogin = (currentPath, reason) => {
+const defaultNavigateToLogin: NavigateToLogin = (currentPath, reason, plane) => {
   // Intentionally NOT a hard-reload via window.location.href anymore. If the
   // SPA navigator hasn't been installed yet (provider hasn't mounted, or
   // an unmount fired in tests / Strict Mode), do nothing visible — the next
@@ -20,13 +25,14 @@ const defaultNavigateToLogin: NavigateToLogin = (currentPath, reason) => {
   console.warn("[navigation] navigateToLogin called before SPA navigator was installed", {
     currentPath,
     reason,
+    plane,
   })
 }
 
 let navigator: NavigateToLogin = defaultNavigateToLogin
 
-export function navigateToLogin(currentPath: string, reason?: string): void {
-  navigator(currentPath, reason)
+export function navigateToLogin(currentPath: string, reason?: string, plane?: AuthPlane): void {
+  navigator(currentPath, reason, plane)
 }
 
 export function setNavigateToLogin(fn: NavigateToLogin): void {

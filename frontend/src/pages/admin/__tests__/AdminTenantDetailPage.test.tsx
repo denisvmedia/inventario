@@ -5,11 +5,14 @@ import { Route, useLocation } from "react-router-dom"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import { AuthProvider } from "@/features/auth/AuthContext"
+import { BackofficeAuthProvider } from "@/features/backoffice/auth/context"
+import { clearBackofficeAuth, setBackofficeAccessToken } from "@/features/backoffice/auth/storage"
 import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { AdminTenantDetailPage } from "@/pages/admin/AdminTenantDetailPage"
+import { backofficeAuthHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -40,9 +43,12 @@ beforeAll(async () => {
 
 beforeEach(() => {
   clearAuth()
+  clearBackofficeAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
   setAccessToken("good-token")
+  setBackofficeAccessToken("good-bo-token")
+  server.use(...backofficeAuthHandlers.signedIn())
 })
 
 interface Seen {
@@ -115,10 +121,12 @@ function renderPage(initialPath = "/admin/tenants/t1") {
         path="/admin/tenants/:tenantId"
         element={
           <AuthProvider>
-            <main>
-              <AdminTenantDetailPage />
-              <LocationProbe />
-            </main>
+            <BackofficeAuthProvider>
+              <main>
+                <AdminTenantDetailPage />
+                <LocationProbe />
+              </main>
+            </BackofficeAuthProvider>
           </AuthProvider>
         }
       />
