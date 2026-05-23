@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"golang.org/x/crypto/bcrypt"
@@ -170,14 +171,15 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 		PasswordHash: string(hash),
 		Role:         role,
 		IsActive:     true,
-		// MFAEnforced defaults to false in Phase 2: the challenge flow
-		// lands in Phase 4. Setting true here would put every
-		// bootstrapped operator into a state where the login handler
-		// returns 501 (fail-closed by design) — but until Phase 4 wires
-		// the real flow, that just means "this account is unusable" —
-		// not "this account is MFA-protected". Phase 4 flips both this
-		// and the schema default back to true.
-		MFAEnforced: false,
+		// MFAEnforced defaults to true in Phase 4: every freshly
+		// bootstrapped operator must run `inventario backoffice mfa setup`
+		// before they can sign in. The login flow returns 501 with
+		// `backoffice.mfa_not_implemented` while MFAEnforced=true but no
+		// secret row exists; the operator's first sign-in only succeeds
+		// after the CLI enrols them. This matches the schema default
+		// (also flipped to true at this commit) so the data state and
+		// the security promise stay in sync.
+		MFAEnforced: true,
 	}
 
 	// Run the model's full validation (length caps, EmailPattern match)
@@ -209,6 +211,12 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 		User:              created,
 		GeneratedPassword: generated,
 	}, nil
+}
+
+// nowInUTC returns the current time in UTC. Tiny helper so MFA code
+// paths don't sprinkle `time.Now().UTC()` calls everywhere.
+func nowInUTC() time.Time {
+	return time.Now().UTC()
 }
 
 // generatePassword produces a strong random password the CLI prints
