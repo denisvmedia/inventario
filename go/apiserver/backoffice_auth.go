@@ -31,10 +31,12 @@ import (
 // /api/v1/auth/* surface. The boundary is enforced by three independent
 // invariants any one of which is sufficient to keep the planes apart:
 //
-//  1. Different `aud` claim: tenant tokens carry `aud == "tenant"`,
-//     back-office tokens `aud == "backoffice"`. validateBackofficeToken
-//     rejects anything that isn't backoffice; JWTMiddleware (tenant)
-//     rejects anything that IS backoffice.
+//  1. Different `aud` claim: back-office tokens carry `aud ==
+//     "backoffice"`. Tenant tokens historically do not stamp an `aud`
+//     claim — the back-office guard rejects anything whose `aud` is not
+//     literally "backoffice" (including absent), so the asymmetry is
+//     deliberate. JWTMiddleware (tenant) symmetrically rejects any token
+//     whose `aud == "backoffice"`.
 //
 //  2. Different identifying claim: tenant tokens carry `user_id` (points
 //     at users.id), back-office tokens carry `admin_id` (points at
@@ -51,6 +53,16 @@ import (
 // already invalidates everything, so a separate secret would double
 // operator surface without adding isolation. The `aud` claim is the
 // actual boundary.
+//
+// COOKIE-PATH INVARIANT: every back-office HTTP surface MUST be mounted
+// at a path starting with `/api/v1/backoffice` so the refresh cookie at
+// `Path=/api/v1/backoffice` is delivered. Phase 3+ contributors adding
+// admin endpoints under a sibling path (`/api/v1/admin/*`,
+// `/api/v1/backoffice-something`, etc.) must EITHER remount them under
+// `/api/v1/backoffice` OR widen this cookie path AND audit the
+// cross-plane CSRF implications (a wider path means more endpoints see
+// the cookie, which can break the cross-plane isolation if the wider
+// region also accepts tenant credentials).
 const (
 	// backofficeTokenAudience is the canonical `aud` claim value for
 	// every JWT minted by the back-office auth plane. Both the access
@@ -83,6 +95,16 @@ const (
 	backofficeActionLogout      = "backoffice.logout"
 	backofficeActionRefresh     = "backoffice.refresh"
 	backofficeActionMFARequired = "backoffice.login_mfa_required"
+	// backofficeMFANotImplementedCode is the FE-facing JSON:API error
+	// `code` returned with HTTP 501 when a back-office user has
+	// `mfa_enforced=true` set in the database. The Phase-2 plane has no
+	// challenge flow yet (#1785 Phase 4), so failing CLOSED on this
+	// branch keeps the login from minting a fully-privileged token for a
+	// user whose MFA-mandatory state cannot actually be enforced. The
+	// schema + bootstrap default `mfa_enforced=false` so this branch is
+	// dormant in practice; it only fires if an operator manually flips
+	// the column to true before Phase 4 lands.
+	backofficeMFANotImplementedCode = "backoffice.mfa_not_implemented"
 )
 
 // ErrBackofficeAccountDisabled is surfaced when login (or refresh)
@@ -138,13 +160,20 @@ type BackofficeLoginResponse struct {
 	User        *BackofficeProfile `json:"user"`
 }
 
-// BackofficeMFARequiredResponse is the Phase-4 placeholder shape the
-// login handler will return when MFAEnforced=true on the back-office
-// user. Phase 2 never returns this — the placeholder branch is wired
-// behind a TODO so the eventual MFA work knows exactly where to hook in.
+// BackofficeMFARequiredResponse is the Phase-2 fail-closed response
+// returned (with HTTP 501) when a back-office user has
+// `mfa_enforced=true` set in the database. Phase 4 will replace the 501
+// with a step-1 MFA challenge mint + return this same response shape
+// from the success path; until then the body carries `mfa_required:
+// true` + the operator email so the FE can render an explicit "MFA is
+// not yet available for your account — contact platform admin" message
+// instead of a generic 401.
 type BackofficeMFARequiredResponse struct {
 	MFARequired bool   `json:"mfa_required"`
 	Email       string `json:"email"`
+	// Code mirrors backofficeMFANotImplementedCode so FE clients can
+	// branch on a stable identifier instead of an HTTP status alone.
+	Code string `json:"code,omitempty"`
 }
 
 // BackofficeLogoutResponse is the trivial body returned by logout.
@@ -219,8 +248,8 @@ func BackofficeAuth(params BackofficeAuthParams) func(r chi.Router) {
 // @Success 200 {object} BackofficeLoginResponse "OK"
 // @Failure 400 {string} string "Bad Request"
 // @Failure 401 {string} string "Unauthorized - invalid credentials"
-// @Failure 403 {string} string "Forbidden - account disabled"
 // @Failure 429 {string} string "Too Many Requests - account locked"
+// @Failure 501 {object} BackofficeMFARequiredResponse "Not Implemented - MFA enforced but not yet wired (Phase 4)"
 // @Router /backoffice/auth/login [post]
 func (api *BackofficeAuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	var req BackofficeLoginRequest
@@ -256,11 +285,36 @@ func (api *BackofficeAuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	user, err := api.backofficeUserRegistry.GetByEmail(r.Context(), req.Email)
 	if err != nil {
 		// User-not-found and wrong-password share the same response so
-		// an attacker can't enumerate emails. Failed login is recorded
-		// against the email the client typed.
+		// an attacker can't enumerate emails. To keep the timing channel
+		// shut as well, run a bcrypt comparison against a fixed dummy
+		// hash so the user-not-found path costs the same as a
+		// wrong-password path for an existing user.
+		_ = bcrypt.CompareHashAndPassword(backofficeDummyBcryptHash, []byte(req.Password))
 		slog.Warn("Backoffice login: user not found", "email", req.Email)
 		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		api.logAuth(r.Context(), backofficeActionLoginFailed, "", false, r, new("user not found"))
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	// Check is_active BEFORE bcrypt so a disabled account does not get a
+	// 300ms bcrypt round before the response. Run a fixed dummy bcrypt
+	// to keep timing aligned with the active+wrong-password path and
+	// surface the same 401 "Invalid credentials" body — collapsing
+	// inactive into the wrong-password response stops attackers from
+	// confirming that a particular operator email exists. An operator
+	// whose account has been disabled is notified out-of-band; the API
+	// surface intentionally leaks nothing.
+	if !user.IsActive {
+		_ = bcrypt.CompareHashAndPassword(backofficeDummyBcryptHash, []byte(req.Password))
+		slog.Warn("Backoffice login: account disabled", "email", req.Email, "user_id", user.ID)
+		// NOTE: maybeRecordFailedLogin intentionally NOT called here —
+		// a disabled account cannot be unlocked by exhausting the
+		// per-email budget, so attempts against it must not count
+		// toward the legitimate-user lockout window. ErrBackoffice
+		// AccountDisabled is the sentinel a future admin UI would use
+		// to render a different status; the wire response stays 401.
+		api.logAuth(r.Context(), backofficeActionLoginFailed, user.ID, false, r, new(ErrBackofficeAccountDisabled.Error()))
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -273,10 +327,19 @@ func (api *BackofficeAuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !user.IsActive {
-		slog.Warn("Backoffice login: account disabled", "email", req.Email, "user_id", user.ID)
-		api.logAuth(r.Context(), backofficeActionLoginFailed, user.ID, false, r, new("account disabled"))
-		http.Error(w, "Account disabled", http.StatusForbidden)
+	// MFA gate. The Phase-2 plane has no challenge flow yet (#1785 Phase
+	// 4), so we MUST fail closed when MFAEnforced=true: minting a
+	// fully-privileged access token for a user the DB advertises as
+	// MFA-mandatory would be a silent security regression. Phase 4 will
+	// replace this 501 with a step-1 challenge mint + return the same
+	// response shape from the success path. The schema + bootstrap
+	// default `mfa_enforced=false` so this branch is dormant in
+	// practice; it only fires if an operator manually flips the column
+	// to true before Phase 4 lands.
+	if user.MFAEnforced {
+		slog.Warn("Backoffice login: MFAEnforced=true rejected — challenge flow not implemented until Phase 4", "user_id", user.ID)
+		api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, false, r, new("mfa not implemented"))
+		api.writeMFANotImplementedResponse(w, user.Email)
 		return
 	}
 
@@ -288,21 +351,48 @@ func (api *BackofficeAuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// MFA gate placeholder (Phase 4). Today the flag is data-only on
-	// BackofficeUser; the MFA challenge flow lands in Phase 4 which will
-	// turn this branch into a step-1 mfa_token response identical in
-	// shape to the tenant equivalent. Until then we let MFAEnforced=true
-	// users in directly so Phase 2 is usable; Phase 4 flips the default.
-	//
-	// TODO(#1785 Phase 4): replace this no-op branch with a back-office
-	// MFA challenge mint + return BackofficeMFARequiredResponse.
-	if user.MFAEnforced {
-		slog.Debug("Backoffice login: MFA enforced but not yet wired (Phase 4)", "user_id", user.ID)
-	}
-
 	if !api.mintAndRespondAfterAuth(w, r, user, backofficeActionLogin) {
 		return
 	}
+}
+
+// writeMFANotImplementedResponse writes the typed 501 response returned
+// from login when a back-office user has MFAEnforced=true (Phase 2:
+// fail-closed; Phase 4 replaces with the real challenge mint).
+func (api *BackofficeAuthAPI) writeMFANotImplementedResponse(w http.ResponseWriter, email string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotImplemented)
+	if err := json.NewEncoder(w).Encode(BackofficeMFARequiredResponse{
+		MFARequired: true,
+		Email:       email,
+		Code:        backofficeMFANotImplementedCode,
+	}); err != nil {
+		slog.Error("Failed to encode backoffice MFA-not-implemented response", "error", err)
+	}
+}
+
+// backofficeDummyBcryptHash is a fixed bcrypt(DefaultCost) hash used to
+// neutralise the timing difference between the user-not-found / account-
+// disabled paths and the wrong-password path. The plaintext does not
+// matter — the only invariant is that CompareHashAndPassword runs to
+// completion (~300ms at DefaultCost) so the failing paths cost the
+// same as an existing-user wrong-password call. Generated once at
+// package init from a fixed string so the cost stays deterministic
+// across binaries.
+var backofficeDummyBcryptHash = mustGenerateDummyBcryptHash()
+
+func mustGenerateDummyBcryptHash() []byte {
+	// The plaintext "backoffice-dummy-password" is irrelevant — only
+	// the cost factor matters. bcrypt at DefaultCost takes a fixed
+	// amount of work regardless of input.
+	h, err := bcrypt.GenerateFromPassword([]byte("backoffice-dummy-password"), bcrypt.DefaultCost)
+	if err != nil {
+		// bcrypt.GenerateFromPassword only fails on cost out of range,
+		// which DefaultCost never is. Panic at package init so a
+		// regression is impossible to miss.
+		panic(fmt.Sprintf("failed to generate backoffice dummy bcrypt hash: %v", err))
+	}
+	return h
 }
 
 // mintAndRespondAfterAuth persists a refresh-token row, mints an access
@@ -345,17 +435,35 @@ func (api *BackofficeAuthAPI) mintAndRespondAfterAuth(w http.ResponseWriter, r *
 }
 
 // refresh issues a new access token using a valid back-office refresh
-// cookie. Mirrors /auth/refresh but is strictly scoped to the
-// back-office plane — it never reads `refresh_token`, only
-// `backoffice_refresh_token`.
+// cookie AND rotates the refresh token. Mirrors /auth/refresh but is
+// strictly scoped to the back-office plane — it never reads
+// `refresh_token`, only `backoffice_refresh_token`.
+//
+// REFRESH-TOKEN ROTATION: on every successful refresh, the consumed
+// refresh-token row is revoked and a NEW row is inserted with a fresh
+// 30-day TTL; the response's Set-Cookie carries the new value. A stolen
+// cookie therefore stays valid only until the legitimate operator next
+// refreshes — at which point the attacker's cookie hashes to a revoked
+// row and the next replay returns 401. The back-office plane is the
+// highest-value identity surface in the system and so diverges from the
+// tenant-side non-rotating behaviour deliberately.
 // @Summary Refresh back-office access token
-// @Description Issue a new back-office access token using the `backoffice_refresh_token` cookie.
+// @Description Issue a new back-office access token using the `backoffice_refresh_token` cookie. Rotates the refresh token: the consumed cookie value is revoked and a new value is set.
 // @Tags backoffice-auth
 // @Produce json
 // @Success 200 {object} BackofficeLoginResponse "OK"
 // @Failure 401 {string} string "Unauthorized"
+// @Failure 501 {string} string "Refresh tokens not supported (registry not configured)"
 // @Router /backoffice/auth/refresh [post]
 func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
+	// Guard against a nil registry the same way the tenant /auth/refresh
+	// does: a misconfiguration / test wiring with no refresh-token
+	// registry must return 501, not nil-deref.
+	if api.refreshTokenRegistry == nil {
+		http.Error(w, "Refresh tokens not supported", http.StatusNotImplemented)
+		return
+	}
+
 	cookie, err := r.Cookie(backofficeRefreshTokenCookieName)
 	if err != nil {
 		http.Error(w, "Refresh token required", http.StatusUnauthorized)
@@ -401,19 +509,47 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	accessToken, _, err := api.issueAccessToken(user, refreshToken.ID)
+	// Rotate: persist a new refresh-token row BEFORE revoking the old
+	// one so a transient registry error leaves the operator's existing
+	// session usable (vs. half-rotated and signed out). The new row's
+	// id becomes the `rti` claim of the minted access token so the
+	// linkage points at the new row from the moment of mint.
+	newRTI, newRawRefreshToken, err := api.persistRefreshToken(r.Context(), r, user)
+	if err != nil {
+		slog.Error("Failed to issue rotated backoffice refresh token", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to rotate session", http.StatusInternalServerError)
+		return
+	}
+
+	accessToken, _, err := api.issueAccessToken(user, newRTI)
 	if err != nil {
 		slog.Error("Failed to issue backoffice access token on refresh", "user_id", user.ID, "error", err)
+		api.rollbackRefreshToken(r.Context(), user.ID, newRTI)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
 
-	now := time.Now()
-	refreshToken.LastUsedAt = &now
-	if _, err := api.refreshTokenRegistry.Update(r.Context(), *refreshToken); err != nil {
-		slog.Error("Failed to update backoffice refresh token last_used_at", "token_id", refreshToken.ID, "error", err)
+	// Mark the consumed row as revoked. If revocation fails (transient
+	// DB error), the access token is already minted and the new cookie
+	// will overwrite the old one in the browser — but log loudly so
+	// operators see the partial rotation. The old token cannot be
+	// concurrently refreshed (we hold the only legitimate copy of
+	// `cookie.Value`); a replay would race the next refresh and lose,
+	// at which point IsValid() rejects it on the now-revoked row.
+	if err := api.refreshTokenRegistry.Revoke(r.Context(), user.ID, refreshToken.ID); err != nil {
+		slog.Error("Failed to revoke consumed backoffice refresh token (rotation partially completed)",
+			"old_token_id", refreshToken.ID, "new_token_id", newRTI, "user_id", user.ID, "error", err)
 	}
 
+	// Stamp last_used_at on the NEW row so an operator inspecting the
+	// active session list sees the most recent usage. Best-effort: a
+	// failure here doesn't break the response.
+	now := time.Now()
+	if err := api.refreshTokenRegistry.BumpLastUsedAt(r.Context(), user.ID, newRTI, now); err != nil {
+		slog.Error("Failed to bump backoffice refresh token last_used_at", "token_id", newRTI, "error", err)
+	}
+
+	api.setRefreshTokenCookie(w, r, newRawRefreshToken)
 	api.logAuth(r.Context(), backofficeActionRefresh, user.ID, true, r, nil)
 	api.writeLoginResponse(w, accessToken, user)
 }
@@ -562,13 +698,30 @@ func (api *BackofficeAuthAPI) revokeRefreshTokenByRaw(ctx context.Context, rawTo
 	}
 }
 
-// adminIDFromAccessTokenHeader pulls the `admin_id` claim out of a
-// (possibly expired) Bearer token. Used by logout so an expired-token
-// logout still records the admin actor.
-func (api *BackofficeAuthAPI) adminIDFromAccessTokenHeader(authHeader string) (string, bool) {
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader {
-		return "", false
+// parseBackofficeAccessTokenClaims parses (and verifies the signature on)
+// a Bearer access token from authHeader and returns the claims map ONLY
+// if the token presents as a back-office token: `aud == "backoffice"`
+// AND a non-empty `admin_id` claim. Expired tokens are accepted so that
+// logout can still extract the admin actor + JTI after the access TTL
+// lapses. Returns (nil, false) for any of:
+//
+//   - missing/malformed Authorization header,
+//   - signature failure or non-HMAC alg,
+//   - missing/empty `admin_id`,
+//   - `aud` != "backoffice" (a tenant JWT replayed at a back-office
+//     endpoint must NEVER let us write into the shared jti blacklist
+//     or stamp a back-office audit row).
+//
+// The Bearer scheme match is case-insensitive (RFC 7235 §2.1), aligned
+// with the tenant-side parseBearerToken added in PR #1812.
+func (api *BackofficeAuthAPI) parseBackofficeAccessTokenClaims(authHeader string) (jwt.MapClaims, bool) {
+	scheme, tokenString, hasSpace := strings.Cut(authHeader, " ")
+	if !hasSpace || !strings.EqualFold(scheme, "Bearer") {
+		return nil, false
+	}
+	tokenString = strings.TrimSpace(tokenString)
+	if tokenString == "" {
+		return nil, false
 	}
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -577,43 +730,66 @@ func (api *BackofficeAuthAPI) adminIDFromAccessTokenHeader(authHeader string) (s
 		return api.jwtSecret, nil
 	})
 	if token == nil {
-		return "", false
+		return nil, false
 	}
 	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
-		return "", false
+		return nil, false
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
+		return nil, false
+	}
+
+	// Plane guard #1: `aud` MUST be "backoffice". A tenant JWT (which
+	// historically carries no `aud` at all) MUST never reach the
+	// blacklist or audit-log writers below — otherwise an attacker who
+	// holds a tenant token can POST it at /backoffice/auth/logout and
+	// forcibly invalidate the victim's tenant session via a different
+	// plane, bypassing the cross-plane boundary. Mirrors the guard
+	// `validateBackofficeJWT` enforces on authenticated routes.
+	if aud, _ := claims["aud"].(string); aud != backofficeTokenAudience {
+		return nil, false
+	}
+
+	// Plane guard #2: `admin_id` MUST be present. A token with the
+	// right `aud` but no admin_id is malformed — refuse to act on it.
+	if adminID, _ := claims["admin_id"].(string); adminID == "" {
+		return nil, false
+	}
+
+	return claims, true
+}
+
+// adminIDFromAccessTokenHeader pulls the `admin_id` claim out of a
+// (possibly expired) Bearer token, returning ("", false) for any token
+// that is not a back-office token (wrong aud, missing admin_id, bad
+// signature). Used by logout so an expired-token logout still records
+// the admin actor — but ONLY when the token is genuinely ours.
+func (api *BackofficeAuthAPI) adminIDFromAccessTokenHeader(authHeader string) (string, bool) {
+	claims, ok := api.parseBackofficeAccessTokenClaims(authHeader)
+	if !ok {
 		return "", false
 	}
-	adminID, ok := claims["admin_id"].(string)
-	return adminID, ok && adminID != ""
+	adminID, _ := claims["admin_id"].(string)
+	return adminID, adminID != ""
 }
 
 // blacklistAccessToken extracts the JTI from a Bearer header and
 // blacklists it until its `exp`. Capped at 2× backofficeAccessTokenExpiration
 // as defence-in-depth against an artificially large exp.
+//
+// The header MUST present as a back-office token (aud="backoffice",
+// non-empty admin_id) — otherwise the call is a no-op. The blacklister
+// keyspace is shared with the tenant plane, so writing a tenant JWT's
+// jti into it from this handler would let an unauthenticated attacker
+// invalidate any tenant session by POSTing a captured tenant JWT at
+// /backoffice/auth/logout. The guard collapses that into a silent
+// decline so the cross-plane boundary holds.
 func (api *BackofficeAuthAPI) blacklistAccessToken(ctx context.Context, authHeader string) {
 	if api.blacklistService == nil {
 		return
 	}
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader {
-		return
-	}
-	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return api.jwtSecret, nil
-	})
-	if token == nil {
-		return
-	}
-	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
-		return
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
+	claims, ok := api.parseBackofficeAccessTokenClaims(authHeader)
 	if !ok {
 		return
 	}

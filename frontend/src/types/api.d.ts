@@ -1995,15 +1995,6 @@ export type paths = {
                         "application/json": string;
                     };
                 };
-                /** @description Forbidden - account disabled */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": string;
-                    };
-                };
                 /** @description Too Many Requests - account locked */
                 429: {
                     headers: {
@@ -2011,6 +2002,15 @@ export type paths = {
                     };
                     content: {
                         "application/json": string;
+                    };
+                };
+                /** @description Not Implemented - MFA enforced but not yet wired (Phase 4) */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.BackofficeMFARequiredResponse"];
                     };
                 };
             };
@@ -2119,7 +2119,7 @@ export type paths = {
         put?: never;
         /**
          * Refresh back-office access token
-         * @description Issue a new back-office access token using the `backoffice_refresh_token` cookie.
+         * @description Issue a new back-office access token using the `backoffice_refresh_token` cookie. Rotates the refresh token: the consumed cookie value is revoked and a new value is set.
          */
         post: {
             parameters: {
@@ -2141,6 +2141,15 @@ export type paths = {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Refresh tokens not supported (registry not configured) */
+                501: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -8625,6 +8634,15 @@ export type components = {
         };
         "apiserver.BackofficeLogoutResponse": {
             message?: string;
+        };
+        "apiserver.BackofficeMFARequiredResponse": {
+            /**
+             * @description Code mirrors backofficeMFANotImplementedCode so FE clients can
+             *     branch on a stable identifier instead of an HTTP status alone.
+             */
+            code?: string;
+            email?: string;
+            mfa_required?: boolean;
         };
         "apiserver.BackofficeProfile": {
             email?: string;

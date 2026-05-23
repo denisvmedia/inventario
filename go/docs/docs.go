@@ -1507,16 +1507,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
-                    "403": {
-                        "description": "Forbidden - account disabled",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
                     "429": {
                         "description": "Too Many Requests - account locked",
                         "schema": {
                             "type": "string"
+                        }
+                    },
+                    "501": {
+                        "description": "Not Implemented - MFA enforced but not yet wired (Phase 4)",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.BackofficeMFARequiredResponse"
                         }
                     }
                 }
@@ -1570,7 +1570,7 @@ const docTemplate = `{
         },
         "/backoffice/auth/refresh": {
             "post": {
-                "description": "Issue a new back-office access token using the ` + "`" + `backoffice_refresh_token` + "`" + ` cookie.",
+                "description": "Issue a new back-office access token using the ` + "`" + `backoffice_refresh_token` + "`" + ` cookie. Rotates the refresh token: the consumed cookie value is revoked and a new value is set.",
                 "produces": [
                     "application/json"
                 ],
@@ -1587,6 +1587,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "501": {
+                        "description": "Refresh tokens not supported (registry not configured)",
                         "schema": {
                             "type": "string"
                         }
@@ -7726,6 +7732,21 @@ const docTemplate = `{
             "properties": {
                 "message": {
                     "type": "string"
+                }
+            }
+        },
+        "apiserver.BackofficeMFARequiredResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code mirrors backofficeMFANotImplementedCode so FE clients can\nbranch on a stable identifier instead of an HTTP status alone.",
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "mfa_required": {
+                    "type": "boolean"
                 }
             }
         },

@@ -24,7 +24,8 @@ import (
 // HMAC-signed URLs (SignedURLMiddleware), not JWTs.
 //
 // The Bearer auth-scheme name is matched case-insensitively per RFC 7235 §2.1
-// (delegated to parseBearerToken).
+// (delegated to parseBearerToken — shared with the back-office middleware so
+// both planes accept the same wire shape).
 func extractTokenFromRequest(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {

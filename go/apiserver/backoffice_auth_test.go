@@ -206,6 +206,14 @@ func TestBackofficeAuth_Login_NonexistentUser(t *testing.T) {
 	c.Assert(logs[0].Action, qt.Equals, "backoffice.login_failed")
 }
 
+// TestBackofficeAuth_Login_InactiveAccount asserts the design-choice
+// collapse: a disabled account returns the SAME 401 "Invalid credentials"
+// body as a wrong-password attempt, so an attacker cannot enumerate
+// which operator emails exist by probing the status code. The audit log
+// still records the disabled-account distinction (action remains
+// `backoffice.login_failed`, error message carries the
+// ErrBackofficeAccountDisabled sentinel text) so platform admins can
+// observe the real reason out-of-band.
 func TestBackofficeAuth_Login_InactiveAccount(t *testing.T) {
 	c := qt.New(t)
 	router, bo, _, audit := newBackofficeAuthRouter(t)
@@ -222,12 +230,14 @@ func TestBackofficeAuth_Login_InactiveAccount(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	c.Assert(rec.Code, qt.Equals, http.StatusForbidden)
+	c.Assert(rec.Code, qt.Equals, http.StatusUnauthorized)
 
 	logs, err := audit.List(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(logs, qt.HasLen, 1)
 	c.Assert(logs[0].Action, qt.Equals, "backoffice.login_failed")
+	c.Assert(logs[0].ErrorMessage, qt.IsNotNil)
+	c.Assert(*logs[0].ErrorMessage, qt.Equals, apiserver.ErrBackofficeAccountDisabled.Error())
 }
 
 func TestBackofficeAuth_Login_MissingFields(t *testing.T) {
@@ -447,4 +457,353 @@ func TestBackofficeAuth_Me_NoToken(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	c.Assert(rec.Code, qt.Equals, http.StatusUnauthorized)
+}
+
+// TestBackofficeAuth_Login_RejectsMalformedEmail pins that a request body
+// whose `email` is syntactically invalid is rejected at the registry
+// validation step rather than slipping through to bcrypt + audit. The
+// current handler only checks for empty strings up-front; a malformed
+// email still maps to "user not found" (same 401 as a wrong-password
+// attempt) because the registry's GetByEmail returns ErrBackofficeUserNotFound
+// for any non-matching key. Pinning this stops a future "let's add
+// strict email-syntax validation up-front" refactor from changing the
+// wire shape and breaking the FE's error-handling.
+func TestBackofficeAuth_Login_RejectsMalformedEmail(t *testing.T) {
+	c := qt.New(t)
+	router, bo, _, _ := newBackofficeAuthRouter(t)
+	seedBackofficeUser(t, bo, "ops@example.com", "S3cretPass!")
+
+	body, _ := json.Marshal(apiserver.BackofficeLoginRequest{
+		Email:    "not-an-email",
+		Password: "doesntmatter",
+	})
+	req := httptest.NewRequest("POST", "/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	// Malformed email collapses into the same "Invalid credentials" 401
+	// as a wrong-password / unknown-user attempt: the registry's
+	// GetByEmail returns not-found for any non-matching key, including
+	// syntactically invalid ones, and the handler treats not-found as
+	// "wrong credentials" by design (to prevent enumeration).
+	c.Assert(rec.Code, qt.Equals, http.StatusUnauthorized)
+}
+
+// TestBackofficeAuth_Login_CaseInsensitiveEmail pins the registry-layer
+// lowercasing contract from the HTTP surface: seeding "ops@example.com"
+// and authenticating as "OPS@Example.COM" must succeed. Otherwise a
+// future "we lowercase emails but only on Create" refactor would silently
+// break login for any operator typing the wrong case.
+func TestBackofficeAuth_Login_CaseInsensitiveEmail(t *testing.T) {
+	c := qt.New(t)
+	router, bo, _, _ := newBackofficeAuthRouter(t)
+	seedBackofficeUser(t, bo, "ops@example.com", "S3cretPass!")
+
+	body, _ := json.Marshal(apiserver.BackofficeLoginRequest{
+		Email:    "OPS@Example.COM",
+		Password: "S3cretPass!",
+	})
+	req := httptest.NewRequest("POST", "/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	c.Assert(rec.Code, qt.Equals, http.StatusOK)
+	var resp apiserver.BackofficeLoginResponse
+	c.Assert(json.Unmarshal(rec.Body.Bytes(), &resp), qt.IsNil)
+	c.Assert(resp.User.Email, qt.Equals, "ops@example.com")
+}
+
+// TestBackofficeAuth_Login_RejectsMFAEnforced_UntilPhase4 pins the
+// Phase-2 fail-closed behaviour: any back-office user with
+// MFAEnforced=true must NOT be able to log in (the challenge flow lands
+// in Phase 4). The schema + bootstrap default `mfa_enforced=false` so
+// this branch is dormant in production, but if an operator manually
+// flips the column to true (e.g. as part of a manual security
+// readiness exercise) the login must return 501 with a typed body,
+// NOT silently mint a fully-privileged token.
+//
+// Phase 4 will replace the 501 with a real challenge mint that returns
+// the same response shape on the success path; this test should remain
+// green but the wire status will become 200.
+func TestBackofficeAuth_Login_RejectsMFAEnforced_UntilPhase4(t *testing.T) {
+	c := qt.New(t)
+	router, bo, _, audit := newBackofficeAuthRouter(t)
+	seedBackofficeUser(t, bo, "ops@example.com", "S3cretPass!", func(u *models.BackofficeUser) {
+		u.MFAEnforced = true
+	})
+
+	body, _ := json.Marshal(apiserver.BackofficeLoginRequest{
+		Email:    "ops@example.com",
+		Password: "S3cretPass!",
+	})
+	req := httptest.NewRequest("POST", "/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	c.Assert(rec.Code, qt.Equals, http.StatusNotImplemented)
+
+	var resp apiserver.BackofficeMFARequiredResponse
+	c.Assert(json.Unmarshal(rec.Body.Bytes(), &resp), qt.IsNil)
+	c.Assert(resp.MFARequired, qt.IsTrue)
+	c.Assert(resp.Email, qt.Equals, "ops@example.com")
+	c.Assert(resp.Code, qt.Equals, "backoffice.mfa_not_implemented")
+
+	// Audit log records the MFA-required outcome so platform admins can
+	// see operators tripping the fail-closed branch.
+	logs, err := audit.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(logs, qt.HasLen, 1)
+	c.Assert(logs[0].Action, qt.Equals, "backoffice.login_mfa_required")
+	c.Assert(logs[0].Success, qt.IsFalse)
+}
+
+// TestBackofficeAuth_Logout_IgnoresTenantTokenInHeader pins the
+// cross-plane revocation gadget fix: posting a valid tenant-shaped JWT
+// (no `aud=backoffice`, no `admin_id`) at /backoffice/auth/logout must
+// NOT blacklist the JWT's `jti` in the shared blacklist. Without this
+// guard, an attacker holding a victim's tenant JWT could forcibly
+// invalidate that tenant session via a back-office endpoint that runs
+// without authentication. Audit log entry must also NOT include the
+// tenant token's `user_id` as a back-office `admin_id`.
+func TestBackofficeAuth_Logout_IgnoresTenantTokenInHeader(t *testing.T) {
+	c := qt.New(t)
+	bo := memory.NewBackofficeUserRegistry()
+	rt := memory.NewBackofficeRefreshTokenRegistry()
+	audit := memory.NewAuditLogRegistry()
+	auditSvc := services.NewAuditService(audit)
+	rateLimiter := services.NewNoOpAuthRateLimiter()
+	blacklist := services.NewInMemoryTokenBlacklister()
+
+	r := chi.NewRouter()
+	r.Route("/", apiserver.BackofficeAuth(apiserver.BackofficeAuthParams{
+		BackofficeUserRegistry:         bo,
+		BackofficeRefreshTokenRegistry: rt,
+		BlacklistService:               blacklist,
+		RateLimiter:                    rateLimiter,
+		AuditService:                   auditSvc,
+		JWTSecret:                      backofficeTestSecret,
+	}))
+
+	// Mint a tenant-shaped token (no aud, user_id instead of admin_id)
+	// signed with the SHARED secret. The signature is valid; the only
+	// thing that protects us is the aud guard inside
+	// parseBackofficeAccessTokenClaims.
+	tenantJTI := "tenant-jti-victim-session"
+	tenantClaims := jwt.MapClaims{
+		"jti":        tenantJTI,
+		"user_id":    "tenant-user-id",
+		"token_type": "access",
+		"exp":        time.Now().Add(15 * time.Minute).Unix(),
+		"iat":        time.Now().Unix(),
+		// Intentionally NO aud claim — mimics the historical tenant mint.
+	}
+	tenantToken := jwt.NewWithClaims(jwt.SigningMethodHS256, tenantClaims)
+	tenantSigned, err := tenantToken.SignedString(backofficeTestSecret)
+	c.Assert(err, qt.IsNil)
+
+	// Post the tenant token at the back-office logout endpoint.
+	logoutReq := httptest.NewRequest("POST", "/logout", nil)
+	logoutReq.Header.Set("Authorization", "Bearer "+tenantSigned)
+	logoutRec := httptest.NewRecorder()
+	r.ServeHTTP(logoutRec, logoutReq)
+
+	// Logout itself succeeds (the endpoint is intentionally
+	// unauthenticated and idempotent) but the tenant jti MUST NOT be
+	// in the blacklist.
+	c.Assert(logoutRec.Code, qt.Equals, http.StatusOK)
+
+	blacklisted, blErr := blacklist.IsBlacklisted(context.Background(), tenantJTI)
+	c.Assert(blErr, qt.IsNil)
+	c.Assert(blacklisted, qt.IsFalse)
+
+	// And no audit log was written under a back-office admin_id (the
+	// tenant token has none, so adminIDFromAccessTokenHeader returned
+	// empty + the logout audit branch was skipped).
+	logs, err := audit.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(logs, qt.HasLen, 0)
+}
+
+// TestBackofficeAuth_Logout_BlacklistsBackofficeAccessToken closes the
+// coverage gap the reviewer flagged: logout must blacklist the access
+// token's jti so a subsequent /me call with the same Bearer fails. The
+// existing TestBackofficeAuth_Logout_RevokesRefreshToken only covers
+// the refresh-token side of the contract.
+func TestBackofficeAuth_Logout_BlacklistsBackofficeAccessToken(t *testing.T) {
+	c := qt.New(t)
+	router, bo, _, _ := newBackofficeAuthRouter(t)
+	seedBackofficeUser(t, bo, "ops@example.com", "S3cretPass!")
+
+	// 1. Login → obtain access token.
+	body, _ := json.Marshal(apiserver.BackofficeLoginRequest{Email: "ops@example.com", Password: "S3cretPass!"})
+	req := httptest.NewRequest("POST", "/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	c.Assert(rec.Code, qt.Equals, http.StatusOK)
+	var resp apiserver.BackofficeLoginResponse
+	c.Assert(json.Unmarshal(rec.Body.Bytes(), &resp), qt.IsNil)
+	c.Assert(resp.AccessToken, qt.Not(qt.Equals), "")
+
+	// Sanity: /me works with this token before logout.
+	meReq := httptest.NewRequest("GET", "/me", nil)
+	meReq.Header.Set("Authorization", "Bearer "+resp.AccessToken)
+	meRec := httptest.NewRecorder()
+	router.ServeHTTP(meRec, meReq)
+	c.Assert(meRec.Code, qt.Equals, http.StatusOK)
+
+	// 2. Logout with the bearer.
+	logoutReq := httptest.NewRequest("POST", "/logout", nil)
+	logoutReq.Header.Set("Authorization", "Bearer "+resp.AccessToken)
+	logoutRec := httptest.NewRecorder()
+	router.ServeHTTP(logoutRec, logoutReq)
+	c.Assert(logoutRec.Code, qt.Equals, http.StatusOK)
+
+	// 3. SAME bearer is now rejected.
+	meReq2 := httptest.NewRequest("GET", "/me", nil)
+	meReq2.Header.Set("Authorization", "Bearer "+resp.AccessToken)
+	meRec2 := httptest.NewRecorder()
+	router.ServeHTTP(meRec2, meReq2)
+	c.Assert(meRec2.Code, qt.Equals, http.StatusUnauthorized)
+}
+
+// TestBackofficeAuth_Refresh_RotatesRefreshToken pins the rotation
+// contract: every successful refresh revokes the consumed refresh-token
+// row and issues a new one. The first call with the seed cookie must
+// succeed and return a new cookie; the second call with the OLD cookie
+// must return 401 (the old token hashes to a now-revoked row).
+func TestBackofficeAuth_Refresh_RotatesRefreshToken(t *testing.T) {
+	c := qt.New(t)
+	router, bo, _, _ := newBackofficeAuthRouter(t)
+	seedBackofficeUser(t, bo, "ops@example.com", "S3cretPass!")
+
+	// Login → first refresh cookie.
+	body, _ := json.Marshal(apiserver.BackofficeLoginRequest{Email: "ops@example.com", Password: "S3cretPass!"})
+	req := httptest.NewRequest("POST", "/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	c.Assert(rec.Code, qt.Equals, http.StatusOK)
+	var originalCookie *http.Cookie
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "backoffice_refresh_token" {
+			originalCookie = cookie
+		}
+	}
+	c.Assert(originalCookie, qt.IsNotNil)
+
+	// First refresh: succeeds, returns a NEW cookie value.
+	refreshReq := httptest.NewRequest("POST", "/refresh", nil)
+	refreshReq.AddCookie(originalCookie)
+	refreshRec := httptest.NewRecorder()
+	router.ServeHTTP(refreshRec, refreshReq)
+	c.Assert(refreshRec.Code, qt.Equals, http.StatusOK)
+
+	var rotatedCookie *http.Cookie
+	for _, cookie := range refreshRec.Result().Cookies() {
+		if cookie.Name == "backoffice_refresh_token" {
+			rotatedCookie = cookie
+		}
+	}
+	c.Assert(rotatedCookie, qt.IsNotNil)
+	c.Assert(rotatedCookie.Value, qt.Not(qt.Equals), originalCookie.Value)
+
+	// Second refresh with the ORIGINAL cookie: must fail with 401
+	// because the original row is now revoked. This is the
+	// replay-after-rotation defence: a stolen cookie stays valid only
+	// until the legitimate operator next refreshes.
+	replayReq := httptest.NewRequest("POST", "/refresh", nil)
+	replayReq.AddCookie(originalCookie)
+	replayRec := httptest.NewRecorder()
+	router.ServeHTTP(replayRec, replayReq)
+	c.Assert(replayRec.Code, qt.Equals, http.StatusUnauthorized)
+
+	// The rotated cookie still works (third call uses the new value).
+	thirdReq := httptest.NewRequest("POST", "/refresh", nil)
+	thirdReq.AddCookie(rotatedCookie)
+	thirdRec := httptest.NewRecorder()
+	router.ServeHTTP(thirdRec, thirdReq)
+	c.Assert(thirdRec.Code, qt.Equals, http.StatusOK)
+}
+
+// TestBackofficeAuth_Refresh_RejectsTenantRefreshCookie pins the
+// cross-plane cookie isolation: posting a `refresh_token=<value>`
+// cookie (the tenant cookie name) at /backoffice/auth/refresh must
+// return 401 "Refresh token required" because the back-office handler
+// reads ONLY the `backoffice_refresh_token` cookie name. Without this
+// guard a browser holding both a tenant and a back-office cookie could
+// accidentally let one plane act on the other plane's session.
+func TestBackofficeAuth_Refresh_RejectsTenantRefreshCookie(t *testing.T) {
+	c := qt.New(t)
+	router, _, _, _ := newBackofficeAuthRouter(t)
+
+	req := httptest.NewRequest("POST", "/refresh", nil)
+	// #nosec G124 -- test cookie attached to an httptest.Request; not transmitted over the wire.
+	req.AddCookie(&http.Cookie{
+		Name:     "refresh_token", // the TENANT cookie name
+		Value:    "some-tenant-cookie-value",
+		HttpOnly: true,
+	})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	c.Assert(rec.Code, qt.Equals, http.StatusUnauthorized)
+}
+
+// TestBackofficeAuth_Login_RateLimited pins the per-email lockout
+// contract: 5 consecutive failed logins against the same email trigger
+// a lockout, and the 6th attempt returns 429 with a `Retry-After`
+// header. Uses the in-memory rate limiter (production wires Redis or
+// in-memory depending on config) so the test is deterministic without
+// external state.
+func TestBackofficeAuth_Login_RateLimited(t *testing.T) {
+	c := qt.New(t)
+	bo := memory.NewBackofficeUserRegistry()
+	rt := memory.NewBackofficeRefreshTokenRegistry()
+	audit := memory.NewAuditLogRegistry()
+	auditSvc := services.NewAuditService(audit)
+	// Use the REAL in-memory rate limiter (not no-op) so the lockout
+	// branch in api.login fires.
+	rateLimiter := services.NewInMemoryAuthRateLimiter()
+	blacklist := services.NewInMemoryTokenBlacklister()
+
+	r := chi.NewRouter()
+	r.Route("/", apiserver.BackofficeAuth(apiserver.BackofficeAuthParams{
+		BackofficeUserRegistry:         bo,
+		BackofficeRefreshTokenRegistry: rt,
+		BlacklistService:               blacklist,
+		RateLimiter:                    rateLimiter,
+		AuditService:                   auditSvc,
+		JWTSecret:                      backofficeTestSecret,
+	}))
+	seedBackofficeUser(t, bo, "ops@example.com", "S3cretPass!")
+
+	wrongBody, _ := json.Marshal(apiserver.BackofficeLoginRequest{
+		Email:    "ops@example.com",
+		Password: "wrong-password",
+	})
+
+	// 5 wrong-password attempts to exhaust the failed-login budget.
+	for range 5 {
+		req := httptest.NewRequest("POST", "/login", bytes.NewReader(wrongBody))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		c.Assert(rec.Code, qt.Equals, http.StatusUnauthorized)
+	}
+
+	// 6th attempt — even with the CORRECT password — must be locked out.
+	rightBody, _ := json.Marshal(apiserver.BackofficeLoginRequest{
+		Email:    "ops@example.com",
+		Password: "S3cretPass!",
+	})
+	req := httptest.NewRequest("POST", "/login", bytes.NewReader(rightBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	c.Assert(rec.Code, qt.Equals, http.StatusTooManyRequests)
+	c.Assert(rec.Header().Get("Retry-After"), qt.Not(qt.Equals), "")
 }

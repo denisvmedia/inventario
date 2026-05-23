@@ -15,7 +15,7 @@ CREATE TABLE backoffice_users (
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL,
   is_active BOOLEAN NOT NULL DEFAULT 'true',
-  mfa_enforced BOOLEAN NOT NULL DEFAULT 'true',
+  mfa_enforced BOOLEAN NOT NULL DEFAULT 'false',
   last_login_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
