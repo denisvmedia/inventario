@@ -1654,8 +1654,12 @@ type SystemAdminGrantRegistry interface {
 	//revive:disable-next-line:flag-parameter
 	RevokeAtomic(ctx context.Context, userID string, allowZero bool) (hadGrant bool, err error)
 
-	// List returns every grant row, ordered by granted_at ASC. Backs
-	// the `inventario admin list-system-admins` CLI command (the CLI
+	// List returns every grant row, ordered by (granted_at ASC,
+	// user_id ASC). The user_id secondary key keeps iteration order
+	// stable when two grants share a granted_at — fast-fired CLI
+	// grants can tie on `now()` resolution otherwise, which would
+	// shuffle the rendered list across reads. Backs the
+	// `inventario admin list-system-admins` CLI command (the CLI
 	// joins to users for the rendered table).
 	List(ctx context.Context) ([]*models.SystemAdminGrant, error)
 }
@@ -1941,6 +1945,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.MaintenanceScheduleRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
+		validation.Field(&s.SystemAdminGrantRegistry, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, s, fields...)

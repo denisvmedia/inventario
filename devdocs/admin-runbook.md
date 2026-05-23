@@ -29,12 +29,12 @@ inventario admin grant-system-admin --email admin@acme.com \
 - The DSN may also come from the `INVENTARIO_DB_DSN` environment
   variable instead of `--db-dsn`.
 - **PostgreSQL only.** `memory://` DSNs are rejected — the in-memory
-  backend cannot persist the flag across restarts.
+  backend cannot persist grants across restarts.
 - The operation is **idempotent**: granting to a user who is already a
   system admin prints `ℹ️  … is already a system administrator.` and
   exits `0`.
 - `grant-system-admin` does **not** add the user to any group — the
-  system-admin flag is orthogonal to group membership.
+  system-admin grant is orthogonal to group membership.
 
 On success:
 
@@ -71,7 +71,7 @@ off active access tokens, block the account (admin UI → user detail →
 **Block**, or `POST /api/v1/admin/users/{id}/block`), which revokes
 refresh tokens and bumps the JWT-blacklist staleness threshold.
 
-To see who currently holds the flag:
+To see who currently holds a grant:
 
 ```bash
 inventario admin list-system-admins \

@@ -57,7 +57,7 @@ they reach `/api/v1/admin/*`.
   mounts an HTTP write endpoint for `system_admin_grants`. The
   invariant also asserts that the user-write request DTOs
   (`RegisterRequest`, `UpdateProfileRequest`, …) carry no field that
-  could maps to a grant write.
+  could map to a grant write.
 
 **Residual risk.**
 - Compromise of the JWT signing secret (see T2) or of the database —

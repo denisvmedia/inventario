@@ -109,9 +109,14 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 }
 
 // listingJSON is the wire shape the --output=json variant emits.
-// Mirrors the legacy *models.User shape with the addition of an
-// explicit granted_at field so existing scripts that walk `id` /
-// `email` / `name` keep working unchanged.
+// Intentionally reduced from the full *models.User row: list-system-admins
+// answers "who currently holds the system-admin privilege and when was
+// it granted", not "give me the user-account identity record". Fields
+// dropped on purpose: created_at, updated_at, tenant_id, is_active —
+// those belong to the user-account identity, not to the grant. Existing
+// scripts that walk `id` / `email` / `name` keep working unchanged;
+// scripts that need the dropped fields can join against `users` via the
+// returned id.
 type listingJSON struct {
 	ID        string `json:"id"`
 	Email     string `json:"email"`

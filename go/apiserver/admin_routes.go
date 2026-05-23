@@ -149,6 +149,13 @@ func Admin(params AdminParams) func(r chi.Router) {
 	if params.AuditService == nil {
 		panic("apiserver.Admin requires non-nil AdminParams.AuditService")
 	}
+	// The #1784 grant store backs RequireSystemAdmin; we dereference
+	// params.FactorySet a few lines below to resolve it. A nil FactorySet
+	// would NPE before any middleware ran, so trip the startup-guard
+	// invariant here for a clear failure message.
+	if params.FactorySet == nil {
+		panic("apiserver.Admin requires non-nil AdminParams.FactorySet")
+	}
 
 	tenantsAPI := &adminTenantsAPI{
 		factorySet:   params.FactorySet,
@@ -180,9 +187,11 @@ func Admin(params AdminParams) func(r chi.Router) {
 	}
 	// Resolve the grants registry from the FactorySet — RequireSystemAdmin
 	// and RequireSystemAdminOrImpersonating are no longer static funcs
-	// (#1784) but instances bound to the deployment's grant store. A nil
-	// FactorySet is a clear startup misconfiguration; let RequireSystemAdmin
-	// panic loudly so the operator notices.
+	// (#1784) but instances bound to the deployment's grant store. The
+	// FactorySet nil-guard above runs before this dereference, so a missing
+	// wiring fails at startup with a clear message rather than NPE'ing here.
+	// A nil SystemAdminGrantRegistry inside a non-nil FactorySet is caught
+	// downstream by RequireSystemAdmin's own nil-check (returns 500).
 	requireSystemAdmin := RequireSystemAdmin(params.FactorySet.SystemAdminGrantRegistry)
 	requireSystemAdminOrImpersonating := RequireSystemAdminOrImpersonating(params.FactorySet.SystemAdminGrantRegistry)
 

@@ -197,16 +197,20 @@ func (r *SystemAdminGrantRegistry) RevokeAtomic(ctx context.Context, userID stri
 	return hadGrant, nil
 }
 
-// List returns every grant row, ordered by granted_at ASC. Backs the
-// CLI list-system-admins command; the CLI joins each row to its user
-// row separately so the registry stays focused on a single table.
+// List returns every grant row, ordered by (granted_at ASC, user_id ASC).
+// Backs the CLI list-system-admins command; the CLI joins each row to
+// its user row separately so the registry stays focused on a single
+// table. The user_id secondary key keeps the rendered list deterministic
+// when two grants share a granted_at — fast-fired CLI grants can tie on
+// `now()` resolution otherwise. The memory backend applies the same
+// composite ordering so both backends agree.
 func (r *SystemAdminGrantRegistry) List(ctx context.Context) ([]*models.SystemAdminGrant, error) {
 	reg := r.newSQLRegistry()
 
 	var grants []*models.SystemAdminGrant
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
-			`SELECT * FROM %s ORDER BY granted_at ASC`,
+			`SELECT * FROM %s ORDER BY granted_at ASC, user_id ASC`,
 			r.tableNames.SystemAdminGrants(),
 		)
 		rows, err := tx.QueryxContext(ctx, query)

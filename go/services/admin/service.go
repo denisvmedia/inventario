@@ -508,7 +508,13 @@ func (s *Service) GrantSystemAdmin(ctx context.Context, idOrEmail string) (resul
 	}
 
 	if s.factorySet.SystemAdminGrantRegistry == nil {
-		return nil, false, errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "SystemAdminGrantRegistry"))
+		configErr := errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "SystemAdminGrantRegistry"))
+		// Audit the misconfiguration before returning so the trail records
+		// the attempt even when the grant store is unwired. Tenant + acting
+		// user are nil/"" because this is a server-config failure, not a
+		// user-driven rejection — there is no resolved subject to charge.
+		s.logAdminAction(ctx, "admin.grant_system_admin", nil, "", configErr)
+		return nil, false, configErr
 	}
 
 	hadFlag, grantErr := s.factorySet.SystemAdminGrantRegistry.Grant(ctx, user.ID, nil)
@@ -547,7 +553,12 @@ func (s *Service) RevokeSystemAdmin(ctx context.Context, idOrEmail string, allow
 	}
 
 	if s.factorySet.SystemAdminGrantRegistry == nil {
-		return nil, false, errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "SystemAdminGrantRegistry"))
+		configErr := errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "SystemAdminGrantRegistry"))
+		// Mirror GrantSystemAdmin: audit the misconfiguration before
+		// returning so the trail records the attempt regardless. Tenant +
+		// acting user are nil/"" because this is a server-config failure.
+		s.logAdminAction(ctx, "admin.revoke_system_admin", nil, "", configErr)
+		return nil, false, configErr
 	}
 
 	hadFlag, revokeErr := s.factorySet.SystemAdminGrantRegistry.RevokeAtomic(ctx, user.ID, allowZero)

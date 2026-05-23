@@ -70,13 +70,24 @@ func (r *SystemAdminGrantRegistry) Grant(_ context.Context, userID string, grant
 		return true, nil
 	}
 
+	// Deep-copy grantedBy so the caller can mutate the variable they
+	// passed in (or even re-use the same address across calls) without
+	// rippling into the registry's stored row. The postgres impl gets
+	// this for free via INSERT param marshalling — the memory backend
+	// must do it explicitly.
+	var storedGrantedBy *string
+	if grantedBy != nil {
+		copyOf := *grantedBy
+		storedGrantedBy = &copyOf
+	}
+
 	grant := &models.SystemAdminGrant{
 		EntityID: models.EntityID{
 			ID:   r.uuidFn(),
 			UUID: r.uuidFn(),
 		},
 		UserID:    userID,
-		GrantedBy: grantedBy,
+		GrantedBy: storedGrantedBy,
 		GrantedAt: r.nowFn(),
 	}
 	r.items[grant.ID] = grant
@@ -114,7 +125,12 @@ func (r *SystemAdminGrantRegistry) RevokeAtomic(_ context.Context, userID string
 	return true, nil
 }
 
-// List returns every grant row, ordered by granted_at ASC.
+// List returns every grant row, ordered by (granted_at ASC, user_id ASC).
+// The user_id secondary key gives callers a stable, deterministic
+// iteration order when two grants share a granted_at timestamp — without
+// it, fast-fired CLI grants could tie on `now()` resolution and the
+// rendered list would shuffle between calls. The postgres impl applies
+// the same composite ORDER BY so both backends agree.
 func (r *SystemAdminGrantRegistry) List(_ context.Context) ([]*models.SystemAdminGrant, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -122,11 +138,21 @@ func (r *SystemAdminGrantRegistry) List(_ context.Context) ([]*models.SystemAdmi
 	out := make([]*models.SystemAdminGrant, 0, len(r.items))
 	for _, g := range r.items {
 		// Defensive copy so a caller mutating the returned slice can't
-		// corrupt registry state.
+		// corrupt registry state. The struct copy duplicates value
+		// fields but `GrantedBy *string` still aliases the registry's
+		// pointer — copy the pointee too so a caller writing through
+		// the returned pointer can't reach the stored row.
 		cp := *g
+		if g.GrantedBy != nil {
+			copyOf := *g.GrantedBy
+			cp.GrantedBy = &copyOf
+		}
 		out = append(out, &cp)
 	}
 	sort.Slice(out, func(i, j int) bool {
+		if out[i].GrantedAt.Equal(out[j].GrantedAt) {
+			return out[i].UserID < out[j].UserID
+		}
 		return out[i].GrantedAt.Before(out[j].GrantedAt)
 	})
 	return out, nil
