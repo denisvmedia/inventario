@@ -302,12 +302,36 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// Generate a CSRF token for this session.
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
 
-	// Stamp the wire-only is_system_admin advisory flag (#1784) so the
-	// FE can render the admin chrome on first paint without an extra
-	// /auth/me round-trip. Best-effort — see populateUserSystemAdminFlag.
-	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, user)
+	// Reuse the already-computed claim from the freshly issued access token
+	// instead of performing a second best-effort admin-grant lookup here.
+	populateUserSystemAdminFlagFromAccessToken(accessTokenString, user)
 
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
+}
+
+func populateUserSystemAdminFlagFromAccessToken(accessTokenString string, user *models.User) {
+	if user == nil || accessTokenString == "" {
+		return
+	}
+
+	token, _, err := new(jwt.Parser).ParseUnverified(accessTokenString, jwt.MapClaims{})
+	if err != nil {
+		slog.Warn("Failed to parse access token for user is_system_admin flag", "user_id", user.ID, "error", err)
+		return
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		slog.Warn("Failed to read access token claims for user is_system_admin flag", "user_id", user.ID)
+		return
+	}
+
+	isAdmin, ok := claims["is_system_admin"].(bool)
+	if !ok {
+		return
+	}
+
+	user.IsSystemAdmin = isAdmin
 }
 
 // refresh issues a new access token using a valid refresh token cookie.
