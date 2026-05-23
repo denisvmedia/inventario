@@ -554,9 +554,9 @@ func (s *Service) RevokeSystemAdmin(ctx context.Context, idOrEmail string, allow
 	if s.factorySet.SystemAdminGrantRegistry == nil {
 		configErr := errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "SystemAdminGrantRegistry"))
 		// Mirror GrantSystemAdmin: audit the misconfiguration before
-		// returning so the trail records the attempt regardless. Tenant +
-		// acting user are nil/"" because this is a server-config failure.
-		s.logAdminAction(ctx, "admin.revoke_system_admin", nil, "", configErr)
+		// returning so the trail records the attempt regardless. The
+		// subject user is already resolved, so include it for forensics.
+		s.logAdminAction(ctx, "admin.revoke_system_admin", &user.TenantID, user.ID, configErr)
 		return nil, false, configErr
 	}
 

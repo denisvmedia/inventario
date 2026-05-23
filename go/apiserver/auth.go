@@ -449,8 +449,10 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// for refresh-only sessions (#1750/#1771).
 	clearLegacyRefreshCookie(w, r)
 
-	// Stamp the wire-only is_system_admin advisory flag (#1784).
-	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, user)
+	// Reuse the freshly-minted access-token claim instead of doing a
+	// second SystemAdminGrantRegistry.Exists lookup on the hot refresh
+	// path.
+	populateUserSystemAdminFlagFromAccessToken(accessTokenString, user)
 
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
