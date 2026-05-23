@@ -96,6 +96,11 @@ func New(cfg Config) (*Provider, error) {
 // Name implements aivision.Provider.
 func (*Provider) Name() string { return Name }
 
+// Model implements aivision.Provider. Returns the resolved model id
+// (the constructor falls back to DefaultModel when Config.Model is
+// empty) so the audit row records the actual upstream variant.
+func (p *Provider) Model() string { return p.model }
+
 // Scan implements aivision.Provider by issuing a single Messages request
 // with tool-use forcing.
 func (p *Provider) Scan(ctx context.Context, req aivision.ScanRequest) (*aivision.ScanResult, error) {

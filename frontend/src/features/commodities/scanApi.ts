@@ -162,10 +162,15 @@ function assignField(
     case "original_price":
       if (typeof value === "number" && Number.isFinite(value)) {
         out[key] = { value, confidence }
-      } else if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) {
+      } else if (typeof value === "string" && value.trim() !== "") {
         // Some providers return prices as strings; coerce here so the
-        // review row gets a plain number to format.
-        out[key] = { value: Number(value), confidence }
+        // review row gets a plain number to format. Use Number.isFinite
+        // (not !isNaN) so "Infinity"/"-Infinity" — which Number() parses
+        // happily — don't survive into the form as an unusable value.
+        const n = Number(value)
+        if (Number.isFinite(n)) {
+          out[key] = { value: n, confidence }
+        }
       }
       break
     case "urls":

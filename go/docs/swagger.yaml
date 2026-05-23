@@ -1269,6 +1269,7 @@ definitions:
       confidence:
         type: number
       value:
+        description: Value is polymorphic — see the type-level doc comment.
         type: object
     type: object
   jsonapi.CommodityScanResource:
@@ -6586,11 +6587,15 @@ paths:
         name: groupSlug
         required: true
         type: string
-      - description: Product photo(s); image/jpeg|png|webp|heic|heif
+      - collectionFormat: multi
+        description: Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Up to 5
+          files; repeat the field name to upload multiple.
         in: formData
+        items:
+          type: file
         name: photos
         required: true
-        type: file
+        type: array
       - description: Optional free-form hint (brand, category guess)
         in: formData
         name: hint

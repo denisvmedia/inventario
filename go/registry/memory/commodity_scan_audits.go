@@ -60,9 +60,12 @@ func (r *CommodityScanAuditRegistry) Record(_ context.Context, audit models.Comm
 	return &stored, nil
 }
 
-// CountRecentForUser counts audit rows for userID created at or after
-// since.
-func (r *CommodityScanAuditRegistry) CountRecentForUser(_ context.Context, userID string, since time.Time) (int, error) {
+// CountRecentForUser counts audit rows for (tenantID, userID) created
+// at or after since.
+func (r *CommodityScanAuditRegistry) CountRecentForUser(_ context.Context, tenantID, userID string, since time.Time) (int, error) {
+	if tenantID == "" {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
 	if userID == "" {
 		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
 	}
@@ -70,6 +73,9 @@ func (r *CommodityScanAuditRegistry) CountRecentForUser(_ context.Context, userI
 	defer r.mu.RUnlock()
 	count := 0
 	for _, item := range r.items {
+		if item.TenantID != tenantID {
+			continue
+		}
 		if item.UserID != userID {
 			continue
 		}

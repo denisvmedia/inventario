@@ -45,7 +45,7 @@ func TestCommodityScanService_HappyPath_AuditWritten(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 
-	count, err := audit.CountRecentForUser(context.Background(), "user-1", time.Now().Add(-1*time.Hour))
+	count, err := audit.CountRecentForUser(context.Background(), "tenant-1", "user-1", time.Now().Add(-1*time.Hour))
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
@@ -61,7 +61,7 @@ func TestCommodityScanService_ProviderDisabled(t *testing.T) {
 
 	// Audit row still recorded so the rate limiter and dashboards see
 	// the attempt even though no upstream call went out.
-	count, err := audit.CountRecentForUser(context.Background(), "user-1", time.Now().Add(-1*time.Hour))
+	count, err := audit.CountRecentForUser(context.Background(), "tenant-1", "user-1", time.Now().Add(-1*time.Hour))
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
@@ -129,7 +129,7 @@ func TestCommodityScanService_RateLimited(t *testing.T) {
 	c.Assert(errors.Is(err, services.ErrScanRateLimited), qt.IsTrue)
 
 	// Both attempts are recorded.
-	count, err := audit.CountRecentForUser(context.Background(), "user-1", time.Now().Add(-1*time.Hour))
+	count, err := audit.CountRecentForUser(context.Background(), "tenant-1", "user-1", time.Now().Add(-1*time.Hour))
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 2)
 }
@@ -174,9 +174,13 @@ func TestCommodityScanService_MissingIdentity(t *testing.T) {
 	c := qt.New(t)
 	svc := services.NewCommodityScanService(mock.New(), memory.NewCommodityScanAuditRegistry(), services.CommodityScanConfig{})
 
+	// Identity-missing is a deployment-wiring bug, not a client error;
+	// the service surfaces a dedicated sentinel the handler maps to 500
+	// (the previous ErrScanProviderError mapping leaked a misleading
+	// 502 "bad gateway" upstream).
 	_, err := svc.Scan(context.Background(), "", "user-1", newScanInput(jpegPhoto("a.jpg", 64)))
-	c.Assert(errors.Is(err, services.ErrScanProviderError), qt.IsTrue)
+	c.Assert(errors.Is(err, services.ErrScanIdentityMissing), qt.IsTrue)
 
 	_, err = svc.Scan(context.Background(), "tenant-1", "", newScanInput(jpegPhoto("a.jpg", 64)))
-	c.Assert(errors.Is(err, services.ErrScanProviderError), qt.IsTrue)
+	c.Assert(errors.Is(err, services.ErrScanIdentityMissing), qt.IsTrue)
 }

@@ -72,11 +72,11 @@ func TestCommodityScanAuditRegistry_CountRecentForUser(t *testing.T) {
 	_, err := r.Record(context.Background(), newTestAudit("user-2"))
 	c.Assert(err, qt.IsNil)
 
-	count, err := r.CountRecentForUser(context.Background(), "user-1", time.Now().Add(-1*time.Hour))
+	count, err := r.CountRecentForUser(context.Background(), "tenant-1", "user-1", time.Now().Add(-1*time.Hour))
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 3)
 
-	count, err = r.CountRecentForUser(context.Background(), "user-2", time.Now().Add(-1*time.Hour))
+	count, err = r.CountRecentForUser(context.Background(), "tenant-1", "user-2", time.Now().Add(-1*time.Hour))
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
@@ -94,7 +94,7 @@ func TestCommodityScanAuditRegistry_CountRecentForUser_FilterByTime(t *testing.T
 	_, err = r.Record(context.Background(), recent)
 	c.Assert(err, qt.IsNil)
 
-	count, err := r.CountRecentForUser(context.Background(), "user-1", time.Now().Add(-1*time.Hour))
+	count, err := r.CountRecentForUser(context.Background(), "tenant-1", "user-1", time.Now().Add(-1*time.Hour))
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }
@@ -115,7 +115,7 @@ func TestCommodityScanAuditRegistry_DeleteOlderThan(t *testing.T) {
 	err = r.DeleteOlderThan(context.Background(), time.Now().Add(-24*time.Hour))
 	c.Assert(err, qt.IsNil)
 
-	count, err := r.CountRecentForUser(context.Background(), "user-1", time.Now().Add(-72*time.Hour))
+	count, err := r.CountRecentForUser(context.Background(), "tenant-1", "user-1", time.Now().Add(-72*time.Hour))
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 1)
 }

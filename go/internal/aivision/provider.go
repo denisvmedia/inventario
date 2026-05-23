@@ -4,11 +4,13 @@
 //
 // The package is deliberately vendor-neutral: callers depend only on the
 // Provider interface and the structured ScanRequest/ScanResult types, and
-// pick a concrete implementation at boot via NewProvider(cfg, httpClient).
-// Two real providers ship in the tree (Anthropic Claude vision, OpenAI
-// GPT-4o vision) plus a deterministic Mock used by unit tests and e2e
-// runs that need a stable canned result without burning credits or
-// requiring network access.
+// pick a concrete implementation at boot via NewProvider(cfg). The HTTP
+// client is carried on ProviderConfig.HTTPClient so a shared client (or
+// a test RoundTripper) can be threaded in without changing the
+// constructor signature. Two real providers ship in the tree
+// (Anthropic Claude vision, OpenAI GPT-4o vision) plus a deterministic
+// Mock used by unit tests and e2e runs that need a stable canned result
+// without burning credits or requiring network access.
 //
 // The interface intentionally exposes a single Scan call rather than a
 // streaming or chunked surface — the FE issues one HTTP request with all
@@ -36,6 +38,13 @@ type Provider interface {
 	// audit table (provider, model). Examples: "anthropic", "openai",
 	// "mock".
 	Name() string
+
+	// Model returns the specific upstream model identifier the provider
+	// is configured to call (e.g. "claude-sonnet-4-6", "gpt-4o"). Used
+	// for the audit row so the cost / accuracy dashboards can compare
+	// across deployments. May be empty when a provider has no notion of
+	// a model (e.g. the in-process mock).
+	Model() string
 
 	// Scan accepts a ScanRequest and returns the structured ScanResult.
 	// Implementations are expected to honour ctx cancellation/deadline

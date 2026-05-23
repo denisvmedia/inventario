@@ -1,5 +1,5 @@
 -- Migration rollback
--- Generated on: 2026-05-23T08:47:26Z
+-- Generated on: 2026-05-23T09:49:13Z
 -- Direction: DOWN
 
 DROP INDEX IF EXISTS idx_commodity_scan_audits_tenant_created;

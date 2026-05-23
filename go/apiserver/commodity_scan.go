@@ -45,6 +45,13 @@ type commodityScanAPI struct {
 	// (base64 overhead, headers). Zero means "no cap" — the chi
 	// router's parent body-size middleware still applies.
 	maxFormBytes int64
+	// maxPhotoBytes caps a SINGLE part. A request whose total stays
+	// inside maxFormBytes but whose individual photo exceeds the
+	// per-photo cap is rejected with 413 + commodity_scan.photo_too_large
+	// before the entire part is read into memory — the body cap alone
+	// would let one hostile part allocate up to maxFormBytes before
+	// the service-layer validator catches it.
+	maxPhotoBytes int
 }
 
 // CommodityScan returns the chi router function that mounts the scan
@@ -57,10 +64,11 @@ type commodityScanAPI struct {
 // scanService may be nil — the route stays mounted (so the FE doesn't
 // see 404 for a misconfigured deployment) and every call returns
 // 503 commodity_scan.provider_disabled.
-func CommodityScan(scanService *services.CommodityScanService, maxFormBytes int64) func(r chi.Router) {
+func CommodityScan(scanService *services.CommodityScanService, maxFormBytes int64, maxPhotoBytes int) func(r chi.Router) {
 	api := &commodityScanAPI{
-		service:      scanService,
-		maxFormBytes: maxFormBytes,
+		service:       scanService,
+		maxFormBytes:  maxFormBytes,
+		maxPhotoBytes: maxPhotoBytes,
 	}
 	return func(r chi.Router) {
 		r.Post("/", api.handleScan)
@@ -77,7 +85,7 @@ func CommodityScan(scanService *services.CommodityScanService, maxFormBytes int6
 // @Accept multipart/form-data
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
-// @Param photos formData file true "Product photo(s); image/jpeg|png|webp|heic|heif"
+// @Param photos formData []file true "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Up to 5 files; repeat the field name to upload multiple." collectionFormat(multi)
 // @Param hint formData string false "Optional free-form hint (brand, category guess)"
 // @Success 200 {object} jsonapi.CommodityScanResponse "OK"
 // @Failure 413 {object} jsonapi.Errors "Photo too large"
@@ -102,13 +110,36 @@ func (api *commodityScanAPI) handleScan(w http.ResponseWriter, r *http.Request) 
 		r.Body = http.MaxBytesReader(w, r.Body, api.maxFormBytes)
 	}
 
-	in, err := api.readPhotos(r)
+	in, err := api.readPhotos(r, int64(api.maxPhotoBytes))
 	if err != nil {
+		// Body-cap or per-part-cap overflows are routed through the
+		// service so the audit row is written and the FE banner sees a
+		// 413 with the same `commodity_scan.photo_too_large` code the
+		// validator emits.
+		if errors.As(err, new(errBodyTooLarge)) || errors.As(err, new(errOversizedPart)) {
+			api.recordOversizeAudit(r.Context(), user.TenantID, user.ID)
+			_ = render.Render(w, r, jsonapi.NewErrors(scanError(
+				services.ErrScanPhotoTooLarge,
+				http.StatusRequestEntityTooLarge,
+				"Payload Too Large",
+				commodityScanPhotoTooLargeCode,
+			)))
+			return
+		}
 		renderScanError(w, r, err)
 		return
 	}
 
 	in.PreferredCurrencyCode = preferredCurrencyFromContext(r.Context())
+
+	// The constructor permits a nil service so the route can stay
+	// mounted in a "feature gated off" deployment; calling Scan on it
+	// would panic. Short-circuit to the typed 503 the FE banner already
+	// knows how to render.
+	if api.service == nil {
+		renderScanError(w, r, services.ErrScanProviderDisabled)
+		return
+	}
 
 	result, err := api.service.Scan(r.Context(), user.TenantID, user.ID, in)
 	if err != nil {
@@ -127,10 +158,15 @@ func (api *commodityScanAPI) handleScan(w http.ResponseWriter, r *http.Request) 
 // "photos" into a ScanInput. The hint (if present) is read from the
 // "hint" form field. Empty parts and unrelated fields are ignored so
 // the FE doesn't need to be strict about which extra fields it appends.
-func (api *commodityScanAPI) readPhotos(r *http.Request) (services.ScanInput, error) {
+//
+// `perPartCap` bounds a single part so a hostile caller can't allocate
+// more than the per-photo cap before the service-layer validator
+// rejects it. Zero disables the per-part cap (the body-level
+// MaxBytesReader is still in effect).
+func (api *commodityScanAPI) readPhotos(r *http.Request, perPartCap int64) (services.ScanInput, error) {
 	reader, err := r.MultipartReader()
 	if err != nil {
-		return services.ScanInput{}, errBadMultipart{cause: err}
+		return services.ScanInput{}, classifyMultipartReadErr(err)
 	}
 
 	var in services.ScanInput
@@ -140,15 +176,15 @@ func (api *commodityScanAPI) readPhotos(r *http.Request) (services.ScanInput, er
 			break
 		}
 		if err != nil {
-			return services.ScanInput{}, errBadMultipart{cause: err}
+			return services.ScanInput{}, classifyMultipartReadErr(err)
 		}
 
 		switch part.FormName() {
 		case scanFormField:
-			data, err := io.ReadAll(part)
+			data, err := readPartBounded(part, perPartCap)
 			_ = part.Close()
 			if err != nil {
-				return services.ScanInput{}, errBadMultipart{cause: err}
+				return services.ScanInput{}, classifyMultipartReadErr(err)
 			}
 			if len(data) == 0 {
 				continue
@@ -163,7 +199,7 @@ func (api *commodityScanAPI) readPhotos(r *http.Request) (services.ScanInput, er
 				Data:        data,
 			})
 		case "hint":
-			data, err := io.ReadAll(part)
+			data, err := readPartBounded(part, perPartCap)
 			_ = part.Close()
 			if err == nil {
 				in.HintFromUser = string(data)
@@ -173,6 +209,42 @@ func (api *commodityScanAPI) readPhotos(r *http.Request) (services.ScanInput, er
 		}
 	}
 	return in, nil
+}
+
+// readPartBounded reads up to `cap+1` bytes from r and reports
+// errOversizedPart if the limit was exceeded. Zero `cap` disables the
+// guard. Returning errOversizedPart lets readPhotos map a single
+// hostile part to ErrScanPhotoTooLarge (413) rather than OOMing.
+func readPartBounded(r io.Reader, maxBytes int64) ([]byte, error) {
+	if maxBytes <= 0 {
+		return io.ReadAll(r)
+	}
+	data, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, errOversizedPart{}
+	}
+	return data, nil
+}
+
+// classifyMultipartReadErr maps a multipart-read error into either an
+// oversized-part sentinel (audit-worthy 413), a body-cap-exceeded
+// sentinel (also 413), or the generic malformed-body sentinel (400).
+// Splitting the cases here keeps the handler's audit-on-every-outcome
+// invariant intact — without this the MaxBytesReader path was rendered
+// as a bare 400 with no `commodity_scan.*` code and no audit row.
+func classifyMultipartReadErr(err error) error {
+	var oversized errOversizedPart
+	if errors.As(err, &oversized) {
+		return oversized
+	}
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		return errBodyTooLarge{}
+	}
+	return errBadMultipart{cause: err}
 }
 
 // preferredCurrencyFromContext reads the active group's currency from
@@ -198,6 +270,34 @@ func (e errBadMultipart) Error() string {
 	return "malformed multipart body: " + e.cause.Error()
 }
 
+// errBodyTooLarge is set when http.MaxBytesReader's cap is hit during
+// the streaming multipart parse. Distinct from errBadMultipart so the
+// handler can map it to 413 + commodity_scan.photo_too_large rather
+// than the generic 400 path, and so the audit row is written.
+type errBodyTooLarge struct{}
+
+func (errBodyTooLarge) Error() string { return "multipart body exceeds the configured size limit" }
+
+// errOversizedPart is set when a single multipart part exceeds the
+// per-photo cap. Routed to the same 413 path as errBodyTooLarge — the
+// FE only differentiates "the upload is too big" from the other scan
+// errors, not "which part" was the cause.
+type errOversizedPart struct{}
+
+func (errOversizedPart) Error() string {
+	return "multipart part exceeds the configured per-photo size limit"
+}
+
+// recordOversizeAudit writes a best-effort audit row for the
+// body-cap / per-part-cap 413 path. Wraps CommodityScanService.RecordOversize
+// so the handler doesn't need to know the audit registry directly.
+func (api *commodityScanAPI) recordOversizeAudit(ctx context.Context, tenantID, userID string) {
+	if api.service == nil {
+		return
+	}
+	api.service.RecordOversize(ctx, tenantID, userID)
+}
+
 // renderScanError maps a sentinel from CommodityScanService into the
 // expected JSON:API status + code shape. Unmapped errors fall through
 // to the generic 500 path via renderEntityError so they're visible in
@@ -206,6 +306,23 @@ func renderScanError(w http.ResponseWriter, r *http.Request, err error) {
 	var bad errBadMultipart
 	if errors.As(err, &bad) {
 		_ = badRequest(w, r, err)
+		return
+	}
+
+	// Identity-missing is a deployment-wiring bug — surface as 500 so
+	// operators see the loud failure mode rather than the misleading
+	// "provider error" 502 a generic mapping would produce.
+	if errors.Is(err, services.ErrScanIdentityMissing) {
+		internalServerError(w, r, err)
+		return
+	}
+
+	// Provider-misconfigured (upstream rejected our API key) is also a
+	// server-side problem the user can't help with. Mirror the
+	// identity-missing handling so operators get a 500 + the loud log
+	// trail rather than a 502 that points at the wrong layer.
+	if errors.Is(err, services.ErrScanProviderMisconfigured) {
+		internalServerError(w, r, err)
 		return
 	}
 

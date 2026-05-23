@@ -2242,8 +2242,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "file",
-                        "description": "Product photo(s); image/jpeg|png|webp|heic|heif",
+                        "type": "array",
+                        "items": {
+                            "type": "file"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Up to 5 files; repeat the field name to upload multiple.",
                         "name": "photos",
                         "in": "formData",
                         "required": true
@@ -9218,6 +9222,7 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "value": {
+                    "description": "Value is polymorphic — see the type-level doc comment.",
                     "type": "object"
                 }
             }

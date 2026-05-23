@@ -69,23 +69,74 @@ func WithDefaultError(err error) Option {
 // Name implements aivision.Provider.
 func (*Provider) Name() string { return Name }
 
+// Model implements aivision.Provider. The mock provider does not call
+// a real upstream model; the constant identifier makes audit rows
+// originating from tests immediately recognisable.
+func (*Provider) Model() string { return "mock" }
+
 // Scan implements aivision.Provider. It returns the per-call override
 // from ctx when present, otherwise the constructor's defaults.
+//
+// The returned ScanResult is a deep copy of the source (override or
+// default): a shallow struct copy still shares the Fields map and the
+// Warnings slice, so a caller that mutates either would contaminate the
+// next call's result. Deep-copying keeps the mock's behaviour identical
+// to a real provider (which always allocates a fresh struct off the
+// wire) and avoids action-at-a-distance test failures.
 func (p *Provider) Scan(ctx context.Context, _ aivision.ScanRequest) (*aivision.ScanResult, error) {
 	if override, ok := overrideFromContext(ctx); ok {
 		if override.err != nil {
 			return nil, override.err
 		}
-		// Make a copy so callers can't mutate the override across
-		// subsequent calls.
-		result := override.result
+		result := cloneScanResult(override.result)
 		return &result, nil
 	}
 	if p.defaultErr != nil {
 		return nil, p.defaultErr
 	}
-	result := p.defaultResult
+	result := cloneScanResult(p.defaultResult)
 	return &result, nil
+}
+
+// cloneScanResult returns a deep copy of src. Fields (a map) and
+// Warnings (a slice) are reallocated; FieldGuess.Value is left as-is
+// because the concrete types we return are all immutable (string,
+// float64, []string with its own allocated backing array — see the
+// per-field clone for the slice case).
+func cloneScanResult(src aivision.ScanResult) aivision.ScanResult {
+	dst := aivision.ScanResult{
+		UsedTokens: src.UsedTokens,
+		LatencyMS:  src.LatencyMS,
+	}
+	if src.Fields != nil {
+		dst.Fields = make(map[string]aivision.FieldGuess, len(src.Fields))
+		for k, v := range src.Fields {
+			dst.Fields[k] = aivision.FieldGuess{
+				Value:      cloneFieldValue(v.Value),
+				Confidence: v.Confidence,
+			}
+		}
+	}
+	if src.Warnings != nil {
+		dst.Warnings = make([]aivision.Warning, len(src.Warnings))
+		copy(dst.Warnings, src.Warnings)
+	}
+	return dst
+}
+
+// cloneFieldValue defensively copies the few slice-typed values we know
+// about (currently only []string for the urls field). Scalar types pass
+// through unchanged.
+func cloneFieldValue(v any) any {
+	if v == nil {
+		return nil
+	}
+	if s, ok := v.([]string); ok {
+		out := make([]string, len(s))
+		copy(out, s)
+		return out
+	}
+	return v
 }
 
 // override is the context-stored per-call result/error pair.
@@ -127,8 +178,11 @@ func DefaultResult() aivision.ScanResult {
 			aivision.FieldNameOriginalPriceCurrency: {Value: "USD", Confidence: 0.85},
 			aivision.FieldNameSerialNumber:          {Value: "SN-MOCK-001", Confidence: 0.70},
 			aivision.FieldNameURLs:                  {Value: []string{"https://example.com/wh-sample"}, Confidence: 0.55},
-			aivision.FieldNamePurchaseDate:          {Value: time.Now().UTC().Format("2006-01-02"), Confidence: 0.50},
-			aivision.FieldNameComments:              {Value: "Black over-ear wireless headphones with active noise cancellation.", Confidence: 0.65},
+			// Fixed purchase date keeps the canned result deterministic
+			// across runs — using time.Now() made every test/screenshot
+			// snapshot drift day-to-day.
+			aivision.FieldNamePurchaseDate: {Value: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02"), Confidence: 0.50},
+			aivision.FieldNameComments:     {Value: "Black over-ear wireless headphones with active noise cancellation.", Confidence: 0.65},
 		},
 		Warnings: []aivision.Warning{
 			{Code: "low_confidence", Field: aivision.FieldNamePurchaseDate, Detail: "purchase date inferred from packaging design only"},

@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"errors"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -231,8 +232,32 @@ func wireCommodityScan(cfg *Config, params *apiserver.Params) error {
 	// Body cap = per-photo cap * max photos + a 1MB headroom for
 	// multipart overhead/JSON form fields. Zero when either cap is
 	// unset so the handler doesn't accidentally clamp to zero.
+	//
+	// Guard against operator misconfiguration: silly-large caps would
+	// overflow int64 during the multiplication and yield a tiny or
+	// negative cap, which is much worse than refusing to scale beyond
+	// math.MaxInt64. When the product would overflow we clamp to
+	// math.MaxInt64 and skip the +1MB headroom — at that magnitude
+	// the headroom is noise anyway and saturating is the safe choice.
 	if cfg.AIVisionMaxPhotoBytes > 0 && cfg.AIVisionMaxPhotos > 0 {
-		params.CommodityScanMaxBodyBytes = int64(cfg.AIVisionMaxPhotoBytes)*int64(cfg.AIVisionMaxPhotos) + (1 << 20)
+		perPhoto := int64(cfg.AIVisionMaxPhotoBytes)
+		count := int64(cfg.AIVisionMaxPhotos)
+		const headroom int64 = 1 << 20
+		switch {
+		case perPhoto > math.MaxInt64/count:
+			// Multiplication overflow guard.
+			params.CommodityScanMaxBodyBytes = math.MaxInt64
+		case perPhoto*count > math.MaxInt64-headroom:
+			// Multiplication fits but adding the 1MB headroom would
+			// overflow. Cap at MaxInt64 without the headroom.
+			params.CommodityScanMaxBodyBytes = math.MaxInt64
+		default:
+			params.CommodityScanMaxBodyBytes = perPhoto*count + headroom
+		}
 	}
+	// Per-part cap mirrors the service-level validator. A single
+	// hostile multipart part is rejected before io.ReadAll allocates
+	// more than (cap+1) bytes.
+	params.CommodityScanMaxPhotoBytes = cfg.AIVisionMaxPhotoBytes
 	return nil
 }

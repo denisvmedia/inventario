@@ -2784,11 +2784,8 @@ export type paths = {
             requestBody: {
                 content: {
                     "multipart/form-data": {
-                        /**
-                         * Format: binary
-                         * @description Product photo(s); image/jpeg|png|webp|heic|heif
-                         */
-                        photos: string;
+                        /** @description Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Up to 5 files; repeat the field name to upload multiple. */
+                        photos: Record<string, never>[];
                         /** @description Optional free-form hint (brand, category guess) */
                         hint?: string;
                     };
@@ -9147,6 +9144,7 @@ export type components = {
         };
         "jsonapi.CommodityScanFieldGuess": {
             confidence?: number;
+            /** @description Value is polymorphic — see the type-level doc comment. */
             value?: Record<string, never>;
         };
         "jsonapi.CommodityScanResource": {

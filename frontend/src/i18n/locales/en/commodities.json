@@ -319,7 +319,7 @@
             "low": "{{percent}}% guess",
             "medium": "{{percent}}% likely"
           },
-          "currencyInferred": "Currency wasn't on the BE's supported list — it won't be pre-filled.",
+          "currencyInferred": "Currency wasn't on the server's supported list — it won't be pre-filled.",
           "retake": "Re-take photos",
           "subtitle": "Untick anything that looks wrong before we prefill the form.",
           "title": "Review extracted details",

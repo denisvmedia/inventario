@@ -88,7 +88,7 @@ func TestCommodityScanAuditRegistry_CountRecentForUser_Postgres(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 	}
 
-	count, err := registrySet.CommodityScanAuditRegistry.CountRecentForUser(ctx, user.ID, time.Now().Add(-1*time.Hour))
+	count, err := registrySet.CommodityScanAuditRegistry.CountRecentForUser(ctx, user.TenantID, user.ID, time.Now().Add(-1*time.Hour))
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 3)
 }
@@ -108,7 +108,7 @@ func TestCommodityScanAuditRegistry_DeleteOlderThan_Postgres(t *testing.T) {
 	err = registrySet.CommodityScanAuditRegistry.DeleteOlderThan(ctx, time.Now().Add(1*time.Hour))
 	c.Assert(err, qt.IsNil)
 
-	count, err := registrySet.CommodityScanAuditRegistry.CountRecentForUser(ctx, user.ID, time.Now().Add(-1*time.Hour))
+	count, err := registrySet.CommodityScanAuditRegistry.CountRecentForUser(ctx, user.TenantID, user.ID, time.Now().Add(-1*time.Hour))
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 0)
 }

@@ -197,6 +197,14 @@ type Params struct {
 	// per-photo cap + max photo count; zero disables the cap so unit
 	// tests can pass small fixtures without minding the limit.
 	CommodityScanMaxBodyBytes int64
+
+	// CommodityScanMaxPhotoBytes caps a single multipart part. Mirrors
+	// AIVisionMaxPhotoBytes from config. A hostile request whose total
+	// body stays inside CommodityScanMaxBodyBytes but whose individual
+	// photo exceeds this cap is rejected with 413 +
+	// commodity_scan.photo_too_large before the entire part is read
+	// into memory.
+	CommodityScanMaxPhotoBytes int
 }
 
 func (p *Params) Validate() error {
@@ -513,7 +521,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		contentWriteGateScan := requireGroupRoleForWrite(groupService, models.GroupRoleUser)
 		r.With(append(groupUploadMiddlewares, contentWriteGateScan)...).Route(
 			"/g/{groupSlug}/commodities/scan",
-			CommodityScan(params.CommodityScanService, params.CommodityScanMaxBodyBytes),
+			CommodityScan(params.CommodityScanService, params.CommodityScanMaxBodyBytes, params.CommodityScanMaxPhotoBytes),
 		)
 
 		// File downloads use signed URL validation instead of JWT authentication

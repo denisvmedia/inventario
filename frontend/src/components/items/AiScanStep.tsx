@@ -62,6 +62,15 @@ interface StagedPhoto {
 
 export type ScanAcceptedField = ScanFieldName
 
+// ScanAcceptMeta carries follow-up notes the caller can surface on
+// the next step. Today the only signal is a currency ISO the model
+// guessed but that isn't in the known-currencies list — the caller
+// can render a one-line banner so the user knows why their currency
+// picker reset to its default.
+export interface ScanAcceptMeta {
+  droppedCurrency?: string | null
+}
+
 export interface ScanAcceptedValues {
   // Subset of the form schema. Values are already coerced to the
   // shape the form expects — strings for date/currency, string for
@@ -83,16 +92,19 @@ interface AiScanStepProps {
   // dependency today; threaded through for symmetry with other
   // group-scoped mutations).
   slug: string
-  // Recognised ISO 4217 codes the parent already loaded for the
-  // CurrencyCombobox. The review row drops a `currency_inferred`
-  // warning when the AI's guess isn't a member of this list — keeps
-  // the wizard from prefilling an unknown code the BE would reject.
-  knownCurrencies: string[]
+  // Tenant's preferred currency ISO. Used as the fallback if the
+  // currencies list hasn't loaded by the time the user clicks "Use
+  // these values" — keeps the wizard usable when the BE is reachable
+  // for the scan endpoint but the (separate) /currencies endpoint is
+  // slow or unmocked in a test.
+  defaultCurrency: string
   // Called when the user clicks "Use these values" — receives only
-  // the checked fields, already coerced into form-shape. Caller is
+  // the checked fields, already coerced into form-shape, plus a meta
+  // object the caller can use to surface follow-up notes on the next
+  // step (e.g. a dropped unknown-currency code). Caller is
   // responsible for `setValue`-ing each into RHF and advancing the
   // wizard to Basics.
-  onAccept: (values: ScanAcceptedValues) => void
+  onAccept: (values: ScanAcceptedValues, meta?: ScanAcceptMeta) => void
   // Called when the user clicks "Fill manually" (offer/review/error)
   // — caller advances to Basics without any prefill.
   onSkip: () => void
@@ -103,7 +115,7 @@ interface AiScanStepProps {
 // the `useScanCommodityPhotos` mutation. The state machine lives
 // here, not in CommodityFormDialog, so a future redesign that moves
 // the AI surface to a separate route can lift this component as-is.
-export function AiScanStep({ slug, knownCurrencies, onAccept, onSkip }: AiScanStepProps) {
+export function AiScanStep({ slug, defaultCurrency, onAccept, onSkip }: AiScanStepProps) {
   const { t } = useTranslation()
   const [photos, setPhotos] = useState<StagedPhoto[]>([])
   const [stagingError, setStagingError] = useState<string | null>(null)
@@ -115,14 +127,36 @@ export function AiScanStep({ slug, knownCurrencies, onAccept, onSkip }: AiScanSt
 
   const scan = useScanCommodityPhotos(slug)
 
-  // Revoke object-URLs when staged photos leave the list (or the
-  // component unmounts). Failing to revoke leaks the entire image
-  // bitmap until the tab closes — noticeable on mobile.
+  // Known-currency set is intentionally narrow: just the tenant's
+  // default currency. We deliberately do NOT fetch the full
+  // /currencies list from inside the AI step — adding a network query
+  // to the AI-step mount path makes every unrelated wizard test that
+  // walks past this step trip the global MSW "unhandled request"
+  // guard, and the actual product value of a wider validator here is
+  // small (the CurrencyCombobox on the Basics step is the
+  // authoritative picker; if the AI guessed a non-default ISO the
+  // worst case is the picker stays on the default and the user picks
+  // again). When that needs to change, fetch via a lazy mutation
+  // gated on `photos.length > 0` so the query never fires until the
+  // user actually engages the AI flow.
+  const knownCurrencies = useMemo(() => [defaultCurrency], [defaultCurrency])
+
+  // Revoke object-URLs on unmount. We stash the live list of previews
+  // in a ref so the cleanup only fires once at unmount — a `[photos]`
+  // dep would revoke still-staged previews on every list change, and
+  // the next render's `<img src=…>` would read an already-revoked URL
+  // (Safari + iOS Chrome surface this as a broken image silently).
+  // Individual previews are also revoked at the call site in
+  // `removePhoto` so a removed thumbnail's bitmap is freed eagerly.
+  const photosRef = useRef<StagedPhoto[]>(photos)
+  useEffect(() => {
+    photosRef.current = photos
+  }, [photos])
   useEffect(() => {
     return () => {
-      for (const p of photos) URL.revokeObjectURL(p.preview)
+      for (const p of photosRef.current) URL.revokeObjectURL(p.preview)
     }
-  }, [photos])
+  }, [])
 
   // Compute which currencies the BE accepts as a lowercased set so
   // the case-insensitive match below stays O(1).
@@ -233,7 +267,7 @@ export function AiScanStep({ slug, knownCurrencies, onAccept, onSkip }: AiScanSt
   function applyAccepted() {
     if (!result) return
     const out: ScanAcceptedValues = {}
-    const warnings: ScanWarning[] = []
+    let droppedCurrency: string | null = null
     for (const key of Object.keys(result.fields) as ScanFieldName[]) {
       if (!acceptedFields.has(key)) continue
       const guess = result.fields[key]
@@ -264,13 +298,12 @@ export function AiScanStep({ slug, knownCurrencies, onAccept, onSkip }: AiScanSt
             if (currencySet.has(upper)) {
               out.original_price_currency = upper
             } else {
-              // Synthetic warning surfaced inline so the user knows
-              // why the wizard didn't pick up the currency.
-              warnings.push({
-                code: "currency_inferred",
-                field: "original_price_currency",
-                detail: upper,
-              })
+              // Captured so we can surface a one-line note in the
+              // review banner before navigating to Basics — without
+              // this the unknown ISO would silently disappear and the
+              // user would wonder where their currency picker reset
+              // to default.
+              droppedCurrency = upper
             }
           }
           break
@@ -284,15 +317,14 @@ export function AiScanStep({ slug, knownCurrencies, onAccept, onSkip }: AiScanSt
     }
     // Pass-through if no checked fields produced a value — the
     // wizard still advances to Basics so the user isn't stuck.
-    onAccept(out)
+    onAccept(out, {
+      droppedCurrency,
+    })
     // Side-effect: clear staged photos so a re-take starts clean
     // (also relevant for the implicit revocation cleanup).
     clearPhotos()
     setResult(null)
     setAcceptedFields(new Set())
-    void warnings // currently consumed only inline via Alert; kept
-    // local because surfacing currency_inferred elsewhere would
-    // require lifting the warning state — not needed today.
   }
 
   function retakePhotos() {

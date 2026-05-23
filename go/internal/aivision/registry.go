@@ -43,7 +43,8 @@ type ProviderConfig struct {
 // providerFactory is the closed registration map of in-tree provider
 // constructors. Adding a new provider means registering a constructor
 // here AND threading new config fields onto ProviderConfig. Tests
-// register a fake by name via RegisterTestProvider.
+// register a fake by name via RegisterProvider too — the registration
+// surface is identical for production and test code.
 var providerFactory = map[string]func(ProviderConfig) (Provider, error){}
 
 // RegisterProvider exposes the package-level provider map for in-tree

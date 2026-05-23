@@ -1143,10 +1143,17 @@ type CommodityScanAuditRegistry interface {
 	// row.
 	Record(ctx context.Context, audit models.CommodityScanAudit) (*models.CommodityScanAudit, error)
 
-	// CountRecentForUser returns the number of rows for userID created
-	// at or after the given cutoff. Used by the per-user rate limiter
-	// in CommodityScanService.
-	CountRecentForUser(ctx context.Context, userID string, since time.Time) (int, error)
+	// CountRecentForUser returns the number of rows for (tenantID,
+	// userID) created at or after the given cutoff. Used by the
+	// per-user rate limiter in CommodityScanService.
+	//
+	// The interface contract is explicit-tenant for parity with the
+	// memory implementation, which has no RLS to lean on. The postgres
+	// implementation can additionally rely on RLS once a user-scoped
+	// registry is used, but the explicit tenant_id predicate stays in
+	// the query so the caller doesn't have to reason about which mode
+	// the registry was constructed in.
+	CountRecentForUser(ctx context.Context, tenantID, userID string, since time.Time) (int, error)
 
 	// DeleteOlderThan removes audit rows older than cutoff. Run by the
 	// retention worker (future) — not yet wired but the entry point
@@ -1908,6 +1915,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.MaintenanceScheduleRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
+		validation.Field(&s.CommodityScanAuditRegistry, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, s, fields...)

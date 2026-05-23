@@ -27,9 +27,22 @@ type CommodityScanAttributes struct {
 }
 
 // CommodityScanFieldGuess is the per-field extraction value plus a
-// 0..1 confidence score. value can be a string, number, or []string
-// depending on the field name; the FE switches on the field key.
+// 0..1 confidence score. The polymorphic shape of value is documented
+// in this comment because swag (Swagger 2.0) does not have first-class
+// support for oneOf / union types on a struct field, and openapi-typescript
+// renders a property-less `{type: object}` schema as Record<string, never>
+// (a closed, indexable-but-empty object). The FE explicitly switches
+// on the field key and casts value into the right concrete type — both
+// sides are under our control, so we accept the typing fudge for now
+// rather than emitting a misleading `additionalProperties:{type:string}`
+// override (the value is not always an object, and not always strings):
+//
+//   - name, short_name, type, serial_number, comments,
+//     original_price_currency, purchase_date (YYYY-MM-DD): string
+//   - original_price: number (decimal)
+//   - urls: string[]
 type CommodityScanFieldGuess struct {
+	// Value is polymorphic — see the type-level doc comment.
 	Value      any     `json:"value" swaggertype:"object"`
 	Confidence float64 `json:"confidence"`
 }

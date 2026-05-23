@@ -93,6 +93,11 @@ func New(cfg Config) (*Provider, error) {
 // Name implements aivision.Provider.
 func (*Provider) Name() string { return Name }
 
+// Model implements aivision.Provider. Returns the resolved model id
+// (the constructor falls back to DefaultModel when Config.Model is
+// empty) so the audit row records the actual upstream variant.
+func (p *Provider) Model() string { return p.model }
+
 // Scan implements aivision.Provider via Chat Completions with
 // json_schema response_format.
 func (p *Provider) Scan(ctx context.Context, req aivision.ScanRequest) (*aivision.ScanResult, error) {
@@ -233,7 +238,16 @@ func (p *Provider) buildPayload(req aivision.ScanRequest) *openaiRequest {
 		ResponseFormat: responseFormat{
 			Type: "json_schema",
 			JSONSchema: responseFormatSchema{
-				Name:   schemaName,
+				Name: schemaName,
+				// Strict mode is intentionally OFF. OpenAI strict mode
+				// requires every property to be in `required` (and
+				// optional values to use `["string", "null"]`), which
+				// forces the model to emit every field key explicitly —
+				// the opposite of our wire contract where absent keys
+				// mean "no signal" and the FE renders the input blank.
+				// ToScanResult drops unknown keys and demotes
+				// type-mismatched values to warnings, so non-strict
+				// output is safe to consume.
 				Strict: false,
 				Schema: aivision.ResponseSchema(),
 			},

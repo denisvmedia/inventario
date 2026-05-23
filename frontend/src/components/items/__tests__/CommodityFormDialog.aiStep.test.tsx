@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
@@ -7,7 +7,7 @@ import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { server } from "@/test/server"
 import { apiUrl, commodityScanHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
-import { setCurrentGroupSlug } from "@/lib/group-context"
+import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 
 const SLUG = "g"
 
@@ -48,6 +48,13 @@ function renderDialog() {
 }
 
 describe("<CommodityFormDialog /> AI scan step", () => {
+  // `setCurrentGroupSlug` mutates a module-level singleton; without an
+  // explicit reset later test files might inherit `g` as the active
+  // slug and route their requests through the wrong /g/<slug>/... path.
+  afterEach(() => {
+    __resetGroupContextForTests()
+  })
+
   beforeEach(() => {
     // /api/v1/currencies feeds the AI step's currency-validation set
     // and the CurrencyCombobox the Purchase step uses later. Register

@@ -97,6 +97,20 @@ var (
 
 	// ErrScanNoPhotos fires when the request had zero photos.
 	ErrScanNoPhotos = errx.NewSentinel("commodity scan request contains no photos")
+
+	// ErrScanIdentityMissing fires when Scan is invoked without a
+	// tenant/user identity — a deployment-wiring bug, not a client
+	// error. The handler maps it to 500.
+	ErrScanIdentityMissing = errx.NewSentinel("commodity scan called without tenant or user identity")
+
+	// ErrScanProviderMisconfigured fires when the upstream provider
+	// rejected the configured API key (401/403). Treated as an internal
+	// 500 rather than the 502 ErrScanProviderUnavailable path: the user
+	// has no retry that helps, and surfacing "bad gateway" misleads
+	// operators when the real cause is a server-side credential rotation
+	// or env-var mishap. The aivision package doc explicitly classifies
+	// auth failures as server-side misconfig for this reason.
+	ErrScanProviderMisconfigured = errx.NewSentinel("commodity scan provider is misconfigured")
 )
 
 // CommodityScanConfig carries the runtime tunables read from
@@ -125,8 +139,15 @@ type CommodityScanConfig struct {
 // CommodityScanService. The set matches what every supported provider
 // can handle — HEIC/HEIF are included because phones still upload them
 // even when "share as JPEG" is the default.
+//
+// "image/jpg" is a noncanonical alias some browsers (notably older
+// Safari builds and some Android camera intents) emit instead of the
+// canonical "image/jpeg". Accepting it here is a one-line ergonomic
+// fix that avoids surprising the FE with a 415 on perfectly valid JPEG
+// bytes; the providers normalise the byte stream anyway.
 var AllowedMIMETypes = map[string]bool{
 	"image/jpeg": true,
+	"image/jpg":  true, // noncanonical alias some browsers emit for JPEGs
 	"image/png":  true,
 	"image/webp": true,
 	"image/heic": true,
@@ -181,14 +202,46 @@ type ScanPhotoInput struct {
 	Data        []byte
 }
 
+// RecordOversize writes an audit row for the handler-level 413 path
+// (body cap or single-part cap exceeded). The handler can't reuse
+// validateInput because the photos were never accumulated into a
+// ScanInput; this entry point exists so the audit-on-every-outcome
+// invariant still holds for the streaming-multipart short-circuit.
+//
+// Best effort: empty tenantID/userID is a no-op (the row would fail
+// the FK constraint).
+func (s *CommodityScanService) RecordOversize(ctx context.Context, tenantID, userID string) {
+	if s == nil || tenantID == "" || userID == "" {
+		return
+	}
+	s.writeAudit(ctx, models.CommodityScanAudit{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
+		Provider:                s.providerName(),
+		Status:                  models.CommodityScanStatusError,
+		ErrorCode:               "commodity_scan.photo_too_large",
+	})
+}
+
 // Scan runs the full flow. tenantID and userID identify the caller —
 // they are written verbatim into the audit row and consulted for the
-// rate limiter. The error result is always one of the declared
-// sentinels (or nil); the audit row is written before return on every
-// path.
+// rate limiter.
+//
+// Precondition: tenantID and userID MUST be non-empty. The handler
+// enforces JWT presence (and therefore a populated user context) before
+// calling Scan, so reaching the identity-missing branch is a
+// deployment-wiring bug, not a client error. That branch is logged
+// (so operators see the loud failure mode) but does NOT write an audit
+// row: the audit table has FK constraints onto users / tenants and the
+// insert would simply fail. Apart from that single programmer-error
+// path, the error result is always one of the declared sentinels (or
+// nil) and the audit row is written before return on every path.
 func (s *CommodityScanService) Scan(ctx context.Context, tenantID, userID string, in ScanInput) (*aivision.ScanResult, error) {
 	if tenantID == "" || userID == "" {
-		return nil, errxtrace.Classify(ErrScanProviderError)
+		// Internal-only path: see the doc-comment above. Log loudly so
+		// the wiring failure is visible to operators even though no
+		// audit row is written (the FK constraint would reject it).
+		slog.Error("commodity scan called without tenant or user identity; deployment-wiring bug", "tenant_id_empty", tenantID == "", "user_id_empty", userID == "", "provider", s.providerName())
+		return nil, errxtrace.Classify(ErrScanIdentityMissing)
 	}
 
 	totalBytes := 0
@@ -254,6 +307,7 @@ func (s *CommodityScanService) Scan(ctx context.Context, tenantID, userID string
 	audit := models.CommodityScanAudit{
 		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
 		Provider:                s.provider.Name(),
+		Model:                   s.provider.Model(),
 		PhotoCount:              clampInt16(len(in.Photos)),
 		TotalPhotoBytes:         clampInt32(totalBytes),
 		LatencyMS:               latencyMS,
@@ -266,10 +320,22 @@ func (s *CommodityScanService) Scan(ctx context.Context, tenantID, userID string
 			audit.ErrorCode = "commodity_scan.provider_timeout"
 			s.writeAudit(ctx, audit)
 			return nil, errxtrace.Classify(ErrScanProviderTimeout)
-		case errors.Is(providerErr, aivision.ErrProviderUnavailable),
-			errors.Is(providerErr, aivision.ErrProviderAuth):
+		case errors.Is(providerErr, aivision.ErrProviderAuth):
+			// Upstream rejected our credentials — a server-side
+			// misconfiguration (rotated key, env-var mishap), not a
+			// user-recoverable condition. Route to a dedicated sentinel
+			// the handler maps to 500 so operators see the right failure
+			// mode rather than a misleading "bad gateway" 502.
 			audit.Status = models.CommodityScanStatusError
-			audit.ErrorCode = "commodity_scan.provider_unavailable"
+			audit.ErrorCode = "commodity_scan.provider_misconfigured"
+			s.writeAudit(ctx, audit)
+			return nil, errxtrace.Classify(ErrScanProviderMisconfigured)
+		case errors.Is(providerErr, aivision.ErrProviderUnavailable):
+			audit.Status = models.CommodityScanStatusError
+			// The handler maps ErrScanProviderUnavailable to the
+			// "commodity_scan.provider_error" JSON:API code so that
+			// audits/analytics correlate with the client response.
+			audit.ErrorCode = "commodity_scan.provider_error"
 			s.writeAudit(ctx, audit)
 			return nil, errxtrace.Classify(ErrScanProviderUnavailable)
 		default:
@@ -309,6 +375,7 @@ func (s *CommodityScanService) validateInput(ctx context.Context, tenantID, user
 		s.writeAudit(ctx, models.CommodityScanAudit{
 			TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
 			Provider:                s.providerName(),
+			Model:                   s.providerModel(),
 			Status:                  models.CommodityScanStatusError,
 			ErrorCode:               "commodity_scan.no_photos",
 		})
@@ -319,6 +386,7 @@ func (s *CommodityScanService) validateInput(ctx context.Context, tenantID, user
 		s.writeAudit(ctx, models.CommodityScanAudit{
 			TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
 			Provider:                s.providerName(),
+			Model:                   s.providerModel(),
 			PhotoCount:              clampInt16(len(in.Photos)),
 			TotalPhotoBytes:         clampInt32(totalBytes),
 			Status:                  models.CommodityScanStatusError,
@@ -362,18 +430,19 @@ func (s *CommodityScanService) checkRateLimit(ctx context.Context, tenantID, use
 		return nil
 	}
 	since := s.now().Add(-1 * time.Hour)
-	count, err := s.audit.CountRecentForUser(ctx, userID, since)
+	count, err := s.audit.CountRecentForUser(ctx, tenantID, userID, since)
 	if err != nil {
 		// Fail open on counter error — observability wins over a hard
 		// block. Log loudly so operators notice an actual outage of
 		// the audit store.
-		slog.Error("commodity scan rate-limit counter failed; allowing request", "error", err.Error(), "user_id", userID)
+		slog.Error("commodity scan rate-limit counter failed; allowing request", "error", err.Error(), "user_id", userID, "provider", s.providerName())
 		return nil
 	}
 	if count >= s.cfg.RateLimitPerHour {
 		s.writeAudit(ctx, models.CommodityScanAudit{
 			TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
 			Provider:                s.providerName(),
+			Model:                   s.providerModel(),
 			PhotoCount:              clampInt16(photoCount),
 			TotalPhotoBytes:         clampInt32(totalBytes),
 			Status:                  models.CommodityScanStatusRateLimited,
@@ -391,6 +460,16 @@ func (s *CommodityScanService) providerName() string {
 		return "none"
 	}
 	return s.provider.Name()
+}
+
+// providerModel returns the configured provider's Model() or "" when
+// no provider is wired. Used so the audit row records the exact model
+// id that handled (or would have handled) the request.
+func (s *CommodityScanService) providerModel() string {
+	if s.provider == nil {
+		return ""
+	}
+	return s.provider.Model()
 }
 
 // writeAudit persists an audit row, swallowing the error after logging.

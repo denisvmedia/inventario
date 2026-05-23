@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2026-05-23T08:47:26Z
+-- Generated on: 2026-05-23T09:49:13Z
 -- Direction: UP
 
 -- POSTGRES TABLE: commodity_scan_audits --

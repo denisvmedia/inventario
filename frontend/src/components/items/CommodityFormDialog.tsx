@@ -47,6 +47,7 @@ import { clearPendingFiles, loadPendingFiles, savePendingFiles } from "@/lib/pen
 import { type ClassifiedServerError, classifyServerError } from "@/lib/server-error"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { useQueryClient } from "@tanstack/react-query"
+
 import { uploadFile, updateFile } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
 import { fileKeys } from "@/features/files/keys"
@@ -69,10 +70,12 @@ import type {
   CreateCommodityRequest,
   UpdateCommodityRequest,
 } from "@/features/commodities/api"
-import { AiScanStep, type ScanAcceptedValues } from "@/components/items/AiScanStep"
+import {
+  AiScanStep,
+  type ScanAcceptedValues,
+  type ScanAcceptMeta,
+} from "@/components/items/AiScanStep"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
-import { useQuery } from "@tanstack/react-query"
-import { http } from "@/lib/http"
 import { cn } from "@/lib/utils"
 
 interface AreaOption {
@@ -518,16 +521,6 @@ export function CommodityFormDialog({
   // sees in the manual currency picker.
   const groupContext = useOptionalCurrentGroup()
   const activeSlug = groupContext?.currentGroup?.slug ?? null
-  const currenciesQuery = useQuery<string[]>({
-    queryKey: ["currencies"],
-    queryFn: ({ signal }) => http.get<string[]>("/currencies", { signal }),
-    staleTime: 60 * 60 * 1000,
-    enabled: step === "ai",
-  })
-  const availableCurrencies = useMemo(
-    () => currenciesQuery.data ?? [defaultCurrency],
-    [currenciesQuery.data, defaultCurrency]
-  )
 
   // handleAiAccept consumes the user's accepted-fields subset (from
   // the AiScanStep review phase) and pushes each value into the RHF
@@ -538,7 +531,7 @@ export function CommodityFormDialog({
   // can return partial values (e.g. just a name) that aren't enough
   // to pass the per-field validators yet; the Basics step revalidates
   // on first Next click anyway.
-  function handleAiAccept(values: ScanAcceptedValues) {
+  function handleAiAccept(values: ScanAcceptedValues, _meta?: ScanAcceptMeta) {
     const apply = (
       name: keyof CommodityFormInput,
       value: CommodityFormInput[keyof CommodityFormInput]
@@ -554,7 +547,15 @@ export function CommodityFormDialog({
     if (values.original_price_currency !== undefined) {
       apply("original_price_currency", values.original_price_currency)
     }
-    if (values.urls !== undefined) apply("urls", values.urls)
+    if (values.urls !== undefined) {
+      // Validation runs on first Next-click into the Extras step
+      // (the wizard's `trigger(currentStepFields)` already covers urls
+      // there). Don't call `trigger` here — it queues an async
+      // re-validation that races other userEvent interactions in unit
+      // tests and shows up as intermittent 5s timeouts on the wizard
+      // walk-through path.
+      apply("urls", values.urls)
+    }
     if (values.comments !== undefined) apply("comments", values.comments)
     setStep("basics")
   }
@@ -805,7 +806,7 @@ export function CommodityFormDialog({
             {step === "ai" ? (
               <AiScanStep
                 slug={activeSlug ?? ""}
-                knownCurrencies={availableCurrencies}
+                defaultCurrency={defaultCurrency}
                 onAccept={handleAiAccept}
                 onSkip={() => setStep("basics")}
               />

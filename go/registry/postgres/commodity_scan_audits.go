@@ -59,15 +59,22 @@ func (r *CommodityScanAuditRegistry) Record(ctx context.Context, audit models.Co
 	return &created, nil
 }
 
-// CountRecentForUser returns the number of audit rows for userID
-// created at or after since.
-func (r *CommodityScanAuditRegistry) CountRecentForUser(ctx context.Context, userID string, since time.Time) (int, error) {
+// CountRecentForUser returns the number of audit rows for
+// (tenantID, userID) created at or after since. The explicit tenant_id
+// predicate is the contract guarantee that the memory implementation
+// also enforces; postgres deployments can additionally rely on RLS via
+// a user-scoped registry, but the predicate stays for parity so the
+// caller doesn't need to know which mode the registry was built in.
+func (r *CommodityScanAuditRegistry) CountRecentForUser(ctx context.Context, tenantID, userID string, since time.Time) (int, error) {
+	if tenantID == "" {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
 	if userID == "" {
 		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
 	}
 	var count int
-	query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE user_id = $1 AND created_at >= $2`, r.tableNames.CommodityScanAudits())
-	if err := r.dbx.GetContext(ctx, &count, query, userID, since); err != nil {
+	query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE tenant_id = $1 AND user_id = $2 AND created_at >= $3`, r.tableNames.CommodityScanAudits())
+	if err := r.dbx.GetContext(ctx, &count, query, tenantID, userID, since); err != nil {
 		return 0, errxtrace.Wrap("count recent commodity scan audits", err)
 	}
 	return count, nil
