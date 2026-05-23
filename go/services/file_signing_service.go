@@ -48,8 +48,10 @@ type SessionBinding string
 // The binding is the first 16 bytes of SHA-256(cookie value), base64url-
 // encoded. The relevant security property is preimage resistance over a
 // high-entropy cookie value (a real refresh token is 32 random bytes), so
-// 16 bytes is overkill — it also keeps the URL compact. The HMAC still
-// supplies the full 32 bytes of secret entropy.
+// 16 bytes is overkill — it also keeps the binding identifier itself
+// short, which matters for log volume and `fmt.Sprintf` of the HMAC
+// message but not for the URL (binding is never written into the URL).
+// The HMAC still supplies the full 32 bytes of secret entropy.
 //
 // Impersonation caveat: during an impersonation session the cookie value
 // is `imp:<jti>`, where the JTI is also a claim on the visible access

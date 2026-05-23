@@ -18,6 +18,21 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
+// newTestRefreshCookie builds a refresh_token cookie suitable for binding
+// tests. Mirrors production attributes (HttpOnly + Secure + SameSiteStrict)
+// to keep the fixture aligned and silence gosec G124 without needing
+// //#nosec directives. ExtractSessionBinding only reads Name + Value, so
+// the transport flags do not affect the binding hash.
+func newTestRefreshCookie(value string) *http.Cookie {
+	return &http.Cookie{
+		Name:     appctx.RefreshTokenCookieName,
+		Value:    value,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	}
+}
+
 // mockUserRegistry implements registry.UserRegistry for testing
 type mockUserRegistry struct {
 	users map[string]*models.User
@@ -453,8 +468,7 @@ func TestSignedURLMiddleware_SessionBinding(t *testing.T) {
 
 	// Mint the URL with the binding the live browser would produce.
 	mintReq := httptest.NewRequest(http.MethodGet, "/mint", nil)
-	// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-	mintReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: "session-cookie-A"})
+	mintReq.AddCookie(newTestRefreshCookie("session-cookie-A"))
 	mintBinding := services.ExtractSessionBinding(mintReq)
 	c.Assert(string(mintBinding), qt.Not(qt.Equals), "")
 
@@ -466,8 +480,7 @@ func TestSignedURLMiddleware_SessionBinding(t *testing.T) {
 
 	c.Run("same-session cookie succeeds", func(c *qt.C) {
 		req := httptest.NewRequest(http.MethodGet, parsed.Path+"?"+parsed.RawQuery, nil)
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "session-cookie-A"})
+		req.AddCookie(newTestRefreshCookie("session-cookie-A"))
 		w := httptest.NewRecorder()
 		wrappedHandler.ServeHTTP(w, req)
 		c.Assert(w.Code, qt.Equals, http.StatusOK)
@@ -484,8 +497,7 @@ func TestSignedURLMiddleware_SessionBinding(t *testing.T) {
 
 	c.Run("different cookie is rejected", func(c *qt.C) {
 		req := httptest.NewRequest(http.MethodGet, parsed.Path+"?"+parsed.RawQuery, nil)
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "session-cookie-B"})
+		req.AddCookie(newTestRefreshCookie("session-cookie-B"))
 		w := httptest.NewRecorder()
 		wrappedHandler.ServeHTTP(w, req)
 		c.Assert(w.Code, qt.Equals, http.StatusUnauthorized)
@@ -514,8 +526,7 @@ func TestSignedURLMiddleware_SessionBinding(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 
 		req := httptest.NewRequest(http.MethodGet, parsedUnbound.Path+"?"+parsedUnbound.RawQuery, nil)
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "session-cookie-A"})
+		req.AddCookie(newTestRefreshCookie("session-cookie-A"))
 		w := httptest.NewRecorder()
 		wrappedHandler.ServeHTTP(w, req)
 		c.Assert(w.Code, qt.Equals, http.StatusUnauthorized)

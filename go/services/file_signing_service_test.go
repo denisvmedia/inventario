@@ -10,9 +10,26 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/services"
 )
+
+// newTestRefreshCookie builds a refresh_token cookie suitable for binding
+// tests. Production cookies are emitted by apiserver.writeRefreshCookie with
+// the same attributes; setting them here keeps the test fixture aligned and
+// silences gosec G124 without sprinkling //#nosec directives. The transport
+// security flags do not affect ExtractSessionBinding's behaviour — the
+// helper only reads Name + Value.
+func newTestRefreshCookie(value string) *http.Cookie {
+	return &http.Cookie{
+		Name:     appctx.RefreshTokenCookieName,
+		Value:    value,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	}
+}
 
 func TestFileSigningService_GenerateSignedURL(t *testing.T) {
 	c := qt.New(t)
@@ -560,18 +577,15 @@ func TestExtractSessionBinding(t *testing.T) {
 
 	c.Run("empty cookie value returns empty", func(c *qt.C) {
 		r := httptest.NewRequest(http.MethodGet, "/whatever", nil)
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		r.AddCookie(&http.Cookie{Name: "refresh_token", Value: ""})
+		r.AddCookie(newTestRefreshCookie(""))
 		c.Assert(services.ExtractSessionBinding(r), qt.Equals, services.SessionBinding(""))
 	})
 
 	c.Run("present cookie produces stable, non-empty binding", func(c *qt.C) {
 		r1 := httptest.NewRequest(http.MethodGet, "/whatever", nil)
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		r1.AddCookie(&http.Cookie{Name: "refresh_token", Value: "the-cookie-value"})
+		r1.AddCookie(newTestRefreshCookie("the-cookie-value"))
 		r2 := httptest.NewRequest(http.MethodGet, "/whatever", nil)
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		r2.AddCookie(&http.Cookie{Name: "refresh_token", Value: "the-cookie-value"})
+		r2.AddCookie(newTestRefreshCookie("the-cookie-value"))
 
 		b1 := services.ExtractSessionBinding(r1)
 		b2 := services.ExtractSessionBinding(r2)
@@ -582,21 +596,19 @@ func TestExtractSessionBinding(t *testing.T) {
 
 	c.Run("different cookies produce different bindings", func(c *qt.C) {
 		r1 := httptest.NewRequest(http.MethodGet, "/whatever", nil)
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		r1.AddCookie(&http.Cookie{Name: "refresh_token", Value: "cookie-A"})
+		r1.AddCookie(newTestRefreshCookie("cookie-A"))
 		r2 := httptest.NewRequest(http.MethodGet, "/whatever", nil)
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		r2.AddCookie(&http.Cookie{Name: "refresh_token", Value: "cookie-B"})
+		r2.AddCookie(newTestRefreshCookie("cookie-B"))
 
 		c.Assert(services.ExtractSessionBinding(r1), qt.Not(qt.Equals), services.ExtractSessionBinding(r2))
 	})
 
 	c.Run("other cookies do not contribute", func(c *qt.C) {
 		r := httptest.NewRequest(http.MethodGet, "/whatever", nil)
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		r.AddCookie(&http.Cookie{Name: "session", Value: "looks-juicy"})
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		r.AddCookie(&http.Cookie{Name: "access_token", Value: "also-juicy"})
+		// #nosec G124 -- intentionally different cookie names; transport security irrelevant.
+		r.AddCookie(&http.Cookie{Name: "session", Value: "looks-juicy", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+		// #nosec G124 -- intentionally different cookie names; transport security irrelevant.
+		r.AddCookie(&http.Cookie{Name: "access_token", Value: "also-juicy", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 		c.Assert(services.ExtractSessionBinding(r), qt.Equals, services.SessionBinding(""))
 	})
 }
@@ -690,8 +702,7 @@ func TestFileSigningService_SessionBindingMatrix(t *testing.T) {
 		c := qt.New(t)
 
 		mintReq := httptest.NewRequest(http.MethodGet, "/sign", nil)
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		mintReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: "round-trip-cookie"})
+		mintReq.AddCookie(newTestRefreshCookie("round-trip-cookie"))
 		mintBinding := services.ExtractSessionBinding(mintReq)
 		c.Assert(string(mintBinding), qt.Not(qt.Equals), "")
 
@@ -702,8 +713,7 @@ func TestFileSigningService_SessionBindingMatrix(t *testing.T) {
 
 		// Same cookie at validate time → success.
 		sameReq := httptest.NewRequest(http.MethodGet, parsed.Path+"?"+parsed.RawQuery, nil)
-		// #nosec G124 -- test request cookie; transport security is irrelevant to the assertion.
-		sameReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: "round-trip-cookie"})
+		sameReq.AddCookie(newTestRefreshCookie("round-trip-cookie"))
 		_, err = service.ValidateSignedURL(parsed.Path, parsed.Query(), services.ExtractSessionBinding(sameReq))
 		c.Assert(err, qt.IsNil)
 
@@ -740,8 +750,10 @@ func TestFileSigningService_ThumbnailsCarryBinding(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(thumbnails, qt.HasLen, 2)
 
-	// Original URL must reject foreign binding.
+	// Original URL must accept the mint binding and reject foreign ones.
 	parsed, err := url.Parse(originalURL)
+	c.Assert(err, qt.IsNil)
+	_, err = service.ValidateSignedURL(parsed.Path, parsed.Query(), "session-A")
 	c.Assert(err, qt.IsNil)
 	_, err = service.ValidateSignedURL(parsed.Path, parsed.Query(), "session-B")
 	c.Assert(err, qt.IsNotNil)
