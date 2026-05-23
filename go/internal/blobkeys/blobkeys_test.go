@@ -155,6 +155,38 @@ func TestRewriteForTenant_EmptyInputs(t *testing.T) {
 	c.Assert(blobkeys.RewriteForTenant("legacy.pdf", ""), qt.Equals, "legacy.pdf")
 }
 
+func TestRewriteForTenant_HostileInputs(t *testing.T) {
+	// Restore reads OriginalPath from attacker-controllable XML. A
+	// hostile foreign-tenant key like `t/other/../../escape` must not
+	// land at a path that resolves outside the importing tenant's
+	// namespace on a filesystem-backed bucket. `..` tokens are
+	// neutralised; structural slashes survive.
+	tenant := "importer"
+	prefix := blobkeys.TenantPrefix(tenant)
+
+	tests := []struct {
+		name, legacy string
+	}{
+		{"flat traversal", "../../escape.pdf"},
+		{"exports traversal", "exports/../../../escape.xml"},
+		{"thumbnails traversal", "thumbnails/file-1/../../../../escape.jpg"},
+		{"backslash traversal", `..\windows\..\..\escape`},
+		{"flat with embedded ..", "uploaded..file.pdf"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			got := blobkeys.RewriteForTenant(tc.legacy, tenant)
+			c.Assert(strings.HasPrefix(got, prefix), qt.IsTrue,
+				qt.Commentf("rewrite %q must carry importer prefix", tc.legacy))
+			c.Assert(got, qt.Not(qt.Contains), "..",
+				qt.Commentf("rewrite %q must not retain traversal token", tc.legacy))
+			c.Assert(got, qt.Not(qt.Contains), `\`,
+				qt.Commentf("rewrite %q must not retain backslash", tc.legacy))
+		})
+	}
+}
+
 func TestKeysAlwaysCarryTenantNamespace(t *testing.T) {
 	// Structural invariant: no helper may emit a key that escapes the
 	// tenant's namespace, however absurd the inputs. This is the core

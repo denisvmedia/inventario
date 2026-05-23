@@ -195,14 +195,27 @@ func RewriteForTenant(legacyKey, tenantID string) string {
 	}
 	switch {
 	case strings.HasPrefix(legacyKey, ExportsSegment+"/"):
-		return Prefix + tenantID + "/" + legacyKey
+		return sanitizeRewritten(Prefix + tenantID + "/" + legacyKey)
 	case strings.HasPrefix(legacyKey, ThumbnailsSegment+"/"):
-		return Prefix + tenantID + "/" + legacyKey
+		return sanitizeRewritten(Prefix + tenantID + "/" + legacyKey)
 	case strings.HasPrefix(legacyKey, FilesSegment+"/"):
-		return Prefix + tenantID + "/" + legacyKey
+		return sanitizeRewritten(Prefix + tenantID + "/" + legacyKey)
 	case strings.HasPrefix(legacyKey, RestoresSegment+"/"):
-		return Prefix + tenantID + "/" + legacyKey
+		return sanitizeRewritten(Prefix + tenantID + "/" + legacyKey)
 	default:
-		return Prefix + tenantID + "/" + FilesSegment + "/" + legacyKey
+		return sanitizeRewritten(Prefix + tenantID + "/" + FilesSegment + "/" + legacyKey)
 	}
+}
+
+// sanitizeRewritten is the rewrite-side counterpart of sanitizeSegment:
+// it strips traversal tokens (`..`, backslash) from a key the rewriter
+// just produced while preserving the forward slashes that segment the
+// canonical layout (`t/<tenant>/exports/...`). Restore imports XML keys
+// that are attacker-controllable, so a malicious `originalPath` like
+// `t/other/../../escape` must not become a key that resolves outside
+// `t/<importer>/` on a filesystem-backed bucket.
+func sanitizeRewritten(s string) string {
+	s = strings.ReplaceAll(s, "\\", "_")
+	s = strings.ReplaceAll(s, "..", "_")
+	return s
 }

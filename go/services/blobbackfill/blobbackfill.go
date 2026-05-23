@@ -24,6 +24,7 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
+	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/internal/blobkeys"
 	"github.com/denisvmedia/inventario/internal/mimekit"
@@ -101,10 +102,15 @@ func (s *Service) Run(ctx context.Context, opts Options) (*Stats, error) {
 	// during the sweep don't shift ordering because rows are updated
 	// (not deleted), and idempotency lets a re-run pick up anything we
 	// somehow missed.
+	//
+	// We stop when the page is short (`len(page) < pageSize`) instead
+	// of comparing offset against `total`. ListPaginated executes a
+	// COUNT(*) on every call to populate `total`, which would re-count
+	// the whole file table on every page for a long-running sweep.
 	const pageSize = 500
 	offset := 0
 	for {
-		page, total, err := fileReg.ListPaginated(ctx, offset, pageSize, nil, nil, nil, nil)
+		page, _, err := fileReg.ListPaginated(ctx, offset, pageSize, nil, nil, nil, nil)
 		if err != nil {
 			return nil, errxtrace.Wrap("failed to list file rows", err)
 		}
@@ -115,7 +121,7 @@ func (s *Service) Run(ctx context.Context, opts Options) (*Stats, error) {
 			s.processRow(ctx, bucket, fileReg, file, opts, logger, stats)
 		}
 		offset += len(page)
-		if offset >= total {
+		if len(page) < pageSize {
 			break
 		}
 	}
@@ -196,12 +202,18 @@ func (s *Service) processRow(
 
 	// Step 3: delete the legacy blob. Failure here is non-fatal — the
 	// row already points at the new key, so the legacy blob is
-	// unreferenced; a later sweep can clean it up.
-	if err := bucket.Delete(ctx, legacyKey); err != nil {
+	// unreferenced; a later sweep can clean it up. NotFound is the
+	// expected state on a re-run (we already deleted it last time) or
+	// on a partially-pruned bucket where copyIfAbsent took the
+	// short-circuit path, so suppress it to keep the log quiet.
+	switch err := bucket.Delete(ctx, legacyKey); {
+	case err == nil:
+		stats.BlobsDeleted++
+	case gcerrors.Code(err) == gcerrors.NotFound:
+		// Legacy blob already gone — nothing to do.
+	default:
 		logger.Warn("blobbackfill: legacy blob delete failed",
 			"file_id", file.ID, "legacy_key", legacyKey, "err", err)
-	} else {
-		stats.BlobsDeleted++
 	}
 
 	// Step 4: thumbnails.
