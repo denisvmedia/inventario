@@ -19,6 +19,16 @@ import (
 // observable contract (1 MiB) without leaking the implementation symbol.
 const tenantScanCap = 1 * 1024 * 1024
 
+// Expected response bodies for the middleware's three short-circuit paths.
+// http.Error always appends "\n" after the message, so these mirror what
+// the wire-level response body looks like to a client. Kept as literal
+// strings (rather than re-exporting from the apiserver package) so the
+// test asserts the observable contract.
+const (
+	tenantSizeCapBody   = "Request body too large\n"
+	tenantViolationBody = "Security violation: tenant information cannot be provided by user\n"
+)
+
 // TestValidateNoUserProvidedTenantID_AdminSubtreeQueryExemption verifies the
 // narrow exemption added for #1748: the /api/v1/admin/* subtree is exempt
 // from the query-parameter "tenant" check (so the documented ?tenantID=
@@ -301,14 +311,17 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_SizeCap(t *testing.T) {
 	multipartClean, multipartCleanCT := buildMultipartBody(t, 2*tenantScanCap)
 	multipartWithTenant, multipartWithTenantCT := buildMultipartBody(t, 2*tenantScanCap, "tenant_id")
 
+	// Every case sets contentType and wantBody explicitly — empty
+	// strings are the literal expected values, not "skip this assertion"
+	// sentinels. Project rule: no conditionals in tests.
 	tests := []struct {
-		name           string
-		method         string
-		target         string
-		contentType    string
-		body           []byte
-		wantStatus     int
-		wantBodyPrefix string // optional; only checked when non-empty
+		name        string
+		method      string
+		target      string
+		contentType string
+		body        []byte
+		wantStatus  int
+		wantBody    string // exact response body the client receives
 	}{
 		{
 			name:        "json well below cap is allowed",
@@ -317,6 +330,7 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_SizeCap(t *testing.T) {
 			contentType: "application/json",
 			body:        buildJSONPadded(1024),
 			wantStatus:  http.StatusOK,
+			wantBody:    "", // downstream only WriteHeaders, no body
 		},
 		{
 			name:        "json exactly at cap is allowed",
@@ -325,25 +339,26 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_SizeCap(t *testing.T) {
 			contentType: "application/json",
 			body:        buildJSONPadded(tenantScanCap),
 			wantStatus:  http.StatusOK,
+			wantBody:    "",
 		},
 		{
-			name:           "json one byte over cap is rejected with 413",
-			method:         http.MethodPost,
-			target:         "/api/v1/areas",
-			contentType:    "application/json",
-			body:           buildJSONPadded(tenantScanCap + 1),
-			wantStatus:     http.StatusRequestEntityTooLarge,
-			wantBodyPrefix: "Request body too large",
+			name:        "json one byte over cap is rejected with 413",
+			method:      http.MethodPost,
+			target:      "/api/v1/areas",
+			contentType: "application/json",
+			body:        buildJSONPadded(tenantScanCap + 1),
+			wantStatus:  http.StatusRequestEntityTooLarge,
+			wantBody:    tenantSizeCapBody,
 		},
 		{
 			// Body is exactly cap+1: "x=" (2 bytes) + cap-1 padding 'a's.
-			name:           "form-encoded one byte over cap is rejected with 413",
-			method:         http.MethodPost,
-			target:         "/api/v1/areas",
-			contentType:    "application/x-www-form-urlencoded",
-			body:           append([]byte("x="), bytes.Repeat([]byte("a"), tenantScanCap-1)...),
-			wantStatus:     http.StatusRequestEntityTooLarge,
-			wantBodyPrefix: "Request body too large",
+			name:        "form-encoded one byte over cap is rejected with 413",
+			method:      http.MethodPost,
+			target:      "/api/v1/areas",
+			contentType: "application/x-www-form-urlencoded",
+			body:        append([]byte("x="), bytes.Repeat([]byte("a"), tenantScanCap-1)...),
+			wantStatus:  http.StatusRequestEntityTooLarge,
+			wantBody:    tenantSizeCapBody,
 		},
 		{
 			name:        "multipart well over cap with no tenant_id is allowed (skip)",
@@ -352,6 +367,7 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_SizeCap(t *testing.T) {
 			contentType: multipartCleanCT,
 			body:        multipartClean,
 			wantStatus:  http.StatusOK,
+			wantBody:    "",
 		},
 		{
 			name:        "multipart well over cap with tenant_id field name is allowed (skip)",
@@ -360,6 +376,7 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_SizeCap(t *testing.T) {
 			contentType: multipartWithTenantCT,
 			body:        multipartWithTenant,
 			wantStatus:  http.StatusOK,
+			wantBody:    "",
 		},
 		{
 			name:        "json with tenant_id under cap is still rejected with 403",
@@ -368,6 +385,7 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_SizeCap(t *testing.T) {
 			contentType: "application/json",
 			body:        []byte(`{"tenant_id":"x"}`),
 			wantStatus:  http.StatusForbidden,
+			wantBody:    tenantViolationBody,
 		},
 		{
 			name:        "GET with huge body is passed through (method gate)",
@@ -376,6 +394,7 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_SizeCap(t *testing.T) {
 			contentType: "application/json",
 			body:        buildJSONPadded(tenantScanCap + 1),
 			wantStatus:  http.StatusOK,
+			wantBody:    "",
 		},
 	}
 
@@ -384,17 +403,12 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_SizeCap(t *testing.T) {
 			c := qt.New(t)
 
 			req := httptest.NewRequest(tc.method, tc.target, bytes.NewReader(tc.body))
-			if tc.contentType != "" {
-				req.Header.Set("Content-Type", tc.contentType)
-			}
+			req.Header.Set("Content-Type", tc.contentType)
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 
 			c.Assert(rr.Code, qt.Equals, tc.wantStatus)
-			if tc.wantBodyPrefix != "" {
-				c.Assert(strings.HasPrefix(rr.Body.String(), tc.wantBodyPrefix), qt.IsTrue,
-					qt.Commentf("body=%q", rr.Body.String()))
-			}
+			c.Assert(rr.Body.String(), qt.Equals, tc.wantBody)
 		})
 	}
 }
