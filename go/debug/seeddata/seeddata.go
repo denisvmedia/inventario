@@ -479,11 +479,18 @@ func ensureSystemAdminUser(ctx context.Context, registrySet *registry.Set, tenan
 	}
 
 	// Idempotent — already-granted users return hadGrant=true with no
-	// row mutation.
-	if registrySet.SystemAdminGrantRegistry != nil {
-		if _, err := registrySet.SystemAdminGrantRegistry.Grant(ctx, sysadmin.ID, nil); err != nil {
-			return errxtrace.Wrap("failed to grant system-admin to seeded fixture", err)
-		}
+	// row mutation. A nil registry here is a miswired FactorySet that
+	// would otherwise produce a non-admin sysadmin fixture and break
+	// every admin-section e2e expectation downstream; fail loudly
+	// instead of silently no-op'ing.
+	if registrySet.SystemAdminGrantRegistry == nil {
+		return errxtrace.Wrap(
+			"system-admin seed fixture requires SystemAdminGrantRegistry; FactorySet is miswired",
+			registry.ErrInvalidConfig,
+		)
+	}
+	if _, err := registrySet.SystemAdminGrantRegistry.Grant(ctx, sysadmin.ID, nil); err != nil {
+		return errxtrace.Wrap("failed to grant system-admin to seeded fixture", err)
 	}
 
 	if _, err := findOrCreateDefaultGroup(ctx, registrySet, sysadmin, models.Currency("USD")); err != nil {
@@ -536,10 +543,18 @@ func reconcileBlockTargetDrift(ctx context.Context, registrySet *registry.Set, u
 			return errxtrace.Wrap("failed to reconcile block-target test user", err)
 		}
 	}
-	if registrySet.SystemAdminGrantRegistry != nil {
-		if _, err := registrySet.SystemAdminGrantRegistry.RevokeAtomic(ctx, user.ID, true); err != nil {
-			return errxtrace.Wrap("failed to revoke any drifted system-admin grant from block-target", err)
-		}
+	// A nil registry here would leave a drifted block-target fixture
+	// silently holding a system-admin grant (if a prior run granted it)
+	// — the e2e block/unblock spec then exercises a system admin rather
+	// than the plain user it expects. Fail loud on the miswiring instead.
+	if registrySet.SystemAdminGrantRegistry == nil {
+		return errxtrace.Wrap(
+			"block-target reconcile requires SystemAdminGrantRegistry; FactorySet is miswired",
+			registry.ErrInvalidConfig,
+		)
+	}
+	if _, err := registrySet.SystemAdminGrantRegistry.RevokeAtomic(ctx, user.ID, true); err != nil {
+		return errxtrace.Wrap("failed to revoke any drifted system-admin grant from block-target", err)
 	}
 	return nil
 }
