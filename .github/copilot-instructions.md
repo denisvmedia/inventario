@@ -59,11 +59,24 @@ Do **not** flag the following as compile errors or "doesn't compile in Go" — t
   `func(yield func(K, V) bool)` (i.e. `iter.Seq` / `iter.Seq2`) is valid since **Go 1.23**.
 - **Builtins** `min`, `max`, `clear` are available since Go 1.21.
 - **Generic type aliases** (`type Foo[T any] = Bar[T]`) are valid since Go 1.24.
+- **`sync.WaitGroup.Go`** — `wg.Go(task)` (auto `Add`/`Done`) is valid since **Go 1.25**.
+  The classic `Add`/`Done` pattern is also fine; don't push contributors to one form
+  over the other.
+- **`new` takes an expression, not just a type** — since **Go 1.26**, `new(x)` where
+  `x` has type `T` allocates a `*T` initialized to the value of `x`. Examples in this
+  repo: `new(true)` (→ `*bool`), `new(value)` (→ `*int`), `m.users[user.ID] = new(user)`
+  (→ `*models.User` initialized from `user`). This is **not** the legacy `new(T)`
+  zero-value form — do **not** "fix" it to `&x`, do **not** claim "the argument is not
+  a type", and do **not** propose `ptrTo` / `toPtr` helpers (the project bans those).
+  Reference: <https://tip.golang.org/doc/go1.26>.
 
 **Before claiming Go code "does not compile":** the project's `go-test*.yml` workflows
 build and run the full test suite on every PR. If those are green and you're flagging a
 compile error, you're wrong — your knowledge of Go syntax is outdated. Defer to the
-build, not to memory.
+build, not to memory. **The Go language version in `go/go.mod` is authoritative; read
+it before commenting on syntax.**
+
+For deeper Go-specific review guidance see [`.github/instructions/go.instructions.md`](instructions/go.instructions.md).
 
 ### Frontend Development
 - Use React 19 with TypeScript
