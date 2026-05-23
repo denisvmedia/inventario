@@ -1515,6 +1515,64 @@
                 }
             }
         },
+        "/backoffice/auth/login/mfa": {
+            "post": {
+                "description": "Exchange a short-lived MFA challenge token + TOTP/backup code for a back-office access token. Issues a `backoffice` aud access token in the body and sets a `backoffice_refresh_token` cookie at `/api/v1/backoffice`.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backoffice-auth"
+                ],
+                "summary": "Complete back-office login with MFA",
+                "parameters": [
+                    {
+                        "description": "MFA challenge response",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.BackofficeLoginMFARequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.BackofficeLoginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized — invalid token or code",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests — account locked",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "501": {
+                        "description": "MFA not configured",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/backoffice/auth/logout": {
             "post": {
                 "description": "Revoke the current back-office session's refresh token and clear the cookie.",
@@ -7692,6 +7750,20 @@
                 }
             }
         },
+        "apiserver.BackofficeLoginMFARequest": {
+            "type": "object",
+            "properties": {
+                "backup_code": {
+                    "type": "string"
+                },
+                "mfa_token": {
+                    "type": "string"
+                },
+                "totp_code": {
+                    "type": "string"
+                }
+            }
+        },
         "apiserver.BackofficeLoginRequest": {
             "type": "object",
             "properties": {
@@ -7732,14 +7804,22 @@
             "type": "object",
             "properties": {
                 "code": {
-                    "description": "Code mirrors backofficeMFANotImplementedCode so FE clients can\nbranch on a stable identifier instead of an HTTP status alone.",
+                    "description": "Code mirrors a stable identifier so FE clients can branch on it\ninstead of an HTTP status alone. Today only the 501 branch sets\n`backofficeMFANotImplementedCode`; future codes can be added\nwithout breaking older FE clients.",
                     "type": "string"
                 },
                 "email": {
                     "type": "string"
                 },
+                "expires_in": {
+                    "description": "ExpiresIn carries the MFAToken lifetime in seconds so the FE can\ndisable the code-entry surface when the token lapses. Zero on the\n501 branch.",
+                    "type": "integer"
+                },
                 "mfa_required": {
                     "type": "boolean"
+                },
+                "mfa_token": {
+                    "description": "MFAToken is the short-lived (5 min) step-1 token that the FE must\necho back to /login/mfa alongside the TOTP / backup code. Empty\non the 501 (not-implemented) branch.",
+                    "type": "string"
                 }
             }
         },

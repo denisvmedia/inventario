@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/cmd/inventario/backoffice/bootstrap"
+	"github.com/denisvmedia/inventario/cmd/inventario/backoffice/mfa"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 )
 
@@ -54,6 +55,7 @@ USAGE EXAMPLES:
 	}
 
 	cmd.AddCommand(bootstrap.New(dbConfig).Cmd())
+	cmd.AddCommand(mfa.New(dbConfig))
 
 	return cmd
 }

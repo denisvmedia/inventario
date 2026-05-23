@@ -387,12 +387,19 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// endpoint a future phase will add (Phase 3 will mount the
 		// admin surface under the same prefix).
 		r.Route("/backoffice/auth", BackofficeAuth(BackofficeAuthParams{
-			BackofficeUserRegistry:         params.FactorySet.BackofficeUserRegistry,
-			BackofficeRefreshTokenRegistry: params.FactorySet.BackofficeRefreshTokenRegistry,
-			BlacklistService:               blacklist,
-			RateLimiter:                    rateLimiter,
-			AuditService:                   auditSvc,
-			JWTSecret:                      params.JWTSecret,
+			BackofficeUserRegistry:          params.FactorySet.BackofficeUserRegistry,
+			BackofficeRefreshTokenRegistry:  params.FactorySet.BackofficeRefreshTokenRegistry,
+			BackofficeUserMFASecretRegistry: params.FactorySet.BackofficeUserMFASecretRegistry,
+			// Reuse the tenant-plane MFAService — same HKDF subkey
+			// label means a TOTP secret encrypted by either plane's CLI
+			// is decryptable by either plane's verifier (no key drift),
+			// which keeps the operational surface uniform across the
+			// two MFA tables.
+			MFAService:       mfaSvc,
+			BlacklistService: blacklist,
+			RateLimiter:      rateLimiter,
+			AuditService:     auditSvc,
+			JWTSecret:        params.JWTSecret,
 		}))
 
 		// Unauthenticated public routes: apply the global per-IP rate limit as a

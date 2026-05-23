@@ -2021,6 +2021,86 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/backoffice/auth/login/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete back-office login with MFA
+         * @description Exchange a short-lived MFA challenge token + TOTP/backup code for a back-office access token. Issues a `backoffice` aud access token in the body and sets a `backoffice_refresh_token` cookie at `/api/v1/backoffice`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description MFA challenge response */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.BackofficeLoginMFARequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.BackofficeLoginResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Unauthorized — invalid token or code */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Too Many Requests — account locked */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description MFA not configured */
+                501: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/backoffice/auth/logout": {
         parameters: {
             query?: never;
@@ -8622,6 +8702,11 @@ export type components = {
             name?: string;
             tenant_id?: string;
         };
+        "apiserver.BackofficeLoginMFARequest": {
+            backup_code?: string;
+            mfa_token?: string;
+            totp_code?: string;
+        };
         "apiserver.BackofficeLoginRequest": {
             email?: string;
             password?: string;
@@ -8637,12 +8722,26 @@ export type components = {
         };
         "apiserver.BackofficeMFARequiredResponse": {
             /**
-             * @description Code mirrors backofficeMFANotImplementedCode so FE clients can
-             *     branch on a stable identifier instead of an HTTP status alone.
+             * @description Code mirrors a stable identifier so FE clients can branch on it
+             *     instead of an HTTP status alone. Today only the 501 branch sets
+             *     `backofficeMFANotImplementedCode`; future codes can be added
+             *     without breaking older FE clients.
              */
             code?: string;
             email?: string;
+            /**
+             * @description ExpiresIn carries the MFAToken lifetime in seconds so the FE can
+             *     disable the code-entry surface when the token lapses. Zero on the
+             *     501 branch.
+             */
+            expires_in?: number;
             mfa_required?: boolean;
+            /**
+             * @description MFAToken is the short-lived (5 min) step-1 token that the FE must
+             *     echo back to /login/mfa alongside the TOTP / backup code. Empty
+             *     on the 501 (not-implemented) branch.
+             */
+            mfa_token?: string;
         };
         "apiserver.BackofficeProfile": {
             email?: string;

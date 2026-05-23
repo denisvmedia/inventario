@@ -330,12 +330,16 @@ func (r *BackofficeUserRegistry) Delete(ctx context.Context, id string) error {
 
 // SetPasswordHash overwrites only the password_hash column on the
 // target row. Kept off the generic Update path so the bcrypt hash never
-// gets exposed through a full-row write.
+// gets exposed through a full-row write. Whitespace-only input is
+// rejected so a caller can't accidentally wipe the hash via a stray
+// "   " — a blanked-out hash would lock the back-office user out of
+// every plane indefinitely (carries Phase 1 deferred review comment
+// cid 3292613046).
 func (r *BackofficeUserRegistry) SetPasswordHash(ctx context.Context, id, hash string) error {
 	if id == "" {
 		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
-	if hash == "" {
+	if strings.TrimSpace(hash) == "" {
 		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "PasswordHash"))
 	}
 

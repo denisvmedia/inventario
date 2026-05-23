@@ -77,6 +77,10 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	// RefreshTokenRegistry uses to satisfy the RLS background-worker
 	// policy.
 	fs.BackofficeRefreshTokenRegistry = NewBackofficeRefreshTokenRegistry(dbx)
+	// Back-office MFA secrets (issue #1785, Phase 4). One row per
+	// back-office user; the operator CLI mints, regenerates, and wipes
+	// rows. Same no-RLS rationale as the rest of the back-office tables.
+	fs.BackofficeUserMFASecretRegistry = NewBackofficeUserMFASecretRegistry(dbx)
 	fs.PingFn = dbx.PingContext
 
 	return fs

@@ -63,15 +63,16 @@ type BackofficeUser struct {
 	Role BackofficeRole `json:"role" db:"role"`
 	//migrator:schema:field name="is_active" type="BOOLEAN" not_null="true" default="true"
 	IsActive bool `json:"is_active" db:"is_active"`
-	// MFAEnforced is reserved for Phase 4 wiring (issue #1785). Defaults
-	// to false in Phase 2 because the actual challenge flow is not yet
-	// implemented — leaving the schema default at true would mean every
-	// bootstrapped operator has `mfa_enforced = true` in the DB but ZERO
-	// MFA in reality (the login handler returns 501 on this branch until
-	// Phase 4 wires the real challenge). Phase 4 will flip the default
-	// back to true at the same commit that wires the enforcement code, so
-	// the security promise becomes real.
-	//migrator:schema:field name="mfa_enforced" type="BOOLEAN" not_null="true" default="false"
+	// MFAEnforced flips back to default-true now that Phase 4 wires the
+	// real step-1 challenge + step-2 endpoint (issue #1785). A row with
+	// MFAEnforced=true AND a populated backoffice_user_mfa_secrets row
+	// triggers the MFA challenge response from POST /backoffice/auth/login;
+	// MFAEnforced=true with NO secret row still returns the 501 fail-closed
+	// branch so an operator must run `inventario backoffice mfa setup`
+	// before they can sign in. The schema default flipped from false to
+	// true at the same commit that wired the challenge so the security
+	// promise lines up with the data state.
+	//migrator:schema:field name="mfa_enforced" type="BOOLEAN" not_null="true" default="true"
 	MFAEnforced bool `json:"mfa_enforced" db:"mfa_enforced"`
 	//migrator:schema:field name="last_login_at" type="TIMESTAMP"
 	LastLoginAt *time.Time `json:"last_login_at" db:"last_login_at" userinput:"false"`
