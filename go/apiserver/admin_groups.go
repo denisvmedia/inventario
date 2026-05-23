@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -44,8 +45,8 @@ type adminGroupsAPI struct {
 // @Param sort query string false "Sort field: name|slug|created_at|status (prefix with - for desc)"
 // @Param order query string false "Sort direction override (wins over `-` prefix)" Enums(asc,desc)
 // @Success 200 {object} jsonapi.AdminGroupsResponse "OK"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Router /admin/groups [get]
 func (api *adminGroupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -102,8 +103,8 @@ func (api *adminGroupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 // @Produce json-api
 // @Param groupID path string true "Group ID"
 // @Success 200 {object} jsonapi.AdminGroupResponse "OK"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Group not found"
 // @Router /admin/groups/{groupID} [get]
 func (api *adminGroupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
@@ -145,11 +146,19 @@ func (api *adminGroupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
 // @Produce json-api
 // @Param groupID path string true "Group ID"
 // @Success 200 {object} jsonapi.AdminGroupResponse "OK - group marked pending_deletion (or already was)"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Group not found"
 // @Router /admin/groups/{groupID} [delete]
 func (api *adminGroupsAPI) deleteGroup(w http.ResponseWriter, r *http.Request) {
+	if appctx.AdminActorFromContext(r.Context()) == nil {
+		// Defence-in-depth: RequireBackofficeAuth should have caught this
+		// already. Mirrors the wiring-bug 401 in admin_users.go's
+		// block/unblock handlers — see actorIDFromRequest's doc-comment.
+		_ = unauthorizedError(w, r, ErrMissingUserContext)
+		return
+	}
+
 	groupID := chi.URLParam(r, "groupID")
 	if groupID == "" {
 		api.auditDelete(r, groupID, "", registry.ErrNotFound)

@@ -67,12 +67,12 @@ func findAuditRow(c *qt.C, params apiserver.Params, action string) *models.Audit
 func TestAdminAddMember_HappyPath(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "newmember@example.com", true, false)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	target := createTestUserDirect(c, env.params, env.tenantID, "newmember@example.com", true, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/groups/"+group.ID+"/members",
-		env.admin.ID, map[string]any{"userID": target.ID, "role": "user"})
+		env.adminToken, map[string]any{"userID": target.ID, "role": "user"})
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.type"), "group_memberships")
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.group_id"), group.ID)
@@ -88,12 +88,12 @@ func TestAdminAddMember_HappyPath(t *testing.T) {
 func TestAdminAddMember_AuditRow(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "newmember@example.com", true, false)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	target := createTestUserDirect(c, env.params, env.tenantID, "newmember@example.com", true, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/groups/"+group.ID+"/members",
-		env.admin.ID, map[string]any{"userID": target.ID, "role": "admin"})
+		env.adminToken, map[string]any{"userID": target.ID, "role": "admin"})
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated)
 
 	row := findAuditRow(c, env.params, apiserver.AuditActionAdminMemberAdd)
@@ -112,7 +112,7 @@ func TestAdminAddMember_AuditRow(t *testing.T) {
 func TestAdminAddMember_CrossTenantRejected(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
 
 	// A user in a different tenant.
 	otherTenant := must.Must(env.params.FactorySet.TenantRegistry.Create(context.Background(), models.Tenant{
@@ -124,7 +124,7 @@ func TestAdminAddMember_CrossTenantRejected(t *testing.T) {
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/groups/"+group.ID+"/members",
-		env.admin.ID, map[string]any{"userID": target.ID, "role": "user"})
+		env.adminToken, map[string]any{"userID": target.ID, "role": "user"})
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 	assertErrorCode(t, c, rr.Body.Bytes(), "admin.member.tenant_mismatch")
 }
@@ -135,43 +135,43 @@ func TestAdminAddMember_CapReached(t *testing.T) {
 		c.Skip("cap disabled")
 	}
 	env := newAdminEnv(c)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "capped@example.com", true, false)
+	target := createTestUserDirect(c, env.params, env.tenantID, "capped@example.com", true, false)
 
 	// Fill the target's membership quota up to the cap.
 	for range services.MaxGroupMembershipsPerUser() {
-		g := createAdminTestGroup(c, env.params, env.admin.TenantID)
-		addMembershipRow(c, env.params, env.admin.TenantID, g.ID, target.ID, models.GroupRoleUser)
+		g := createAdminTestGroup(c, env.params, env.tenantID)
+		addMembershipRow(c, env.params, env.tenantID, g.ID, target.ID, models.GroupRoleUser)
 	}
-	overflow := createAdminTestGroup(c, env.params, env.admin.TenantID)
+	overflow := createAdminTestGroup(c, env.params, env.tenantID)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/groups/"+overflow.ID+"/members",
-		env.admin.ID, map[string]any{"userID": target.ID, "role": "user"})
+		env.adminToken, map[string]any{"userID": target.ID, "role": "user"})
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 }
 
 func TestAdminAddMember_AlreadyMemberRejected(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "dup@example.com", true, false)
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, target.ID, models.GroupRoleUser)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	target := createTestUserDirect(c, env.params, env.tenantID, "dup@example.com", true, false)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, target.ID, models.GroupRoleUser)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/groups/"+group.ID+"/members",
-		env.admin.ID, map[string]any{"userID": target.ID, "role": "admin"})
+		env.adminToken, map[string]any{"userID": target.ID, "role": "admin"})
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 }
 
 func TestAdminAddMember_InvalidRoleRejected(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "badrole@example.com", true, false)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	target := createTestUserDirect(c, env.params, env.tenantID, "badrole@example.com", true, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/groups/"+group.ID+"/members",
-		env.admin.ID, map[string]any{"userID": target.ID, "role": "superuser"})
+		env.adminToken, map[string]any{"userID": target.ID, "role": "superuser"})
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 	assertErrorCode(t, c, rr.Body.Bytes(), "admin.member.invalid_role")
 }
@@ -179,11 +179,11 @@ func TestAdminAddMember_InvalidRoleRejected(t *testing.T) {
 func TestAdminAddMember_MissingUserIDRejected(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/groups/"+group.ID+"/members",
-		env.admin.ID, map[string]any{"role": "user"})
+		env.adminToken, map[string]any{"role": "user"})
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 	assertErrorCode(t, c, rr.Body.Bytes(), "admin.member.user_required")
 }
@@ -191,40 +191,40 @@ func TestAdminAddMember_MissingUserIDRejected(t *testing.T) {
 func TestAdminAddMember_UnknownGroupReturns404(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "nogroup@example.com", true, false)
+	target := createTestUserDirect(c, env.params, env.tenantID, "nogroup@example.com", true, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/groups/does-not-exist/members",
-		env.admin.ID, map[string]any{"userID": target.ID, "role": "user"})
+		env.adminToken, map[string]any{"userID": target.ID, "role": "user"})
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
-func TestAdminAddMember_NonAdminForbidden(t *testing.T) {
+func TestAdminAddMember_TenantTokenRejected(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := newParams() // not promoted
+	params, user, _ := newParams()
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 	group := createAdminTestGroup(c, params, user.TenantID)
 	target := createTestUserDirect(c, params, user.TenantID, "nope@example.com", true, false)
 
+	// Tenant JWT — RequireBackofficeAuth rejects at the audience guard.
 	rr := doAdminJSONRequest(t, handler, http.MethodPost,
 		"/api/v1/admin/groups/"+group.ID+"/members",
-		user.ID, map[string]any{"userID": target.ID, "role": "user"})
-	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
-	c.Assert(rr.Body.String(), qt.Contains, "admin.forbidden")
+		createTestJWTToken(user.ID), map[string]any{"userID": target.ID, "role": "user"})
+	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
 }
 
 func TestAdminRemoveMember_HappyPath(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	owner := createTestUserDirect(c, env.params, env.admin.TenantID, "owner@example.com", true, false)
-	member := createTestUserDirect(c, env.params, env.admin.TenantID, "member@example.com", true, false)
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, owner.ID, models.GroupRoleOwner)
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, member.ID, models.GroupRoleUser)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	owner := createTestUserDirect(c, env.params, env.tenantID, "owner@example.com", true, false)
+	member := createTestUserDirect(c, env.params, env.tenantID, "member@example.com", true, false)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, owner.ID, models.GroupRoleOwner)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, member.ID, models.GroupRoleUser)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodDelete,
 		"/api/v1/admin/groups/"+group.ID+"/members/"+member.ID,
-		env.admin.ID, nil)
+		env.adminToken, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
 
 	_, err := env.params.FactorySet.GroupMembershipRegistry.GetByGroupAndUser(context.Background(), group.ID, member.ID)
@@ -240,32 +240,32 @@ func TestAdminRemoveMember_HappyPath(t *testing.T) {
 func TestAdminRemoveMember_LastOwnerRejected(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	owner := createTestUserDirect(c, env.params, env.admin.TenantID, "soleowner@example.com", true, false)
-	member := createTestUserDirect(c, env.params, env.admin.TenantID, "plainmember@example.com", true, false)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	owner := createTestUserDirect(c, env.params, env.tenantID, "soleowner@example.com", true, false)
+	member := createTestUserDirect(c, env.params, env.tenantID, "plainmember@example.com", true, false)
 	// One owner + one non-owner: removing the owner trips ErrLastOwner
 	// (the ≥1-member invariant is still satisfied).
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, owner.ID, models.GroupRoleOwner)
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, member.ID, models.GroupRoleUser)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, owner.ID, models.GroupRoleOwner)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, member.ID, models.GroupRoleUser)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodDelete,
 		"/api/v1/admin/groups/"+group.ID+"/members/"+owner.ID,
-		env.admin.ID, nil)
+		env.adminToken, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 }
 
 func TestAdminRemoveMember_LastMemberRejected(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	member := createTestUserDirect(c, env.params, env.admin.TenantID, "lonely@example.com", true, false)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	member := createTestUserDirect(c, env.params, env.tenantID, "lonely@example.com", true, false)
 	// A single non-owner member: removing them trips ErrLastMember
 	// (the owner check would pass vacuously).
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, member.ID, models.GroupRoleUser)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, member.ID, models.GroupRoleUser)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodDelete,
 		"/api/v1/admin/groups/"+group.ID+"/members/"+member.ID,
-		env.admin.ID, nil)
+		env.adminToken, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 	assertErrorCode(t, c, rr.Body.Bytes(), "group.last_member")
 }
@@ -273,27 +273,27 @@ func TestAdminRemoveMember_LastMemberRejected(t *testing.T) {
 func TestAdminRemoveMember_NotAMemberReturns404(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	stranger := createTestUserDirect(c, env.params, env.admin.TenantID, "stranger@example.com", true, false)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	stranger := createTestUserDirect(c, env.params, env.tenantID, "stranger@example.com", true, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodDelete,
 		"/api/v1/admin/groups/"+group.ID+"/members/"+stranger.ID,
-		env.admin.ID, nil)
+		env.adminToken, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
 func TestAdminUpdateMemberRole_HappyPath(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	owner := createTestUserDirect(c, env.params, env.admin.TenantID, "owner2@example.com", true, false)
-	member := createTestUserDirect(c, env.params, env.admin.TenantID, "promoteme@example.com", true, false)
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, owner.ID, models.GroupRoleOwner)
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, member.ID, models.GroupRoleUser)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	owner := createTestUserDirect(c, env.params, env.tenantID, "owner2@example.com", true, false)
+	member := createTestUserDirect(c, env.params, env.tenantID, "promoteme@example.com", true, false)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, owner.ID, models.GroupRoleOwner)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, member.ID, models.GroupRoleUser)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPatch,
 		"/api/v1/admin/groups/"+group.ID+"/members/"+member.ID,
-		env.admin.ID, map[string]any{"role": "admin"})
+		env.adminToken, map[string]any{"role": "admin"})
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.role"), "admin")
 
@@ -310,29 +310,29 @@ func TestAdminUpdateMemberRole_HappyPath(t *testing.T) {
 func TestAdminUpdateMemberRole_LastOwnerDemotionRejected(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	owner := createTestUserDirect(c, env.params, env.admin.TenantID, "demoteme@example.com", true, false)
-	member := createTestUserDirect(c, env.params, env.admin.TenantID, "bystander@example.com", true, false)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	owner := createTestUserDirect(c, env.params, env.tenantID, "demoteme@example.com", true, false)
+	member := createTestUserDirect(c, env.params, env.tenantID, "bystander@example.com", true, false)
 	// Sole owner: demoting them to user would leave the group ownerless.
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, owner.ID, models.GroupRoleOwner)
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, member.ID, models.GroupRoleUser)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, owner.ID, models.GroupRoleOwner)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, member.ID, models.GroupRoleUser)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPatch,
 		"/api/v1/admin/groups/"+group.ID+"/members/"+owner.ID,
-		env.admin.ID, map[string]any{"role": "user"})
+		env.adminToken, map[string]any{"role": "user"})
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 }
 
 func TestAdminUpdateMemberRole_InvalidRoleRejected(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	member := createTestUserDirect(c, env.params, env.admin.TenantID, "rolecheck@example.com", true, false)
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, member.ID, models.GroupRoleUser)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	member := createTestUserDirect(c, env.params, env.tenantID, "rolecheck@example.com", true, false)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, member.ID, models.GroupRoleUser)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPatch,
 		"/api/v1/admin/groups/"+group.ID+"/members/"+member.ID,
-		env.admin.ID, map[string]any{"role": "godmode"})
+		env.adminToken, map[string]any{"role": "godmode"})
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 	assertErrorCode(t, c, rr.Body.Bytes(), "admin.member.invalid_role")
 }
@@ -340,12 +340,12 @@ func TestAdminUpdateMemberRole_InvalidRoleRejected(t *testing.T) {
 func TestAdminUpdateMemberRole_NotAMemberReturns404(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	stranger := createTestUserDirect(c, env.params, env.admin.TenantID, "ghost@example.com", true, false)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	stranger := createTestUserDirect(c, env.params, env.tenantID, "ghost@example.com", true, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPatch,
 		"/api/v1/admin/groups/"+group.ID+"/members/"+stranger.ID,
-		env.admin.ID, map[string]any{"role": "admin"})
+		env.adminToken, map[string]any{"role": "admin"})
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
@@ -357,14 +357,14 @@ func TestAdminUpdateMemberRole_NotAMemberReturns404(t *testing.T) {
 func TestAdminListMembers_HappyPath(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
-	owner := createTestUserDirect(c, env.params, env.admin.TenantID, "listowner@example.com", true, false)
-	member := createTestUserDirect(c, env.params, env.admin.TenantID, "listmember@example.com", true, false)
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, owner.ID, models.GroupRoleOwner)
-	addMembershipRow(c, env.params, env.admin.TenantID, group.ID, member.ID, models.GroupRoleUser)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
+	owner := createTestUserDirect(c, env.params, env.tenantID, "listowner@example.com", true, false)
+	member := createTestUserDirect(c, env.params, env.tenantID, "listmember@example.com", true, false)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, owner.ID, models.GroupRoleOwner)
+	addMembershipRow(c, env.params, env.tenantID, group.ID, member.ID, models.GroupRoleUser)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodGet,
-		"/api/v1/admin/groups/"+group.ID+"/members", env.admin.ID, nil)
+		"/api/v1/admin/groups/"+group.ID+"/members", env.adminToken, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 2)
 	// joined_at ASC ordering: the owner was seeded first.
@@ -383,19 +383,19 @@ func TestAdminListMembers_UnknownGroupReturns404(t *testing.T) {
 	env := newAdminEnv(c)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodGet,
-		"/api/v1/admin/groups/does-not-exist/members", env.admin.ID, nil)
+		"/api/v1/admin/groups/does-not-exist/members", env.adminToken, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
 func TestAdminListMembers_EmptyGroupReturns200(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	group := createAdminTestGroup(c, env.params, env.admin.TenantID)
+	group := createAdminTestGroup(c, env.params, env.tenantID)
 
 	// An existing group with no members is a 200 with an empty data
 	// array — not a 404.
 	rr := doAdminJSONRequest(t, env.handler, http.MethodGet,
-		"/api/v1/admin/groups/"+group.ID+"/members", env.admin.ID, nil)
+		"/api/v1/admin/groups/"+group.ID+"/members", env.adminToken, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 0)
 }
@@ -417,21 +417,21 @@ func TestAdminListMembers_CrossTenant(t *testing.T) {
 	addMembershipRow(c, env.params, otherTenant.ID, group.ID, member.ID, models.GroupRoleOwner)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodGet,
-		"/api/v1/admin/groups/"+group.ID+"/members", env.admin.ID, nil)
+		"/api/v1/admin/groups/"+group.ID+"/members", env.adminToken, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 1)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].member_user_id"), member.ID)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].user.email"), "crosstenant@example.com")
 }
 
-func TestAdminListMembers_NonAdminForbidden(t *testing.T) {
+func TestAdminListMembers_TenantTokenRejected(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := newParams() // not promoted
+	params, user, _ := newParams()
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 	group := createAdminTestGroup(c, params, user.TenantID)
 
+	// Tenant JWT — RequireBackofficeAuth rejects at the audience guard.
 	rr := doAdminJSONRequest(t, handler, http.MethodGet,
-		"/api/v1/admin/groups/"+group.ID+"/members", user.ID, nil)
-	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
-	c.Assert(rr.Body.String(), qt.Contains, "admin.forbidden")
+		"/api/v1/admin/groups/"+group.ID+"/members", createTestJWTToken(user.ID), nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
 }

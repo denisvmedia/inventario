@@ -443,19 +443,22 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
 		r.With(userMiddlewares...).Route("/debug", Debug(params))
 		// Platform-administrative subtree (#1745 foundation; #1744 umbrella).
-		// userMiddlewares populates the JWT user; the RequireSystemAdmin gate
-		// inside Admin() rejects non-admins before any handler runs. Mounting
-		// at the same level as /system keeps the surface tenant-agnostic —
-		// system admins are not scoped to a tenant.
+		// The cross-tenant CRUD endpoints are gated by RequireBackofficeAuth
+		// (#1785 Phase 3) which validates a back-office JWT and rejects any
+		// tenant token. The legacy impersonation routes still rely on the
+		// tenant userMiddlewares + RequireSystemAdmin gate — see Admin()
+		// for the rationale. Mounting at the same level as /system keeps
+		// the surface tenant-agnostic.
 		r.Route("/admin", Admin(AdminParams{
-			FactorySet:       params.FactorySet,
-			Blacklist:        blacklist,
-			AuditService:     auditSvc,
-			GroupService:     groupService,
-			JWTSecret:        params.JWTSecret,
-			RateLimiter:      rateLimiter,
-			CSRFService:      csrfSvc,
-			ImpersonationTTL: params.ImpersonationTTL,
+			FactorySet:             params.FactorySet,
+			BackofficeUserRegistry: params.FactorySet.BackofficeUserRegistry,
+			Blacklist:              blacklist,
+			AuditService:           auditSvc,
+			GroupService:           groupService,
+			JWTSecret:              params.JWTSecret,
+			RateLimiter:            rateLimiter,
+			CSRFService:            csrfSvc,
+			ImpersonationTTL:       params.ImpersonationTTL,
 			// ImpersonationStore is the SAME instance /auth/logout
 			// receives, so logout can revoke the operator's genuine
 			// refresh token when an impersonation session is ended via

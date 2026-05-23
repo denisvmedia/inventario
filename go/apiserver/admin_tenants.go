@@ -43,8 +43,8 @@ type adminTenantsAPI struct {
 // @Param sort query string false "Sort field: name|slug|created_at|status (prefix with - for desc)"
 // @Param order query string false "Sort direction override: asc|desc (wins over `-` prefix)"
 // @Success 200 {object} jsonapi.AdminTenantsResponse "OK"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Router /admin/tenants [get]
 func (api *adminTenantsAPI) listTenants(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -88,8 +88,8 @@ func (api *adminTenantsAPI) listTenants(w http.ResponseWriter, r *http.Request) 
 // @Produce json-api
 // @Param tenantID path string true "Tenant ID"
 // @Success 200 {object} jsonapi.AdminTenantResponse "OK"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Tenant not found"
 // @Router /admin/tenants/{tenantID} [get]
 func (api *adminTenantsAPI) getTenant(w http.ResponseWriter, r *http.Request) {
@@ -159,17 +159,25 @@ func (api *adminTenantsAPI) auditGet(r *http.Request, tenantID string, opErr err
 	api.auditService.LogAdmin(r.Context(), ev)
 }
 
-// actorIDFromRequest pulls the authenticated user ID off the context
-// for use as the AdminEvent.ActorID field. Returns nil if the user is
-// missing — RequireSystemAdmin should have rejected the request before
-// reaching the handler, so a missing user here is a wiring bug, not a
-// data-loss path.
+// actorIDFromRequest pulls the back-office admin actor ID off the
+// context for use as the AdminEvent.ActorID field. Returns nil when no
+// admin actor is attached — RequireBackofficeAuth should have rejected
+// the request before reaching the handler, so a missing actor here is
+// a wiring bug, not a data-loss path. The legacy impersonation routes
+// still run under the tenant gate; their handlers do not call this
+// helper, they read the tenant user directly (see admin_impersonation.go).
+//
+// Mutating handlers in admin_groups.go and admin_group_members.go
+// short-circuit on a nil actor with a 401 (mirroring blockUser/unblockUser
+// in admin_users.go) before reaching this helper — read paths intentionally
+// fall through to a NULL ActorID audit row so a wiring-bug deploy is at
+// least observable in the audit trail.
 func actorIDFromRequest(r *http.Request) *string {
-	user := appctx.UserFromContext(r.Context())
-	if user == nil || user.ID == "" {
+	actor := appctx.AdminActorFromContext(r.Context())
+	if actor == nil || actor.ID == "" {
 		return nil
 	}
-	id := user.ID
+	id := actor.ID
 	return &id
 }
 
