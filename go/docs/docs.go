@@ -124,13 +124,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -165,13 +165,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -210,13 +210,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -257,13 +257,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -320,13 +320,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -377,13 +377,13 @@ const docTemplate = `{
                         "description": "No Content"
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -453,13 +453,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -599,13 +599,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -640,13 +640,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -723,13 +723,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -770,13 +770,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -835,13 +835,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -982,13 +982,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

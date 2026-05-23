@@ -4361,11 +4361,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.AdminGroupsResponse'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: List groups (admin)
@@ -4390,11 +4390,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.AdminGroupResponse'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
@@ -4421,11 +4421,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.AdminGroupResponse'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
@@ -4454,11 +4454,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.AdminGroupMembersResponse'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
@@ -4498,11 +4498,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
@@ -4539,11 +4539,11 @@ paths:
         "204":
           description: No Content
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
@@ -4592,11 +4592,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
@@ -4707,11 +4707,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.AdminTenantsResponse'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: List tenants (admin)
@@ -4736,11 +4736,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.AdminTenantResponse'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
@@ -4795,11 +4795,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.AdminUsersResponse'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
@@ -4828,11 +4828,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.AdminUserResponse'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
@@ -4874,11 +4874,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
@@ -4985,11 +4985,11 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "401":
-          description: Unauthorized
+          description: Unauthorized - back-office authentication required
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "403":
-          description: Forbidden - system-admin required
+          description: Account disabled
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "404":

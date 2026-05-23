@@ -103,7 +103,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.AdminGroupsResponse"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -112,7 +112,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -163,7 +163,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.AdminGroupResponse"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -172,7 +172,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -219,7 +219,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.AdminGroupResponse"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -228,7 +228,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -285,7 +285,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.AdminGroupMembersResponse"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -294,7 +294,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -355,7 +355,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -364,7 +364,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -434,7 +434,7 @@ export type paths = {
                     };
                     content?: never;
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -443,7 +443,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -515,7 +515,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -524,7 +524,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -730,7 +730,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantsResponse"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -739,7 +739,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -790,7 +790,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -799,7 +799,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -872,7 +872,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.AdminUsersResponse"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -881,7 +881,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -941,7 +941,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.AdminUserResponse"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -950,7 +950,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1028,7 +1028,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -1037,7 +1037,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1231,7 +1231,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -1240,7 +1240,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
