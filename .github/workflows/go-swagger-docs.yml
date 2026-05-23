@@ -15,9 +15,32 @@ permissions:
   pull-requests: read
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      go_swagger: ${{ steps.filter.outputs.go_swagger }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: .github/filters.yml
+
   swagger-docs:
     name: Check Swagger Docs Sync
     runs-on: ubuntu-latest
+    needs: changes
+    # `go_swagger` is the narrow filter: only the annotated subtrees
+    # (apiserver, cmd, models, jsonapi, docs) plus shared build glue.
+    # Backend changes outside those areas don't affect the swagger spec.
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.go_swagger == 'true' ||
+      needs.changes.outputs.ci == 'true'
     steps:
       # Checkout code
       - name: Checkout code
