@@ -64,13 +64,5 @@ jobs:
         working-directory: go
 
       - name: Run tests
-        # -timeout=20m bumps the per-package test timeout from the 10-minute
-        # default. The `apiserver` package crosses 10m on the ubuntu-latest
-        # runner under -race after the backoffice plane landed (#1785 Phase
-        # 1-6 added ~1.5k LOC of admin/backoffice handler tests). Master
-        # itself was hitting `panic: test timed out after 10m0s` on the
-        # alarm goroutine, blaming whichever subtest happened to be running
-        # — flake symptom, structural cause. 20m leaves enough headroom for
-        # the next round of additions before this needs revisiting.
-        run: go test -v -race -timeout=20m ./...
+        run: go test -v -race ./...
         working-directory: go
