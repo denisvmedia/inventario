@@ -1247,6 +1247,61 @@ definitions:
       cover:
         $ref: '#/definitions/jsonapi.CommodityCover'
     type: object
+  jsonapi.CommodityScanAttributes:
+    properties:
+      fields:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
+        type: object
+      latency_ms:
+        type: integer
+      provider:
+        type: string
+      used_tokens:
+        type: integer
+      warnings:
+        items:
+          $ref: '#/definitions/jsonapi.CommodityScanWarning'
+        type: array
+    type: object
+  jsonapi.CommodityScanFieldGuess:
+    properties:
+      confidence:
+        type: number
+      value:
+        type: object
+    type: object
+  jsonapi.CommodityScanResource:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityScanAttributes'
+      type:
+        enum:
+        - commodity_scan
+        example: commodity_scan
+        type: string
+    type: object
+  jsonapi.CommodityScanResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityScanResource'
+    type: object
+  jsonapi.CommodityScanWarning:
+    properties:
+      code:
+        enum:
+        - low_confidence
+        - unreadable_serial
+        - ambiguous_price
+        - currency_inferred
+        - no_photo_text
+        example: low_confidence
+        type: string
+      detail:
+        type: string
+      field:
+        type: string
+    type: object
   jsonapi.CommodityServiceCountsResponse:
     properties:
       data:
@@ -6516,6 +6571,66 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Bulk-move commodities to a new area
+      tags:
+      - commodities
+  /g/{groupSlug}/commodities/scan:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Extract structured commodity field guesses from 1..N product photos.
+        The handler does not persist any commodity — it only returns structured suggestions
+        for the Add Item dialog to pre-fill.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Product photo(s); image/jpeg|png|webp|heic|heif
+        in: formData
+        name: photos
+        required: true
+        type: file
+      - description: Optional free-form hint (brand, category guess)
+        in: formData
+        name: hint
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityScanResponse'
+        "413":
+          description: Photo too large
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "415":
+          description: Unsupported MIME type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Too many photos / no photos
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "429":
+          description: Rate limited
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "502":
+          description: Provider unavailable / parse error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "503":
+          description: Provider disabled
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "504":
+          description: Provider timed out
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Run an AI vision scan on uploaded photos
       tags:
       - commodities
   /g/{groupSlug}/commodities/values:

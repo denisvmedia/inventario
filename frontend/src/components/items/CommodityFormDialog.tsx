@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import {
   AlertTriangle,
   BookOpen,
-  Camera,
   ChevronLeft,
   ChevronDown,
   ChevronRight,
@@ -13,7 +12,6 @@ import {
   Image as ImageIcon,
   Plus,
   RefreshCw,
-  ScanText,
   Sparkles,
   Tag as TagIcon,
   Upload,
@@ -71,6 +69,10 @@ import type {
   CreateCommodityRequest,
   UpdateCommodityRequest,
 } from "@/features/commodities/api"
+import { AiScanStep, type ScanAcceptedValues } from "@/components/items/AiScanStep"
+import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
+import { useQuery } from "@tanstack/react-query"
+import { http } from "@/lib/http"
 import { cn } from "@/lib/utils"
 
 interface AreaOption {
@@ -505,6 +507,58 @@ export function CommodityFormDialog({
     }
   }
 
+  // Slug + currency list for the AI scan step. `useOptionalCurrentGroup`
+  // returns undefined when the dialog is mounted outside a GroupProvider
+  // (the unit-test harness does this for the non-AI flow). The AI step
+  // gates its scan button behind a non-empty slug, so the empty-string
+  // fallback is safe — the wire request would just 404, which the
+  // typed error banner surfaces. The currencies query reuses the same
+  // `/currencies` endpoint the CurrencyCombobox queries, so the
+  // unknown-currency rejection in AiScanStep matches what the user
+  // sees in the manual currency picker.
+  const groupContext = useOptionalCurrentGroup()
+  const activeSlug = groupContext?.currentGroup?.slug ?? null
+  const currenciesQuery = useQuery<string[]>({
+    queryKey: ["currencies"],
+    queryFn: ({ signal }) => http.get<string[]>("/currencies", { signal }),
+    staleTime: 60 * 60 * 1000,
+    enabled: step === "ai",
+  })
+  const availableCurrencies = useMemo(
+    () => currenciesQuery.data ?? [defaultCurrency],
+    [currenciesQuery.data, defaultCurrency]
+  )
+
+  // handleAiAccept consumes the user's accepted-fields subset (from
+  // the AiScanStep review phase) and pushes each value into the RHF
+  // form before advancing to Basics. setValue with shouldDirty:true so
+  // the close-confirm gate picks up the prefill — a user who reviews
+  // and accepts BEFORE typing anything else still has unsaved value
+  // worth a save-as-draft prompt. shouldValidate=false because the AI
+  // can return partial values (e.g. just a name) that aren't enough
+  // to pass the per-field validators yet; the Basics step revalidates
+  // on first Next click anyway.
+  function handleAiAccept(values: ScanAcceptedValues) {
+    const apply = (
+      name: keyof CommodityFormInput,
+      value: CommodityFormInput[keyof CommodityFormInput]
+    ) => {
+      setValue(name, value, { shouldDirty: true, shouldValidate: false })
+    }
+    if (values.name !== undefined) apply("name", values.name)
+    if (values.short_name !== undefined) apply("short_name", values.short_name)
+    if (values.type !== undefined) apply("type", values.type)
+    if (values.serial_number !== undefined) apply("serial_number", values.serial_number)
+    if (values.purchase_date !== undefined) apply("purchase_date", values.purchase_date)
+    if (values.original_price !== undefined) apply("original_price", values.original_price)
+    if (values.original_price_currency !== undefined) {
+      apply("original_price_currency", values.original_price_currency)
+    }
+    if (values.urls !== undefined) apply("urls", values.urls)
+    if (values.comments !== undefined) apply("comments", values.comments)
+    setStep("basics")
+  }
+
   // The numbered stepper + Back/Next gating only know about FORM_STEPS.
   // On the AI surface the form-step index is reported as -1 (not in
   // the form sequence yet) — Back is disabled, Next ("Fill manually")
@@ -748,7 +802,14 @@ export function CommodityFormDialog({
           noValidate
         >
           <StepResizeWrapper>
-            {step === "ai" ? <AiStep /> : null}
+            {step === "ai" ? (
+              <AiScanStep
+                slug={activeSlug ?? ""}
+                knownCurrencies={availableCurrencies}
+                onAccept={handleAiAccept}
+                onSkip={() => setStep("basics")}
+              />
+            ) : null}
             {step === "basics" ? (
               <BasicsStep
                 register={register}
@@ -796,32 +857,15 @@ export function CommodityFormDialog({
         </form>
 
         {step === "ai" ? (
-          // AI-step footer mirrors the mock (AddItemDialog L657-L674):
-          // Cancel (ghost, mr-auto) | Fill manually (outline) |
-          // Scan photos (primary, Sparkles icon, disabled until at
-          // least one photo is attached). Scanner backend is in #1540
-          // so "Scan photos" stays disabled here.
+          // AI-step footer: only the Cancel/close affordance lives in
+          // the dialog chrome. The four-phase state machine (offer /
+          // scanning / review / error) owns its own primary actions
+          // inline — "Scan photos" / "Use these values" / "Re-take" /
+          // "Fill manually" / "Cancel scan" — so the footer stays
+          // tight and never wrestles with phase-specific buttons.
           <DialogFooter className="gap-2">
             <Button type="button" variant="ghost" className="mr-auto" onClick={requestClose}>
               {t("common:actions.cancel")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={nextStep}
-              data-testid="commodity-form-next"
-            >
-              {t("commodities:form.fillManually")}
-            </Button>
-            <Button
-              type="button"
-              disabled
-              className="gap-1.5"
-              title={t("commodities:form.step.ai.scanDisabledTitle")}
-              data-testid="commodity-form-ai-scan"
-            >
-              <Sparkles aria-hidden="true" className="size-3.5" />
-              {t("commodities:form.step.ai.scanPhotos")}
             </Button>
           </DialogFooter>
         ) : (
@@ -1686,76 +1730,6 @@ function ExtrasStep(props: any) {
 }
 
 // ---- Step 5: Files (stub) ----------------------------------------------
-
-// ---- Step 0: Fill with AI (placeholder) ---------------------------------
-
-// AiStep ports the design-mock `AiPhotoStep` "offer" phase 1:1 — see
-// `design-mocks/src/components/AddItemDialog.tsx` L789-L856. Anatomy
-// is identical: two photo-type cards (full-item / label) with the
-// `bg-primary/10` icon tile, then the dashed dropzone with the
-// `bg-amber-500/10` Sparkles tile and the "Drop photos here or
-// browse" copy. The scanner backend (AI vision service + scanning /
-// review phases) is tracked in #1540, so the inputs render inert
-// here. A single muted line under the dropzone hint tags the surface
-// as a preview and links to the tracker — that's the only deviation
-// from the mock's offer phase. The wizard's Next button is relabelled
-// "Fill manually" while on this step to mirror the mock footer copy.
-function AiStep() {
-  const { t } = useTranslation()
-  return (
-    <div className="flex flex-col gap-4 py-2" data-testid="commodity-form-ai-step">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-            <Camera aria-hidden="true" className="size-4 text-primary" />
-          </div>
-          <p className="text-xs font-semibold">{t("commodities:form.step.ai.fullItem.title")}</p>
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
-            {t("commodities:form.step.ai.fullItem.description")}
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-            <ScanText aria-hidden="true" className="size-4 text-primary" />
-          </div>
-          <p className="text-xs font-semibold">{t("commodities:form.step.ai.label.title")}</p>
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
-            {t("commodities:form.step.ai.label.description")}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-6">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500/10">
-          <Sparkles className="size-5 text-amber-500" aria-hidden="true" />
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {t("commodities:form.step.ai.dropzone.primary")}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {t("commodities:form.step.ai.dropzone.hint")}
-        </p>
-      </div>
-      {/* Mirrors the mock's "Add at least one photo to enable AI
-          scanning, or tap Fill manually below." hint placement
-          (one muted line under the dropzone), repurposed as the
-          tracker disclosure for #1540. */}
-      <p
-        className="text-center text-xs text-muted-foreground"
-        data-testid="commodity-form-ai-coming-soon"
-      >
-        {t("commodities:form.step.ai.comingSoon")}{" "}
-        <a
-          href="https://github.com/denisvmedia/inventario/issues/1720"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-medium underline underline-offset-2"
-        >
-          {t("commodities:form.step.ai.trackerLink")}
-        </a>
-      </p>
-    </div>
-  )
-}
 
 // uploadPendingFiles runs each picked attachment through
 // `POST /uploads/file` (creates the file row, derives MIME), then

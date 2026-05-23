@@ -63,6 +63,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.StorageQuotaReminderRegistry = NewStorageQuotaReminderRegistry(dbx)
 	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry(dbx)
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistry(dbx)
+	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry(dbx)
 	fs.PingFn = dbx.PingContext
 
 	return fs

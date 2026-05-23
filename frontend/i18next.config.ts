@@ -143,6 +143,20 @@ export default defineConfig({
       "commodities:status.*",
       "commodities:sort.*",
       "commodities:warranty.*",
+      // commodities:form.step.ai.review.confidence.* — AiScanStep
+      //   resolves the confidence chip via
+      //   `t(\`commodities:form.step.ai.review.confidence.${band}\`)`
+      //   over the closed `high` | `medium` | `low` union, with the
+      //   percent value interpolated from the per-field guess. Same
+      //   pattern as commodities:warrantyStatus.*. (#1720)
+      // commodities:form.step.ai.errors.* — typed BE codes
+      //   (`commodity_scan.<kind>`) map onto these titles via the
+      //   errorCodeTitle switch inside AiScanStep. The switch lists
+      //   each code statically, but the wildcard documents the i18n
+      //   namespace and protects the keys from a re-extract pass.
+      "commodities:form.step.ai.review.confidence.*",
+      "commodities:form.step.ai.errors.*",
+      "commodities:form.step.ai.offer.staged.title*",
       // commodities:warrantyStatus.* — WarrantyTab + WarrantyStep + the
       //   warranties list page render the pill via
       //   `t(\`commodities:warrantyStatus.${status}\`)` over the closed

@@ -184,6 +184,19 @@ type Params struct {
 	// MUST share one store. Injectable so a future Redis-backed
 	// implementation can be wired without touching the apiserver.
 	ImpersonationStore services.ImpersonationStore
+
+	// CommodityScanService runs the AI vision photo-scan flow for the
+	// Add Item dialog (#1720). When nil (or wrapping a nil provider)
+	// the POST /commodities/scan endpoint stays mounted but always
+	// returns 503 commodity_scan.provider_disabled — that's the
+	// "feature off in this deployment" contract the FE branches on.
+	CommodityScanService *services.CommodityScanService
+
+	// CommodityScanMaxBodyBytes caps the entire multipart body for
+	// the photo-scan endpoint. Computed at bootstrap from the configured
+	// per-photo cap + max photo count; zero disables the cap so unit
+	// tests can pass small fixtures without minding the limit.
+	CommodityScanMaxBodyBytes int64
 }
 
 func (p *Params) Validate() error {
@@ -489,6 +502,19 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// registry set is built with group context.
 		groupUploadMiddlewares := createGroupAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet, blacklist, csrfSvc, groupService)
 		r.With(groupUploadMiddlewares...).Route("/g/{groupSlug}/uploads", Uploads(params))
+
+		// AI vision photo-scan endpoint (#1720). Bypasses the default
+		// JSON:API content-type guards because it accepts
+		// multipart/form-data; otherwise the middleware chain matches
+		// the group-scoped content tree (JWT → RLS → group → registry
+		// → CSRF) plus the role gate that POST /commodities itself
+		// applies, since this is effectively a "prepare an Add Item"
+		// affordance.
+		contentWriteGateScan := requireGroupRoleForWrite(groupService, models.GroupRoleUser)
+		r.With(append(groupUploadMiddlewares, contentWriteGateScan)...).Route(
+			"/g/{groupSlug}/commodities/scan",
+			CommodityScan(params.CommodityScanService, params.CommodityScanMaxBodyBytes),
+		)
 
 		// File downloads use signed URL validation instead of JWT authentication
 		fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)

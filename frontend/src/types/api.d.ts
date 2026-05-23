@@ -2758,6 +2758,123 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run an AI vision scan on uploaded photos
+         * @description Extract structured commodity field guesses from 1..N product photos. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /**
+                         * Format: binary
+                         * @description Product photo(s); image/jpeg|png|webp|heic|heif
+                         */
+                        photos: string;
+                        /** @description Optional free-form hint (brand, category guess) */
+                        hint?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityScanResponse"];
+                    };
+                };
+                /** @description Photo too large */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unsupported MIME type */
+                415: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Too many photos / no photos */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Rate limited */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Provider unavailable / parse error */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Provider disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Provider timed out */
+                504: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/commodities/values": {
         parameters: {
             query?: never;
@@ -9018,6 +9135,39 @@ export type components = {
         };
         "jsonapi.CommodityResponseMeta": {
             cover?: components["schemas"]["jsonapi.CommodityCover"];
+        };
+        "jsonapi.CommodityScanAttributes": {
+            fields?: {
+                [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
+            };
+            latency_ms?: number;
+            provider?: string;
+            used_tokens?: number;
+            warnings?: components["schemas"]["jsonapi.CommodityScanWarning"][];
+        };
+        "jsonapi.CommodityScanFieldGuess": {
+            confidence?: number;
+            value?: Record<string, never>;
+        };
+        "jsonapi.CommodityScanResource": {
+            attributes?: components["schemas"]["jsonapi.CommodityScanAttributes"];
+            /**
+             * @example commodity_scan
+             * @enum {string}
+             */
+            type?: "commodity_scan";
+        };
+        "jsonapi.CommodityScanResponse": {
+            data?: components["schemas"]["jsonapi.CommodityScanResource"];
+        };
+        "jsonapi.CommodityScanWarning": {
+            /**
+             * @example low_confidence
+             * @enum {string}
+             */
+            code?: "low_confidence" | "unreadable_serial" | "ambiguous_price" | "currency_inferred" | "no_photo_text";
+            detail?: string;
+            field?: string;
         };
         "jsonapi.CommodityServiceCountsResponse": {
             data?: {

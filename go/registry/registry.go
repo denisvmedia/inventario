@@ -1128,6 +1128,32 @@ type AuditLogRegistry interface {
 	DeleteOlderThan(ctx context.Context, cutoff time.Time) error
 }
 
+// CommodityScanAuditRegistry records each invocation of the AI vision
+// scan endpoint (#1720). It is the source of truth for both
+// observability (cost/usage dashboards) and the in-DB rate limiter
+// — the service counts recent rows for the requesting user to gate a
+// new scan. The registry runs in service mode (the writer record path
+// crosses an RLS boundary when the deadline has fired and the request
+// context is no longer usable; cleaner to bypass RLS for the audit
+// row itself and rely on the application carrying tenant/user
+// identifiers on the entity).
+type CommodityScanAuditRegistry interface {
+	// Record persists a scan audit row. The implementation generates
+	// ID/UUID and sets CreatedAt. The returned pointer is the stored
+	// row.
+	Record(ctx context.Context, audit models.CommodityScanAudit) (*models.CommodityScanAudit, error)
+
+	// CountRecentForUser returns the number of rows for userID created
+	// at or after the given cutoff. Used by the per-user rate limiter
+	// in CommodityScanService.
+	CountRecentForUser(ctx context.Context, userID string, since time.Time) (int, error)
+
+	// DeleteOlderThan removes audit rows older than cutoff. Run by the
+	// retention worker (future) — not yet wired but the entry point
+	// belongs to this registry, not the worker.
+	DeleteOlderThan(ctx context.Context, cutoff time.Time) error
+}
+
 // PasswordResetRegistry manages password-reset tokens.
 type PasswordResetRegistry interface {
 	Registry[models.PasswordReset]
@@ -1813,6 +1839,7 @@ type Set struct {
 	StorageQuotaReminderRegistry   StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the idempotency store for the storage quota warning worker; service-mode only (#1585)
 	MaintenanceReminderRegistry    MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the idempotency store for the maintenance reminder worker; service-mode only (#1368)
 	CurrencyMigrationRegistry      CurrencyMigrationRegistry     // Currency migration operation rows + audit + HMAC token signing (issue #1550 / epic #202)
+	CommodityScanAuditRegistry     CommodityScanAuditRegistry    // CommodityScanAuditRegistry records every AI vision scan request (#1720); also backs the per-user rate limiter
 }
 
 // Search-related types and functions
