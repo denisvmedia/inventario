@@ -68,29 +68,22 @@ func validateJWTToken(ctx context.Context, tokenString string, jwtSecret []byte,
 	}
 
 	// Enforce the token type so only genuine access tokens reach
-	// authenticated endpoints (#1778). Every JWT the apiserver mints is
-	// signed with the same jwtSecret, so a valid signature + unexpired
-	// exp is NOT enough to prove a token was meant for the access path.
-	// Without this check the step-1 mfa_token — handed out before the TOTP
-	// code is verified — could be replayed verbatim as a Bearer token,
-	// fully bypassing the second factor for its ~5-minute TTL.
+	// authenticated endpoints (#1778, tightened in #1791). Every JWT the
+	// apiserver mints is signed with the same jwtSecret, so a valid
+	// signature + unexpired exp is NOT enough to prove a token was meant
+	// for the access path. Without this check the step-1 mfa_token —
+	// handed out before the TOTP code is verified — could be replayed
+	// verbatim as a Bearer token, fully bypassing the second factor for
+	// its ~5-minute TTL.
 	//
-	// A token is admitted only if:
-	//   - token_type == accessTokenType ("access"), stamped by every access
-	//     token mint (issueAccessToken / signAdminAccessToken /
-	//     signImpersonationToken); or
-	//   - it carries imp == true. This explicit allowance keeps
-	//     impersonation tokens issued *before* this change (which lack the
-	//     token_type claim) working for their short TTL across a deploy.
-	//     Steady-state impersonation tokens already pass via token_type, so
-	//     the imp arm is removable once #1778 has shipped — tracked by #1791.
-	//
-	// Everything else — a missing token_type, the mfa_challenge type, or
+	// Admission rule: token_type == accessTokenType ("access"). Every
+	// access-token mint (issueAccessToken, signAdminAccessToken,
+	// signImpersonationToken) stamps it, so impersonation tokens are
+	// included. Anything else — missing token_type, mfa_challenge, or
 	// any future special-purpose JWT — is rejected, which makes
 	// JWTMiddleware respond 401.
 	tokenType, _ := claims["token_type"].(string)
-	imp, _ := claims["imp"].(bool)
-	if tokenType != accessTokenType && !imp {
+	if tokenType != accessTokenType {
 		return nil, fmt.Errorf("invalid token type")
 	}
 
