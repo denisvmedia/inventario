@@ -1914,6 +1914,57 @@ type UserMFASecretRegistry interface {
 	ConsumeBackupCodeAtomic(ctx context.Context, tenantID, userID string, now time.Time, matchHash func(hash string) bool) (bool, error)
 }
 
+// BackofficeUserMFASecretRegistry stores per-back-office-user TOTP
+// credentials (issue #1785, Phase 4). One row per back-office user is
+// enforced by the unique index on backoffice_user_id. The table has NO
+// RLS — same reasoning as backoffice_users / backoffice_refresh_tokens:
+// back-office identities live OUTSIDE the tenant model and access is
+// gated entirely at the application layer.
+//
+// Unlike UserMFASecretRegistry, the back-office variant has no over-HTTP
+// self-enrollment surface — only the operator CLI mints, regenerates,
+// and wipes rows. The interface reflects that: there's no Create method
+// that takes a partial row; Upsert atomically replaces (or inserts) the
+// single row for the given back-office user, and MarkEnabled flips the
+// EnabledAt timestamp from CLI setup.
+type BackofficeUserMFASecretRegistry interface {
+	// Get returns the row for backofficeUserID, or
+	// ErrBackofficeMFASecretNotFound when the user has no enrollment.
+	Get(ctx context.Context, backofficeUserID string) (*models.BackofficeUserMFASecret, error)
+
+	// Upsert atomically replaces (or inserts) the single row for the
+	// given back-office user. The whole replace runs under a single
+	// transaction so a partial write (e.g. secret persisted but backup
+	// codes failed) is impossible. The caller is responsible for filling
+	// SecretEncrypted and BackupCodesHashed; CreatedAt / UpdatedAt are
+	// stamped by the registry.
+	Upsert(ctx context.Context, secret models.BackofficeUserMFASecret) (*models.BackofficeUserMFASecret, error)
+
+	// Delete removes the back-office user's MFA row idempotently — a
+	// missing row is not an error.
+	Delete(ctx context.Context, backofficeUserID string) error
+
+	// MarkEnabled stamps EnabledAt to `at` (replacing any prior value)
+	// and bumps UpdatedAt. Used by the CLI setup flow to mark a freshly
+	// inserted row as active in a single explicit call rather than
+	// relying on a separate Upsert with the timestamp prepopulated.
+	MarkEnabled(ctx context.Context, backofficeUserID string, at time.Time) error
+
+	// ConsumeBackupCodeAtomic atomically removes the matching hash from
+	// the row's BackupCodesHashed slice. Mirrors
+	// UserMFASecretRegistry.ConsumeBackupCodeAtomic — two concurrent
+	// step-2 login attempts on the same code can never both succeed.
+	// Returns (true, nil) when one hash was consumed, (false, nil)
+	// when none matched, and a classified error on infrastructure
+	// failure. Updates LastUsedAt to `now` on a successful consumption.
+	ConsumeBackupCodeAtomic(ctx context.Context, backofficeUserID string, now time.Time, matchHash func(hash string) bool) (bool, error)
+
+	// BumpLastUsedAt sets the last_used_at column to `now` after a
+	// successful TOTP verification (the backup-code path bumps it
+	// inside ConsumeBackupCodeAtomic). Used by the login MFA handler.
+	BumpLastUsedAt(ctx context.Context, backofficeUserID string, now time.Time) error
+}
+
 // GroupPurger hard-deletes every row whose group_id references the given
 // LocationGroup, in a FK-safe order: restore_steps, restore_operations,
 // exports, files, commodities, areas, locations and finally group_memberships.

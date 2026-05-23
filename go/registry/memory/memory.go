@@ -77,6 +77,11 @@ func NewFactorySet() *registry.FactorySet {
 	// tenant users* hold platform-wide admin privilege; it has no
 	// tenant scope (mirrors AuditLogRegistry).
 	fs.SystemAdminGrantRegistry = NewSystemAdminGrantRegistry()
+	// Back-office MFA secrets (issue #1785, Phase 4). One row per
+	// back-office user; the operator CLI mints, regenerates, and wipes
+	// rows. No RLS / tenant scoping — same reasoning as the rest of the
+	// back-office infrastructure tables.
+	fs.BackofficeUserMFASecretRegistry = NewBackofficeUserMFASecretRegistry()
 	groupReg := NewLocationGroupRegistry()
 	fs.LocationGroupRegistry = groupReg
 	membershipReg := NewGroupMembershipRegistry()

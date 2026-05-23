@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"golang.org/x/crypto/bcrypt"
@@ -33,19 +34,26 @@ type Service struct {
 // dbConfig.Validate already rejects non-postgres DSNs (memory://,
 // file://, etc.), so by the time control reaches the registry lookup
 // the DSN is guaranteed to be postgres. Mirrors services/admin.NewService.
+//
+// Error messages NEVER include the raw DSN — a back-office service that
+// shells up the DSN on a "unknown scheme" surface would leak any
+// embedded credentials (postgres://user:password@host) into logs and
+// the operator's terminal scrollback (carries Phase 1 deferred review
+// comment cid 3292613050). The DSN scheme alone is safe to surface and
+// is enough to disambiguate the failure mode.
 func NewService(dbConfig *shared.DatabaseConfig) (*Service, error) {
 	if err := dbConfig.Validate(); err != nil {
-		return nil, fmt.Errorf("database configuration error: %w", err)
+		return nil, errxtrace.Wrap("database configuration error", err)
 	}
 
 	registryFunc, ok := registry.GetRegistry(dbConfig.DBDSN)
 	if !ok {
-		return nil, fmt.Errorf("unsupported database type in DSN: %s", dbConfig.DBDSN)
+		return nil, errors.New("unsupported database type in DSN (expected postgres://)")
 	}
 
 	factorySet, err := registryFunc(registry.Config(dbConfig.DBDSN))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create registry factory set: %w", err)
+		return nil, errxtrace.Wrap("failed to create registry factory set", err)
 	}
 
 	return &Service{
@@ -156,7 +164,7 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 	}
 
 	if err := models.ValidatePassword(password); err != nil {
-		return nil, fmt.Errorf("password validation failed: %w", err)
+		return nil, errxtrace.Wrap("password validation failed", err)
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -170,14 +178,15 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 		PasswordHash: string(hash),
 		Role:         role,
 		IsActive:     true,
-		// MFAEnforced defaults to false in Phase 2: the challenge flow
-		// lands in Phase 4. Setting true here would put every
-		// bootstrapped operator into a state where the login handler
-		// returns 501 (fail-closed by design) — but until Phase 4 wires
-		// the real flow, that just means "this account is unusable" —
-		// not "this account is MFA-protected". Phase 4 flips both this
-		// and the schema default back to true.
-		MFAEnforced: false,
+		// MFAEnforced defaults to true in Phase 4: every freshly
+		// bootstrapped operator must run `inventario backoffice mfa setup`
+		// before they can sign in. The login flow returns 501 with
+		// `backoffice.mfa_not_implemented` while MFAEnforced=true but no
+		// secret row exists; the operator's first sign-in only succeeds
+		// after the CLI enrols them. This matches the schema default
+		// (also flipped to true at this commit) so the data state and
+		// the security promise stay in sync.
+		MFAEnforced: true,
 	}
 
 	// Run the model's full validation (length caps, EmailPattern match)
@@ -187,7 +196,7 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 	// `--email "not-an-email"` would round-trip cleanly. Mirrors
 	// services/admin.Service.CreateUser.
 	if err := user.ValidateWithContext(ctx); err != nil {
-		return nil, fmt.Errorf("user validation failed: %w", err)
+		return nil, errxtrace.Wrap("user validation failed", err)
 	}
 
 	created, err := s.factorySet.BackofficeUserRegistry.Create(ctx, user)
@@ -209,6 +218,12 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 		User:              created,
 		GeneratedPassword: generated,
 	}, nil
+}
+
+// nowInUTC returns the current time in UTC. Tiny helper so MFA code
+// paths don't sprinkle `time.Now().UTC()` calls everywhere.
+func nowInUTC() time.Time {
+	return time.Now().UTC()
 }
 
 // generatePassword produces a strong random password the CLI prints

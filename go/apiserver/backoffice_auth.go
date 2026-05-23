@@ -95,16 +95,34 @@ const (
 	backofficeActionLogout      = "backoffice.logout"
 	backofficeActionRefresh     = "backoffice.refresh"
 	backofficeActionMFARequired = "backoffice.login_mfa_required"
+	// backofficeActionLoginMFACompleted is the audit action stamped on a
+	// successful step-2 MFA login. Lets ops correlate the step-1 challenge
+	// (`backoffice.login_mfa_required`) with the step-2 outcome on the
+	// same admin row.
+	backofficeActionLoginMFACompleted = "backoffice.login_mfa_completed"
+	// backofficeActionLoginMFAFailed is the audit action stamped on a
+	// step-2 MFA login that rejected the supplied TOTP / backup code.
+	backofficeActionLoginMFAFailed = "backoffice.login_mfa_failed"
 	// backofficeMFANotImplementedCode is the FE-facing JSON:API error
 	// `code` returned with HTTP 501 when a back-office user has
-	// `mfa_enforced=true` set in the database. The Phase-2 plane has no
-	// challenge flow yet (#1785 Phase 4), so failing CLOSED on this
-	// branch keeps the login from minting a fully-privileged token for a
-	// user whose MFA-mandatory state cannot actually be enforced. The
-	// schema + bootstrap default `mfa_enforced=false` so this branch is
-	// dormant in practice; it only fires if an operator manually flips
-	// the column to true before Phase 4 lands.
+	// `mfa_enforced=true` set in the database BUT no enrollment row
+	// exists in backoffice_user_mfa_secrets. Phase 4 wired the challenge
+	// flow for the happy path (row present, EnabledAt non-null); this
+	// fail-closed branch survives so an operator who flips
+	// `mfa_enforced=true` without running `inventario backoffice mfa setup`
+	// gets a clear 501 + a stable error code instead of silently signing
+	// in without MFA.
 	backofficeMFANotImplementedCode = "backoffice.mfa_not_implemented"
+	// backofficeMFATokenType is the `token_type` claim stamped on the
+	// short-lived JWT issued by step-1 of the MFA login. The step-2
+	// handler refuses any other token type so a tenant-plane MFA token
+	// (mfa_challenge) can NEVER be replayed at the back-office step-2.
+	backofficeMFATokenType = "backoffice_mfa_challenge"
+	// backofficeMFATokenExpiration is how long the step-1 challenge token
+	// stays valid. 5 minutes mirrors the tenant plane's MFA token TTL —
+	// long enough for a human to switch to their authenticator app, short
+	// enough to limit replay if the step-1 transcript leaks.
+	backofficeMFATokenExpiration = 5 * time.Minute
 )
 
 // ErrBackofficeAccountDisabled is surfaced when login (or refresh)
@@ -160,19 +178,36 @@ type BackofficeLoginResponse struct {
 	User        *BackofficeProfile `json:"user"`
 }
 
-// BackofficeMFARequiredResponse is the Phase-2 fail-closed response
-// returned (with HTTP 501) when a back-office user has
-// `mfa_enforced=true` set in the database. Phase 4 will replace the 501
-// with a step-1 MFA challenge mint + return this same response shape
-// from the success path; until then the body carries `mfa_required:
-// true` + the operator email so the FE can render an explicit "MFA is
-// not yet available for your account — contact platform admin" message
-// instead of a generic 401.
+// BackofficeMFARequiredResponse is the typed shape returned from POST
+// /backoffice/auth/login when the user has `mfa_enforced=true`. Phase 4
+// uses it in two distinct branches:
+//
+//   - 200 OK + `MFAToken` populated + `ExpiresIn` set: step-1 succeeded
+//     (password verified, enrollment row present) and the FE must POST
+//     the supplied token + a TOTP/backup code to /login/mfa to complete.
+//   - 501 Not Implemented + `Code = backofficeMFANotImplementedCode` +
+//     `MFAToken` empty: the user has `mfa_enforced=true` but no row in
+//     backoffice_user_mfa_secrets. The operator must run
+//     `inventario backoffice mfa setup --email <e>` before they can
+//     sign in. Fail-closed by design.
+//
+// FE clients should branch on the HTTP status FIRST (501 → ops error)
+// and on `Code` second; `MFAToken` is only present on the 200 path.
 type BackofficeMFARequiredResponse struct {
 	MFARequired bool   `json:"mfa_required"`
 	Email       string `json:"email"`
-	// Code mirrors backofficeMFANotImplementedCode so FE clients can
-	// branch on a stable identifier instead of an HTTP status alone.
+	// MFAToken is the short-lived (5 min) step-1 token that the FE must
+	// echo back to /login/mfa alongside the TOTP / backup code. Empty
+	// on the 501 (not-implemented) branch.
+	MFAToken string `json:"mfa_token,omitempty"`
+	// ExpiresIn carries the MFAToken lifetime in seconds so the FE can
+	// disable the code-entry surface when the token lapses. Zero on the
+	// 501 branch.
+	ExpiresIn int `json:"expires_in,omitempty"`
+	// Code mirrors a stable identifier so FE clients can branch on it
+	// instead of an HTTP status alone. Today only the 501 branch sets
+	// `backofficeMFANotImplementedCode`; future codes can be added
+	// without breaking older FE clients.
 	Code string `json:"code,omitempty"`
 }
 
@@ -181,10 +216,24 @@ type BackofficeLogoutResponse struct {
 	Message string `json:"message"`
 }
 
+// BackofficeLoginMFARequest is the body for POST /backoffice/auth/login/mfa
+// (step-2 of the MFA login dance). The client supplies the short-lived
+// `mfa_token` from step-1's 200 response alongside EITHER a TOTP code
+// OR a backup code — never both. The handler verifies the token, looks
+// up the back-office user, validates the code, and mints the standard
+// access + refresh tokens on success.
+type BackofficeLoginMFARequest struct {
+	MFAToken   string `json:"mfa_token"`
+	TOTPCode   string `json:"totp_code,omitempty"`
+	BackupCode string `json:"backup_code,omitempty"`
+}
+
 // BackofficeAuthAPI handles the back-office auth endpoints.
 type BackofficeAuthAPI struct {
 	backofficeUserRegistry registry.BackofficeUserRegistry
 	refreshTokenRegistry   registry.BackofficeRefreshTokenRegistry
+	mfaRegistry            registry.BackofficeUserMFASecretRegistry
+	mfaService             *services.MFAService
 	blacklistService       services.TokenBlacklister
 	rateLimiter            services.AuthRateLimiter
 	auditService           services.AuditLogger
@@ -193,12 +242,14 @@ type BackofficeAuthAPI struct {
 
 // BackofficeAuthParams holds the wiring for the back-office auth router.
 type BackofficeAuthParams struct {
-	BackofficeUserRegistry         registry.BackofficeUserRegistry
-	BackofficeRefreshTokenRegistry registry.BackofficeRefreshTokenRegistry
-	BlacklistService               services.TokenBlacklister
-	RateLimiter                    services.AuthRateLimiter
-	AuditService                   services.AuditLogger
-	JWTSecret                      []byte
+	BackofficeUserRegistry          registry.BackofficeUserRegistry
+	BackofficeRefreshTokenRegistry  registry.BackofficeRefreshTokenRegistry
+	BackofficeUserMFASecretRegistry registry.BackofficeUserMFASecretRegistry
+	MFAService                      *services.MFAService
+	BlacklistService                services.TokenBlacklister
+	RateLimiter                     services.AuthRateLimiter
+	AuditService                    services.AuditLogger
+	JWTSecret                       []byte
 }
 
 // BackofficeAuth mounts the back-office auth routes. The login, refresh,
@@ -214,6 +265,8 @@ func BackofficeAuth(params BackofficeAuthParams) func(r chi.Router) {
 	api := &BackofficeAuthAPI{
 		backofficeUserRegistry: params.BackofficeUserRegistry,
 		refreshTokenRegistry:   params.BackofficeRefreshTokenRegistry,
+		mfaRegistry:            params.BackofficeUserMFASecretRegistry,
+		mfaService:             params.MFAService,
 		blacklistService:       params.BlacklistService,
 		rateLimiter:            params.RateLimiter,
 		auditService:           params.AuditService,
@@ -229,6 +282,10 @@ func BackofficeAuth(params BackofficeAuthParams) func(r chi.Router) {
 		// Rate-limit the password endpoints exactly like the tenant
 		// equivalents — same limiter instance is wired in from APIServer().
 		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).Post("/login", api.login)
+		// Step-2 of the MFA login dance (issue #1785, Phase 4). Same
+		// per-IP limiter as step-1 so an attacker can't bypass the
+		// account-lockout budget by hammering step-2 alone.
+		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).Post("/login/mfa", api.loginMFA)
 		r.Post("/refresh", api.refresh)
 		r.Post("/logout", api.logout)
 		// /me is the only route that requires a back-office bearer
@@ -327,20 +384,22 @@ func (api *BackofficeAuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// MFA gate. The Phase-2 plane has no challenge flow yet (#1785 Phase
-	// 4), so we MUST fail closed when MFAEnforced=true: minting a
-	// fully-privileged access token for a user the DB advertises as
-	// MFA-mandatory would be a silent security regression. Phase 4 will
-	// replace this 501 with a step-1 challenge mint + return the same
-	// response shape from the success path. The schema + bootstrap
-	// default `mfa_enforced=false` so this branch is dormant in
-	// practice; it only fires if an operator manually flips the column
-	// to true before Phase 4 lands.
+	// MFA gate (issue #1785, Phase 4). Two branches:
+	//
+	//   1. MFAEnforced=true AND an enabled enrollment row exists →
+	//      mint a short-lived step-1 challenge token and return
+	//      200 + mfa_required:true + mfa_token. The FE then POSTs to
+	//      /login/mfa with the token + a TOTP / backup code.
+	//
+	//   2. MFAEnforced=true AND NO enrollment row (or row not yet
+	//      enabled) → fail closed with 501 + a typed body. An operator
+	//      must run `inventario backoffice mfa setup` before the
+	//      account can sign in. Same behaviour as Phase 2's placeholder
+	//      so existing FE clients on the 501 branch keep working.
 	if user.MFAEnforced {
-		slog.Warn("Backoffice login: MFAEnforced=true rejected — challenge flow not implemented until Phase 4", "user_id", user.ID)
-		api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, false, r, new("mfa not implemented"))
-		api.writeMFANotImplementedResponse(w, user.Email)
-		return
+		if !api.handleBackofficeMFAGate(w, r, user) {
+			return
+		}
 	}
 
 	// Clear any prior failed-login counter on success — same as tenant
@@ -356,9 +415,71 @@ func (api *BackofficeAuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleBackofficeMFAGate inspects the user's MFA enrollment and either
+// (a) writes a 200 + step-1 challenge response and returns false, or
+// (b) writes a 501 fail-closed response (no enrollment row, or row not
+// yet enabled, or MFA service not configured) and returns false. Returns
+// true ONLY when no MFA action is required — which today is unreachable
+// because the caller only invokes this when MFAEnforced=true. Returning
+// false signals the caller to abandon the login flow; the response has
+// already been written.
+//
+// The dual return is the cleanest way to keep the caller's control flow
+// readable: `if !api.handleBackofficeMFAGate(...) { return }` — same
+// shape as the rate-limiter check above.
+func (api *BackofficeAuthAPI) handleBackofficeMFAGate(w http.ResponseWriter, r *http.Request, user *models.BackofficeUser) bool {
+	// No MFA service / registry configured → fail closed. This branch
+	// fires when an operator deploys a build without wiring the
+	// back-office MFA dependencies (memory-only test harness, etc.).
+	// Treating "not configured" identically to "no enrollment row"
+	// keeps the FE response shape consistent for the ops contract.
+	if api.mfaService == nil || api.mfaRegistry == nil {
+		slog.Warn("Backoffice login: MFAEnforced=true but MFA service not configured", "user_id", user.ID)
+		api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, false, r, new("mfa not configured"))
+		api.writeMFANotImplementedResponse(w, user.Email)
+		return false
+	}
+
+	row, err := api.mfaRegistry.Get(r.Context(), user.ID)
+	if err != nil {
+		if errors.Is(err, registry.ErrBackofficeMFASecretNotFound) {
+			slog.Warn("Backoffice login: MFAEnforced=true but no enrollment row", "user_id", user.ID)
+			api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, false, r, new("mfa enrollment missing"))
+			api.writeMFANotImplementedResponse(w, user.Email)
+			return false
+		}
+		slog.Error("Backoffice login: MFA lookup failed", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to check MFA enrollment", http.StatusInternalServerError)
+		return false
+	}
+	if !row.IsEnabled() {
+		// A row with EnabledAt=null shouldn't happen in practice (the
+		// CLI stamps it atomically with insert), but if it does we
+		// treat it like a missing row: fail closed.
+		slog.Warn("Backoffice login: MFAEnforced=true but enrollment row not enabled", "user_id", user.ID)
+		api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, false, r, new("mfa enrollment not enabled"))
+		api.writeMFANotImplementedResponse(w, user.Email)
+		return false
+	}
+
+	// Happy path: mint the step-1 challenge token and return 200 so the
+	// FE pivots to the code-entry surface.
+	token, expiresAt, err := api.issueBackofficeMFAToken(user)
+	if err != nil {
+		slog.Error("Backoffice login: failed to mint MFA challenge token", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to issue MFA challenge", http.StatusInternalServerError)
+		return false
+	}
+	api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, true, r, nil)
+	api.writeMFAChallengeResponse(w, user.Email, token, int(time.Until(expiresAt).Seconds()))
+	return false
+}
+
 // writeMFANotImplementedResponse writes the typed 501 response returned
-// from login when a back-office user has MFAEnforced=true (Phase 2:
-// fail-closed; Phase 4 replaces with the real challenge mint).
+// from login when a back-office user has MFAEnforced=true but no
+// enrollment row exists (or the row is not yet enabled). The FE branches
+// on `code == backoffice.mfa_not_implemented` to render an explicit "MFA
+// is required on your account — contact platform admin" message.
 func (api *BackofficeAuthAPI) writeMFANotImplementedResponse(w http.ResponseWriter, email string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotImplemented)
@@ -368,6 +489,22 @@ func (api *BackofficeAuthAPI) writeMFANotImplementedResponse(w http.ResponseWrit
 		Code:        backofficeMFANotImplementedCode,
 	}); err != nil {
 		slog.Error("Failed to encode backoffice MFA-not-implemented response", "error", err)
+	}
+}
+
+// writeMFAChallengeResponse writes the 200 step-1 response carrying the
+// short-lived MFA token. The FE pivots to the code-entry surface and
+// POSTs the token + a TOTP/backup code back to /login/mfa.
+func (api *BackofficeAuthAPI) writeMFAChallengeResponse(w http.ResponseWriter, email, token string, expiresInSeconds int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(BackofficeMFARequiredResponse{
+		MFARequired: true,
+		Email:       email,
+		MFAToken:    token,
+		ExpiresIn:   expiresInSeconds,
+	}); err != nil {
+		slog.Error("Failed to encode backoffice MFA challenge response", "error", err)
 	}
 }
 
