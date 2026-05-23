@@ -211,19 +211,19 @@ binary.
 ### Forward-apply order
 
 1. **Migration A** — schema-add: `CREATE TABLE system_admin_grants`
-   (timestamp `1780600000_add_system_admin_grants`). Pure DDL; no app
+   (timestamp `1780900000_add_system_admin_grants`). Pure DDL; no app
    change required.
 2. **Migration B** — data backfill: copies every
    `users.is_system_admin = true` row into `system_admin_grants` using
    `INSERT ... ON CONFLICT (user_id) DO NOTHING` (timestamp
-   `1780700000_backfill_system_admin_grants`). Idempotent — safe to
+   `1781000000_backfill_system_admin_grants`). Idempotent — safe to
    re-run.
 3. **Application binary** — deploy the new (grants-reading) build.
    `RequireSystemAdmin` and every admin handler now consult
    `SystemAdminGrantRegistry.Exists` instead of the struct field.
 4. **Migration C** — schema-drop: removes `users.is_system_admin`
    plus its partial index (timestamp
-   `1780800000_drop_users_is_system_admin`).
+   `1781100000_drop_users_is_system_admin`).
 
 **Critical ordering**: the new app binary MUST be in place BEFORE
 migration C runs. If C lands first, every old-binary instance still
