@@ -101,7 +101,7 @@ func seedGroupMembers(ctx context.Context, set *registry.Set, tenant *models.Ten
 		return fmt.Errorf("create family owner membership: %w", err)
 	}
 
-	// Invariant: admin's Family membership must JoinedAt strictly LATER
+	// Invariant: admin's Family membership must be JoinedAt strictly LATER
 	// than admin's own owner memberships. The default-group re-election
 	// tiebreaker (`pickDefaultMembership` in services/group_service.go)
 	// sorts by joined_at ASC and picks the oldest — and admin only carries

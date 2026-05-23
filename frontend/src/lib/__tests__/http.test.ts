@@ -337,6 +337,53 @@ describe("error handling", () => {
     })
   })
 
+  it("503 carrying a typed JSON:API product error (#1720/#1835) does NOT bounce to /maintenance", async () => {
+    // Some endpoints use 503 to surface a typed product-level error rather
+    // than an infra outage — `commodity_scan.provider_disabled` is the
+    // canonical one (#1720, AI vision provider off by config). The feature
+    // handler maps the typed code to an inline banner, so the global
+    // 503 → /maintenance bounce must skip it; otherwise the shell unmounts
+    // before the banner ever paints.
+    server.use(
+      msw.get(api("/groups"), () =>
+        HttpResponse.json(
+          {
+            errors: [
+              {
+                code: "commodity_scan.provider_disabled",
+                status: "503",
+                title: "provider disabled",
+              },
+            ],
+          },
+          { status: 503 }
+        )
+      )
+    )
+    const navigate = vi.fn()
+    setNavigateToMaintenance(navigate)
+    await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it("503 with an UNTYPED errors[] code (no dot) still bounces — guards against widening", async () => {
+    // The typed-error detection keys off `code` containing a dot
+    // (`<feature>.<reason>`). A plain string code without a dot is the
+    // legacy/untyped shape and SHOULD still trigger the maintenance bounce.
+    server.use(
+      msw.get(api("/groups"), () =>
+        HttpResponse.json(
+          { errors: [{ code: "service_unavailable", status: "503" }] },
+          { status: 503 }
+        )
+      )
+    )
+    const navigate = vi.fn()
+    setNavigateToMaintenance(navigate)
+    await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
+    expect(navigate).toHaveBeenCalledOnce()
+  })
+
   it("503 does NOT re-bounce when the user is already on /maintenance (#1542 — avoids reload loop)", async () => {
     server.use(msw.get(api("/groups"), () => HttpResponse.json(null, { status: 503 })))
     const navigate = vi.fn()

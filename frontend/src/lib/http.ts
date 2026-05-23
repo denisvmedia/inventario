@@ -248,11 +248,12 @@ async function parseBody(response: Response): Promise<unknown> {
 }
 
 // hasTypedProductError checks the response body for a JSON:API errors[]
-// entry carrying a typed feature-namespaced code (e.g. `commodity_scan.
-// provider_disabled`). Those are product-level errors riding on 503 by
-// BE convention (#1720), distinct from "the whole API is down" — the
-// feature handler maps them to an inline banner, so the global
-// 503 → /maintenance bounce in performRequest must skip them.
+// entry carrying a typed feature-namespaced code
+// (e.g. `commodity_scan.provider_disabled`). Those are product-level
+// errors riding on 503 by BE convention (#1720), distinct from "the
+// whole API is down" — the feature handler maps them to an inline
+// banner, so the global 503 → /maintenance bounce in performRequest
+// must skip them.
 //
 // A code is considered "typed" when it contains a dot — every typed BE
 // error code is `<feature>.<reason>`. Untyped server errors (plain
