@@ -92,6 +92,27 @@ func TestBackofficeUserRegistry_Create_InvalidRole(t *testing.T) {
 	c.Assert(errors.Is(err, registry.ErrInvalidBackofficeRole), qt.IsTrue)
 }
 
+// TestBackofficeUserRegistry_Create_RejectsMalformedEmail proves the
+// defence-in-depth model validation runs at the registry layer — a
+// string that passes the bespoke TrimSpace-required check ("not-an-
+// email") still gets rejected by BackofficeUser.ValidateWithContext's
+// EmailPattern rule. The Service.Bootstrap path also runs model
+// validation; this test guards the registry against future callers
+// that bypass the service layer.
+func TestBackofficeUserRegistry_Create_RejectsMalformedEmail(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewBackofficeUserRegistry()
+
+	u := newTestBackofficeUser("not-an-email")
+	_, err := r.Create(ctx, u)
+	c.Assert(err, qt.IsNotNil)
+	// Model validation returns a wrapped validation.Errors — the
+	// registry doesn't translate it to a typed sentinel because the
+	// future HTTP layer maps validation errors generically.
+	c.Assert(err.Error(), qt.Contains, "model validation")
+}
+
 // TestBackofficeUserRegistry_Create_DuplicateEmail pins the platform-wide
 // uniqueness invariant — including the case-insensitive variant, since
 // the second Create's email is upper-cased on input.
@@ -155,6 +176,18 @@ func TestBackofficeUserRegistry_GetByEmail_NotFound(t *testing.T) {
 	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
 }
 
+// TestBackofficeUserRegistry_GetByEmail_WhitespaceOnly pins the
+// whitespace-rejection invariant — a stray "   " from the caller must
+// surface as ErrFieldRequired, not as a no-rows lookup.
+func TestBackofficeUserRegistry_GetByEmail_WhitespaceOnly(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewBackofficeUserRegistry()
+
+	_, err := r.GetByEmail(ctx, "   ")
+	c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+}
+
 func TestBackofficeUserRegistry_Update_PreservesPasswordHash(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -175,6 +208,25 @@ func TestBackofficeUserRegistry_Update_PreservesPasswordHash(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.PasswordHash, qt.Equals, originalHash)
 	c.Assert(got.Name, qt.Equals, "Renamed Operator")
+}
+
+// TestBackofficeUserRegistry_Update_RejectsMalformedEmail confirms the
+// model-level EmailPattern check runs on Update too — a payload that
+// passes the bespoke required-field check ("not-an-email") still fails
+// model validation. Symmetric with the Create variant.
+func TestBackofficeUserRegistry_Update_RejectsMalformedEmail(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewBackofficeUserRegistry()
+
+	created, err := r.Create(ctx, newTestBackofficeUser("ok@example.com"))
+	c.Assert(err, qt.IsNil)
+
+	updated := *created
+	updated.Email = "not-an-email"
+	_, err = r.Update(ctx, updated)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "model validation")
 }
 
 func TestBackofficeUserRegistry_Update_RejectsEmailCollision(t *testing.T) {

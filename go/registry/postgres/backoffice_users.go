@@ -72,6 +72,15 @@ func (r *BackofficeUserRegistry) Create(ctx context.Context, user models.Backoff
 	if err := r.validateForCreate(user); err != nil {
 		return nil, err
 	}
+	// Defence-in-depth: re-run the model's full validation so format/
+	// length constraints (EmailPattern, max lengths, closed-set role)
+	// fail closed even if a future caller bypasses Service.Bootstrap.
+	// The registry's bespoke validateForCreate runs first so the existing
+	// ErrFieldRequired / ErrInvalidBackofficeRole sentinels keep their
+	// identity for callers that branch on them.
+	if err := user.ValidateWithContext(ctx); err != nil {
+		return nil, errxtrace.Wrap("backoffice user failed model validation", err)
+	}
 	user.Email = normaliseBackofficeEmail(user.Email)
 	now := time.Now().UTC()
 	if user.CreatedAt.IsZero() {
@@ -135,9 +144,10 @@ func (r *BackofficeUserRegistry) Get(ctx context.Context, id string) (*models.Ba
 // GetByEmail performs a case-insensitive lookup by lowercased email.
 // The registry layer normalises the email both on write and read, so a
 // regular `email = $1` predicate is enough — no `lower(email)` index
-// required.
+// required. Whitespace-only input is treated as empty so a stray "   "
+// from a caller doesn't fall through to a no-rows lookup.
 func (r *BackofficeUserRegistry) GetByEmail(ctx context.Context, email string) (*models.BackofficeUser, error) {
-	if email == "" {
+	if strings.TrimSpace(email) == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Email"))
 	}
 	normalised := normaliseBackofficeEmail(email)
@@ -190,6 +200,21 @@ func (r *BackofficeUserRegistry) Update(ctx context.Context, user models.Backoff
 	if err := r.validateForUpdate(user); err != nil {
 		return nil, err
 	}
+	// Defence-in-depth: re-run the model's full validation so format/
+	// length constraints (EmailPattern, max lengths, closed-set role)
+	// fail closed even when callers bypass the service layer. The
+	// registry's bespoke validateForUpdate runs first so the existing
+	// ErrFieldRequired / ErrInvalidBackofficeRole sentinels keep their
+	// identity. PasswordHash isn't part of the public Update surface,
+	// so model validation runs on a copy with an opaque non-empty hash
+	// substituted in — the on-disk hash is restored further down.
+	validateUser := user
+	if validateUser.PasswordHash == "" {
+		validateUser.PasswordHash = "validation-placeholder"
+	}
+	if err := validateUser.ValidateWithContext(ctx); err != nil {
+		return nil, errxtrace.Wrap("backoffice user failed model validation", err)
+	}
 	user.Email = normaliseBackofficeEmail(user.Email)
 
 	reg := r.newSQLRegistry()
@@ -227,9 +252,10 @@ func (r *BackofficeUserRegistry) Update(ctx context.Context, user models.Backoff
 			 WHERE id = $6`,
 			r.tableNames.BackofficeUsers(),
 		)
-		if _, execErr := tx.ExecContext(ctx, updateQuery,
+		res, execErr := tx.ExecContext(ctx, updateQuery,
 			user.Email, user.Name, string(user.Role), user.IsActive, user.MFAEnforced, user.GetID(),
-		); execErr != nil {
+		)
+		if execErr != nil {
 			// Re-classify a Postgres unique-violation on the email
 			// index as ErrBackofficeEmailAlreadyExists — mirrors the
 			// Create path so callers get the canonical sentinel even
@@ -239,6 +265,19 @@ func (r *BackofficeUserRegistry) Update(ctx context.Context, user models.Backoff
 				return errxtrace.Classify(registry.ErrBackofficeEmailAlreadyExists, errx.Attrs("email", user.Email))
 			}
 			return errxtrace.Wrap("failed to update backoffice user", execErr)
+		}
+		// Defence-in-depth: even though the pre-SELECT above runs in the
+		// same READ COMMITTED transaction, it doesn't take a row lock,
+		// so a concurrent Delete could remove the row between the
+		// ScanOneByField and this UPDATE. Checking RowsAffected closes
+		// the window — without it, the call would return success on a
+		// no-op write and the caller would see a stale view of the row.
+		affected, raErr := res.RowsAffected()
+		if raErr != nil {
+			return errxtrace.Wrap("failed to read rows affected for backoffice update", raErr)
+		}
+		if affected == 0 {
+			return errxtrace.Classify(registry.ErrBackofficeUserNotFound, errx.Attrs("entity_id", user.GetID()))
 		}
 
 		// Replay preserved columns on the caller's struct so the

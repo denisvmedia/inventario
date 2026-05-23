@@ -98,6 +98,25 @@ func TestBackofficeUserRegistryPostgres_Create_InvalidRole(t *testing.T) {
 	c.Assert(errors.Is(err, registry.ErrInvalidBackofficeRole), qt.IsTrue)
 }
 
+// TestBackofficeUserRegistryPostgres_Create_RejectsMalformedEmail proves
+// the defence-in-depth model validation runs at the postgres registry
+// layer — a string that passes the bespoke TrimSpace-required check
+// ("not-an-email") still gets rejected by BackofficeUser.ValidateWith-
+// Context's EmailPattern rule before the INSERT touches the database.
+func TestBackofficeUserRegistryPostgres_Create_RejectsMalformedEmail(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+	bo := getBackofficeRegistry(t, registrySet)
+
+	c := qt.New(t)
+	ctx := context.Background()
+
+	u := newTestBackofficeUser("not-an-email")
+	_, err := bo.Create(ctx, u)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "model validation")
+}
+
 func TestBackofficeUserRegistryPostgres_Create_DuplicateEmail(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
@@ -170,6 +189,21 @@ func TestBackofficeUserRegistryPostgres_GetByEmail_NotFound(t *testing.T) {
 	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
 }
 
+// TestBackofficeUserRegistryPostgres_GetByEmail_WhitespaceOnly pins the
+// whitespace-rejection invariant — a stray "   " from the caller must
+// surface as ErrFieldRequired, not as a no-rows lookup.
+func TestBackofficeUserRegistryPostgres_GetByEmail_WhitespaceOnly(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+	bo := getBackofficeRegistry(t, registrySet)
+
+	c := qt.New(t)
+	ctx := context.Background()
+
+	_, err := bo.GetByEmail(ctx, "   ")
+	c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+}
+
 func TestBackofficeUserRegistryPostgres_Update_PreservesPasswordHash(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
@@ -213,6 +247,35 @@ func TestBackofficeUserRegistryPostgres_Update_RejectsEmailCollision(t *testing.
 	second.Email = "first@example.com"
 	_, err = bo.Update(ctx, *second)
 	c.Assert(errors.Is(err, registry.ErrBackofficeEmailAlreadyExists), qt.IsTrue)
+}
+
+// TestBackofficeUserRegistryPostgres_Update_NotFoundOnDeletedRow pins
+// the defence-in-depth RowsAffected check: if the row is deleted
+// between Update's pre-SELECT and its UPDATE, the call must surface
+// ErrBackofficeUserNotFound rather than silently succeed. We simulate
+// the race by deleting the row immediately before Update (no need for
+// real concurrency — the postgres pre-SELECT inside Update's tx will
+// see no row, which itself returns ErrBackofficeUserNotFound; this
+// test guards the secondary path where the row could vanish between
+// the pre-SELECT and the UPDATE if SELECT FOR UPDATE were ever added
+// or removed without updating the contract).
+func TestBackofficeUserRegistryPostgres_Update_NotFoundOnDeletedRow(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+	bo := getBackofficeRegistry(t, registrySet)
+
+	c := qt.New(t)
+	ctx := context.Background()
+
+	created, err := bo.Create(ctx, newTestBackofficeUser("race@example.com"))
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(bo.Delete(ctx, created.ID), qt.IsNil)
+
+	updated := *created
+	updated.Name = "After Delete"
+	_, err = bo.Update(ctx, updated)
+	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
 }
 
 func TestBackofficeUserRegistryPostgres_Delete(t *testing.T) {

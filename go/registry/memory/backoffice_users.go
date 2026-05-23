@@ -48,9 +48,18 @@ func NewBackofficeUserRegistry() *BackofficeUserRegistry {
 // leaving a race window where two concurrent calls with the same email
 // could both observe "no collision". Holding the lock across both ops
 // matches the postgres backend's "check + insert in one tx" contract.
-func (r *BackofficeUserRegistry) Create(_ context.Context, user models.BackofficeUser) (*models.BackofficeUser, error) {
+func (r *BackofficeUserRegistry) Create(ctx context.Context, user models.BackofficeUser) (*models.BackofficeUser, error) {
 	if err := r.validateForCreate(user); err != nil {
 		return nil, err
+	}
+	// Defence-in-depth: re-run the model's full validation so format/
+	// length constraints (EmailPattern, max lengths, closed-set role)
+	// fail closed even if a future caller bypasses Service.Bootstrap.
+	// The registry's bespoke validateForCreate runs first so the existing
+	// ErrFieldRequired / ErrInvalidBackofficeRole sentinels keep their
+	// identity for callers that branch on them.
+	if err := user.ValidateWithContext(ctx); err != nil {
+		return nil, errxtrace.Wrap("backoffice user failed model validation", err)
 	}
 	user.Email = normaliseBackofficeEmail(user.Email)
 
@@ -106,8 +115,10 @@ func (r *BackofficeUserRegistry) Get(ctx context.Context, id string) (*models.Ba
 }
 
 // GetByEmail performs a case-insensitive lookup by lowercased email.
+// Whitespace-only input is treated as empty so a stray "   " from a
+// caller doesn't fall through to a no-rows lookup.
 func (r *BackofficeUserRegistry) GetByEmail(ctx context.Context, email string) (*models.BackofficeUser, error) {
-	if email == "" {
+	if strings.TrimSpace(email) == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Email"))
 	}
 	normalised := normaliseBackofficeEmail(email)
@@ -132,6 +143,13 @@ func (r *BackofficeUserRegistry) GetByEmail(ctx context.Context, email string) (
 // PasswordHash is intentionally NOT required on the input — Update
 // restores it from the persisted row. Callers that want to change the
 // hash must go through SetPasswordHash.
+//
+// The cross-row email uniqueness check AND the persisted write happen
+// under a single write-lock acquisition — the previous shape released
+// the lock between the check and a delegated call to the underlying
+// Registry.Update, leaving a race window where two concurrent updates
+// could both observe "no collision". Holding the lock across both ops
+// matches the postgres backend's "check + UPDATE in one tx" contract.
 func (r *BackofficeUserRegistry) Update(ctx context.Context, user models.BackofficeUser) (*models.BackofficeUser, error) {
 	if user.GetID() == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
@@ -139,28 +157,50 @@ func (r *BackofficeUserRegistry) Update(ctx context.Context, user models.Backoff
 	if err := r.validateForUpdate(user); err != nil {
 		return nil, err
 	}
+	// Defence-in-depth: re-run the model's full validation so format/
+	// length constraints (EmailPattern, max lengths, closed-set role)
+	// fail closed even when callers bypass the service layer. The
+	// registry's bespoke validateForUpdate runs first so the existing
+	// ErrFieldRequired / ErrInvalidBackofficeRole sentinels keep their
+	// identity. PasswordHash isn't part of the public Update surface,
+	// so model validation runs on a copy with an opaque non-empty hash
+	// substituted in — the on-disk hash is restored further down.
+	validateUser := user
+	if validateUser.PasswordHash == "" {
+		validateUser.PasswordHash = "validation-placeholder"
+	}
+	if err := validateUser.ValidateWithContext(ctx); err != nil {
+		return nil, errxtrace.Wrap("backoffice user failed model validation", err)
+	}
 	user.Email = normaliseBackofficeEmail(user.Email)
 
 	r.lock.Lock()
+	defer r.lock.Unlock()
+
 	existing, ok := r.items.Get(user.ID)
 	if !ok {
-		r.lock.Unlock()
 		return nil, errxtrace.Classify(registry.ErrBackofficeUserNotFound, errx.Attrs("entity_id", user.ID))
 	}
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		if pair.Value.ID != user.ID && pair.Value.Email == user.Email {
-			r.lock.Unlock()
 			return nil, errxtrace.Classify(registry.ErrBackofficeEmailAlreadyExists, errx.Attrs("email", user.Email))
 		}
 	}
-	// Preserve immutable / write-path-isolated fields.
+	// Preserve immutable / write-path-isolated fields, then perform the
+	// store update inline so the whole "check uniqueness, mutate" sequence
+	// runs under the single lock acquisition.
 	user.CreatedAt = existing.CreatedAt
 	user.PasswordHash = existing.PasswordHash
 	user.LastLoginAt = existing.LastLoginAt
 	user.UpdatedAt = time.Now()
-	r.lock.Unlock()
+	// UUID is immutable after creation — overwrite whatever the caller
+	// supplied with the persisted value (mirrors the base Registry's
+	// Update behaviour for UUIDable rows).
+	user.UUID = existing.UUID
+	stored := user
+	r.items.Set(stored.ID, &stored)
 
-	return r.baseBackofficeUserRegistry.Update(ctx, user)
+	return &stored, nil
 }
 
 // Delete is delegated to the base registry. Idempotent semantics match
