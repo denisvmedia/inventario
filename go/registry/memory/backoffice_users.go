@@ -218,12 +218,16 @@ func (r *BackofficeUserRegistry) Delete(ctx context.Context, id string) error {
 
 // SetPasswordHash overwrites only password_hash + bumps updated_at.
 // Intentionally separate from Update so the bcrypt hash can never leak
-// through a generic full-row update.
+// through a generic full-row update. Whitespace-only input is rejected
+// so a caller can't accidentally wipe the hash via a stray "   " — the
+// previous shape accepted any non-zero string and a blanked-out hash
+// would lock the back-office user out of every plane indefinitely
+// (carries Phase 1 deferred review comment cid 3292613046).
 func (r *BackofficeUserRegistry) SetPasswordHash(_ context.Context, id, hash string) error {
 	if id == "" {
 		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
-	if hash == "" {
+	if strings.TrimSpace(hash) == "" {
 		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "PasswordHash"))
 	}
 
