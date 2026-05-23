@@ -1,7 +1,7 @@
 <!--
 Thanks for opening a PR. Follow project conventions documented in AGENTS.md.
 -->
-
+<!-- markdownlint-disable-next-line MD041 -->
 ## Summary
 
 <!-- 1-3 bullets describing what this PR does and why. -->
