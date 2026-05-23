@@ -14,12 +14,15 @@ vi.mock("sonner", () => ({
 import { toast } from "sonner"
 
 import { AuthProvider } from "@/features/auth/AuthContext"
+import { BackofficeAuthProvider } from "@/features/backoffice/auth/context"
+import { clearBackofficeAuth, setBackofficeAccessToken } from "@/features/backoffice/auth/storage"
 import { initI18n } from "@/i18n"
 import { clearAuth, getImpersonationReturn, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { __resetNavigationForTests, setHardRedirect } from "@/lib/navigation"
 import { AdminUserDetailPage } from "@/pages/admin/AdminUserDetailPage"
+import { backofficeAuthHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -62,10 +65,13 @@ beforeAll(async () => {
 
 beforeEach(() => {
   clearAuth()
+  clearBackofficeAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
   __resetNavigationForTests()
   setAccessToken("good-token")
+  setBackofficeAccessToken("good-bo-token")
+  server.use(...backofficeAuthHandlers.signedIn())
   vi.mocked(toast.success).mockClear()
 })
 
@@ -92,9 +98,11 @@ function renderPage(initialPath = "/admin/users/user-1") {
         path="/admin/users/:userId"
         element={
           <AuthProvider>
-            <main>
-              <AdminUserDetailPage />
-            </main>
+            <BackofficeAuthProvider>
+              <main>
+                <AdminUserDetailPage />
+              </main>
+            </BackofficeAuthProvider>
           </AuthProvider>
         }
       />

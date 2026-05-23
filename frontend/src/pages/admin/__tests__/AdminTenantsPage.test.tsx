@@ -5,11 +5,14 @@ import { Route, useLocation } from "react-router-dom"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import { AuthProvider } from "@/features/auth/AuthContext"
+import { BackofficeAuthProvider } from "@/features/backoffice/auth/context"
+import { setBackofficeAccessToken, clearBackofficeAuth } from "@/features/backoffice/auth/storage"
 import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { AdminTenantsPage } from "@/pages/admin/AdminTenantsPage"
+import { backofficeAuthHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -28,9 +31,15 @@ beforeAll(async () => {
 
 beforeEach(() => {
   clearAuth()
+  clearBackofficeAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
   setAccessToken("good-token")
+  // Admin queries fire on the back-office plane (#1785 Phase 6); seed a
+  // back-office token + /backoffice/auth/me handler so useBackofficeAuth
+  // resolves to an authenticated operator.
+  setBackofficeAccessToken("good-bo-token")
+  server.use(...backofficeAuthHandlers.signedIn())
 })
 
 interface SeenRequest {
@@ -99,10 +108,12 @@ function renderPage(initialPath = "/admin/tenants") {
           path="/admin/tenants"
           element={
             <AuthProvider>
-              <main>
-                <AdminTenantsPage />
-                <LocationProbe />
-              </main>
+              <BackofficeAuthProvider>
+                <main>
+                  <AdminTenantsPage />
+                  <LocationProbe />
+                </main>
+              </BackofficeAuthProvider>
             </AuthProvider>
           }
         />
