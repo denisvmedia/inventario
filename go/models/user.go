@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
-	"testing"
+	"sync/atomic"
 	"time"
 
 	"github.com/jellydator/validation"
@@ -18,7 +18,33 @@ import (
 // (4, ~1ms per hash) via SetBcryptCostForTesting; under `go test -race` the
 // difference scales by ~10x, which is the only reason the apiserver test
 // package stays under the 10-minute per-binary panic timeout.
-var bcryptCost = bcrypt.DefaultCost
+//
+// Stored as atomic.Int32 because SetPassword can run from many goroutines
+// concurrently (HTTP handlers under load, parallel test cases) while a
+// single TestMain / t.Cleanup writes the override; the race detector
+// flags the plain-int form, and atomic load/store keeps the contract
+// (production = DefaultCost when no override is in effect) while making
+// `go test -race` clean.
+//
+// The default value is seeded lazily by newBcryptCost (called at package
+// init via a var initializer) rather than an init() function so we can
+// keep `gochecknoinits` happy.
+var bcryptCost = newBcryptCost()
+
+func newBcryptCost() *atomic.Int32 {
+	v := new(atomic.Int32)
+	v.Store(int32(bcrypt.DefaultCost))
+	return v
+}
+
+// testingCleanup is the minimal subset of *testing.T (and *testing.B) that
+// SetBcryptCostForTesting needs — just t.Cleanup(func()). Accepting an
+// interface instead of *testing.T lets this function live in production
+// code without dragging the `testing` package into production builds or
+// registering `-test.*` flags on the process-global flag set.
+type testingCleanup interface {
+	Cleanup(func())
+}
 
 // SetBcryptCostForTesting overrides the package-level bcrypt cost used by
 // SetPassword for the duration of the test (or TestMain). Restores the
@@ -26,11 +52,22 @@ var bcryptCost = bcrypt.DefaultCost
 // doesn't leak the override into other tests in the same package. Pass
 // nil for `t` from a TestMain that wants the override to persist for the
 // whole binary run.
-func SetBcryptCostForTesting(t *testing.T, cost int) {
-	orig := bcryptCost
-	bcryptCost = cost
+//
+// `cost` is clamped to [bcrypt.MinCost, bcrypt.MaxCost] (4..31) so the
+// int->int32 store is safe; bcrypt itself rejects anything outside
+// MinCost..MaxCost at GenerateFromPassword time, so clamping here is
+// strictly defensive against an overflow in the atomic store.
+func SetBcryptCostForTesting(t testingCleanup, cost int) {
+	switch {
+	case cost < bcrypt.MinCost:
+		cost = bcrypt.MinCost
+	case cost > bcrypt.MaxCost:
+		cost = bcrypt.MaxCost
+	}
+	orig := bcryptCost.Load()
+	bcryptCost.Store(int32(cost))
 	if t != nil {
-		t.Cleanup(func() { bcryptCost = orig })
+		t.Cleanup(func() { bcryptCost.Store(orig) })
 	}
 }
 
@@ -136,7 +173,7 @@ func (u *User) SetPassword(password string) error {
 		return err
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), int(bcryptCost.Load()))
 	if err != nil {
 		return err
 	}
