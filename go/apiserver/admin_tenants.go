@@ -159,17 +159,19 @@ func (api *adminTenantsAPI) auditGet(r *http.Request, tenantID string, opErr err
 	api.auditService.LogAdmin(r.Context(), ev)
 }
 
-// actorIDFromRequest pulls the authenticated user ID off the context
-// for use as the AdminEvent.ActorID field. Returns nil if the user is
-// missing — RequireSystemAdmin should have rejected the request before
-// reaching the handler, so a missing user here is a wiring bug, not a
-// data-loss path.
+// actorIDFromRequest pulls the back-office admin actor ID off the
+// context for use as the AdminEvent.ActorID field. Returns nil when no
+// admin actor is attached — RequireBackofficeAuth should have rejected
+// the request before reaching the handler, so a missing actor here is
+// a wiring bug, not a data-loss path. The legacy impersonation routes
+// still run under the tenant gate; their handlers do not call this
+// helper, they read the tenant user directly (see admin_impersonation.go).
 func actorIDFromRequest(r *http.Request) *string {
-	user := appctx.UserFromContext(r.Context())
-	if user == nil || user.ID == "" {
+	actor := appctx.AdminActorFromContext(r.Context())
+	if actor == nil || actor.ID == "" {
 		return nil
 	}
-	id := user.ID
+	id := actor.ID
 	return &id
 }
 
