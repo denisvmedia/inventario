@@ -82,6 +82,32 @@ func (r *BackofficeRefreshTokenRegistry) GetByHash(ctx context.Context, tokenHas
 	return nil, errxtrace.Classify(registry.ErrBackofficeRefreshTokenNotFound)
 }
 
+// BumpLastUsedAt sets LastUsedAt on a single row, gated on the
+// (id, backofficeUserID) pair so a stolen id can't be used to rewrite
+// a row belonging to a different operator. Returns
+// ErrBackofficeRefreshTokenNotFound when no row matches the pair.
+// Mirrors the postgres implementation's narrow contract; replaces
+// what would otherwise be a generic Update call from the refresh
+// handler.
+func (r *BackofficeRefreshTokenRegistry) BumpLastUsedAt(_ context.Context, backofficeUserID, id string, at time.Time) error {
+	if backofficeUserID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "BackofficeUserID"))
+	}
+	if id == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	t, ok := r.items.Get(id)
+	if !ok || t.BackofficeUserID != backofficeUserID {
+		return errxtrace.Classify(registry.ErrBackofficeRefreshTokenNotFound, errx.Attrs("entity_id", id))
+	}
+	t.LastUsedAt = &at
+	r.items.Set(t.ID, t)
+	return nil
+}
+
 // Revoke marks a single row as revoked by id, gated on backofficeUserID
 // so a stolen id can't be used to revoke someone else's session.
 // Already-revoked rows are treated as idempotent successes.

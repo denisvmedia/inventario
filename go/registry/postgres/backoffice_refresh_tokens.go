@@ -109,8 +109,14 @@ func (r *BackofficeRefreshTokenRegistry) List(ctx context.Context) ([]*models.Ba
 	return tokens, nil
 }
 
-// Update rewrites a row by id. Currently used only by the refresh
-// handler to bump LastUsedAt.
+// Update rewrites a row by id. Generic Update is kept on the type to
+// satisfy the embedded Registry[T] interface, but the public registry
+// interface does NOT expose it — callers MUST use the narrower
+// BumpLastUsedAt / Revoke / RevokeByBackofficeUserID methods so the
+// per-user gate is always enforced. Direct callers of this method
+// bypass the (id, backoffice_user_id) gate that BumpLastUsedAt
+// enforces and so MUST ensure the row id was loaded under appropriate
+// authorisation; the back-office auth handlers do NOT use this method.
 func (r *BackofficeRefreshTokenRegistry) Update(ctx context.Context, token models.BackofficeRefreshToken) (*models.BackofficeRefreshToken, error) {
 	if token.GetID() == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
@@ -121,6 +127,45 @@ func (r *BackofficeRefreshTokenRegistry) Update(ctx context.Context, token model
 		return nil, errxtrace.Wrap("failed to update backoffice refresh token", err)
 	}
 	return &token, nil
+}
+
+// BumpLastUsedAt sets last_used_at on a single row, gated on the
+// (id, backoffice_user_id) pair so a stolen id can't be used to rewrite
+// a row belonging to a different operator. Returns
+// ErrBackofficeRefreshTokenNotFound when no row matches the pair.
+//
+// The narrow surface replaces what would otherwise be a generic Update
+// call site at the refresh handler — only last_used_at is mutated, so
+// the misuse footprint shrinks to "an attacker who already controls
+// (id, backoffice_user_id) can update last_used_at on their own row",
+// which is harmless.
+func (r *BackofficeRefreshTokenRegistry) BumpLastUsedAt(ctx context.Context, backofficeUserID, id string, at time.Time) error {
+	if backofficeUserID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "BackofficeUserID"))
+	}
+	if id == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
+	}
+
+	reg := r.newSQLRegistry()
+	return reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET last_used_at = $1 WHERE id = $2 AND backoffice_user_id = $3`,
+			r.tableNames.BackofficeRefreshTokens(),
+		)
+		res, err := tx.ExecContext(ctx, query, at, id, backofficeUserID)
+		if err != nil {
+			return errxtrace.Wrap("failed to bump backoffice refresh token last_used_at", err)
+		}
+		n, rerr := res.RowsAffected()
+		if rerr != nil {
+			return errxtrace.Wrap("failed to read rows affected on backoffice refresh token bump", rerr)
+		}
+		if n == 0 {
+			return errxtrace.Classify(registry.ErrBackofficeRefreshTokenNotFound, errx.Attrs("entity_id", id))
+		}
+		return nil
+	})
 }
 
 // Delete removes a row by id.

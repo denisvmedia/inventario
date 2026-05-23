@@ -241,6 +241,57 @@ func TestBackofficeRefreshTokenRegistryPostgres_RevokeByBackofficeUserID(t *test
 	c.Assert(got.RevokedAt, qt.IsNil)
 }
 
+// TestBackofficeRefreshTokenRegistryPostgres_BumpLastUsedAt_HappyPath
+// pins the narrow-mutation contract — only last_used_at is touched.
+func TestBackofficeRefreshTokenRegistryPostgres_BumpLastUsedAt_HappyPath(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+	r := getBackofficeRefreshTokenRegistry(t, registrySet)
+	userID := createBackofficeUserForRefreshTest(t, registrySet, "rt-bump@example.com")
+
+	c := qt.New(t)
+	ctx := context.Background()
+
+	created, err := r.Create(ctx, newTestBackofficeRefreshToken(userID, "bump-1"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(created.LastUsedAt, qt.IsNil)
+
+	now := time.Now().Truncate(time.Second)
+	c.Assert(r.BumpLastUsedAt(ctx, userID, created.ID, now), qt.IsNil)
+
+	got, err := r.GetByHash(ctx, "bump-1")
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.LastUsedAt, qt.IsNotNil)
+	c.Assert(got.LastUsedAt.Unix(), qt.Equals, now.Unix())
+	c.Assert(got.TokenHash, qt.Equals, "bump-1")
+	c.Assert(got.BackofficeUserID, qt.Equals, userID)
+}
+
+// TestBackofficeRefreshTokenRegistryPostgres_BumpLastUsedAt_WrongUser
+// pins the per-user gate: a stolen id paired with the wrong
+// backoffice_user_id must 404 rather than rewrite the victim's row.
+func TestBackofficeRefreshTokenRegistryPostgres_BumpLastUsedAt_WrongUser(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+	r := getBackofficeRefreshTokenRegistry(t, registrySet)
+	victimID := createBackofficeUserForRefreshTest(t, registrySet, "rt-bump-victim@example.com")
+	attackerID := createBackofficeUserForRefreshTest(t, registrySet, "rt-bump-attacker@example.com")
+
+	c := qt.New(t)
+	ctx := context.Background()
+
+	created, err := r.Create(ctx, newTestBackofficeRefreshToken(victimID, "bump-wrong-user"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(created.LastUsedAt, qt.IsNil)
+
+	err = r.BumpLastUsedAt(ctx, attackerID, created.ID, time.Now())
+	c.Assert(errors.Is(err, registry.ErrBackofficeRefreshTokenNotFound), qt.IsTrue)
+
+	got, err := r.GetByHash(ctx, "bump-wrong-user")
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.LastUsedAt, qt.IsNil)
+}
+
 func TestBackofficeRefreshTokenRegistryPostgres_DeleteExpired(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()

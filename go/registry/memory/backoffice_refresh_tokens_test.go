@@ -191,6 +191,72 @@ func TestBackofficeRefreshTokenRegistry_RevokeByBackofficeUserID(t *testing.T) {
 	c.Assert(got.RevokedAt, qt.IsNil)
 }
 
+// TestBackofficeRefreshTokenRegistry_BumpLastUsedAt_HappyPath pins the
+// narrow-mutation contract: BumpLastUsedAt sets the LastUsedAt column
+// (and only that column) on the matching row.
+func TestBackofficeRefreshTokenRegistry_BumpLastUsedAt_HappyPath(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewBackofficeRefreshTokenRegistry()
+
+	created, err := r.Create(ctx, newTestBackofficeRefreshToken("user-1", "hash-1"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(created.LastUsedAt, qt.IsNil)
+
+	now := time.Now().Truncate(time.Second)
+	c.Assert(r.BumpLastUsedAt(ctx, "user-1", created.ID, now), qt.IsNil)
+
+	got, err := r.GetByHash(ctx, "hash-1")
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.LastUsedAt, qt.IsNotNil)
+	c.Assert(got.LastUsedAt.Unix(), qt.Equals, now.Unix())
+	// Other columns untouched.
+	c.Assert(got.TokenHash, qt.Equals, "hash-1")
+	c.Assert(got.BackofficeUserID, qt.Equals, "user-1")
+	c.Assert(got.RevokedAt, qt.IsNil)
+}
+
+// TestBackofficeRefreshTokenRegistry_BumpLastUsedAt_WrongUser pins the
+// (id, backofficeUserID) gate: a stolen id matched to the wrong user
+// must return ErrBackofficeRefreshTokenNotFound rather than rewrite
+// the row.
+func TestBackofficeRefreshTokenRegistry_BumpLastUsedAt_WrongUser(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewBackofficeRefreshTokenRegistry()
+
+	created, err := r.Create(ctx, newTestBackofficeRefreshToken("user-1", "hash-1"))
+	c.Assert(err, qt.IsNil)
+
+	err = r.BumpLastUsedAt(ctx, "other-user", created.ID, time.Now())
+	c.Assert(errors.Is(err, registry.ErrBackofficeRefreshTokenNotFound), qt.IsTrue)
+
+	got, err := r.GetByHash(ctx, "hash-1")
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.LastUsedAt, qt.IsNil)
+}
+
+func TestBackofficeRefreshTokenRegistry_BumpLastUsedAt_MissingFields(t *testing.T) {
+	ctx := context.Background()
+	r := memory.NewBackofficeRefreshTokenRegistry()
+	now := time.Now()
+	cases := []struct {
+		name             string
+		backofficeUserID string
+		id               string
+	}{
+		{"empty backoffice user id", "", "id-1"},
+		{"empty id", "user-1", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			err := r.BumpLastUsedAt(ctx, tc.backofficeUserID, tc.id, now)
+			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+		})
+	}
+}
+
 func TestBackofficeRefreshTokenRegistry_DeleteExpired(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()

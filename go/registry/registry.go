@@ -1157,10 +1157,13 @@ type BackofficeUserRegistry interface {
 }
 
 // BackofficeRefreshTokenRegistry persists long-lived refresh tokens
-// for the back-office auth plane (issue #1785, Phase 2). It mirrors the
-// tenant-side RefreshTokenRegistry method-for-method but with
-// backoffice_user_id in place of (tenant_id, user_id) so the two
-// identity universes can't accidentally cross.
+// for the back-office auth plane (issue #1785, Phase 2). It is a NARROW
+// surface tailored to the back-office plane's actual call sites — it
+// does NOT mirror the tenant-side RefreshTokenRegistry method-for-method
+// (the tenant interface exposes `GetByUserID`, `RevokeAllExceptID`, and
+// other surface area the back-office plane doesn't currently need; the
+// back-office plane intentionally narrows to only what its handlers
+// require so the misuse surface stays small).
 //
 // The table has NO row-level security (same reasoning as
 // `backoffice_users`: it lives OUTSIDE the tenant model). The login flow
@@ -1180,6 +1183,19 @@ type BackofficeRefreshTokenRegistry interface {
 	// a session that belongs to a different back-office user. Idempotent:
 	// re-revoking an already-revoked row is a no-op success.
 	Revoke(ctx context.Context, backofficeUserID, id string) error
+
+	// BumpLastUsedAt sets the last_used_at column on a single token row
+	// to `at`, gated on the supplied (backofficeUserID, id) pair so a
+	// stolen id from a different operator can't be used to rewrite
+	// someone else's row. This is the ONLY field-level mutation the
+	// back-office refresh flow needs: the deliberately narrow surface
+	// replaces a generic Update method and forecloses the
+	// "stolen-id-rewrite" primitive a wide-open Update would expose
+	// (cf. the same pattern in BackofficeUserRegistry.SetPasswordHash).
+	// Idempotent: bumping a missing or already-revoked row returns
+	// ErrBackofficeRefreshTokenNotFound; bumping an existing row to the
+	// same timestamp is allowed (no-op cost).
+	BumpLastUsedAt(ctx context.Context, backofficeUserID, id string, at time.Time) error
 
 	// ListActiveByBackofficeUserID returns the non-revoked, non-expired
 	// rows for the given back-office user ordered most-recently-used
