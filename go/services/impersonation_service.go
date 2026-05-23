@@ -10,35 +10,70 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-// ImpersonationSlot is the server-side "return slot" recorded when an
-// admin starts an impersonation session (#1750). It is keyed by the
-// impersonation access token's JTI and holds everything the
-// `end` endpoint needs to restore the admin's original session without
+// ImpersonationOperatorKind discriminates the auth plane the operator
+// authenticated on when they opened the impersonation session.
+//
+// Phase 5 of issue #1785 cuts the cross-plane impersonation surface
+// over to back-office identities — a tenant operator can no longer
+// start an impersonation session — so the only live value today is
+// ImpersonationOperatorBackoffice. The field is recorded explicitly
+// (rather than implied) so that an end-time mismatch between the
+// slot's kind and the impersonation-token-bound restore path fails
+// loudly instead of silently restoring the wrong cookie / minting the
+// wrong access token.
+type ImpersonationOperatorKind string
+
+const (
+	// ImpersonationOperatorBackoffice marks a slot opened by a
+	// back-office user (aud=backoffice JWT). The slot's OperatorUserID
+	// references backoffice_users.id and OperatorRefreshTokenRaw — when
+	// non-empty — is a `backoffice_refresh_token` cookie value scoped
+	// to `/api/v1/backoffice`. The `end` endpoint mints a back-office
+	// access token + writes the back-office refresh cookie.
+	ImpersonationOperatorBackoffice ImpersonationOperatorKind = "backoffice_user"
+)
+
+// ImpersonationSlot is the server-side "return slot" recorded when a
+// back-office operator starts an impersonation session against a
+// tenant user (#1785 Phase 5; originally #1750). It is keyed by the
+// impersonation access token's JTI and holds everything the `end`
+// endpoint needs to restore the operator's back-office session without
 // trusting any client-supplied state.
 //
-// The slot carries the raw refresh-token *value* the admin's session
-// was using at start-time — not its hash — so `end` can re-set the
-// httpOnly refresh cookie and mint a fresh access token for the admin.
-// The raw value is held server-side only transiently: for the lifetime
-// of the impersonation session and no longer (it is discarded the moment
-// the session ends or expires). It is only ever re-emitted to the
-// original operator's browser — and to no other client — via the
-// httpOnly `refresh_token` cookie that `end` restores.
+// The slot carries the raw refresh-token *value* the operator's
+// back-office session was using at start-time — not its hash — so
+// `end` can re-set the httpOnly `backoffice_refresh_token` cookie
+// without forcing the operator back to the login screen. The raw value
+// is held server-side only transiently: for the lifetime of the
+// impersonation session and no longer (it is discarded the moment the
+// session ends or expires). It is only ever re-emitted to the original
+// operator's browser — and to no other client — via the httpOnly
+// `backoffice_refresh_token` cookie that `end` restores.
 type ImpersonationSlot struct {
 	// JTI is the impersonation access token's unique id — the slot key.
 	JTI string
-	// AdminUserID is the operator who initiated the impersonation.
-	AdminUserID string
-	// AdminTenantID is the operator's tenant. System admins are not
-	// tenant-scoped for authorization, but the column is recorded so
-	// the audit trail and the restored admin session stay coherent.
-	AdminTenantID string
-	// AdminRefreshTokenRaw is the raw refresh-token value the admin's
-	// session held at start-time. Empty when the admin authenticated
-	// without a refresh cookie (e.g. a pure-bearer test client) — in
-	// that case `end` mints a brand-new admin session instead.
-	AdminRefreshTokenRaw string
-	// TargetUserID / TargetTenantID identify the impersonated user.
+	// OperatorKind names the auth plane the slot's operator
+	// authenticated on. Always ImpersonationOperatorBackoffice after
+	// #1785 Phase 5; recorded explicitly so an end-time mismatch fails
+	// loudly rather than silently restoring the wrong cookie.
+	OperatorKind ImpersonationOperatorKind
+	// OperatorUserID is the operator who initiated the impersonation.
+	// References backoffice_users.id under
+	// ImpersonationOperatorBackoffice.
+	OperatorUserID string
+	// OperatorRefreshTokenRaw is the raw refresh-token value the
+	// operator's session held at start-time (the
+	// `backoffice_refresh_token` cookie value for back-office
+	// operators). Empty when the operator authenticated without a
+	// refresh cookie (e.g. a pure-bearer test client) — in that case
+	// `end` mints a fresh access token but does NOT plant a refresh
+	// cookie, so the operator continues on bearer-only until they log
+	// in again.
+	OperatorRefreshTokenRaw string
+	// TargetUserID / TargetTenantID identify the impersonated tenant
+	// user. The audit row records actor=target with
+	// impersonated_by=OperatorUserID auto-filled from the request's
+	// JWT claims by impersonatorFromContext.
 	TargetUserID   string
 	TargetTenantID string
 	// Reason is the optional operator-supplied justification.
