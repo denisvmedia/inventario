@@ -94,18 +94,19 @@ func (*File) Validate() error {
 // intentionally empty placeholders — the blob doesn't exist yet — and
 // only become populated by the server-side upload handler. The earlier
 // `Required` rules on Path / OriginalPath / Ext / MIMEType were
-// effectively dead anyway (FileEntity.ValidateWithContext validates the
-// pointer is non-nil but never recurses into File.ValidateWithContext)
-// AND would have rejected the new metadata-only create path.
+// unreachable in production: no code path currently invokes
+// `FileEntity.ValidateWithContext` (the JSON-API binder validates the
+// outer request DTO, not the entity), so the rules — which jellydator
+// *would* cascade into here via the inner `ValidatableWithContext`
+// interface — never fired. They would also have rejected the new
+// metadata-only create path the moment any caller did wire validation
+// in. Dropping them removes the misleading shape contract.
 //
-// The cascade is intentionally not wired up: keeping File validation a
-// pure metadata-shape check (Length on title-like fields, here a no-op
-// because none currently apply) means an unpopulated File literal
-// passes, matching the createFile handler's lifecycle expectations.
-// If a future field carries shape constraints (max length, enum), they
-// go here and the cascade can stay off.
-func (i *File) ValidateWithContext(_ context.Context) error {
-	_ = i
+// The no-op stays as a hook: when a future field carries a shape
+// constraint (max length, enum), it goes here and the cascade lights
+// up automatically the first time something validates the outer
+// FileEntity.
+func (*File) ValidateWithContext(_ context.Context) error {
 	return nil
 }
 
