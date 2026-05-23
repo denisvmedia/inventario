@@ -600,7 +600,7 @@ func (api *AuthAPI) issueMFALoginSession(w http.ResponseWriter, r *http.Request,
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return false
 	}
-	accessToken, _, err := api.issueAccessToken(user, rti)
+	accessToken, _, err := api.issueAccessToken(r.Context(), user, rti)
 	if err != nil {
 		slog.Error("MFA login: access token failed", "user_id", user.ID, "error", err)
 		api.rollbackRefreshToken(r.Context(), user.ID, rti)

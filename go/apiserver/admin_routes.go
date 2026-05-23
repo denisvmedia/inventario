@@ -178,6 +178,14 @@ func Admin(params AdminParams) func(r chi.Router) {
 		jwtSecret:    params.JWTSecret,
 		ttl:          params.ImpersonationTTL,
 	}
+	// Resolve the grants registry from the FactorySet — RequireSystemAdmin
+	// and RequireSystemAdminOrImpersonating are no longer static funcs
+	// (#1784) but instances bound to the deployment's grant store. A nil
+	// FactorySet is a clear startup misconfiguration; let RequireSystemAdmin
+	// panic loudly so the operator notices.
+	requireSystemAdmin := RequireSystemAdmin(params.FactorySet.SystemAdminGrantRegistry)
+	requireSystemAdminOrImpersonating := RequireSystemAdminOrImpersonating(params.FactorySet.SystemAdminGrantRegistry)
+
 	return func(r chi.Router) {
 		// POST /admin/impersonation/end is mounted FIRST and OUTSIDE the
 		// authenticated-middleware group on purpose. JWTMiddleware (part of
@@ -203,7 +211,8 @@ func Admin(params AdminParams) func(r chi.Router) {
 			for _, mw := range params.UserMiddlewares {
 				r.Use(mw)
 			}
-			adminAuthenticatedRoutes(r, tenantsAPI, usersAPI, groupsAPI, groupMembersAPI, impersonationAPI)
+			adminAuthenticatedRoutes(r, requireSystemAdmin, requireSystemAdminOrImpersonating,
+				tenantsAPI, usersAPI, groupsAPI, groupMembersAPI, impersonationAPI)
 		})
 	}
 }
@@ -211,9 +220,14 @@ func Admin(params AdminParams) func(r chi.Router) {
 // adminAuthenticatedRoutes registers every /api/v1/admin/* route that runs
 // behind the authenticated middleware chain (everything except POST
 // /admin/impersonation/end, which is mounted bare by Admin()). Extracted
-// from Admin() so that closure stays under the funlen budget.
+// from Admin() so that closure stays under the funlen budget. The two
+// admin gates are passed in already bound to the grants registry
+// (#1784) so this function stays unaware of which registry the
+// deployment uses.
 func adminAuthenticatedRoutes(
 	r chi.Router,
+	requireSystemAdmin func(http.Handler) http.Handler,
+	requireSystemAdminOrImpersonating func(http.Handler) http.Handler,
 	tenantsAPI *adminTenantsAPI,
 	usersAPI *adminUsersAPI,
 	groupsAPI *adminGroupsAPI,
@@ -226,7 +240,7 @@ func adminAuthenticatedRoutes(
 	// /admin/impersonation/current is registered OUTSIDE this group with
 	// the wider RequireSystemAdminOrImpersonating gate — see below for why.
 	r.Group(func(r chi.Router) {
-		r.Use(RequireSystemAdmin)
+		r.Use(requireSystemAdmin)
 		r.Get("/_ping", adminPing)
 
 		// #1746: tenants + users listing endpoints. Each handler
@@ -283,7 +297,7 @@ func adminAuthenticatedRoutes(
 	// `end`, `current` is a harmless read and is fine to keep behind
 	// JWTMiddleware — an expired token simply means the FE banner reads
 	// inactive, which is the correct answer.
-	r.With(RequireSystemAdminOrImpersonating).Get("/impersonation/current", impersonationAPI.currentImpersonation)
+	r.With(requireSystemAdminOrImpersonating).Get("/impersonation/current", impersonationAPI.currentImpersonation)
 }
 
 // parseAdminSortAndOrder reconciles the dual sort conventions the

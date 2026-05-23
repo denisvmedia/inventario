@@ -58,7 +58,9 @@ func newAdminEnv(c *qt.C) adminTestEnv {
 // tests — use the registry directly so a single helper covers both
 // "second admin" and "ordinary user". Callers pass the tenant ID
 // explicitly so the helper does not silently pick `tenants[0]` when the
-// fixture set contains more than one tenant.
+// fixture set contains more than one tenant. When isSystemAdmin is
+// true, the system-admin privilege is conferred via the grants registry
+// (#1784) rather than a column on the user row.
 func createTestUserDirect(c *qt.C, params apiserver.Params, tenantID, email string, isActive, isSystemAdmin bool) *models.User {
 	c.Helper()
 	c.Assert(tenantID, qt.Not(qt.Equals), "", qt.Commentf("createTestUserDirect: tenantID is required"))
@@ -67,10 +69,12 @@ func createTestUserDirect(c *qt.C, params apiserver.Params, tenantID, email stri
 		Email:               email,
 		Name:                email,
 		IsActive:            isActive,
-		IsSystemAdmin:       isSystemAdmin,
 	}
 	must.Assert(u.SetPassword("Password123"))
 	created := must.Must(params.FactorySet.UserRegistry.Create(context.Background(), u))
+	if isSystemAdmin {
+		must.Must(params.FactorySet.SystemAdminGrantRegistry.Grant(context.Background(), created.ID, nil))
+	}
 	return created
 }
 

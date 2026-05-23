@@ -323,19 +323,20 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			panic("init MFA service: " + err.Error())
 		}
 		r.Route("/auth", Auth(AuthParams{
-			UserRegistry:            params.FactorySet.UserRegistry,
-			RefreshTokenRegistry:    params.FactorySet.RefreshTokenRegistry,
-			GroupMembershipRegistry: params.FactorySet.GroupMembershipRegistry,
-			LoginEventRegistry:      params.FactorySet.LoginEventRegistry,
-			MFARegistry:             params.FactorySet.UserMFASecretRegistry,
-			BlacklistService:        blacklist,
-			RateLimiter:             rateLimiter,
-			CSRFService:             csrfSvc,
-			AuditService:            auditSvc,
-			JWTSecret:               params.JWTSecret,
-			EmailService:            emailSvc,
-			MFAService:              mfaSvc,
-			ImpersonationStore:      impersonationStore,
+			UserRegistry:             params.FactorySet.UserRegistry,
+			RefreshTokenRegistry:     params.FactorySet.RefreshTokenRegistry,
+			GroupMembershipRegistry:  params.FactorySet.GroupMembershipRegistry,
+			LoginEventRegistry:       params.FactorySet.LoginEventRegistry,
+			MFARegistry:              params.FactorySet.UserMFASecretRegistry,
+			SystemAdminGrantRegistry: params.FactorySet.SystemAdminGrantRegistry,
+			BlacklistService:         blacklist,
+			RateLimiter:              rateLimiter,
+			CSRFService:              csrfSvc,
+			AuditService:             auditSvc,
+			JWTSecret:                params.JWTSecret,
+			EmailService:             emailSvc,
+			MFAService:               mfaSvc,
+			ImpersonationStore:       impersonationStore,
 		}))
 
 		// Unauthenticated public routes: apply the global per-IP rate limit as a

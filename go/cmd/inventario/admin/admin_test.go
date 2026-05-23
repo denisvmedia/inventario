@@ -101,14 +101,15 @@ func runAdminCommand(c *qt.C, args ...string) (string, error) {
 	return buf.String(), err
 }
 
-// fetchUser loads a user via the user registry (bypassing the admin
-// service) so a test can assert post-state without going through more CLI
-// surface than necessary.
-func fetchUser(c *qt.C, fx *adminTestFixture, id string) *models.User {
+// hasSystemAdminGrant asserts the post-state via the dedicated grant
+// store (#1784) — the legacy IsSystemAdmin column on users is gone, so
+// "is this user an admin?" now means "is there a row in
+// system_admin_grants?".
+func hasSystemAdminGrant(c *qt.C, fx *adminTestFixture, id string) bool {
 	c.Helper()
-	u, err := fx.factorySet.UserRegistry.Get(context.Background(), id)
+	ok, err := fx.factorySet.SystemAdminGrantRegistry.Exists(context.Background(), id)
 	c.Assert(err, qt.IsNil)
-	return u
+	return ok
 }
 
 func TestAdmin_GrantListRevoke_HappyPath(t *testing.T) {
@@ -119,7 +120,7 @@ func TestAdmin_GrantListRevoke_HappyPath(t *testing.T) {
 	out, err := runAdminCommand(c, "grant-system-admin", "--email", fx.user1Email)
 	c.Assert(err, qt.IsNil)
 	c.Assert(out, qt.Contains, "Granted system-admin")
-	c.Assert(fetchUser(c, fx, fx.user1ID).IsSystemAdmin, qt.IsTrue)
+	c.Assert(hasSystemAdminGrant(c, fx, fx.user1ID), qt.IsTrue)
 
 	// Grant bob so we have two admins (so we can revoke without --allow-zero).
 	out, err = runAdminCommand(c, "grant-system-admin", "--email", fx.user2Email)
@@ -136,7 +137,7 @@ func TestAdmin_GrantListRevoke_HappyPath(t *testing.T) {
 	out, err = runAdminCommand(c, "revoke-system-admin", "--email", fx.user1Email)
 	c.Assert(err, qt.IsNil)
 	c.Assert(out, qt.Contains, "Revoked system-admin")
-	c.Assert(fetchUser(c, fx, fx.user1ID).IsSystemAdmin, qt.IsFalse)
+	c.Assert(hasSystemAdminGrant(c, fx, fx.user1ID), qt.IsFalse)
 }
 
 func TestAdmin_RevokeLastAdmin_RefusedWithoutAllowZero(t *testing.T) {
@@ -154,7 +155,7 @@ func TestAdmin_RevokeLastAdmin_RefusedWithoutAllowZero(t *testing.T) {
 	c.Assert(err.Error(), qt.Contains, adminservice.ErrLastSystemAdmin.Error())
 
 	// User flag must still be true — the guard must not have flipped the row.
-	c.Assert(fetchUser(c, fx, fx.user1ID).IsSystemAdmin, qt.IsTrue)
+	c.Assert(hasSystemAdminGrant(c, fx, fx.user1ID), qt.IsTrue)
 }
 
 func TestAdmin_RevokeLastAdmin_AllowedWithFlag(t *testing.T) {
@@ -167,7 +168,7 @@ func TestAdmin_RevokeLastAdmin_AllowedWithFlag(t *testing.T) {
 	out, err := runAdminCommand(c, "revoke-system-admin", "--email", fx.user1Email, "--allow-zero")
 	c.Assert(err, qt.IsNil)
 	c.Assert(out, qt.Contains, "Revoked system-admin")
-	c.Assert(fetchUser(c, fx, fx.user1ID).IsSystemAdmin, qt.IsFalse)
+	c.Assert(hasSystemAdminGrant(c, fx, fx.user1ID), qt.IsFalse)
 }
 
 func TestAdmin_GrantIdempotent(t *testing.T) {

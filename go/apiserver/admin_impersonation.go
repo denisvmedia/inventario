@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -200,7 +201,7 @@ func (api *adminImpersonationAPI) startImpersonation(w http.ResponseWriter, r *h
 		return
 	}
 
-	if guardErr := impersonationTargetGuard(target); guardErr != nil {
+	if guardErr := impersonationTargetGuard(r.Context(), api.factorySet.SystemAdminGrantRegistry, target); guardErr != nil {
 		api.auditStart(r, admin.ID, "", target.ID, target.TenantID, false, guardErr.Error())
 		_ = renderEntityError(w, r, guardErr)
 		return
@@ -566,7 +567,7 @@ func (api *adminImpersonationAPI) restoreAdminSession(w http.ResponseWriter, r *
 	// empty rti is fine — issueAdminAccessToken omits the claim.
 	rti := api.resolveAdminRefreshTokenID(r.Context(), slot.AdminRefreshTokenRaw)
 
-	tokenString, err := api.signAdminAccessToken(admin, rti)
+	tokenString, err := api.signAdminAccessToken(r.Context(), admin, rti)
 	if err != nil {
 		slog.Error("Impersonation end: failed to mint admin access token", "admin_id", admin.ID, "error", err)
 		_ = internalServerError(w, r, err)
@@ -647,13 +648,30 @@ func (api *adminImpersonationAPI) signImpersonationToken(target *models.User, ad
 // signAdminAccessToken mints a normal (non-impersonation) access token
 // for the operator when an impersonation session ends. Mirrors
 // AuthAPI.issueAccessToken so the restored session is indistinguishable
-// from a fresh login/refresh — including the is_system_admin claim.
-func (api *adminImpersonationAPI) signAdminAccessToken(admin *models.User, rti string) (string, error) {
+// from a fresh login/refresh — including the is_system_admin claim
+// (resolved fresh from the grants registry, #1784; the claim is an
+// advisory FE hint, never the source of truth for authorization).
+func (api *adminImpersonationAPI) signAdminAccessToken(ctx context.Context, admin *models.User, rti string) (string, error) {
+	isAdmin := false
+	if api.factorySet != nil && api.factorySet.SystemAdminGrantRegistry != nil {
+		ok, err := api.factorySet.SystemAdminGrantRegistry.Exists(ctx, admin.ID)
+		if err != nil {
+			// Best-effort: a transient grant-registry blip should not
+			// hold the operator's restored session hostage. The FE
+			// re-renders the admin chrome based on a /admin/_ping probe
+			// next, which goes through RequireSystemAdmin and is the
+			// real authorization gate. Log so an outage is visible.
+			slog.Warn("Impersonation end: grant lookup failed; minting non-admin claim",
+				"admin_id", admin.ID, "error", err)
+		} else {
+			isAdmin = ok
+		}
+	}
 	now := time.Now()
 	claims := jwt.MapClaims{
 		"jti":             uuid.New().String(),
 		"user_id":         admin.ID,
-		"is_system_admin": admin.IsSystemAdmin,
+		"is_system_admin": isAdmin,
 		"token_type":      accessTokenType,
 		"iat":             now.Unix(),
 		"exp":             now.Add(accessTokenExpiration).Unix(),
@@ -790,10 +808,18 @@ func (api *adminImpersonationAPI) auditEnd(r *http.Request, slot services.Impers
 // impersonationTargetGuard rejects targets that may not be impersonated:
 // a system admin (privilege-escalation footgun) or a blocked account
 // (resurrecting a torn-down session). Returns nil when the target is a
-// valid impersonation subject.
-func impersonationTargetGuard(target *models.User) error {
-	if target.IsSystemAdmin {
-		return ErrCannotImpersonateAdmin
+// valid impersonation subject. System-admin status is resolved via the
+// dedicated grants registry (#1784) — the legacy IsSystemAdmin column
+// on users is gone.
+func impersonationTargetGuard(ctx context.Context, grants registry.SystemAdminGrantRegistry, target *models.User) error {
+	if grants != nil {
+		ok, err := grants.Exists(ctx, target.ID)
+		if err != nil {
+			return errxtrace.Wrap("impersonation guard: grant lookup failed", err)
+		}
+		if ok {
+			return ErrCannotImpersonateAdmin
+		}
 	}
 	if !target.IsActive {
 		return ErrTargetBlocked

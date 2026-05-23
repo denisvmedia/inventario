@@ -399,11 +399,21 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 		// peer admin is a 200 no-op rather than a surprising 422.
 		cascadeErrMsg := api.applyBlockCascade(r, target.ID)
 		api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, false)
-		api.writeUserEnvelope(w, http.StatusOK, target)
+		api.writeUserEnvelope(w, r, http.StatusOK, target)
 		return
 	}
 
-	if target.IsSystemAdmin && !req.Force {
+	// Admin-on-admin block requires explicit --force. Resolve via the
+	// dedicated grant registry (#1784); the privilege is no longer a
+	// column on the users row.
+	targetIsAdmin, grantErr := api.factorySet.SystemAdminGrantRegistry.Exists(r.Context(), target.ID)
+	if grantErr != nil {
+		slog.Error("admin block: grant lookup failed", "user_id", target.ID, "error", grantErr)
+		api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, false, grantErr.Error(), false)
+		_ = internalServerError(w, r, grantErr)
+		return
+	}
+	if targetIsAdmin && !req.Force {
 		api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, false, ErrAdminCannotBlockAdminWithoutForce.Error(), false)
 		_ = renderEntityError(w, r, ErrAdminCannotBlockAdminWithoutForce)
 		return
@@ -414,7 +424,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	// was active above). Surface it on the audit row so post-hoc
 	// analysis can pivot on "operator blocked a live peer admin"
 	// without re-parsing the breadcrumb JSON.
-	forced := target.IsSystemAdmin && req.Force
+	forced := targetIsAdmin && req.Force
 
 	updated := *target
 	updated.IsActive = false
@@ -435,7 +445,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	// blipped.
 	cascadeErrMsg := api.applyBlockCascade(r, target.ID)
 	api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, forced)
-	api.writeUserEnvelope(w, http.StatusOK, saved)
+	api.writeUserEnvelope(w, r, http.StatusOK, saved)
 }
 
 // operatorIDFromContext returns the ID of the user who actually
@@ -507,7 +517,7 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 		// 200 — the alternative would be a 422 that the FE doesn't
 		// actually need to branch on.
 		api.logUnblockOutcome(r, actor, target.ID, target.TenantID, req, true, "")
-		api.writeUserEnvelope(w, http.StatusOK, target)
+		api.writeUserEnvelope(w, r, http.StatusOK, target)
 		return
 	}
 
@@ -522,7 +532,7 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.logUnblockOutcome(r, actor, target.ID, target.TenantID, req, true, "")
-	api.writeUserEnvelope(w, http.StatusOK, saved)
+	api.writeUserEnvelope(w, r, http.StatusOK, saved)
 }
 
 // decodeBlockRequest parses + validates the POST /block body. Writes
@@ -715,8 +725,23 @@ func (api *adminUsersAPI) logUnblockOutcome(
 }
 
 // writeUserEnvelope encodes a *models.User into the AdminUserEnvelope
-// JSON:API shape and writes it on the response.
-func (api *adminUsersAPI) writeUserEnvelope(w http.ResponseWriter, status int, u *models.User) {
+// JSON:API shape and writes it on the response. The is_system_admin
+// attribute is resolved from the dedicated grant registry (#1784) — it
+// is no longer a column on the users row. A best-effort lookup
+// failure renders the attribute as false rather than 500-ing the whole
+// response (the rest of the envelope is the load-bearing content; the
+// flag is an FE hint for the "cannot impersonate" disabled-button copy).
+func (api *adminUsersAPI) writeUserEnvelope(w http.ResponseWriter, r *http.Request, status int, u *models.User) {
+	isAdmin := false
+	if api.factorySet != nil && api.factorySet.SystemAdminGrantRegistry != nil {
+		ok, err := api.factorySet.SystemAdminGrantRegistry.Exists(r.Context(), u.ID)
+		if err != nil {
+			slog.Warn("admin user envelope: grant lookup failed",
+				"user_id", u.ID, "error", err)
+		} else {
+			isAdmin = ok
+		}
+	}
 	envelope := AdminUserEnvelope{
 		Data: AdminUserResource{
 			Type: "users",
@@ -726,7 +751,7 @@ func (api *adminUsersAPI) writeUserEnvelope(w http.ResponseWriter, status int, u
 				Email:         u.Email,
 				Name:          u.Name,
 				IsActive:      u.IsActive,
-				IsSystemAdmin: u.IsSystemAdmin,
+				IsSystemAdmin: isAdmin,
 				TenantID:      u.TenantID,
 			},
 		},

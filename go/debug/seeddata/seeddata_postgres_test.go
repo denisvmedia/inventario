@@ -159,19 +159,23 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	c.Assert(familyUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(familyUser.IsActive, qt.IsTrue)
 
-	// Sysadmin: the is_system_admin flag must round-trip through the
-	// Postgres INSERT/SELECT path (issue #1758).
+	// Sysadmin: the system-admin grant row must round-trip through the
+	// Postgres INSERT/SELECT path (issue #1758, #1784).
 	c.Assert(sysadminUser, qt.IsNotNil, qt.Commentf("sysadmin user not found"))
 	c.Assert(sysadminUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(sysadminUser.IsActive, qt.IsTrue)
-	c.Assert(sysadminUser.IsSystemAdmin, qt.IsTrue)
+	isAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(context.Background(), sysadminUser.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(isAdmin, qt.IsTrue)
 
 	// Block-target: a plain active fixture — asserted explicitly so a
 	// broken insert can't be masked by unrelated rows (issue #1758).
 	c.Assert(blockTargetUser, qt.IsNotNil, qt.Commentf("blocktarget user not found"))
 	c.Assert(blockTargetUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(blockTargetUser.IsActive, qt.IsTrue)
-	c.Assert(blockTargetUser.IsSystemAdmin, qt.IsFalse)
+	isBlockTargetAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(context.Background(), blockTargetUser.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(isBlockTargetAdmin, qt.IsFalse)
 }
 
 // usersForTenant returns the users belonging to a single tenant. The
