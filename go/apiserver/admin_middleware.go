@@ -12,6 +12,19 @@ import (
 // when the caller lacks platform-admin privileges. Kept as a constant so
 // future admin endpoints can re-use the same wire code without duplicating
 // the literal.
+//
+// Phase 5 of issue #1785 removed the tenant-side `RequireSystemAdmin`
+// gate from every admin ROUTE in favor of `RequireBackofficeAuth` /
+// `RequirePlatformAdmin`. The middleware functions remain in this file
+// for use by handler-side gates that still need to consult
+// `system_admin_grants` (the per-handler `is_system_admin` advisory
+// flag on /auth/me, the impersonation target check, etc.) and the
+// constant lives here because every admin surface in the codebase
+// indirectly depends on it via the JSON:API error mapping. The
+// back-office plane uses a sibling AdminRoleRequiredCode
+// (admin.role_required) for the more specific "you authenticated as a
+// back-office user but your role is not platform_admin" rejection —
+// see RequirePlatformAdmin.
 const adminForbiddenCode = "admin.forbidden"
 
 // RequireSystemAdmin gates a route subtree on the presence of a row in

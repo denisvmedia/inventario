@@ -29,6 +29,13 @@ var (
 	// JSON:API code "admin.forbidden" so the FE can render specific copy
 	// instead of the generic "permission denied" toast (#1745).
 	ErrNotSystemAdmin = errx.NewSentinel("system administrator privileges required")
+	// ErrPlatformAdminRequired is returned by RequirePlatformAdmin when a
+	// back-office user authenticates successfully but their role is not
+	// platform_admin (e.g. a support_agent attempting to start an
+	// impersonation session). Surfaces as a 403 with JSON:API code
+	// AdminRoleRequiredCode so the FE can render "ask a platform admin to
+	// do this" instead of the generic "forbidden" toast (#1785, Phase 5).
+	ErrPlatformAdminRequired = errx.NewSentinel("platform administrator role required")
 	// ErrMissingUserContext fires when a handler runs without an
 	// authenticated user in context — almost always a middleware-wiring
 	// bug (JWTMiddleware was bypassed). Distinct from ErrNotSystemAdmin
@@ -319,6 +326,18 @@ func adminSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 			HTTPStatusCode: http.StatusForbidden,
 			StatusText:     "Forbidden",
 			Code:           adminForbiddenCode,
+		}, true
+	case errors.Is(err, ErrPlatformAdminRequired):
+		// #1785 Phase 5: RequirePlatformAdmin emits this via codedForbiddenError
+		// already; the toJSONAPIError branch matters when a handler chooses to
+		// return the sentinel directly (e.g. a deeper role check after a wider
+		// gate). 403 + admin.role_required keeps the FE branch identical.
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusForbidden,
+			StatusText:     "Forbidden",
+			Code:           AdminRoleRequiredCode,
 		}, true
 	case errors.Is(err, ErrAdminCannotBlockSelf),
 		errors.Is(err, ErrAdminCannotBlockAdminWithoutForce):

@@ -179,20 +179,42 @@ attempts. A per-action JSON breadcrumb is stored in `user_agent`.
 
 ## 5. Impersonation — operational notes
 
-A system admin can issue a short-lived impersonation session for a
-target user (admin UI → user detail → **Impersonate**). Operational
-constraints:
+A **back-office operator with `role=platform_admin`** can issue a
+short-lived impersonation session for a target tenant user
+(admin UI → user detail → **Impersonate**). Phase 5 of issue
+[#1785](https://github.com/denisvmedia/inventario/issues/1785) cut the
+impersonation surface over from the tenant-side
+`users.is_system_admin` gate to the back-office auth plane —
+`support_agent` is read-mostly and **cannot** start an impersonation
+session. The token still targets a tenant user (so the impersonated
+browsing session works against the tenant `/api/v1/g/...` endpoints),
+but the operator-of-record is now a `backoffice_users` row.
 
+Operational constraints:
+
+- The caller MUST be a back-office user with `role=platform_admin`.
+  A `support_agent` is rejected with `403` and
+  `admin.role_required`.
 - Default TTL is **30 minutes**, configurable via
   `INVENTARIO_IMPERSONATION_TTL` (capped at 30 minutes).
-- The impersonation token carries `is_system_admin = false` — an
-  operator does **not** keep admin powers while impersonating.
+- The impersonation token carries `is_system_admin = false` and the
+  cross-plane operator claims
+  `impersonator_id = <backoffice_users.id>` and
+  `impersonator_type = "backoffice_user"`. The audit-log
+  `impersonated_by` column records the back-office operator id (the
+  column name is historical and was kept stable across the rename).
 - Sessions **cannot** be nested (no impersonating from within an
   impersonation) and **cannot** be refreshed.
-- Impersonating another system admin is rejected (`422`,
-  `admin.impersonate.target_is_admin`).
+- Impersonating a tenant user whose `is_system_admin = true` is
+  rejected (`422`, `admin.impersonate.target_is_admin`); impersonating
+  a blocked account is rejected (`422`,
+  `admin.impersonate.target_blocked`).
 - A persistent banner is shown in the UI for the whole session; "End
-  impersonation" restores the operator's own session.
+  impersonation" restores the operator's back-office session —
+  mints a fresh back-office access token + re-plants the
+  `backoffice_refresh_token` cookie. The legacy `imp:<jti>` tenant
+  marker cookie is gone; the JTI-keyed server-side return slot is
+  the only binding between the impersonation token and the operator.
 - The impersonate endpoint is rate-limited (10 starts per operator per
   hour).
 
