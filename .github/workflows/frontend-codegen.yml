@@ -35,8 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     # frontend_codegen unions the codegen script / generated types /
-    # package metadata with the Go swagger inputs (apiserver/cmd/models/
-    # jsonapi/docs) — any change on either side can produce drift.
+    # package metadata with the full Go surface (`go/**` + Makefile).
+    # Mirroring `go_swagger`'s breadth keeps the drift check honest:
+    # a backend tweak that shifts swagger.json gets noticed even when
+    # the producer's annotated handler file isn't itself touched.
     if: >-
       github.event_name != 'pull_request' ||
       needs.changes.outputs.frontend_codegen == 'true' ||
