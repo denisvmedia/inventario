@@ -93,9 +93,10 @@ type AuthAPI struct {
 	mfaRegistry             registry.UserMFASecretRegistry
 	// systemAdminGrantRegistry resolves the is_system_admin advisory
 	// claim baked into access tokens (#1784). The claim is FE-only —
-	// authorization happens server-side in RequireSystemAdmin, which
-	// queries the grant store directly on every admin request. May be
-	// nil in tests; issueAccessToken treats nil as "not an admin".
+	// authorization happens server-side in RequireSystemAdmin /
+	// RequireBackofficeAuth / RequirePlatformAdmin, which all query the
+	// grant store or backoffice_users directly on every admin request.
+	// May be nil in tests; issueAccessToken treats nil as "not an admin".
 	systemAdminGrantRegistry registry.SystemAdminGrantRegistry
 	blacklistService         services.TokenBlacklister
 	rateLimiter              services.AuthRateLimiter
@@ -103,17 +104,7 @@ type AuthAPI struct {
 	auditService             services.AuditLogger
 	emailService             services.EmailService
 	mfaService               *services.MFAService
-	// impersonationStore lets logout revoke the operator's GENUINE refresh
-	// token when the request runs during an impersonation session (#1750).
-	// During impersonation the refresh cookie holds the
-	// impersonationRefreshCookieMarker + <jti> sentinel rather than a real
-	// token; the admin's actual refresh token is held server-side in the
-	// return slot. Without this, a logout-during-impersonation would hash
-	// the marker, find no row, and silently leave the admin's real refresh
-	// token valid in the DB for its full lifetime. May be nil (tests /
-	// memory-mode bootstrap) — logout then falls back to the normal path.
-	impersonationStore services.ImpersonationStore
-	jwtSecret          []byte
+	jwtSecret                []byte
 }
 
 func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
@@ -650,50 +641,22 @@ func (api *AuthAPI) revokeRefreshToken(ctx context.Context, rawToken string) {
 	}
 }
 
-// revokeImpersonationRefreshToken handles the logout-during-impersonation
-// case (#1750). When cookieValue is an impersonation marker
-// (impersonationRefreshCookieMarker + <jti>) it resolves the return slot
-// by that jti, revokes the admin's GENUINE refresh token held in the slot
-// (slot.AdminRefreshTokenRaw), and deletes the slot so it is not orphaned.
-// Returns true when the cookie was a marker and this path handled it
-// (caller must NOT also run the plain revokeRefreshToken path), false when
-// the cookie is a normal refresh token the caller should revoke as before.
-//
-// Best-effort, mirroring the rest of logout: a missing store, a malformed
-// marker, an already-gone slot, or an empty captured token are all benign
-// — logout must still succeed. The genuine token is only ever revoked when
-// it is actually recoverable from a live slot; the slot is deleted on a
-// best-effort basis so a double logout/end is harmless.
-func (api *AuthAPI) revokeImpersonationRefreshToken(ctx context.Context, cookieValue string) bool {
+// revokeImpersonationRefreshTokenIfMarker historically resolved the
+// admin's genuine tenant refresh token from the legacy `imp:<jti>`
+// marker cookie at logout-during-impersonation. Phase 5 of issue
+// #1785 dropped the marker cookie entirely — cross-plane
+// impersonation captures + restores the operator's back-office cookie
+// instead, so the tenant logout cookie path no longer needs the
+// marker-aware branch. The function is kept as a no-op stub so
+// existing test fixtures that planted an `imp:` cookie (a malformed
+// shape under the new model) don't double-revoke a non-existent
+// refresh-token row. Returns true when the cookie is the legacy
+// marker shape so the caller skips its plain revoke path.
+func (api *AuthAPI) revokeImpersonationRefreshTokenIfMarker(cookieValue string) bool {
 	if !strings.HasPrefix(cookieValue, impersonationRefreshCookieMarker) {
 		return false
 	}
-	// The cookie carries an impersonation marker rather than a real token,
-	// so the plain revoke path would hash a non-token and find nothing.
-	// Treat the marker as handled regardless of what we can recover below
-	// — there is no real refresh token in this cookie for the caller to
-	// fall back on.
-	if api.impersonationStore == nil {
-		slog.Warn("Logout during impersonation: no impersonation store configured, admin refresh token not revoked")
-		return true
-	}
-	jti := strings.TrimPrefix(cookieValue, impersonationRefreshCookieMarker)
-	if jti == "" {
-		return true
-	}
-	slot, err := api.impersonationStore.Get(ctx, jti)
-	if err != nil {
-		// Slot already ended/expired/never recorded — nothing to revoke.
-		slog.Warn("Logout during impersonation: return slot not found", "jti", jti)
-		return true
-	}
-	if slot.AdminRefreshTokenRaw != "" {
-		api.revokeRefreshToken(ctx, slot.AdminRefreshTokenRaw)
-	}
-	if delErr := api.impersonationStore.Delete(ctx, jti); delErr != nil {
-		slog.Warn("Logout during impersonation: failed to delete return slot", "jti", jti, "error", delErr)
-	}
-	slog.Info("Impersonation session ended via logout", "jti", jti, "admin_id", slot.AdminUserID)
+	slog.Warn("Logout: ignoring legacy imp: marker cookie — cross-plane impersonation no longer plants it")
 	return true
 }
 
@@ -727,14 +690,12 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Revoke the refresh token from the database. During an impersonation
-	// session (#1750) the refresh cookie holds the impersonation marker
-	// (impersonationRefreshCookieMarker + <jti>) rather than a real token —
-	// revokeImpersonationRefreshToken detects that, resolves the return
-	// slot, and revokes the admin's GENUINE refresh token instead. A normal
-	// cookie takes the plain revokeRefreshToken path unchanged.
+	// Revoke the refresh token from the database. A legacy `imp:`
+	// marker cookie (pre-#1785 Phase 5) is silently dropped instead of
+	// being hashed against the refresh-token registry — the marker is
+	// not a real token and would never resolve to a row.
 	if cookie, err := r.Cookie(refreshTokenCookieName); err == nil {
-		if !api.revokeImpersonationRefreshToken(r.Context(), cookie.Value) {
+		if !api.revokeImpersonationRefreshTokenIfMarker(cookie.Value) {
 			api.revokeRefreshToken(r.Context(), cookie.Value)
 		}
 	}
@@ -878,15 +839,7 @@ type AuthParams struct {
 	AuditService             services.AuditLogger
 	EmailService             services.EmailService
 	MFAService               *services.MFAService
-	// ImpersonationStore is the same return-slot store the /admin
-	// impersonation endpoints use (#1750). logout consults it to revoke
-	// the operator's genuine refresh token when a session is ended via
-	// logout (rather than POST /admin/impersonation/end) from inside an
-	// impersonation session. Must be the SAME instance Admin() receives so
-	// the slot a `start` recorded is visible here. nil disables the
-	// impersonation-aware logout branch.
-	ImpersonationStore services.ImpersonationStore
-	JWTSecret          []byte
+	JWTSecret                []byte
 }
 
 // Auth sets up the authentication API routes.
@@ -904,7 +857,6 @@ func Auth(params AuthParams) func(r chi.Router) {
 		auditService:             params.AuditService,
 		emailService:             params.EmailService,
 		mfaService:               params.MFAService,
-		impersonationStore:       params.ImpersonationStore,
 		jwtSecret:                params.JWTSecret,
 	}
 

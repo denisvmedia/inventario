@@ -11,6 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -180,6 +181,161 @@ func checkBackofficeTokenBlacklist(ctx context.Context, claims jwt.MapClaims, bl
 		}
 	}
 	return nil
+}
+
+// AdminRoleRequiredCode is the JSON:API error code returned when a
+// back-office route gated on RequirePlatformAdmin is hit by a
+// back-office user whose role is not platform_admin (e.g. a
+// support_agent attempting to start an impersonation session). Kept as
+// a constant so the FE branch table and the tests reference the same
+// literal; lives in the `admin.*` namespace alongside
+// `admin.forbidden` for consistency.
+const AdminRoleRequiredCode = "admin.role_required"
+
+// RequirePlatformAdmin gates a back-office route subtree on a
+// platform_admin role. MUST run AFTER RequireBackofficeAuth so the
+// back-office identity is already in the context. A support_agent (the
+// read-mostly persona) reaching this point is the most common rejection
+// case — turning the start-impersonation surface into platform_admin
+// only is the primary use of this middleware in Phase 5 of issue #1785.
+//
+// Logs at Warn level on every block so a misconfigured FE that surfaces
+// the start-impersonation button to a support_agent is visible in
+// operator logs. Returns 403 with JSON:API code AdminRoleRequiredCode so
+// the FE can render specific copy ("ask a platform admin to do this")
+// rather than a generic "forbidden" toast.
+func RequirePlatformAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := appctx.BackofficeUserFromContext(r.Context())
+		if user == nil {
+			// RequireBackofficeAuth should have populated this. Reaching
+			// here means the middleware chain is wired wrong — fail
+			// closed with 401 rather than 403 so the operator notices.
+			slog.Warn("RequirePlatformAdmin: no back-office user in context — middleware chain misconfigured",
+				"path", r.URL.Path)
+			_ = unauthorizedError(w, r, ErrMissingUserContext)
+			return
+		}
+		if user.Role != models.BackofficeRolePlatformAdmin {
+			slog.Warn("RequirePlatformAdmin: access denied",
+				"admin_id", user.ID,
+				"role", string(user.Role),
+				"path", r.URL.Path,
+			)
+			_ = codedForbiddenError(w, r, ErrPlatformAdminRequired, AdminRoleRequiredCode)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RequireBackofficeAuthOrImpersonating gates a route subtree on EITHER
+// a back-office identity (the operator who is not currently
+// impersonating, or who has already ended the session) OR a request
+// running inside an active impersonation session (the access token
+// carries `imp=true`).
+//
+// The widened gate exists for GET /admin/impersonation/current: the FE
+// banner needs to read its own state from inside the impersonated
+// session, whose access token is a tenant JWT and so cannot satisfy
+// RequireBackofficeAuth. The handler re-validates the impersonation
+// claim itself, so this middleware only widens the gate — it does not
+// weaken any handler-side check.
+//
+// Implementation: peek at the bearer token's claims FIRST to decide
+// which branch to take, then dispatch — that way neither branch ever
+// commits a wasted error response. A `aud=backoffice` token goes
+// through RequireBackofficeAuth; a token with `imp=true` is validated
+// as an impersonation token (signed, non-expired, target loadable +
+// active) and admitted with the tenant user planted in context. A
+// token that matches neither shape gets a single 401.
+func RequireBackofficeAuthOrImpersonating(
+	jwtSecret []byte,
+	backofficeUserRegistry registry.BackofficeUserRegistry,
+	userRegistry registry.UserRegistry,
+	blacklist services.TokenBlacklister,
+) func(http.Handler) http.Handler {
+	backofficeGate := RequireBackofficeAuth(jwtSecret, backofficeUserRegistry, blacklist)
+	return func(next http.Handler) http.Handler {
+		gatedBackoffice := backofficeGate(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, peeked := peekTokenClaims(r, jwtSecret)
+			if !peeked {
+				_ = unauthorizedError(w, r, ErrMissingUserContext)
+				return
+			}
+			if aud, _ := claims["aud"].(string); aud == backofficeTokenAudience {
+				gatedBackoffice.ServeHTTP(w, r)
+				return
+			}
+			if !claimsAreImpersonation(claims) {
+				_ = unauthorizedError(w, r, ErrMissingUserContext)
+				return
+			}
+			serveImpersonatingRequest(w, r, claims, userRegistry, blacklist, next)
+		})
+	}
+}
+
+// peekTokenClaims returns the claims of the request's bearer token
+// without enforcing any plane-specific authorization. Used by the
+// OR-gate to dispatch to the right downstream validator. Returns
+// (nil, false) for missing/malformed headers and for forged signatures
+// — both cases the caller maps to 401 directly.
+func peekTokenClaims(r *http.Request, jwtSecret []byte) (jwt.MapClaims, bool) {
+	tokenString, err := extractTokenFromRequest(r)
+	if err != nil {
+		return nil, false
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return jwtSecret, nil
+	})
+	if err != nil || token == nil || !token.Valid {
+		return nil, false
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, false
+	}
+	return claims, true
+}
+
+// serveImpersonatingRequest validates the supplied claims as an
+// impersonation token's claims (signature already verified by the
+// caller), loads the target tenant user, and dispatches next with the
+// user + claims planted in context. On any validation failure writes
+// a 401 — the caller has already classified the token as an
+// impersonation attempt by the time it reaches here.
+func serveImpersonatingRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	claims jwt.MapClaims,
+	userRegistry registry.UserRegistry,
+	blacklist services.TokenBlacklister,
+	next http.Handler,
+) {
+	if blacklist != nil {
+		if err := checkTokenBlacklist(r.Context(), claims, blacklist); err != nil {
+			_ = unauthorizedError(w, r, ErrMissingUserContext)
+			return
+		}
+	}
+	userID, _ := claims["user_id"].(string)
+	if userID == "" {
+		_ = unauthorizedError(w, r, ErrMissingUserContext)
+		return
+	}
+	user, err := userRegistry.Get(r.Context(), userID)
+	if err != nil || !user.IsActive {
+		_ = unauthorizedError(w, r, ErrMissingUserContext)
+		return
+	}
+	ctx := appctx.WithUser(r.Context(), user)
+	ctx = appctx.WithJWTClaims(ctx, claims)
+	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
 // checkBackofficeUserBlacklistIat enforces that the token's iat is

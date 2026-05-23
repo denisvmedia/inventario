@@ -314,10 +314,19 @@ func ImpersonatorIDFromContext(ctx context.Context) *string {
 	return impersonatorFromContext(ctx)
 }
 
-// impersonatorFromContext returns the user ID stored in the `impersonated_by`
-// JWT claim when the `imp` claim is true, otherwise nil. Nil is the common
-// case: the vast majority of admin actions are performed without an active
-// impersonation session.
+// impersonatorFromContext returns the operator id stored in the
+// `impersonator_id` JWT claim when the `imp` claim is true, otherwise
+// nil. Nil is the common case: the vast majority of admin actions are
+// performed without an active impersonation session.
+//
+// The claim name was renamed from `impersonated_by` to
+// `impersonator_id` at #1785 Phase 5 (the audit-log column stays
+// `impersonated_by` because the column tracks "who was the
+// impersonator?" — the rename only applies to the wire-side claim).
+// The legacy claim is still read as a fallback so an in-flight
+// impersonation session minted before the upgrade is not orphaned on
+// rolling deploys; both names will never coexist in production after
+// the rollout window.
 func impersonatorFromContext(ctx context.Context) *string {
 	claims := appctx.JWTClaimsFromContext(ctx)
 	if claims == nil {
@@ -327,11 +336,13 @@ func impersonatorFromContext(ctx context.Context) *string {
 	if !imp {
 		return nil
 	}
-	by, ok := claims["impersonated_by"].(string)
-	if !ok || by == "" {
-		return nil
+	if by, ok := claims["impersonator_id"].(string); ok && by != "" {
+		return &by
 	}
-	return &by
+	if by, ok := claims["impersonated_by"].(string); ok && by != "" {
+		return &by
+	}
+	return nil
 }
 
 // clientIPFromRequest extracts the real client IP from the request, respecting

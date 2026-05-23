@@ -19,7 +19,8 @@ func TestInMemoryImpersonationStore_PutGetDelete(t *testing.T) {
 
 	slot := services.ImpersonationSlot{
 		JTI:            "jti-1",
-		AdminUserID:    "admin-1",
+		OperatorKind:   services.ImpersonationOperatorBackoffice,
+		OperatorUserID: "admin-1",
 		TargetUserID:   "target-1",
 		TargetTenantID: "tenant-1",
 		StartedAt:      time.Now(),
@@ -30,7 +31,8 @@ func TestInMemoryImpersonationStore_PutGetDelete(t *testing.T) {
 
 	got, err := store.Get(ctx, "jti-1")
 	c.Assert(err, qt.IsNil)
-	c.Assert(got.AdminUserID, qt.Equals, "admin-1")
+	c.Assert(got.OperatorUserID, qt.Equals, "admin-1")
+	c.Assert(got.OperatorKind, qt.Equals, services.ImpersonationOperatorBackoffice)
 	c.Assert(got.TargetUserID, qt.Equals, "target-1")
 
 	c.Assert(store.Delete(ctx, "jti-1"), qt.IsNil)

@@ -563,8 +563,10 @@ export type paths = {
             cookie?: never;
         };
         /**
-         * Read the active impersonation session (admin)
-         * @description Convenience read for the FE impersonation banner. Returns `active=false` with no other fields when the caller is not inside an impersonation session, and the target/admin/started_at/expires_at quartet when it is.
+         * Read the active impersonation session
+         * @description Convenience read for the FE impersonation banner. Returns `active=false` with no other fields when the
+         *     caller is not inside an impersonation session, and the target/operator/started_at/expires_at quartet when
+         *     it is. Reachable from EITHER the operator's back-office session OR the impersonated tenant session.
          */
         get: {
             parameters: {
@@ -593,15 +595,6 @@ export type paths = {
                         "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin or active impersonation session required */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["jsonapi.Errors"];
-                    };
-                };
             };
         };
         put?: never;
@@ -622,20 +615,17 @@ export type paths = {
         get?: never;
         put?: never;
         /**
-         * End an impersonation session (admin)
-         * @description Ends the active impersonation session: blacklists the impersonation access token, restores the operator's
-         *     own refresh-token cookie, and mints a fresh admin access token. Must be called with the impersonation
-         *     access token (the token carrying `imp=true`). The token's signature is always verified; an expired
-         *     impersonation token is still accepted here so an operator can end an idle session without re-logging in.
-         *     The request must also carry the httpOnly `refresh_token` cookie holding the `imp:<jti>` marker that
-         *     impersonation-start planted — proof the call comes from the operator's own browser. A stolen bearer
-         *     token alone, without that cookie, cannot be redeemed for admin credentials.
+         * End an impersonation session (back-office operator)
+         * @description Ends the active impersonation session: blacklists the impersonation access token, mints a fresh back-office
+         *     access token, and re-plants the operator's `backoffice_refresh_token` cookie (when one was captured at
+         *     start). Must be called with the impersonation access token (the token carrying `imp=true`). The token's
+         *     signature is always verified; an expired impersonation token is still accepted so an operator can end an
+         *     idle session without re-logging in.
          *     This endpoint is mounted WITHOUT the JWT middleware and self-validates the impersonation token off the
          *     Authorization header. Returns 401 when the token is missing, malformed, forged, or not an impersonation
          *     token (an authentication failure). Returns 422 with `admin.impersonate.not_active` when the token is a
-         *     validly-signed impersonation token but no active session backs it — the return slot is missing, the
-         *     slot's operator disagrees with the token, or the operator's marker refresh cookie is absent/mismatched.
-         *     A 500 is returned only on a genuine store or registry fault.
+         *     validly-signed impersonation token but no active session backs it — the return slot is missing or its
+         *     operator-of-record disagrees with the token. A 500 is returned only on a genuine store or registry fault.
          */
         post: {
             parameters: {
@@ -652,7 +642,7 @@ export type paths = {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["apiserver.LoginResponse"];
+                        "application/json": components["schemas"]["apiserver.BackofficeLoginResponse"];
                     };
                 };
                 /** @description Unauthorized - missing, malformed, forged, or non-impersonation token */
@@ -664,7 +654,7 @@ export type paths = {
                         "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Unprocessable Entity - no active impersonation session (missing/mismatched return slot or marker cookie) */
+                /** @description Unprocessable Entity - no active impersonation session (missing/mismatched return slot) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -1082,23 +1072,22 @@ export type paths = {
         get?: never;
         put?: never;
         /**
-         * Start an impersonation session (admin)
-         * @description Issues a short-lived impersonation access token for the target user and sets it as the active session.
-         *     The token carries `imp=true`, `impersonated_by=<adminID>`, and `is_system_admin=false`; it cannot be
-         *     refreshed and cannot start a nested impersonation. The admin's own refresh-token cookie is replaced
-         *     with a non-refreshable impersonation marker for the duration of the session; POST /admin/impersonation/end
-         *     restores the operator's original refresh cookie.
+         * Start an impersonation session (back-office operator)
+         * @description Issues a short-lived impersonation access token for the target tenant user on behalf of the calling back-office operator.
+         *     The token carries `imp=true`, `impersonator_id=<backoffice user id>`, `impersonator_type=backoffice_user`, and
+         *     `is_system_admin=false`; it cannot be refreshed and cannot start a nested impersonation. The operator's own
+         *     `backoffice_refresh_token` cookie is captured server-side at start and restored by POST /admin/impersonation/end.
          *     Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
          *     `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
          *     when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the
-         *     per-admin start rate limit (10/hour) is exceeded.
+         *     per-operator start rate limit (10/hour) is exceeded.
          */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Target user ID */
+                    /** @description Target tenant user ID */
                     userID: string;
                 };
                 cookie?: never;
@@ -1137,7 +1126,7 @@ export type paths = {
                         "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Forbidden - platform_admin role required */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -1146,7 +1135,7 @@ export type paths = {
                         "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Not Found - unknown user */
+                /** @description Not Found - unknown tenant user */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -1164,7 +1153,7 @@ export type paths = {
                         "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Too Many Requests - per-admin rate limit */
+                /** @description Too Many Requests - per-operator rate limit */
                 429: {
                     headers: {
                         [name: string]: unknown;
@@ -8816,18 +8805,26 @@ export type components = {
              */
             reason?: string;
         };
+        "apiserver.ImpersonationOperatorView": {
+            email?: string;
+            id?: string;
+            name?: string;
+            role?: string;
+        };
         "apiserver.ImpersonationStateResponse": {
             /** @description Active reports whether the caller is inside an impersonation session. */
             active?: boolean;
-            /**
-             * @description AdminUser is the operator who initiated the session — nil when
-             *     Active is false.
-             */
-            admin_user?: components["schemas"]["apiserver.ImpersonationUserView"];
             expires_at?: string;
+            /**
+             * @description Operator is the back-office operator who initiated the session —
+             *     nil when Active is false. Renamed from `admin_user` at #1785
+             *     Phase 5 to reflect that the operator-of-record now lives in the
+             *     back-office identity plane.
+             */
+            operator?: components["schemas"]["apiserver.ImpersonationOperatorView"];
             /** @description StartedAt / ExpiresAt bound the session — zero values when inactive. */
             started_at?: string;
-            /** @description TargetUser is the impersonated user — nil when Active is false. */
+            /** @description TargetUser is the impersonated tenant user — nil when Active is false. */
             target_user?: components["schemas"]["apiserver.ImpersonationUserView"];
         };
         "apiserver.ImpersonationUserView": {

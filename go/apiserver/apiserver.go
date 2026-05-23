@@ -374,7 +374,6 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			JWTSecret:                params.JWTSecret,
 			EmailService:             emailSvc,
 			MFAService:               mfaSvc,
-			ImpersonationStore:       impersonationStore,
 		}))
 
 		// Back-office auth plane (issue #1785, Phase 2). Completely
@@ -450,12 +449,13 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
 		r.With(userMiddlewares...).Route("/debug", Debug(params))
 		// Platform-administrative subtree (#1745 foundation; #1744 umbrella).
-		// The cross-tenant CRUD endpoints are gated by RequireBackofficeAuth
-		// (#1785 Phase 3) which validates a back-office JWT and rejects any
-		// tenant token. The legacy impersonation routes still rely on the
-		// tenant userMiddlewares + RequireSystemAdmin gate — see Admin()
-		// for the rationale. Mounting at the same level as /system keeps
-		// the surface tenant-agnostic.
+		// Every admin route — including the cross-plane impersonation
+		// start/end/current trio added by #1785 Phase 5 — is gated by the
+		// back-office auth plane: RequireBackofficeAuth validates a
+		// `aud=backoffice` JWT and rejects any tenant token, and
+		// /current widens the gate to also admit an active impersonation
+		// token so the FE banner can read its own state. Mounting at the
+		// same level as /system keeps the surface tenant-agnostic.
 		r.Route("/admin", Admin(AdminParams{
 			FactorySet:             params.FactorySet,
 			BackofficeUserRegistry: params.FactorySet.BackofficeUserRegistry,
@@ -471,13 +471,6 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			// refresh token when an impersonation session is ended via
 			// logout rather than POST /admin/impersonation/end (#1750).
 			ImpersonationStore: impersonationStore,
-			// UserMiddlewares is applied by Admin() to every admin route
-			// EXCEPT POST /admin/impersonation/end, which is deliberately
-			// mounted without JWTMiddleware so an operator can still end
-			// an impersonation session whose access token has expired —
-			// endImpersonation self-validates the (possibly expired) imp
-			// token. See Admin() for the full rationale.
-			UserMiddlewares: userMiddlewares,
 		}))
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives

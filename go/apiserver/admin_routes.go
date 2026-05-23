@@ -113,31 +113,21 @@ type AdminParams struct {
 	// (#1750). Zero falls back to the 30-min default; values above the
 	// 30-min ceiling are clamped down inside the handler.
 	ImpersonationTTL time.Duration
-
-	// UserMiddlewares is the standard authenticated-route middleware chain
-	// (JWT + RLS + RegistrySet + CSRF). Admin() applies it to every admin
-	// route EXCEPT POST /admin/impersonation/end. That one endpoint is
-	// mounted bare so it stays reachable after the impersonation access
-	// token has expired — JWTMiddleware would otherwise 401 an expired
-	// token before endImpersonation runs, stranding the operator and
-	// orphaning the return slot. endImpersonation self-validates the imp
-	// token (signature + imp=true), tolerating only an expired `exp`, and
-	// the server-side slot is the real authorization. When nil (tests that
-	// build the admin router in isolation), Admin() applies no middleware
-	// — callers must wrap the result themselves.
-	UserMiddlewares []func(http.Handler) http.Handler
 }
 
 // Admin returns the router configurator for /api/v1/admin/*. Mounted
 // from apiserver.go. Cross-tenant CRUD endpoints (tenants, users,
-// groups, members) are gated by RequireBackofficeAuth so the operator
-// must hold a back-office JWT (aud=backoffice, admin_id claim). The
-// legacy impersonation subtree (start/current/end) remains on the
-// tenant-side RequireSystemAdmin gate because the impersonation
-// lifecycle (return-slot restore of the operator's tenant refresh
-// cookie, fresh tenant access token mint) is intrinsically tied to a
-// tenant operator identity; a back-office redesign of impersonation is
-// deferred to a later phase of issue #1785.
+// groups, members) and the impersonation-start surface are gated by
+// the back-office auth plane: the operator must hold a back-office
+// JWT (aud=backoffice, admin_id claim), and start additionally
+// requires role=platform_admin (support_agent cannot impersonate).
+// GET /admin/impersonation/current accepts EITHER a back-office token
+// OR an impersonation token so the FE banner can read its state from
+// inside the impersonated session. POST /admin/impersonation/end is
+// mounted bare because it must remain reachable after the impersonation
+// access token expires (it self-validates the imp token). Phase 5 of
+// issue #1785 cut start/end over to the back-office plane (was on the
+// tenant-side RequireSystemAdmin gate).
 func Admin(params AdminParams) func(r chi.Router) {
 	// Fail fast on a misconfigured wiring: the #1749 group-membership
 	// endpoints dereference GroupService on every request, so a nil
@@ -204,19 +194,14 @@ func Admin(params AdminParams) func(r chi.Router) {
 		jwtSecret:    params.JWTSecret,
 		ttl:          params.ImpersonationTTL,
 	}
-	// Resolve the grants registry from the FactorySet — RequireSystemAdmin
-	// and RequireSystemAdminOrImpersonating are no longer static funcs
-	// (#1784) but instances bound to the deployment's grant store. Used
-	// by the legacy impersonation subtree below; the back-office gate
-	// replaces them for the CRUD subtree (#1785 Phase 3). The FactorySet
-	// nil-guard above runs before this dereference, so a missing wiring
-	// fails at startup with a clear message rather than NPE'ing here.
-	// A nil SystemAdminGrantRegistry inside a non-nil FactorySet is caught
-	// downstream by RequireSystemAdmin's own nil-check, which panics at
-	// construction time — fail-fast on a misconfigured deployment rather
-	// than letting the process boot and 500-on-every-admin-request.
-	requireSystemAdmin := RequireSystemAdmin(params.FactorySet.SystemAdminGrantRegistry)
-	requireSystemAdminOrImpersonating := RequireSystemAdminOrImpersonating(params.FactorySet.SystemAdminGrantRegistry)
+	// #1785 Phase 5 removed the legacy `RequireSystemAdmin` gate from
+	// every admin route: the CRUD subtree is gated by RequireBackofficeAuth
+	// (Phase 3), impersonation/start is gated by RequirePlatformAdmin
+	// inside the back-office group (this phase), and
+	// /admin/impersonation/current uses RequireBackofficeAuthOrImpersonating.
+	// The grants registry still exists (#1784) — it backs the per-handler
+	// `is_system_admin` advisory flag on /auth/me — just not the admin
+	// routing gate.
 
 	backofficeAuth := RequireBackofficeAuth(
 		params.JWTSecret,
@@ -224,70 +209,79 @@ func Admin(params AdminParams) func(r chi.Router) {
 		params.Blacklist,
 	)
 
+	currentGate := RequireBackofficeAuthOrImpersonating(
+		params.JWTSecret,
+		params.BackofficeUserRegistry,
+		params.FactorySet.UserRegistry,
+		params.Blacklist,
+	)
+
 	return func(r chi.Router) {
-		// POST /admin/impersonation/end is mounted FIRST and OUTSIDE the
-		// authenticated-middleware group on purpose. JWTMiddleware (part of
-		// UserMiddlewares) rejects an expired access token with 401 before
-		// any handler runs — which would make `end` unreachable the moment
-		// the (≤30-min) impersonation token lapses, stranding the operator
-		// on a re-login and orphaning the return slot until it is
-		// TTL-pruned. endImpersonation therefore self-validates the imp
-		// token straight off the Authorization header: it verifies the
-		// signature and the `imp=true` claim and tolerates ONLY an expired
-		// `exp`. The jti-keyed server-side slot plus the
-		// `slot.AdminUserID == impersonated_by` assertion are the real
-		// authorization — a forged/garbage token fails signature
-		// verification, and an expired NON-impersonation token fails the
-		// imp check, so neither is newly admitted. See endImpersonation.
+		// POST /admin/impersonation/end is mounted FIRST and OUTSIDE
+		// every auth-middleware group on purpose. Any auth middleware
+		// would reject an expired access token with 401 before the
+		// handler runs — which would make `end` unreachable the moment
+		// the (≤30-min) impersonation token lapses, stranding the
+		// operator on a re-login and orphaning the return slot until
+		// it is TTL-pruned. endImpersonation therefore self-validates
+		// the imp token straight off the Authorization header: it
+		// verifies the signature and the `imp=true` +
+		// non-empty-impersonator_id claims and tolerates ONLY an
+		// expired `exp`. The jti-keyed server-side slot plus the
+		// `slot.OperatorUserID == impersonator_id` +
+		// `slot.OperatorKind == ImpersonationOperatorBackoffice`
+		// assertions are the real authorization — a forged/garbage
+		// token fails signature verification, and an expired
+		// NON-impersonation token fails the imp check, so neither is
+		// newly admitted. See endImpersonation.
 		r.Post("/impersonation/end", impersonationAPI.endImpersonation)
 
+		// GET /admin/impersonation/current sits on a WIDER gate than
+		// every other admin route: the FE banner needs to read its own
+		// state from inside the impersonated session whose access token
+		// is a tenant JWT and so cannot satisfy RequireBackofficeAuth.
+		// RequireBackofficeAuthOrImpersonating peeks at the bearer
+		// token's `aud` claim and dispatches: a back-office token goes
+		// through the back-office gate (per-request user load, blacklist
+		// check), an impersonation token (`imp=true`) is validated as
+		// a tenant JWT with the target loaded into context. A token
+		// that is neither shape is a 401.
+		r.With(currentGate).Get("/impersonation/current", impersonationAPI.currentImpersonation)
+
 		// Cross-tenant CRUD subtree (#1785 Phase 3): gated by the
-		// back-office auth plane. RequireBackofficeAuth parses + validates
-		// a `aud=backoffice` JWT and attaches the back-office identity to
-		// the context via appctx.WithBackofficeUser. Handlers read it back
-		// via appctx.AdminActorFromContext for audit-row population.
-		// Distinct from the impersonation group below — RequireBackofficeAuth
-		// REJECTS tenant tokens (and vice versa), so the two groups are
-		// mutually exclusive on the wire.
+		// back-office auth plane. RequireBackofficeAuth parses +
+		// validates a `aud=backoffice` JWT and attaches the back-office
+		// identity to the context via appctx.WithBackofficeUser.
+		// Handlers read it back via appctx.AdminActorFromContext for
+		// audit-row population. RequireBackofficeAuth REJECTS tenant
+		// tokens (and vice versa).
 		r.Group(func(r chi.Router) {
 			r.Use(backofficeAuth)
 			adminBackofficeRoutes(r, tenantsAPI, usersAPI, groupsAPI, groupMembersAPI, impersonationAPI)
-		})
-
-		// Legacy impersonation subtree stays on the tenant-side JWT +
-		// RequireSystemAdmin gate. The impersonation start/end lifecycle
-		// captures and restores the operator's tenant refresh cookie and
-		// mints a tenant access token in `restoreAdminSession`; none of
-		// that has a back-office analogue yet. Redesign is deferred to a
-		// later phase of issue #1785. UserMiddlewares may be nil in
-		// isolated unit tests, in which case no middleware is applied and
-		// the caller is responsible for wrapping.
-		r.Group(func(r chi.Router) {
-			for _, mw := range params.UserMiddlewares {
-				r.Use(mw)
-			}
-			adminImpersonationRoutes(r, requireSystemAdmin, requireSystemAdminOrImpersonating, impersonationAPI)
 		})
 	}
 }
 
 // adminBackofficeRoutes registers every cross-tenant admin route that
-// is gated by RequireBackofficeAuth (issue #1785, Phase 3). The legacy
-// impersonation subtree lives in adminImpersonationRoutes — those routes
-// retain the tenant JWT + RequireSystemAdmin gate until a back-office
-// redesign of the impersonation lifecycle lands. Extracted from Admin()
-// so that closure stays under the funlen budget.
+// is gated by RequireBackofficeAuth (issue #1785, Phase 3+5). Extracted
+// from Admin() so that closure stays under the funlen budget.
 //
 // Every handler in this group can assume appctx.AdminActorFromContext
 // returns non-nil — RequireBackofficeAuth populates it before
 // dispatching.
+//
+// POST /admin/users/{userID}/impersonate adds a deeper role check via
+// RequirePlatformAdmin: support_agent is read-mostly and may not start
+// an impersonation session. The check is applied only on that one
+// route so support_agent retains read access to every other admin
+// surface.
 func adminBackofficeRoutes(
 	r chi.Router,
 	tenantsAPI *adminTenantsAPI,
 	usersAPI *adminUsersAPI,
 	groupsAPI *adminGroupsAPI,
 	groupMembersAPI *adminGroupMembersAPI,
-	_ *adminImpersonationAPI, // reserved for a future back-office impersonation surface
+	impersonationAPI *adminImpersonationAPI,
 ) {
 	r.Get("/_ping", adminPing)
 
@@ -325,42 +319,14 @@ func adminBackofficeRoutes(
 	r.Post("/groups/{groupID}/members", groupMembersAPI.addMember)
 	r.Delete("/groups/{groupID}/members/{userID}", groupMembersAPI.removeMember)
 	r.Patch("/groups/{groupID}/members/{userID}", groupMembersAPI.updateMemberRole)
-}
 
-// adminImpersonationRoutes registers the #1750 impersonation start /
-// current endpoints. These intentionally stay on the tenant JWT +
-// RequireSystemAdmin gate (rather than RequireBackofficeAuth): the
-// impersonation lifecycle captures and restores the operator's tenant
-// refresh cookie and mints a tenant access token in
-// restoreAdminSession, none of which has a back-office analogue yet.
-// A back-office-native impersonation surface is a follow-up of issue
-// #1785.
-//
-// POST /impersonation/end is registered separately by Admin() because
-// it must remain reachable AFTER the (≤30 min) impersonation access
-// token expires — see Admin() for the full rationale.
-func adminImpersonationRoutes(
-	r chi.Router,
-	requireSystemAdmin func(http.Handler) http.Handler,
-	requireSystemAdminOrImpersonating func(http.Handler) http.Handler,
-	impersonationAPI *adminImpersonationAPI,
-) {
-	// Starting an impersonation session is a privileged operation — it
-	// stays behind the strict gate. The nested-impersonation guard in
-	// the handler rejects a request already inside an impersonation
-	// session.
-	r.With(requireSystemAdmin).Post("/users/{userID}/impersonate", impersonationAPI.startImpersonation)
-
-	// #1750: GET /admin/impersonation/current must be reachable from
-	// INSIDE an impersonation session, whose access token deliberately
-	// carries is_system_admin=false — the strict RequireSystemAdmin gate
-	// would reject it. The wider RequireSystemAdminOrImpersonating gate
-	// admits both a genuine admin and an active (non-expired) impersonation
-	// token; the handler re-validates the impersonation claim. Unlike
-	// `end`, `current` is a harmless read and is fine to keep behind
-	// JWTMiddleware — an expired token simply means the FE banner reads
-	// inactive, which is the correct answer.
-	r.With(requireSystemAdminOrImpersonating).Get("/impersonation/current", impersonationAPI.currentImpersonation)
+	// #1785 Phase 5: impersonation-start is gated on platform_admin —
+	// support_agent (the read-mostly persona) cannot borrow a tenant
+	// identity. The nested-impersonation guard in the handler is
+	// defence-in-depth: RequireBackofficeAuth already rejects
+	// impersonation (tenant) tokens, so an active impersonation context
+	// at the handler would mean the gate was bypassed.
+	r.With(RequirePlatformAdmin).Post("/users/{userID}/impersonate", impersonationAPI.startImpersonation)
 }
 
 // parseAdminSortAndOrder reconciles the dual sort conventions the
