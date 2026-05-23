@@ -112,4 +112,25 @@ var (
 	// callers branch on a single identity. The CLI exposes the override
 	// via `--allow-zero`; the HTTP path will never expose it. #1745.
 	ErrLastSystemAdmin = errx.NewSentinel("cannot revoke the last system administrator")
+
+	// ErrBackofficeUserNotFound is returned by BackofficeUserRegistry
+	// lookups when no row matches the supplied id / email. Distinct
+	// sentinel from ErrNotFound so callers in the back-office plane
+	// (issue #1785) can render messages targeted at platform operators
+	// without conflating with regular user/tenant misses.
+	ErrBackofficeUserNotFound = errx.NewSentinel("backoffice user not found", ErrNotFound)
+
+	// ErrBackofficeEmailAlreadyExists is returned by
+	// BackofficeUserRegistry.Create when the lowercased email collides
+	// with an existing row. Email is unique platform-wide for back-office
+	// identities (no tenant_id to partition on), so this is the canonical
+	// duplicate-create error for that table.
+	ErrBackofficeEmailAlreadyExists = errx.NewSentinel("backoffice user email already exists", ErrEmailAlreadyExists)
+
+	// ErrInvalidBackofficeRole is returned by BackofficeUserRegistry.Create
+	// / Update when the supplied role is not one of the closed-set values
+	// declared on models.BackofficeRole. The model's ValidateWithContext
+	// catches this on the happy path; the registry-level check is a
+	// defense-in-depth guard for callers that skip model validation.
+	ErrInvalidBackofficeRole = errx.NewSentinel("invalid backoffice role")
 )

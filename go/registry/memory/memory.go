@@ -62,6 +62,11 @@ func NewFactorySet() *registry.FactorySet {
 	fs.LoginEventRegistry = NewLoginEventRegistry()
 	fs.UserMFASecretRegistry = NewUserMFASecretRegistry()
 	fs.AuditLogRegistry = NewAuditLogRegistry()
+	// Back-office identities (issue #1785) — platform-operator users
+	// that live OUTSIDE the tenant model. Wired on FactorySet only;
+	// not part of the per-request Set since back-office identities are
+	// cross-cutting infra, not user-aware data.
+	fs.BackofficeUserRegistry = NewBackofficeUserRegistry()
 	groupReg := NewLocationGroupRegistry()
 	fs.LocationGroupRegistry = groupReg
 	membershipReg := NewGroupMembershipRegistry()

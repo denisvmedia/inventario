@@ -1111,6 +1111,51 @@ type AdminTenantListItem struct {
 	GroupCount int
 }
 
+// BackofficeUserRegistry persists platform-operator identities used by
+// the back-office auth plane (issue #1785). Unlike UserRegistry, this
+// table has NO tenant_id and NO RLS — back-office users live OUTSIDE
+// the tenant model and are gated entirely at the application layer.
+//
+// Phase 1 surfaces only the storage primitives the bootstrap CLI needs;
+// later phases add the HTTP login flow + role-aware authorisation on top
+// of these methods. Two design choices worth pinning:
+//
+//  1. GetByEmail is case-insensitive. The registry layer lowercases the
+//     email on every read and every write, and the postgres UNIQUE INDEX
+//     is defined over the column (not lower(email), which the migrator
+//     annotations cannot express). Bypass paths that INSERT a mixed-case
+//     email would let duplicates through, so callers MUST go through
+//     this interface for create/update/lookup.
+//
+//  2. SetPasswordHash and UpdateLastLogin are isolated from Update so
+//     the bcrypt hash never gets exposed through a generic Update path
+//     that the future HTTP layer might call with a partially populated
+//     struct. The same shape worked for refresh tokens (RevokeByID /
+//     UpdateLastUsedAt) and is the cheapest way to keep the write-path
+//     surface explicit.
+type BackofficeUserRegistry interface {
+	Registry[models.BackofficeUser]
+
+	// GetByEmail returns the back-office user whose lowercased email
+	// matches the lowercased argument. Returns ErrBackofficeUserNotFound
+	// when no row exists.
+	GetByEmail(ctx context.Context, email string) (*models.BackofficeUser, error)
+
+	// SetPasswordHash overwrites only the password_hash column on the
+	// target row, leaving every other field untouched. Keeps the bcrypt
+	// hash out of any generic Update call site.
+	SetPasswordHash(ctx context.Context, id, hash string) error
+
+	// UpdateLastLogin stamps last_login_at on the target row. Called by
+	// the Phase 2 login flow on each successful authentication.
+	UpdateLastLogin(ctx context.Context, id string, at time.Time) error
+
+	// SetActive flips is_active to the requested value. Used by the
+	// future back-office admin UI; in Phase 1 only the bootstrap CLI
+	// exercises this indirectly via the initial-user create path.
+	SetActive(ctx context.Context, id string, active bool) error
+}
+
 // AuditLogRegistry manages security-relevant event records for compliance and debugging.
 type AuditLogRegistry interface {
 	Registry[models.AuditLog]
