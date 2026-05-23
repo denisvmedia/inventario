@@ -23,15 +23,43 @@ permissions:
   packages: write
 
 jobs:
+  # Resolve which ecosystems this PR touches. Skipped on PR `closed` events —
+  # the cleanup job below has its own predicate and doesn't need this output.
+  changes:
+    name: Detect changes
+    if: github.event_name != 'pull_request' || github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      image_inputs: ${{ steps.filter.outputs.image_inputs }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      e2e: ${{ steps.filter.outputs.e2e }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: .github/filters.yml
+
   build:
     name: Build ${{ matrix.platform }}
+    needs: changes
     # Skip on PR close (cleanup job handles that). Skip on fork PRs — their
-    # restricted GITHUB_TOKEN can't push to GHCR.
+    # restricted GITHUB_TOKEN can't push to GHCR. On PRs from the same repo,
+    # also skip when no image input changed (docs-only / helm-only / etc.) —
+    # the `ci` filter forces it back on whenever a workflow file changes.
     if: |
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' &&
        github.event.action != 'closed' &&
-       github.event.pull_request.head.repo.full_name == github.repository)
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       (needs.changes.outputs.image_inputs == 'true' ||
+        needs.changes.outputs.ci == 'true'))
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -120,13 +148,22 @@ jobs:
 
   darwin-binary:
     name: Build darwin/arm64 binary for e2e
-    # Same skip-condition as build — produced solely for the macOS e2e lane,
-    # which doesn't run for fork PRs or on PR close.
+    needs: changes
+    # The only consumer is e2e-tests-macos (webkit). That lane runs on
+    # PRs only when the diff touches `frontend`, `e2e`, or `ci`, so this
+    # job mirrors the same gate — a backend / k8s / Dockerfile-only PR
+    # would otherwise spend ~3 minutes building a binary that nothing
+    # downstream actually consumes. Push and tag events still build the
+    # binary unconditionally (release / cache warming). Fork PRs and the
+    # PR-close event are still skipped via the existing predicates.
     if: |
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' &&
        github.event.action != 'closed' &&
-       github.event.pull_request.head.repo.full_name == github.repository)
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       (needs.changes.outputs.frontend == 'true' ||
+        needs.changes.outputs.e2e == 'true' ||
+        needs.changes.outputs.ci == 'true'))
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || 'edge' }}

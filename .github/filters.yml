@@ -1,0 +1,113 @@
+# Path filters for conditional CI execution on pull requests.
+#
+# Each top-level key is a filter consumed by a `dorny/paths-filter@v3` step
+# in one or more workflow files. Pattern semantics are picomatch — `**` for
+# any depth, repo-relative paths. **Negation (`!`) patterns are intentionally
+# avoided**: `dorny/paths-filter`'s default `predicate-quantifier: 'some'`
+# makes a single `!` match every non-matching file, which would silently
+# evaluate every filter to `true` and defeat the whole optimization.
+#
+# Pull requests skip jobs whose ecosystem filter is `false`. Pushes to
+# `master` and pushes of `v*` tags always run the full pipeline (the
+# workflow `if:` clauses include `github.event_name != 'pull_request'`).
+#
+# Any change inside `.github/workflows/`, `.github/actions/`, or this file
+# itself sets `ci=true`, which every workflow ORs into its gate — when CI
+# itself is being edited we run everything (false-positive cost is preferred
+# over a silently-skipped check).
+#
+# A doc-only change inside one of these subtrees (e.g. `go/README.md`) will
+# match the ecosystem filter and trigger that ecosystem's checks. The
+# false-positive cost (one extra run of cheap tests on a rare path) is
+# preferred over the maintenance and fragility of correctly-composed
+# negation patterns.
+#
+# Full design and decision tables: devdocs/ci/conditional-execution.md.
+
+# ---- Backend (Go) ---------------------------------------------------------
+# Go sources, root-level cmd helpers, linter config, build glue, release
+# config. Everything under go/ is included — including `go/docs/**` (the
+# generated swagger output) because regenerating docs is what the swagger
+# drift workflow tests, and we want it gated on the same surface.
+go:
+  - 'go/**'
+  - 'cmd/**'
+  - '.golangci.yml'
+  - 'Makefile'
+  - '.goreleaser.yaml'
+
+# ---- Swagger / OpenAPI surface -------------------------------------------
+# `swag init` walks every package transitively imported by the annotated
+# handlers — so a change to `go/services/foo.go` that flips a response
+# type can shift `swagger.json` even though no handler file moved. To
+# avoid the drift check silently skipping that case, this filter mirrors
+# the full Go surface.
+go_swagger:
+  - 'go/**'
+  - 'Makefile'
+
+# ---- Frontend (React) ----------------------------------------------------
+# Anything under frontend/. Includes the Makefile because it carries
+# frontend targets too.
+frontend:
+  - 'frontend/**'
+  - 'Makefile'
+
+# ---- Frontend codegen drift ----------------------------------------------
+# OpenAPI -> TypeScript regeneration is driven by frontend/scripts/codegen.mjs
+# and consumes go/docs/swagger.json (regenerated from the Go surface).
+# Trigger the drift check when either the generator or any Go file changes.
+frontend_codegen:
+  - 'frontend/scripts/codegen.mjs'
+  - 'frontend/package*.json'
+  - 'frontend/src/types/api.d.ts'
+  - 'go/**'
+  - 'Makefile'
+
+# ---- Frontend i18n drift -------------------------------------------------
+# Keys extracted from src/ vs. committed locale catalogs.
+frontend_i18n:
+  - 'frontend/src/**'
+  - 'frontend/i18next.config.ts'
+  - 'frontend/scripts/i18n-check.mjs'
+  - 'frontend/package*.json'
+
+# ---- E2E suite -----------------------------------------------------------
+# Test code and its compose override. The e2e workflow itself ORs `e2e`
+# into its browser-matrix decision so an e2e-only PR runs the full matrix
+# (test changes can themselves cross browser boundaries).
+e2e:
+  - 'e2e/**'
+  - 'docker-compose.e2e.yaml'
+
+# ---- Docker image inputs -------------------------------------------------
+# Everything that requires a fresh production image to be built. Includes:
+#   - the obvious image-defining files (Dockerfile, compose, go/, frontend/,
+#     scripts/, init-scripts/, Makefile, .goreleaser.yaml)
+#   - `e2e/**` and `docker-compose.e2e.yaml` because e2e-tests waits for
+#     docker.yml to publish a sha-<HEAD> image; if docker.yml is skipped
+#     the consumer will fail at `docker pull`. Aligning the gates avoids
+#     the silent-deadlock failure mode.
+#   - `k8s/dev/**` because kind-smoke-test consumes the same image; same
+#     deadlock risk if the gates disagree.
+image_inputs:
+  - 'Dockerfile'
+  - '.dockerignore'
+  - 'docker-compose*.yaml'
+  - 'go/**'
+  - 'frontend/**'
+  - 'scripts/**'
+  - 'init-scripts/**'
+  - 'Makefile'
+  - '.goreleaser.yaml'
+  - 'e2e/**'
+  - 'k8s/dev/**'
+
+# ---- CI self-reference ---------------------------------------------------
+# Any change to a workflow file, a composite action, or this filter file
+# forces the full pipeline back on. Conservative on purpose — when CI is
+# being edited we want every check to confirm the edit didn't break it.
+ci:
+  - '.github/workflows/**'
+  - '.github/actions/**'
+  - '.github/filters.yml'
