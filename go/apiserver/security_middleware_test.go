@@ -78,6 +78,99 @@ func TestValidateNoUserProvidedTenantID_AdminSubtreeQueryExemption(t *testing.T)
 	}
 }
 
+// TestValidateNoUserProvidedTenantID_RejectTenantBodyCamelCaseVariants
+// verifies the camelCase coverage added for #1782: a body containing a
+// JSON key such as "tenantId" or "tenantID" lowercases to "tenantid",
+// which earlier slipped past the blacklist (the pre-fix patterns only
+// matched "tenant_id" and quoted "tenant"). The fix adds the quoted
+// "tenantid" substring so JSON keys are caught while bare-word free text
+// remains untouched. The test also keeps a positive case for the load-
+// bearing snake_case "tenant_id" pattern so a future refactor cannot
+// silently drop it.
+func TestValidateNoUserProvidedTenantID_RejectTenantBodyCamelCaseVariants(t *testing.T) {
+	downstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := apiserver.ValidateNoUserProvidedTenantID()(downstream)
+
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		wantStatus  int
+	}{
+		{
+			name:       "camelCase tenantId json key is rejected",
+			body:       `{"tenantId":"tenant-xyz"}`,
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "camelCase tenantID json key is rejected",
+			body:       `{"tenantID":"tenant-xyz"}`,
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "mixed case TenantId json key is rejected case-insensitively",
+			body:       `{"TenantId":"tenant-xyz"}`,
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "whitespace between key and colon is still rejected",
+			body:       `{"tenantId" : "tenant-xyz"}`,
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "snake_case tenant_id json key is still rejected",
+			body:       `{"tenant_id":"tenant-xyz"}`,
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:        "snake_case tenant_id form-encoded body is still rejected",
+			contentType: "application/x-www-form-urlencoded",
+			body:        `tenant_id=tenant-xyz`,
+			wantStatus:  http.StatusForbidden,
+		},
+		{
+			name:       "clean body without tenant fields is allowed",
+			body:       `{"name":"my group"}`,
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "bare word tenantid in free text is not flagged",
+			body:       `{"description":"contains the word tenantid as free text"}`,
+			wantStatus: http.StatusOK,
+		},
+		{
+			// The double-quoted "\"tenantid\"" pattern is the only camelCase
+			// substring added — see the rationale in rejectTenantBody's doc
+			// comment. A single-quoted occurrence inside a description-style
+			// string must NOT trip the check; this guards against a future
+			// reflex to mirror the new pattern with a 'tenantid' substring.
+			name:       "single-quoted tenantid inside a json string value is not flagged",
+			body:       `{"description":"contains 'tenantid' in single quotes"}`,
+			wantStatus: http.StatusOK,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/groups",
+				strings.NewReader(tc.body))
+			contentType := tc.contentType
+			if contentType == "" {
+				contentType = "application/json"
+			}
+			req.Header.Set("Content-Type", contentType)
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			c.Assert(rr.Code, qt.Equals, tc.wantStatus)
+		})
+	}
+}
+
 // TestValidateNoUserProvidedTenantID_AdminSubtreeBodyCheckEnforced verifies
 // that the request-body "tenant_id" check stays in force for admin paths —
 // the #1748 exemption relaxes the query-parameter check ONLY.
