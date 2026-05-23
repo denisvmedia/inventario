@@ -1086,7 +1086,7 @@ func (api *groupsAPI) getInviteInfo(w http.ResponseWriter, r *http.Request) {
 
 // acceptInvite accepts an invite and joins the group.
 // @Summary Accept invite
-// @Description Accepts a single-use invite link and joins the group as a user. Requires authentication.
+// @Description Accepts a single-use invite link and joins the group as a user. Requires authentication. If the invite has an invitee email, the user's email must match (case-insensitive); else 422 with code `invite.email_mismatch`.
 // @Tags invites
 // @Accept json-api
 // @Produce json-api
@@ -1094,7 +1094,7 @@ func (api *groupsAPI) getInviteInfo(w http.ResponseWriter, r *http.Request) {
 // @Success 201 {object} jsonapi.GroupMembershipResponse "Created"
 // @Failure 401 {string} string "Unauthorized"
 // @Failure 404 {object} jsonapi.Errors "Invite not found"
-// @Failure 422 {object} jsonapi.Errors "Invite expired, already used, or user already a member"
+// @Failure 422 {object} jsonapi.Errors "Invite expired, already used, user already a member, or user email does not match invitee email"
 // @Router /invites/{token}/accept [post].
 func (api *groupsAPI) acceptInvite(w http.ResponseWriter, r *http.Request) {
 	token := chi.URLParam(r, "token")
@@ -1109,7 +1109,7 @@ func (api *groupsAPI) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	membership, err := api.groupService.AcceptInvite(r.Context(), token, user.ID, user.TenantID)
+	membership, err := api.groupService.AcceptInvite(r.Context(), token, user.ID, user.Email, user.TenantID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

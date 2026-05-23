@@ -7609,7 +7609,7 @@ export type paths = {
         put?: never;
         /**
          * Accept invite
-         * @description Accepts a single-use invite link and joins the group as a user. Requires authentication.
+         * @description Accepts a single-use invite link and joins the group as a user. Requires authentication. If the invite has an invitee email, the user's email must match (case-insensitive); else 422 with code `invite.email_mismatch`.
          */
         post: {
             parameters: {
@@ -7650,7 +7650,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Invite expired, already used, or user already a member */
+                /** @description Invite expired, already used, user already a member, or user email does not match invitee email */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -7705,7 +7705,7 @@ export type paths = {
                         };
                     };
                 };
-                /** @description Bad Request - invalid body, expired/used invite, or invalid password */
+                /** @description Bad Request - invalid body, expired/used invite, invalid password, or registration email doesn't match invitee email */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -8435,6 +8435,11 @@ export type components = {
              *     (the invite itself vouches for the user). The token is NOT consumed
              *     here — the caller must POST /api/v1/invites/{token}/accept after
              *     logging in. See issue #1219 §7 and #1285.
+             *
+             *     When the invite carries `invitee_email` (the #1533 email-flow path),
+             *     the registration `email` must match it case-insensitively, otherwise
+             *     the request is rejected with 400. Legacy token-only invites
+             *     (invitee_email == nil) keep working unchanged. See #1221.
              */
             invite_token?: string;
             name?: string;

@@ -576,14 +576,14 @@ func TestGroupService_InviteFlow(t *testing.T) {
 	c.Assert(fetchedInvite.ID, qt.Equals, invite.ID)
 	c.Assert(fetchedGroup.ID, qt.Equals, group.ID)
 
-	// Accept invite
-	membership, err := svc.AcceptInvite(ctx, invite.Token, "user-2", "tenant-1")
+	// Accept invite (legacy token-only invite — userEmail is ignored).
+	membership, err := svc.AcceptInvite(ctx, invite.Token, "user-2", "", "tenant-1")
 	c.Assert(err, qt.IsNil)
 	c.Assert(membership.MemberUserID, qt.Equals, "user-2")
 	c.Assert(membership.Role, qt.Equals, models.GroupRoleUser)
 
 	// Cannot accept the same invite again
-	_, err = svc.AcceptInvite(ctx, invite.Token, "user-3", "tenant-1")
+	_, err = svc.AcceptInvite(ctx, invite.Token, "user-3", "", "tenant-1")
 	c.Assert(err, qt.IsNotNil)
 
 	// Verify user-2 is now a member
@@ -641,8 +641,8 @@ func TestGroupService_RevokeInviteForGroup_CannotRevokeUsed(t *testing.T) {
 	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, "user-1", 24*time.Hour)
 	c.Assert(err, qt.IsNil)
 
-	// Accept the invite
-	_, err = svc.AcceptInvite(ctx, invite.Token, "user-2", "tenant-1")
+	// Accept the invite (legacy token-only invite — userEmail is ignored).
+	_, err = svc.AcceptInvite(ctx, invite.Token, "user-2", "", "tenant-1")
 	c.Assert(err, qt.IsNil)
 
 	// Cannot revoke a used invite
@@ -738,7 +738,7 @@ func TestGroupService_EnsureDefaultGroup_AcceptInviteAsBrandNewUser(t *testing.T
 	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, owner.ID, 24*time.Hour)
 	c.Assert(err, qt.IsNil)
 
-	_, err = svc.AcceptInvite(ctx, invite.Token, invitee.ID, "tenant-1")
+	_, err = svc.AcceptInvite(ctx, invite.Token, invitee.ID, invitee.Email, "tenant-1")
 	c.Assert(err, qt.IsNil)
 
 	stored, err := users.Get(ctx, invitee.ID)
@@ -1020,9 +1020,83 @@ func TestGroupService_AcceptInvite_UsesInviteRole(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	mem, err := svc.AcceptInvite(ctx, invite.Token, "user-2", "tenant-1")
+	// The invite was minted with invitee_email = email, so the accepting
+	// user must supply that same address (#1221).
+	mem, err := svc.AcceptInvite(ctx, invite.Token, "user-2", email, "tenant-1")
 	c.Assert(err, qt.IsNil)
 	c.Assert(mem.Role, qt.Equals, models.GroupRoleViewer)
+}
+
+// TestGroupService_AcceptInvite_EmailMismatchRejected — #1221: an
+// invite minted via the email-flow (invitee_email != nil) refuses an
+// AcceptInvite call from a different address. No membership is created
+// and the invite stays unconsumed.
+func TestGroupService_AcceptInvite_EmailMismatchRejected(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
+	c.Assert(err, qt.IsNil)
+
+	inviteeEmail := "intended@example.com"
+	invite, err := svc.CreateInviteWithEmail(
+		ctx, "tenant-1", group.ID, "user-1",
+		models.GroupRoleUser, &inviteeEmail, 0,
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = svc.AcceptInvite(ctx, invite.Token, "user-2", "someone-else@example.com", "tenant-1")
+	c.Assert(err, qt.ErrorIs, services.ErrInviteEmailMismatch)
+	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-2"), qt.IsFalse,
+		qt.Commentf("rejected accept must not create a membership"))
+}
+
+// TestGroupService_AcceptInvite_EmailMatchAccepted — #1221: matching
+// email succeeds, and the match is case-insensitive (passing the
+// invitee_email in upper-case must still match the stored lower-case
+// form).
+func TestGroupService_AcceptInvite_EmailMatchAccepted(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
+	c.Assert(err, qt.IsNil)
+
+	inviteeEmail := "invitee@example.com"
+	invite, err := svc.CreateInviteWithEmail(
+		ctx, "tenant-1", group.ID, "user-1",
+		models.GroupRoleUser, &inviteeEmail, 0,
+	)
+	c.Assert(err, qt.IsNil)
+
+	// Pass the email in upper-case to prove the comparison is case-folded.
+	mem, err := svc.AcceptInvite(ctx, invite.Token, "user-2", "INVITEE@EXAMPLE.COM", "tenant-1")
+	c.Assert(err, qt.IsNil)
+	c.Assert(mem.MemberUserID, qt.Equals, "user-2")
+	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-2"), qt.IsTrue)
+}
+
+// TestGroupService_AcceptInvite_LegacyInviteIgnoresUserEmail — #1221
+// regression guard: a legacy token-only invite (invitee_email == nil,
+// the copy-paste flow) accepts any userEmail. The admin handed the URL
+// to whoever they meant — there's no email on file to compare against.
+func TestGroupService_AcceptInvite_LegacyInviteIgnoresUserEmail(t *testing.T) {
+	c := qt.New(t)
+	svc := newTestGroupService()
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
+	c.Assert(err, qt.IsNil)
+
+	// CreateInvite (no email) is the legacy token-only entry point.
+	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, "user-1", 0)
+	c.Assert(err, qt.IsNil)
+
+	mem, err := svc.AcceptInvite(ctx, invite.Token, "user-2", "whoever@example.com", "tenant-1")
+	c.Assert(err, qt.IsNil)
+	c.Assert(mem.MemberUserID, qt.Equals, "user-2")
 }
 
 func TestGroupService_ResendInvite(t *testing.T) {
