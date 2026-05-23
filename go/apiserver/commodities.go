@@ -90,7 +90,7 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 
 	setPaginationHeaders(w, page, perPage, total)
 
-	covers := api.resolveCoversForList(r.Context(), regSet.FileRegistry, commodities)
+	covers := api.resolveCoversForList(r, regSet.FileRegistry, commodities)
 
 	if err := render.Render(w, r, jsonapi.NewCommoditiesResponseWithCovers(commodities, total, page, perPage, covers)); err != nil {
 		internalServerError(w, r, err)
@@ -102,15 +102,16 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 // commodities and the per-request user, returning the JSON:API-shaped
 // map that NewCommoditiesResponseWithCovers expects. Returns nil (not an
 // empty map) when no covers resolve so the response shape stays clean.
-func (api *commoditiesAPI) resolveCoversForList(ctx context.Context, fileReg registry.FileRegistry, commodities []*models.Commodity) map[string]jsonapi.CommodityCover {
+func (api *commoditiesAPI) resolveCoversForList(r *http.Request, fileReg registry.FileRegistry, commodities []*models.Commodity) map[string]jsonapi.CommodityCover {
 	if api.coverService == nil || len(commodities) == 0 {
 		return nil
 	}
+	ctx := r.Context()
 	user := appctx.UserFromContext(ctx)
 	if user == nil {
 		return nil
 	}
-	resolved := api.coverService.ResolveMany(ctx, fileReg, commodities, user.ID)
+	resolved := api.coverService.ResolveMany(ctx, fileReg, commodities, user.ID, services.ExtractSessionBinding(r))
 	if len(resolved) == 0 {
 		return nil
 	}
@@ -244,7 +245,7 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 	}
 
 	resp := jsonapi.NewCommodityResponse(commodity).WithStatusCode(http.StatusOK)
-	if cover := api.resolveCoverForOne(r.Context(), commodity); cover != nil {
+	if cover := api.resolveCoverForOne(r, commodity); cover != nil {
 		resp = resp.WithCover(cover)
 	}
 
@@ -258,10 +259,11 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 // resolveCoversForList. Returns nil when the commodity has no usable
 // photo, or the user context is missing, or signing fails — every path
 // the FE handles via the type-emoji fallback.
-func (api *commoditiesAPI) resolveCoverForOne(ctx context.Context, commodity *models.Commodity) *jsonapi.CommodityCover {
+func (api *commoditiesAPI) resolveCoverForOne(r *http.Request, commodity *models.Commodity) *jsonapi.CommodityCover {
 	if api.coverService == nil || commodity == nil || commodity.ID == "" {
 		return nil
 	}
+	ctx := r.Context()
 	user := appctx.UserFromContext(ctx)
 	if user == nil {
 		return nil
@@ -270,7 +272,7 @@ func (api *commoditiesAPI) resolveCoverForOne(ctx context.Context, commodity *mo
 	if regSet == nil {
 		return nil
 	}
-	cov, ok := api.coverService.ResolveOne(ctx, regSet.FileRegistry, commodity, user.ID)
+	cov, ok := api.coverService.ResolveOne(ctx, regSet.FileRegistry, commodity, user.ID, services.ExtractSessionBinding(r))
 	if !ok {
 		return nil
 	}
@@ -655,7 +657,7 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 	api.eventService.EmitUpdated(r.Context(), commodity, updated)
 
 	resp := jsonapi.NewCommodityResponse(updated).WithStatusCode(http.StatusOK)
-	if cover := api.resolveCoverForOne(r.Context(), updated); cover != nil {
+	if cover := api.resolveCoverForOne(r, updated); cover != nil {
 		resp = resp.WithCover(cover)
 	}
 

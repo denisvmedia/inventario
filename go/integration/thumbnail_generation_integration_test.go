@@ -161,7 +161,7 @@ func verifySignedURLGeneration(c *qt.C, fileSigningService *services.FileSigning
 	}
 
 	// Test signed URL generation with thumbnails
-	originalURL, thumbnails, err := fileSigningService.GenerateSignedURLsWithThumbnails(fileEntity, "test-user-123")
+	originalURL, thumbnails, err := fileSigningService.GenerateSignedURLsWithThumbnails(fileEntity, "test-user-123", "")
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(originalURL, qt.Not(qt.Equals), "")

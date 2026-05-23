@@ -114,7 +114,7 @@ func TestCommodityCoverService_PicksEarliestPhoto(t *testing.T) {
 	signing := services.NewFileSigningService(signingKey32, time.Hour)
 	coverSvc := services.NewCommodityCoverService(signing)
 
-	cov, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRef("commodity-A"), "user-1")
+	cov, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRef("commodity-A"), "user-1", "")
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(cov.FileID, qt.Equals, createdOlder.ID)
 	c.Assert(cov.Source, qt.Equals, services.CoverSourceFirstPhoto)
@@ -132,10 +132,10 @@ func TestCommodityCoverService_AbsentWhenNoPhotos(t *testing.T) {
 	signing := services.NewFileSigningService(signingKey32, time.Hour)
 	coverSvc := services.NewCommodityCoverService(signing)
 
-	_, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRef("commodity-empty"), "user-1")
+	_, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRef("commodity-empty"), "user-1", "")
 	c.Assert(ok, qt.IsFalse)
 
-	resolved := coverSvc.ResolveMany(ctx, fileReg, commodityRefs("commodity-empty"), "user-1")
+	resolved := coverSvc.ResolveMany(ctx, fileReg, commodityRefs("commodity-empty"), "user-1", "")
 	c.Assert(resolved, qt.HasLen, 0)
 }
 
@@ -156,7 +156,7 @@ func TestCommodityCoverService_ResolveMany_PerCommodity(t *testing.T) {
 	signing := services.NewFileSigningService(signingKey32, time.Hour)
 	coverSvc := services.NewCommodityCoverService(signing)
 
-	resolved := coverSvc.ResolveMany(ctx, fileReg, commodityRefs("commodity-A", "commodity-B", "commodity-C"), "user-1")
+	resolved := coverSvc.ResolveMany(ctx, fileReg, commodityRefs("commodity-A", "commodity-B", "commodity-C"), "user-1", "")
 	c.Assert(resolved, qt.HasLen, 2)
 	c.Assert(resolved["commodity-A"].FileID, qt.Equals, aCover.ID)
 	c.Assert(resolved["commodity-B"].FileID, qt.Equals, bCover.ID)
@@ -175,9 +175,9 @@ func TestCommodityCoverService_EmptyUserShortCircuits(t *testing.T) {
 	coverSvc := services.NewCommodityCoverService(signing)
 
 	// Anonymous caller — signing wouldn't produce a verifiable URL anyway.
-	resolved := coverSvc.ResolveMany(ctx, fileReg, commodityRefs("commodity-A"), "")
+	resolved := coverSvc.ResolveMany(ctx, fileReg, commodityRefs("commodity-A"), "", "")
 	c.Assert(resolved, qt.HasLen, 0)
-	_, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRef("commodity-A"), "")
+	_, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRef("commodity-A"), "", "")
 	c.Assert(ok, qt.IsFalse)
 }
 
@@ -195,7 +195,7 @@ func TestCommodityCoverService_SkipsNonImageMetaImages(t *testing.T) {
 	signing := services.NewFileSigningService(signingKey32, time.Hour)
 	coverSvc := services.NewCommodityCoverService(signing)
 
-	_, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRef("commodity-A"), "user-1")
+	_, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRef("commodity-A"), "user-1", "")
 	c.Assert(ok, qt.IsFalse)
 }
 
@@ -212,7 +212,7 @@ func TestCommodityCoverService_ExplicitOverridePreferred(t *testing.T) {
 	coverSvc := services.NewCommodityCoverService(signing)
 
 	// Explicit cover_file_id wins over the otherwise-earlier "older".
-	cov, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRefWithCover("commodity-A", picked.ID), "user-1")
+	cov, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRefWithCover("commodity-A", picked.ID), "user-1", "")
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(cov.FileID, qt.Equals, picked.ID)
 	c.Assert(cov.Source, qt.Equals, services.CoverSourceExplicit)
@@ -232,7 +232,7 @@ func TestCommodityCoverService_StaleOverrideFallsBack(t *testing.T) {
 	// Stale override — file id doesn't exist. Resolver falls back to
 	// the first-photo path so a deleted-image race never blanks out the
 	// cover slot until the user re-picks.
-	cov, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRefWithCover("commodity-A", "no-such-file"), "user-1")
+	cov, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRefWithCover("commodity-A", "no-such-file"), "user-1", "")
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(cov.FileID, qt.Equals, older.ID)
 	c.Assert(cov.Source, qt.Equals, services.CoverSourceFirstPhoto)
@@ -253,6 +253,6 @@ func TestCommodityCoverService_OverrideFromOtherCommodityRejected(t *testing.T) 
 	signing := services.NewFileSigningService(signingKey32, time.Hour)
 	coverSvc := services.NewCommodityCoverService(signing)
 
-	_, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRefWithCover("commodity-B", other.ID), "user-1")
+	_, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRefWithCover("commodity-B", other.ID), "user-1", "")
 	c.Assert(ok, qt.IsFalse)
 }

@@ -1,7 +1,6 @@
 package apiserver
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -206,7 +205,7 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate signed URLs for all files
-	signedUrls := api.generateSignedURLsForFiles(r.Context(), files)
+	signedUrls := api.generateSignedURLsForFiles(r, files)
 
 	response := jsonapi.NewFilesResponseWithSignedUrls(files, total, signedUrls)
 	if err := render.Render(w, r, response); err != nil {
@@ -230,16 +229,21 @@ func parseLinkedEntityParams(typeParam, idParam string) (linkedType, linkedID *s
 
 // generateSignedURLsForFiles generates signed URLs for a list of files.
 // Returns a map of file ID to URLData with signed URLs and thumbnails. Missing URLs indicate generation failures.
-func (api *filesAPI) generateSignedURLsForFiles(ctx context.Context, files []*models.FileEntity) map[string]jsonapi.URLData {
+//
+// `r` is taken (not just `ctx`) so the per-session binding can be lifted off
+// the refresh_token cookie. URLs minted here will only validate when the
+// same browser session presents the request — see services.ExtractSessionBinding.
+func (api *filesAPI) generateSignedURLsForFiles(r *http.Request, files []*models.FileEntity) map[string]jsonapi.URLData {
 	signedUrls := make(map[string]jsonapi.URLData)
-	user := appctx.UserFromContext(ctx)
+	user := appctx.UserFromContext(r.Context())
 	if user == nil {
 		return signedUrls
 	}
 
+	binding := services.ExtractSessionBinding(r)
 	for _, file := range files {
 		// Generate signed URLs for file and thumbnails
-		originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(file, user.ID)
+		originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(file, user.ID, binding)
 		if err != nil {
 			// Log error but don't fail the entire request
 			// The frontend can handle missing URLs gracefully
@@ -381,7 +385,7 @@ func (api *filesAPI) apiGetFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate signed URLs for the file
-	signedUrls := api.generateSignedURLsForFiles(r.Context(), []*models.FileEntity{file})
+	signedUrls := api.generateSignedURLsForFiles(r, []*models.FileEntity{file})
 
 	response := jsonapi.NewFileResponseWithSignedUrls(file, signedUrls)
 	if err := render.Render(w, r, response); err != nil {
@@ -557,7 +561,7 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate signed URLs for file and thumbnails
-	signedURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(file, user.ID)
+	signedURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(file, user.ID, services.ExtractSessionBinding(r))
 	if err != nil {
 		internalServerError(w, r, errxtrace.Wrap("failed to generate signed URL", err))
 		return
