@@ -72,6 +72,38 @@ describe("ImpersonationBanner", () => {
     expect(screen.queryByTestId("impersonation-banner")).toBeNull()
   })
 
+  it("stays hidden when the endpoint 401s for a tenant-only user", async () => {
+    setAccessToken("good-token")
+    let authMeCalls = 0
+    let impersonationCalls = 0
+    server.use(
+      msw.get(api("/auth/me"), () => {
+        authMeCalls++
+        return HttpResponse.json({ id: "u9", email: "plain@example.com", name: "Plain" })
+      }),
+      // A plain tenant user 401s on /admin/impersonation/current — the
+      // endpoint is gated by RequireBackofficeAuthOrImpersonating (#1785
+      // Phase 5), which rejects bare tenant tokens with 401, not 403.
+      // The api layer translates that into `{ active: false }` and
+      // crucially does NOT let the http client treat the 401 as a
+      // back-office session expiry (it would otherwise refresh-bounce the
+      // tenant user to /backoffice/login since the path matches
+      // isBackofficePath).
+      msw.get(api("/admin/impersonation/current"), () => {
+        impersonationCalls++
+        return HttpResponse.json({ errors: [] }, { status: 401 })
+      })
+    )
+    renderBanner()
+    // Positive completion signal: wait until both probes have actually been
+    // hit (the 401 included) before asserting the banner stays absent.
+    await waitFor(() => {
+      expect(authMeCalls).toBeGreaterThan(0)
+      expect(impersonationCalls).toBeGreaterThan(0)
+    })
+    expect(screen.queryByTestId("impersonation-banner")).toBeNull()
+  })
+
   it("stays hidden when the endpoint 403s for a non-admin user", async () => {
     setAccessToken("good-token")
     let authMeCalls = 0
@@ -81,8 +113,9 @@ describe("ImpersonationBanner", () => {
         authMeCalls++
         return HttpResponse.json({ id: "u9", email: "plain@example.com", name: "Plain" })
       }),
-      // A plain user 403s on /admin/impersonation/current — the api layer
-      // translates that into `{ active: false }`, so the banner hides.
+      // Defensive: if any deployment of the gate ever returns 403 (e.g. a
+      // future tightening of the middleware), the api layer still treats
+      // it as "not impersonating" so the banner stays hidden.
       msw.get(api("/admin/impersonation/current"), () => {
         impersonationCalls++
         return HttpResponse.json({ errors: [] }, { status: 403 })
