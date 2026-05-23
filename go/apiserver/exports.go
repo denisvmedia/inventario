@@ -396,7 +396,7 @@ func (api *exportsAPI) generateExportSignedURL(w http.ResponseWriter, r *http.Re
 		fileExt = "xml"
 	}
 
-	signedURL, err := api.fileSigningService.GenerateSignedURL(file.ID, fileExt, user.ID)
+	signedURL, err := api.fileSigningService.GenerateSignedURL(file.ID, fileExt, user.ID, services.ExtractSessionBinding(r))
 	if err != nil {
 		internalServerError(w, r, errxtrace.Wrap("failed to generate signed URL", err))
 		return
