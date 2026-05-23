@@ -13,6 +13,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
+	"github.com/denisvmedia/inventario/internal/blobkeys"
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -81,7 +82,7 @@ func (s *FileService) GenerateThumbnails(ctx context.Context, file *models.FileE
 
 	// Generate thumbnails for each size
 	for sizeName, maxSize := range s.thumbnailSizes {
-		thumbnailPath := s.getThumbnailPath(file.ID, sizeName)
+		thumbnailPath := s.getThumbnailPath(file.TenantID, file.ID, sizeName)
 
 		// Create thumbnail
 		thumbnail := s.imageProcessor.CreateThumbnail(img, maxSize)
@@ -104,18 +105,25 @@ func (s *FileService) GenerateThumbnails(ctx context.Context, file *models.FileE
 	return nil
 }
 
-// getThumbnailPath generates the thumbnail file path using file ID
-// All thumbnails are saved as JPEG files regardless of the original format
-func (s *FileService) getThumbnailPath(fileID, sizeName string) string {
-	// Use file ID for thumbnail paths to avoid conflicts with user-controlled paths
-	return fmt.Sprintf("thumbnails/%s_%s.jpg", fileID, sizeName)
+// getThumbnailPath generates the canonical tenant-prefixed thumbnail
+// blob key for the given file. All thumbnails are saved as JPEG
+// regardless of the original format. The blob key shape is owned by
+// blobkeys.BuildThumbnailBlobKey; the helper is preserved here only as
+// the FileService's single call site so the service is the single
+// derivation point for the rest of the codebase.
+func (s *FileService) getThumbnailPath(tenantID, fileID, sizeName string) string {
+	return blobkeys.BuildThumbnailBlobKey(tenantID, fileID, sizeName)
 }
 
-// GetThumbnailPaths returns the paths of all thumbnails for a given file ID
-func (s *FileService) GetThumbnailPaths(fileID string) map[string]string {
+// GetThumbnailPaths returns the canonical blob keys for every
+// thumbnail derived from the given file. Post-#1793 the keys are
+// tenant-prefixed; `tenantID` is read off the FileEntity by the
+// caller (the file row is the source of truth for which tenant owns
+// the blob).
+func (s *FileService) GetThumbnailPaths(tenantID, fileID string) map[string]string {
 	thumbnails := make(map[string]string)
 	for sizeName := range s.thumbnailSizes {
-		thumbnails[sizeName] = s.getThumbnailPath(fileID, sizeName)
+		thumbnails[sizeName] = s.getThumbnailPath(tenantID, fileID, sizeName)
 	}
 	return thumbnails
 }
@@ -135,7 +143,7 @@ func (s *FileService) DeleteFileWithPhysical(ctx context.Context, fileID string)
 
 	// Delete the physical file and thumbnails if they exist
 	if file.File != nil && file.File.OriginalPath != "" {
-		if err := s.deletePhysicalFileAndThumbnails(ctx, fileID, file.File.OriginalPath, file.File.MIMEType); err != nil {
+		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, fileID, file.File.OriginalPath, file.File.MIMEType); err != nil {
 			return errxtrace.Wrap("failed to delete physical file and thumbnails", err)
 		}
 	}
@@ -182,15 +190,22 @@ func (s *FileService) DeletePhysicalFilesForGroup(ctx context.Context, tenantID,
 		if file.File == nil || file.File.OriginalPath == "" {
 			continue
 		}
-		if err := s.deletePhysicalFileAndThumbnails(ctx, file.ID, file.File.OriginalPath, file.File.MIMEType); err != nil {
+		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, file.ID, file.File.OriginalPath, file.File.MIMEType); err != nil {
 			return errxtrace.Wrap(fmt.Sprintf("failed to delete physical blobs for file %s", file.ID), err)
 		}
 	}
 	return nil
 }
 
-// deletePhysicalFileAndThumbnails deletes the physical file and all its thumbnails
-func (s *FileService) deletePhysicalFileAndThumbnails(ctx context.Context, fileID, filePath, mimeType string) error {
+// deletePhysicalFileAndThumbnails deletes the physical file and all its
+// thumbnails. `tenantID` is the tenant that owns the row — used to
+// derive the canonical thumbnail blob keys (#1793). For legacy rows
+// whose blob lives under a flat key, the original-file delete uses the
+// stored OriginalPath verbatim (treated as opaque) so an unbackfilled
+// row still cleans up cleanly. The thumbnail-key derivation only knows
+// the new layout; an unbackfilled row's legacy thumbnails are deleted
+// best-effort by the backfill itself.
+func (s *FileService) deletePhysicalFileAndThumbnails(ctx context.Context, tenantID, fileID, filePath, mimeType string) error {
 	// Delete the original file
 	if err := s.deletePhysicalFile(ctx, filePath); err != nil {
 		return errxtrace.Wrap("failed to delete original file", err)
@@ -198,10 +213,18 @@ func (s *FileService) deletePhysicalFileAndThumbnails(ctx context.Context, fileI
 
 	// Delete thumbnails if it's an image file
 	if mimekit.IsImage(mimeType) {
-		thumbnailPaths := s.GetThumbnailPaths(fileID)
-		for _, thumbnailPath := range thumbnailPaths {
+		// Walk both the canonical (tenant-prefixed) and legacy
+		// (flat) thumbnail keys so a row whose original blob has
+		// been backfilled to a new key still has its legacy
+		// thumbnails cleaned up if they happen to linger.
+		thumbnailPaths := s.GetThumbnailPaths(tenantID, fileID)
+		for sizeName, thumbnailPath := range thumbnailPaths {
 			// Don't fail if thumbnail doesn't exist - it might not have been generated
 			_ = s.deletePhysicalFile(ctx, thumbnailPath)
+			// Legacy-key cleanup. No-op for already-prefixed rows
+			// because the bucket-Exists check inside
+			// deletePhysicalFile short-circuits on missing.
+			_ = s.deletePhysicalFile(ctx, fmt.Sprintf("thumbnails/%s_%s.jpg", fileID, sizeName))
 		}
 	}
 
@@ -259,27 +282,43 @@ func (s *FileService) DeleteLinkedFiles(ctx context.Context, entityType, entityI
 	return nil
 }
 
-// ThumbnailExists checks if a thumbnail file exists for a given file and size
-func (s *FileService) ThumbnailExists(ctx context.Context, fileID, size string) (bool, error) {
-	// Validate size parameter
+// ResolveThumbnail resolves the bucket-relative key from which a
+// thumbnail should be read for the given file, and whether it actually
+// exists in the bucket. Canonical tenant-prefixed key (#1793) is tried
+// first; legacy flat-key fallback (`thumbnails/<id>_<size>.jpg`) lets
+// rows that pre-date the backfill keep rendering. When neither key
+// exists, the canonical key is returned with `exists=false` so callers
+// can render a placeholder against the post-migration layout.
+//
+// One bucket open per call — combines what `ThumbnailExists` and
+// `ThumbnailReadPath` did in separate passes.
+func (s *FileService) ResolveThumbnail(ctx context.Context, tenantID, fileID, size string) (path string, exists bool, err error) {
 	if size != "small" && size != "medium" {
-		return false, errxtrace.Classify(ErrInvalidThumbnailSize, errx.Attrs("size", size))
+		return "", false, errxtrace.Classify(ErrInvalidThumbnailSize, errx.Attrs("size", size))
 	}
 
-	// Generate thumbnail path using the same structure as download
-	thumbnailPath := s.getThumbnailPath(fileID, size)
-
-	// Open bucket and check if file exists
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {
-		return false, errxtrace.Wrap("failed to open bucket", err)
+		return "", false, errxtrace.Wrap("failed to open bucket", err)
 	}
 	defer b.Close()
 
-	exists, err := b.Exists(ctx, thumbnailPath)
+	canonical := s.getThumbnailPath(tenantID, fileID, size)
+	canonicalExists, err := b.Exists(ctx, canonical)
 	if err != nil {
-		return false, errxtrace.Wrap("failed to check thumbnail existence", err, errx.Attrs("thumbnail_path", thumbnailPath))
+		return "", false, errxtrace.Wrap("failed to check thumbnail existence", err, errx.Attrs("thumbnail_path", canonical))
+	}
+	if canonicalExists {
+		return canonical, true, nil
 	}
 
-	return exists, nil
+	legacy := fmt.Sprintf("thumbnails/%s_%s.jpg", fileID, size)
+	legacyExists, err := b.Exists(ctx, legacy)
+	if err != nil {
+		return "", false, errxtrace.Wrap("failed to check legacy thumbnail existence", err, errx.Attrs("thumbnail_path", legacy))
+	}
+	if legacyExists {
+		return legacy, true, nil
+	}
+	return canonical, false, nil
 }

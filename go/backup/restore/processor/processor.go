@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -18,6 +19,7 @@ import (
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/restore/security"
 	"github.com/denisvmedia/inventario/backup/restore/types"
+	"github.com/denisvmedia/inventario/internal/blobkeys"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -1963,12 +1965,9 @@ func (l *RestoreOperationProcessor) decodeFileElement(
 		switch t := tok.(type) {
 		case xml.StartElement:
 			if t.Name.Local == "data" {
-				if xmlFile.OriginalPath == "" {
-					return nil, 0, errors.New("malformed export: <data> element preceded <originalPath>")
-				}
-				size, err := l.handleFileDataElement(ctx, decoder, &xmlFile, existing, idMapping, options)
+				size, err := l.handleDataStart(ctx, decoder, &xmlFile, existing, idMapping, options)
 				if err != nil {
-					return nil, 0, errxtrace.Wrap("failed to stream file data", err, errx.Attrs("xml_id", xmlFile.ID))
+					return nil, 0, err
 				}
 				rawSize = size
 				continue
@@ -1982,6 +1981,60 @@ func (l *RestoreOperationProcessor) decodeFileElement(
 			}
 		}
 	}
+}
+
+// handleDataStart is the per-row entry point for the <data> element.
+// It validates the ordering invariant (originalPath must precede
+// data), rewrites OriginalPath into the importing tenant's namespace,
+// and then delegates the actual blob write to handleFileDataElement.
+//
+// Pulled out of decodeFileElement so the decoder loop stays inside the
+// project's cognitive-complexity budget.
+func (l *RestoreOperationProcessor) handleDataStart(
+	ctx context.Context,
+	decoder *xml.Decoder,
+	xmlFile *types.XMLFile,
+	existing *types.ExistingEntities,
+	idMapping *types.IDMapping,
+	options types.RestoreOptions,
+) (int64, error) {
+	if xmlFile.OriginalPath == "" {
+		return 0, errors.New("malformed export: <data> element preceded <originalPath>")
+	}
+	// Rewrite OriginalPath into the importing tenant's namespace
+	// before the blob is written. The XML may carry either a legacy
+	// flat key (pre-#1793 export) or an already-prefixed key from a
+	// foreign tenant — in either case the blob MUST land under the
+	// importing tenant's namespace, never the exporter's (defence-
+	// in-depth: a malicious XML cannot point a restore at another
+	// tenant's bucket slot).
+	//
+	// Fail-closed: a restore that reached this point without a tenant
+	// context is a wiring bug — the Process pipeline always populates
+	// it from `Export.CreatedByUserID`. Proceeding here would write
+	// the blob under the XML-declared key, defeating the whole point
+	// of the rewrite.
+	user := appctx.UserFromContext(ctx)
+	if user == nil || user.TenantID == "" {
+		return 0, errors.New("tenant context is required to restore file data")
+	}
+	xmlFile.OriginalPath = rewriteImportKey(xmlFile.OriginalPath, user.TenantID)
+	size, err := l.handleFileDataElement(ctx, decoder, xmlFile, existing, idMapping, options)
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to stream file data", err, errx.Attrs("xml_id", xmlFile.ID))
+	}
+	return size, nil
+}
+
+// rewriteImportKey normalises an XML-declared OriginalPath into the
+// importing tenant's namespace. Legacy flat keys go through
+// blobkeys.RewriteForTenant straight; already-prefixed keys have
+// their (foreign) tenant prefix stripped and are re-prefixed.
+func rewriteImportKey(originalPath, tenantID string) string {
+	if blobkeys.HasTenantPrefix(originalPath) {
+		return blobkeys.RewriteForTenant(stripTenantPrefix(originalPath), tenantID)
+	}
+	return blobkeys.RewriteForTenant(originalPath, tenantID)
 }
 
 // handleFileDataElement is the dispatch point for <data> chardata: it
@@ -2220,4 +2273,25 @@ func ensureFileTags(tags models.StringSlice) models.StringSlice {
 		return models.StringSlice{}
 	}
 	return tags
+}
+
+// stripTenantPrefix removes a `t/<anything>/` prefix from a blob key,
+// leaving the bucket-relative remainder ("files/<id>.pdf",
+// "thumbnails/<id>_small.jpg", "exports/...", "restores/...", or a
+// bare basename). Used during restore to drop the exporting tenant's
+// namespace before re-prefixing under the importing tenant.
+//
+// Returns the input unchanged if it does not carry a tenant prefix or
+// the prefix is malformed (no trailing slash after the tenant segment;
+// kept as a defensive guard even though every caller funnels through
+// HasTenantPrefix first).
+func stripTenantPrefix(key string) string {
+	if !blobkeys.HasTenantPrefix(key) {
+		return key
+	}
+	_, after, found := strings.Cut(key[len(blobkeys.Prefix):], "/")
+	if !found {
+		return key
+	}
+	return after
 }

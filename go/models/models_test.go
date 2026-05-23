@@ -20,7 +20,7 @@ func TestFile_Validate(t *testing.T) {
 }
 
 func TestFile_ValidateWithContext_HappyPath(t *testing.T) {
-	t.Run("valid file", func(t *testing.T) {
+	t.Run("fully populated file", func(t *testing.T) {
 		c := qt.New(t)
 
 		file := models.File{
@@ -34,51 +34,21 @@ func TestFile_ValidateWithContext_HappyPath(t *testing.T) {
 		err := file.ValidateWithContext(ctx)
 		c.Assert(err, qt.IsNil)
 	})
-}
 
-func TestFile_ValidateWithContext_UnhappyPaths(t *testing.T) {
-	testCases := []struct {
-		name          string
-		file          models.File
-		errorContains string
-	}{
-		{
-			name:          "missing path",
-			file:          models.File{OriginalPath: "test.pdf", Ext: ".pdf", MIMEType: "application/pdf"},
-			errorContains: "path: cannot be blank",
-		},
-		{
-			name:          "missing original path",
-			file:          models.File{Path: "test", Ext: ".pdf", MIMEType: "application/pdf"},
-			errorContains: "original_path: cannot be blank",
-		},
-		{
-			name:          "missing extension",
-			file:          models.File{Path: "test", OriginalPath: "test.pdf", MIMEType: "application/pdf"},
-			errorContains: "ext: cannot be blank",
-		},
-		{
-			name:          "missing MIME type",
-			file:          models.File{Path: "test", OriginalPath: "test.pdf", Ext: ".pdf"},
-			errorContains: "mime_type: cannot be blank",
-		},
-		{
-			name:          "empty file",
-			file:          models.File{},
-			errorContains: "path: cannot be blank",
-		},
-	}
+	// Post-#1779 createFile writes an empty File until the upload
+	// handler populates it. Validation must accept the empty literal so
+	// the metadata-only POST /files path still goes through. The shape
+	// invariants live on FileEntity (Type / Category / linked-entity
+	// invariants), not on the File sub-struct itself.
+	t.Run("empty file passes (placeholder before upload)", func(t *testing.T) {
+		c := qt.New(t)
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
+		file := models.File{}
 
-			ctx := context.Background()
-			err := tc.file.ValidateWithContext(ctx)
-			c.Assert(err, qt.IsNotNil)
-			c.Assert(err.Error(), qt.Contains, tc.errorContains)
-		})
-	}
+		ctx := context.Background()
+		err := file.ValidateWithContext(ctx)
+		c.Assert(err, qt.IsNil)
+	})
 }
 
 func TestFile_JSONMarshaling(t *testing.T) {

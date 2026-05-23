@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"gocloud.dev/blob"
+
+	"github.com/denisvmedia/inventario/internal/blobkeys"
 )
 
 // fixturesFS bundles a handful of small JPG photos and PDF documents.
@@ -70,8 +72,12 @@ var fixtureMetadata = map[fixtureKind]fixtureMeta{
 // still creates FileEntity rows so the UI surfaces the entry, but the
 // row's OriginalPath points at a blob that won't exist if anyone tries
 // to read it). The no-op path is what the in-memory unit tests use.
+//
+// Implementations construct tenant-prefixed blob keys via
+// blobkeys.BuildSeedKey so seeded rows respect the same per-tenant
+// namespace as user-uploaded files (#1793).
 type blobUploader interface {
-	upload(ctx context.Context, fixture fixtureKind) (storagePath string, sizeBytes int64, err error)
+	upload(ctx context.Context, fixture fixtureKind, tenantID string) (storagePath string, sizeBytes int64, err error)
 	close()
 }
 
@@ -96,12 +102,15 @@ func newBlobUploader(ctx context.Context, uploadLocation string) (blobUploader, 
 
 type noopUploader struct{}
 
-func (*noopUploader) upload(_ context.Context, fixture fixtureKind) (string, int64, error) {
+func (*noopUploader) upload(_ context.Context, fixture fixtureKind, tenantID string) (string, int64, error) {
 	// Even with no backend, give the row a plausible-looking path so
 	// list endpoints don't trip on validation: the file rows must
 	// carry a non-empty OriginalPath. The "seed-" prefix + UUID makes
-	// these rows obvious if anyone debugs the table.
-	return fmt.Sprintf("seed-%s%s", uuid.NewString(), filepath.Ext(string(fixture))), 0, nil
+	// these rows obvious if anyone debugs the table. The full key is
+	// tenant-prefixed (#1793) for consistency with real uploads, even
+	// though no bucket actually receives the bytes.
+	basename := fmt.Sprintf("seed-%s%s", uuid.NewString(), filepath.Ext(string(fixture)))
+	return blobkeys.BuildSeedKey(tenantID, basename), 0, nil
 }
 
 func (*noopUploader) close() {}
@@ -110,12 +119,13 @@ type bucketUploader struct {
 	bucket *blob.Bucket
 }
 
-func (u *bucketUploader) upload(ctx context.Context, fixture fixtureKind) (string, int64, error) {
+func (u *bucketUploader) upload(ctx context.Context, fixture fixtureKind, tenantID string) (string, int64, error) {
 	data, err := fixturesFS.ReadFile(string(fixture))
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to read fixture %s: %w", fixture, err)
 	}
-	storagePath := fmt.Sprintf("seed-%s%s", uuid.NewString(), filepath.Ext(string(fixture)))
+	basename := fmt.Sprintf("seed-%s%s", uuid.NewString(), filepath.Ext(string(fixture)))
+	storagePath := blobkeys.BuildSeedKey(tenantID, basename)
 	w, err := u.bucket.NewWriter(ctx, storagePath, nil)
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to open bucket writer for %s: %w", storagePath, err)
