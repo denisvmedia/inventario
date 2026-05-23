@@ -510,10 +510,9 @@ func (s *Service) GrantSystemAdmin(ctx context.Context, idOrEmail string) (resul
 	if s.factorySet.SystemAdminGrantRegistry == nil {
 		configErr := errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "SystemAdminGrantRegistry"))
 		// Audit the misconfiguration before returning so the trail records
-		// the attempt even when the grant store is unwired. Tenant + acting
-		// user are nil/"" because this is a server-config failure, not a
-		// user-driven rejection — there is no resolved subject to charge.
-		s.logAdminAction(ctx, "admin.grant_system_admin", nil, "", configErr)
+		// the attempt even when the grant store is unwired. The subject was
+		// resolved, so charge the attempt to that tenant/user.
+		s.logAdminAction(ctx, "admin.grant_system_admin", &user.TenantID, user.ID, configErr)
 		return nil, false, configErr
 	}
 
