@@ -2784,8 +2784,11 @@ export type paths = {
             requestBody: {
                 content: {
                     "multipart/form-data": {
-                        /** @description Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Up to 5 files; repeat the field name to upload multiple. */
-                        photos: Record<string, never>[];
+                        /**
+                         * Format: binary
+                         * @description Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts).
+                         */
+                        photos: string;
                         /** @description Optional free-form hint (brand, category guess) */
                         hint?: string;
                     };
