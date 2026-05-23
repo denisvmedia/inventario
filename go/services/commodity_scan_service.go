@@ -129,9 +129,9 @@ type CommodityScanConfig struct {
 	// limit"; production deployments should always set this.
 	RateLimitPerHour int
 
-	// Timeout is the upstream provider deadline. The handler injects
-	// it via context, but the service also enforces it server-side
-	// against the audit-write path.
+	// Timeout is the upstream provider deadline. The service enforces it
+	// by wrapping the incoming context; callers may also set their own
+	// deadline, in which case whichever deadline expires first wins.
 	Timeout time.Duration
 }
 

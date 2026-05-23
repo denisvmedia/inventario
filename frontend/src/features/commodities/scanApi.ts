@@ -35,9 +35,10 @@ export interface ScanWarning {
 }
 
 // The shape after we strip the JSON:API envelope. Keys match the BE's
-// `models.CommodityScanFields` (go/models/commodity_scan.go). The
-// review UI consumes `Partial<…>` because the BE may omit any field
-// for which the model returned no confident guess.
+// canonical AI-vision field set in `go/internal/aivision` (`FieldName*`
+// constants / `AllFieldNames`). The review UI consumes `Partial<…>`
+// because the BE may omit any field for which the model returned no
+// confident guess.
 export type ScanFieldName =
   | "name"
   | "short_name"

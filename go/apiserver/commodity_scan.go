@@ -389,7 +389,6 @@ type commodityScanResource struct {
 type commodityScanResultDT struct {
 	Fields     map[string]commodityScanFieldDT `json:"fields"`
 	Warnings   []aivision.Warning              `json:"warnings,omitempty"`
-	Provider   string                          `json:"provider,omitempty"`
 	UsedTokens int                             `json:"used_tokens,omitempty"`
 	LatencyMS  int64                           `json:"latency_ms,omitempty"`
 }

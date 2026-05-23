@@ -9201,9 +9201,6 @@ const docTemplate = `{
                 "latency_ms": {
                     "type": "integer"
                 },
-                "provider": {
-                    "type": "string"
-                },
                 "used_tokens": {
                     "type": "integer"
                 },

@@ -9138,7 +9138,6 @@ export type components = {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
             latency_ms?: number;
-            provider?: string;
             used_tokens?: number;
             warnings?: components["schemas"]["jsonapi.CommodityScanWarning"][];
         };

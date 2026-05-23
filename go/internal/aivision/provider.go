@@ -95,8 +95,7 @@ type ScanRequest struct {
 //   - name, short_name, type, serial_number, comments,
 //     original_price_currency: string
 //   - original_price: float64 (decimal as string is also accepted by
-//     callers — the handler stringifies before JSON-encoding to dodge
-//     float precision issues)
+//     callers, which coerce it to a number)
 //   - urls: []string
 //   - purchase_date: string in YYYY-MM-DD form
 type FieldGuess struct {

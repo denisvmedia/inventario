@@ -21,7 +21,6 @@ type CommodityScanResource struct {
 type CommodityScanAttributes struct {
 	Fields     map[string]CommodityScanFieldGuess `json:"fields"`
 	Warnings   []CommodityScanWarning             `json:"warnings,omitempty"`
-	Provider   string                             `json:"provider,omitempty"`
 	UsedTokens int                                `json:"used_tokens,omitempty"`
 	LatencyMS  int64                              `json:"latency_ms,omitempty"`
 }

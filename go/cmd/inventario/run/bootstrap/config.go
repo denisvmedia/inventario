@@ -78,10 +78,12 @@ type Config struct {
 	// recommended) for multi-replica or restart-stable deployments.
 	CurrencyMigrationHMACKey string `yaml:"currency_migration_hmac_key" env:"CURRENCY_MIGRATION_HMAC_KEY" env-default:""`
 
-	// AIVision* settings drive the photo-scan endpoint (#1720). The
-	// provider discriminator selects which implementation handles the
-	// scan call ("none", "mock", "anthropic", "openai"); the per-provider
-	// API key / model fields override the in-tree defaults.
+	// AIVision* settings drive the photo-scan endpoint (#1720). Under the
+	// `run` section loader these map to INVENTARIO_RUN_AI_VISION_* env vars
+	// (e.g. INVENTARIO_RUN_AI_VISION_PROVIDER). The provider discriminator
+	// selects which implementation handles the scan call ("none", "mock",
+	// "anthropic", "openai"); the per-provider API key / model fields
+	// override the in-tree defaults.
 	AIVisionProvider         string `yaml:"ai_vision_provider" env:"AI_VISION_PROVIDER" env-default:"none"`
 	AIVisionAnthropicAPIKey  string `yaml:"ai_vision_anthropic_api_key" env:"AI_VISION_ANTHROPIC_API_KEY" env-default:""`
 	AIVisionAnthropicModel   string `yaml:"ai_vision_anthropic_model" env:"AI_VISION_ANTHROPIC_MODEL" env-default:"claude-sonnet-4-6"`
