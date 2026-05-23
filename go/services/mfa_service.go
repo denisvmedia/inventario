@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/pquerna/otp"
@@ -24,6 +25,27 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/secrets"
 )
+
+// backupCodeBcryptCost is the cost factor used by GenerateBackupCodes.
+// Production keeps bcrypt.DefaultCost (10) so a leaked column still costs
+// the attacker ~100ms per guess; tests opt down to bcrypt.MinCost via
+// SetBackupCodeBcryptCostForTesting because each MFA setup hashes
+// MFABackupCodeCount (10) codes serially and under `go test -race` that
+// alone is ~8s/setup at DefaultCost — multiplied across the MFA test
+// suite it blows past the per-binary 10-minute panic timeout.
+var backupCodeBcryptCost = bcrypt.DefaultCost
+
+// SetBackupCodeBcryptCostForTesting overrides the cost factor used when
+// hashing fresh backup codes. Mirrors models.SetBcryptCostForTesting:
+// pass a non-nil *testing.T to scope the override via t.Cleanup, or nil
+// from a TestMain that wants the lowered cost for the entire binary run.
+func SetBackupCodeBcryptCostForTesting(t *testing.T, cost int) {
+	orig := backupCodeBcryptCost
+	backupCodeBcryptCost = cost
+	if t != nil {
+		t.Cleanup(func() { backupCodeBcryptCost = orig })
+	}
+}
 
 const (
 	// MFAIssuer is the human label that appears in authenticator apps
@@ -223,7 +245,7 @@ func (s *MFAService) GenerateBackupCodes(n int) (plaintext []string, hashes []st
 		// compare against any cosmetic variant the user types
 		// (lowercase, spaces, missing/extra hyphen). The plaintext
 		// returned to the user keeps the hyphen for readability.
-		hash, err := bcrypt.GenerateFromPassword([]byte(normalizeBackupCode(code)), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte(normalizeBackupCode(code)), backupCodeBcryptCost)
 		if err != nil {
 			return nil, nil, fmt.Errorf("mfa: bcrypt: %w", err)
 		}

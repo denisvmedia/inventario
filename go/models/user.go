@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
+	"testing"
 	"time"
 
 	"github.com/jellydator/validation"
@@ -11,6 +12,27 @@ import (
 
 	"github.com/denisvmedia/inventario/models/rules"
 )
+
+// bcryptCost is the cost factor used by SetPassword. In production it is
+// bcrypt.DefaultCost (10, ~80ms per hash). Tests lower it to bcrypt.MinCost
+// (4, ~1ms per hash) via SetBcryptCostForTesting; under `go test -race` the
+// difference scales by ~10x, which is the only reason the apiserver test
+// package stays under the 10-minute per-binary panic timeout.
+var bcryptCost = bcrypt.DefaultCost
+
+// SetBcryptCostForTesting overrides the package-level bcrypt cost used by
+// SetPassword for the duration of the test (or TestMain). Restores the
+// previous value via t.Cleanup so a single test that opts in to MinCost
+// doesn't leak the override into other tests in the same package. Pass
+// nil for `t` from a TestMain that wants the override to persist for the
+// whole binary run.
+func SetBcryptCostForTesting(t *testing.T, cost int) {
+	orig := bcryptCost
+	bcryptCost = cost
+	if t != nil {
+		t.Cleanup(func() { bcryptCost = orig })
+	}
+}
 
 var (
 	_ validation.Validatable            = (*User)(nil)
@@ -114,7 +136,7 @@ func (u *User) SetPassword(password string) error {
 		return err
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
 	if err != nil {
 		return err
 	}
