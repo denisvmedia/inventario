@@ -34,6 +34,8 @@ jobs:
       pull-requests: read
     outputs:
       image_inputs: ${{ steps.filter.outputs.image_inputs }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      e2e: ${{ steps.filter.outputs.e2e }}
       ci: ${{ steps.filter.outputs.ci }}
     steps:
       - name: Checkout code
@@ -147,15 +149,20 @@ jobs:
   darwin-binary:
     name: Build darwin/arm64 binary for e2e
     needs: changes
-    # Same skip-condition as build — produced solely for the macOS e2e lane,
-    # which doesn't run for fork PRs or on PR close. Also skipped when no
-    # image input changed; ci changes force it back on.
+    # The only consumer is e2e-tests-macos (webkit). That lane runs on
+    # PRs only when the diff touches `frontend`, `e2e`, or `ci`, so this
+    # job mirrors the same gate — a backend / k8s / Dockerfile-only PR
+    # would otherwise spend ~3 minutes building a binary that nothing
+    # downstream actually consumes. Push and tag events still build the
+    # binary unconditionally (release / cache warming). Fork PRs and the
+    # PR-close event are still skipped via the existing predicates.
     if: |
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' &&
        github.event.action != 'closed' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
-       (needs.changes.outputs.image_inputs == 'true' ||
+       (needs.changes.outputs.frontend == 'true' ||
+        needs.changes.outputs.e2e == 'true' ||
         needs.changes.outputs.ci == 'true'))
     runs-on: ubuntu-latest
     env:

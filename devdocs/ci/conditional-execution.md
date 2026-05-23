@@ -84,16 +84,25 @@ and Firefox on Linux, Webkit on macOS. Each browser is its own ~30-minute
 critical-path job. The `changes` job emits two extra outputs to scope the
 matrix:
 
-- `linux_browsers` — a JSON array. `["chromium"]` for backend-only PRs;
-  `["chromium","firefox"]` for anything that could plausibly affect rendering
-  (frontend / e2e / image_inputs ∩ frontend / ci / push).
-- `run_webkit` — boolean; same logic as the firefox toggle.
+- `linux_browsers` — a JSON array. `["chromium","firefox"]` whenever the diff
+  matches the `frontend`, `e2e`, or `ci` filter (or any non-PR event);
+  `["chromium"]` otherwise.
+- `run_webkit` — boolean; same predicate as the Firefox toggle.
 
-| PR diff                                 | Linux runs              | macOS webkit runs |
-| --------------------------------------- | ----------------------- | ----------------- |
-| Backend (`go`) only                     | chromium                | no                |
-| Frontend / e2e / image_inputs           | chromium + firefox      | yes               |
-| `ci` / push to master / `v*` tag        | chromium + firefox      | yes               |
+Note that `image_inputs` alone does **not** widen the browser matrix.
+A backend-only, Dockerfile-only, or `k8s/dev/**`-only PR sets
+`image_inputs=true` (so the image is rebuilt and Chromium e2e runs against
+it), but Firefox and Webkit stay skipped — those diffs can't plausibly
+shift cross-browser rendering, so the per-PR matrix-decision predicate
+narrows to `frontend OR e2e OR ci OR non-PR`.
+
+| PR diff                                                    | Linux runs              | macOS webkit runs |
+| ---------------------------------------------------------- | ----------------------- | ----------------- |
+| Backend (`go`) only                                        | chromium                | no                |
+| `image_inputs` only (Dockerfile, `k8s/dev/**`, scripts/…)  | chromium                | no                |
+| Frontend or e2e                                            | chromium + firefox      | yes               |
+| `ci` (workflow / action / filters edit)                    | chromium + firefox      | yes               |
+| push to master or `v*` tag                                 | chromium + firefox      | yes               |
 
 ## Workflows not modified
 
