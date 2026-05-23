@@ -1111,6 +1111,47 @@ func TestGroupService_AcceptInvite_LegacyInviteIgnoresUserEmail(t *testing.T) {
 	c.Assert(mem.MemberUserID, qt.Equals, "user-2")
 }
 
+// TestGroupService_AcceptInvite_WhitespaceOnlyInviteeEmailRejected — #1221
+// fail-closed guard: an invite whose invitee_email is set but normalizes
+// to "" (only reachable via a direct registry write — the JSON-API
+// binder strips whitespace) must NOT be redeemable, even by a caller
+// whose userEmail is also empty/whitespace. Otherwise a malformed
+// invite would be a free wildcard.
+func TestGroupService_AcceptInvite_WhitespaceOnlyInviteeEmailRejected(t *testing.T) {
+	c := qt.New(t)
+	// Build the service with an explicit invite registry handle so the
+	// test can patch invitee_email to whitespace — simulating a
+	// corrupted row that bypassed the binder.
+	invites := memory.NewGroupInviteRegistry()
+	svc := services.NewGroupService(
+		memory.NewLocationGroupRegistry(),
+		memory.NewGroupMembershipRegistry(),
+		invites,
+	)
+	ctx := context.Background()
+
+	group, err := svc.CreateGroup(ctx, "tenant-1", "user-1", "Group", "", "", "")
+	c.Assert(err, qt.IsNil)
+
+	validEmail := "real@example.com"
+	invite, err := svc.CreateInviteWithEmail(
+		ctx, "tenant-1", group.ID, "user-1",
+		models.GroupRoleUser, &validEmail, 0,
+	)
+	c.Assert(err, qt.IsNil)
+	whitespace := "   "
+	invite.InviteeEmail = &whitespace
+	_, err = invites.Update(ctx, *invite)
+	c.Assert(err, qt.IsNil)
+
+	// A caller passing an exactly-equal whitespace string must still
+	// be rejected — the fail-closed branch makes any whitespace-only
+	// invitee_email unredeemable.
+	_, err = svc.AcceptInvite(ctx, invite.Token, "user-2", "   ", "tenant-1")
+	c.Assert(err, qt.ErrorIs, services.ErrInviteEmailMismatch)
+	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-2"), qt.IsFalse)
+}
+
 func TestGroupService_ResendInvite(t *testing.T) {
 	c := qt.New(t)
 	svc := newTestGroupService()

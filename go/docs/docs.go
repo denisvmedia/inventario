@@ -6869,7 +6869,7 @@ const docTemplate = `{
         },
         "/invites/{token}/accept": {
             "post": {
-                "description": "Accepts a single-use invite link and joins the group as a user. Requires authentication. If the invite has an invitee email, the user's email must match (case-insensitive); else 422 with code ` + "`" + `invite.email_mismatch` + "`" + `.",
+                "description": "Accepts a single-use invite link and joins the group with the role stored on the invite. Requires auth. If invitee_email is set, user email must match (trimmed, case-insensitive); else 422 ` + "`" + `invite.email_mismatch` + "`" + `.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6909,7 +6909,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Invite expired, already used, user already a member, or user email does not match invitee email",
+                        "description": "Invite expired, already used, user already a member, or user email (trim + case-insensitive) does not match invitee email",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -6952,7 +6952,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request - invalid body, expired/used invite, invalid password, or registration email doesn't match invitee email",
+                        "description": "Bad Request - invalid body, expired/used invite, invalid password, or registration email (trim + case-insensitive) does not match invitee email",
                         "schema": {
                             "type": "string"
                         }
@@ -7811,7 +7811,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "invite_token": {
-                    "description": "InviteToken, when present and valid, allows registration even if\nRegistrationMode is closed and suppresses the email-verification step\n(the invite itself vouches for the user). The token is NOT consumed\nhere — the caller must POST /api/v1/invites/{token}/accept after\nlogging in. See issue #1219 §7 and #1285.\n\nWhen the invite carries ` + "`" + `invitee_email` + "`" + ` (the #1533 email-flow path),\nthe registration ` + "`" + `email` + "`" + ` must match it case-insensitively, otherwise\nthe request is rejected with 400. Legacy token-only invites\n(invitee_email == nil) keep working unchanged. See #1221.",
+                    "description": "InviteToken, when present and valid, allows registration even if\nRegistrationMode is closed and suppresses the email-verification step\n(the invite itself vouches for the user). The token is NOT consumed\nhere — the caller must POST /api/v1/invites/{token}/accept after\nlogging in. See issue #1219 §7 and #1285.\n\nWhen the invite carries ` + "`" + `invitee_email` + "`" + ` (the #1533 email-flow path),\nthe registration ` + "`" + `email` + "`" + ` must match it after trim + case-insensitive\nnormalization, otherwise the request is rejected with 400. A\nwhitespace-only invitee_email (only reachable via direct registry\nwrite — the JSON-API binder strips whitespace) is treated as\ninvalid and rejected. Legacy token-only invites (invitee_email ==\nnil) keep working unchanged. See #1221.",
                     "type": "string"
                 },
                 "name": {

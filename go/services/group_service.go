@@ -905,14 +905,16 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, userEmai
 //   - invite is not expired;
 //   - invite is not already used;
 //   - #1221: if the invite carries an invitee_email (the #1533
-//     email-flow path), the accepting user's email must match it
-//     case-insensitively. Legacy token-only invites (invitee_email ==
-//     nil) bypass the email check — the admin vouched for whoever they
-//     handed the URL to. An invitee_email that normalizes to the empty
-//     string (only possible via a direct registry write — the JSON-API
-//     binder in createInvite rejects whitespace-only input) is treated
-//     as fail-closed: no caller email matches, so the invite is
-//     unredeemable. Trusting it would silently bypass the gate.
+//     email-flow path), the accepting user's email must match it after
+//     trim + case-insensitive normalization. Legacy token-only invites
+//     (invitee_email == nil) bypass the email check — the admin
+//     vouched for whoever they handed the URL to. An invitee_email
+//     that normalizes to the empty string (only possible via a direct
+//     registry write — the JSON-API binder in createInvite rejects
+//     whitespace-only input) is unconditionally rejected: even a
+//     caller whose userEmail also normalizes to "" must not match,
+//     otherwise a malformed invite would be redeemable for any
+//     blank-email caller.
 //
 // Extracted as a free function so AcceptInvite stays under the gocyclo
 // budget while keeping every rejection sentinel grep-friendly.
@@ -931,7 +933,13 @@ func validateInviteForAccept(invite *models.GroupInvite, userEmail, expectedTena
 	}
 	inviteEmail := strings.ToLower(strings.TrimSpace(*invite.InviteeEmail))
 	caller := strings.ToLower(strings.TrimSpace(userEmail))
-	if inviteEmail != caller {
+	// Fail closed on a whitespace-only invitee_email: even if the
+	// caller also normalizes to empty, an empty == empty match would
+	// silently redeem a malformed invite. The JSON-API binder in
+	// createInvite already rejects whitespace input, so reaching this
+	// branch implies a direct registry write (or future bypass) — we
+	// refuse to redeem it.
+	if inviteEmail == "" || inviteEmail != caller {
 		return errxtrace.Classify(ErrInviteEmailMismatch)
 	}
 	return nil

@@ -59,9 +59,12 @@ type RegisterRequest struct {
 	// logging in. See issue #1219 §7 and #1285.
 	//
 	// When the invite carries `invitee_email` (the #1533 email-flow path),
-	// the registration `email` must match it case-insensitively, otherwise
-	// the request is rejected with 400. Legacy token-only invites
-	// (invitee_email == nil) keep working unchanged. See #1221.
+	// the registration `email` must match it after trim + case-insensitive
+	// normalization, otherwise the request is rejected with 400. A
+	// whitespace-only invitee_email (only reachable via direct registry
+	// write — the JSON-API binder strips whitespace) is treated as
+	// invalid and rejected. Legacy token-only invites (invitee_email ==
+	// nil) keep working unchanged. See #1221.
 	InviteToken string `json:"invite_token,omitempty"`
 }
 
@@ -106,7 +109,7 @@ func resolveRegistrationMode(ctx context.Context) models.RegistrationMode {
 //     email; caller must separately POST /invites/{token}/accept to join the
 //     group (see #1219 §7). Allowed even when RegistrationMode is closed.
 //     If the invite carries `invitee_email`, the registration `email` must
-//     match it (case-insensitive); mismatch → 400 (#1221).
+//     match it (trim + case-insensitive); mismatch → 400 (#1221).
 //   - closed    → 403 Forbidden; registration is disabled.
 //   - approval  → account created (inactive); admin must activate; no verification email sent.
 //   - open      → account created (inactive); verification email sent; activates on token click.
@@ -118,7 +121,7 @@ func resolveRegistrationMode(ctx context.Context) models.RegistrationMode {
 // @Produce json
 // @Param data body RegisterRequest true "Registration data (optionally including invite_token)"
 // @Success 200 {object} map[string]string "OK - registration accepted"
-// @Failure 400 {string} string "Bad Request - invalid body, expired/used invite, invalid password, or registration email doesn't match invitee email"
+// @Failure 400 {string} string "Bad Request - invalid body, expired/used invite, invalid password, or registration email (trim + case-insensitive) does not match invitee email"
 // @Failure 403 {string} string "Forbidden - registrations are closed and no valid invite was supplied"
 // @Failure 500 {string} string "Internal Server Error"
 // @Failure 503 {string} string "Service Unavailable - registration mode is misconfigured or invite-based registration is not wired"
@@ -302,7 +305,13 @@ func (api *RegistrationAPI) resolveInvite(r *http.Request, token, callerEmail st
 	if invite.InviteeEmail != nil {
 		inviteEmail := strings.ToLower(strings.TrimSpace(*invite.InviteeEmail))
 		caller := strings.ToLower(strings.TrimSpace(callerEmail))
-		if inviteEmail != caller {
+		// Fail closed on a whitespace-only invitee_email: an empty ==
+		// empty match would silently redeem a malformed invite for any
+		// caller (including a buggy/malicious one that submits an
+		// empty email). The JSON-API binder in createInvite already
+		// strips whitespace, so reaching this branch implies a direct
+		// registry write — refuse to bypass closed-mode for it.
+		if inviteEmail == "" || inviteEmail != caller {
 			return false, &registrationError{
 				status:      http.StatusBadRequest,
 				userMessage: "This invite is for a different email address. Please register with the email address the invite was sent to.",

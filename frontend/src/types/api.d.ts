@@ -7609,7 +7609,7 @@ export type paths = {
         put?: never;
         /**
          * Accept invite
-         * @description Accepts a single-use invite link and joins the group as a user. Requires authentication. If the invite has an invitee email, the user's email must match (case-insensitive); else 422 with code `invite.email_mismatch`.
+         * @description Accepts a single-use invite link and joins the group with the role stored on the invite. Requires auth. If invitee_email is set, user email must match (trimmed, case-insensitive); else 422 `invite.email_mismatch`.
          */
         post: {
             parameters: {
@@ -7650,7 +7650,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Invite expired, already used, user already a member, or user email does not match invitee email */
+                /** @description Invite expired, already used, user already a member, or user email (trim + case-insensitive) does not match invitee email */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -7705,7 +7705,7 @@ export type paths = {
                         };
                     };
                 };
-                /** @description Bad Request - invalid body, expired/used invite, invalid password, or registration email doesn't match invitee email */
+                /** @description Bad Request - invalid body, expired/used invite, invalid password, or registration email (trim + case-insensitive) does not match invitee email */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -8437,9 +8437,12 @@ export type components = {
              *     logging in. See issue #1219 §7 and #1285.
              *
              *     When the invite carries `invitee_email` (the #1533 email-flow path),
-             *     the registration `email` must match it case-insensitively, otherwise
-             *     the request is rejected with 400. Legacy token-only invites
-             *     (invitee_email == nil) keep working unchanged. See #1221.
+             *     the registration `email` must match it after trim + case-insensitive
+             *     normalization, otherwise the request is rejected with 400. A
+             *     whitespace-only invitee_email (only reachable via direct registry
+             *     write — the JSON-API binder strips whitespace) is treated as
+             *     invalid and rejected. Legacy token-only invites (invitee_email ==
+             *     nil) keep working unchanged. See #1221.
              */
             invite_token?: string;
             name?: string;
