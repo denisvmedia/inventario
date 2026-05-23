@@ -194,8 +194,15 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 #### System Administrators
 
 System administrators are platform operators with cross-tenant privileges
-(access to the `/api/v1/admin/*` API and the `/admin/*` UI). The flag is
-distinct from per-group roles and is managed with the `admin` command group:
+(access to the `/api/v1/admin/*` API and the `/admin/*` UI). The privilege
+is stored in the dedicated `system_admin_grants` table (#1784) — a user
+is an admin iff they have a row there — and is structurally separate
+from any field on the `users` row. In production, the `admin` command
+group is the only mutation path; the table has no authenticated HTTP
+write surface. (The debug `/api/v1/seed` endpoint can also mint a grant
+via the seed-fixture flow, but only when `INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE`
+is set — that opt-in is off by default and never enabled in production
+deployments. The e2e harness uses it; nothing else does.)
 
 ```bash
 # Grant platform-wide system-admin to a user

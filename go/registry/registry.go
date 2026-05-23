@@ -1627,32 +1627,6 @@ type UserRegistry interface {
 	// ListByTenant returns all users for a tenant
 	ListByTenant(ctx context.Context, tenantID string) ([]*models.User, error)
 
-	// ListSystemAdmins returns every user with IsSystemAdmin = true,
-	// across all tenants. Used by the `inventario admin list-system-admins`
-	// CLI and by the last-admin invariant check in RevokeSystemAdmin
-	// (#1745). Postgres uses the partial index `users_system_admin_idx`
-	// so the call stays O(matches) even on large user tables.
-	ListSystemAdmins(ctx context.Context) ([]*models.User, error)
-
-	// RevokeSystemAdminAtomic atomically clears IsSystemAdmin on the
-	// user when allowZero=false guarantees at least one admin remains.
-	// Returns ErrLastSystemAdmin if the call would leave zero admins.
-	// Idempotent: revoking a non-admin user returns (false, nil) with
-	// no row touched.
-	//
-	// The atomicity is critical because the naive "List + check >1 +
-	// Update" pattern races: two concurrent revokes can both pass the
-	// count check and both flip the flag, leaving zero admins. The
-	// postgres impl serialises via pg_advisory_xact_lock so the count
-	// and the UPDATE happen under the same lock. #1745.
-	//
-	// allowZero=true bypasses the guard; intended for the deliberate
-	// "I'm shutting down the platform" path. Exposed on the CLI as
-	// `--allow-zero`; never exposed on any HTTP endpoint.
-	//
-	//revive:disable-next-line:flag-parameter
-	RevokeSystemAdminAtomic(ctx context.Context, userID string, allowZero bool) (hadFlag bool, err error)
-
 	// ListAdminByTenant returns a paginated, filtered, and sorted listing
 	// of every user in the given tenant alongside per-row group membership
 	// counts. The endpoint behind this method
@@ -1677,6 +1651,60 @@ type UserRegistry interface {
 	// by ActorID + timestamp to distinguish "genuine 0 sessions" from
 	// "session-count registry hiccup".
 	CountSessionsByUser(ctx context.Context, userID string) (int, error)
+}
+
+// SystemAdminGrantRegistry stores the dedicated grant rows that confer
+// platform-wide system-admin privilege on a user (#1784). Splitting the
+// privilege off the users row removes the escalation footgun of a
+// "just UPDATE users SET is_system_admin = true" path.
+//
+// Write-surface invariant: no production HTTP handler can mutate this
+// table. Production write paths are the `inventario admin` CLI
+// (grant-system-admin / revoke-system-admin) only. The lone exception
+// is the debug seed flow at POST /api/v1/seed, which can mint a grant
+// via ensureSystemAdminUser — but only the system-admin fixture/grant
+// path within that handler is gated on INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE
+// (off by default, never set in production deployments; the e2e harness
+// uses it, nothing else does). The seed endpoint itself is mounted
+// unconditionally; the env var controls only whether a sysadmin grant
+// is created during seeding.
+//
+// The registry is NOT tenant-scoped: system-admin is a platform privilege
+// orthogonal to tenants. Same posture as AuditLogRegistry.
+type SystemAdminGrantRegistry interface {
+	// Exists returns true when the user has a grant row. Hot path —
+	// RequireSystemAdmin runs this on every /api/v1/admin/* request.
+	// Postgres backs the lookup with a unique index on user_id; memory
+	// keeps a simple map keyed by user id.
+	Exists(ctx context.Context, userID string) (bool, error)
+
+	// Grant inserts a grant row. Idempotent: when the user is already
+	// a system admin, returns (true, nil) and does not mutate the row.
+	// grantedBy is the operator who authorised the grant; nil for CLI
+	// bootstrap (no authenticated session).
+	Grant(ctx context.Context, userID string, grantedBy *string) (hadGrant bool, err error)
+
+	// RevokeAtomic removes the grant row while serializing against
+	// concurrent revokes. With allowZero=false, enforces the "at least
+	// one grant remains" invariant — returns ErrLastSystemAdmin
+	// otherwise. Idempotent: when the user has no grant, returns
+	// (false, nil) with no row touched. The postgres impl serialises
+	// via pg_advisory_xact_lock('system_admin_mutations') — the same
+	// lock key the legacy users.is_system_admin path used — so a
+	// rolling deploy is race-free even mid-cutover. allowZero=true
+	// bypasses the guard; exposed on the CLI as --allow-zero only.
+	//
+	//revive:disable-next-line:flag-parameter
+	RevokeAtomic(ctx context.Context, userID string, allowZero bool) (hadGrant bool, err error)
+
+	// List returns every grant row, ordered by (granted_at ASC,
+	// user_id ASC). The user_id secondary key keeps iteration order
+	// stable when two grants share a granted_at — fast-fired CLI
+	// grants can tie on `now()` resolution otherwise, which would
+	// shuffle the rendered list across reads. Backs the
+	// `inventario admin list-system-admins` CLI command (the CLI
+	// joins to users for the rendered table).
+	List(ctx context.Context) ([]*models.SystemAdminGrant, error)
 }
 
 // AdminUserSortField names the columns the admin user listing endpoint
@@ -1892,6 +1920,7 @@ type Set struct {
 	MaintenanceReminderRegistry    MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the idempotency store for the maintenance reminder worker; service-mode only (#1368)
 	CurrencyMigrationRegistry      CurrencyMigrationRegistry     // Currency migration operation rows + audit + HMAC token signing (issue #1550 / epic #202)
 	CommodityScanAuditRegistry     CommodityScanAuditRegistry    // CommodityScanAuditRegistry records every AI vision scan request (#1720); also backs the per-user rate limiter
+	SystemAdminGrantRegistry       SystemAdminGrantRegistry      // Platform-admin grant rows (#1784); no tenant scope, no HTTP write surface
 }
 
 // Search-related types and functions
@@ -1961,6 +1990,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 		validation.Field(&s.CommodityScanAuditRegistry, validation.Required),
+		validation.Field(&s.SystemAdminGrantRegistry, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, s, fields...)

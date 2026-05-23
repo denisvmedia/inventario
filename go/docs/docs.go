@@ -6956,7 +6956,7 @@ const docTemplate = `{
         },
         "/invites/{token}/accept": {
             "post": {
-                "description": "Accepts a single-use invite link and joins the group as a user. Requires authentication.",
+                "description": "Accepts a single-use invite link and joins the group with the role stored on the invite. Requires auth. If invitee_email is set, user email must match (trimmed, case-insensitive); else 422 ` + "`" + `invite.email_mismatch` + "`" + `.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6996,7 +6996,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Invite expired, already used, or user already a member",
+                        "description": "Invite expired, already used, user already a member, or user email (trim + case-insensitive) does not match invitee email",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7039,7 +7039,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request - invalid body, expired/used invite, or invalid password",
+                        "description": "Bad Request - invalid body, expired/used invite, invalid password, or registration email (trim + case-insensitive) does not match invitee email",
                         "schema": {
                             "type": "string"
                         }
@@ -7898,7 +7898,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "invite_token": {
-                    "description": "InviteToken, when present and valid, allows registration even if\nRegistrationMode is closed and suppresses the email-verification step\n(the invite itself vouches for the user). The token is NOT consumed\nhere — the caller must POST /api/v1/invites/{token}/accept after\nlogging in. See issue #1219 §7 and #1285.",
+                    "description": "InviteToken, when present and valid, allows registration even if\nRegistrationMode is closed and suppresses the email-verification step\n(the invite itself vouches for the user). The token is NOT consumed\nhere — the caller must POST /api/v1/invites/{token}/accept after\nlogging in. See issue #1219 §7 and #1285.\n\nWhen the invite carries ` + "`" + `invitee_email` + "`" + ` (the #1533 email-flow path),\nthe registration ` + "`" + `email` + "`" + ` must match it after trim + case-insensitive\nnormalization, otherwise the request is rejected with 400. A\nwhitespace-only invitee_email (only reachable via direct registry\nwrite — the JSON-API binder strips whitespace) is treated as\ninvalid and rejected. Legacy token-only invites (invitee_email ==\nnil) keep working unchanged. See #1221.",
                     "type": "string"
                 },
                 "name": {
@@ -12934,7 +12934,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "is_system_admin": {
-                    "description": "IsSystemAdmin grants platform-wide admin access (#1745).",
+                    "description": "IsSystemAdmin is a transient wire-only field reflecting the user's\nentry in ` + "`" + `system_admin_grants` + "`" + ` (#1784). It is NEVER persisted on the\nusers row — the privilege lives in the grant table. Handlers that\nemit a /auth/me-style payload (the authenticated user reading their\nown identity) populate it from ` + "`" + `SystemAdminGrantRegistry.Exists` + "`" + `\nbefore encoding; the FE uses it as an advisory hint to gate sidebar\nand route visibility (the backend re-checks via ` + "`" + `RequireSystemAdmin` + "`" + `\non every /admin/* request).\n\nPersistence safety: there is no ` + "`" + `//migrator:schema:field` + "`" + ` annotation\nso the migration generator never re-adds the column, and the ` + "`" + `db:\"-\"` + "`" + `\ntag tells sqlx to skip the field in both SELECT and INSERT/UPDATE,\nso this stays purely in-memory. A caller that smuggles ` + "`" + `true` + "`" + ` here\ngains nothing — Go authorization paths never read the field; they\nall consult the grant registry directly.",
                     "type": "boolean"
                 },
                 "last_login_at": {

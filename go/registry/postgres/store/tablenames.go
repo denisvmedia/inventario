@@ -40,6 +40,7 @@ type TableNames struct {
 	CurrencyMigrationAudit  func() TableName
 	CommodityScanAudits     func() TableName
 	BackofficeUsers         func() TableName
+	SystemAdminGrants       func() TableName
 }
 
 var DefaultTableNames = TableNames{
@@ -80,6 +81,7 @@ var DefaultTableNames = TableNames{
 	CurrencyMigrationAudit:  func() TableName { return "currency_migration_audit_rows" },
 	CommodityScanAudits:     func() TableName { return "commodity_scan_audits" },
 	BackofficeUsers:         func() TableName { return "backoffice_users" },
+	SystemAdminGrants:       func() TableName { return "system_admin_grants" },
 }
 
 // NewTableNames returns the default table names

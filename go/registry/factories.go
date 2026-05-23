@@ -175,7 +175,8 @@ type FactorySet struct {
 	// not user-aware data), so the bootstrap CLI accesses them directly
 	// via factorySet.BackofficeUserRegistry. Phase 2 (login flow) and
 	// Phase 3 (admin surface) will add HTTP-side wiring on top.
-	BackofficeUserRegistry BackofficeUserRegistry
+	BackofficeUserRegistry   BackofficeUserRegistry
+	SystemAdminGrantRegistry SystemAdminGrantRegistry // Platform-admin grant store (#1784); not tenant-scoped, not user-aware
 }
 
 // Ping checks readiness of the backing registry dependency (e.g. database).
@@ -316,6 +317,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		MaintenanceReminderRegistry:    fs.MaintenanceReminderRegistry,
 		CurrencyMigrationRegistry:      currencyMigrationRegistry,
 		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
+		SystemAdminGrantRegistry:       fs.SystemAdminGrantRegistry,
 	}, nil
 }
 
@@ -358,5 +360,6 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		MaintenanceReminderRegistry:    fs.MaintenanceReminderRegistry,
 		CurrencyMigrationRegistry:      fs.CurrencyMigrationRegistryFactory.CreateServiceRegistry(),
 		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
+		SystemAdminGrantRegistry:       fs.SystemAdminGrantRegistry,
 	}
 }

@@ -61,7 +61,13 @@ func (r *CommodityScanAuditRegistry) Record(_ context.Context, audit models.Comm
 }
 
 // CountRecentForUser counts audit rows for (tenantID, userID) created
-// at or after since.
+// at or after since whose status indicates the provider was actually
+// called (`ok` / `error` / `timeout`). Validation rejections,
+// rate-limit rejections, and provider-disabled rows are excluded
+// because they don't consume vendor budget — counting them would let
+// a user lock themselves out by sending malformed requests, and would
+// self-perpetuate the lockout once the rate-limit row itself bumped
+// the count past the threshold.
 func (r *CommodityScanAuditRegistry) CountRecentForUser(_ context.Context, tenantID, userID string, since time.Time) (int, error) {
 	if tenantID == "" {
 		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
@@ -82,9 +88,26 @@ func (r *CommodityScanAuditRegistry) CountRecentForUser(_ context.Context, tenan
 		if item.CreatedAt.Before(since) {
 			continue
 		}
+		if !providerAttemptStatus(item.Status) {
+			continue
+		}
 		count++
 	}
 	return count, nil
+}
+
+// providerAttemptStatus reports whether the audit row represents a
+// real provider call (counted toward the per-user rate limit) vs a
+// pre-provider rejection (validation / rate_limited / disabled).
+func providerAttemptStatus(status string) bool {
+	switch status {
+	case models.CommodityScanStatusOK,
+		models.CommodityScanStatusError,
+		models.CommodityScanStatusTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 // DeleteOlderThan removes every audit row older than cutoff.

@@ -3,9 +3,10 @@
 Operational guide for the **system-wide admin section** (umbrella
 [#1744](https://github.com/denisvmedia/inventario/issues/1744)). A
 *system administrator* is a platform operator with cross-tenant
-privileges — distinct from a per-group `admin`/`owner` role. The flag
-lives in `users.is_system_admin` and gates the `/api/v1/admin/*` API
-subtree and the `/admin/*` UI.
+privileges — distinct from a per-group `admin`/`owner` role. The
+privilege lives in the dedicated `system_admin_grants` table (#1784) —
+a user is a system admin iff they have a row there — and gates the
+`/api/v1/admin/*` API subtree and the `/admin/*` UI.
 
 > **Scope.** System admins can list tenants, inspect/block users,
 > oversee groups (including soft-delete), edit group memberships, and
@@ -28,12 +29,12 @@ inventario admin grant-system-admin --email admin@acme.com \
 - The DSN may also come from the `INVENTARIO_DB_DSN` environment
   variable instead of `--db-dsn`.
 - **PostgreSQL only.** `memory://` DSNs are rejected — the in-memory
-  backend cannot persist the flag across restarts.
+  backend cannot persist grants across restarts.
 - The operation is **idempotent**: granting to a user who is already a
   system admin prints `ℹ️  … is already a system administrator.` and
   exits `0`.
 - `grant-system-admin` does **not** add the user to any group — the
-  system-admin flag is orthogonal to group membership.
+  system-admin grant is orthogonal to group membership.
 
 On success:
 
@@ -70,7 +71,7 @@ off active access tokens, block the account (admin UI → user detail →
 **Block**, or `POST /api/v1/admin/users/{id}/block`), which revokes
 refresh tokens and bumps the JWT-blacklist staleness threshold.
 
-To see who currently holds the flag:
+To see who currently holds a grant:
 
 ```bash
 inventario admin list-system-admins \
@@ -105,11 +106,18 @@ inventario admin grant-system-admin --email operator@acme.com --db-dsn …
 ```
 
 Worst-case fallback — a direct SQL statement (use only if the CLI
-binary is unavailable):
+binary is unavailable). After #1784 the privilege lives in
+`system_admin_grants`, not on `users`:
 
 ```sql
-UPDATE users SET is_system_admin = true, updated_at = now()
-WHERE email = 'operator@acme.com';
+INSERT INTO system_admin_grants (id, uuid, user_id, granted_at)
+VALUES (
+  (gen_random_uuid())::text,
+  (gen_random_uuid())::text,
+  (SELECT id FROM users WHERE email = 'operator@acme.com'),
+  now()
+)
+ON CONFLICT (user_id) DO NOTHING;
 ```
 
 Prefer the CLI: it writes an audit-log row and enforces the safety
@@ -190,6 +198,78 @@ constraints:
 
 Every action taken during impersonation is audit-logged with both the
 subject (`user_id`) and the operator (`impersonated_by`).
+
+---
+
+## 6. Rolling deploy / rollback — system_admin_grants migration (#1784)
+
+The platform-admin privilege moved from `users.is_system_admin` to the
+dedicated `system_admin_grants` table in #1784. The migration ships as
+three sequenced steps with strict ordering rules around the application
+binary.
+
+### Forward-apply order
+
+1. **Migration A** — schema-add: `CREATE TABLE system_admin_grants`
+   (timestamp `1780900000_add_system_admin_grants`). Pure DDL; no app
+   change required.
+2. **Migration B** — data backfill: copies every
+   `users.is_system_admin = true` row into `system_admin_grants` using
+   `INSERT ... ON CONFLICT (user_id) DO NOTHING` (timestamp
+   `1781000000_backfill_system_admin_grants`). Idempotent — safe to
+   re-run.
+3. **Application binary** — deploy the new (grants-reading) build.
+   `RequireSystemAdmin` and every admin handler now consult
+   `SystemAdminGrantRegistry.Exists` instead of the struct field.
+4. **Migration C** — schema-drop: removes `users.is_system_admin`
+   plus its partial index (timestamp
+   `1781100000_drop_users_is_system_admin`).
+
+**Critical ordering**: the new app binary MUST be in place BEFORE
+migration C runs. If C lands first, every old-binary instance still
+reads `user.IsSystemAdmin` as the zero-value `false` and 403s every
+admin user until the rolling deploy completes. A safe rollout pulls
+all old replicas before applying C.
+
+### Recovery from a partial migrator run
+
+- **Stops between A and B**: the grants table exists but is empty; the
+  old binary keeps working off `users.is_system_admin`. Re-run
+  `inventario db migrate up` — the backfill's `ON CONFLICT (user_id)
+  DO NOTHING` makes the second pass a no-op for rows that already
+  copied. Safe to retry indefinitely.
+- **Stops between B and C**: both columns and the grants table are
+  populated. Either roll forward (deploy the new binary, apply C) or
+  roll back via the down migrations in reverse — there is no
+  consistency drift here because the new binary writes to grants AND
+  the old binary reads `is_system_admin`. The two sources stay in
+  lock-step until C runs.
+
+### Rollback (production safety)
+
+Rollback order is the reverse of forward, with one binary constraint:
+
+1. Apply migration **C-down** — re-adds `users.is_system_admin` with
+   default `false` and re-creates the partial index. The column is
+   empty; admins read as false on EVERY request until B-down runs.
+2. Apply migration **B-down** — re-sets `users.is_system_admin = true`
+   for every user with a current `system_admin_grants` row. The
+   WHERE clause skips rows that already read true so `updated_at`
+   churn is bounded to the rows the rollback actually had to change.
+   The grants table itself is NOT dropped; its lifecycle belongs to
+   the schema-add migration (A-down).
+3. Only AFTER B-down completes is it safe to roll back the
+   application binary to a pre-#1784 build. The old binary's
+   `RequireSystemAdmin` reads `user.IsSystemAdmin`; rolling it back
+   between C-down and B-down would 403 every admin user.
+4. (Optional) Apply migration **A-down** to drop the grants table.
+   Only do this if you intend to abandon #1784 entirely — leaving the
+   table dormant costs nothing and makes a future re-forward
+   trivial.
+
+The data-backfill exception (per AGENTS.md) was granted for this
+migration set on issue #1784; the SQL was reviewed alongside the
+schema migrations.
 
 ---
 

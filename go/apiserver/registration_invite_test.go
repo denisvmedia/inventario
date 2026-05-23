@@ -59,6 +59,19 @@ func (f *inviteFixture) mintInvite(c *qt.C) string {
 	return invite.Token
 }
 
+// mintInviteForEmail returns a fresh single-use invite token whose
+// invitee_email is bound to the given address (the #1533 email-flow
+// shape). #1221 requires the registering/accepting user's email to
+// match this value (case-insensitive).
+func (f *inviteFixture) mintInviteForEmail(c *qt.C, email string) string {
+	invite, err := f.groupService.CreateInviteWithEmail(
+		context.Background(), inviteTestTenantID, f.group.ID, f.creatorID,
+		models.GroupRoleUser, &email, 0,
+	)
+	c.Assert(err, qt.IsNil)
+	return invite.Token
+}
+
 // mintExpiredInvite produces a token whose ExpiresAt is already in the past.
 // It creates the invite via the service (which forbids past expiry) and then
 // back-dates it directly via the registry.
@@ -359,4 +372,116 @@ func TestHandleRegister_OpenModeWithoutInviteStillWorks(t *testing.T) {
 		created = u
 	}
 	c.Assert(created.IsActive, qt.IsFalse, qt.Commentf("open-mode registration without invite must stay pending email verification"))
+}
+
+// closedModeInviteWithMatchingEmail — #1221: invite was minted via the
+// email-flow (invitee_email != nil) and the registration email matches.
+// The user is created ACTIVE just like the unconstrained invite path.
+// Case-insensitivity is exercised explicitly by registering with a
+// mixed-case variant of the invitee email.
+func TestHandleRegister_ClosedModeInviteWithMatchingEmailCreatesActiveUser(t *testing.T) {
+	c := qt.New(t)
+
+	f := newInviteFixture(c)
+	userReg := &registrationUserRegistry{mockUserRegistryForAuth: &mockUserRegistryForAuth{users: map[string]*models.User{}}}
+	r := newRegistrationRouterWithInvites(apiserver.RegistrationParams{
+		UserRegistry:         userReg,
+		VerificationRegistry: memory.NewEmailVerificationRegistry(),
+		GroupService:         f.groupService,
+		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
+	}, models.RegistrationModeClosed)
+
+	token := f.mintInviteForEmail(c, "match@example.com")
+	// Mixed-case input proves the comparison is case-insensitive — the
+	// handler lower-cases req.Email before resolveInvite runs.
+	w := postRegister(c, r, map[string]string{
+		"email":        "Match@Example.com",
+		"name":         "Matching Invitee",
+		"password":     "Password123",
+		"invite_token": token,
+	})
+
+	c.Assert(w.Code, qt.Equals, http.StatusOK)
+	c.Assert(userReg.users, qt.HasLen, 1)
+	var created *models.User
+	for _, u := range userReg.users {
+		created = u
+	}
+	c.Assert(created, qt.IsNotNil)
+	c.Assert(created.Email, qt.Equals, "match@example.com")
+	c.Assert(created.IsActive, qt.IsTrue,
+		qt.Commentf("invite-based registration with matching email must mark user active"))
+}
+
+// closedModeInviteWithMismatchEmail — #1221: invite was minted via the
+// email-flow (invitee_email != nil) but the registration email is for
+// someone else. Rejected with 400 and a useful message; no user is
+// created. The invite stays unconsumed so the legitimate invitee can
+// still redeem it.
+func TestHandleRegister_ClosedModeInviteWithMismatchEmailRejected(t *testing.T) {
+	c := qt.New(t)
+
+	f := newInviteFixture(c)
+	userReg := &registrationUserRegistry{mockUserRegistryForAuth: &mockUserRegistryForAuth{users: map[string]*models.User{}}}
+	r := newRegistrationRouterWithInvites(apiserver.RegistrationParams{
+		UserRegistry:         userReg,
+		VerificationRegistry: memory.NewEmailVerificationRegistry(),
+		GroupService:         f.groupService,
+		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
+	}, models.RegistrationModeClosed)
+
+	token := f.mintInviteForEmail(c, "intended@example.com")
+	w := postRegister(c, r, map[string]string{
+		"email":        "other@example.com",
+		"name":         "Wrong Invitee",
+		"password":     "Password123",
+		"invite_token": token,
+	})
+
+	c.Assert(w.Code, qt.Equals, http.StatusBadRequest)
+	c.Assert(w.Body.String(), qt.Contains, "different email")
+	c.Assert(userReg.users, qt.HasLen, 0,
+		qt.Commentf("mismatched-email invite registration must not create a user"))
+
+	// Invite must remain unconsumed so the legitimate invitee can still use it.
+	invite, err := f.invites.GetByToken(context.Background(), token)
+	c.Assert(err, qt.IsNil)
+	c.Assert(invite.IsUsed(), qt.IsFalse)
+}
+
+// closedModeLegacyInviteIgnoresEmail — #1221 regression guard: a legacy
+// token-only invite (invitee_email == nil, the copy-paste flow) keeps
+// working as it did before the email-match check landed. The admin
+// generated a URL they handed to the intended person — there's no
+// invitee_email to compare against, so any email registers fine.
+func TestHandleRegister_ClosedModeLegacyInviteIgnoresEmail(t *testing.T) {
+	c := qt.New(t)
+
+	f := newInviteFixture(c)
+	userReg := &registrationUserRegistry{mockUserRegistryForAuth: &mockUserRegistryForAuth{users: map[string]*models.User{}}}
+	r := newRegistrationRouterWithInvites(apiserver.RegistrationParams{
+		UserRegistry:         userReg,
+		VerificationRegistry: memory.NewEmailVerificationRegistry(),
+		GroupService:         f.groupService,
+		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
+	}, models.RegistrationModeClosed)
+
+	// mintInvite() builds a token-only invite (invitee_email == nil).
+	token := f.mintInvite(c)
+	w := postRegister(c, r, map[string]string{
+		"email":        "whoever@example.com",
+		"name":         "Whoever",
+		"password":     "Password123",
+		"invite_token": token,
+	})
+
+	c.Assert(w.Code, qt.Equals, http.StatusOK)
+	c.Assert(userReg.users, qt.HasLen, 1)
+	var created *models.User
+	for _, u := range userReg.users {
+		created = u
+	}
+	c.Assert(created.Email, qt.Equals, "whoever@example.com")
+	c.Assert(created.IsActive, qt.IsTrue,
+		qt.Commentf("legacy invite path must still mark user active"))
 }

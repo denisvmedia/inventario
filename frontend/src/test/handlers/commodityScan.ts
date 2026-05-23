@@ -3,9 +3,9 @@ import { http, HttpResponse } from "msw"
 import { apiUrl } from "."
 
 // MSW factory for the AI-vision scan endpoint (#1720). Mirrors the BE
-// handler `apiserver/commodity_scan.go::scanCommodity` — the response
-// is wrapped in a JSON:API `data.attributes` envelope with `fields`
-// and `warnings` objects.
+// handler `apiserver/commodity_scan.go::(commodityScanAPI).handleScan` —
+// the response is wrapped in a JSON:API `data.attributes` envelope with
+// `fields` and `warnings` objects.
 //
 // Usage:
 //   server.use(...commodityScanHandlers.ok("g", { name: { value: "Sony", confidence: 0.9 } }))

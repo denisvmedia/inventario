@@ -59,11 +59,14 @@ func TestCommodityScanService_ProviderDisabled(t *testing.T) {
 	_, err := svc.Scan(context.Background(), "tenant-1", "user-1", newScanInput(jpegPhoto("a.jpg", 64)))
 	c.Assert(errors.Is(err, services.ErrScanProviderDisabled), qt.IsTrue)
 
-	// Audit row still recorded so the rate limiter and dashboards see
-	// the attempt even though no upstream call went out.
+	// Audit row is written (provider="none", status="disabled") so
+	// dashboards see the attempt, but CountRecentForUser excludes
+	// disabled rows from the rate-limit count — a deployment with
+	// the feature off shouldn't accrue a per-user budget the user
+	// never spent.
 	count, err := audit.CountRecentForUser(context.Background(), "tenant-1", "user-1", time.Now().Add(-1*time.Hour))
 	c.Assert(err, qt.IsNil)
-	c.Assert(count, qt.Equals, 1)
+	c.Assert(count, qt.Equals, 0)
 }
 
 func TestCommodityScanService_NoPhotos(t *testing.T) {
@@ -128,10 +131,13 @@ func TestCommodityScanService_RateLimited(t *testing.T) {
 	_, err = svc.Scan(context.Background(), "tenant-1", "user-1", newScanInput(jpegPhoto("b.jpg", 64)))
 	c.Assert(errors.Is(err, services.ErrScanRateLimited), qt.IsTrue)
 
-	// Both attempts are recorded.
+	// CountRecentForUser counts provider attempts only — the first
+	// call (status=ok) counts, the second (status=rate_limited) does
+	// not. This is the load-bearing semantic: a rate-limited row
+	// counting itself would self-perpetuate the lockout forever.
 	count, err := audit.CountRecentForUser(context.Background(), "tenant-1", "user-1", time.Now().Add(-1*time.Hour))
 	c.Assert(err, qt.IsNil)
-	c.Assert(count, qt.Equals, 2)
+	c.Assert(count, qt.Equals, 1)
 }
 
 func TestCommodityScanService_ProviderTimeout(t *testing.T) {

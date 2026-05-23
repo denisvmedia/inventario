@@ -79,20 +79,6 @@ func (m *mockUserRegistryForSecurityTests) ListByTenant(ctx context.Context, ten
 	return users, nil
 }
 
-func (m *mockUserRegistryForSecurityTests) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
-	var admins []*models.User
-	for _, user := range m.users {
-		if user.IsSystemAdmin {
-			admins = append(admins, user)
-		}
-	}
-	return admins, nil
-}
-
-func (m *mockUserRegistryForSecurityTests) RevokeSystemAdminAtomic(ctx context.Context, userID string, allowZero bool) (bool, error) {
-	return false, nil
-}
-
 func (m *mockUserRegistryForSecurityTests) ListAdminByTenant(ctx context.Context, tenantID string, opts registry.AdminUserListOptions) ([]*registry.AdminUserListItem, int, error) {
 	return nil, 0, nil
 }

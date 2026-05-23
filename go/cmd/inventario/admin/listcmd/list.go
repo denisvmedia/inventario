@@ -17,7 +17,6 @@ import (
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/services/admin"
 )
 
@@ -42,16 +41,14 @@ func New(dbConfig *shared.DatabaseConfig) *Command {
 	c.Base = command.NewBase(&cobra.Command{
 		Use:   "list-system-admins",
 		Short: "List all platform system administrators",
-		Long: `List every user with the system-admin flag set.
+		Long: `List every grant in the system_admin_grants table joined to
+its user row.
 
 Output columns: id, email, name, granted_at.
 
-NOTE: the ` + "`granted_at`" + ` column is sourced from the user row's
-updated_at — the schema does not yet carry a dedicated grant timestamp.
-For users whose only post-grant write was the grant itself this reads
-correctly; for users edited later (name change, password reset) it
-reflects the most recent write, not the grant moment. A dedicated
-column will be added when the audit-trail UI lands (#1744 umbrella).
+The ` + "`granted_at`" + ` column is sourced directly from the
+system_admin_grants row (#1784) and reflects the moment the grant was
+issued — not the most recent write to the user row.
 
 OUTPUT FORMATS:
   • table: human-readable formatted output (default)
@@ -111,13 +108,38 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 	}
 }
 
-func outputJSON(out io.Writer, admins []*models.User) error {
-	encoder := json.NewEncoder(out)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(admins)
+// listingJSON is the wire shape the --output=json variant emits.
+// Intentionally reduced from the full *models.User row: list-system-admins
+// answers "who currently holds the system-admin privilege and when was
+// it granted", not "give me the user-account identity record". Fields
+// dropped on purpose: created_at, updated_at, tenant_id, is_active —
+// those belong to the user-account identity, not to the grant. Existing
+// scripts that walk `id` / `email` / `name` keep working unchanged;
+// scripts that need the dropped fields can join against `users` via the
+// returned id.
+type listingJSON struct {
+	ID        string `json:"id"`
+	Email     string `json:"email"`
+	Name      string `json:"name"`
+	GrantedAt string `json:"granted_at"`
 }
 
-func (c *Command) outputTable(admins []*models.User) error {
+func outputJSON(out io.Writer, admins []*admin.SystemAdminListing) error {
+	rows := make([]listingJSON, 0, len(admins))
+	for _, a := range admins {
+		rows = append(rows, listingJSON{
+			ID:        a.User.ID,
+			Email:     a.User.Email,
+			Name:      a.User.Name,
+			GrantedAt: a.GrantedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		})
+	}
+	encoder := json.NewEncoder(out)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(rows)
+}
+
+func (c *Command) outputTable(admins []*admin.SystemAdminListing) error {
 	out := c.Cmd().OutOrStdout()
 
 	if len(admins) == 0 {
@@ -128,13 +150,13 @@ func (c *Command) outputTable(admins []*models.User) error {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	defer w.Flush()
 
-	fmt.Fprintln(w, "ID\tEMAIL\tNAME\tGRANTED_AT (proxy: updated_at)")
-	for _, u := range admins {
+	fmt.Fprintln(w, "ID\tEMAIL\tNAME\tGRANTED_AT")
+	for _, a := range admins {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-			u.ID,
-			u.Email,
-			u.Name,
-			u.UpdatedAt.Format("2006-01-02 15:04:05"),
+			a.User.ID,
+			a.User.Email,
+			a.User.Name,
+			a.GrantedAt.Format("2006-01-02 15:04:05"),
 		)
 	}
 	return nil

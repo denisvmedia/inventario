@@ -85,14 +85,6 @@ func (m *mockUserRegistry) ListByTenant(ctx context.Context, tenantID string) ([
 	return nil, registry.ErrNotFound
 }
 
-func (m *mockUserRegistry) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
-	return nil, registry.ErrNotFound
-}
-
-func (m *mockUserRegistry) RevokeSystemAdminAtomic(ctx context.Context, userID string, allowZero bool) (bool, error) {
-	return false, registry.ErrNotFound
-}
-
 func (m *mockUserRegistry) ListAdminByTenant(ctx context.Context, tenantID string, opts registry.AdminUserListOptions) ([]*registry.AdminUserListItem, int, error) {
 	return nil, 0, nil
 }

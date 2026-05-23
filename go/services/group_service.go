@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,7 +35,13 @@ var (
 	// ErrInviteNotByEmail is returned when the resend path is called on an
 	// invite created via the legacy token-only flow (invitee_email is nil
 	// — there's no address to resend to).
-	ErrInviteNotByEmail    = errx.NewSentinel("invite was not created with an email address")
+	ErrInviteNotByEmail = errx.NewSentinel("invite was not created with an email address")
+	// ErrInviteEmailMismatch is returned when an invite was addressed to a
+	// specific email (invitee_email != nil, the #1533 email-flow path) and
+	// the registering or accepting user's email doesn't match. Legacy
+	// copy-paste invites (invitee_email == nil) skip this check — the
+	// admin handed the URL to whoever they meant to invite. See #1221.
+	ErrInviteEmailMismatch = errx.NewSentinel("user email does not match invitee email on invite")
 	ErrAlreadyMember       = errx.NewSentinel("user is already a member of this group")
 	ErrNotGroupMember      = errx.NewSentinel("user is not a member of this group")
 	ErrNotGroupAdmin       = errx.NewSentinel("user is not an admin of this group")
@@ -785,24 +792,20 @@ func (s *GroupService) GetInviteInfo(ctx context.Context, token string) (*models
 // the invite's tenant, otherwise we'd create a cross-tenant membership (which
 // in memory silently violates isolation and on PostgreSQL fails RLS with a
 // confusing error).
-func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, expectedTenantID string) (*models.GroupMembership, error) {
+//
+// When the invite was created with an invitee_email (the #1533 email-flow
+// path), userEmail must match invitee_email case-insensitively; otherwise
+// ErrInviteEmailMismatch is returned. Legacy token-only invites
+// (invitee_email == nil) ignore userEmail — the admin handed the URL to
+// whoever they meant to invite. See #1221.
+func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, userEmail, expectedTenantID string) (*models.GroupMembership, error) {
 	invite, err := s.inviteRegistry.GetByToken(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 
-	if invite.TenantID != expectedTenantID {
-		// Don't leak the distinction between "token not found" and
-		// "token belongs to another tenant".
-		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "GroupInvite"))
-	}
-
-	if invite.IsExpired() {
-		return nil, errxtrace.Classify(ErrInviteExpired)
-	}
-
-	if invite.IsUsed() {
-		return nil, errxtrace.Classify(ErrInviteAlreadyUsed)
+	if err := validateInviteForAccept(invite, userEmail, expectedTenantID); err != nil {
+		return nil, err
 	}
 
 	// Check if already a member. Distinguish real failures from NotFound.
@@ -892,6 +895,54 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, expected
 	s.ensureDefaultGroupBestEffort(ctx, userID)
 
 	return created, nil
+}
+
+// validateInviteForAccept enforces the pre-redemption invariants of the
+// AcceptInvite flow:
+//
+//   - tenant match (cross-tenant tokens are masked as not-found so we
+//     don't leak the distinction);
+//   - invite is not expired;
+//   - invite is not already used;
+//   - #1221: if the invite carries an invitee_email (the #1533
+//     email-flow path), the accepting user's email must match it after
+//     trim + case-insensitive normalization. Legacy token-only invites
+//     (invitee_email == nil) bypass the email check — the admin
+//     vouched for whoever they handed the URL to. An invitee_email
+//     that normalizes to the empty string (only possible via a direct
+//     registry write — the JSON-API binder in createInvite rejects
+//     whitespace-only input) is unconditionally rejected: even a
+//     caller whose userEmail also normalizes to "" must not match,
+//     otherwise a malformed invite would be redeemable for any
+//     blank-email caller.
+//
+// Extracted as a free function so AcceptInvite stays under the gocyclo
+// budget while keeping every rejection sentinel grep-friendly.
+func validateInviteForAccept(invite *models.GroupInvite, userEmail, expectedTenantID string) error {
+	if invite.TenantID != expectedTenantID {
+		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "GroupInvite"))
+	}
+	if invite.IsExpired() {
+		return errxtrace.Classify(ErrInviteExpired)
+	}
+	if invite.IsUsed() {
+		return errxtrace.Classify(ErrInviteAlreadyUsed)
+	}
+	if invite.InviteeEmail == nil {
+		return nil
+	}
+	inviteEmail := strings.ToLower(strings.TrimSpace(*invite.InviteeEmail))
+	caller := strings.ToLower(strings.TrimSpace(userEmail))
+	// Fail closed on a whitespace-only invitee_email: even if the
+	// caller also normalizes to empty, an empty == empty match would
+	// silently redeem a malformed invite. The JSON-API binder in
+	// createInvite already rejects whitespace input, so reaching this
+	// branch implies a direct registry write (or future bypass) — we
+	// refuse to redeem it.
+	if inviteEmail == "" || inviteEmail != caller {
+		return errxtrace.Classify(ErrInviteEmailMismatch)
+	}
+	return nil
 }
 
 // RevokeInviteForGroup verifies the invite belongs to the given group, then deletes it.

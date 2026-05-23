@@ -22,6 +22,14 @@ const (
 	// CommodityScanStatusDisabled signals the provider was configured
 	// as "none" — the request never went out.
 	CommodityScanStatusDisabled = "disabled"
+	// CommodityScanStatusValidation signals the request was rejected
+	// pre-provider by the service-layer validator (too many photos,
+	// unsupported MIME, oversize part, no photos, body cap hit).
+	// Distinct from "error" so the rate limiter can exclude these
+	// rows — a user who sends malformed requests shouldn't burn the
+	// per-user budget that's meant to bound vendor cost on real
+	// provider attempts.
+	CommodityScanStatusValidation = "validation"
 )
 
 // CommodityScanAudit records each invocation of the AI vision scan

@@ -217,7 +217,8 @@ func (s *CommodityScanService) RecordOversize(ctx context.Context, tenantID, use
 	s.writeAudit(ctx, models.CommodityScanAudit{
 		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
 		Provider:                s.providerName(),
-		Status:                  models.CommodityScanStatusError,
+		Model:                   s.providerModel(),
+		Status:                  models.CommodityScanStatusValidation,
 		ErrorCode:               "commodity_scan.photo_too_large",
 	})
 }
@@ -376,7 +377,7 @@ func (s *CommodityScanService) validateInput(ctx context.Context, tenantID, user
 			TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
 			Provider:                s.providerName(),
 			Model:                   s.providerModel(),
-			Status:                  models.CommodityScanStatusError,
+			Status:                  models.CommodityScanStatusValidation,
 			ErrorCode:               "commodity_scan.no_photos",
 		})
 		return errxtrace.Classify(ErrScanNoPhotos)
@@ -389,7 +390,7 @@ func (s *CommodityScanService) validateInput(ctx context.Context, tenantID, user
 			Model:                   s.providerModel(),
 			PhotoCount:              clampInt16(len(in.Photos)),
 			TotalPhotoBytes:         clampInt32(totalBytes),
-			Status:                  models.CommodityScanStatusError,
+			Status:                  models.CommodityScanStatusValidation,
 			ErrorCode:               "commodity_scan.too_many_photos",
 		})
 		return errxtrace.Classify(ErrScanTooManyPhotos)
@@ -400,9 +401,10 @@ func (s *CommodityScanService) validateInput(ctx context.Context, tenantID, user
 			s.writeAudit(ctx, models.CommodityScanAudit{
 				TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
 				Provider:                s.providerName(),
+				Model:                   s.providerModel(),
 				PhotoCount:              clampInt16(len(in.Photos)),
 				TotalPhotoBytes:         clampInt32(totalBytes),
-				Status:                  models.CommodityScanStatusError,
+				Status:                  models.CommodityScanStatusValidation,
 				ErrorCode:               "commodity_scan.unsupported_mime",
 			})
 			return errxtrace.Classify(ErrScanUnsupportedMIME)
@@ -411,9 +413,10 @@ func (s *CommodityScanService) validateInput(ctx context.Context, tenantID, user
 			s.writeAudit(ctx, models.CommodityScanAudit{
 				TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
 				Provider:                s.providerName(),
+				Model:                   s.providerModel(),
 				PhotoCount:              clampInt16(len(in.Photos)),
 				TotalPhotoBytes:         clampInt32(totalBytes),
-				Status:                  models.CommodityScanStatusError,
+				Status:                  models.CommodityScanStatusValidation,
 				ErrorCode:               "commodity_scan.photo_too_large",
 			})
 			return errxtrace.Classify(ErrScanPhotoTooLarge)

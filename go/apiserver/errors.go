@@ -255,6 +255,27 @@ func adminMemberTenantMismatchError(err error) jsonapi.Error {
 	}
 }
 
+// inviteAcceptRejectionError maps the invite-accept business-rule
+// sentinels (expired, already used, already a member, #1221 email
+// mismatch) to their 422 wire shape. The email-mismatch case carries
+// the JSON:API code `invite.email_mismatch` so the FE can distinguish
+// it from generic invite-state errors; the other three keep the bare
+// 422 they had pre-#1221. Extracted as a free function so the
+// toJSONAPIError switch stays under the gocyclo budget while keeping
+// the mapping explicit and grep-friendly.
+func inviteAcceptRejectionError(err error) jsonapi.Error {
+	if errors.Is(err, services.ErrInviteEmailMismatch) {
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusUnprocessableEntity,
+			StatusText:     "Unprocessable Entity",
+			Code:           "invite.email_mismatch",
+		}
+	}
+	return NewUnprocessableEntityError(err)
+}
+
 // adminImpersonationGuardError maps the #1750 impersonation guard
 // sentinels (target-is-admin, target-blocked, nested, not-active) to
 // their 422 + code wire shape. Extracted as a free function — like
@@ -403,14 +424,20 @@ func toJSONAPIError(err error) jsonapi.Error {
 		return NewUnprocessableEntityError(err)
 	case errors.Is(err, services.ErrInviteExpired),
 		errors.Is(err, services.ErrInviteAlreadyUsed),
-		errors.Is(err, services.ErrAlreadyMember):
+		errors.Is(err, services.ErrAlreadyMember),
+		errors.Is(err, services.ErrInviteEmailMismatch):
 		// Business-rule violations on the invite accept path: the token
 		// is syntactically valid but cannot be redeemed right now.
 		// Swagger on POST /invites/{token}/accept advertises 422 for
 		// exactly these conditions; without this mapping they fall into
 		// the default branch and surface as 500, which would mislead
 		// clients (and e2e assertions) into treating them as server bugs.
-		return NewUnprocessableEntityError(err)
+		// The #1221 email-mismatch sentinel carries an extra JSON:API
+		// `code` so the FE can render targeted copy ("this invite is
+		// for a different email address") — handled by a helper that
+		// keeps the wire shape sentinel-specific while collapsing the
+		// switch arm so gocyclo stays under budget.
+		return inviteAcceptRejectionError(err)
 	case errors.Is(err, registry.ErrGroupCurrencyNotSet):
 		return NewBadRequestError(err)
 	case errors.Is(err, services.ErrRateLimitExceeded):
