@@ -37,9 +37,6 @@ type User struct {
 	Name string `json:"name" db:"name"`
 	//migrator:schema:field name="is_active" type="BOOLEAN" not_null="true" default="true"
 	IsActive bool `json:"is_active" db:"is_active"`
-	// IsSystemAdmin grants platform-wide admin access (#1745).
-	//migrator:schema:field name="is_system_admin" type="BOOLEAN" not_null="true" default="false"
-	IsSystemAdmin bool `json:"is_system_admin" db:"is_system_admin" userinput:"false"`
 	//migrator:schema:field name="last_login_at" type="TIMESTAMP"
 	LastLoginAt *time.Time `json:"last_login_at" db:"last_login_at" userinput:"false"`
 	// DefaultGroupID is the user's preferred landing group after login.
@@ -70,13 +67,6 @@ type UserIndexes struct {
 
 	// Index for active users
 	//migrator:schema:index name="users_active_idx" fields="is_active" table="users"
-	_ int
-
-	// Partial index for the rare system-admin lookups (#1745). The set is
-	// expected to stay tiny (single-digit rows in any deployment), so a
-	// partial index over WHERE is_system_admin = true keeps `ListSystemAdmins`
-	// O(matches) and ignores the regular users that dominate the table.
-	//migrator:schema:index name="users_system_admin_idx" fields="is_system_admin" condition="is_system_admin = true" table="users"
 	_ int
 }
 

@@ -299,6 +299,22 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 		sessionCount = 0
 	}
 
+	// Resolve the is_system_admin attribute via the dedicated grant
+	// registry (#1784). A lookup failure degrades to false rather than
+	// 500-ing the whole user-detail response — the flag is an FE hint
+	// for the "cannot impersonate" disabled-button copy, not the
+	// authoritative gate (RequireSystemAdmin owns that).
+	isAdmin := false
+	if api.factorySet.SystemAdminGrantRegistry != nil {
+		ok, err := api.factorySet.SystemAdminGrantRegistry.Exists(r.Context(), user.ID)
+		if err != nil {
+			slog.Warn("admin getUser: grant lookup failed",
+				"user_id", user.ID, "error", err)
+		} else {
+			isAdmin = ok
+		}
+	}
+
 	// Audit AFTER render — a JSON-encoding / writer failure should
 	// land in the audit trail as Success=false rather than the
 	// previous "say success then 500" pattern. The session-count
@@ -308,6 +324,7 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 		User:               user,
 		Memberships:        mems,
 		ActiveSessionCount: sessionCount,
+		IsSystemAdmin:      isAdmin,
 	}))
 	api.auditGetUser(r, userID, user.TenantID, renderErr)
 	if renderErr != nil {
