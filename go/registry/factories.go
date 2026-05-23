@@ -168,6 +168,13 @@ type FactorySet struct {
 	StorageQuotaReminderRegistry          StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the storage quota warning worker idempotency store; service-mode only (#1585)
 	MaintenanceReminderRegistry           MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the maintenance reminder worker idempotency store; service-mode only (#1368)
 	CurrencyMigrationRegistryFactory      CurrencyMigrationRegistryFactory
+	// BackofficeUserRegistry persists platform-operator identities
+	// (issue #1785). Lives on FactorySet only — back-office identities
+	// are NOT part of the per-request *Set (they're cross-cutting infra,
+	// not user-aware data), so the bootstrap CLI accesses them directly
+	// via factorySet.BackofficeUserRegistry. Phase 2 (login flow) and
+	// Phase 3 (admin surface) will add HTTP-side wiring on top.
+	BackofficeUserRegistry BackofficeUserRegistry
 }
 
 // Ping checks readiness of the backing registry dependency (e.g. database).
