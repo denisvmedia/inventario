@@ -87,17 +87,26 @@ func (*File) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 
-func (i *File) ValidateWithContext(ctx context.Context) error {
-	fields := make([]*validation.FieldRules, 0)
-
-	fields = append(fields,
-		validation.Field(&i.Path, validation.Required),
-		validation.Field(&i.OriginalPath, validation.Required),
-		validation.Field(&i.Ext, validation.Required),
-		validation.Field(&i.MIMEType, validation.Required),
-	)
-
-	return validation.ValidateStructWithContext(ctx, i, fields...)
+// ValidateWithContext validates the per-blob metadata sub-struct.
+//
+// The post-#1779 / post-#1793 contract is that File rows go through two
+// lifecycle phases: at row-create time (POST /files) the fields are
+// intentionally empty placeholders — the blob doesn't exist yet — and
+// only become populated by the server-side upload handler. The earlier
+// `Required` rules on Path / OriginalPath / Ext / MIMEType were
+// effectively dead anyway (FileEntity.ValidateWithContext validates the
+// pointer is non-nil but never recurses into File.ValidateWithContext)
+// AND would have rejected the new metadata-only create path.
+//
+// The cascade is intentionally not wired up: keeping File validation a
+// pure metadata-shape check (Length on title-like fields, here a no-op
+// because none currently apply) means an unpopulated File literal
+// passes, matching the createFile handler's lifecycle expectations.
+// If a future field carries shape constraints (max length, enum), they
+// go here and the cascade can stay off.
+func (i *File) ValidateWithContext(_ context.Context) error {
+	_ = i
+	return nil
 }
 
 // FileType represents the type/category of a file
