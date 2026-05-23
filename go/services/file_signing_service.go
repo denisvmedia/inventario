@@ -130,19 +130,51 @@ func (s *FileSigningService) GenerateSignedURL(fileID, fileExt, userID string, b
 	return signedURL, nil
 }
 
-// GenerateSignedURLsWithThumbnails generates signed URLs for a file and its thumbnails
-func (s *FileSigningService) GenerateSignedURLsWithThumbnails(file *models.FileEntity, userID string, binding SessionBinding) (string, map[string]string, error) {
+// GenerateSignedURLsWithThumbnails mints a signed URL for the original
+// file and best-effort signed URLs for any pre-computed thumbnails the
+// FE may want to render alongside it.
+//
+// Parameters:
+//   - file: the FileEntity being exposed. `file.ID` is the routing key,
+//     `file.Ext` provides the sanity-check extension for the original
+//     URL, and `file.MIMEType` decides whether thumbnails are minted
+//     at all (only image/jpeg and image/png are eligible — every other
+//     MIME type returns an empty `thumbnails` map).
+//   - userID: the user the URLs are minted for; folded into the HMAC so
+//     a foreign-user replay fails validation.
+//   - binding: the SessionBinding from the request that authorized this
+//     signing call (see ExtractSessionBinding). Pass "" to produce
+//     unbound URLs; otherwise downstream validators must present the
+//     same binding to consume them.
+//
+// Return values:
+//   - original: the signed URL for the full-resolution file. Always
+//     populated when err is nil.
+//   - thumbnails: keyed by size name ("small", "medium"). Only carries
+//     entries for sizes that could be signed; a missing entry simply
+//     means no thumbnail is available at that size and callers should
+//     fall back to `original`. Non-nil but empty when the file has no
+//     eligible MIME type.
+//   - err: non-nil only when the *original* URL cannot be signed.
+//     Per-thumbnail signing errors are swallowed by design — a missing
+//     thumbnail URL is recoverable on the client; an unsigned original
+//     is not.
+func (s *FileSigningService) GenerateSignedURLsWithThumbnails(
+	file *models.FileEntity,
+	userID string,
+	binding SessionBinding,
+) (original string, thumbnails map[string]string, err error) {
 	// Get file extension (remove leading dot if present)
 	fileExt := strings.TrimPrefix(file.Ext, ".")
 
 	// Generate signed URL for the original file
-	originalURL, err := s.GenerateSignedURL(file.ID, fileExt, userID, binding)
+	original, err = s.GenerateSignedURL(file.ID, fileExt, userID, binding)
 	if err != nil {
 		return "", nil, errxtrace.Wrap("failed to generate original file URL", err)
 	}
 
 	// Generate thumbnail URLs if it's a supported image format
-	thumbnails := make(map[string]string)
+	thumbnails = make(map[string]string)
 	if mimekit.IsImage(file.MIMEType) && (strings.HasPrefix(file.MIMEType, "image/jpeg") || strings.HasPrefix(file.MIMEType, "image/png")) {
 		thumbnailSizes := map[string]int{
 			"small":  150,
@@ -150,16 +182,18 @@ func (s *FileSigningService) GenerateSignedURLsWithThumbnails(file *models.FileE
 		}
 
 		for sizeName := range thumbnailSizes {
-			thumbnailURL, err := s.generateThumbnailSignedURL(file.ID, sizeName, userID, binding)
-			if err != nil {
-				// Don't fail if thumbnail URL generation fails - thumbnail might not exist
+			thumbnailURL, thumbErr := s.generateThumbnailSignedURL(file.ID, sizeName, userID, binding)
+			if thumbErr != nil {
+				// Don't fail if thumbnail URL generation fails — thumbnail
+				// may not exist yet (deferred generation) or be unsupported
+				// at this size. The client falls back to `original`.
 				continue
 			}
 			thumbnails[sizeName] = thumbnailURL
 		}
 	}
 
-	return originalURL, thumbnails, nil
+	return original, thumbnails, nil
 }
 
 // generateThumbnailSignedURL creates a signed URL for thumbnail access
