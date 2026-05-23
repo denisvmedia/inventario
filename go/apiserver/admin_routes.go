@@ -33,17 +33,19 @@ type AdminPingResponse struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// adminPing is the placeholder handler behind RequireSystemAdmin.
-// Returns 200 with a simple JSON body so the FE can detect "I have
-// system-admin" without needing a richer endpoint until later
-// admin issues land.
-// @Summary System-admin ping
-// @Description Returns 200 when the caller has system-admin privileges. Probe endpoint for the admin surface (#1745).
+// adminPing is the placeholder handler behind RequireBackofficeAuth.
+// Returns 200 with a simple JSON body so the FE can detect "I am
+// signed in to the back-office plane" without needing a richer
+// endpoint until later admin issues land. Post-#1785 Phase 3 the gate
+// is back-office-only — a tenant JWT with `is_system_admin` no longer
+// reaches this route.
+// @Summary Back-office ping
+// @Description Returns 200 when the caller is authenticated on the back-office plane. Probe endpoint for the admin surface (#1745).
 // @Tags admin
 // @Produce json
 // @Success 200 {object} AdminPingResponse "OK"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Router /admin/_ping [get]
 func adminPing(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")

@@ -24,14 +24,14 @@ const docTemplate = `{
     "paths": {
         "/admin/_ping": {
             "get": {
-                "description": "Returns 200 when the caller has system-admin privileges. Probe endpoint for the admin surface (#1745).",
+                "description": "Returns 200 when the caller is authenticated on the back-office plane. Probe endpoint for the admin surface (#1745).",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "admin"
                 ],
-                "summary": "System-admin ping",
+                "summary": "Back-office ping",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -40,13 +40,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Unauthorized - back-office authentication required",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "403": {
-                        "description": "Forbidden - system-admin required",
+                        "description": "Account disabled",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

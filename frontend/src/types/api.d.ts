@@ -10,8 +10,8 @@ export type paths = {
             cookie?: never;
         };
         /**
-         * System-admin ping
-         * @description Returns 200 when the caller has system-admin privileges. Probe endpoint for the admin surface (#1745).
+         * Back-office ping
+         * @description Returns 200 when the caller is authenticated on the back-office plane. Probe endpoint for the admin surface (#1745).
          */
         get: {
             parameters: {
@@ -31,7 +31,7 @@ export type paths = {
                         "application/json": components["schemas"]["apiserver.AdminPingResponse"];
                     };
                 };
-                /** @description Unauthorized */
+                /** @description Unauthorized - back-office authentication required */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -40,7 +40,7 @@ export type paths = {
                         "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Forbidden - system-admin required */
+                /** @description Account disabled */
                 403: {
                     headers: {
                         [name: string]: unknown;
