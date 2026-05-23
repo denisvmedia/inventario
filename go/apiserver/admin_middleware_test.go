@@ -60,3 +60,27 @@ func TestAdmin_AcceptsBackofficeJWT(t *testing.T) {
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 }
+
+// TestImpersonation_RejectsBackofficeJWT is the mirror of
+// TestAdmin_RejectsTenantJWTAfterMigration for the legacy impersonation
+// subtree: the impersonation start endpoint stays on the tenant-side
+// JWTMiddleware (#1785 Phase 3 left the impersonation lifecycle gated by
+// RequireSystemAdmin until a back-office-native redesign lands).
+// JWTMiddleware rejects any token with `aud == "backoffice"` or a non-
+// empty `admin_id` claim — see jwt_middleware.go:104-109 — so a back-
+// office token cannot satisfy the impersonation route.
+func TestImpersonation_RejectsBackofficeJWT(t *testing.T) {
+	c := qt.New(t)
+	params, user, _ := newParams()
+	_, backofficeToken := WithBackofficeAdmin(t, params)
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/v1/admin/users/"+user.ID+"/impersonate", nil)
+	addBackofficeAuthHeader(req, backofficeToken)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
+}

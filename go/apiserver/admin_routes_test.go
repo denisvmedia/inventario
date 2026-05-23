@@ -68,6 +68,9 @@ func WithBackofficeAdmin(t *testing.T, params apiserver.Params) (*models.Backoff
 // testJWTSecret. Mirrors the production back-office login mint at the
 // claim level — token_type=access, jti, iat, exp — so the token
 // validates cleanly through RequireBackofficeAuth.
+//
+// Note: omits rti claim — fine for admin CRUD tests; refresh-path tests
+// must set rti explicitly.
 func signBackofficeAccessToken(t *testing.T, adminID, role string) string {
 	t.Helper()
 	now := time.Now()

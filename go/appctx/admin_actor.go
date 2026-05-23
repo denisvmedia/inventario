@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-// AdminActor is the identity-only projection of the operator behind an
+// AdminActor is the plane-agnostic actor abstraction behind an
 // admin/back-office request. It deliberately decouples the audit / op
 // surface in apiserver from the concrete *models.BackofficeUser type:
 // admin handlers only ever need the ID + Email + Name to fill audit-row
@@ -13,9 +13,7 @@ import (
 //
 // Issue #1785, Phase 3 — introduced together with the swap from the
 // tenant-side `RequireSystemAdmin` middleware to the back-office
-// `RequireBackofficeAuth`. A future phase that adds a second admin
-// identity shape (e.g. a federated SSO platform operator) can populate
-// the same struct without forcing a second pass over every handler.
+// `RequireBackofficeAuth`.
 type AdminActor struct {
 	// ID is backoffice_users.id when the request was admitted via
 	// RequireBackofficeAuth. Empty AdminActor (or a nil pointer from

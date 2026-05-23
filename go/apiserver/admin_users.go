@@ -159,8 +159,8 @@ type adminUsersAPI struct {
 // @Param sort query string false "Sort field: email|name|created_at|last_login_at|is_active (prefix with - for desc)"
 // @Param order query string false "Sort direction override: asc|desc (wins over `-` prefix)"
 // @Success 200 {object} jsonapi.AdminUsersResponse "OK"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Tenant not found"
 // @Router /admin/tenants/{tenantID}/users [get]
 func (api *adminUsersAPI) listTenantUsers(w http.ResponseWriter, r *http.Request) {
@@ -224,8 +224,8 @@ func (api *adminUsersAPI) listTenantUsers(w http.ResponseWriter, r *http.Request
 // @Produce json-api
 // @Param userID path string true "User ID"
 // @Success 200 {object} jsonapi.AdminUserResponse "OK"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "User not found"
 // @Router /admin/users/{userID} [get]
 func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
@@ -348,8 +348,8 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 // @Param data body AdminBlockRequest true "Block request"
 // @Success 200 {object} AdminUserEnvelope "OK"
 // @Failure 400 {object} jsonapi.Errors "Bad Request - invalid body"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown user"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - self-block or admin-on-admin without force"
 // @Router /admin/users/{userID}/block [post]
@@ -482,8 +482,8 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 // @Param data body AdminUnblockRequest true "Unblock request"
 // @Success 200 {object} AdminUserEnvelope "OK"
 // @Failure 400 {object} jsonapi.Errors "Bad Request - invalid body"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown user"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - invalid reason"
 // @Router /admin/users/{userID}/unblock [post]

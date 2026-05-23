@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -136,8 +137,8 @@ type adminGroupMembersAPI struct {
 // @Produce json-api
 // @Param groupID path string true "Group ID"
 // @Success 200 {object} jsonapi.AdminGroupMembersResponse "OK"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown group"
 // @Router /admin/groups/{groupID}/members [get]
 func (api *adminGroupMembersAPI) listMembers(w http.ResponseWriter, r *http.Request) {
@@ -199,12 +200,20 @@ func (api *adminGroupMembersAPI) listMembers(w http.ResponseWriter, r *http.Requ
 // @Param data body AdminAddMemberRequest true "Add-member request"
 // @Success 201 {object} AdminMemberEnvelope "Created"
 // @Failure 400 {object} jsonapi.Errors "Bad Request - invalid body"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown group or user"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - tenant mismatch, cap reached, duplicate, or invalid role"
 // @Router /admin/groups/{groupID}/members [post]
 func (api *adminGroupMembersAPI) addMember(w http.ResponseWriter, r *http.Request) {
+	if appctx.AdminActorFromContext(r.Context()) == nil {
+		// Defence-in-depth: RequireBackofficeAuth should have caught this
+		// already. Mirrors the wiring-bug 401 in admin_users.go's
+		// block/unblock handlers — see actorIDFromRequest's doc-comment.
+		_ = unauthorizedError(w, r, ErrMissingUserContext)
+		return
+	}
+
 	groupID := chi.URLParam(r, "groupID")
 	if strings.TrimSpace(groupID) == "" {
 		_ = renderEntityError(w, r, registry.ErrNotFound)
@@ -272,12 +281,20 @@ func (api *adminGroupMembersAPI) addMember(w http.ResponseWriter, r *http.Reques
 // @Param groupID path string true "Group ID"
 // @Param userID path string true "User ID of the member to remove"
 // @Success 204 "No Content"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - user is not a member of the group"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - removing the last owner or last member"
 // @Router /admin/groups/{groupID}/members/{userID} [delete]
 func (api *adminGroupMembersAPI) removeMember(w http.ResponseWriter, r *http.Request) {
+	if appctx.AdminActorFromContext(r.Context()) == nil {
+		// Defence-in-depth: RequireBackofficeAuth should have caught this
+		// already. Mirrors the wiring-bug 401 in admin_users.go's
+		// block/unblock handlers — see actorIDFromRequest's doc-comment.
+		_ = unauthorizedError(w, r, ErrMissingUserContext)
+		return
+	}
+
 	groupID := chi.URLParam(r, "groupID")
 	userID := chi.URLParam(r, "userID")
 	if strings.TrimSpace(groupID) == "" || strings.TrimSpace(userID) == "" {
@@ -336,12 +353,20 @@ func (api *adminGroupMembersAPI) removeMember(w http.ResponseWriter, r *http.Req
 // @Param data body AdminUpdateMemberRoleRequest true "Role-change request"
 // @Success 200 {object} AdminMemberEnvelope "OK"
 // @Failure 400 {object} jsonapi.Errors "Bad Request - invalid body"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - user is not a member of the group"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - demoting the last owner or invalid role"
 // @Router /admin/groups/{groupID}/members/{userID} [patch]
 func (api *adminGroupMembersAPI) updateMemberRole(w http.ResponseWriter, r *http.Request) {
+	if appctx.AdminActorFromContext(r.Context()) == nil {
+		// Defence-in-depth: RequireBackofficeAuth should have caught this
+		// already. Mirrors the wiring-bug 401 in admin_users.go's
+		// block/unblock handlers — see actorIDFromRequest's doc-comment.
+		_ = unauthorizedError(w, r, ErrMissingUserContext)
+		return
+	}
+
 	groupID := chi.URLParam(r, "groupID")
 	userID := chi.URLParam(r, "userID")
 	if strings.TrimSpace(groupID) == "" || strings.TrimSpace(userID) == "" {

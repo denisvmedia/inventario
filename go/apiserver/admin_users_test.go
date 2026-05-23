@@ -472,13 +472,15 @@ func TestAdminBlockUser_AccessTokenIssuedBeforeBlockFails(t *testing.T) {
 
 	// Build params with a real in-memory blacklister so the BlacklistUserTokens
 	// call inside the block cascade is observable by subsequent /system requests.
-	params, admin, _ := newParams()
+	// newParams returns the seeded tenant user — used only as a TenantID carrier;
+	// the actual back-office admin actor comes from WithBackofficeAdmin.
+	params, tenantUser, _ := newParams()
 	_, adminToken := WithBackofficeAdmin(t, params)
 	bl := services.NewInMemoryTokenBlacklister()
 	params.TokenBlacklister = bl
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
-	target := createTestUserDirect(c, params, admin.TenantID, "ordinary@example.com", true, false)
+	target := createTestUserDirect(c, params, tenantUser.TenantID, "ordinary@example.com", true, false)
 	// Mint an access token for the TARGET with iat=now-1s. After block
 	// the blacklister stamps "since" at the block's wall-clock time, so
 	// this token is "before" the blacklist threshold and must be rejected.
@@ -522,11 +524,13 @@ func TestAdminBlockUser_AccessTokenIssuedBeforeBlockFails(t *testing.T) {
 
 func TestAdminBlockUser_RefreshTokenRevokedByCascade(t *testing.T) {
 	c := qt.New(t)
-	params, admin, _ := newParams()
+	// newParams returns the seeded tenant user — used only as a TenantID
+	// carrier; the actual back-office admin actor comes from WithBackofficeAdmin.
+	params, tenantUser, _ := newParams()
 	_, adminToken := WithBackofficeAdmin(t, params)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
-	target := createTestUserDirect(c, params, admin.TenantID, "ordinary@example.com", true, false)
+	target := createTestUserDirect(c, params, tenantUser.TenantID, "ordinary@example.com", true, false)
 
 	// Seed a refresh token for the target. After block, ListActiveByUserID
 	// must return zero rows — the cascade calls RevokeByUserID and the
@@ -562,13 +566,15 @@ func TestAdminBlockUser_RefreshTokenRevokedByCascade(t *testing.T) {
 // idempotent path and a stale refresh token survives the second block.
 func TestAdminBlockUser_IdempotentBlockReRunsCascade(t *testing.T) {
 	c := qt.New(t)
-	params, admin, _ := newParams()
+	// newParams returns the seeded tenant user — used only as a TenantID
+	// carrier; the actual back-office admin actor comes from WithBackofficeAdmin.
+	params, tenantUser, _ := newParams()
 	_, adminToken := WithBackofficeAdmin(t, params)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	// Seed an already-inactive user — simulates the "previously
 	// blocked" state where the cascade ran once long ago.
-	target := createTestUserDirect(c, params, admin.TenantID, "ordinary@example.com", false, false)
+	target := createTestUserDirect(c, params, tenantUser.TenantID, "ordinary@example.com", false, false)
 
 	// Plant a fresh refresh token AFTER the user was already inactive.
 	// Represents a token that should never have existed (post-block
@@ -652,13 +658,15 @@ func TestAdminBlockUser_IdempotentOnPeerAdminWithoutForce(t *testing.T) {
 // access tokens minted before the block stay rejected after unblock.
 func TestAdminUnblockUser_LeavesStalenessRingIntact(t *testing.T) {
 	c := qt.New(t)
-	params, admin, _ := newParams()
+	// newParams returns the seeded tenant user — used only as a TenantID
+	// carrier; the actual back-office admin actor comes from WithBackofficeAdmin.
+	params, tenantUser, _ := newParams()
 	_, adminToken := WithBackofficeAdmin(t, params)
 	bl := services.NewInMemoryTokenBlacklister()
 	params.TokenBlacklister = bl
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
-	target := createTestUserDirect(c, params, admin.TenantID, "ordinary@example.com", true, false)
+	target := createTestUserDirect(c, params, tenantUser.TenantID, "ordinary@example.com", true, false)
 
 	// Block — installs an entry in the staleness ring.
 	blockRR := doAdminJSONRequest(t, handler, http.MethodPost,
