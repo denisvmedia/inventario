@@ -1,6 +1,9 @@
 package services_test
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -722,6 +725,57 @@ func TestFileSigningService_SessionBindingMatrix(t *testing.T) {
 		c.Assert(err, qt.IsNotNil)
 		c.Assert(err.Error(), qt.Equals, "invalid signature")
 	})
+}
+
+// TestFileSigningService_PreBindingURLStillValidates locks in the
+// rolling-deploy backwards compatibility property: a URL produced by the
+// pre-#1781 message format (no |binding segment) MUST still validate on
+// the post-#1781 code when no cookie is presented. Without this, every
+// in-flight signed URL would 401 on the new pods for FileURLExpiration
+// after deploy.
+//
+// We emulate the old mint by computing the signature over the OLD
+// message format ourselves and assembling the same wire format
+// GenerateSignedURL emits, then validate with the current code.
+func TestFileSigningService_PreBindingURLStillValidates(t *testing.T) {
+	c := qt.New(t)
+
+	signingKey := []byte("test-signing-key-32-bytes-long!!")
+	service := services.NewFileSigningService(signingKey, 15*time.Minute)
+
+	const (
+		fileID   = "file-legacy"
+		userID   = "user-legacy"
+		basePath = "/api/v1/files/download/files/file-legacy"
+	)
+	exp := time.Now().Add(10 * time.Minute).Unix()
+
+	// Pre-#1781 message format — no trailing |binding segment.
+	oldMessage := "GET|" + basePath + "|" + fileID + "|" + userID + "|" + strconv.FormatInt(exp, 10)
+
+	h := hmac.New(sha256.New, signingKey)
+	_, err := h.Write([]byte(oldMessage))
+	c.Assert(err, qt.IsNil)
+	oldSig := base64.URLEncoding.EncodeToString(h.Sum(nil))
+
+	q := url.Values{}
+	q.Set("sig", oldSig)
+	q.Set("exp", strconv.FormatInt(exp, 10))
+	q.Set("uid", userID)
+	q.Set("fid", fileID)
+
+	// Validator with no cookie → must accept the OLD-format signature.
+	claims, err := service.ValidateSignedURL(basePath, q, "")
+	c.Assert(err, qt.IsNil)
+	c.Assert(claims, qt.IsNotNil)
+	c.Assert(claims.FileID, qt.Equals, fileID)
+	c.Assert(claims.UserID, qt.Equals, userID)
+
+	// Validator WITH a cookie must NOT accept the OLD-format signature —
+	// that would let a bound caller replay an unbound URL.
+	_, err = service.ValidateSignedURL(basePath, q, "session-A")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Equals, "invalid signature")
 }
 
 // TestFileSigningService_ThumbnailsCarryBinding ensures the thumbnail URL

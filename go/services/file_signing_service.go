@@ -77,12 +77,18 @@ type SignedURLClaims struct {
 	ExpiresAt time.Time // Expiration time
 }
 
-// GenerateSignedURL creates a signed URL for file access
-// The URL format will be: /files/{fileID}.{ext}?sig={signature}&exp={timestamp}&uid={userID}
+// GenerateSignedURL creates a signed URL for file access.
+//
+// The emitted URL is `/api/v1/files/download/files/{fileID}?sig=…&exp=…&uid=…&fid=…`
+// — no extension is embedded; chi routes off the path segment alone and
+// the streamer reads MIME / extension from the FileEntity. `fileExt` is
+// validated for non-emptiness as a sanity check but does not appear in
+// the path.
 //
 // `binding` is the SessionBinding from the request that authorized this
-// signing call. An empty binding produces an unbound URL — validators must
-// be invoked with an empty binding to accept it.
+// signing call. An empty binding produces an unbound URL — validators
+// must be invoked with an empty binding to accept it. The binding is
+// folded into the HMAC message only and never written into the URL.
 func (s *FileSigningService) GenerateSignedURL(fileID, fileExt, userID string, binding SessionBinding) (string, error) {
 	if fileID == "" {
 		return "", errors.New("file ID is required")
@@ -101,8 +107,24 @@ func (s *FileSigningService) GenerateSignedURL(fileID, fileExt, userID string, b
 	// Create the base URL path for original files
 	basePath := fmt.Sprintf("/api/v1/files/download/files/%s", fileID)
 
-	// Create the message to sign: method + path + fileID + userID + expiration + binding
-	message := fmt.Sprintf("GET|%s|%s|%s|%d|%s", basePath, fileID, userID, expTimestamp, binding)
+	// Create the message to sign. Format is
+	//     GET|path|fileID|userID|exp[|binding]
+	// where the trailing |binding segment is omitted entirely when the
+	// binding is empty. Two reasons:
+	//
+	//  1. Rolling-deploy backwards compatibility: URLs minted by the
+	//     pre-#1781 code carried no binding segment. With conditional
+	//     encoding, the new validator constructs the same OLD-format
+	//     message when no cookie is present, so existing in-flight
+	//     unbound URLs keep validating through the deploy window
+	//     instead of all 401-ing for the FileURLExpiration TTL.
+	//  2. Symmetry: a URL minted as "unbound" should look textually
+	//     identical to what the pre-binding world produced, so the
+	//     fallback path has no extra surface.
+	//
+	// The bound case (binding != "") still appends |binding, which is
+	// what the binding matrix tests exercise.
+	message := buildSignedURLMessage(basePath, fileID, userID, expTimestamp, binding)
 
 	// Generate HMAC signature
 	signature, err := s.generateSignature(message)
@@ -119,6 +141,17 @@ func (s *FileSigningService) GenerateSignedURL(fileID, fileExt, userID string, b
 		url.QueryEscape(fileID))
 
 	return signedURL, nil
+}
+
+// buildSignedURLMessage assembles the HMAC message. The `|binding` suffix
+// is conditionally appended so unbound URLs share their wire format with
+// pre-#1781 code — see GenerateSignedURL for the rolling-deploy rationale.
+func buildSignedURLMessage(basePath, fileID, userID string, expTimestamp int64, binding SessionBinding) string {
+	message := fmt.Sprintf("GET|%s|%s|%s|%d", basePath, fileID, userID, expTimestamp)
+	if binding != "" {
+		message += "|" + string(binding)
+	}
+	return message
 }
 
 // GenerateSignedURLsWithThumbnails generates signed URLs for a file and its thumbnails
@@ -172,8 +205,8 @@ func (s *FileSigningService) generateThumbnailSignedURL(fileID, sizeName, userID
 	// Create the base URL path for thumbnails
 	basePath := fmt.Sprintf("/api/v1/files/download/thumbnails/%s/%s", fileID, sizeName)
 
-	// Create the message to sign: method + path + fileID + userID + expiration + binding
-	message := fmt.Sprintf("GET|%s|%s|%s|%d|%s", basePath, fileID, userID, expTimestamp, binding)
+	// See GenerateSignedURL for the conditional |binding suffix rationale.
+	message := buildSignedURLMessage(basePath, fileID, userID, expTimestamp, binding)
 
 	// Generate HMAC signature
 	signature, err := s.generateSignature(message)
@@ -233,8 +266,10 @@ func (s *FileSigningService) ValidateSignedURL(path string, queryParams url.Valu
 		return nil, errors.New("signed URL has expired")
 	}
 
-	// Recreate the message that was signed
-	message := fmt.Sprintf("GET|%s|%s|%s|%d|%s", path, fileID, userID, expTimestamp, binding)
+	// Recreate the message that was signed. See GenerateSignedURL for the
+	// conditional |binding suffix rationale (matters for rolling-deploy
+	// compatibility against pre-#1781 URLs).
+	message := buildSignedURLMessage(path, fileID, userID, expTimestamp, binding)
 
 	// Validate the signature
 	if !s.validateSignature(message, signature) {
