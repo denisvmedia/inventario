@@ -144,4 +144,12 @@ var (
 	// refresh-token miss with a back-office one. Wraps ErrNotFound so
 	// generic NOT FOUND handlers still match.
 	ErrBackofficeRefreshTokenNotFound = errx.NewSentinel("backoffice refresh token not found", ErrNotFound)
+
+	// ErrBackofficeMFASecretNotFound is returned by
+	// BackofficeUserMFASecretRegistry lookups when no row matches the
+	// supplied back-office user id. Wraps ErrNotFound so generic NOT
+	// FOUND handlers still match. The login flow uses this branch to
+	// decide whether to issue a 501 (MFAEnforced=true, no secret) vs.
+	// a MFA challenge (MFAEnforced=true, secret present).
+	ErrBackofficeMFASecretNotFound = errx.NewSentinel("backoffice MFA secret not found", ErrNotFound)
 )

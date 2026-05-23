@@ -189,6 +189,13 @@ type FactorySet struct {
 	// Lives on FactorySet only — not tenant-scoped, not user-aware
 	// (same posture as AuditLogRegistry).
 	SystemAdminGrantRegistry SystemAdminGrantRegistry
+
+	// BackofficeUserMFASecretRegistry persists per-back-office-user TOTP
+	// credentials (issue #1785, Phase 4). Mirrors UserMFASecretRegistry
+	// for the back-office plane: one row per back-office user, no RLS,
+	// no tenant_id. The Phase 4 login handler reads it to decide whether
+	// to issue a MFA challenge; the operator CLI mints / wipes rows.
+	BackofficeUserMFASecretRegistry BackofficeUserMFASecretRegistry
 }
 
 // Ping checks readiness of the backing registry dependency (e.g. database).
