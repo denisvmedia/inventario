@@ -15,9 +15,34 @@ permissions:
   pull-requests: read
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend_codegen: ${{ steps.filter.outputs.frontend_codegen }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: .github/filters.yml
+
   codegen-drift:
     name: Check OpenAPI → TS codegen sync
     runs-on: ubuntu-latest
+    needs: changes
+    # frontend_codegen unions the codegen script / generated types /
+    # package metadata with the full Go surface (`go/**` + Makefile).
+    # Mirroring `go_swagger`'s breadth keeps the drift check honest:
+    # a backend tweak that shifts swagger.json gets noticed even when
+    # the producer's annotated handler file isn't itself touched.
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.frontend_codegen == 'true' ||
+      needs.changes.outputs.ci == 'true'
     defaults:
       run:
         working-directory: frontend

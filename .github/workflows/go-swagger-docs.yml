@@ -15,9 +15,34 @@ permissions:
   pull-requests: read
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      go_swagger: ${{ steps.filter.outputs.go_swagger }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: .github/filters.yml
+
   swagger-docs:
     name: Check Swagger Docs Sync
     runs-on: ubuntu-latest
+    needs: changes
+    # `go_swagger` covers the full Go surface (`go/**` plus Makefile) —
+    # `swag init` walks transitively imported packages, so a response-type
+    # tweak under `go/services/` or `go/registry/` can shift the swagger
+    # spec without touching an annotated handler. Mirroring the broad Go
+    # surface avoids silent drift cases.
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.go_swagger == 'true' ||
+      needs.changes.outputs.ci == 'true'
     steps:
       # Checkout code
       - name: Checkout code

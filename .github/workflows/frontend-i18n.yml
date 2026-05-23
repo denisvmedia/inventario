@@ -15,9 +15,29 @@ permissions:
   pull-requests: read
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend_i18n: ${{ steps.filter.outputs.frontend_i18n }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: .github/filters.yml
+
   i18n-drift:
     name: Check i18n catalog sync
     runs-on: ubuntu-latest
+    needs: changes
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.frontend_i18n == 'true' ||
+      needs.changes.outputs.ci == 'true'
     defaults:
       run:
         working-directory: frontend
