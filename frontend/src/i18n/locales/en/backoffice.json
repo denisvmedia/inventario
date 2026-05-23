@@ -1,0 +1,76 @@
+{
+  "fields": {
+    "email": "Operator email",
+    "emailPlaceholder": "operator@company.com",
+    "password": "Password",
+    "passwordPlaceholder": "••••••••"
+  },
+  "layout": {
+    "brand": "Inventario Platform",
+    "restrictedBadge": "Restricted",
+    "tagline": "Back-office administration",
+    "subtitle": "Cross-tenant operations, audit, and impersonation tooling. Access is logged.",
+    "footer": "© Inventario · Authorised personnel only"
+  },
+  "login": {
+    "routeTitle": "Back-office sign in",
+    "title": "Back-office sign in",
+    "subtitle": "Sign in with your platform-operator credentials.",
+    "submit": "Continue",
+    "submitting": "Signing in…",
+    "errorGeneric": "Sign in failed. Check your credentials and try again.",
+    "disclaimer": "This area is for platform operators. Access attempts are recorded.",
+    "mfaNotEnrolled": {
+      "title": "Two-factor enrollment required",
+      "body": "Two-factor authentication is enforced for {{email}} but no enrollment exists yet. Run the CLI command below on the server to enroll, then return here to sign in.",
+      "cli": "inventario backoffice mfa setup --email {{email}}"
+    }
+  },
+  "mfa": {
+    "challenge": {
+      "title": "Two-factor verification",
+      "subtitle": "Enter the verification code for {{email}}.",
+      "totpLabel": "Authenticator code",
+      "totpPlaceholder": "123456",
+      "totpHint": "Open your authenticator app and copy the 6-digit code.",
+      "backupLabel": "Backup code",
+      "backupPlaceholder": "xxxx-xxxx",
+      "backupHint": "Use one of the single-use backup codes you saved when you enrolled.",
+      "submit": "Verify",
+      "submitting": "Verifying…",
+      "error": "The code was rejected. Try again or use a backup code.",
+      "useBackupInstead": "Use a backup code instead",
+      "useTotpInstead": "Use the authenticator code instead",
+      "cancel": "Back to sign in"
+    }
+  },
+  "session": {
+    "expired": "Your back-office session has expired. Please sign in again.",
+    "authRequired": "Sign in to the back-office plane to continue.",
+    "ended": "Your back-office session has ended."
+  },
+  "shell": {
+    "brand": "Inventario Platform",
+    "planeChip": "Back-office",
+    "operator": "Operator",
+    "signOut": "Sign out"
+  },
+  "me": {
+    "routeTitle": "Operator profile",
+    "title": "Operator profile",
+    "subtitle": "Your back-office identity and session controls.",
+    "unknownOperator": "Operator",
+    "fields": {
+      "email": "Email",
+      "role": "Role",
+      "mfaEnforced": "MFA enforced",
+      "lastLogin": "Last sign in"
+    },
+    "values": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "signOut": "Sign out",
+    "signingOut": "Signing out…"
+  }
+}
