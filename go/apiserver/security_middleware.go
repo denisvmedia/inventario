@@ -89,15 +89,22 @@ func rejectTenantQueryParam(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-// tenantScanMaxBodyBytes is the maximum number of body bytes rejectTenantBody
-// will read from a non-multipart request. It applies only to bodies that are
-// actually scanned (multipart/* is skipped entirely — see rejectTenantBody);
-// it is NOT a global request-body cap. The value is intentionally much
-// larger than every per-handler text-body cap in the codebase today
-// (feedbackMaxRequestBodyBytes ≈ 53 KB; createInviteMaxBodyBytes = 4 KB;
-// PasswordResetRateLimitMiddleware = 4 KB) so legitimate JSON / form
-// payloads never trip it, while still being small enough that an attacker
-// cannot force gigabyte-scale allocations per concurrent request.
+// tenantScanMaxBodyBytes is the maximum non-multipart request-body size
+// that rejectTenantBody will accept and scan. It applies only to bodies
+// that are actually scanned (multipart/* is skipped entirely — see
+// rejectTenantBody); it is NOT a global request-body cap. The
+// implementation actually reads up to tenantScanMaxBodyBytes+1 bytes via
+// io.LimitReader so that a body of exactly this size still passes (it is
+// buffered in full) but a body one byte larger trips the cap and
+// short-circuits with 413 — the +1 is a sentinel read for overflow
+// detection, not part of the contract.
+//
+// The value is intentionally much larger than every per-handler text-body
+// cap in the codebase today (feedbackMaxRequestBodyBytes ≈ 53 KB;
+// createInviteMaxBodyBytes = 4 KB; PasswordResetRateLimitMiddleware =
+// 4 KB) so legitimate JSON / form payloads never trip it, while still
+// being small enough that an attacker cannot force gigabyte-scale
+// allocations per concurrent request.
 const tenantScanMaxBodyBytes = 1 * 1024 * 1024 // 1 MiB
 
 // rejectTenantBody checks the request body of mutating requests for
@@ -199,7 +206,12 @@ func rejectTenantBody(w http.ResponseWriter, r *http.Request) bool {
 	// here, so the immutable reader is more accurate.
 	r.Body = io.NopCloser(bytes.NewReader(body))
 
-	bodyLower := strings.ToLower(string(body))
+	// Convert []byte→string ONCE — the body can be up to
+	// tenantScanMaxBodyBytes (1 MiB) on every POST/PUT/PATCH and a second
+	// conversion in the violation-logging branch would double the
+	// per-request allocation cost on a hot path.
+	bodyStr := string(body)
+	bodyLower := strings.ToLower(bodyStr)
 	if !strings.Contains(bodyLower, "tenant_id") &&
 		!strings.Contains(bodyLower, "\"tenant\"") &&
 		!strings.Contains(bodyLower, "'tenant'") &&
@@ -208,7 +220,7 @@ func rejectTenantBody(w http.ResponseWriter, r *http.Request) bool {
 	}
 	slog.Error("Security violation: user-provided tenant ID in request body",
 		"content_type", contentType,
-		"body_preview", truncateString(string(body), 200),
+		"body_preview", truncateString(bodyStr, 200),
 		"user_agent", r.UserAgent(),
 		"remote_addr", r.RemoteAddr,
 		"method", r.Method,

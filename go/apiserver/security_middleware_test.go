@@ -199,15 +199,19 @@ func TestValidateNoUserProvidedTenantID_AdminSubtreeBodyCheckEnforced(t *testing
 	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
 }
 
-// buildJSONPadded constructs a JSON document of EXACTLY size bytes that
-// (when scanned for tenant_id substrings) contains no positive match.
-// The shape is {"x":"<padding>"}; padding is ASCII 'a' bytes.
+// buildJSONPadded constructs a JSON document that (when scanned for
+// tenant_id substrings) contains no positive match. The shape is
+// {"x":"<padding>"} with ASCII 'a' bytes as padding. The returned slice
+// is EXACTLY `size` bytes long when `size >= len(prefix)+len(suffix)`
+// (the only regime any caller in this test exercises); below that
+// threshold it returns the literal `{}` (2 bytes) as a sentinel so
+// degenerate inputs cannot produce malformed output.
 func buildJSONPadded(size int) []byte {
 	const prefix = `{"x":"`
 	const suffix = `"}`
 	if size < len(prefix)+len(suffix) {
-		// Fall back to an empty object if the requested size is smaller
-		// than the wrapper itself; callers in this test request >= cap-1.
+		// Out-of-contract sentinel — callers here always request a size
+		// well above the wrapper width, so this branch is purely defensive.
 		return []byte(`{}`)
 	}
 	padLen := size - len(prefix) - len(suffix)
