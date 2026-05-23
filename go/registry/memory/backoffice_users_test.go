@@ -347,3 +347,35 @@ func TestBackofficeUserRegistry_SetActive(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(fetched.IsActive, qt.IsTrue)
 }
+
+// TestBackofficeUserRegistry_List_DistinctRowsAndInsertionOrder pins
+// the cross-backend list contract: List returns one entry per inserted
+// row, each a distinct pointer, in the order rows were inserted. The
+// memory backend's base List iterates the underlying ordered map's
+// Oldest()->Newest() chain and copies each item, so the slice can never
+// alias — this test guards against a future refactor that returns the
+// map's internal pointers directly.
+func TestBackofficeUserRegistry_List_DistinctRowsAndInsertionOrder(t *testing.T) {
+	r := memory.NewBackofficeUserRegistry()
+	c := qt.New(t)
+	ctx := context.Background()
+
+	emails := []string{"first@example.com", "second@example.com", "third@example.com"}
+	for _, email := range emails {
+		_, err := r.Create(ctx, newTestBackofficeUser(email))
+		c.Assert(err, qt.IsNil)
+	}
+
+	listed, err := r.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(listed, qt.HasLen, 3)
+
+	seenIDs := make(map[string]struct{}, len(listed))
+	gotEmails := make([]string, 0, len(listed))
+	for _, u := range listed {
+		seenIDs[u.ID] = struct{}{}
+		gotEmails = append(gotEmails, u.Email)
+	}
+	c.Assert(seenIDs, qt.HasLen, 3)
+	c.Assert(gotEmails, qt.DeepEquals, emails)
+}

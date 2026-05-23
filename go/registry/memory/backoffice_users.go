@@ -63,7 +63,11 @@ func (r *BackofficeUserRegistry) Create(ctx context.Context, user models.Backoff
 	}
 	user.Email = normaliseBackofficeEmail(user.Email)
 
-	now := time.Now()
+	// Stamp in UTC to match the postgres backend (which uses
+	// time.Now().UTC() / Postgres now() returning UTC-equivalent values)
+	// and the rest of the memory registries — keeps cross-backend
+	// timestamps comparable and independent of the host timezone.
+	now := time.Now().UTC()
 	if user.CreatedAt.IsZero() {
 		user.CreatedAt = now
 	}
@@ -192,7 +196,7 @@ func (r *BackofficeUserRegistry) Update(ctx context.Context, user models.Backoff
 	user.CreatedAt = existing.CreatedAt
 	user.PasswordHash = existing.PasswordHash
 	user.LastLoginAt = existing.LastLoginAt
-	user.UpdatedAt = time.Now()
+	user.UpdatedAt = time.Now().UTC()
 	// UUID is immutable after creation — overwrite whatever the caller
 	// supplied with the persisted value (mirrors the base Registry's
 	// Update behaviour for UUIDable rows).
@@ -230,7 +234,7 @@ func (r *BackofficeUserRegistry) SetPasswordHash(_ context.Context, id, hash str
 		return errxtrace.Classify(registry.ErrBackofficeUserNotFound, errx.Attrs("entity_id", id))
 	}
 	existing.PasswordHash = hash
-	existing.UpdatedAt = time.Now()
+	existing.UpdatedAt = time.Now().UTC()
 	r.items.Set(id, existing)
 	return nil
 }
@@ -249,7 +253,7 @@ func (r *BackofficeUserRegistry) UpdateLastLogin(_ context.Context, id string, a
 	}
 	stamped := at
 	existing.LastLoginAt = &stamped
-	existing.UpdatedAt = time.Now()
+	existing.UpdatedAt = time.Now().UTC()
 	r.items.Set(id, existing)
 	return nil
 }
@@ -267,7 +271,7 @@ func (r *BackofficeUserRegistry) SetActive(_ context.Context, id string, active 
 		return errxtrace.Classify(registry.ErrBackofficeUserNotFound, errx.Attrs("entity_id", id))
 	}
 	existing.IsActive = active
-	existing.UpdatedAt = time.Now()
+	existing.UpdatedAt = time.Now().UTC()
 	r.items.Set(id, existing)
 	return nil
 }

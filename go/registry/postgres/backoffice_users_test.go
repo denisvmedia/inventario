@@ -332,6 +332,53 @@ func TestBackofficeUserRegistryPostgres_Count(t *testing.T) {
 	c.Assert(count, qt.Equals, 2)
 }
 
+// TestBackofficeUserRegistryPostgres_List_DistinctRowsAndOrder pins two
+// invariants on the List query that earlier shapes got wrong:
+//
+//  1. Each returned pointer references a distinct row, not N copies of
+//     the last one. The previous Scan-based implementation re-used the
+//     iteration variable's address per yield, so appending `&user`
+//     produced a slice of aliased pointers.
+//  2. Rows come back ordered by created_at (then id as the tiebreaker).
+//     The previous shape relied on Postgres's un-ordered SELECT and
+//     happened to look stable in tests, but the contract was not
+//     enforced.
+//
+// We insert three rows with explicit, monotonically-increasing
+// CreatedAt stamps and assert (a) three distinct IDs, (b) emails come
+// back in created_at order.
+func TestBackofficeUserRegistryPostgres_List_DistinctRowsAndOrder(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+	bo := getBackofficeRegistry(t, registrySet)
+
+	c := qt.New(t)
+	ctx := context.Background()
+
+	base := time.Now().UTC().Truncate(time.Second)
+	emails := []string{"first@example.com", "second@example.com", "third@example.com"}
+	for i, email := range emails {
+		u := newTestBackofficeUser(email)
+		u.CreatedAt = base.Add(time.Duration(i) * time.Second)
+		u.UpdatedAt = u.CreatedAt
+		_, err := bo.Create(ctx, u)
+		c.Assert(err, qt.IsNil)
+	}
+
+	listed, err := bo.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(listed, qt.HasLen, 3)
+
+	seenIDs := make(map[string]struct{}, len(listed))
+	gotEmails := make([]string, 0, len(listed))
+	for _, u := range listed {
+		seenIDs[u.ID] = struct{}{}
+		gotEmails = append(gotEmails, u.Email)
+	}
+	c.Assert(seenIDs, qt.HasLen, 3)
+	c.Assert(gotEmails, qt.DeepEquals, emails)
+}
+
 func TestBackofficeUserRegistryPostgres_SetPasswordHash(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()

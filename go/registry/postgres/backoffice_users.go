@@ -163,16 +163,31 @@ func (r *BackofficeUserRegistry) GetByEmail(ctx context.Context, email string) (
 	return &user, nil
 }
 
-// List returns every back-office row in insertion order. Tiny table (a
+// List returns every back-office row ordered by created_at, with id as
+// the tiebreaker for rows that share a timestamp (Postgres timestamps
+// resolve to microseconds, so two inserts inside the same microsecond
+// would otherwise come back in unstable storage order). Tiny table (a
 // handful of platform operators), so no pagination is needed yet.
+//
+// Implemented as a direct sqlx.SelectContext rather than via
+// NonRLSRepository.Scan because Scan issues an un-ordered
+// `SELECT * FROM ...` and Postgres does not guarantee insertion order
+// without an explicit ORDER BY. Returning `[]*BackofficeUser` directly
+// from SelectContext also avoids the for-range-yields-shared-value
+// aliasing trap (Scan's iterator yielded the same address per
+// iteration, so appending `&user` produced N pointers to the last row).
 func (r *BackofficeUserRegistry) List(ctx context.Context) ([]*models.BackofficeUser, error) {
 	var users []*models.BackofficeUser
 	reg := r.newSQLRegistry()
-	for user, err := range reg.Scan(ctx) {
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to list backoffice users", err)
-		}
-		users = append(users, &user)
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT * FROM %s ORDER BY created_at, id`,
+			r.tableNames.BackofficeUsers(),
+		)
+		return tx.SelectContext(ctx, &users, query)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list backoffice users", err)
 	}
 	return users, nil
 }
