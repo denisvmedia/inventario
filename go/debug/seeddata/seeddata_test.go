@@ -87,24 +87,31 @@ func TestSeedData(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(memberships, qt.HasLen, 0)
 
-	// The sysadmin fixture carries the platform-admin flag; every other
-	// seeded user must not (issue #1758).
+	// The sysadmin fixture carries a row in system_admin_grants (#1784);
+	// every other seeded user must not.
 	sysadmin := emails["sysadmin@test-org.com"]
 	c.Assert(sysadmin, qt.IsNotNil)
 	c.Assert(sysadmin.IsActive, qt.IsTrue)
-	c.Assert(sysadmin.IsSystemAdmin, qt.IsTrue)
+	isAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(ctx, sysadmin.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(isAdmin, qt.IsTrue)
 	for _, u := range users {
-		if u.Email != "sysadmin@test-org.com" {
-			c.Assert(u.IsSystemAdmin, qt.IsFalse,
-				qt.Commentf("%s must not be a system admin", u.Email))
+		if u.Email == "sysadmin@test-org.com" {
+			continue
 		}
+		isAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(ctx, u.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(isAdmin, qt.IsFalse,
+			qt.Commentf("%s must not be a system admin", u.Email))
 	}
 
 	// The block-target fixture is a plain active user.
 	blockTarget := emails["blocktarget@test-org.com"]
 	c.Assert(blockTarget, qt.IsNotNil)
 	c.Assert(blockTarget.IsActive, qt.IsTrue)
-	c.Assert(blockTarget.IsSystemAdmin, qt.IsFalse)
+	blockTargetAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(ctx, blockTarget.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(blockTargetAdmin, qt.IsFalse)
 }
 
 // TestSeedDataSurfaceCoverage asserts that every feature surface called
@@ -369,7 +376,8 @@ func TestSeedDataDoesNotCreateFixturesInNonTestTenant(t *testing.T) {
 	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{TenantSlug: "acme", SeedSystemAdmin: true})
 	c.Assert(err, qt.IsNil)
 
-	users, err := registrySet.UserRegistry.List(context.Background())
+	ctx := context.Background()
+	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	for _, u := range users {
 		c.Assert(u.Email, qt.Not(qt.Equals), "orphan@test-org.com")
@@ -377,7 +385,9 @@ func TestSeedDataDoesNotCreateFixturesInNonTestTenant(t *testing.T) {
 		c.Assert(u.Email, qt.Not(qt.Equals), "teammate@test-org.com")
 		c.Assert(u.Email, qt.Not(qt.Equals), "sysadmin@test-org.com")
 		c.Assert(u.Email, qt.Not(qt.Equals), "blocktarget@test-org.com")
-		c.Assert(u.IsSystemAdmin, qt.IsFalse)
+		isAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(ctx, u.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(isAdmin, qt.IsFalse)
 	}
 }
 
@@ -400,7 +410,9 @@ func TestSeedDataSystemAdminGate(t *testing.T) {
 	for _, u := range users {
 		c.Assert(u.Email, qt.Not(qt.Equals), "sysadmin@test-org.com",
 			qt.Commentf("sysadmin fixture must not be seeded without the opt-in"))
-		c.Assert(u.IsSystemAdmin, qt.IsFalse)
+		isAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(ctx, u.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(isAdmin, qt.IsFalse)
 	}
 	// The non-privileged block-target fixture is still provisioned.
 	emails := map[string]bool{}

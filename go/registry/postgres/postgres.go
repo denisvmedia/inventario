@@ -48,6 +48,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.LoginEventRegistry = NewLoginEventRegistry(dbx)
 	fs.UserMFASecretRegistry = NewUserMFASecretRegistry(dbx)
 	fs.AuditLogRegistry = NewAuditLogRegistry(dbx)
+	fs.SystemAdminGrantRegistry = NewSystemAdminGrantRegistry(dbx)
 	fs.EmailVerificationRegistry = NewEmailVerificationRegistry(dbx)
 	fs.PasswordResetRegistry = NewPasswordResetRegistry(dbx)
 	fs.ThumbnailGenerationJobRegistryFactory = NewThumbnailGenerationJobRegistry(dbx)

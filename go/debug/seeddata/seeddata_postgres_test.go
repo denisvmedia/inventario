@@ -139,11 +139,21 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	c.Assert(adminUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(adminUser.Name, qt.Equals, "Test Administrator")
 	c.Assert(adminUser.IsActive, qt.Equals, true)
+	// "admin" is the per-group admin/owner role, NOT a platform system
+	// admin. Assert no grant row exists so a regression that conflates
+	// the two privileges (e.g. accidentally calling Grant on every
+	// "admin@*" address) is caught here.
+	isAdminUserSysAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(context.Background(), adminUser.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(isAdminUserSysAdmin, qt.IsFalse)
 
 	c.Assert(regularUser, qt.IsNotNil, qt.Commentf("Regular user not found"))
 	c.Assert(regularUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(regularUser.Name, qt.Equals, "Test User 2")
 	c.Assert(regularUser.IsActive, qt.Equals, true)
+	isRegularSysAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(context.Background(), regularUser.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(isRegularSysAdmin, qt.IsFalse)
 
 	// Orphan: active so it can authenticate, zero memberships so e2e tests
 	// hit the real `/api/v1/groups` empty-collection response (issue #1277).
@@ -153,25 +163,38 @@ func TestSeedDataPostgreSQL(t *testing.T) {
 	memberships, err := registrySet.GroupMembershipRegistry.ListByUser(context.Background(), testTenant.ID, orphanUser.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(memberships, qt.HasLen, 0)
+	isOrphanSysAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(context.Background(), orphanUser.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(isOrphanSysAdmin, qt.IsFalse)
 
 	// Family user owns the secondary group (Family).
 	c.Assert(familyUser, qt.IsNotNil, qt.Commentf("family user not found"))
 	c.Assert(familyUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(familyUser.IsActive, qt.IsTrue)
+	isFamilySysAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(context.Background(), familyUser.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(isFamilySysAdmin, qt.IsFalse)
 
-	// Sysadmin: the is_system_admin flag must round-trip through the
-	// Postgres INSERT/SELECT path (issue #1758).
+	// Sysadmin: the system-admin grant row must round-trip through the
+	// Postgres INSERT/SELECT path (issue #1758, #1784).
 	c.Assert(sysadminUser, qt.IsNotNil, qt.Commentf("sysadmin user not found"))
 	c.Assert(sysadminUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(sysadminUser.IsActive, qt.IsTrue)
-	c.Assert(sysadminUser.IsSystemAdmin, qt.IsTrue)
+	isAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(context.Background(), sysadminUser.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(isAdmin, qt.IsTrue)
 
 	// Block-target: a plain active fixture — asserted explicitly so a
 	// broken insert can't be masked by unrelated rows (issue #1758).
+	// Negative Exists assertion completes the set: every non-sysadmin
+	// seed user must NOT hold a grant row, so a regression that grants
+	// the wrong identity (or grants everyone) is caught here.
 	c.Assert(blockTargetUser, qt.IsNotNil, qt.Commentf("blocktarget user not found"))
 	c.Assert(blockTargetUser.TenantID, qt.Equals, testTenant.ID)
 	c.Assert(blockTargetUser.IsActive, qt.IsTrue)
-	c.Assert(blockTargetUser.IsSystemAdmin, qt.IsFalse)
+	isBlockTargetAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(context.Background(), blockTargetUser.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(isBlockTargetAdmin, qt.IsFalse)
 }
 
 // usersForTenant returns the users belonging to a single tenant. The

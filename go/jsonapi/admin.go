@@ -231,11 +231,14 @@ type AdminUserResponse struct {
 // without forcing handlers to construct a giant struct literal. The
 // memberships are pre-joined to (group_id, group_slug, group_name)
 // triplets at the handler so the JSON-API package stays decoupled from
-// the LocationGroup model.
+// the LocationGroup model. IsSystemAdmin is passed in by the handler
+// (resolved from the SystemAdminGrantRegistry; #1784) — the privilege
+// no longer lives on the users row.
 type AdminUserResponseInput struct {
 	User               *models.User
 	Memberships        []AdminUserGroupMembership
 	ActiveSessionCount int
+	IsSystemAdmin      bool
 }
 
 // NewAdminUserResponse wraps a single user row for the detail endpoint.
@@ -258,7 +261,7 @@ func NewAdminUserResponse(in AdminUserResponseInput) *AdminUserResponse {
 			Name:               u.Name,
 			TenantID:           u.TenantID,
 			IsActive:           u.IsActive,
-			IsSystemAdmin:      u.IsSystemAdmin,
+			IsSystemAdmin:      in.IsSystemAdmin,
 			LastLoginAt:        u.LastLoginAt,
 			CreatedAt:          u.CreatedAt,
 			UpdatedAt:          u.UpdatedAt,

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
@@ -16,9 +18,9 @@ import (
 
 // ErrLastSystemAdmin is re-exported from the registry layer for callers
 // (CLI, tests) that still import this package. The sentinel itself lives
-// at the registry layer so RevokeSystemAdminAtomic can return it from
-// inside the lock-protected revoke path. New callers should branch on
-// registry.ErrLastSystemAdmin directly. #1745.
+// at the registry layer so SystemAdminGrantRegistry.RevokeAtomic can
+// return it from inside the lock-protected revoke path. New callers
+// should branch on registry.ErrLastSystemAdmin directly. #1745 / #1784.
 var ErrLastSystemAdmin = registry.ErrLastSystemAdmin
 
 // Service provides administrative operations for CLI commands
@@ -487,12 +489,17 @@ func (s *Service) ResetUserMFA(ctx context.Context, idOrEmail string) (resetUser
 	return user, hadEnrollment, nil
 }
 
-// GrantSystemAdmin sets IsSystemAdmin=true on the user resolved by
-// idOrEmail. Idempotent — calling on an already-admin user returns the
-// row unchanged with hadFlag=true so the CLI can print "already a system
-// admin" rather than a misleading "granted" line. Writes a
-// `admin.grant_system_admin` audit row regardless so the audit trail
-// shows the attempt.
+// GrantSystemAdmin records a row in `system_admin_grants` (#1784) for
+// the user resolved by idOrEmail. Idempotent — calling on an already-
+// admin user returns the row unchanged with hadFlag=true so the CLI can
+// print "already a system admin" rather than a misleading "granted"
+// line. Writes a `admin.grant_system_admin` audit row regardless so the
+// audit trail shows the attempt.
+//
+// The CLI runs out-of-band with no authenticated operator, so the
+// grant row's granted_by column is nil — the audit row carries the
+// "operator was an OS/host boundary" signal via UserID=nil (see
+// logAdminAction).
 func (s *Service) GrantSystemAdmin(ctx context.Context, idOrEmail string) (resultUser *models.User, hadFlag bool, err error) {
 	user, err := s.GetUser(ctx, idOrEmail)
 	if err != nil {
@@ -500,32 +507,33 @@ func (s *Service) GrantSystemAdmin(ctx context.Context, idOrEmail string) (resul
 		return nil, false, err
 	}
 
-	if user.IsSystemAdmin {
-		// Audit the no-op too so an operator can see "already admin"
-		// in the trail without having to grep for the create-only case.
-		s.logAdminAction(ctx, "admin.grant_system_admin", &user.TenantID, user.ID, nil)
-		return user, true, nil
+	if s.factorySet.SystemAdminGrantRegistry == nil {
+		configErr := errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "SystemAdminGrantRegistry"))
+		// Audit the misconfiguration before returning so the trail records
+		// the attempt even when the grant store is unwired. The subject was
+		// resolved, so charge the attempt to that tenant/user.
+		s.logAdminAction(ctx, "admin.grant_system_admin", &user.TenantID, user.ID, configErr)
+		return nil, false, configErr
 	}
 
-	user.IsSystemAdmin = true
-	updated, err := s.factorySet.UserRegistry.Update(ctx, *user)
-	if err != nil {
-		s.logAdminAction(ctx, "admin.grant_system_admin", &user.TenantID, user.ID, err)
-		return nil, false, errxtrace.Wrap("failed to grant system-admin flag", err)
+	hadFlag, grantErr := s.factorySet.SystemAdminGrantRegistry.Grant(ctx, user.ID, nil)
+	if grantErr != nil {
+		s.logAdminAction(ctx, "admin.grant_system_admin", &user.TenantID, user.ID, grantErr)
+		return nil, false, errxtrace.Wrap("failed to grant system-admin", grantErr)
 	}
 
-	s.logAdminAction(ctx, "admin.grant_system_admin", &updated.TenantID, updated.ID, nil)
-	return updated, false, nil
+	s.logAdminAction(ctx, "admin.grant_system_admin", &user.TenantID, user.ID, nil)
+	return user, hadFlag, nil
 }
 
-// RevokeSystemAdmin clears IsSystemAdmin on the resolved user. When
-// allowZero is false (the default), the registry refuses to revoke the
-// last remaining system admin so an operator can't lock themselves out
-// of every admin surface — the count is checked AND the flag is cleared
-// inside the same transaction (postgres) / under the same registry mutex
-// (memory), so the operation is atomic against concurrent revokes.
-// Idempotent: revoking a user who is not a system admin returns
-// hadFlag=false with no error.
+// RevokeSystemAdmin deletes the resolved user's row from
+// `system_admin_grants` (#1784). When allowZero is false (the default),
+// the registry refuses to revoke the last remaining system admin so an
+// operator can't lock themselves out of every admin surface — the
+// count is checked AND the row is deleted inside the same transaction
+// (postgres) / under the same registry mutex (memory), so the operation
+// is atomic against concurrent revokes. Idempotent: revoking a user who
+// holds no grant returns hadFlag=false with no error.
 //
 // allowZero=true bypasses the guard; intended for the deliberate
 // "I'm shutting down the platform" path, exposed on the CLI as
@@ -543,7 +551,16 @@ func (s *Service) RevokeSystemAdmin(ctx context.Context, idOrEmail string, allow
 		return nil, false, err
 	}
 
-	hadFlag, revokeErr := s.factorySet.UserRegistry.RevokeSystemAdminAtomic(ctx, user.ID, allowZero)
+	if s.factorySet.SystemAdminGrantRegistry == nil {
+		configErr := errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "SystemAdminGrantRegistry"))
+		// Mirror GrantSystemAdmin: audit the misconfiguration before
+		// returning so the trail records the attempt regardless. The
+		// subject user is already resolved, so include it for forensics.
+		s.logAdminAction(ctx, "admin.revoke_system_admin", &user.TenantID, user.ID, configErr)
+		return nil, false, configErr
+	}
+
+	hadFlag, revokeErr := s.factorySet.SystemAdminGrantRegistry.RevokeAtomic(ctx, user.ID, allowZero)
 	if revokeErr != nil {
 		s.logAdminAction(ctx, "admin.revoke_system_admin", &user.TenantID, user.ID, revokeErr)
 		if errors.Is(revokeErr, registry.ErrLastSystemAdmin) {
@@ -552,36 +569,65 @@ func (s *Service) RevokeSystemAdmin(ctx context.Context, idOrEmail string, allow
 			// friendly --allow-zero hint without consuming the wrap.
 			return nil, hadFlag, revokeErr
 		}
-		return nil, hadFlag, errxtrace.Wrap("failed to revoke system-admin flag", revokeErr)
+		return nil, hadFlag, errxtrace.Wrap("failed to revoke system-admin", revokeErr)
 	}
 
-	if !hadFlag {
-		// Idempotent: the user wasn't an admin in the first place.
-		s.logAdminAction(ctx, "admin.revoke_system_admin", &user.TenantID, user.ID, nil)
-		return user, false, nil
-	}
-
-	// Re-fetch the post-update row so the caller can show fresh state.
-	updated, err := s.factorySet.UserRegistry.Get(ctx, user.ID)
-	if err != nil {
-		s.logAdminAction(ctx, "admin.revoke_system_admin", &user.TenantID, user.ID, err)
-		return nil, true, errxtrace.Wrap("failed to re-fetch user after revoke", err)
-	}
-	s.logAdminAction(ctx, "admin.revoke_system_admin", &updated.TenantID, updated.ID, nil)
-	return updated, true, nil
+	s.logAdminAction(ctx, "admin.revoke_system_admin", &user.TenantID, user.ID, nil)
+	return user, hadFlag, nil
 }
 
-// ListSystemAdmins returns every user with IsSystemAdmin = true. Logs an
-// `admin.list_system_admins` audit row regardless of result count so the
-// trail shows operator-side reads as well as writes.
-func (s *Service) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
-	admins, err := s.factorySet.UserRegistry.ListSystemAdmins(ctx)
+// SystemAdminListing is the joined view a CLI render needs to show
+// each grant row: identity fields from `users` plus the real
+// `granted_at` timestamp from `system_admin_grants` (no longer the
+// `users.updated_at` proxy that the pre-#1784 path used).
+type SystemAdminListing struct {
+	User      *models.User
+	GrantedAt time.Time
+	GrantedBy *string
+}
+
+// ListSystemAdmins returns every system-admin grant joined to its
+// user row, ordered by granted_at ASC. Logs an
+// `admin.list_system_admins` audit row regardless of result count so
+// the trail shows operator-side reads as well as writes.
+func (s *Service) ListSystemAdmins(ctx context.Context) ([]*SystemAdminListing, error) {
+	if s.factorySet.SystemAdminGrantRegistry == nil {
+		err := errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "SystemAdminGrantRegistry"))
+		s.logAdminAction(ctx, "admin.list_system_admins", nil, "", err)
+		return nil, err
+	}
+
+	grants, err := s.factorySet.SystemAdminGrantRegistry.List(ctx)
 	if err != nil {
 		s.logAdminAction(ctx, "admin.list_system_admins", nil, "", err)
-		return nil, errxtrace.Wrap("failed to list system admins", err)
+		return nil, errxtrace.Wrap("failed to list system admin grants", err)
 	}
+
+	out := make([]*SystemAdminListing, 0, len(grants))
+	for _, g := range grants {
+		// Per-grant Get keeps the registry interface narrow; for the
+		// expected single-digit grant count this is cheaper than
+		// introducing a join helper. A user that disappeared between
+		// the List and the Get (ON DELETE CASCADE on the FK) is
+		// skipped silently — the CLI then renders a shorter list,
+		// which matches the post-cascade truth.
+		user, getErr := s.factorySet.UserRegistry.Get(ctx, g.UserID)
+		if getErr != nil {
+			if errors.Is(getErr, registry.ErrNotFound) {
+				continue
+			}
+			s.logAdminAction(ctx, "admin.list_system_admins", nil, "", getErr)
+			return nil, errxtrace.Wrap("failed to fetch grant subject user", getErr)
+		}
+		out = append(out, &SystemAdminListing{
+			User:      user,
+			GrantedAt: g.GrantedAt,
+			GrantedBy: g.GrantedBy,
+		})
+	}
+
 	s.logAdminAction(ctx, "admin.list_system_admins", nil, "", nil)
-	return admins, nil
+	return out, nil
 }
 
 // logAdminAction writes an admin audit row via the AuditLogRegistry on

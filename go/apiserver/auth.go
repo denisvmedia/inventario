@@ -91,12 +91,18 @@ type AuthAPI struct {
 	groupMembershipRegistry registry.GroupMembershipRegistry
 	loginEventRegistry      registry.LoginEventRegistry
 	mfaRegistry             registry.UserMFASecretRegistry
-	blacklistService        services.TokenBlacklister
-	rateLimiter             services.AuthRateLimiter
-	csrfService             csrf.Service
-	auditService            services.AuditLogger
-	emailService            services.EmailService
-	mfaService              *services.MFAService
+	// systemAdminGrantRegistry resolves the is_system_admin advisory
+	// claim baked into access tokens (#1784). The claim is FE-only —
+	// authorization happens server-side in RequireSystemAdmin, which
+	// queries the grant store directly on every admin request. May be
+	// nil in tests; issueAccessToken treats nil as "not an admin".
+	systemAdminGrantRegistry registry.SystemAdminGrantRegistry
+	blacklistService         services.TokenBlacklister
+	rateLimiter              services.AuthRateLimiter
+	csrfService              csrf.Service
+	auditService             services.AuditLogger
+	emailService             services.EmailService
+	mfaService               *services.MFAService
 	// impersonationStore lets logout revoke the operator's GENUINE refresh
 	// token when the request runs during an impersonation session (#1750).
 	// During impersonation the refresh cookie holds the
@@ -270,7 +276,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// The new token's iat claim is based on the current time and is intended to
 	// work with iat-based blacklist checks in the JWT middleware, without
 	// requiring explicit removal of any existing blacklist entry in typical cases.
-	accessTokenString, _, err := api.issueAccessToken(user, rti)
+	accessTokenString, _, err := api.issueAccessToken(r.Context(), user, rti)
 	if err != nil {
 		slog.Error("Failed to generate access token", "user_id", user.ID, "error", err)
 		api.rollbackRefreshToken(r.Context(), user.ID, rti)
@@ -296,7 +302,36 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// Generate a CSRF token for this session.
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
 
+	// Reuse the already-computed claim from the freshly issued access token
+	// instead of performing a second best-effort admin-grant lookup here.
+	populateUserSystemAdminFlagFromAccessToken(accessTokenString, user)
+
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
+}
+
+func populateUserSystemAdminFlagFromAccessToken(accessTokenString string, user *models.User) {
+	if user == nil || accessTokenString == "" {
+		return
+	}
+
+	token, _, err := new(jwt.Parser).ParseUnverified(accessTokenString, jwt.MapClaims{})
+	if err != nil {
+		slog.Warn("Failed to parse access token for user is_system_admin flag", "user_id", user.ID, "error", err)
+		return
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		slog.Warn("Failed to read access token claims for user is_system_admin flag", "user_id", user.ID)
+		return
+	}
+
+	isAdmin, ok := claims["is_system_admin"].(bool)
+	if !ok {
+		return
+	}
+
+	user.IsSystemAdmin = isAdmin
 }
 
 // refresh issues a new access token using a valid refresh token cookie.
@@ -390,7 +425,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 
 	// Carry the refreshed-from row id as "rti" so /users/me/sessions can
 	// identify the caller's own session without the refresh cookie.
-	accessTokenString, _, err := api.issueAccessToken(user, refreshToken.ID)
+	accessTokenString, _, err := api.issueAccessToken(r.Context(), user, refreshToken.ID)
 	if err != nil {
 		slog.Error("Failed to generate access token on refresh", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
@@ -413,6 +448,11 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// explicitly here — cheap, idempotent, and closes the migration window
 	// for refresh-only sessions (#1750/#1771).
 	clearLegacyRefreshCookie(w, r)
+
+	// Reuse the freshly-minted access-token claim instead of doing a
+	// second SystemAdminGrantRegistry.Exists lookup on the hot refresh
+	// path.
+	populateUserSystemAdminFlagFromAccessToken(accessTokenString, user)
 
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
@@ -756,6 +796,12 @@ func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request)
 	// after a page reload where the in-memory token was lost).
 	api.writeCSRFHeader(w, r.Context(), user.ID)
 
+	// Stamp the wire-only is_system_admin advisory flag (#1784) so the
+	// FE's `useIsSystemAdmin()` hook receives the current truth on the
+	// canonical boot probe. Authorization is still enforced server-side
+	// via RequireSystemAdmin on every /admin/* request.
+	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, user)
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(user); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
@@ -821,12 +867,17 @@ type AuthParams struct {
 	GroupMembershipRegistry registry.GroupMembershipRegistry
 	LoginEventRegistry      registry.LoginEventRegistry
 	MFARegistry             registry.UserMFASecretRegistry
-	BlacklistService        services.TokenBlacklister
-	RateLimiter             services.AuthRateLimiter
-	CSRFService             csrf.Service
-	AuditService            services.AuditLogger
-	EmailService            services.EmailService
-	MFAService              *services.MFAService
+	// SystemAdminGrantRegistry resolves the is_system_admin advisory
+	// FE claim baked into access tokens (#1784). May be nil — tokens
+	// then carry is_system_admin=false (FE renders the non-admin
+	// chrome; the gate still enforces the truth server-side).
+	SystemAdminGrantRegistry registry.SystemAdminGrantRegistry
+	BlacklistService         services.TokenBlacklister
+	RateLimiter              services.AuthRateLimiter
+	CSRFService              csrf.Service
+	AuditService             services.AuditLogger
+	EmailService             services.EmailService
+	MFAService               *services.MFAService
 	// ImpersonationStore is the same return-slot store the /admin
 	// impersonation endpoints use (#1750). logout consults it to revoke
 	// the operator's genuine refresh token when a session is ended via
@@ -841,19 +892,20 @@ type AuthParams struct {
 // Auth sets up the authentication API routes.
 func Auth(params AuthParams) func(r chi.Router) {
 	api := &AuthAPI{
-		userRegistry:            params.UserRegistry,
-		refreshTokenRegistry:    params.RefreshTokenRegistry,
-		groupMembershipRegistry: params.GroupMembershipRegistry,
-		loginEventRegistry:      params.LoginEventRegistry,
-		mfaRegistry:             params.MFARegistry,
-		blacklistService:        params.BlacklistService,
-		rateLimiter:             params.RateLimiter,
-		csrfService:             params.CSRFService,
-		auditService:            params.AuditService,
-		emailService:            params.EmailService,
-		mfaService:              params.MFAService,
-		impersonationStore:      params.ImpersonationStore,
-		jwtSecret:               params.JWTSecret,
+		userRegistry:             params.UserRegistry,
+		refreshTokenRegistry:     params.RefreshTokenRegistry,
+		groupMembershipRegistry:  params.GroupMembershipRegistry,
+		loginEventRegistry:       params.LoginEventRegistry,
+		mfaRegistry:              params.MFARegistry,
+		systemAdminGrantRegistry: params.SystemAdminGrantRegistry,
+		blacklistService:         params.BlacklistService,
+		rateLimiter:              params.RateLimiter,
+		csrfService:              params.CSRFService,
+		auditService:             params.AuditService,
+		emailService:             params.EmailService,
+		mfaService:               params.MFAService,
+		impersonationStore:       params.ImpersonationStore,
+		jwtSecret:                params.JWTSecret,
 	}
 
 	requireAuth := RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)
@@ -925,6 +977,12 @@ func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
 		return
 	}
+
+	// Stamp the wire-only is_system_admin advisory flag (#1784) so the
+	// FE keeps the correct sidebar/route gating after a profile update —
+	// otherwise the cached user object would briefly read the zero-value
+	// false until the next /auth/me poll.
+	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, updated)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(updated); err != nil {
@@ -1215,19 +1273,32 @@ func (api *AuthAPI) recordLoginEvent(ctx context.Context, tenantID, email string
 // claim from the validated JWT. Pass "" when no refresh-token row exists
 // yet — the claim is then omitted.
 //
-// The is_system_admin claim mirrors models.User.IsSystemAdmin so the
-// RequireSystemAdmin middleware (#1745) can gate /api/v1/admin/* without
-// re-fetching the user — though in practice JWTMiddleware also re-loads
-// the user from the DB on every request, so the claim is informational
-// and the user struct in context is authoritative. The refresh path
-// re-loads the user before reissuing, so revoking the flag invalidates
-// active access tokens within accessTokenExpiration (15 min).
-func (api *AuthAPI) issueAccessToken(user *models.User, rti string) (string, time.Time, error) {
+// The is_system_admin claim is an advisory FE hint only (#1784): the
+// authoritative source of system-admin privilege is the
+// `system_admin_grants` table, queried by RequireSystemAdmin on every
+// /api/v1/admin/* request. The claim is included so the FE can render
+// the admin chrome (sidebar, banner) without an extra round-trip; the
+// backend must never trust it for authorization. A fresh registry
+// lookup is performed at token-issue time so a revocation invalidates
+// the claim within accessTokenExpiration (15 min). A nil registry or a
+// transient lookup error reads as `false` — fail closed for the FE
+// hint, since the gate still enforces the truth server-side.
+func (api *AuthAPI) issueAccessToken(ctx context.Context, user *models.User, rti string) (string, time.Time, error) {
+	isAdmin := false
+	if api.systemAdminGrantRegistry != nil {
+		ok, err := api.systemAdminGrantRegistry.Exists(ctx, user.ID)
+		if err != nil {
+			slog.Warn("issueAccessToken: grant lookup failed; minting non-admin claim",
+				"user_id", user.ID, "error", err)
+		} else {
+			isAdmin = ok
+		}
+	}
 	expiresAt := time.Now().Add(accessTokenExpiration)
 	claims := jwt.MapClaims{
 		"jti":             uuid.New().String(),
 		"user_id":         user.ID,
-		"is_system_admin": user.IsSystemAdmin,
+		"is_system_admin": isAdmin,
 		"token_type":      accessTokenType,
 		"exp":             expiresAt.Unix(),
 		"iat":             time.Now().Unix(),
@@ -1386,6 +1457,39 @@ func writeLoginResponse(w http.ResponseWriter, accessToken, csrfToken string, us
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+// populateUserSystemAdminFlag stamps user.IsSystemAdmin from the grant
+// registry just before a /auth/me-style payload is encoded (#1784). The
+// flag is a wire-only FE hint — gateway authorization is owned by
+// RequireSystemAdmin, which consults the grant store directly on every
+// /admin/* request — so this helper is best-effort: a nil registry or a
+// transient lookup error leaves the flag false and logs at warn level.
+// The FE then renders the non-admin chrome (graceful degradation) and
+// any actual admin operation surfaces the real privilege on the next
+// admin request via the middleware re-check.
+//
+// Call this immediately before json-encoding a *models.User to the
+// authenticated owner of that identity (handlers like /auth/me,
+// /auth/login, /auth/refresh, /auth/mfa/verify, impersonation
+// start/end). Do NOT call it from registry / service layers — the rule
+// is that no authorization code path reads this struct field.
+func populateUserSystemAdminFlag(ctx context.Context, grants registry.SystemAdminGrantRegistry, user *models.User) {
+	if user == nil {
+		return
+	}
+	if grants == nil {
+		user.IsSystemAdmin = false
+		return
+	}
+	ok, err := grants.Exists(ctx, user.ID)
+	if err != nil {
+		slog.Warn("populateUserSystemAdminFlag: grant lookup failed; emitting is_system_admin=false",
+			"user_id", user.ID, "error", err)
+		user.IsSystemAdmin = false
+		return
+	}
+	user.IsSystemAdmin = ok
 }
 
 // clearRefreshCookie instructs the browser to delete the refresh token cookie

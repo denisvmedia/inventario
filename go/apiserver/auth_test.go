@@ -21,6 +21,7 @@ import (
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	memreg "github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -241,14 +242,6 @@ func (m *mockUserRegistryForAuth) GetByEmail(ctx context.Context, tenantID, emai
 
 func (m *mockUserRegistryForAuth) ListByTenant(ctx context.Context, tenantID string) ([]*models.User, error) {
 	return nil, nil
-}
-
-func (m *mockUserRegistryForAuth) ListSystemAdmins(ctx context.Context) ([]*models.User, error) {
-	return nil, nil
-}
-
-func (m *mockUserRegistryForAuth) RevokeSystemAdminAtomic(ctx context.Context, userID string, allowZero bool) (bool, error) {
-	return false, nil
 }
 
 func (m *mockUserRegistryForAuth) ListAdminByTenant(ctx context.Context, tenantID string, opts registry.AdminUserListOptions) ([]*registry.AdminUserListItem, int, error) {
@@ -1880,5 +1873,155 @@ func TestLogin_AfterPasswordChange(t *testing.T) {
 		// Step 5: New token must pass the JWT middleware.
 		w = doRequest(t, "GET", "/me", nil, newToken)
 		c.Assert(w.Code, qt.Equals, http.StatusOK)
+	})
+}
+
+// TestAuthAPI_IsSystemAdminWireField pins the contract surfaced by #1784:
+// the FE's `useIsSystemAdmin()` hook reads `is_system_admin` off the
+// `/auth/me` and `/auth/login` payloads. The struct field is transient —
+// see models.User.IsSystemAdmin — so handlers MUST populate it from
+// SystemAdminGrantRegistry.Exists immediately before encoding.
+//
+// Coverage:
+//   - GET /auth/me returns is_system_admin=true when the grant exists.
+//   - GET /auth/me returns is_system_admin=false when no grant exists.
+//   - POST /auth/login carries the same flag on LoginResponse.user.
+//
+// Per the "no redundant test assertions" rule, each subtest asserts the
+// status code plus the single JSON field under test — no envelope-shape
+// assertions.
+func TestAuthAPI_IsSystemAdminWireField(t *testing.T) {
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+
+	const (
+		adminID    = "user-admin"
+		nonAdminID = "user-nonadmin"
+		tenantID   = "tenant-isa"
+	)
+
+	makeUser := func(id, email string) *models.User {
+		u := &models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: id},
+				TenantID: tenantID,
+			},
+			Email:    email,
+			Name:     "Test User",
+			IsActive: true,
+		}
+		// All login tests use the same password so the table-driven
+		// LoginResponse case can reuse a single credential.
+		if err := u.SetPassword("S0lidPassword!"); err != nil {
+			t.Fatalf("SetPassword: %v", err)
+		}
+		return u
+	}
+
+	setupHandler := func(t *testing.T, grantUserIDs ...string) (func(r chi.Router), *models.Tenant) {
+		t.Helper()
+		userRegistry := &mockUserRegistryForAuth{
+			users: map[string]*models.User{
+				adminID:    makeUser(adminID, "admin@example.com"),
+				nonAdminID: makeUser(nonAdminID, "nonadmin@example.com"),
+			},
+		}
+		grants := memreg.NewSystemAdminGrantRegistry()
+		for _, uid := range grantUserIDs {
+			if _, err := grants.Grant(context.Background(), uid, nil); err != nil {
+				t.Fatalf("seed grant: %v", err)
+			}
+		}
+		handler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:             userRegistry,
+			SystemAdminGrantRegistry: grants,
+			JWTSecret:                jwtSecret,
+		})
+		tenant := &models.Tenant{
+			EntityID: models.EntityID{ID: tenantID},
+			Status:   models.TenantStatusActive,
+		}
+		return handler, tenant
+	}
+
+	doRequest := func(t *testing.T, handler func(r chi.Router), tenant *models.Tenant, method, path string, body any, token string) *httptest.ResponseRecorder {
+		t.Helper()
+		c := qt.New(t)
+		var bodyBytes []byte
+		if body != nil {
+			var err error
+			bodyBytes, err = json.Marshal(body)
+			c.Assert(err, qt.IsNil)
+		}
+		req := httptest.NewRequest(method, path, bytes.NewBuffer(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		router := chi.NewRouter()
+		router.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ctx := apiserver.WithTenant(r.Context(), tenant)
+				next.ServeHTTP(w, r.WithContext(ctx))
+			})
+		})
+		handler(router)
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	signAccessToken := func(t *testing.T, userID string) string {
+		t.Helper()
+		c := qt.New(t)
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"user_id":    userID,
+			"token_type": "access",
+			"exp":        time.Now().Add(1 * time.Hour).Unix(),
+		})
+		tokenString, err := token.SignedString(jwtSecret)
+		c.Assert(err, qt.IsNil)
+		return tokenString
+	}
+
+	t.Run("GetCurrentUser_AdminEmitsIsSystemAdminTrue", func(t *testing.T) {
+		c := qt.New(t)
+		handler, tenant := setupHandler(t, adminID)
+		token := signAccessToken(t, adminID)
+
+		resp := doRequest(t, handler, tenant, "GET", "/me", nil, token)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+		var user models.User
+		c.Assert(json.Unmarshal(resp.Body.Bytes(), &user), qt.IsNil)
+		c.Assert(user.IsSystemAdmin, qt.IsTrue)
+	})
+
+	t.Run("GetCurrentUser_NonAdminEmitsIsSystemAdminFalse", func(t *testing.T) {
+		c := qt.New(t)
+		handler, tenant := setupHandler(t /* no grants */)
+		token := signAccessToken(t, nonAdminID)
+
+		resp := doRequest(t, handler, tenant, "GET", "/me", nil, token)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+		var user models.User
+		c.Assert(json.Unmarshal(resp.Body.Bytes(), &user), qt.IsNil)
+		c.Assert(user.IsSystemAdmin, qt.IsFalse)
+	})
+
+	t.Run("Login_ResponseUserCarriesIsSystemAdmin", func(t *testing.T) {
+		c := qt.New(t)
+		handler, tenant := setupHandler(t, adminID)
+
+		resp := doRequest(t, handler, tenant, "POST", "/login", map[string]string{
+			"email":    "admin@example.com",
+			"password": "S0lidPassword!",
+		}, "")
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+		var body apiserver.LoginResponse
+		c.Assert(json.Unmarshal(resp.Body.Bytes(), &body), qt.IsNil)
+		c.Assert(body.User, qt.IsNotNil)
+		c.Assert(body.User.IsSystemAdmin, qt.IsTrue)
 	})
 }
