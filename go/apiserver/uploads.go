@@ -280,8 +280,7 @@ func (e *uploadHTTPError) Error() string { return e.err.Error() }
 func (e *uploadHTTPError) Unwrap() error { return e.err }
 
 func renderUploadError(w http.ResponseWriter, r *http.Request, err error) {
-	var ue *uploadHTTPError
-	if errors.As(err, &ue) {
+	if ue, ok := errors.AsType[*uploadHTTPError](err); ok {
 		switch ue.status {
 		case http.StatusUnprocessableEntity:
 			unprocessableEntityError(w, r, ue.err)
