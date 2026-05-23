@@ -16,6 +16,7 @@ import (
 	exporttypes "github.com/denisvmedia/inventario/backup/export/types"
 	"github.com/denisvmedia/inventario/backup/restore/processor"
 	"github.com/denisvmedia/inventario/backup/restore/types"
+	"github.com/denisvmedia/inventario/internal/blobkeys"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -667,7 +668,11 @@ func TestExportRestore_LargeBlobStreamingRoundTrip(t *testing.T) {
 	c.Assert(stats.FileCount, qt.Equals, 1)
 	c.Assert(stats.BinaryDataSize, qt.Equals, int64(blobSize))
 
-	got := readBlob(c, restoreLocation, bigFile.OriginalPath)
+	// Restore rewrites the legacy flat XML key under the importing
+	// tenant's namespace (#1793). Read at the rewritten location so
+	// the blob round-trip assertion still holds.
+	restoredKey := blobkeys.RewriteForTenant(bigFile.OriginalPath, dst.tenantID)
+	got := readBlob(c, restoreLocation, restoredKey)
 	c.Assert(got, qt.HasLen, blobSize)
 	c.Assert(bytes.Equal(got, bigBlob), qt.IsTrue, qt.Commentf("blob bytes corrupted across streaming round-trip"))
 }
