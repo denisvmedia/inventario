@@ -194,8 +194,11 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 #### System Administrators
 
 System administrators are platform operators with cross-tenant privileges
-(access to the `/api/v1/admin/*` API and the `/admin/*` UI). The flag is
-distinct from per-group roles and is managed with the `admin` command group:
+(access to the `/api/v1/admin/*` API and the `/admin/*` UI). The privilege
+is stored in the dedicated `system_admin_grants` table (#1784) — a user
+is an admin iff they have a row there — and is structurally separate
+from any field on the `users` row. The grant table has no HTTP write
+surface; the `admin` command group is the only mutation path:
 
 ```bash
 # Grant platform-wide system-admin to a user

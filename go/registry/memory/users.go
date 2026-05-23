@@ -301,4 +301,3 @@ func (r *UserRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*mo
 
 	return tenantUsers, nil
 }
-

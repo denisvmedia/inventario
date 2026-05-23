@@ -12766,10 +12766,6 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean"
                 },
-                "is_system_admin": {
-                    "description": "IsSystemAdmin grants platform-wide admin access (#1745).",
-                    "type": "boolean"
-                },
                 "last_login_at": {
                     "type": "string"
                 },

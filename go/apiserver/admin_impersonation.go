@@ -13,8 +13,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-chi/chi/v5"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 

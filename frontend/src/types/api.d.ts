@@ -10930,8 +10930,6 @@ export type components = {
             email?: string;
             id?: string;
             is_active?: boolean;
-            /** @description IsSystemAdmin grants platform-wide admin access (#1745). */
-            is_system_admin?: boolean;
             last_login_at?: string;
             name?: string;
             updated_at?: string;

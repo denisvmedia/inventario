@@ -61,6 +61,8 @@ func newAdminEnv(c *qt.C) adminTestEnv {
 // fixture set contains more than one tenant. When isSystemAdmin is
 // true, the system-admin privilege is conferred via the grants registry
 // (#1784) rather than a column on the user row.
+//
+//revive:disable-next-line:flag-parameter // isActive + isSystemAdmin are the natural shape for a test-only fixture helper; the alternative (four sibling constructors) blows the test-helper count without changing semantics.
 func createTestUserDirect(c *qt.C, params apiserver.Params, tenantID, email string, isActive, isSystemAdmin bool) *models.User {
 	c.Helper()
 	c.Assert(tenantID, qt.Not(qt.Equals), "", qt.Commentf("createTestUserDirect: tenantID is required"))

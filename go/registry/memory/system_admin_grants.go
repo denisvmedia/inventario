@@ -28,10 +28,10 @@ type SystemAdminGrantRegistry struct {
 	// items is keyed by grant ID. The unique invariant lives on user_id
 	// instead (mirroring the SQL unique index); a tiny secondary map
 	// keeps the lookup constant-time without an O(N) scan.
-	items     map[string]*models.SystemAdminGrant
-	byUserID  map[string]string // user_id -> grant id
-	nowFn     func() time.Time
-	uuidFn    func() string
+	items    map[string]*models.SystemAdminGrant
+	byUserID map[string]string // user_id -> grant id
+	nowFn    func() time.Time
+	uuidFn   func() string
 }
 
 // NewSystemAdminGrantRegistry creates a new in-memory SystemAdminGrantRegistry.

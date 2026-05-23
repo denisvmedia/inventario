@@ -112,8 +112,8 @@ type AuthAPI struct {
 	// the marker, find no row, and silently leave the admin's real refresh
 	// token valid in the DB for its full lifetime. May be nil (tests /
 	// memory-mode bootstrap) — logout then falls back to the normal path.
-	impersonationStore       services.ImpersonationStore
-	jwtSecret                []byte
+	impersonationStore services.ImpersonationStore
+	jwtSecret          []byte
 }
 
 func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
@@ -822,11 +822,11 @@ func (api *AuthAPI) writeCSRFHeader(w http.ResponseWriter, ctx context.Context, 
 
 // AuthParams holds all dependencies needed by the auth API.
 type AuthParams struct {
-	UserRegistry             registry.UserRegistry
-	RefreshTokenRegistry     registry.RefreshTokenRegistry
-	GroupMembershipRegistry  registry.GroupMembershipRegistry
-	LoginEventRegistry       registry.LoginEventRegistry
-	MFARegistry              registry.UserMFASecretRegistry
+	UserRegistry            registry.UserRegistry
+	RefreshTokenRegistry    registry.RefreshTokenRegistry
+	GroupMembershipRegistry registry.GroupMembershipRegistry
+	LoginEventRegistry      registry.LoginEventRegistry
+	MFARegistry             registry.UserMFASecretRegistry
 	// SystemAdminGrantRegistry resolves the is_system_admin advisory
 	// FE claim baked into access tokens (#1784). May be nil — tokens
 	// then carry is_system_admin=false (FE renders the non-admin

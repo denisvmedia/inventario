@@ -4,7 +4,8 @@ Focused threat model for the system-wide admin section
 ([umbrella #1744](https://github.com/denisvmedia/inventario/issues/1744),
 QA gate [#1758](https://github.com/denisvmedia/inventario/issues/1758)).
 It covers the `/api/v1/admin/*` API subtree, the `/admin/*` UI, the
-`is_system_admin` JWT claim, and the impersonation primitive.
+`system_admin_grants` table (#1784), the advisory `is_system_admin`
+JWT claim, and the impersonation primitive.
 
 Scope is deliberately narrow: it addresses what the admin section adds
 on top of the existing auth stack (JWT + refresh tokens + CSRF + RLS).
@@ -13,13 +14,14 @@ General application threats are out of scope.
 ## Trust boundaries & assets
 
 - **Assets**: every tenant's data (the admin surface is cross-tenant),
-  the `is_system_admin` flag, the JWT signing secret, impersonation
-  tokens, and the audit log.
-- **Privileged principals**: system admins (`users.is_system_admin =
-  true`) and anyone with database or host shell access (the CLI
-  bootstrap path).
+  the `system_admin_grants` table (#1784), the JWT signing secret,
+  impersonation tokens, and the audit log.
+- **Privileged principals**: users with a row in `system_admin_grants`
+  and anyone with database or host shell access (the CLI bootstrap
+  path).
 - **Boundary**: the `RequireSystemAdmin` middleware separates ordinary
-  authenticated users from the admin surface; the database role's RLS
+  authenticated users from the admin surface by querying
+  `system_admin_grants` on every request; the database role's RLS
   policies separate tenants for all *non-admin* traffic.
 
 ---
@@ -27,41 +29,43 @@ General application threats are out of scope.
 ## T1 — Privilege escalation: a non-admin self-grants admin
 
 **Threat.** A regular user forges or mutates a token / record so that
-`is_system_admin` reads `true`.
+they reach `/api/v1/admin/*`.
 
 **Mitigations.**
-- `is_system_admin` is never present in any request DTO: the binding
-  structs for the user-facing write paths (`RegisterRequest`,
-  `UpdateProfileRequest`, …) simply do not declare the field, and
-  handlers assign `models.User` fields by name — there is no blind
-  `json.Decode(&user)` into the model. The combination of the
-  request-DTO allow-list and explicit per-field assignment is the
-  actual control. The model field also carries a `userinput:"false"`
-  tag, but that tag is a **non-enforced marker** — neither the registry
-  layer nor request binding checks it — and must not be relied on as a
-  control.
-- The flag is written by the CLI (`admin grant-system-admin`, which
-  needs a database DSN) or by the seed. The seed reaches the flag only
-  through the `ensureSystemAdminUser` fixture, which is gated behind the
+- **Structural (the primary control, #1784):** the system-admin
+  privilege is no longer a column on the `users` row. It lives in a
+  dedicated `system_admin_grants` table whose only write path is the
+  CLI — no HTTP handler can `INSERT`, `UPDATE`, or `DELETE` rows there,
+  and no request DTO maps to it. A future handler that does a blind
+  decode + Update on `models.User` cannot reach the privilege; the
+  worst case is a no-op on a field that no longer exists. This is the
+  *structural* control the threat model now relies on.
+- Granting / revoking is reachable only via `inventario admin
+  grant-system-admin` / `revoke-system-admin`, which require a
+  database DSN. The seed reaches the privilege only through the
+  `ensureSystemAdminUser` fixture, which is gated behind the
   `INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE` opt-in (off by default) — so
-  the unauthenticated `/api/v1/seed` endpoint cannot mint a cross-tenant
-  admin in a production deployment.
+  the unauthenticated `/api/v1/seed` endpoint cannot mint a
+  cross-tenant admin in a production deployment.
 - The JWT `is_system_admin` claim is signed (HS256) with the server
-  secret; a tampered claim fails signature verification.
-- `RequireSystemAdmin` re-reads the flag from the authenticated user
-  context; a stale or self-asserted claim alone does not pass.
+  secret; a tampered claim fails signature verification. The claim is
+  an advisory FE hint only — backend authorization always re-queries
+  `system_admin_grants` via `RequireSystemAdmin` on every admin
+  request (#1784).
+- A test invariant (`admin_security_invariants_test.go`) walks every
+  registered chi route and asserts no path under `/api/v1/admin/*`
+  mounts an HTTP write endpoint for `system_admin_grants`. The
+  invariant also asserts that the user-write request DTOs
+  (`RegisterRequest`, `UpdateProfileRequest`, …) carry no field that
+  could maps to a grant write.
 
 **Residual risk.**
 - Compromise of the JWT signing secret (see T2) or of the database —
   pre-existing platform-level risks.
-- **Architectural:** the privilege lives on the `users` row, so a
-  single future handler doing a blind decode (`json.Decode(&user)` +
-  `registry.Update`) would be a full privilege escalation. Today this
-  is held only by code-review discipline, not structurally. #1784
-  tracks moving the privilege off the `users` row into a dedicated
-  `system_admin_grants` table, which would remove this class of risk;
-  until then it must be re-checked on every change to user-write
-  handlers.
+- The CLI bootstrap path is the only privileged write surface; whoever
+  has shell access to the host (or to a postgres role that can write
+  to `system_admin_grants`) can mint admins. Operationally controlled
+  by host hardening; not in scope here.
 
 ---
 
@@ -75,6 +79,11 @@ or `imp: true` / `impersonated_by`, or replays a captured one.
   every request; the algorithm is pinned (no `alg:none` downgrade).
 - Access tokens are short-lived; impersonation tokens are shorter still
   (≤30 min, `INVENTARIO_IMPERSONATION_TTL`).
+- The `is_system_admin` claim is **not** the authorization gate (#1784):
+  `RequireSystemAdmin` queries `system_admin_grants` on every admin
+  request, so a forged claim that escaped signature verification
+  somehow still cannot reach the admin surface — the gate fetches the
+  truth fresh from the grant store.
 - Block bumps a per-user JWT-blacklist `iat`-staleness threshold, so a
   captured access token for a blocked user is rejected on next use even
   before it expires.
@@ -223,9 +232,14 @@ and/or an automated test.
       `inventario_admin` `BYPASSRLS` role), all behind
       `RequireSystemAdmin`. *(T3)*
 - [ ] **JWT claim layout** — `is_system_admin` / `impersonated_by`
-      cannot be self-signed by a non-admin (signature verification +
-      the request-DTO allow-list: the field is absent from the request
-      structs). *(T1, T2)*
+      cannot be self-signed by a non-admin (signature verification);
+      the `is_system_admin` claim is advisory only, with
+      `RequireSystemAdmin` re-querying `system_admin_grants` on every
+      admin request. *(T1, T2)*
+- [ ] **No HTTP write path to system_admin_grants** — the table is
+      mutable only via the CLI; `admin_security_invariants_test.go`
+      walks every chi route and asserts no admin endpoint can write
+      to it. *(T1)*
 - [ ] **Impersonation no-chain** — e2e + integration test assert nested
       impersonation is rejected. *(T4)*
 - [ ] **Impersonation no-refresh** — e2e + integration test assert the

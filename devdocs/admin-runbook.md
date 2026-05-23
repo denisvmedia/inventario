@@ -3,9 +3,10 @@
 Operational guide for the **system-wide admin section** (umbrella
 [#1744](https://github.com/denisvmedia/inventario/issues/1744)). A
 *system administrator* is a platform operator with cross-tenant
-privileges — distinct from a per-group `admin`/`owner` role. The flag
-lives in `users.is_system_admin` and gates the `/api/v1/admin/*` API
-subtree and the `/admin/*` UI.
+privileges — distinct from a per-group `admin`/`owner` role. The
+privilege lives in the dedicated `system_admin_grants` table (#1784) —
+a user is a system admin iff they have a row there — and gates the
+`/api/v1/admin/*` API subtree and the `/admin/*` UI.
 
 > **Scope.** System admins can list tenants, inspect/block users,
 > oversee groups (including soft-delete), edit group memberships, and
@@ -105,11 +106,18 @@ inventario admin grant-system-admin --email operator@acme.com --db-dsn …
 ```
 
 Worst-case fallback — a direct SQL statement (use only if the CLI
-binary is unavailable):
+binary is unavailable). After #1784 the privilege lives in
+`system_admin_grants`, not on `users`:
 
 ```sql
-UPDATE users SET is_system_admin = true, updated_at = now()
-WHERE email = 'operator@acme.com';
+INSERT INTO system_admin_grants (id, uuid, user_id, granted_at)
+VALUES (
+  (gen_random_uuid())::text,
+  (gen_random_uuid())::text,
+  (SELECT id FROM users WHERE email = 'operator@acme.com'),
+  now()
+)
+ON CONFLICT (user_id) DO NOTHING;
 ```
 
 Prefer the CLI: it writes an audit-log row and enforces the safety

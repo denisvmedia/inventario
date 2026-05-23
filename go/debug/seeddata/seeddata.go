@@ -502,27 +502,7 @@ func ensureBlockTargetUser(ctx context.Context, registrySet *registry.Set, tenan
 	const blockTargetEmail = "blocktarget@test-org.com"
 	for _, user := range users {
 		if user.TenantID == tenant.ID && user.Email == blockTargetEmail {
-			// Reconcile drift: force the fixture back to a plain,
-			// active account so the next run starts from a clean state.
-			needsUpdate := false
-			if !user.IsActive {
-				user.IsActive = true
-				needsUpdate = true
-			}
-			if needsUpdate {
-				if _, err := registrySet.UserRegistry.Update(ctx, *user); err != nil {
-					return errxtrace.Wrap("failed to reconcile block-target test user", err)
-				}
-			}
-			// A drifted run may have granted system-admin to this
-			// fixture — strip it so the next admin-block test starts
-			// from a non-admin subject.
-			if registrySet.SystemAdminGrantRegistry != nil {
-				if _, err := registrySet.SystemAdminGrantRegistry.RevokeAtomic(ctx, user.ID, true); err != nil {
-					return errxtrace.Wrap("failed to revoke any drifted system-admin grant from block-target", err)
-				}
-			}
-			return nil
+			return reconcileBlockTargetDrift(ctx, registrySet, user)
 		}
 	}
 
@@ -539,6 +519,27 @@ func ensureBlockTargetUser(ctx context.Context, registrySet *registry.Set, tenan
 	}
 	if _, err := registrySet.UserRegistry.Create(ctx, target); err != nil {
 		return errxtrace.Wrap("failed to create block-target test user", err)
+	}
+	return nil
+}
+
+// reconcileBlockTargetDrift forces an already-seeded block-target
+// fixture back to a clean state: active, no system-admin grant. A
+// failed block/unblock run can leave is_active=false, and a drifted
+// admin tooling run can have granted system-admin — the next seed
+// should reset both. Extracted from ensureBlockTargetUser so the
+// caller stays under the nestif complexity budget.
+func reconcileBlockTargetDrift(ctx context.Context, registrySet *registry.Set, user *models.User) error {
+	if !user.IsActive {
+		user.IsActive = true
+		if _, err := registrySet.UserRegistry.Update(ctx, *user); err != nil {
+			return errxtrace.Wrap("failed to reconcile block-target test user", err)
+		}
+	}
+	if registrySet.SystemAdminGrantRegistry != nil {
+		if _, err := registrySet.SystemAdminGrantRegistry.RevokeAtomic(ctx, user.ID, true); err != nil {
+			return errxtrace.Wrap("failed to revoke any drifted system-admin grant from block-target", err)
+		}
 	}
 	return nil
 }
