@@ -116,7 +116,8 @@ export async function scanCommodityPhotos(opts: ScanCommodityPhotosOptions): Pro
 }
 
 // normalizeScanResponse strips the JSON:API envelope and drops fields
-// that came back with a null/undefined value or missing confidence.
+// that came back with a null/undefined value. Missing confidence is
+// normalized to 0 so callers can still review otherwise-usable values.
 // Exported for tests so a recorded BE fixture can be normalized
 // without round-tripping through `http`.
 export function normalizeScanResponse(env: ScanResponseEnvelope): ScanResult {

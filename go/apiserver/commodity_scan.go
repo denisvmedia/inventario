@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -103,11 +104,24 @@ func (api *commodityScanAPI) handleScan(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Enforce the body cap before the streaming parse so a malicious
+	// Enforce the body cap before the multipart parse so a malicious
 	// caller can't OOM the process by sending an unbounded multipart
-	// stream.
-	if api.maxFormBytes > 0 {
-		r.Body = http.MaxBytesReader(w, r.Body, api.maxFormBytes)
+	// stream. We intentionally use io.LimitReader rather than
+	// http.MaxBytesReader so this handler keeps sole control over the
+	// eventual 413 JSON:API response shape.
+	if err := api.bufferBody(r); err != nil {
+		if errors.As(err, new(errBodyTooLarge)) {
+			api.recordOversizeAudit(r.Context(), user.TenantID, user.ID)
+			_ = render.Render(w, r, jsonapi.NewErrors(scanError(
+				services.ErrScanPhotoTooLarge,
+				http.StatusRequestEntityTooLarge,
+				"Payload Too Large",
+				commodityScanPhotoTooLargeCode,
+			)))
+			return
+		}
+		renderScanError(w, r, classifyMultipartReadErr(err))
+		return
 	}
 
 	in, err := api.readPhotos(r, int64(api.maxPhotoBytes))
@@ -211,6 +225,23 @@ func (api *commodityScanAPI) readPhotos(r *http.Request, perPartCap int64) (serv
 	return in, nil
 }
 
+func (api *commodityScanAPI) bufferBody(r *http.Request) error {
+	if api.maxFormBytes <= 0 {
+		return nil
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, api.maxFormBytes+1))
+	_ = r.Body.Close()
+	if err != nil {
+		return err
+	}
+	if int64(len(body)) > api.maxFormBytes {
+		return errBodyTooLarge{}
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	return nil
+}
+
 // readPartBounded reads up to `cap+1` bytes from r and reports
 // errOversizedPart if the limit was exceeded. Zero `cap` disables the
 // guard. Returning errOversizedPart lets readPhotos map a single
@@ -230,19 +261,13 @@ func readPartBounded(r io.Reader, maxBytes int64) ([]byte, error) {
 }
 
 // classifyMultipartReadErr maps a multipart-read error into either an
-// oversized-part sentinel (audit-worthy 413), a body-cap-exceeded
-// sentinel (also 413), or the generic malformed-body sentinel (400).
-// Splitting the cases here keeps the handler's audit-on-every-outcome
-// invariant intact — without this the MaxBytesReader path was rendered
-// as a bare 400 with no `commodity_scan.*` code and no audit row.
+// oversized-part sentinel (audit-worthy 413) or the generic malformed-body
+// sentinel (400). The overall body-cap check happens earlier in handleScan
+// via bufferBody so the handler can keep sole control over the 413 response.
 func classifyMultipartReadErr(err error) error {
 	var oversized errOversizedPart
 	if errors.As(err, &oversized) {
 		return oversized
-	}
-	var maxBytesErr *http.MaxBytesError
-	if errors.As(err, &maxBytesErr) {
-		return errBodyTooLarge{}
 	}
 	return errBadMultipart{cause: err}
 }
@@ -270,10 +295,10 @@ func (e errBadMultipart) Error() string {
 	return "malformed multipart body: " + e.cause.Error()
 }
 
-// errBodyTooLarge is set when http.MaxBytesReader's cap is hit during
-// the streaming multipart parse. Distinct from errBadMultipart so the
-// handler can map it to 413 + commodity_scan.photo_too_large rather
-// than the generic 400 path, and so the audit row is written.
+// errBodyTooLarge is set when the pre-parse body cap in bufferBody is
+// exceeded. Distinct from errBadMultipart so the handler can map it to
+// 413 + commodity_scan.photo_too_large rather than the generic 400 path,
+// and so the audit row is written.
 type errBodyTooLarge struct{}
 
 func (errBodyTooLarge) Error() string { return "multipart body exceeds the configured size limit" }

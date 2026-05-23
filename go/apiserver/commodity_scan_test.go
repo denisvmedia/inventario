@@ -168,6 +168,30 @@ func TestCommodityScan_PhotoTooLarge(t *testing.T) {
 	assertErrorCode(t, c, rr.Body.Bytes(), "commodity_scan.photo_too_large")
 }
 
+func TestCommodityScan_BodyTooLarge(t *testing.T) {
+	c := qt.New(t)
+
+	params, userID, slug := newScanParams(mock.New(), services.CommodityScanConfig{MaxPhotos: 5, MaxPhotoBytes: 1 << 20})
+	body, contentType := buildScanMultipart(c, []struct {
+		name string
+		mime string
+		body []byte
+	}{
+		{"a.jpg", "image/jpeg", bytes.Repeat([]byte("a"), 128)},
+	})
+	params.CommodityScanMaxBodyBytes = int64(body.Len() - 1)
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/g/"+slug+"/commodities/scan", body)
+	req.Header.Set("Content-Type", contentType)
+	addTestUserAuthHeader(req, userID)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusRequestEntityTooLarge)
+	assertErrorCode(t, c, rr.Body.Bytes(), "commodity_scan.photo_too_large")
+}
+
 func TestCommodityScan_UnsupportedMIME(t *testing.T) {
 	c := qt.New(t)
 
