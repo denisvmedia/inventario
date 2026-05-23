@@ -49,6 +49,18 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 	middleware.AllowContentType("application/json", "application/vnd.api+json"),
 }
 
+// Install the JSON:API-aware decoder on the package-global `render.Decode`
+// at package load time rather than on every APIServer() construction. The
+// previous per-call assignment was racy under `go test -race`: two parallel
+// tests calling APIServer() concurrently both wrote to the same package
+// variable, and the race detector flagged whichever pair of tests happened
+// to be running when the second write landed. init() runs exactly once,
+// before any test goroutine exists, so the write is unconditionally
+// well-ordered against every reader.
+func init() {
+	render.Decode = JSONAPIAwareDecoder
+}
+
 // createUserAwareMiddlewares creates middleware stack with user authentication and RLS context.
 // For non-group-scoped routes. Group-scoped routes need GroupSlugResolverMiddleware
 // inserted BEFORE RegistrySetMiddleware (see createGroupAwareMiddlewares).
@@ -214,8 +226,6 @@ func (p *Params) Validate() error {
 }
 
 func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
-	render.Decode = JSONAPIAwareDecoder
-
 	r := chi.NewRouter()
 	// CORS middleware — strict and explicit origin-based policy.
 	r.Use(NewCORSMiddleware(params.CORSConfig).Handler)
