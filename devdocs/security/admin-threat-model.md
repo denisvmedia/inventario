@@ -72,7 +72,7 @@ they reach `/api/v1/admin/*`.
 ## T2 — JWT forgery / replay of admin or impersonation claims
 
 **Threat.** An attacker self-signs a token with `is_system_admin: true`
-or `imp: true` / `impersonated_by`, or replays a captured one.
+or `imp: true` / `impersonator_id`, or replays a captured one.
 
 **Mitigations.**
 - All tokens are HS256-signed with the server secret and verified on
@@ -88,9 +88,13 @@ or `imp: true` / `impersonated_by`, or replays a captured one.
   captured access token for a blocked user is rejected on next use even
   before it expires.
 - Impersonation tokens carry a server-side return slot keyed by `jti`;
-  `POST /admin/impersonation/end` additionally requires the matching
-  browser-bound marker cookie, so a stolen bearer token alone cannot
-  redeem the session.
+  `POST /admin/impersonation/end` requires the token's
+  `impersonator_id` claim to match the slot's `OperatorUserID` AND the
+  slot's `OperatorKind` to be `backoffice_user`. The marker cookie
+  binding that previously rode in `imp:<jti>` on the tenant
+  `refresh_token` was retired in Phase 5 (issue #1785) — the
+  cross-plane redesign issues a tenant impersonation token on behalf
+  of a back-office operator, and the tenant cookie path is not used.
 
 **Residual risk.** Secret compromise. Mitigated operationally by secret
 rotation and not logging the secret (see T7).
@@ -147,23 +151,39 @@ the e2e 403 test.
 impersonation.
 
 **Mitigations.**
-- Impersonation tokens pin `is_system_admin: false` — an operator
-  cannot use an impersonated identity to reach the admin surface.
+- **Cross-plane authorisation (#1785 Phase 5)**: the start handler
+  requires a back-office JWT (`aud=backoffice` + `admin_id`) AND
+  `role=platform_admin`. A `support_agent` is refused with `403` and
+  `admin.role_required`. A tenant JWT — including one with
+  `is_system_admin=true` — is refused at the back-office gate.
+- Impersonation tokens pin `is_system_admin: false` — the impersonated
+  tenant session cannot reach the back-office admin surface (the
+  back-office gate rejects tenant tokens anyway).
 - **No chaining**: a request already inside an impersonation cannot
-  start another (`isImpersonatedRequest` guard + `RequireSystemAdmin`
-  rejecting the non-admin impersonation token).
+  start another. The impersonation token is a tenant JWT and the
+  back-office gate rejects it at the door, so the nested guard in the
+  handler is defence-in-depth.
 - **No refresh**: `POST /auth/refresh` rejects impersonation tokens
-  (bearer `imp=true` and the `imp:<jti>` refresh-cookie marker), so the
-  short TTL cannot be extended.
-- **No admin targets**: impersonating another system admin is rejected
-  (`422 admin.impersonate.target_is_admin`); blocked users are also
-  refused.
+  (`imp=true` bearer check), so the short TTL cannot be extended.
+- **No admin targets**: impersonating a tenant user with
+  `is_system_admin=true` is rejected (`422
+  admin.impersonate.target_is_admin`); blocked users are also refused.
 - **Rate limited**: 10 impersonation starts per operator per hour.
 - **Self-block protection**: the block handler resolves the real
   operator via `impersonated_by`, so an operator cannot block their own
   account by acting through an impersonated identity.
 - **Auditable**: every action in an impersonated session is logged with
-  both the subject (`user_id`) and the operator (`impersonated_by`).
+  both the subject (`user_id`) and the operator (`impersonated_by` —
+  the column name is historical; the wire claim it is populated from
+  is `impersonator_id` after Phase 5, with a fallback read of the
+  legacy `impersonated_by` claim for in-flight tokens during rolling
+  upgrades).
+- **End-of-session integrity**: `POST /admin/impersonation/end`
+  validates the impersonation token's signature, requires
+  `impersonator_id` to match the JTI-keyed return slot's
+  `OperatorUserID`, and requires the slot's `OperatorKind` to be
+  `backoffice_user`. A forged token with a mismatched operator id is
+  refused (`422 admin.impersonate.not_active`).
 - The UI shows a persistent, non-dismissible banner for the whole
   session.
 
