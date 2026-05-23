@@ -3,7 +3,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react"
 import { useOptionalAuth } from "@/features/auth/AuthContext"
 
 import { useImpersonationState } from "../hooks"
-import type { ImpersonationState, ImpersonationUser } from "../api"
+import type { ImpersonationOperator, ImpersonationState, ImpersonationUser } from "../api"
 
 // The shape every consumer of useImpersonation() reads. `active` is the
 // single render gate for the banner; the rest of the quartet is populated
@@ -11,10 +11,13 @@ import type { ImpersonationState, ImpersonationUser } from "../api"
 interface ImpersonationContextValue {
   // True while the current browser is inside an impersonation session.
   active: boolean
-  // The impersonated user — populated only when `active` is true.
+  // The impersonated tenant user — populated only when `active` is true.
   targetUser: ImpersonationUser | null
-  // The operator who initiated the session — populated only when active.
-  adminUser: ImpersonationUser | null
+  // The back-office operator who initiated the session — populated only
+  // when active. Phase 5 (#1785) renamed `admin_user` to `operator` on
+  // the wire and switched its shape from a tenant user to a back-office
+  // operator (id, email, name, role).
+  operator: ImpersonationOperator | null
   // ISO timestamps bounding the session; null when inactive.
   startedAt: string | null
   expiresAt: string | null
@@ -26,7 +29,7 @@ interface ImpersonationContextValue {
 const INACTIVE: ImpersonationContextValue = {
   active: false,
   targetUser: null,
-  adminUser: null,
+  operator: null,
   startedAt: null,
   expiresAt: null,
   isLoading: false,
@@ -51,7 +54,7 @@ function toContextValue(
   return {
     active: true,
     targetUser: state.target_user ?? null,
-    adminUser: state.admin_user ?? null,
+    operator: state.operator ?? null,
     startedAt: state.started_at ?? null,
     expiresAt: state.expires_at ?? null,
     isLoading,
