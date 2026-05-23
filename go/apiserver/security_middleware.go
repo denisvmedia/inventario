@@ -90,10 +90,33 @@ func rejectTenantQueryParam(w http.ResponseWriter, r *http.Request) bool {
 }
 
 // rejectTenantBody checks the request body of mutating requests for
-// tenant_id fields. It reads and restores the body so downstream handlers
-// still see it. Returns true — having written a 4xx — when a violation (or
-// a body-read failure) was found; false when the body is clean or the
-// method is not body-bearing.
+// tenant-identifying fields. It reads and restores the body so downstream
+// handlers still see it. Returns true — having written a 4xx — when a
+// violation (or a body-read failure) was found; false when the body is
+// clean or the method is not body-bearing.
+//
+// The check is intentionally a cheap, case-insensitive substring scan
+// rather than a JSON parser — it is belt-and-suspenders defense-in-depth,
+// not a contract validator. After lowercasing the body it matches:
+//   - snake_case "tenant_id" (also catches snake_case form-encoded
+//     bodies such as "tenant_id=…");
+//   - the double-quoted form "\"tenant\"" — a JSON object key cannot
+//     legitimately read free text without those surrounding quotes, so
+//     the quote anchors make this match key-shaped occurrences only;
+//   - the single-quoted form "'tenant'" — pre-existing pattern that
+//     covers non-JSON formats (YAML / JS-embedded) and is left in
+//     place for back-compat. It can over-fire on free text that
+//     contains 'tenant' in single quotes; accepted as a known
+//     belt-and-suspenders limitation;
+//   - the camelCase JSON-key forms "\"tenantId\"" / "\"tenantID\""
+//     (covered by the lowercased "\"tenantid\"" substring, quoted to
+//     avoid flagging the bare word "tenantid" inside free text).
+//
+// Only the double-quoted "\"tenantid\"" form is added — extending the
+// single-quoted variant would introduce a new false-positive surface
+// for description-style strings such as "...'tenantid'..." without
+// adding any coverage against JSON, which is the format every current
+// Inventario handler decodes.
 func rejectTenantBody(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodPost && r.Method != http.MethodPut && r.Method != http.MethodPatch {
 		return false
@@ -111,7 +134,8 @@ func rejectTenantBody(w http.ResponseWriter, r *http.Request) bool {
 	bodyLower := strings.ToLower(string(body))
 	if !strings.Contains(bodyLower, "tenant_id") &&
 		!strings.Contains(bodyLower, "\"tenant\"") &&
-		!strings.Contains(bodyLower, "'tenant'") {
+		!strings.Contains(bodyLower, "'tenant'") &&
+		!strings.Contains(bodyLower, "\"tenantid\"") {
 		return false
 	}
 	slog.Error("Security violation: user-provided tenant ID in request body",
