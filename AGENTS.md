@@ -247,6 +247,7 @@ Support for multiple database backends via DSN:
   ```
   The script spins a throwaway postgres container, applies all existing migrations, then diffs the model annotations against the live schema and writes a timestamped `<ts>_<name>.up.sql` / `.down.sql` pair. Hand-written SQL drifts from the model and `make lint-migrations` (CI gate) will fail.
 - Migration filenames are timestamped (`<unix-seconds>_<snake_case>.{up,down}.sql`); the script picks the timestamp.
+- **Migration version MUST be a real Unix timestamp in UTC ≤ the current `date -u +%s`.** Never invent a "fake-future" prefix to dodge a collision: the migrator treats version IDs as monotonic real timestamps, and a value greater than wall-clock now will break audit reasoning ("when did this migration land?") and any tooling that filters by `created_at`. If the generator's output collides with another in-flight migration, rebase + regenerate (it will pick the next real second). Renaming a generated migration to a value greater than `now` is the worst possible workaround — always pick a real timestamp ≤ now that preserves cross-migration ordering against already-merged migrations. A CI guard fails the build if any file under `go/schema/migrations/_sqldata/` carries a version prefix > now.
 - After generating, `make lint-migrations` (requires `POSTGRES_TEST_DSN`) must report no pending schema changes.
 
 ### API Design
