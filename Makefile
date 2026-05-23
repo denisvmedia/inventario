@@ -5,50 +5,22 @@ BIN_DIR=bin
 FRONTEND_DIR=frontend
 BACKEND_DIR=go
 
+# Recipes assume a POSIX shell. On Windows, run `make` from Git Bash or WSL
+# (see README "Windows" section) — the native `cmd.exe` is not supported.
+SHELL=/bin/bash
+
 # Version information variables
-# Platform-specific commands for extracting version information
-ifeq ($(OS),Windows_NT)
-    # Windows-specific commands
-    VERSION ?= $(shell git describe --tags --always --dirty 2>nul || echo dev)
-    COMMIT ?= $(shell git rev-parse --short HEAD 2>nul || echo unknown)
-    BUILD_DATE ?= $(shell powershell -Command "Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ'" 2>nul || echo unknown)
-else
-    # Unix-like systems
-    VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-    COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-    BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown")
-endif
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown")
 
 # Go ldflags for version injection
 LDFLAGS=-X github.com/denisvmedia/inventario/internal/version.Version=$(VERSION) \
         -X github.com/denisvmedia/inventario/internal/version.Commit=$(COMMIT) \
         -X github.com/denisvmedia/inventario/internal/version.Date=$(BUILD_DATE)
 
-# Detect OS for platform-specific commands
-ifeq ($(OS),Windows_NT)
-    BINARY_EXT=.exe
-    MKDIR=if not exist $(subst /,\,$(1)) mkdir $(subst /,\,$(1))
-    RM=if exist $(subst /,\,$(1)) rmdir /s /q $(subst /,\,$(1))
-    SHELL=cmd.exe
-    CHECK_DIR=if not exist $(subst /,\,$(1))
-    SEP=\\
-    CURRENT_DIR=$(subst /,\,$(shell cd))
-    CD=cd /d
-    CURL=curl
-else
-    BINARY_EXT=
-    MKDIR=mkdir -p $(1)
-    RM=rm -rf $(1)
-    SHELL=/bin/bash
-    CHECK_DIR=[ ! -d $(1) ]
-    SEP=/
-    CURRENT_DIR=$(shell pwd)
-    CD=cd
-    CURL=curl
-endif
-
-BINARY_PATH=$(BIN_DIR)/$(BINARY_NAME)$(BINARY_EXT)
-INVENTOOL_PATH=$(BIN_DIR)/inventool$(BINARY_EXT)
+BINARY_PATH=$(BIN_DIR)/$(BINARY_NAME)
+INVENTOOL_PATH=$(BIN_DIR)/inventool
 
 # Server configuration
 SERVER_ADDR=:3333
@@ -67,18 +39,9 @@ all: build
 
 # Wire up local git hooks (pre-commit format/lint, pre-push typecheck/i18n).
 # Run once per clone. See scripts/install-hooks.sh for what gets installed.
-#
-# The installer is a bash script; the Makefile-level `SHELL=cmd.exe` on
-# Windows would fail to invoke it directly. Route through `bash` when
-# available (Git Bash / WSL ship one on $PATH); the recipe-level
-# explicit `bash` overrides the Make-wide SHELL just for this target.
 .PHONY: install-hooks
 install-hooks:
-ifeq ($(OS),Windows_NT)
-	@bash ./scripts/install-hooks.sh
-else
 	@./scripts/install-hooks.sh
-endif
 
 # Build everything
 .PHONY: build
@@ -87,24 +50,24 @@ build: build-frontend build-backend
 # Build the Go backend
 .PHONY: build-backend
 build-backend:
-	$(call MKDIR,$(BIN_DIR))
-	$(CD) $(BACKEND_DIR)/cmd/inventario && $(GO_CMD) build -tags with_frontend -ldflags "$(LDFLAGS)" -o ../../../$(BINARY_PATH) .
+	mkdir -p $(BIN_DIR)
+	cd $(BACKEND_DIR)/cmd/inventario && $(GO_CMD) build -tags with_frontend -ldflags "$(LDFLAGS)" -o ../../../$(BINARY_PATH) .
 
 .PHONY: build-backend-nofe
 build-backend-nofe:
-	$(call MKDIR,$(BIN_DIR))
-	$(CD) $(BACKEND_DIR)/cmd/inventario && $(GO_CMD) build -ldflags "$(LDFLAGS)" -o ../../../$(BINARY_PATH) .
+	mkdir -p $(BIN_DIR)
+	cd $(BACKEND_DIR)/cmd/inventario && $(GO_CMD) build -ldflags "$(LDFLAGS)" -o ../../../$(BINARY_PATH) .
 
-.PHONE: build-inventool
+.PHONY: build-inventool
 build-inventool:
-	$(call MKDIR,$(BIN_DIR))
-	$(CD) $(BACKEND_DIR)/cmd/inventool && $(GO_CMD) build -ldflags "$(LDFLAGS)" -o ../../../$(INVENTOOL_PATH) .
+	mkdir -p $(BIN_DIR)
+	cd $(BACKEND_DIR)/cmd/inventool && $(GO_CMD) build -ldflags "$(LDFLAGS)" -o ../../../$(INVENTOOL_PATH) .
 
 
 # Build the React frontend (produces frontend/dist for Go's //go:embed)
 .PHONY: build-frontend
 build-frontend:
-	$(CD) $(FRONTEND_DIR) && npm install && npm run build
+	cd $(FRONTEND_DIR) && npm install && npm run build
 
 # Show version information that will be injected into the binary
 .PHONY: version
@@ -126,61 +89,44 @@ run-backend-postgres: build-backend
 # Run the React frontend dev server (Vite). Proxies /api to :3333.
 .PHONY: run-frontend
 run-frontend:
-	$(CD) $(FRONTEND_DIR) && npm run dev
+	cd $(FRONTEND_DIR) && npm run dev
 
 # Run both servers concurrently (for development)
 .PHONY: run-dev
 run-dev:
 	@echo "Starting development servers..."
-ifeq ($(OS),Windows_NT)
-	start /B make run-backend
-	start /B make run-frontend
-else
 	$(MAKE) -j2 run-backend run-frontend
-endif
 
 # Run Go tests (excluding PostgreSQL)
 .PHONY: test-go
 test-go:
-ifeq ($(OS),Windows_NT)
-	$(CD) $(BACKEND_DIR) && for /f %%i in ('$(GO_CMD) list ./... ^| findstr /v "registry/postgres"') do $(GO_CMD) test -v %%i
-else
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v $$($(GO_CMD) list ./... | grep -v '/registry/postgres')
-endif
+	cd $(BACKEND_DIR) && $(GO_CMD) test -v $$($(GO_CMD) list ./... | grep -v '/registry/postgres')
 
 # Run PostgreSQL registry tests
 .PHONY: test-go-postgres
 test-go-postgres:
 	@echo "Running PostgreSQL registry tests..."
-ifeq ($(OS),Windows_NT)
-	@if not defined POSTGRES_TEST_DSN ( \
-		echo ❌ POSTGRES_TEST_DSN environment variable is not set && \
-		echo    Example: set POSTGRES_TEST_DSN=postgres://user:password@localhost:5432/inventario_test?sslmode=disable && \
-		exit /b 1 \
-	)
-else
 	@if [ -z "$(POSTGRES_TEST_DSN)" ]; then \
 		echo "❌ POSTGRES_TEST_DSN environment variable is not set"; \
 		echo "   Example: export POSTGRES_TEST_DSN='postgres://user:password@localhost:5432/inventario_test?sslmode=disable'"; \
 		exit 1; \
 	fi
-endif
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v ./registry/postgres/... ./services/files_backfill/...
+	cd $(BACKEND_DIR) && $(GO_CMD) test -v ./registry/postgres/... ./services/files_backfill/...
 
 # Run all Go tests including PostgreSQL
 .PHONY: test-go-all
 test-go-all:
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) test -v ./...
+	cd $(BACKEND_DIR) && $(GO_CMD) test -v ./...
 
 # Run React frontend unit tests (Vitest + RTL + jest-axe)
 .PHONY: test-frontend
 test-frontend:
-	$(CD) $(FRONTEND_DIR) && npm run test
+	cd $(FRONTEND_DIR) && npm run test
 
 # Run React frontend unit tests with coverage report
 .PHONY: test-frontend-coverage
 test-frontend-coverage:
-	$(CD) $(FRONTEND_DIR) && npm run test:coverage
+	cd $(FRONTEND_DIR) && npm run test:coverage
 
 # Run all tests
 .PHONY: test
@@ -189,46 +135,46 @@ test: test-go test-frontend
 # Run end-to-end tests
 .PHONY: test-e2e
 test-e2e:
-	$(CD) e2e && npm install && npm run test
+	cd e2e && npm install && npm run test
 
 # Seed the database
 .PHONY: seed-db
 seed-db:
 	@echo "Seeding the database..."
-	$(CURL) -X POST http://localhost:3333/api/v1/seed
+	curl -X POST http://localhost:3333/api/v1/seed
 
 # Lint Go code
 .PHONY: lint-go
 lint-go:
 	@echo "Running nolintguard..."
-	$(CD) $(BACKEND_DIR) && go tool nolintguard ./...
+	cd $(BACKEND_DIR) && go tool nolintguard ./...
 	@echo ""
 	@echo "Running qtlint..."
-	$(CD) $(BACKEND_DIR) && go tool qtlint ./...
+	cd $(BACKEND_DIR) && go tool qtlint ./...
 	@echo ""
 	@echo "Running golangci-lint..."
-	$(CD) $(BACKEND_DIR) && golangci-lint run
+	cd $(BACKEND_DIR) && golangci-lint run
 
 # Lint Go code with auto-fix
 .PHONY: lint-go-fix
 lint-go-fix:
 	@echo "Running go fix..."
-	$(CD) $(BACKEND_DIR) && go fix ./...
+	cd $(BACKEND_DIR) && go fix ./...
 	@echo "Running qtlint with auto-fix..."
-	$(CD) $(BACKEND_DIR) && go tool qtlint -fix ./...
+	cd $(BACKEND_DIR) && go tool qtlint -fix ./...
 	@echo ""
 	@echo "Running golangci-lint with auto-fix..."
-	$(CD) $(BACKEND_DIR) && golangci-lint run --fix
+	cd $(BACKEND_DIR) && golangci-lint run --fix
 
 # Lint the React frontend (ESLint flat config)
 .PHONY: lint-frontend
 lint-frontend:
-	$(CD) $(FRONTEND_DIR) && npm run lint
+	cd $(FRONTEND_DIR) && npm run lint
 
 # Typecheck the React frontend
 .PHONY: typecheck-frontend
 typecheck-frontend:
-	$(CD) $(FRONTEND_DIR) && npm run typecheck
+	cd $(FRONTEND_DIR) && npm run typecheck
 
 # Regenerate the OpenAPI/Swagger spec AND the matching React TypeScript
 # types in one go. Output: go/docs/swagger.{yaml,json,go} and
@@ -245,18 +191,18 @@ swagger: swagger-backend codegen-frontend
 # want to inspect spec drift without touching frontend artifacts.
 .PHONY: swagger-backend
 swagger-backend:
-	$(CD) $(BACKEND_DIR) && $(GO_CMD) tool swag init --output docs
+	cd $(BACKEND_DIR) && $(GO_CMD) tool swag init --output docs
 
 # Regenerate the React frontend's TypeScript types from go/docs/swagger.json.
 # Normally invoked transitively via `make swagger`; kept as its own target
 # so dev workflows can regen FE-only after a manual swagger.json edit.
 .PHONY: codegen-frontend
 codegen-frontend:
-	$(CD) $(FRONTEND_DIR) && npm run codegen
+	cd $(FRONTEND_DIR) && npm run codegen
 
 .PHONY: codegen-frontend-check
 codegen-frontend-check:
-	$(CD) $(FRONTEND_DIR) && npm run codegen:check
+	cd $(FRONTEND_DIR) && npm run codegen:check
 
 # Check that all Go entity schema changes have a corresponding migration.
 # Requires POSTGRES_TEST_DSN to point to a PostgreSQL instance that has all migrations applied.
@@ -279,16 +225,14 @@ lint: lint-go lint-frontend
 # Clean build artifacts
 .PHONY: clean
 clean:
-	$(call RM,$(BIN_DIR))
-	$(CD) $(FRONTEND_DIR) && npm run clean
+	rm -rf $(BIN_DIR)
+	cd $(FRONTEND_DIR) && npm run clean
 
 # Install dependencies
 .PHONY: deps
 deps:
-	$(CD) $(BACKEND_DIR)
-	$(GO_CMD) mod download
-	$(GO_CMD) mod tidy
-	$(CD) $(FRONTEND_DIR) && npm install
+	cd $(BACKEND_DIR) && $(GO_CMD) mod download && $(GO_CMD) mod tidy
+	cd $(FRONTEND_DIR) && npm install
 
 # Production Docker operations
 .PHONY: docker-build
@@ -365,85 +309,52 @@ docker-test-logs:
 # Generate help
 .PHONY: help
 help:
-ifeq ($(OS),Windows_NT)
-	@echo Available commands:
-	@echo   all              - Build everything (default)
-	@echo   build            - Build backend and frontend
-	@echo   build-backend    - Build backend with embedded frontend
-	@echo   build-backend-nofe - Build backend without frontend
-	@echo   build-frontend   - Build only the frontend
-	@echo   run-backend      - Run the backend server
-	@echo   run-backend-postgres - Run the backend server with PostgreSQL
-	@echo   run-frontend     - Run the frontend dev server
-	@echo   run-dev          - Run both servers concurrently (for development)
-	@echo   test             - Run all tests
-	@echo   test-go          - Run Go tests (excluding PostgreSQL)
-	@echo   test-go-postgres - Run PostgreSQL registry tests
-	@echo   test-go-all      - Run all Go tests including PostgreSQL
-	@echo   test-frontend    - Run frontend tests
-	@echo   test-e2e         - Run end-to-end tests
-	@echo   seed-db          - Seed the database with test data
-	@echo   lint             - Run all linters
-	@echo   lint-go          - Lint Go code
-	@echo   lint-go-fix      - Lint Go code with auto-fix
-	@echo   lint-frontend    - Lint frontend code
-	@echo   clean            - Clean build artifacts
-	@echo   deps             - Install dependencies
-	@echo   docker-build     - Build Docker image for production
-	@echo   docker-up        - Start Docker services (production)
-	@echo   docker-down      - Stop Docker services (production)
-	@echo   docker-logs      - View Docker logs (production)
-	@echo   docker-clean     - Clean Docker containers and volumes (production)
-	@echo   docker-dev-up    - Start Docker services (development)
-	@echo   docker-dev-down  - Stop Docker services (development)
-	@echo   docker-dev-logs  - View Docker logs (development)
-	@echo   docker-test-build - Build Docker test image
-	@echo   docker-test-up   - Start Docker test database
-	@echo   docker-test-down - Stop Docker test services
-	@echo   docker-test-clean - Clean Docker test containers and volumes
-	@echo   docker-test-migrate - Run database migrations in Docker
-	@echo   docker-test-go   - Run Go tests in Docker
-	@echo   docker-test-go-postgres - Run PostgreSQL tests in Docker
-	@echo   docker-test-logs - View Docker test logs
-else
 	@echo "Available commands:"
-	@echo "  all              - Build everything (default)"
-	@echo "  build            - Build backend and frontend"
-	@echo "  build-backend    - Build backend with embedded frontend"
-	@echo "  build-backend-nofe - Build backend without frontend"
-	@echo "  build-frontend   - Build only the frontend"
-	@echo "  version          - Show version information that will be injected"
-	@echo "  run-backend      - Run the backend server"
-	@echo "  run-backend-postgres - Run the backend server with PostgreSQL"
-	@echo "  run-frontend     - Run the frontend dev server"
-	@echo "  run-dev          - Run both servers concurrently (for development)"
-	@echo "  test             - Run all tests"
-	@echo "  test-go          - Run Go tests (excluding PostgreSQL)"
-	@echo "  test-go-postgres - Run PostgreSQL registry tests"
-	@echo "  test-go-all      - Run all Go tests including PostgreSQL"
-	@echo "  test-frontend    - Run frontend tests"
-	@echo "  test-e2e         - Run end-to-end tests"
-	@echo "  seed-db          - Seed the database with test data"
-	@echo "  lint             - Run all linters"
-	@echo "  lint-go          - Lint Go code"
-	@echo "  lint-go-fix      - Lint Go code with auto-fix"
-	@echo "  lint-frontend    - Lint frontend code"
-	@echo "  clean            - Clean build artifacts"
-	@echo "  deps             - Install dependencies"
-	@echo "  docker-build     - Build Docker image for production"
-	@echo "  docker-up        - Start Docker services (production)"
-	@echo "  docker-down      - Stop Docker services (production)"
-	@echo "  docker-logs      - View Docker logs (production)"
-	@echo "  docker-clean     - Clean Docker containers and volumes (production)"
-	@echo "  docker-dev-up    - Start Docker services (development)"
-	@echo "  docker-dev-down  - Stop Docker services (development)"
-	@echo "  docker-dev-logs  - View Docker logs (development)"
-	@echo "  docker-test-build - Build Docker test image"
-	@echo "  docker-test-up   - Start Docker test database"
-	@echo "  docker-test-down - Stop Docker test services"
-	@echo "  docker-test-clean - Clean Docker test containers and volumes"
-	@echo "  docker-test-migrate - Run database migrations in Docker"
-	@echo "  docker-test-go   - Run Go tests in Docker"
+	@echo "  all                     - Build everything (default)"
+	@echo "  build                   - Build backend and frontend"
+	@echo "  build-backend           - Build backend with embedded frontend"
+	@echo "  build-backend-nofe      - Build backend without frontend"
+	@echo "  build-frontend          - Build only the frontend"
+	@echo "  build-inventool         - Build the inventool CLI"
+	@echo "  version                 - Show version information that will be injected"
+	@echo "  run-backend             - Run the backend server"
+	@echo "  run-backend-postgres    - Run the backend server with PostgreSQL"
+	@echo "  run-frontend            - Run the frontend dev server"
+	@echo "  run-dev                 - Run both servers concurrently (for development)"
+	@echo "  test                    - Run all tests"
+	@echo "  test-go                 - Run Go tests (excluding PostgreSQL)"
+	@echo "  test-go-postgres        - Run PostgreSQL registry tests"
+	@echo "  test-go-all             - Run all Go tests including PostgreSQL"
+	@echo "  test-frontend           - Run frontend tests"
+	@echo "  test-frontend-coverage  - Run frontend tests with coverage report"
+	@echo "  test-e2e                - Run end-to-end tests"
+	@echo "  seed-db                 - Seed the database with test data"
+	@echo "  lint                    - Run all linters"
+	@echo "  lint-go                 - Lint Go code"
+	@echo "  lint-go-fix             - Lint Go code with auto-fix"
+	@echo "  lint-frontend           - Lint frontend code"
+	@echo "  typecheck-frontend      - Typecheck the React frontend"
+	@echo "  swagger                 - Regenerate OpenAPI spec and frontend types"
+	@echo "  swagger-backend         - Regenerate only the Go OpenAPI spec"
+	@echo "  codegen-frontend        - Regenerate frontend types from swagger.json"
+	@echo "  codegen-frontend-check  - Check frontend types are up to date"
+	@echo "  lint-migrations         - Check for missing migrations vs schema annotations"
+	@echo "  install-hooks           - Install local git hooks"
+	@echo "  clean                   - Clean build artifacts"
+	@echo "  deps                    - Install dependencies"
+	@echo "  docker-build            - Build Docker image for production"
+	@echo "  docker-up               - Start Docker services (production)"
+	@echo "  docker-down             - Stop Docker services (production)"
+	@echo "  docker-logs             - View Docker logs (production)"
+	@echo "  docker-clean            - Clean Docker containers and volumes (production)"
+	@echo "  docker-dev-up           - Start Docker services (development)"
+	@echo "  docker-dev-down         - Stop Docker services (development)"
+	@echo "  docker-dev-logs         - View Docker logs (development)"
+	@echo "  docker-test-build       - Build Docker test image"
+	@echo "  docker-test-up          - Start Docker test database"
+	@echo "  docker-test-down        - Stop Docker test services"
+	@echo "  docker-test-clean       - Clean Docker test containers and volumes"
+	@echo "  docker-test-migrate     - Run database migrations in Docker"
+	@echo "  docker-test-go          - Run Go tests in Docker"
 	@echo "  docker-test-go-postgres - Run PostgreSQL tests in Docker"
-	@echo "  docker-test-logs - View Docker test logs"
-endif
+	@echo "  docker-test-logs        - View Docker test logs"
