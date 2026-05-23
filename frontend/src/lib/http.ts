@@ -7,6 +7,11 @@
 //   - 401 → access-token refresh via httpOnly refresh cookie, with single-flight
 //     deduplication; on refresh failure, clear auth and redirect to /login
 //   - Surfaces non-2xx as `HttpError` so React Query can react via onError
+//
+// Plane-awareness (#1785 Phase 6): the back-office and tenant auth planes
+// are separately credentialed — see features/backoffice/auth/storage.ts.
+// `isBackofficePath` routes each request to its plane's token, CSRF, and
+// refresh endpoint without callers having to think about it.
 import {
   clearAuth,
   clearImpersonationReturn,
@@ -16,6 +21,13 @@ import {
   setAccessToken,
   setCsrfToken,
 } from "./auth-storage"
+import {
+  clearBackofficeAuth,
+  getBackofficeAccessToken,
+  getBackofficeCsrfToken,
+  setBackofficeAccessToken,
+  setBackofficeCsrfToken,
+} from "@/features/backoffice/auth/storage"
 import { getCurrentGroupSlug } from "./group-context"
 import { hardRedirect, navigateToLogin, navigateToMaintenance } from "./navigation"
 
@@ -54,13 +66,43 @@ const GROUP_SCOPED_PREFIXES = [
 
 // Auth endpoints where a 401 is an application-level error (bad credentials,
 // invalid refresh token) rather than a session-expiry event — never trigger a
-// refresh-and-retry loop on these.
-const NON_REFRESHABLE_AUTH_PATHS = new Set(["/auth/login", "/auth/register", "/auth/refresh"])
+// refresh-and-retry loop on these. Both planes' login + refresh paths are
+// listed: the BE rejects malformed credentials with 401 and we want the
+// FE to surface the actual error body rather than re-fire a doomed refresh.
+const NON_REFRESHABLE_AUTH_PATHS = new Set([
+  "/auth/login",
+  "/auth/register",
+  "/auth/refresh",
+  "/backoffice/auth/login",
+  "/backoffice/auth/login/mfa",
+  "/backoffice/auth/refresh",
+])
 
 // Routes the user might already be on when a 401 fires; redirecting from them
 // would either be a no-op (already at /login) or interrupt a flow that
-// intentionally allows unauthenticated access.
-const PUBLIC_PATHS = ["/login", "/register", "/verify-email", "/reset-password", "/invite"]
+// intentionally allows unauthenticated access. The `/backoffice/login` entry
+// keeps the back-office plane from refresh-bouncing while an operator is
+// already on the back-office login screen (mirrors the tenant `/login`).
+const PUBLIC_PATHS = [
+  "/login",
+  "/register",
+  "/verify-email",
+  "/reset-password",
+  "/invite",
+  "/backoffice/login",
+]
+
+// Path → auth plane. A path belongs to the back-office plane iff it lives
+// under /admin/* (gated by RequireBackofficeAuth since Phase 3) or the
+// /backoffice/* subtree itself. Everything else uses the tenant plane.
+function isBackofficePath(path: string): boolean {
+  return (
+    path === "/admin" ||
+    path.startsWith("/admin/") ||
+    path === "/backoffice" ||
+    path.startsWith("/backoffice/")
+  )
+}
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 
@@ -111,8 +153,11 @@ interface RefreshResponse {
 }
 
 // Single-flight refresh: concurrent 401s wait on the same in-flight refresh
-// promise so the backend sees one /auth/refresh call, not N.
+// promise so the backend sees one /auth/refresh call, not N. One slot per
+// plane — a back-office refresh in flight must not block (or be deduped by)
+// a tenant refresh.
 let refreshInFlight: Promise<string> | null = null
+let backofficeRefreshInFlight: Promise<string> | null = null
 
 // Single-flight impersonation-expiry recovery: 401s that overlap the
 // in-flight `end` call's window all wait on the same promise, so the
@@ -161,7 +206,7 @@ function buildUrl(path: string, skipGroupRewrite: boolean | undefined): string {
   return `${BASE_URL}${rewritten}`
 }
 
-function buildHeaders(method: HttpMethod, init: HttpRequestInit): Headers {
+function buildHeaders(method: HttpMethod, path: string, init: HttpRequestInit): Headers {
   const headers = new Headers({
     Accept: "application/vnd.api+json",
   })
@@ -172,12 +217,13 @@ function buildHeaders(method: HttpMethod, init: HttpRequestInit): Headers {
     // arrives at the BE empty.
     headers.set("Content-Type", "application/vnd.api+json")
   }
-  const accessToken = getAccessToken()
+  const backoffice = isBackofficePath(path)
+  const accessToken = backoffice ? getBackofficeAccessToken() : getAccessToken()
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`)
   }
   if (MUTATING_METHODS.has(method)) {
-    const csrf = getCsrfToken()
+    const csrf = backoffice ? getBackofficeCsrfToken() : getCsrfToken()
     if (csrf) headers.set("X-CSRF-Token", csrf)
   }
   if (init.authCheck === "user-initiated") {
@@ -239,29 +285,93 @@ async function refreshAccessToken(): Promise<string> {
   }
 }
 
+// refreshBackofficeAccessToken mirrors refreshAccessToken for the back-office
+// plane (#1785 Phase 6). The two planes share zero state — separate httpOnly
+// refresh cookies (rooted at /api/v1 vs /api/v1/backoffice), separate access
+// tokens, separate CSRF tokens — so a 401 on /admin/* MUST hit
+// /backoffice/auth/refresh and a 401 on a tenant path MUST hit
+// /auth/refresh. The dispatcher in `handle401` picks the right one.
+async function refreshBackofficeAccessToken(): Promise<string> {
+  if (backofficeRefreshInFlight) return backofficeRefreshInFlight
+  backofficeRefreshInFlight = (async () => {
+    const url = `${BASE_URL}/backoffice/auth/refresh`
+    const response = await fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: "{}",
+      cache: "no-store",
+    })
+    if (!response.ok) {
+      throw new HttpError(
+        `Back-office refresh failed with ${response.status}`,
+        response.status,
+        url,
+        await parseBody(response).catch(() => null)
+      )
+    }
+    const payload = (await response.json()) as RefreshResponse
+    if (!payload.access_token) {
+      throw new HttpError(
+        "Back-office refresh returned no access_token",
+        response.status,
+        url,
+        payload
+      )
+    }
+    setBackofficeAccessToken(payload.access_token)
+    // The back-office BE rotates CSRF via the X-CSRF-Token header (read by
+    // performRequest below); the JSON body does not always carry it, so the
+    // header path is the source of truth. Keep this opportunistic assignment
+    // for parity with refreshAccessToken — harmless when absent.
+    const csrf = response.headers.get("X-CSRF-Token") ?? response.headers.get("x-csrf-token")
+    if (csrf) setBackofficeCsrfToken(csrf)
+    return payload.access_token
+  })()
+  try {
+    return await backofficeRefreshInFlight
+  } finally {
+    backofficeRefreshInFlight = null
+  }
+}
+
 interface ImpersonationEndResponse {
   access_token?: string
   csrf_token?: string
 }
 
-// Recovers the admin session when an impersonation access token has
-// auto-expired (#1757). The marker refresh cookie is a non-refreshable
-// primitive, so the normal /auth/refresh path cannot help here — instead
-// we call POST /admin/impersonation/end, which the BE deliberately
-// tolerates being called with an EXPIRED impersonation token (it
-// self-validates off the Authorization header + the httpOnly marker
-// cookie). On success the admin's fresh tokens are stored and the browser
-// hard-redirects back to the impersonated user's admin detail page; on
-// failure the session is unrecoverable so we clear auth and bounce to
-// /login. Either way this throws — the original request's promise must
-// reject because the page is being replaced (mirrors refreshAccessToken's
-// failure path). A raw `fetch` keeps lib/http.ts free of a layering
-// inversion into features/admin (mirrors refreshAccessToken).
+// Recovers the operator's back-office session when an impersonation
+// access token has auto-expired (#1757; updated for #1785 Phase 5/6). The
+// marker refresh cookie is a non-refreshable primitive, so the normal
+// /auth/refresh path cannot help here — instead we call POST
+// /admin/impersonation/end, which the BE deliberately tolerates being
+// called with an EXPIRED impersonation token (it self-validates off the
+// Authorization header + the httpOnly marker cookie).
+//
+// Phase 5 moved start/end onto the back-office plane, so the response is
+// now a BackofficeLoginResponse: a fresh BACK-OFFICE access token + the
+// rotated CSRF in the X-CSRF-Token header. We write through the
+// back-office storage keys (not the tenant ones) so the next /admin/*
+// request lands with the right credentials. The stale impersonation
+// token in tenant storage is left in place; the next tenant request
+// either gets re-issued through the tenant refresh path or 401s into a
+// /login redirect — neither matters here, because the page is about to
+// hard-redirect anyway.
+//
+// On failure the operator session is unrecoverable, so we clear BOTH
+// planes and bounce to /backoffice/login. Either way this throws — the
+// original request's promise must reject because the page is being
+// replaced (mirrors refreshAccessToken's failure path). A raw `fetch`
+// keeps lib/http.ts free of a layering inversion into features/admin
+// (mirrors refreshAccessToken).
 async function recoverFromImpersonationExpiry(url: string): Promise<never> {
   if (!impersonationEndInFlight) {
     impersonationEndInFlight = (async () => {
       const endUrl = `${BASE_URL}${IMPERSONATION_END_PATH}`
       const headers = new Headers({ Accept: "application/json" })
+      // The expired impersonation token lives in TENANT storage — that's
+      // the Authorization header the BE expects to self-validate. CSRF
+      // also rides the tenant pair for this call.
       const accessToken = getAccessToken()
       if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`)
       const csrf = getCsrfToken()
@@ -274,8 +384,9 @@ async function recoverFromImpersonationExpiry(url: string): Promise<never> {
       })
       if (!response.ok) {
         clearAuth()
+        clearBackofficeAuth()
         if (shouldRedirectFromCurrentPath()) {
-          navigateToLogin(currentReturnTo(), "session_expired")
+          navigateToLogin(currentReturnTo(), "session_expired", "backoffice")
         }
         throw new HttpError(
           `Impersonation-end recovery failed with ${response.status}`,
@@ -286,15 +397,16 @@ async function recoverFromImpersonationExpiry(url: string): Promise<never> {
       }
       const payload = (await response.json()) as ImpersonationEndResponse
       // A 2xx without an access token is a malformed response — it cannot
-      // restore the admin session, so do the same terminal fallback as the
-      // non-ok branch instead of falling through as "success" (which would
-      // keep the expired impersonation token, clear the return slot, and
-      // hard-redirect into a reload/401 loop). Mirrors the fail-fast guards
-      // in startImpersonation / endImpersonation.
+      // restore the operator session, so do the same terminal fallback as
+      // the non-ok branch instead of falling through as "success" (which
+      // would keep the expired impersonation token, clear the return slot,
+      // and hard-redirect into a reload/401 loop). Mirrors the fail-fast
+      // guards in startImpersonation / endImpersonation.
       if (!payload.access_token) {
         clearAuth()
+        clearBackofficeAuth()
         if (shouldRedirectFromCurrentPath()) {
-          navigateToLogin(currentReturnTo(), "session_expired")
+          navigateToLogin(currentReturnTo(), "session_expired", "backoffice")
         }
         throw new HttpError(
           "Impersonation-end recovery returned no access_token",
@@ -303,8 +415,14 @@ async function recoverFromImpersonationExpiry(url: string): Promise<never> {
           payload
         )
       }
-      setAccessToken(payload.access_token)
-      if (payload.csrf_token) setCsrfToken(payload.csrf_token)
+      // Write the operator's restored credentials through the BACK-OFFICE
+      // storage keys (Phase 5/6). The CSRF lands via the X-CSRF-Token
+      // response header — read it explicitly here since this helper does
+      // its own raw fetch and bypasses performRequest's header-rotation
+      // path.
+      setBackofficeAccessToken(payload.access_token)
+      const newCsrf = response.headers.get("X-CSRF-Token") ?? response.headers.get("x-csrf-token")
+      if (newCsrf) setBackofficeCsrfToken(newCsrf)
       // Read the return target BEFORE clearing the slot. With no stored
       // target, fall back to the admin landing route.
       const targetUserId = getImpersonationReturn()?.targetUserId
@@ -342,7 +460,10 @@ async function handle401(
   // Background /auth/me probes during boot must not clear auth or redirect —
   // the legacy frontend's behavior we want to preserve so the user is not
   // bounced to /login on a transient network blip during initial mount.
-  if (init.authCheck === "background" && originalPath.startsWith("/auth/me")) {
+  if (
+    init.authCheck === "background" &&
+    (originalPath.startsWith("/auth/me") || originalPath.startsWith("/backoffice/auth/me"))
+  ) {
     throw new HttpError("Unauthorized", 401, url, null)
   }
   // For login/register/refresh, a 401 is an application-level error (bad
@@ -365,15 +486,35 @@ async function handle401(
   // refresh-opted-out request; the explicit `IMPERSONATION_END_PATH` guard
   // here is belt-and-suspenders in case `end` is ever issued without
   // `skipAuthRefresh`.
+  //
+  // This check stays plane-agnostic on purpose: an impersonation session
+  // is a tenant-plane construct (the impersonated identity is a tenant
+  // user), but the operator-side recovery via POST /admin/impersonation/end
+  // restores the BACK-OFFICE plane (Phase 5 moved start/end onto the
+  // back-office plane). The recovery helper writes back-office tokens
+  // through `endImpersonation`, which is fine — the impersonated-tenant 401
+  // and the back-office-plane recovery share the same upstream control flow.
   if (getImpersonationReturn() !== null && originalPath !== IMPERSONATION_END_PATH) {
     return recoverFromImpersonationExpiry(url)
   }
+  const backoffice = isBackofficePath(originalPath)
   try {
-    await refreshAccessToken()
+    if (backoffice) {
+      await refreshBackofficeAccessToken()
+    } else {
+      await refreshAccessToken()
+    }
   } catch (refreshErr) {
-    clearAuth()
-    if (shouldRedirectFromCurrentPath()) {
-      navigateToLogin(currentReturnTo(), "session_expired")
+    if (backoffice) {
+      clearBackofficeAuth()
+      if (shouldRedirectFromCurrentPath()) {
+        navigateToLogin(currentReturnTo(), "session_expired", "backoffice")
+      }
+    } else {
+      clearAuth()
+      if (shouldRedirectFromCurrentPath()) {
+        navigateToLogin(currentReturnTo(), "session_expired")
+      }
     }
     throw refreshErr instanceof HttpError
       ? refreshErr
@@ -388,7 +529,7 @@ async function performRequest<T = unknown>(
 ): Promise<HttpResponse<T>> {
   const method = (init.method ?? "GET") as HttpMethod
   const url = buildUrl(path, init.skipGroupRewrite)
-  const headers = buildHeaders(method, init)
+  const headers = buildHeaders(method, path, init)
   const body =
     init.body === undefined || method === "GET"
       ? undefined
@@ -412,9 +553,19 @@ async function performRequest<T = unknown>(
     // staleness bugs.
     cache: "no-store",
   })
-  // Backend may rotate the CSRF token on any response — pick it up.
+  // Backend may rotate the CSRF token on any response — pick it up. The
+  // rotated value lands in whichever plane the request belonged to so the
+  // tenant and back-office CSRF tokens never bleed into each other (the BE
+  // signs them with plane-specific keys; a swap would just cause the next
+  // mutation to fail CSRF verification).
   const newCsrf = response.headers.get("X-CSRF-Token") ?? response.headers.get("x-csrf-token")
-  if (newCsrf) setCsrfToken(newCsrf)
+  if (newCsrf) {
+    if (isBackofficePath(path)) {
+      setBackofficeCsrfToken(newCsrf)
+    } else {
+      setCsrfToken(newCsrf)
+    }
+  }
 
   if (response.status === 401) {
     return (await handle401(url, path, init, response)) as HttpResponse<T>
@@ -479,5 +630,6 @@ export const http = {
 // Test-only: reset module state between cases.
 export function __resetHttpForTests(): void {
   refreshInFlight = null
+  backofficeRefreshInFlight = null
   impersonationEndInFlight = null
 }

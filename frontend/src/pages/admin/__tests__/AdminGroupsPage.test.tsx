@@ -5,11 +5,14 @@ import { Route, useLocation } from "react-router-dom"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import { AuthProvider } from "@/features/auth/AuthContext"
+import { BackofficeAuthProvider } from "@/features/backoffice/auth/context"
+import { clearBackofficeAuth, setBackofficeAccessToken } from "@/features/backoffice/auth/storage"
 import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { AdminGroupsPage } from "@/pages/admin/AdminGroupsPage"
+import { backofficeAuthHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -101,10 +104,12 @@ function renderPage(initialPath = "/admin/groups") {
           path="/admin/groups"
           element={
             <AuthProvider>
-              <main>
-                <AdminGroupsPage />
-                <LocationProbe />
-              </main>
+              <BackofficeAuthProvider>
+                <main>
+                  <AdminGroupsPage />
+                  <LocationProbe />
+                </main>
+              </BackofficeAuthProvider>
             </AuthProvider>
           }
         />
@@ -131,9 +136,12 @@ describe("AdminGroupsPage", () => {
 
   beforeEach(() => {
     clearAuth()
+    clearBackofficeAuth()
     __resetGroupContextForTests()
     __resetHttpForTests()
     setAccessToken("good-token")
+    setBackofficeAccessToken("good-bo-token")
+    server.use(...backofficeAuthHandlers.signedIn())
   })
 
   it("renders the groups table with a row per group", async () => {

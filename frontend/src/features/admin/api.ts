@@ -14,6 +14,7 @@ import {
   setCsrfToken,
   setImpersonationReturn,
 } from "@/lib/auth-storage"
+import { setBackofficeAccessToken } from "@/features/backoffice/auth/storage"
 import type { Schema } from "@/types"
 import type { AdminGroupsParams, AdminTenantsParams, AdminTenantUsersParams } from "./keys"
 
@@ -75,11 +76,28 @@ export type AdminListMeta = Schema<"jsonapi.AdminListMeta">
 // The active-impersonation snapshot powering the persistent banner.
 export type ImpersonationState = Schema<"apiserver.ImpersonationStateResponse">
 export type ImpersonationUser = Schema<"apiserver.ImpersonationUserView">
+// The OPERATOR shape (Phase 5 #1785). The operator is a back-office user,
+// not a tenant user, so its wire shape (id, email, name, role) differs
+// from ImpersonationUserView (which carries tenant_id, no role).
+export type ImpersonationOperator = Schema<"apiserver.ImpersonationOperatorView">
 
 // The login envelope returned by POST /admin/users/{id}/impersonate (user =
-// the TARGET) and POST /admin/impersonation/end (user = the ADMIN). Same
-// shape as the auth login response — { access_token, csrf_token, user, … }.
+// the TARGET). Same shape as the tenant /auth/login response —
+// { access_token, csrf_token, user, … } — because the impersonation
+// session lives on the TENANT plane (the operator becomes the target
+// tenant user). End-impersonation uses a different shape, see
+// `BackofficeImpersonationEndResponse` below.
 export type LoginResponse = Schema<"apiserver.LoginResponse">
+
+// The back-office login envelope returned by POST /admin/impersonation/end
+// (#1785 Phase 5). The end-flow restores the operator's BACK-OFFICE
+// session (not a tenant session): the BE moved start/end onto the
+// back-office plane so the operator's identity is what gets re-established
+// — `user` is a BackofficeProfile, `access_token` is `aud=backoffice`,
+// and the response sets a fresh back-office refresh cookie at
+// /api/v1/backoffice. The FE writes through the back-office storage keys
+// rather than the tenant ones.
+export type BackofficeImpersonationEndResponse = Schema<"apiserver.BackofficeLoginResponse">
 
 type AdminTenantsResponse = Schema<"jsonapi.AdminTenantsResponse">
 type AdminTenantResponse = Schema<"jsonapi.AdminTenantResponse">
@@ -445,9 +463,18 @@ export interface EndImpersonationResult {
 // Ends the active impersonation session (POST /admin/impersonation/end). The
 // BE self-validates the impersonation token off the Authorization header
 // (tolerating an expired one) plus the httpOnly marker refresh cookie, and
-// returns the ADMIN's restored session with fresh tokens. `skipAuthRefresh`
-// is critical: a 401 from `end` itself must NOT kick off the normal refresh
-// dance (the marker cookie is non-refreshable).
+// returns the OPERATOR's restored BACK-OFFICE session — Phase 5 moved end
+// onto the back-office plane (#1785). `skipAuthRefresh` is critical: a 401
+// from `end` itself must NOT kick off the normal refresh dance (the marker
+// cookie is non-refreshable).
+//
+// The token swap writes the operator's back-office tokens through the
+// back-office storage keys (NOT the tenant ones); the impersonation access
+// token that was previously sitting in tenant storage stays there but is
+// no longer used because the next /admin/* request reads the back-office
+// token via the plane-aware http client. The page hard-redirects to
+// /admin/users/<targetUserId> (or /admin/tenants) immediately after, which
+// rebuilds every cache from scratch.
 //
 // The token swap, the return-target capture, and `clearImpersonationReturn`
 // all happen here, inside the mutationFn — so they are atomic with respect
@@ -456,14 +483,20 @@ export interface EndImpersonationResult {
 // can therefore never leave the admin live under the wrong identity or
 // orphan the return-slot.
 export async function endImpersonation(): Promise<EndImpersonationResult> {
-  const body = await http.post<LoginResponse>("/admin/impersonation/end", undefined, {
-    skipAuthRefresh: true,
-  })
+  const body = await http.post<BackofficeImpersonationEndResponse>(
+    "/admin/impersonation/end",
+    undefined,
+    { skipAuthRefresh: true }
+  )
   if (!body.access_token) {
     throw new Error("Impersonation-end response is missing its access token")
   }
-  setAccessToken(body.access_token)
-  if (body.csrf_token) setCsrfToken(body.csrf_token)
+  // The end response restores the OPERATOR's back-office plane, so writes
+  // go through the back-office storage keys — see the function comment.
+  setBackofficeAccessToken(body.access_token)
+  // BackofficeLoginResponse has no `csrf_token` field on the wire; the BE
+  // rotates CSRF via the X-CSRF-Token response header which the http
+  // client picks up and persists to back-office storage automatically.
   // Capture the return target, then clear the slot atomically with the
   // token swap above — see the function comment.
   const targetUserId = getImpersonationReturn()?.targetUserId ?? null

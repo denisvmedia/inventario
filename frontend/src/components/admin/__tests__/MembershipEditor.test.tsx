@@ -4,11 +4,14 @@ import { http, HttpResponse } from "msw"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import { MembershipEditor } from "@/components/admin/MembershipEditor"
+import { BackofficeAuthProvider } from "@/features/backoffice/auth/context"
+import { clearBackofficeAuth, setBackofficeAccessToken } from "@/features/backoffice/auth/storage"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
+import { backofficeAuthHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -49,9 +52,15 @@ beforeAll(async () => {
 
 beforeEach(() => {
   clearAuth()
+  clearBackofficeAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
   setAccessToken("good-token")
+  // Admin queries fire on the back-office plane (#1785 Phase 6); seed a
+  // back-office token + /backoffice/auth/me handler so useBackofficeAuth
+  // resolves to an authenticated operator and the admin query gate opens.
+  setBackofficeAccessToken("good-bo-token")
+  server.use(...backofficeAuthHandlers.signedIn())
 })
 
 // Seeds /auth/me (so useIsSystemAdmin gates the editor's queries open) and
@@ -67,15 +76,17 @@ function renderEditor(props: Partial<Parameters<typeof MembershipEditor>[0]> = {
   return renderWithProviders({
     withAuth: true,
     children: (
-      <ConfirmProvider>
-        <MembershipEditor
-          groupId="g1"
-          groupName="HQ Inventory"
-          tenantId="t1"
-          tenantName="Acme Corp"
-          {...props}
-        />
-      </ConfirmProvider>
+      <BackofficeAuthProvider>
+        <ConfirmProvider>
+          <MembershipEditor
+            groupId="g1"
+            groupName="HQ Inventory"
+            tenantId="t1"
+            tenantName="Acme Corp"
+            {...props}
+          />
+        </ConfirmProvider>
+      </BackofficeAuthProvider>
     ),
   })
 }

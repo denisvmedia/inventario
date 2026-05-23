@@ -109,7 +109,7 @@ describe("ImpersonationBanner", () => {
         HttpResponse.json({
           active: true,
           target_user: { id: "t1", name: "Target User", email: "target@example.com" },
-          admin_user: { id: "u1", name: "Admin", email: "admin@example.com" },
+          operator: { id: "u1", name: "Admin", email: "admin@example.com", role: "platform_admin" },
           started_at: new Date().toISOString(),
           expires_at: expiresAt,
         })
@@ -131,7 +131,7 @@ describe("ImpersonationBanner", () => {
         HttpResponse.json({
           active: true,
           target_user: { id: "t1", name: "Target User", email: "target@example.com" },
-          admin_user: { id: "u1", name: "Admin", email: "admin@example.com" },
+          operator: { id: "u1", name: "Admin", email: "admin@example.com", role: "platform_admin" },
           started_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
         })
@@ -162,7 +162,7 @@ describe("ImpersonationBanner", () => {
     expect(getImpersonationReturn()).toBeNull()
   })
 
-  it("on End failure: clears auth and redirects to /login with the session_expired reason", async () => {
+  it("on End failure: clears auth and redirects to /backoffice/login with the session_expired reason", async () => {
     setAccessToken("good-token")
     setImpersonationReturn({ targetUserId: "t1" })
     seedActiveSession()
@@ -178,9 +178,13 @@ describe("ImpersonationBanner", () => {
     await waitFor(() => expect(screen.getByTestId("impersonation-end")).toBeEnabled())
     await userEvent.click(screen.getByTestId("impersonation-end"))
 
-    // The hook-level onError carries the `reason` param so /login renders
-    // the "session expired" notice — consistent with the auto-expiry path.
-    await waitFor(() => expect(redirect).toHaveBeenCalledWith("/login?reason=session_expired"))
+    // The hook-level onError carries the `reason` param so the back-office
+    // login page renders the "session expired" notice — consistent with the
+    // auto-expiry path. Phase 5/6 (#1785) moved end onto the back-office
+    // plane, so the recovery surface is /backoffice/login, not /login.
+    await waitFor(() =>
+      expect(redirect).toHaveBeenCalledWith("/backoffice/login?reason=session_expired")
+    )
     expect(getImpersonationReturn()).toBeNull()
   })
 })
