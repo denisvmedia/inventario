@@ -1,0 +1,47 @@
+// markdownlint-cli2 tool configuration.
+//
+// Lint rules live in `.markdownlint.jsonc` (also picked up by editor
+// integrations). This file only declares which files the CLI walks.
+//
+// Invoked by `.github/workflows/markdown-lint.yml`.
+{
+  // Lint every markdown file under the repo unless excluded below.
+  "globs": [
+    "**/*.md"
+  ],
+
+  // Paths the linter must not walk into.
+  //
+  //   - design-mocks/**     vendored read-only mirror of denisvmedia/inventario-design
+  //   - go/vendor/**        Go vendored dependencies
+  //   - go/docs/**          generated swagger output (swag init)
+  //   - .research/**        abandoned design notes (banner-marked deprecated)
+  //   - **/node_modules/**  third-party npm packages
+  //   - e2e/test-results/** Playwright run artifacts
+  //   - e2e/playwright-report/** Playwright HTML report artifacts
+  //   - frontend/coverage/** Vitest coverage HTML
+  //   - frontend/dist/**    built bundle
+  //   - **/CHANGELOG.md     conventionally machine-generated
+  //   - .git/**             internal git state (e.g. ephemeral PR/issue drafts)
+  //   - .claude/**          local agent state (untracked; worktrees, memories)
+  //   - .augment/**         local agent rules (machine-generated)
+  //
+  // The repo's `.gitignore` already excludes most build outputs; this list
+  // adds the checked-in directories that we deliberately do not own
+  // (design-mocks, vendor, generated docs) and the abandoned research tree.
+  "ignores": [
+    "design-mocks/**",
+    "go/vendor/**",
+    "go/docs/**",
+    ".research/**",
+    "**/node_modules/**",
+    "e2e/test-results/**",
+    "e2e/playwright-report/**",
+    "frontend/coverage/**",
+    "frontend/dist/**",
+    "**/CHANGELOG.md",
+    ".git/**",
+    ".claude/**",
+    ".augment/**"
+  ]
+}

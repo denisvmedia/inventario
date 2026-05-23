@@ -1,3 +1,5 @@
+# Inventario Copilot instructions
+
 This is a Go-based personal inventory management application with a React 19 + TypeScript frontend (Tailwind v4
 + shadcn/ui). It supports multiple database backends (memory, PostgreSQL) and is designed for tracking personal
 items, their locations, and associated metadata. Please follow these guidelines when contributing:

@@ -103,6 +103,17 @@ image_inputs:
   - 'e2e/**'
   - 'k8s/dev/**'
 
+# ---- Markdown lint -------------------------------------------------------
+# Any markdown file anywhere in the repo, plus the linter's own config.
+# Used by `markdown-lint.yml` to skip the run when no documentation
+# changed. Note: this filter doesn't include `ci` paths — the workflow
+# OR-s `needs.changes.outputs.ci` into its own gate the usual way, so
+# CI-self changes still re-run markdownlint without bloating this filter.
+markdown:
+  - '**/*.md'
+  - '.markdownlint.jsonc'
+  - '.markdownlint-cli2.jsonc'
+
 # ---- CI self-reference ---------------------------------------------------
 # Any change to a workflow file, a composite action, or this filter file
 # forces the full pipeline back on. Conservative on purpose — when CI is

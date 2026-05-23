@@ -52,20 +52,22 @@ matters more than wall-time.
 | `frontend_i18n`    | `frontend/src/**`, `frontend/i18next.config.ts`, `frontend/scripts/i18n-check.mjs`, `frontend/package*.json`                                            |
 | `e2e`              | `e2e/**` or `docker-compose.e2e.yaml`                                                                                                                    |
 | `image_inputs`     | Anything that makes a fresh Docker image necessary or that a downstream consumer (e2e-tests, kind-smoke-test) needs an image for: `Dockerfile`, `.dockerignore`, `docker-compose*.yaml`, `go/**`, `frontend/**`, `scripts/**`, `init-scripts/**`, `Makefile`, `.goreleaser.yaml`, `e2e/**`, `k8s/dev/**` |
+| `markdown`         | Any `**/*.md`, plus the linter's own config (`.markdownlint.jsonc`, `.markdownlint-cli2.jsonc`). Gates `markdown-lint.yml`                              |
 | `ci`               | Anything under `.github/workflows/`, `.github/actions/`, or `.github/filters.yml`                                                                        |
 
-Markdown-only diffs at the repository root (e.g. `README.md`) match none of
-these filters, so all PR-gated jobs short-circuit. A markdown change *inside*
-a tracked subtree (`go/README.md`, `frontend/CONTRIBUTING.md`) does match the
-ecosystem filter and triggers that ecosystem's checks — a deliberate tradeoff
-to avoid the fragility of composing negation patterns under `dorny/paths-filter`'s
-default semantics.
+Markdown-only diffs at the repository root (e.g. `README.md`) match only the
+`markdown` filter, so the markdown-lint workflow is the only PR-gated job
+that runs. A markdown change *inside* a tracked subtree (`go/README.md`,
+`frontend/CONTRIBUTING.md`) matches both `markdown` and that ecosystem's
+filter, so the ecosystem's checks run alongside the markdown lint — a
+deliberate tradeoff to avoid the fragility of composing negation patterns
+under `dorny/paths-filter`'s default semantics.
 
 ## Decision table — representative PR scenarios
 
 | PR diff                              | Jobs that run                                                                                                                                                                              |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Root markdown only (`README.md`)     | None of the 13 PR-event-gated workflows; existing narrowly-filtered ones (helm-lint, cli-integration-test, smoke tests, release dry-run, renovate-config) also skip                         |
+| Root markdown only (`README.md`)     | `markdown-lint` only. The 13 ecosystem-gated workflows skip; the narrowly-filtered ones (helm-lint, cli-integration-test, smoke tests, release dry-run, renovate-config) also skip          |
 | Backend only (`go/**`)               | `go-test`, `go-test-postgres`, `go-lint`, `go-swagger-docs`, `frontend-codegen` (Go drives swagger.json), `frontend-embed-smoke-test`, `docker.yml`, `e2e-tests-linux[chromium]`; Firefox + macOS-webkit + the other frontend-* workflows skip |
 | Frontend code only (e.g. `frontend/src/App.tsx`) | `frontend-test`, `frontend-lint`, `frontend-i18n`, `frontend-lhci`, `frontend-size`, `frontend-embed-smoke-test`, `docker.yml`, full `e2e-tests` matrix. `frontend-codegen` skips because no codegen driver changed |
 | Frontend codegen driver only (`frontend/scripts/codegen.mjs`) | `frontend-codegen`, plus (via `frontend/**`) `frontend-test`, `frontend-lint`, `frontend-lhci`, `frontend-size`, `frontend-embed-smoke-test`, `docker.yml`, and the full `e2e-tests` matrix. `frontend-i18n` skips because no i18n input changed |
@@ -103,6 +105,31 @@ narrows to `frontend OR e2e OR ci OR non-PR`.
 | Frontend or e2e                                            | chromium + firefox      | yes               |
 | `ci` (workflow / action / filters edit)                    | chromium + firefox      | yes               |
 | push to master or `v*` tag                                 | chromium + firefox      | yes               |
+
+## Markdown lint
+
+`markdown-lint.yml` is the only PR-gated workflow that runs when the diff is
+documentation-only. It follows the same `changes` + `if:`-gate pattern as
+every other workflow and is short-circuited unless the `markdown` or `ci`
+filter matches.
+
+Rules live in `.markdownlint.jsonc` (also picked up by VS Code's
+`DavidAnson.vscode-markdownlint` extension). Globs and ignore list live in
+`.markdownlint-cli2.jsonc`. The baseline is deliberately permissive — only
+high-signal, near-zero-false-positive rules are on (heading levels, trailing
+whitespace, hard tabs, top-level heading at file start, plus a handful of
+syntactic bug-catchers). Tighten by adding rules to `.markdownlint.jsonc`
+in a follow-up PR; the existing corpus may need fixes before each rule is
+enabled.
+
+To run the same lint locally:
+
+```sh
+# from the repo root
+brew install markdownlint-cli2   # or: npx markdownlint-cli2
+markdownlint-cli2                # uses .markdownlint-cli2.jsonc + .markdownlint.jsonc
+markdownlint-cli2 --fix          # auto-fix what's auto-fixable
+```
 
 ## Workflows not modified
 
