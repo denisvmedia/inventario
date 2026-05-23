@@ -791,6 +791,83 @@ func TestAuthAPI_Refresh(t *testing.T) {
 	})
 }
 
+// TestAuthAPI_Refresh_BearerSchemeIsCaseInsensitive is the #1812 regression
+// test for accessTokenIsImpersonation. The refresh endpoint reads the
+// Authorization header to detect impersonation access tokens (which it must
+// reject). Before #1812 the scheme match was case-sensitive on the exact
+// prefix `"Bearer "`, so an FE that sent `Authorization: bearer <token>` —
+// permitted by RFC 7235 §2.1 — would bypass the impersonation guard and
+// silently receive a fresh admin access token. This test asserts that a
+// lower-case scheme is correctly classified as an impersonation token and
+// rejected with 401 ErrImpersonationTokenCannotRefresh.
+func TestAuthAPI_Refresh_BearerSchemeIsCaseInsensitive(t *testing.T) {
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const (
+		userID   = "user-refresh-imp"
+		tenantID = "test-tenant-id"
+	)
+
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: {
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: tenantID,
+		},
+		Email:    "imp@example.com",
+		Name:     "Imp Refresh User",
+		IsActive: true,
+	}}}
+	refreshReg := &mockRefreshTokenRegistryForAuth{tokensByHash: map[string]*models.RefreshToken{}}
+
+	// Mint an impersonation access token. accessTokenIsImpersonation reads only
+	// the `imp` claim, so the rest of the claims can be minimal.
+	impToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id":         userID,
+		"token_type":      "access",
+		"imp":             true,
+		"impersonated_by": "admin-user",
+		"jti":             "imp-jti",
+		"exp":             time.Now().Add(15 * time.Minute).Unix(),
+	})
+	impTokenString, err := impToken.SignedString(jwtSecret)
+	if err != nil {
+		t.Fatalf("SignedString: %v", err)
+	}
+
+	cases := []struct {
+		name        string
+		authHeader  string
+		description string
+	}{
+		{"lower-case bearer", "bearer " + impTokenString, "RFC 7235 §2.1 case-insensitive scheme"},
+		{"upper-case BEARER", "BEARER " + impTokenString, "RFC 7235 §2.1 case-insensitive scheme"},
+		{"mixed-case BeArEr", "BeArEr " + impTokenString, "RFC 7235 §2.1 case-insensitive scheme"},
+		{"canonical Bearer", "Bearer " + impTokenString, "baseline sanity"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			req := httptest.NewRequest("POST", "/refresh", nil)
+			req.Header.Set("Authorization", tc.authHeader)
+			resp := httptest.NewRecorder()
+
+			router := chi.NewRouter()
+			apiserver.Auth(apiserver.AuthParams{
+				UserRegistry:         userReg,
+				RefreshTokenRegistry: refreshReg,
+				JWTSecret:            jwtSecret,
+			})(router)
+			router.ServeHTTP(resp, req)
+
+			// All four header forms must be classified as impersonation tokens
+			// and rejected with 401 carrying the dedicated error message.
+			c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+			c.Assert(strings.TrimSpace(resp.Body.String()), qt.Equals, apiserver.ErrImpersonationTokenCannotRefresh.Error())
+		})
+	}
+}
+
 // legacyRefreshCookieDeleted reports whether the response includes a
 // Set-Cookie header that deletes the refresh_token cookie pinned at the
 // legacy /api/v1/auth path. http.SetCookie with MaxAge=-1 renders as

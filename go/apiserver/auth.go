@@ -417,14 +417,36 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
 
+// parseBearerToken extracts the token portion of an Authorization header that
+// uses the Bearer scheme. Per RFC 7235 §2.1, auth-scheme names are
+// case-insensitive, so `Bearer`, `bearer`, `BEARER`, `BeArEr` all match. The
+// token is trimmed of surrounding whitespace; an empty token (e.g. `Bearer `
+// with nothing after the space) is rejected. Returns (token, true) on a
+// well-formed Bearer header; ("", false) when the header is empty, lacks a
+// space-separated scheme, uses a non-Bearer scheme, or carries no token.
+func parseBearerToken(authHeader string) (string, bool) {
+	scheme, token, ok := strings.Cut(authHeader, " ")
+	if !ok {
+		return "", false
+	}
+	if !strings.EqualFold(scheme, "Bearer") {
+		return "", false
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", false
+	}
+	return token, true
+}
+
 // userIDFromAccessTokenHeader parses the Bearer token in authHeader and returns
 // the user ID stored in the "user_id" claim.  Expired tokens are accepted so
 // that logout can retrieve the user ID even when the access token has already
 // lapsed.  Returns ("", false) when the header is absent, malformed, or has an
 // invalid signature.
 func (api *AuthAPI) userIDFromAccessTokenHeader(authHeader string) (string, bool) {
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader {
+	tokenString, ok := parseBearerToken(authHeader)
+	if !ok {
 		return "", false
 	}
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
@@ -457,8 +479,8 @@ func (api *AuthAPI) userIDFromAccessTokenHeader(authHeader string) (string, bool
 // cannot verify is treated as "not an impersonation token" so the
 // regular cookie-based refresh path handles (and rejects) it.
 func (api *AuthAPI) accessTokenIsImpersonation(authHeader string) bool {
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader || tokenString == "" {
+	tokenString, ok := parseBearerToken(authHeader)
+	if !ok {
 		return false
 	}
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
@@ -495,8 +517,8 @@ func (api *AuthAPI) accessTokenIsImpersonation(authHeader string) bool {
 // header is absent/malformed, the signature is invalid, or the token is
 // not an impersonation token.
 func (api *AuthAPI) impersonationClaimsFromAccessTokenHeader(authHeader string) (jwt.MapClaims, bool) {
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader || tokenString == "" {
+	tokenString, ok := parseBearerToken(authHeader)
+	if !ok {
 		return nil, false
 	}
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
@@ -526,8 +548,8 @@ func (api *AuthAPI) blacklistAccessToken(ctx context.Context, authHeader string)
 	if api.blacklistService == nil {
 		return
 	}
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader {
+	tokenString, ok := parseBearerToken(authHeader)
+	if !ok {
 		return
 	}
 	// Parse with signature verification. We allow tokens that are already expired
