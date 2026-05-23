@@ -94,6 +94,8 @@ describe("ImpersonationBanner", () => {
         return HttpResponse.json({ errors: [] }, { status: 401 })
       })
     )
+    const mockSetHardRedirect = vi.fn()
+    setHardRedirect(mockSetHardRedirect)
     renderBanner()
     // Positive completion signal: wait until both probes have actually been
     // hit (the 401 included) before asserting the banner stays absent.
@@ -102,6 +104,7 @@ describe("ImpersonationBanner", () => {
       expect(impersonationCalls).toBeGreaterThan(0)
     })
     expect(screen.queryByTestId("impersonation-banner")).toBeNull()
+    expect(mockSetHardRedirect).not.toHaveBeenCalled()
   })
 
   it("stays hidden when the endpoint 403s for a non-admin user", async () => {
