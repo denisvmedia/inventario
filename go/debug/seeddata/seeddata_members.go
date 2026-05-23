@@ -101,6 +101,26 @@ func seedGroupMembers(ctx context.Context, set *registry.Set, tenant *models.Ten
 		return fmt.Errorf("create family owner membership: %w", err)
 	}
 
+	// admin's Family-group membership intentionally JoinedAt LATER than
+	// every group admin owns. `pickDefaultMembership` (the tiebreaker
+	// `GroupService.EnsureUserDefaultGroup` uses when `GroupPurgeService.
+	// repromoteDefaultGroupForUsers` re-elects a default after admin's
+	// then-current default is purged) sorts by `joined_at ASC` and picks
+	// the oldest. Backdating Family the same way the owner row is
+	// backdated would let Family win that tiebreaker — re-promoting
+	// admin onto Family where they only carry GroupRoleUser. Every
+	// subsequent admin write (POST /locations, /commodities, /files…)
+	// then 403s with "Group admin access required" from
+	// `structuralWriteGate(requireGroupRoleForWrite(GroupRoleAdmin))`
+	// and the e2e suite collapses (storage-usage, warranties,
+	// user-isolation, files, mail — 14 tests in sequence). The
+	// macOS-webkit lane is where this lands deterministically; the
+	// docker linux lanes happen to never trip the purge → re-promote
+	// chain inside a single workflow attempt. Pinning Family strictly
+	// later than admin's own primary-group owner stamp (set at request
+	// time inside SeedData) keeps Family visible in the switcher (which
+	// only requires the membership row to exist) while taking it out
+	// of the default-promotion lottery entirely.
 	if _, err := set.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenant.ID,
@@ -108,7 +128,7 @@ func seedGroupMembers(ctx context.Context, set *registry.Set, tenant *models.Ten
 		GroupID:      family.ID,
 		MemberUserID: user1.ID,
 		Role:         models.GroupRoleUser,
-		JoinedAt:     now.AddDate(0, 0, -60),
+		JoinedAt:     now.AddDate(0, 0, 1),
 	}); err != nil {
 		return fmt.Errorf("add user1 to family group: %w", err)
 	}
