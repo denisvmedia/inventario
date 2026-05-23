@@ -85,6 +85,9 @@ func (r *EmailVerificationRegistry) Update(ctx context.Context, ev models.EmailV
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
 	if err := r.newRepo().Update(ctx, ev, nil); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "EmailVerification", "entity_id", ev.GetID()))
+		}
 		return nil, errxtrace.Wrap("failed to update email verification", err)
 	}
 	return &ev, nil

@@ -85,6 +85,9 @@ func (r *PasswordResetRegistry) Update(ctx context.Context, pr models.PasswordRe
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
 	if err := r.newRepo().Update(ctx, pr, nil); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "PasswordReset", "entity_id", pr.GetID()))
+		}
 		return nil, errxtrace.Wrap("failed to update password reset", err)
 	}
 	return &pr, nil
