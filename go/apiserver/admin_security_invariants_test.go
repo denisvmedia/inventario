@@ -69,9 +69,9 @@ func TestAdminSecurityInvariant_RequestDTOsCannotCarryGrantField(t *testing.T) {
 
 	// The set is small and load-bearing — every user-write surface
 	// that could plausibly reach UserRegistry.Update or an unsafe
-	// decode into models.User. Pin the types by reflect.TypeOf so a
-	// rename of the struct in code surfaces here as a compile error
-	// rather than a silent drop in coverage.
+	// decode into models.User. Pin the types by reflect.TypeFor[...]()
+	// so a rename of the struct in code surfaces here as a compile
+	// error rather than a silent drop in coverage.
 	dtos := []reflect.Type{
 		reflect.TypeFor[apiserver.RegisterRequest](),
 		reflect.TypeFor[jsonapi.UpdateProfileRequest](),
