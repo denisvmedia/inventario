@@ -2242,12 +2242,8 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "array",
-                        "items": {
-                            "type": "file"
-                        },
-                        "collectionFormat": "multi",
-                        "description": "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Up to 5 files; repeat the field name to upload multiple.",
+                        "type": "file",
+                        "description": "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple ` + "`" + `photos` + "`" + ` parts).",
                         "name": "photos",
                         "in": "formData",
                         "required": true
