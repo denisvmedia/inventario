@@ -93,6 +93,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.StorageQuotaReminderRegistry = NewStorageQuotaReminderRegistry()
 	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry()
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistryFactory()
+	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry()
 	fs.GroupPurger = NewGroupPurger(
 		locationFactory,
 		areaFactory,

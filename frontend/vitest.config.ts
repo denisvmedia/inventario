@@ -14,6 +14,24 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // Vitest's 5 s default per-test budget was calibrated for pure-JS
+    // unit tests. Our heaviest integration walks (CommodityFormDialog
+    // wizard, CommoditiesListPage create flow, admin-search pages)
+    // legitimately need 3.5-4.2 s _in isolation_ — they drive
+    // userEvent through 4+ Radix Select portals plus 4-step dialog
+    // navigation, and each interaction yields microtasks the React
+    // commit phase has to drain in jsdom. Under default forks-pool
+    // parallelism (≈ one worker per CPU) these tests routinely tip
+    // past 5 s as 145 jsdom contexts share cores, but the same suite
+    // passes deterministically with `--maxWorkers=1`. The behaviour
+    // is purely contention, not a logic / leak bug — verified by
+    // bisecting failing tests against master baseline (same tests
+    // flake without any PR changes) and by running each suspected
+    // polluter in isolation (no cross-file state leaks). 15 s gives
+    // the wizard walks enough headroom under contended workers
+    // without slowing the rest of the suite (per-test budget is only
+    // consumed if the test actually needs it).
+    testTimeout: 15000,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

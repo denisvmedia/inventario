@@ -78,6 +78,24 @@ type Config struct {
 	// recommended) for multi-replica or restart-stable deployments.
 	CurrencyMigrationHMACKey string `yaml:"currency_migration_hmac_key" env:"CURRENCY_MIGRATION_HMAC_KEY" env-default:""`
 
+	// AIVision* settings drive the photo-scan endpoint (#1720). Under the
+	// `run` section loader these map to INVENTARIO_RUN_AI_VISION_* env vars
+	// (e.g. INVENTARIO_RUN_AI_VISION_PROVIDER). The provider discriminator
+	// selects which implementation handles the scan call ("none", "mock",
+	// "anthropic", "openai"); the per-provider API key / model fields
+	// override the in-tree defaults.
+	AIVisionProvider         string `yaml:"ai_vision_provider" env:"AI_VISION_PROVIDER" env-default:"none"`
+	AIVisionAnthropicAPIKey  string `yaml:"ai_vision_anthropic_api_key" env:"AI_VISION_ANTHROPIC_API_KEY" env-default:""`
+	AIVisionAnthropicModel   string `yaml:"ai_vision_anthropic_model" env:"AI_VISION_ANTHROPIC_MODEL" env-default:"claude-sonnet-4-6"`
+	AIVisionAnthropicBaseURL string `yaml:"ai_vision_anthropic_base_url" env:"AI_VISION_ANTHROPIC_BASE_URL" env-default:""`
+	AIVisionOpenAIAPIKey     string `yaml:"ai_vision_openai_api_key" env:"AI_VISION_OPENAI_API_KEY" env-default:""`
+	AIVisionOpenAIModel      string `yaml:"ai_vision_openai_model" env:"AI_VISION_OPENAI_MODEL" env-default:"gpt-4o"`
+	AIVisionOpenAIBaseURL    string `yaml:"ai_vision_openai_base_url" env:"AI_VISION_OPENAI_BASE_URL" env-default:""`
+	AIVisionTimeout          string `yaml:"ai_vision_timeout" env:"AI_VISION_TIMEOUT" env-default:"20s"`
+	AIVisionMaxPhotos        int    `yaml:"ai_vision_max_photos" env:"AI_VISION_MAX_PHOTOS" env-default:"5"`
+	AIVisionMaxPhotoBytes    int    `yaml:"ai_vision_max_photo_bytes" env:"AI_VISION_MAX_PHOTO_BYTES" env-default:"10485760"`
+	AIVisionRateLimitPerHour int    `yaml:"ai_vision_rate_limit_per_hour" env:"AI_VISION_RATE_LIMIT_PER_HOUR" env-default:"30"`
+
 	// WorkersOnly / WorkersExclude restrict which background workers run in
 	// `inventario run workers`. See the run/workers package for the accepted
 	// syntax and mutual-exclusion rules. Both fields default to empty, meaning
@@ -151,6 +169,14 @@ func (c *Config) SetDefaults() {
 		// the apiserver clamps to. An empty value here just means the
 		// env-default did not apply (e.g. config loaded from YAML).
 		c.ImpersonationTTL = "30m"
+	}
+	if c.AIVisionTimeout == "" {
+		// #1720: matches AI_VISION_TIMEOUT env-default. Empty values
+		// come from YAML configs that omit the key entirely.
+		c.AIVisionTimeout = "20s"
+	}
+	if c.AIVisionProvider == "" {
+		c.AIVisionProvider = "none"
 	}
 }
 

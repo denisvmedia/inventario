@@ -168,6 +168,7 @@ type FactorySet struct {
 	StorageQuotaReminderRegistry          StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the storage quota warning worker idempotency store; service-mode only (#1585)
 	MaintenanceReminderRegistry           MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the maintenance reminder worker idempotency store; service-mode only (#1368)
 	CurrencyMigrationRegistryFactory      CurrencyMigrationRegistryFactory
+	CommodityScanAuditRegistry            CommodityScanAuditRegistry // AI vision scan audit log (#1720); service-mode (writes audit rows even when the calling RLS context has been cancelled)
 	// BackofficeUserRegistry persists platform-operator identities
 	// (issue #1785). Lives on FactorySet only — back-office identities
 	// are NOT part of the per-request *Set (they're cross-cutting infra,
@@ -315,6 +316,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		StorageQuotaReminderRegistry:   fs.StorageQuotaReminderRegistry,
 		MaintenanceReminderRegistry:    fs.MaintenanceReminderRegistry,
 		CurrencyMigrationRegistry:      currencyMigrationRegistry,
+		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
 		SystemAdminGrantRegistry:       fs.SystemAdminGrantRegistry,
 	}, nil
 }
@@ -357,6 +359,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		StorageQuotaReminderRegistry:   fs.StorageQuotaReminderRegistry,
 		MaintenanceReminderRegistry:    fs.MaintenanceReminderRegistry,
 		CurrencyMigrationRegistry:      fs.CurrencyMigrationRegistryFactory.CreateServiceRegistry(),
+		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
 		SystemAdminGrantRegistry:       fs.SystemAdminGrantRegistry,
 	}
 }

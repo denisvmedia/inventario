@@ -1,7 +1,9 @@
 package bootstrap
 
 import (
+	"errors"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -9,6 +11,10 @@ import (
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/debug"
+	"github.com/denisvmedia/inventario/internal/aivision"
+	_ "github.com/denisvmedia/inventario/internal/aivision/anthropic" // register the anthropic provider via init()
+	_ "github.com/denisvmedia/inventario/internal/aivision/mock"      // register the mock provider via init()
+	_ "github.com/denisvmedia/inventario/internal/aivision/openai"    // register the openai provider via init()
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -161,6 +167,11 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 	params.EmailService = emailLifecycle.Service
 	params.SupportEmail = strings.TrimSpace(cfg.SupportEmail)
 
+	if err = wireCommodityScan(cfg, &params); err != nil {
+		slog.Error("Failed to wire commodity scan service", "error", err)
+		return serverSetup{}, err
+	}
+
 	if err = validation.Validate(params); err != nil {
 		slog.Error("Invalid server parameters", "error", err)
 		return serverSetup{}, err
@@ -171,4 +182,82 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		emailLifecycle:            emailLifecycle,
 		closeReadinessRedisPinger: closeReadinessRedisPinger,
 	}, nil
+}
+
+// wireCommodityScan constructs the apiserver.Params CommodityScanService
+// + CommodityScanMaxBodyBytes from the AIVision* config. A provider of
+// "none" (the default) builds the service with a nil provider so the
+// route stays mounted but returns 503 — matches the "feature gated
+// off" contract the FE branches on. An unknown provider name fails
+// boot loudly so a typo doesn't silently downgrade to "disabled".
+func wireCommodityScan(cfg *Config, params *apiserver.Params) error {
+	timeout, err := time.ParseDuration(cfg.AIVisionTimeout)
+	if err != nil {
+		return err
+	}
+
+	provider, err := aivision.NewProvider(aivision.ProviderConfig{
+		Name:             strings.TrimSpace(cfg.AIVisionProvider),
+		AnthropicAPIKey:  cfg.AIVisionAnthropicAPIKey,
+		AnthropicModel:   cfg.AIVisionAnthropicModel,
+		AnthropicBaseURL: cfg.AIVisionAnthropicBaseURL,
+		OpenAIAPIKey:     cfg.AIVisionOpenAIAPIKey,
+		OpenAIModel:      cfg.AIVisionOpenAIModel,
+		OpenAIBaseURL:    cfg.AIVisionOpenAIBaseURL,
+	})
+	switch {
+	case err == nil:
+		// got a provider; carry on
+	case errors.Is(err, aivision.ErrProviderDisabled):
+		// intentional "feature off" path — keep provider nil; the
+		// service surfaces ErrScanProviderDisabled per request.
+		provider = nil
+	default:
+		// Unknown provider name or per-provider construction failure
+		// (e.g. anthropic/openai with an empty API key while a real
+		// provider was selected). Loud boot failure is correct.
+		return err
+	}
+
+	params.CommodityScanService = services.NewCommodityScanService(
+		provider,
+		params.FactorySet.CommodityScanAuditRegistry,
+		services.CommodityScanConfig{
+			MaxPhotos:        cfg.AIVisionMaxPhotos,
+			MaxPhotoBytes:    cfg.AIVisionMaxPhotoBytes,
+			RateLimitPerHour: cfg.AIVisionRateLimitPerHour,
+			Timeout:          timeout,
+		},
+	)
+	// Body cap = per-photo cap * max photos + a 1MB headroom for
+	// multipart overhead/JSON form fields. Zero when either cap is
+	// unset so the handler doesn't accidentally clamp to zero.
+	//
+	// Guard against operator misconfiguration: silly-large caps would
+	// overflow int64 during the multiplication and yield a tiny or
+	// negative cap, which is much worse than refusing to scale beyond
+	// math.MaxInt64. When the product would overflow we clamp to
+	// math.MaxInt64 and skip the +1MB headroom — at that magnitude
+	// the headroom is noise anyway and saturating is the safe choice.
+	if cfg.AIVisionMaxPhotoBytes > 0 && cfg.AIVisionMaxPhotos > 0 {
+		perPhoto := int64(cfg.AIVisionMaxPhotoBytes)
+		count := int64(cfg.AIVisionMaxPhotos)
+		const headroom int64 = 1 << 20
+		switch {
+		case perPhoto > math.MaxInt64/count:
+			// Multiplication overflow guard.
+			params.CommodityScanMaxBodyBytes = math.MaxInt64
+		case perPhoto*count > math.MaxInt64-headroom:
+			// Multiplication fits but adding the 1MB headroom would
+			// overflow. Cap at MaxInt64 without the headroom.
+			params.CommodityScanMaxBodyBytes = math.MaxInt64
+		default:
+			params.CommodityScanMaxBodyBytes = perPhoto*count + headroom
+		}
+	}
+	// Per-part cap mirrors the service-level validator. A single
+	// hostile multipart part is rejected before io.ReadAll allocates
+	// more than (cap+1) bytes.
+	params.CommodityScanMaxPhotoBytes = cfg.AIVisionMaxPhotoBytes
+	return nil
 }

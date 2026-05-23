@@ -23,9 +23,12 @@ async function walkPastAi(user: ReturnType<typeof userEvent.setup>) {
   // Radix Dialog renders into a portal; the AI step isn't queryable
   // synchronously after render, so wait for it before clicking. Used
   // exclusively from create-mode tests — edit mode skips the AI step
-  // and never lands here.
+  // and never lands here. Post-#1720 the AI step owns its own
+  // primary actions inline; "Fill manually" carries a distinct
+  // testid (`commodity-form-ai-fill-manually`) so the wizard footer's
+  // `commodity-form-next` testid only appears on form steps.
   await screen.findByTestId("commodity-form-ai-step")
-  await user.click(screen.getByTestId("commodity-form-next"))
+  await user.click(screen.getByTestId("commodity-form-ai-fill-manually"))
   await screen.findByLabelText(/^Name$/i)
 }
 
@@ -59,7 +62,10 @@ describe("<CommodityFormDialog />", () => {
       ),
     })
     expect(await screen.findByTestId("commodity-form-ai-step")).toBeInTheDocument()
-    expect(screen.getByTestId("commodity-form-ai-coming-soon")).toBeInTheDocument()
+    // Post-#1720 the AI step ships with a live dropzone instead of
+    // the inert tracker line — assert the dropzone testid is mounted
+    // so a future regression that hides it gets caught.
+    expect(screen.getByTestId("commodity-form-ai-dropzone")).toBeInTheDocument()
   })
 
   it("walks past the AI step into Basics on Next", async () => {
@@ -77,7 +83,7 @@ describe("<CommodityFormDialog />", () => {
         />
       ),
     })
-    await user.click(await screen.findByTestId("commodity-form-next"))
+    await user.click(await screen.findByTestId("commodity-form-ai-fill-manually"))
     expect(await screen.findByLabelText(/^Name$/i)).toBeInTheDocument()
   })
 
