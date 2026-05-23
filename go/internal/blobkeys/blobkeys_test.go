@@ -179,9 +179,9 @@ func TestKeysAlwaysCarryTenantNamespace(t *testing.T) {
 	for i, got := range hostileInputs {
 		c.Assert(strings.HasPrefix(got, prefix), qt.IsTrue,
 			qt.Commentf("[%d] %q must carry tenant prefix", i, got))
-		c.Assert(strings.Contains(got, ".."), qt.IsFalse,
+		c.Assert(got, qt.Not(qt.Contains), "..",
 			qt.Commentf("[%d] %q must not contain traversal token", i, got))
-		c.Assert(strings.Contains(got, "\\"), qt.IsFalse,
+		c.Assert(got, qt.Not(qt.Contains), `\`,
 			qt.Commentf("[%d] %q must not contain backslash", i, got))
 		// After stripping the tenant prefix the remainder must have no
 		// further `..` segments and no backslashes — those would let a
