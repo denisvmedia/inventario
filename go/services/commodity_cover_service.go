@@ -70,7 +70,7 @@ func NewCommodityCoverService(signing *FileSigningService) *CommodityCoverServic
 // Caller must supply the user id used to sign the URLs; an empty userID
 // short-circuits to an empty result because the signed URL would be
 // unverifiable. `binding` couples the produced URLs to the caller's
-// browser session (see services.ExtractSessionBinding).
+// browser session (see ExtractSessionBinding).
 func (s *CommodityCoverService) ResolveMany(ctx context.Context, fileReg registry.FileRegistry, commodities []*models.Commodity, userID string, binding SessionBinding) map[string]ResolvedCover {
 	out := make(map[string]ResolvedCover, len(commodities))
 	if userID == "" || fileReg == nil || len(commodities) == 0 {
