@@ -1156,6 +1156,48 @@ type BackofficeUserRegistry interface {
 	SetActive(ctx context.Context, id string, active bool) error
 }
 
+// BackofficeRefreshTokenRegistry persists long-lived refresh tokens
+// for the back-office auth plane (issue #1785, Phase 2). It mirrors the
+// tenant-side RefreshTokenRegistry method-for-method but with
+// backoffice_user_id in place of (tenant_id, user_id) so the two
+// identity universes can't accidentally cross.
+//
+// The table has NO row-level security (same reasoning as
+// `backoffice_users`: it lives OUTSIDE the tenant model). The login flow
+// must be able to look up a row before any DB session context is set,
+// so RLS predicates that read `get_current_*_id()` would block the
+// very call that needs to authenticate.
+type BackofficeRefreshTokenRegistry interface {
+	Registry[models.BackofficeRefreshToken]
+
+	// GetByHash returns the refresh-token row whose token_hash matches.
+	// Used by the refresh handler (cookie value -> SHA-256 -> row). Returns
+	// ErrBackofficeRefreshTokenNotFound when no row exists.
+	GetByHash(ctx context.Context, tokenHash string) (*models.BackofficeRefreshToken, error)
+
+	// Revoke marks a single token row as revoked by id, gated on the
+	// supplied backofficeUserID so a stolen id can't be used to revoke
+	// a session that belongs to a different back-office user. Idempotent:
+	// re-revoking an already-revoked row is a no-op success.
+	Revoke(ctx context.Context, backofficeUserID, id string) error
+
+	// ListActiveByBackofficeUserID returns the non-revoked, non-expired
+	// rows for the given back-office user ordered most-recently-used
+	// first (LastUsedAt desc, CreatedAt desc tiebreaker). Mirrors the
+	// equivalent on RefreshTokenRegistry.
+	ListActiveByBackofficeUserID(ctx context.Context, backofficeUserID string) ([]*models.BackofficeRefreshToken, error)
+
+	// RevokeByBackofficeUserID marks every refresh-token row for the
+	// given back-office user as revoked. Used on password change / forced
+	// logout-all scenarios.
+	RevokeByBackofficeUserID(ctx context.Context, backofficeUserID string) error
+
+	// DeleteExpired removes all rows whose expires_at is in the past.
+	// Called by the retention sweep (future worker). Returning no count
+	// keeps the surface narrow — callers only care about success/error.
+	DeleteExpired(ctx context.Context) error
+}
+
 // AuditLogRegistry manages security-relevant event records for compliance and debugging.
 type AuditLogRegistry interface {
 	Registry[models.AuditLog]
