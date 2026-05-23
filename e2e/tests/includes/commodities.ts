@@ -340,18 +340,19 @@ export async function createCommodity(
   await page.click('[data-testid="commodities-add-button"]');
   await page.waitForSelector('[data-testid="commodity-form-dialog"]');
 
-  // Step 0: AI placeholder (#1540 / PR #1621). Create mode opens on
-  // the inert "Fill with AI" surface before Basics — there are no
-  // form fields, just the photo-type cards and the dropzone hint,
-  // so clicking Continue advances straight to Basics. Edit mode
-  // skips this step entirely, so `editCommodity` doesn't need the
-  // same hop. Wait on the AI-step marker before clicking to make
-  // sure we're not racing the dialog's open animation.
+  // Step 0: AI scan (#1720 / PR #1835). Create mode opens on the
+  // AI scan surface before Basics. The AI step owns its own footer
+  // (no `commodity-form-next` button) — "Fill manually" carries the
+  // distinct testid `commodity-form-ai-fill-manually` and advances
+  // to Basics without a scan. Edit mode skips this step entirely so
+  // `editCommodity` doesn't need this hop. Wait on the AI-step
+  // marker before clicking to make sure we're not racing the
+  // dialog's open animation.
   await page.waitForSelector('[data-testid="commodity-form-ai-step"]', {
     state: "visible",
     timeout: 5000,
   });
-  await gotoNext(page);
+  await page.click('[data-testid="commodity-form-ai-fill-manually"]');
 
   // Step 1: Basics. Wait for the step marker before filling so a
   // skipped/blocked transition (e.g. a step-level `trigger()` returned
