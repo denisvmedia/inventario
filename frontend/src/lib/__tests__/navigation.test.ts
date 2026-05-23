@@ -50,7 +50,9 @@ describe("navigation", () => {
     const spy = vi.fn()
     setNavigateToLogin(spy)
     navigateToLogin("/x", "auth_required")
-    expect(spy).toHaveBeenCalledWith("/x", "auth_required")
+    // The signature now takes an optional `plane` arg (#1785 Phase 6) — a
+    // bare `(path, reason)` call surfaces as `(path, reason, undefined)`.
+    expect(spy).toHaveBeenCalledWith("/x", "auth_required", undefined)
   })
 
   it("__resetNavigationForTests restores the default (now a noop+warn)", () => {
