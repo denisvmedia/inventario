@@ -87,17 +87,27 @@ func (*File) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 
-func (i *File) ValidateWithContext(ctx context.Context) error {
-	fields := make([]*validation.FieldRules, 0)
-
-	fields = append(fields,
-		validation.Field(&i.Path, validation.Required),
-		validation.Field(&i.OriginalPath, validation.Required),
-		validation.Field(&i.Ext, validation.Required),
-		validation.Field(&i.MIMEType, validation.Required),
-	)
-
-	return validation.ValidateStructWithContext(ctx, i, fields...)
+// ValidateWithContext validates the per-blob metadata sub-struct.
+//
+// The post-#1779 / post-#1793 contract is that File rows go through two
+// lifecycle phases: at row-create time (POST /files) the fields are
+// intentionally empty placeholders — the blob doesn't exist yet — and
+// only become populated by the server-side upload handler. The earlier
+// `Required` rules on Path / OriginalPath / Ext / MIMEType were
+// unreachable in production: no code path currently invokes
+// `FileEntity.ValidateWithContext` (the JSON-API binder validates the
+// outer request DTO, not the entity), so the rules — which jellydator
+// *would* cascade into here via the inner `ValidatableWithContext`
+// interface — never fired. They would also have rejected the new
+// metadata-only create path the moment any caller did wire validation
+// in. Dropping them removes the misleading shape contract.
+//
+// The no-op stays as a hook: when a future field carries a shape
+// constraint (max length, enum), it goes here and the cascade lights
+// up automatically the first time something validates the outer
+// FileEntity.
+func (*File) ValidateWithContext(_ context.Context) error {
+	return nil
 }
 
 // FileType represents the type/category of a file

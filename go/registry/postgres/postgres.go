@@ -64,6 +64,11 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry(dbx)
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistry(dbx)
 	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry(dbx)
+	// Back-office identities (issue #1785) — platform-operator users
+	// that live OUTSIDE the tenant model. Wired on FactorySet only;
+	// not part of the per-request Set since back-office identities are
+	// cross-cutting infra, not user-aware data.
+	fs.BackofficeUserRegistry = NewBackofficeUserRegistry(dbx)
 	fs.PingFn = dbx.PingContext
 
 	return fs

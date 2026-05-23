@@ -358,7 +358,7 @@ _None yet._
 
 #### 2026-05-20 — Admin sidebar section is a single top-level link
 
-- **Issue/PR**: #1752 / PR (pending)
+- **Issue/PR**: #1752 / PR #1773
 - **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) renders an `Admin` `SidebarGroup` with **two** entries — `Tenants` and `Groups` — both always visible (the mock has no auth/permission model).
 - **Reality**: `frontend/src/components/AppSidebar.tsx` renders the `Admin` section with a **single** top-level entry → `/admin/tenants`, and only when `useIsSystemAdmin()` is true. Sub-section navigation (Groups) lives in the `AdminLayout` secondary nav instead of the sidebar.
 - **Why**: Issue #1752 specifies "a new 'ADMIN' section … Top-level link → `/admin/tenants`" — one sidebar entry, with the AdminLayout owning sub-navigation. The conditional render is required because the mock has no permission gating; non-admins must not see the section.
@@ -380,7 +380,7 @@ _None yet._
 
 #### 2026-05-20 — Admin Tenants list is a divide-y card list, not a `<Table>`
 
-- **Issue/PR**: #1752 / PR (pending)
+- **Issue/PR**: #1752 / PR #1773
 - **Mock**: [`design-mocks/src/views/admin/TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx) renders the tenant list with the shadcn `<Table>` primitive (TableHeader/TableBody/TableRow/TableCell) and a shadcn `<Pagination>` control below it.
 - **Reality**: `frontend/src/pages/admin/AdminTenantsPage.tsx` renders the tenant list as a `divide-y divide-border` card list of rows (the established frontend convention — see `LoginHistoryPage`, `SessionsPage`). The header card + stat tiles + search input + status-badge palette all match the mock. The search box is wired to the server: the debounced input feeds `?q` (the BE matches it against name/slug/domain) via `features/admin/api.ts` + `keys.ts`, so search stays correct across pages. The remaining pagination params (`page`/`per_page`/`sort`) are plumbed through the data layer but no `<Pagination>` UI ships in this foundation issue.
 - **Why**: The frontend has **no `table.tsx` or `pagination.tsx` shadcn primitive** yet. Pulling two new primitives in a foundation issue widens the blast radius beyond the issue's scope; the `divide-y` card list is the pattern every other list page in `frontend/` already uses, so it's the lower-drift choice. The pagination data layer is ready for a later sub-issue to add the UI.
@@ -390,7 +390,7 @@ _None yet._
 
 #### 2026-05-21 — Admin Tenants stat row shows one tile (Tenants), not four
 
-- **Issue/PR**: #1753 / PR (pending)
+- **Issue/PR**: #1753 / PR #1774
 - **Mock**: [`design-mocks/src/views/admin/TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx) renders a 4-up stat grid above the table — Tenants, Active, Total users, Total groups — each computed by reducing over the full `MOCK_TENANTS` array.
 - **Reality**: `frontend/src/pages/admin/AdminTenantsPage.tsx` renders a single "Tenants" tile, fed by the server-provided `meta.total`.
 - **Why**: Backend constraint. The list endpoint is paginated — Active / Total users / Total groups cannot be computed correctly from one page, and the BE exposes no platform-wide aggregate endpoint. Showing a per-page sum would be misleading. The total-tenants count is the one figure the pagination envelope (`meta.total`) makes correct. (This carries forward the same decision the #1752 foundation took.)
@@ -399,7 +399,7 @@ _None yet._
 
 #### 2026-05-21 — Tenant detail header has no Plan-name lookup; row navigation replaces mock callbacks
 
-- **Issue/PR**: #1753 / PR (pending)
+- **Issue/PR**: #1753 / PR #1774
 - **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) shows the Plan stat as a human label via `TENANT_PLAN_CONFIG[tenant.plan].label` ("Business", "Enterprise", …) and the Users tab carries a `Role` column + per-user avatar initials; navigation is via `onSelectUser` / `onSelectGroup` prop callbacks.
 - **Reality**: `frontend/src/pages/admin/AdminTenantDetailPage.tsx` renders the raw `plan_id` string in the Plan tile, drops the Users-tab `Role` column and the avatar-initials chip, and navigates with `react-router-dom` (`/admin/users/{id}`, `/admin/groups/{id}`).
 - **Why**: Backend shape. `jsonapi.AdminTenantListItem` carries `plan_id` (an opaque identifier), not a resolved plan name, and there is no plan-catalog endpoint to map it — so the raw id is shown until one exists. `jsonapi.AdminUserListItem` has **no `role` field** (role is per-group-membership, not tenant-wide) and **no avatar field**, so the Role column and initials chip are omitted rather than faked. Router navigation replacing the mock's prop callbacks is the standard mock→frontend translation, not a visual deviation.
@@ -408,7 +408,7 @@ _None yet._
 
 #### 2026-05-21 — Admin Tenants list / detail page naming follows the `Admin*Page` convention
 
-- **Issue/PR**: #1753 / PR (pending)
+- **Issue/PR**: #1753 / PR #1774
 - **Mock**: The mock view files are `TenantsView.tsx` / `TenantDetailView.tsx`; issue #1753's text proposed `TenantsListPage.tsx` / `TenantDetailPage.tsx`.
 - **Reality**: The list upgrades `AdminTenantsPage.tsx` in place and the detail page is `AdminTenantDetailPage.tsx`.
 - **Why**: Code-organisation choice, not a visual deviation. The #1752 foundation established the `Admin*Page` convention (`AdminTenantsPage`, `AdminUsersPage`, `AdminGroupsPage`, `AdminLayout`, `AdminForbiddenPage`); the issue text predates that foundation. Logged here only for traceability — there is no visual drift.
@@ -417,7 +417,7 @@ _None yet._
 
 #### 2026-05-21 — Admin Tenants list drops the mock's `Plan` column
 
-- **Issue/PR**: #1753 / PR (pending)
+- **Issue/PR**: #1753 / PR #1774
 - **Mock**: [`design-mocks/src/views/admin/TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx) renders a `Plan` `TableHead` + per-row cell, showing the plan as a human label via `TENANT_PLAN_CONFIG[tenant.plan].label` ("Business", "Enterprise", …).
 - **Reality**: `frontend/src/pages/admin/AdminTenantsPage.tsx` omits the `Plan` column entirely — the table is Name / Domain / Status / Users / Groups / Created.
 - **Why**: Backend shape. `jsonapi.AdminTenantListItem` carries only `plan_id` — an opaque identifier — and there is no plan-catalog endpoint to resolve it to a name. The tenant **detail** tile has the same constraint (logged in "Tenant detail header has no Plan-name lookup" above), where it falls back to the raw id; the list column is a separate surface, so dropping it outright (rather than showing a column of opaque ids) is the lower-noise choice for a wide table. Logged separately from the detail-tile entry because it is its own surface.
@@ -426,7 +426,7 @@ _None yet._
 
 #### 2026-05-21 — Admin Tenants list + detail add controls (search, filters, pagination, sortable headers) the mock lacks
 
-- **Issue/PR**: #1753 / PR (pending)
+- **Issue/PR**: #1753 / PR #1774
 - **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) renders the tenant-detail Users / Groups tabs as plain static `<Table>`s — no search box, no filter dropdown, no pagination footer. [`design-mocks/src/views/admin/TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx) renders the tenant-list table with plain (non-sortable) column headers.
 - **Reality**: `frontend/src/pages/admin/AdminTenantDetailPage.tsx` adds a debounced search box + tri-state `isActive` filter + pagination footer to the Users tab, a status filter + pagination footer to the Groups tab; `frontend/src/pages/admin/AdminTenantsPage.tsx` adds sortable column headers (Name / Status / Created) with `aria-sort`.
 - **Why**: Issue #1753 mandates these controls — the issue text predates the mock, which was vendored before the admin surface grew its server-side list semantics. The lists are server-paginated/-searched/-sorted (the BE endpoints accept `?q`, `?sort`, `?order`, `?page`, `?per_page`, `?is_active`, `?status`), so the UI must surface the controls that drive those params. This entry exists so the doc is honest that the shipped admin tables are not 1:1 with the mock's static tables — the divergence is issue-mandated, not a taste call.
@@ -435,7 +435,7 @@ _None yet._
 
 #### 2026-05-21 — Tenant-detail Users / Groups rows link to `/admin/users/:id` and `/admin/groups/:id` (forward reference)
 
-- **Issue/PR**: #1753 / PR (pending)
+- **Issue/PR**: #1753 / PR #1774
 - **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) drills into a user / group via `onSelectUser` / `onSelectGroup` prop callbacks (the mock is a `view`-state machine with no router).
 - **Reality**: `frontend/src/pages/admin/AdminTenantDetailPage.tsx` navigates row clicks to `/admin/users/{userID}` and `/admin/groups/{groupID}` with `react-router-dom`. Those routes have **no element in `src/app/router.tsx` yet** — they are delivered by sibling sub-issues #1754 (admin user detail) and #1755 (admin group detail) of the same umbrella #1744, landing next in order. Until #1754 / #1755 merge, clicking such a row falls through the `/admin/*` subtree to the top-level `*` catch-all route and renders the standard `NotFoundPage` (`src/pages/NotFound.tsx`) — no crash, no blank screen.
 - **Why**: Issue #1753 explicitly mandates these link targets; the route components are a deliberate forward reference to #1754 / #1755. The link targets are committed now so the detail page is feature-complete per its spec and the sibling issues only need to add the route entries.
@@ -444,7 +444,7 @@ _None yet._
 
 #### 2026-05-21 — Admin user detail Sessions section is a count summary, not a per-session table
 
-- **Issue/PR**: #1754 / PR (pending)
+- **Issue/PR**: #1754 / PR #1776
 - **Mock**: [`design-mocks/src/views/admin/UserDetailView.tsx`](../../design-mocks/src/views/admin/UserDetailView.tsx) renders a Sessions section as a shadcn `<Table>` with one row per active session — columns Device, IP address, Location, Last active — driven by a per-session `user.sessions[]` array in `mock.ts`.
 - **Reality**: `frontend/src/pages/admin/AdminUserDetailPage.tsx` renders the Sessions section as a single count summary — an icon-headed block reading "N active sessions" — with the centred icon + muted-text empty state when the count is 0. No per-session table.
 - **Why**: Backend shape. `GET /api/v1/admin/users/{id}` (`jsonapi.AdminUserDetail`) returns only `active_session_count` — an integer derived from unrevoked refresh tokens — and exposes **no per-session detail** (no device / IP / location / last-active list). There is no admin endpoint that lists another user's sessions, so the table cannot be populated; rendering a count is the honest representation of the data the API provides.
@@ -453,7 +453,7 @@ _None yet._
 
 #### 2026-05-21 — Admin user detail block/unblock confirm uses `Dialog`, not `AlertDialog`
 
-- **Issue/PR**: #1754 / PR (pending)
+- **Issue/PR**: #1754 / PR #1776
 - **Mock**: [`design-mocks/src/views/admin/UserDetailView.tsx`](../../design-mocks/src/views/admin/UserDetailView.tsx) wraps the block confirmation in the shadcn `<AlertDialog>` primitive (AlertDialogContent / AlertDialogAction / AlertDialogCancel).
 - **Reality**: `frontend/src/pages/admin/AdminUserDetailPage.tsx` hosts the block/unblock confirmation in the generic shadcn `<Dialog>` primitive with a `<Textarea>` for the required `reason` and inline typed-error banner.
 - **Why**: Two constraints. (1) The frontend has no `alert-dialog.tsx` primitive — only `dialog.tsx` is vendored; the established codebase confirmation pattern (`hooks/useConfirm.tsx`) deliberately uses `Dialog`, not `AlertDialog`. (2) The issue brief points at the `ConfirmProvider`/`useConfirm` pattern, but that provider only renders a title + description and cannot host a `<textarea>`; the required free-form `reason` field forces a bespoke dialog. Using `Dialog` keeps it consistent with the in-repo confirmation convention. Visual anatomy (header, description, footer, destructive confirm button) still matches the mock's confirmation shape.
@@ -462,7 +462,7 @@ _None yet._
 
 #### 2026-05-21 — Admin user detail group memberships render as a link list, not a `<Table>`
 
-- **Issue/PR**: #1754 / PR (pending)
+- **Issue/PR**: #1754 / PR #1776
 - **Mock**: [`design-mocks/src/views/admin/UserDetailView.tsx`](../../design-mocks/src/views/admin/UserDetailView.tsx) renders the user's group memberships as a shadcn `<Table>` — one row per group with column headers (Group, Role, Joined).
 - **Reality**: `frontend/src/pages/admin/AdminUserDetailPage.tsx` renders group memberships as a vertical link list — each row is an icon-headed card (`<Link>` to `/admin/groups/{id}`, or a non-interactive `<div>` when `group_id` is absent) with the group name, relative join time, and a `RoleBadge`. No tabular header row.
 - **Why**: Component-composition choice. The membership row's primary affordance is navigation to the group-detail page; a clickable link-list row communicates that affordance more directly than a `<Table>` row, and the section is a short, scannable list (a user typically belongs to a handful of groups) rather than a sortable/paginated dataset. The link-list also degrades gracefully when `group_id` is missing — the row simply becomes non-interactive — whereas a `<Table>` row would still look like tabular data. Visual anatomy (group name, role badge, join time) still matches the mock's information set.
@@ -471,7 +471,7 @@ _None yet._
 
 #### 2026-05-21 — Admin user detail page naming follows the `Admin*Page` convention
 
-- **Issue/PR**: #1754 / PR (pending)
+- **Issue/PR**: #1754 / PR #1776
 - **Mock**: The issue text proposes `UserDetailPage.tsx`; the mock view file is `design-mocks/src/views/admin/UserDetailView.tsx`.
 - **Reality**: The page ships as `frontend/src/pages/admin/AdminUserDetailPage.tsx`.
 - **Why**: Code-organisation choice, not a visual deviation. The #1752 foundation established the `Admin*Page` convention (`AdminTenantsPage`, `AdminTenantDetailPage`, `AdminUsersPage`, `AdminGroupsPage`, `AdminLayout`, `AdminForbiddenPage`); the issue text predates that foundation. Logged for traceability — there is no visual drift.
@@ -480,7 +480,7 @@ _None yet._
 
 #### 2026-05-21 — Admin Groups list / detail page naming follows the `Admin*Page` convention
 
-- **Issue/PR**: #1755 / PR (pending)
+- **Issue/PR**: #1755 / PR #1775
 - **Mock**: [`design-mocks/src/views/admin/GroupsView.tsx`](../../design-mocks/src/views/admin/GroupsView.tsx) and [`GroupDetailView.tsx`](../../design-mocks/src/views/admin/GroupDetailView.tsx) are named `*View` per the mock's `view`-state-machine convention.
 - **Reality**: `frontend/src/pages/admin/AdminGroupsPage.tsx` and `AdminGroupDetailPage.tsx` follow the `Admin*Page` naming the #1752 foundation established for this subtree (AdminTenantsPage / AdminTenantDetailPage / AdminUsersPage).
 - **Why**: Codebase convention — `pages/admin/*` are routed React Router pages, not mock `view` states. Consistent with the prior admin entries in this log.
@@ -489,7 +489,7 @@ _None yet._
 
 #### 2026-05-21 — Admin Groups list + detail add controls (search, filters, sortable headers, pagination) the mock lacks
 
-- **Issue/PR**: #1755 / PR (pending)
+- **Issue/PR**: #1755 / PR #1775
 - **Mock**: `GroupsView.tsx` filters/paginates a client-side `MOCK_ADMIN_GROUPS` array (search + tenant Select + status Select + numbered pager, no sortable headers). `GroupDetailView.tsx` has no URL state.
 - **Reality**: `AdminGroupsPage.tsx` drives every control server-side via `?q`, `?tenantID`, `?status`, `?sort`, `?order`, `?page` on the URL — debounced search, sortable column headers (name/slug/created_at/status, the BE-supported `?sort` set), windowed `AdminPagination`, and out-of-range page recovery. The mock's table has no sortable headers; the frontend adds the asc/desc affordance to match the rest of the admin surface (AdminTenantsPage).
 - **Why**: Backend reality — `GET /admin/groups` is a real paginated/sortable/searchable endpoint, not a static array. URL-persisted state is an issue #1755 acceptance criterion. The sortable-header mechanism mirrors the canonical AdminTenantsPage pattern.
@@ -498,7 +498,7 @@ _None yet._
 
 #### 2026-05-21 — Admin Groups list adds a dedicated sortable Slug column
 
-- **Issue/PR**: #1755 / PR (pending)
+- **Issue/PR**: #1755 / PR #1775
 - **Mock**: `GroupsView.tsx` shows six columns — Group, Tenant, Status, Currency, Members, Created — with the slug not surfaced as its own column (the mock row shows only the group name).
 - **Reality**: `AdminGroupsPage.tsx` shows only the group name in the Group cell (matching the mock) AND adds a separate, sortable `Slug` column. Seven columns total — one more than the mock.
 - **Why**: Issue #1755 explicitly requires sortable headers for the full BE-supported `?sort` set, which includes `slug`. A sortable header needs a column to attach to; the dedicated Slug column is the affordance for the `slug` sort.
@@ -507,7 +507,7 @@ _None yet._
 
 #### 2026-05-21 — Admin Groups tenant filter is fetched as one large page (per_page=100)
 
-- **Issue/PR**: #1755 / PR (pending)
+- **Issue/PR**: #1755 / PR #1775
 - **Mock**: `GroupsView.tsx` maps the in-memory `MOCK_TENANTS` array directly into the tenant-filter `<Select>` — no pagination, every tenant is always available.
 - **Reality**: `AdminGroupsPage.tsx` populates the tenant-filter `<Select>` from `useAdminTenants({ page: 1, perPage: 100, sort: "name" })` — a single first page at the BE's `per_page` cap. A deployment with more than 100 tenants would not list tenants 101+ in the dropdown.
 - **Why**: Backend reality — tenants come from a paginated endpoint. A searchable combobox would be the fully-correct fix but is heavier than #1755's scope; one 100-row page covers every realistic deployment today. A deep-linked `?tenantID` still filters correctly even when that tenant is absent from the dropdown options (the filter value round-trips through the URL independently of the option list).
@@ -516,17 +516,17 @@ _None yet._
 
 #### 2026-05-21 — Admin Group detail: Members panel is a placeholder; soft-delete confirm uses `useConfirm`, not `AlertDialog`
 
-- **Issue/PR**: #1755 / PR (pending)
+- **Issue/PR**: #1755 / PR #1775
 - **Mock**: `GroupDetailView.tsx` renders a full Members panel — add-member dialog, per-row role `<Select>`, remove-member `AlertDialog` — and the Danger-zone soft-delete confirm is a shadcn `AlertDialog`.
 - **Reality**: `AdminGroupDetailPage.tsx` renders the Members panel as a clearly-labelled **placeholder** card (dashed border, `Users` glyph, "Member management ships in a follow-up update.") — the real add/remove/role editor is a later sub-issue of umbrella #1744, out of #1755's scope. The Danger-zone soft-delete confirm uses the codebase's `useConfirm()` primitive (a root-mounted `Dialog` exposing a promise-based `confirm()`), not a per-call `AlertDialog`.
 - **Why**: (1) Members editor — scoped out of #1755 by the issue text; shipping a placeholder keeps the page coherent without pre-empting the follow-up. (2) `AlertDialog` — the frontend has **no `AlertDialog` primitive**; `frontend/src/hooks/useConfirm.tsx` is the established destructive-confirm pattern (see its own header comment) and is already mounted by Shell's `ConfirmProvider`. The confirm body still explains the two-phase async purge as the issue requires.
 - **Approved by**: user (explicit) — issue #1755 spec mandates the Members placeholder and a soft-delete confirm dialog; the `useConfirm` substitution follows the documented codebase convention.
 - **Reversion plan**: Members placeholder is replaced by the real editor in the follow-up sub-issue. The `useConfirm` choice is permanent unless the codebase adopts a shadcn `AlertDialog` primitive repo-wide.
-- **Resolved**: 2026-05-21, PR (pending) — the Members placeholder is replaced by the real `<MembershipEditor>` in #1756 (see the entry below). The `useConfirm`-not-`AlertDialog` decision still stands.
+- **Resolved**: 2026-05-21, PR #1783 — the Members placeholder is replaced by the real `<MembershipEditor>` in #1756 (see the entry below). The `useConfirm`-not-`AlertDialog` decision still stands.
 
 #### 2026-05-21 — Admin Group detail: membership editor uses `useConfirm` for the remove confirm; add-member dialog resolves email → userID instead of free-text name+email
 
-- **Issue/PR**: #1756 / PR (pending)
+- **Issue/PR**: #1756 / PR #1783
 - **Mock**: `GroupDetailView.tsx`'s Members section is a `<Table>` (Member / Role / actions) with an inline role `<Select>` per row, an "Add member" button, a per-row dropdown carrying "Remove from group", a remove-confirmation `AlertDialog`, and an Add-member `Dialog` with a **free-text Full name + Email** pair plus a role picker — the mock fabricates a member from whatever strings are typed.
 - **Reality**: `frontend/src/components/admin/MembershipEditor.tsx` replicates the `<Table>` markup/classNames 1:1 (the inline role `<Select>`, the `Ellipsis` per-row dropdown, the "Add member" button, the icon-headed Add dialog). Two behavioural divergences: (1) the remove confirmation uses the codebase's `useConfirm()` primitive (a root-mounted `Dialog`), not a per-call shadcn `AlertDialog` — same rationale as the #1755 Danger-zone confirm. (2) The Add-member dialog has **no free-text name field**: the BE's `POST .../members` takes a resolved `userID`, so the dialog debounces a tenant-scoped `?q=<email>` lookup (`listAdminTenantUsers`) as the operator types, confirms the resolved user's name/email inline, and only enables Add once exactly one exact email match is found. A no-match shows an inline "no user with that email in this tenant" notice.
 - **Why**: (1) `useConfirm` — the frontend has no `AlertDialog` primitive; `useConfirm` is the established destructive-confirm pattern and is already mounted app-wide. (2) Email-lookup add — the mock has no real backend and can mint a member from arbitrary strings; the real BE requires a `userID` for an *existing* account. Scoping the lookup to the group's owning tenant also structurally prevents cross-tenant adds from the UI (a `admin.member.tenant_mismatch` 422 is still mapped defensively per the issue AC). A free-text name field would let the operator type a name that isn't backed by any real user.
@@ -537,7 +537,7 @@ _None yet._
 
 #### 2026-05-20 — Admin 403 page reuses the 404 empty-state pattern
 
-- **Issue/PR**: #1752 / PR (pending)
+- **Issue/PR**: #1752 / PR #1773
 - **Mock**: [`design-mocks/src/views/EmptyStatesView.tsx`](../../design-mocks/src/views/EmptyStatesView.tsx) ships `NotFoundView` (404), `NoLocationGroupView`, `NoGroupOnboardingView`, `NoLocationView`, `NoAreaView`, `MaintenanceView` — but **no 403 / "access denied" surface**.
 - **Reality**: `frontend/src/pages/admin/AdminForbiddenPage.tsx` (shown in-place by the `RequireSystemAdmin` guard for a signed-in non-admin) replicates the `NotFoundView` anatomy exactly — concentric muted circles + centred Lucide glyph (`ShieldAlert` instead of `SearchX`), `403` overline, bold heading, muted lede, single primary action — swapping only the glyph and copy.
 - **Why**: Not present in mock. Issue #1752 requires a "403-style page (NOT a crash, NOT a silent redirect)". The closest analogue in the mock is the 404 empty state, so the page ports that pattern verbatim per the design-mock-fidelity fallback rule.

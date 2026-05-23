@@ -18,6 +18,7 @@ import (
 
 	"github.com/denisvmedia/inventario/apiserver/middleware"
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/internal/blobkeys"
 	"github.com/denisvmedia/inventario/internal/filekit"
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -50,7 +51,14 @@ func detectFileType(mimeType string) models.FileType {
 }
 
 type uploadedFile struct {
+	// FilePath is the bucket-relative blob key the upload was written
+	// to. Post-#1793 this is always tenant-prefixed
+	// (`t/<tenant>/files/<basename>` or `t/<tenant>/restores/<basename>`).
 	FilePath string
+	// Basename is the sanitized filename from filekit.UploadFileName —
+	// preserved separately so handlers can derive a human-readable
+	// title from it without having to parse the tenant-prefixed key.
+	Basename string
 	MIMEType string
 	Size     int64
 }
@@ -110,9 +118,13 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 
 	// Get the extension from the MIME type
 	ext := mimekit.ExtensionByMime(f.MIMEType)
+	// `OriginalPath` carries the tenant-prefixed blob key
+	// (`t/<tenant>/files/<basename>`) — see `uploadFiles` middleware.
 	originalPath := f.FilePath
-	// Set Path to be the filename without extension
-	pathWithoutExt := strings.TrimSuffix(originalPath, filepath.Ext(originalPath))
+	// `Path` / Title come from the human-readable basename, NOT the
+	// blob key — otherwise the user would see `t/<tenant>/files/...`
+	// as the title of every uploaded file.
+	pathWithoutExt := strings.TrimSuffix(f.Basename, filepath.Ext(f.Basename))
 
 	// Auto-detect file type based on MIME type
 	fileType := detectFileType(f.MIMEType)
@@ -220,62 +232,135 @@ func (api *uploadsAPI) handleRestoreUpload(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (api *uploadsAPI) uploadFiles(allowedContentTypes ...string) func(next http.Handler) http.Handler {
+// uploadKind selects the per-tenant subfolder that the upload middleware
+// writes to. Restore uploads land under `restores/` so the importer can
+// list them separately from user-facing files; the default `file_upload`
+// flow writes under `files/`.
+type uploadKind int
+
+const (
+	uploadKindFile uploadKind = iota
+	uploadKindRestore
+)
+
+func (api *uploadsAPI) uploadFiles(kind uploadKind, allowedContentTypes ...string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Get the multipart reader from the request
-			reader, err := r.MultipartReader()
-			if err != nil {
-				unprocessableEntityError(w, r, err)
+			// Resolve the authenticated tenant up-front so the blob is
+			// written under the per-tenant namespace from the very first
+			// byte (issue #1793). The middleware runs after JWT + tenant
+			// middlewares so the user must be present; an unauthenticated
+			// request here is a wiring bug, not a recoverable client error.
+			user := appctx.UserFromContext(r.Context())
+			if user == nil || user.TenantID == "" {
+				internalServerError(w, r, errxtrace.Classify(errx.NewDisplayable("upload requires authenticated tenant context")))
 				return
 			}
 
-			var uploadedFiles []uploadedFile
-			fileCount := 0
-
-		loop:
-			for {
-				// Read the next part (file) in the multipart stream
-				part, err := reader.NextPart()
-				switch err {
-				case nil:
-				case io.EOF:
-					break loop
-				default:
-					internalServerError(w, r, errxtrace.Wrap("unable to read part in multipart form", err))
-					return
-				}
-
-				// Skip if it's not a file part
-				if part.FileName() == "" {
-					continue
-				}
-
-				fileCount++
-				// Only allow single file uploads
-				if fileCount > 1 {
-					unprocessableEntityError(w, r, errxtrace.Classify(errx.NewDisplayable("only single file uploads are allowed")))
-					return
-				}
-
-				// Generate the file path and open a new file
-				filename := filekit.UploadFileName(part.FileName())
-				mimeType, size, err := api.saveFile(r.Context(), filename, part, allowedContentTypes) // TODO: make sure that the file is not too big
-				switch {
-				case errors.Is(err, mimekit.ErrInvalidContentType):
-					unprocessableEntityError(w, r, errxtrace.Wrap("unsupported content type", err))
-					return
-				case err != nil:
-					internalServerError(w, r, errxtrace.Wrap("unable to save file", err))
-					return
-				}
-				uploadedFiles = append(uploadedFiles, uploadedFile{FilePath: filename, MIMEType: mimeType, Size: size})
+			uploadedFiles, err := api.readUploadedFiles(r, user.TenantID, kind, allowedContentTypes)
+			if err != nil {
+				renderUploadError(w, r, err)
+				return
 			}
-
 			ctx := context.WithValue(r.Context(), uploadedFilesCtxKey, uploadedFiles)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// uploadHTTPError is the per-part error envelope returned from
+// readUploadedFiles. Carries the HTTP status the handler should render
+// so the middleware itself stays flat (cognitive-complexity budget).
+type uploadHTTPError struct {
+	status int
+	err    error
+}
+
+func (e *uploadHTTPError) Error() string { return e.err.Error() }
+func (e *uploadHTTPError) Unwrap() error { return e.err }
+
+func renderUploadError(w http.ResponseWriter, r *http.Request, err error) {
+	if ue, ok := errors.AsType[*uploadHTTPError](err); ok {
+		switch ue.status {
+		case http.StatusUnprocessableEntity:
+			unprocessableEntityError(w, r, ue.err)
+		default:
+			internalServerError(w, r, ue.err)
+		}
+		return
+	}
+	internalServerError(w, r, err)
+}
+
+// readUploadedFiles walks the request's multipart stream and writes
+// each part to the bucket under the tenant-prefixed namespace. Returns
+// the parsed-out uploadedFile list (one entry per accepted part) or
+// an uploadHTTPError carrying the status the caller should render.
+func (api *uploadsAPI) readUploadedFiles(r *http.Request, tenantID string, kind uploadKind, allowedContentTypes []string) ([]uploadedFile, error) {
+	reader, err := r.MultipartReader()
+	if err != nil {
+		return nil, &uploadHTTPError{status: http.StatusUnprocessableEntity, err: err}
+	}
+
+	var uploadedFiles []uploadedFile
+	fileCount := 0
+	for {
+		part, err := reader.NextPart()
+		switch err {
+		case nil:
+			// fallthrough to body
+		case io.EOF:
+			return uploadedFiles, nil
+		default:
+			return nil, errxtrace.Wrap("unable to read part in multipart form", err)
+		}
+
+		rawName := part.FileName()
+		if rawName == "" {
+			continue
+		}
+
+		fileCount++
+		if fileCount > 1 {
+			return nil, &uploadHTTPError{
+				status: http.StatusUnprocessableEntity,
+				err:    errxtrace.Classify(errx.NewDisplayable("only single file uploads are allowed")),
+			}
+		}
+
+		basename := filekit.UploadFileName(rawName)
+		uf, err := api.saveOnePart(r.Context(), part, basename, tenantID, kind, allowedContentTypes)
+		if err != nil {
+			return nil, err
+		}
+		uploadedFiles = append(uploadedFiles, uf)
+	}
+}
+
+// saveOnePart computes the tenant-prefixed blob key from the
+// caller-supplied (already-sanitised) basename and writes the part
+// bytes to the bucket. Returns either a populated uploadedFile or an
+// error (wrapped in uploadHTTPError for the unprocessable-entity-bound
+// MIME mismatch).
+func (api *uploadsAPI) saveOnePart(ctx context.Context, part io.Reader, basename, tenantID string, kind uploadKind, allowedContentTypes []string) (uploadedFile, error) {
+	var blobKey string
+	switch kind {
+	case uploadKindRestore:
+		blobKey = blobkeys.BuildRestoreUploadKey(tenantID, basename)
+	default:
+		blobKey = blobkeys.BuildFileUploadKey(tenantID, basename)
+	}
+	mimeType, size, err := api.saveFile(ctx, blobKey, part, allowedContentTypes)
+	switch {
+	case errors.Is(err, mimekit.ErrInvalidContentType):
+		return uploadedFile{}, &uploadHTTPError{
+			status: http.StatusUnprocessableEntity,
+			err:    errxtrace.Wrap("unsupported content type", err),
+		}
+	case err != nil:
+		return uploadedFile{}, errxtrace.Wrap("unable to save file", err)
+	}
+	return uploadedFile{FilePath: blobKey, Basename: basename, MIMEType: mimeType, Size: size}, nil
 }
 
 func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Reader, allowedContentTypes []string) (mimeType string, size int64, err error) {
@@ -334,12 +419,12 @@ func Uploads(params Params) func(r chi.Router) {
 		fileMiddlewares := []func(http.Handler) http.Handler{
 			middleware.SetUploadOperation("file_upload"),
 			uploadLimiter,
-			api.uploadFiles(mimekit.AllContentTypes()...),
+			api.uploadFiles(uploadKindFile, mimekit.AllContentTypes()...),
 		}
 		r.With(fileMiddlewares...).Post("/file", api.handleFileUpload)
 
 		// Restore uploads - only allow XML files (no upload limiting for system operations)
-		r.With(api.uploadFiles(mimekit.XMLContentTypes()...)).Post("/restores", api.handleRestoreUpload)
+		r.With(api.uploadFiles(uploadKindRestore, mimekit.XMLContentTypes()...)).Post("/restores", api.handleRestoreUpload)
 	}
 }
 

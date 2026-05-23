@@ -92,19 +92,12 @@ func TestJWTMiddleware(t *testing.T) {
 			},
 		},
 		{
-			// #1778: an impersonation token issued before the token_type
-			// change lacks the claim but carries imp=true. The explicit
-			// imp allowance keeps such in-flight tokens working across a
-			// deploy.
-			name: "legacy impersonation token (imp=true, no token_type)",
+			// #1812 regression: RFC 7235 §2.1 makes auth-scheme names
+			// case-insensitive. Lower-case `bearer` must be accepted.
+			name: "lower-case bearer scheme is accepted",
 			setupRequest: func(req *http.Request) {
-				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-					"user_id": "user-123",
-					"imp":     true,
-					"exp":     time.Now().Add(24 * time.Hour).Unix(),
-				})
-				tokenString, _ := token.SignedString(jwtSecret)
-				req.Header.Set("Authorization", "Bearer "+tokenString)
+				token := createToken("user-123")
+				req.Header.Set("Authorization", "bearer "+token)
 			},
 			checkContext: func(t *testing.T, r *http.Request) {
 				c := qt.New(t)
@@ -114,8 +107,36 @@ func TestJWTMiddleware(t *testing.T) {
 			},
 		},
 		{
-			// Steady-state impersonation token: carries both imp=true and
-			// token_type=access. Accepted via the token_type check.
+			// #1812 regression: upper-case BEARER scheme is accepted.
+			name: "upper-case BEARER scheme is accepted",
+			setupRequest: func(req *http.Request) {
+				token := createToken("user-123")
+				req.Header.Set("Authorization", "BEARER "+token)
+			},
+			checkContext: func(t *testing.T, r *http.Request) {
+				c := qt.New(t)
+				user := appctx.UserFromContext(r.Context())
+				c.Assert(user, qt.IsNotNil)
+				c.Assert(user.ID, qt.Equals, "user-123")
+			},
+		},
+		{
+			// #1812 regression: mixed-case BeArEr scheme is accepted.
+			name: "mixed-case BeArEr scheme is accepted",
+			setupRequest: func(req *http.Request) {
+				token := createToken("user-123")
+				req.Header.Set("Authorization", "BeArEr "+token)
+			},
+			checkContext: func(t *testing.T, r *http.Request) {
+				c := qt.New(t)
+				user := appctx.UserFromContext(r.Context())
+				c.Assert(user, qt.IsNotNil)
+				c.Assert(user.ID, qt.Equals, "user-123")
+			},
+		},
+		{
+			// Steady-state impersonation token: carries imp=true and
+			// token_type=access (stamped by signImpersonationToken).
 			name: "impersonation token with imp=true and token_type=access",
 			setupRequest: func(req *http.Request) {
 				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -258,6 +279,63 @@ func TestJWTMiddleware(t *testing.T) {
 				})
 				tokenString, _ := token.SignedString(jwtSecret)
 				req.Header.Set("Authorization", "Bearer "+tokenString)
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			// #1791: the legacy imp=true rollout-window allowance was
+			// dropped. A token shaped like a pre-#1778 impersonation
+			// token (imp=true, no token_type) must now be rejected, like
+			// any other token missing token_type=access. Steady-state
+			// impersonation tokens stamp token_type=access and are
+			// covered by the success case above.
+			name: "legacy impersonation token without token_type is rejected",
+			setupRequest: func(req *http.Request) {
+				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+					"user_id": "user-123",
+					"imp":     true,
+					"exp":     time.Now().Add(24 * time.Hour).Unix(),
+				})
+				tokenString, _ := token.SignedString(jwtSecret)
+				req.Header.Set("Authorization", "Bearer "+tokenString)
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			// #1812 regression: a single space with no scheme/no token is
+			// rejected. extractTokenFromRequest must not admit `" "` as a
+			// valid Bearer header.
+			name: "single space authorization header is rejected",
+			setupRequest: func(req *http.Request) {
+				req.Header.Set("Authorization", " ")
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			// #1812 regression: a Basic scheme — a different RFC 7235 auth
+			// scheme — must be rejected even when it carries what looks
+			// like a JWT after the space.
+			name: "non-Bearer scheme is rejected",
+			setupRequest: func(req *http.Request) {
+				req.Header.Set("Authorization", "Basic some.jwt.like.thing")
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			// #1812 regression: a bare `Bearer` with no space and no token
+			// is rejected.
+			name: "Bearer with no token is rejected",
+			setupRequest: func(req *http.Request) {
+				req.Header.Set("Authorization", "Bearer")
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			// #1812 regression: `Bearer ` with a trailing space but no
+			// actual token is rejected.
+			name: "Bearer with trailing space and empty token is rejected",
+			setupRequest: func(req *http.Request) {
+				req.Header.Set("Authorization", "Bearer ")
 			},
 			expectedStatus: http.StatusUnauthorized,
 		},

@@ -89,34 +89,138 @@ func rejectTenantQueryParam(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
+// tenantScanMaxBodyBytes is the maximum non-multipart request-body size
+// that rejectTenantBody will accept and scan. It applies only to bodies
+// that are actually scanned (multipart/* is skipped entirely — see
+// rejectTenantBody); it is NOT a global request-body cap. The
+// implementation actually reads up to tenantScanMaxBodyBytes+1 bytes via
+// io.LimitReader so that a body of exactly this size still passes (it is
+// buffered in full) but a body one byte larger trips the cap and
+// short-circuits with 413 — the +1 is a sentinel read for overflow
+// detection, not part of the contract.
+//
+// The value is intentionally much larger than every per-handler text-body
+// cap in the codebase today (feedbackMaxRequestBodyBytes ≈ 53 KB;
+// createInviteMaxBodyBytes = 4 KB; PasswordResetRateLimitMiddleware =
+// 4 KB) so legitimate JSON / form payloads never trip it, while still
+// being small enough that an attacker cannot force gigabyte-scale
+// allocations per concurrent request.
+const tenantScanMaxBodyBytes = 1 * 1024 * 1024 // 1 MiB
+
 // rejectTenantBody checks the request body of mutating requests for
-// tenant_id fields. It reads and restores the body so downstream handlers
-// still see it. Returns true — having written a 4xx — when a violation (or
-// a body-read failure) was found; false when the body is clean or the
-// method is not body-bearing.
+// tenant-identifying fields. Behaviour, in order:
+//
+//  1. Method gate: only POST/PUT/PATCH bodies are scanned. Anything else
+//     passes through untouched (returns false).
+//
+//  2. Multipart skip: when Content-Type starts with "multipart/", the body
+//     is skipped entirely without being read. Multipart payloads are
+//     mostly binary file bytes that (a) can be gigabytes large and (b)
+//     can randomly contain the substrings this scan looks for, producing
+//     false-positive 403s. No handler in the codebase binds a tenant ID
+//     from a multipart field, and the header / query / non-multipart-body
+//     scans still catch the realistic injection paths.
+//
+//  3. Size cap: the body is read through io.LimitReader with a cap of
+//     tenantScanMaxBodyBytes+1. If the read length exceeds the cap, the
+//     middleware writes a 413 and short-circuits. io.LimitReader is used
+//     in preference to http.MaxBytesReader to keep response-writing under
+//     the middleware's sole control: MaxBytesReader writes to the
+//     ResponseWriter when the limit is exceeded, which would race the
+//     middleware's own http.Error call and risk a double-write. This is
+//     the same idiom PasswordResetRateLimitMiddleware uses in
+//     rate_limit_middleware.go for the same reason.
+//
+//  4. Substring scan: the read body is lowercased and checked against a
+//     small mixed set of quote-anchored and unanchored substrings. This
+//     is intentionally a cheap, case-insensitive scan rather than a JSON
+//     parser — it is belt-and-suspenders defense-in-depth, not a contract
+//     validator. The patterns matched are:
+//     - snake_case "tenant_id" — UNANCHORED on purpose so it catches
+//     form-encoded bodies such as "tenant_id=…", where the key is not
+//     wrapped in quotes. This can over-fire if a free-text value
+//     happens to contain the literal substring "tenant_id"; accepted
+//     as a known belt-and-suspenders limitation because no handler
+//     currently binds a "tenant_id" field anyway, so the cost of a
+//     spurious 403 is bounded;
+//     - the double-quoted form "\"tenant\"" — a JSON object key cannot
+//     legitimately read free text without those surrounding quotes,
+//     so the quote anchors make this match key-shaped occurrences
+//     only;
+//     - the single-quoted form "'tenant'" — pre-existing pattern that
+//     covers non-JSON formats (YAML / JS-embedded) and is left in
+//     place for back-compat. It can over-fire on free text that
+//     contains 'tenant' in single quotes; same accepted trade-off as
+//     the snake_case form;
+//     - the camelCase JSON-key forms "\"tenantId\"" / "\"tenantID\""
+//     (covered by the lowercased "\"tenantid\"" substring, quoted
+//     to avoid flagging the bare word "tenantid" inside free text).
+//     Only the double-quoted "\"tenantid\"" form is added — extending
+//     the single-quoted variant would introduce a new false-positive
+//     surface for description-style strings such as "...'tenantid'..."
+//     without adding any coverage against JSON, which is the format
+//     every current Inventario handler decodes. On a hit the middleware
+//     writes a 403.
+//
+//  5. Body restoration: the buffered bytes are written back to r.Body
+//     via io.NopCloser so downstream handlers can re-read.
+//
+// Returns true — having written a 4xx — when a violation, a body-read
+// failure, or an oversize-body event occurred; false when the body is
+// clean, the method is not body-bearing, or the content type is multipart.
 func rejectTenantBody(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodPost && r.Method != http.MethodPut && r.Method != http.MethodPatch {
 		return false
 	}
 
-	body, err := io.ReadAll(r.Body)
+	contentType := r.Header.Get("Content-Type")
+	if strings.HasPrefix(strings.ToLower(contentType), "multipart/") {
+		return false
+	}
+
+	// Bound the read so a malicious client cannot force unbounded
+	// allocation here. See tenantScanMaxBodyBytes and the doc comment
+	// above for the LimitReader-vs-MaxBytesReader rationale.
+	body, err := io.ReadAll(io.LimitReader(r.Body, tenantScanMaxBodyBytes+1))
+	_ = r.Body.Close() // mirrors PasswordResetRateLimitMiddleware; r.Body is replaced below
 	if err != nil {
 		slog.Error("Failed to read request body for security validation", "error", err)
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return true
 	}
-	// Restore body for downstream handlers.
-	r.Body = io.NopCloser(bytes.NewBuffer(body))
+	if int64(len(body)) > tenantScanMaxBodyBytes {
+		slog.Error("Security violation: request body exceeds tenant-scan size cap",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"content_type", contentType,
+			"content_length", r.ContentLength,
+			"user_agent", r.UserAgent(),
+			"remote_addr", r.RemoteAddr,
+		)
+		http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+		return true
+	}
+	// Restore body for downstream handlers. bytes.NewReader (read-only)
+	// matches PasswordResetRateLimitMiddleware's restoration pattern in
+	// rate_limit_middleware.go — the slice is never written to again
+	// here, so the immutable reader is more accurate.
+	r.Body = io.NopCloser(bytes.NewReader(body))
 
-	bodyLower := strings.ToLower(string(body))
+	// Convert []byte→string ONCE — the body can be up to
+	// tenantScanMaxBodyBytes (1 MiB) on every POST/PUT/PATCH and a second
+	// conversion in the violation-logging branch would double the
+	// per-request allocation cost on a hot path.
+	bodyStr := string(body)
+	bodyLower := strings.ToLower(bodyStr)
 	if !strings.Contains(bodyLower, "tenant_id") &&
 		!strings.Contains(bodyLower, "\"tenant\"") &&
-		!strings.Contains(bodyLower, "'tenant'") {
+		!strings.Contains(bodyLower, "'tenant'") &&
+		!strings.Contains(bodyLower, "\"tenantid\"") {
 		return false
 	}
 	slog.Error("Security violation: user-provided tenant ID in request body",
-		"content_type", r.Header.Get("Content-Type"),
-		"body_preview", truncateString(string(body), 200),
+		"content_type", contentType,
+		"body_preview", truncateString(bodyStr, 200),
 		"user_agent", r.UserAgent(),
 		"remote_addr", r.RemoteAddr,
 		"method", r.Method,

@@ -780,7 +780,7 @@ func attachLocationFile(ctx context.Context, set *registry.Set, uploader blobUpl
 }
 
 func attachFile(ctx context.Context, args attachArgs, linkedEntityType, linkedEntityID string) (string, error) {
-	storagePath, size, err := args.Uploader.upload(ctx, args.Fixture)
+	storagePath, size, err := args.Uploader.upload(ctx, args.Fixture, args.User.TenantID)
 	if err != nil {
 		return "", err
 	}
