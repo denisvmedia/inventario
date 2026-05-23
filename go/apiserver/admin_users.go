@@ -462,7 +462,11 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	// blipped.
 	cascadeErrMsg := api.applyBlockCascade(r, target.ID)
 	api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, forced)
-	api.writeUserEnvelope(w, r, http.StatusOK, saved)
+	// Reuse the targetIsAdmin lookup the --force guard already did
+	// instead of doing a second SystemAdminGrantRegistry.Exists call
+	// from inside writeUserEnvelope — a successful block has just
+	// committed, so the admin flag cannot have flipped in between.
+	api.writeUserEnvelopeKnownAdmin(w, r, http.StatusOK, saved, targetIsAdmin)
 }
 
 // operatorIDFromContext returns the ID of the user who actually
@@ -748,17 +752,36 @@ func (api *adminUsersAPI) logUnblockOutcome(
 // failure renders the attribute as false rather than 500-ing the whole
 // response (the rest of the envelope is the load-bearing content; the
 // flag is an FE hint for the "cannot impersonate" disabled-button copy).
+//
+// For call sites that ALREADY resolved the admin flag earlier in the
+// request (e.g. blockUser's admin-on-admin --force guard), call
+// writeUserEnvelopeKnownAdmin to thread the boolean through and avoid
+// a duplicate registry round-trip. writeUserEnvelope itself runs the
+// lookup for callers that don't already have it.
 func (api *adminUsersAPI) writeUserEnvelope(w http.ResponseWriter, r *http.Request, status int, u *models.User) {
-	isAdmin := false
-	if api.factorySet != nil && api.factorySet.SystemAdminGrantRegistry != nil {
-		ok, err := api.factorySet.SystemAdminGrantRegistry.Exists(r.Context(), u.ID)
-		if err != nil {
-			slog.Warn("admin user envelope: grant lookup failed",
-				"user_id", u.ID, "error", err)
-		} else {
-			isAdmin = ok
-		}
+	api.writeUserEnvelopeKnownAdmin(w, r, status, u, api.lookupIsSystemAdmin(r.Context(), u.ID))
+}
+
+// lookupIsSystemAdmin runs the grant-registry Exists query, treating
+// any error as "not admin" with a Warn log — same best-effort posture
+// as the inlined version that used to live in writeUserEnvelope.
+func (api *adminUsersAPI) lookupIsSystemAdmin(ctx context.Context, userID string) bool {
+	if api.factorySet == nil || api.factorySet.SystemAdminGrantRegistry == nil {
+		return false
 	}
+	ok, err := api.factorySet.SystemAdminGrantRegistry.Exists(ctx, userID)
+	if err != nil {
+		slog.Warn("admin user envelope: grant lookup failed",
+			"user_id", userID, "error", err)
+		return false
+	}
+	return ok
+}
+
+// writeUserEnvelopeKnownAdmin is the variant for call sites that have
+// already resolved the user's admin flag in the same request. Skips the
+// grant-registry round-trip writeUserEnvelope would otherwise perform.
+func (api *adminUsersAPI) writeUserEnvelopeKnownAdmin(w http.ResponseWriter, r *http.Request, status int, u *models.User, isAdmin bool) {
 	envelope := AdminUserEnvelope{
 		Data: AdminUserResource{
 			Type: "users",

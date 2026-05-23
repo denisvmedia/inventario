@@ -20,8 +20,12 @@ var _ registry.SystemAdminGrantRegistry = (*SystemAdminGrantRegistry)(nil)
 
 // SystemAdminGrantRegistry is the postgres-backed system-admin grant
 // store (#1784). The table is NOT RLS-enabled — system-admin is a
-// platform privilege orthogonal to tenants. All operations use
-// NonRLSRepository.
+// platform privilege orthogonal to tenants. Mutating operations
+// (Grant / RevokeAtomic / List) route through NonRLSRepository so the
+// advisory-lock + transaction pattern stays consistent with the rest
+// of the admin write path; Exists is a single read on the unique
+// (user_id) index and runs against `r.dbx` directly — no transaction
+// needed, and the hot middleware path stays a single round-trip.
 //
 // Mutating operations take pg_advisory_xact_lock('system_admin_mutations')
 // — the SAME lock key the legacy users.is_system_admin path used. This
@@ -134,10 +138,23 @@ func (r *SystemAdminGrantRegistry) Grant(ctx context.Context, userID string, gra
 			 ON CONFLICT (user_id) DO NOTHING`,
 			r.tableNames.SystemAdminGrants(),
 		)
-		if _, execErr := tx.ExecContext(ctx, insertQuery,
+		res, execErr := tx.ExecContext(ctx, insertQuery,
 			uuid.New().String(), uuid.New().String(), userID, grantedBy,
-		); execErr != nil {
+		)
+		if execErr != nil {
 			return errxtrace.Wrap("failed to insert system_admin_grants row", execErr)
+		}
+		// When the INSERT no-ops on ON CONFLICT, RowsAffected returns 0.
+		// That can only happen via the out-of-band path (the probe already
+		// would have set hadGrant=true otherwise), so flip hadGrant=true
+		// to keep the return contract consistent: at commit time the row
+		// exists either way, and a caller branching on hadGrant must not
+		// see it as "fresh grant" when a concurrent INSERT actually wrote
+		// the row. RowsAffected is informational on the postgres driver;
+		// if it ever returned an error we'd still fall back to false,
+		// which preserves the legacy behavior — no regression.
+		if affected, raErr := res.RowsAffected(); raErr == nil && affected == 0 {
+			hadGrant = true
 		}
 		return nil
 	})
