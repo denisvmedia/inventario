@@ -46,19 +46,19 @@ func TestCompareSchemaVersion(t *testing.T) {
 	}{
 		{
 			name:      "in sync — passes silently",
-			dbVersion: 1779600000,
-			embedMax:  1779600000,
+			dbVersion: 1779553010,
+			embedMax:  1779553010,
 		},
 		{
 			name:      "db behind binary — the #1655 footprint",
 			dbVersion: 1779200000,
-			embedMax:  1779600000,
+			embedMax:  1779553010,
 			wantErr:   ErrSchemaLagsBinary,
 		},
 		{
 			name:      "db ahead of binary — operator rolled the binary back, warn only",
-			dbVersion: 1779700000,
-			embedMax:  1779600000,
+			dbVersion: 1779553020,
+			embedMax:  1779553010,
 		},
 		{
 			name:      "both zero — fresh dev DB or empty fixture, no error",
@@ -68,7 +68,7 @@ func TestCompareSchemaVersion(t *testing.T) {
 		{
 			name:      "fresh DB against real binary — db lags",
 			dbVersion: 0,
-			embedMax:  1779600000,
+			embedMax:  1779553010,
 			wantErr:   ErrSchemaLagsBinary,
 		},
 	}

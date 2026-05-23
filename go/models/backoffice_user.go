@@ -32,9 +32,12 @@ import (
 // — direct INSERTs that bypass the lower-casing would let duplicates land
 // and the unique index would NOT catch them.
 //
-// MFAEnforced defaults to true and is reserved for Phase 4 wiring; the
-// column exists now so the schema is stable when MFA enforcement lands.
-// Phase 1 readers should treat it as data only.
+// MFAEnforced defaults to false in Phase 2 (the schema default and the
+// CLI bootstrap both set false) so the data state matches reality: the
+// MFA challenge flow lands in Phase 4. The Phase-2 login handler returns
+// 501 when MFAEnforced=true so any row manually flipped to true fails
+// closed instead of silently bypassing MFA. Phase 4 will flip both
+// defaults back to true at the same commit that wires the enforcement.
 //
 // PasswordHash is bcrypt at DefaultCost — matching models.User so the
 // hash format is identical and the CLI bootstrap can reuse the standard
@@ -61,9 +64,14 @@ type BackofficeUser struct {
 	//migrator:schema:field name="is_active" type="BOOLEAN" not_null="true" default="true"
 	IsActive bool `json:"is_active" db:"is_active"`
 	// MFAEnforced is reserved for Phase 4 wiring (issue #1785). Defaults
-	// to true at the schema level so freshly bootstrapped back-office
-	// users are MFA-mandatory once the enforcement code lands.
-	//migrator:schema:field name="mfa_enforced" type="BOOLEAN" not_null="true" default="true"
+	// to false in Phase 2 because the actual challenge flow is not yet
+	// implemented — leaving the schema default at true would mean every
+	// bootstrapped operator has `mfa_enforced = true` in the DB but ZERO
+	// MFA in reality (the login handler returns 501 on this branch until
+	// Phase 4 wires the real challenge). Phase 4 will flip the default
+	// back to true at the same commit that wires the enforcement code, so
+	// the security promise becomes real.
+	//migrator:schema:field name="mfa_enforced" type="BOOLEAN" not_null="true" default="false"
 	MFAEnforced bool `json:"mfa_enforced" db:"mfa_enforced"`
 	//migrator:schema:field name="last_login_at" type="TIMESTAMP"
 	LastLoginAt *time.Time `json:"last_login_at" db:"last_login_at" userinput:"false"`

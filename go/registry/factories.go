@@ -175,8 +175,20 @@ type FactorySet struct {
 	// not user-aware data), so the bootstrap CLI accesses them directly
 	// via factorySet.BackofficeUserRegistry. Phase 2 (login flow) and
 	// Phase 3 (admin surface) will add HTTP-side wiring on top.
-	BackofficeUserRegistry   BackofficeUserRegistry
-	SystemAdminGrantRegistry SystemAdminGrantRegistry // Platform-admin grant store (#1784); not tenant-scoped, not user-aware
+	BackofficeUserRegistry BackofficeUserRegistry
+
+	// BackofficeRefreshTokenRegistry persists long-lived refresh tokens
+	// for the back-office auth plane (issue #1785, Phase 2). Lives on
+	// FactorySet only for the same reason as BackofficeUserRegistry —
+	// back-office identity infra is cross-cutting, not user-aware. The
+	// HTTP login/refresh/logout handlers (Phase 2) reach in via
+	// factorySet.BackofficeRefreshTokenRegistry.
+	BackofficeRefreshTokenRegistry BackofficeRefreshTokenRegistry
+
+	// SystemAdminGrantRegistry holds platform-admin grants (issue #1784).
+	// Lives on FactorySet only — not tenant-scoped, not user-aware
+	// (same posture as AuditLogRegistry).
+	SystemAdminGrantRegistry SystemAdminGrantRegistry
 }
 
 // Ping checks readiness of the backing registry dependency (e.g. database).

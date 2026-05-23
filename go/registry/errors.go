@@ -135,4 +135,13 @@ var (
 	// catches this on the happy path; the registry-level check is a
 	// defense-in-depth guard for callers that skip model validation.
 	ErrInvalidBackofficeRole = errx.NewSentinel("invalid backoffice role")
+
+	// ErrBackofficeRefreshTokenNotFound is returned by
+	// BackofficeRefreshTokenRegistry lookups when no row matches the
+	// supplied id / hash. Distinct from ErrNotFound so the back-office
+	// refresh handler can render a back-office-specific message and so
+	// callers branching on the sentinel never confuse a tenant-side
+	// refresh-token miss with a back-office one. Wraps ErrNotFound so
+	// generic NOT FOUND handlers still match.
+	ErrBackofficeRefreshTokenNotFound = errx.NewSentinel("backoffice refresh token not found", ErrNotFound)
 )

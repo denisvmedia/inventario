@@ -24,7 +24,8 @@ import (
 // HMAC-signed URLs (SignedURLMiddleware), not JWTs.
 //
 // The Bearer auth-scheme name is matched case-insensitively per RFC 7235 §2.1
-// (delegated to parseBearerToken).
+// (delegated to parseBearerToken — shared with the back-office middleware so
+// both planes accept the same wire shape).
 func extractTokenFromRequest(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
@@ -87,6 +88,20 @@ func validateJWTToken(ctx context.Context, tokenString string, jwtSecret []byte,
 	tokenType, _ := claims["token_type"].(string)
 	if tokenType != accessTokenType {
 		return nil, fmt.Errorf("invalid token type")
+	}
+
+	// Cross-plane defensive guard (#1785, Phase 2): a back-office
+	// access token MUST NEVER satisfy the tenant JWT middleware, even
+	// though it is signed with the same secret. Two independent rejects
+	// — `aud == "backoffice"` and `admin_id` presence — so a token
+	// where one signal is somehow misset is still rejected by the
+	// other. Tenant tokens never carry admin_id; back-office tokens
+	// always carry aud="backoffice".
+	if aud, _ := claims["aud"].(string); aud == backofficeTokenAudience {
+		return nil, fmt.Errorf("invalid token audience")
+	}
+	if adminID, _ := claims["admin_id"].(string); adminID != "" {
+		return nil, fmt.Errorf("token carries backoffice admin_id claim")
 	}
 
 	// Check blacklist when a blacklister is configured.

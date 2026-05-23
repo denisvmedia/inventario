@@ -86,7 +86,7 @@ services:
   # running an OLD binary whose embedded migrations don't include anything
   # the app binary added since the previous build. See issue #1655 for the
   # incident (location/invite 500s caused by a stale migrate image missing
-  # migrations 1779300000–1779600000).
+  # migrations 1779300000–1779553010).
   inventario-bootstrap:
     image: inventario:dev
     restart: "no"

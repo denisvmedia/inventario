@@ -170,7 +170,14 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 		PasswordHash: string(hash),
 		Role:         role,
 		IsActive:     true,
-		MFAEnforced:  true,
+		// MFAEnforced defaults to false in Phase 2: the challenge flow
+		// lands in Phase 4. Setting true here would put every
+		// bootstrapped operator into a state where the login handler
+		// returns 501 (fail-closed by design) — but until Phase 4 wires
+		// the real flow, that just means "this account is unusable" —
+		// not "this account is MFA-protected". Phase 4 flips both this
+		// and the schema default back to true.
+		MFAEnforced: false,
 	}
 
 	// Run the model's full validation (length caps, EmailPattern match)

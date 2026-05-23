@@ -377,6 +377,24 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			ImpersonationStore:       impersonationStore,
 		}))
 
+		// Back-office auth plane (issue #1785, Phase 2). Completely
+		// isolated from /auth/* — separate audience claim, separate
+		// `admin_id` identifier, separate cookie name + path, separate
+		// middleware. The same JWT secret is intentional: rotating the
+		// secret invalidates everything, and the `aud` claim is the
+		// real boundary. Mounted at /api/v1/backoffice/auth so the
+		// cookie path `/api/v1/backoffice` covers every back-office
+		// endpoint a future phase will add (Phase 3 will mount the
+		// admin surface under the same prefix).
+		r.Route("/backoffice/auth", BackofficeAuth(BackofficeAuthParams{
+			BackofficeUserRegistry:         params.FactorySet.BackofficeUserRegistry,
+			BackofficeRefreshTokenRegistry: params.FactorySet.BackofficeRefreshTokenRegistry,
+			BlacklistService:               blacklist,
+			RateLimiter:                    rateLimiter,
+			AuditService:                   auditSvc,
+			JWTSecret:                      params.JWTSecret,
+		}))
+
 		// Unauthenticated public routes: apply the global per-IP rate limit as a
 		// defence-in-depth layer on top of their dedicated rate limiters.
 		r.Group(func(r chi.Router) {

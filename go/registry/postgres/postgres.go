@@ -70,6 +70,13 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	// not part of the per-request Set since back-office identities are
 	// cross-cutting infra, not user-aware data.
 	fs.BackofficeUserRegistry = NewBackofficeUserRegistry(dbx)
+	// Back-office refresh tokens (issue #1785, Phase 2). No RLS on the
+	// underlying table — the login flow runs before any DB session
+	// context is set, so the registry uses a plain (non-RLS) repository
+	// rather than the service-mode pattern the tenant-side
+	// RefreshTokenRegistry uses to satisfy the RLS background-worker
+	// policy.
+	fs.BackofficeRefreshTokenRegistry = NewBackofficeRefreshTokenRegistry(dbx)
 	fs.PingFn = dbx.PingContext
 
 	return fs
