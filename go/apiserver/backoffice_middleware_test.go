@@ -55,7 +55,7 @@ func newRequireBackofficeAuthSetup(t *testing.T) (func(http.Handler) http.Handle
 	t.Helper()
 	c := qt.New(t)
 	bo := memory.NewBackofficeUserRegistry()
-	hash, err := bcrypt.GenerateFromPassword([]byte("ignored"), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte("ignored"), bcrypt.MinCost)
 	c.Assert(err, qt.IsNil)
 	created, err := bo.Create(context.Background(), models.BackofficeUser{
 		Email:        "ops@example.com",

@@ -71,7 +71,7 @@ func seedBackofficeUser(t *testing.T, bo *memory.BackofficeUserRegistry, email, 
 	t.Helper()
 	c := qt.New(t)
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	c.Assert(err, qt.IsNil)
 
 	u := models.BackofficeUser{

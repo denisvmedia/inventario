@@ -42,7 +42,7 @@ func WithBackofficeAdmin(t *testing.T, params apiserver.Params) (*models.Backoff
 	t.Helper()
 	c := qt.New(t)
 
-	hash, err := bcrypt.GenerateFromPassword([]byte("UnusedTestPassword1!"), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte("UnusedTestPassword1!"), bcrypt.MinCost)
 	c.Assert(err, qt.IsNil)
 
 	u := models.BackofficeUser{
