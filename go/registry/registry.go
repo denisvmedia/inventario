@@ -1629,10 +1629,12 @@ type UserRegistry interface {
 // table. Production write paths are the `inventario admin` CLI
 // (grant-system-admin / revoke-system-admin) only. The lone exception
 // is the debug seed flow at POST /api/v1/seed, which can mint a grant
-// via ensureSystemAdminUser — but that path is gated on
-// INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE (off by default, never set in
-// production deployments; the e2e harness uses it, nothing else does).
-// The same gate also blocks the seed handler itself.
+// via ensureSystemAdminUser — but only the system-admin fixture/grant
+// path within that handler is gated on INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE
+// (off by default, never set in production deployments; the e2e harness
+// uses it, nothing else does). The seed endpoint itself is mounted
+// unconditionally; the env var controls only whether a sysadmin grant
+// is created during seeding.
 //
 // The registry is NOT tenant-scoped: system-admin is a platform privilege
 // orthogonal to tenants. Same posture as AuditLogRegistry.
