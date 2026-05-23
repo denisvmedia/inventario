@@ -299,6 +299,22 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 		sessionCount = 0
 	}
 
+	// Resolve the is_system_admin attribute via the dedicated grant
+	// registry (#1784). A lookup failure degrades to false rather than
+	// 500-ing the whole user-detail response — the flag is an FE hint
+	// for the "cannot impersonate" disabled-button copy, not the
+	// authoritative gate (RequireSystemAdmin owns that).
+	isAdmin := false
+	if api.factorySet.SystemAdminGrantRegistry != nil {
+		ok, err := api.factorySet.SystemAdminGrantRegistry.Exists(r.Context(), user.ID)
+		if err != nil {
+			slog.Warn("admin getUser: grant lookup failed",
+				"user_id", user.ID, "error", err)
+		} else {
+			isAdmin = ok
+		}
+	}
+
 	// Audit AFTER render — a JSON-encoding / writer failure should
 	// land in the audit trail as Success=false rather than the
 	// previous "say success then 500" pattern. The session-count
@@ -308,6 +324,7 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 		User:               user,
 		Memberships:        mems,
 		ActiveSessionCount: sessionCount,
+		IsSystemAdmin:      isAdmin,
 	}))
 	api.auditGetUser(r, userID, user.TenantID, renderErr)
 	if renderErr != nil {
@@ -399,11 +416,21 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 		// peer admin is a 200 no-op rather than a surprising 422.
 		cascadeErrMsg := api.applyBlockCascade(r, target.ID)
 		api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, false)
-		api.writeUserEnvelope(w, http.StatusOK, target)
+		api.writeUserEnvelope(w, r, http.StatusOK, target)
 		return
 	}
 
-	if target.IsSystemAdmin && !req.Force {
+	// Admin-on-admin block requires explicit --force. Resolve via the
+	// dedicated grant registry (#1784); the privilege is no longer a
+	// column on the users row.
+	targetIsAdmin, grantErr := api.factorySet.SystemAdminGrantRegistry.Exists(r.Context(), target.ID)
+	if grantErr != nil {
+		slog.Error("admin block: grant lookup failed", "user_id", target.ID, "error", grantErr)
+		api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, false, grantErr.Error(), false)
+		_ = internalServerError(w, r, grantErr)
+		return
+	}
+	if targetIsAdmin && !req.Force {
 		api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, false, ErrAdminCannotBlockAdminWithoutForce.Error(), false)
 		_ = renderEntityError(w, r, ErrAdminCannotBlockAdminWithoutForce)
 		return
@@ -414,7 +441,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	// was active above). Surface it on the audit row so post-hoc
 	// analysis can pivot on "operator blocked a live peer admin"
 	// without re-parsing the breadcrumb JSON.
-	forced := target.IsSystemAdmin && req.Force
+	forced := targetIsAdmin && req.Force
 
 	updated := *target
 	updated.IsActive = false
@@ -435,7 +462,11 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	// blipped.
 	cascadeErrMsg := api.applyBlockCascade(r, target.ID)
 	api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, forced)
-	api.writeUserEnvelope(w, http.StatusOK, saved)
+	// Reuse the targetIsAdmin lookup the --force guard already did
+	// instead of doing a second SystemAdminGrantRegistry.Exists call
+	// from inside writeUserEnvelope — a successful block has just
+	// committed, so the admin flag cannot have flipped in between.
+	api.writeUserEnvelopeKnownAdmin(w, r, http.StatusOK, saved, targetIsAdmin)
 }
 
 // operatorIDFromContext returns the ID of the user who actually
@@ -507,7 +538,7 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 		// 200 — the alternative would be a 422 that the FE doesn't
 		// actually need to branch on.
 		api.logUnblockOutcome(r, actor, target.ID, target.TenantID, req, true, "")
-		api.writeUserEnvelope(w, http.StatusOK, target)
+		api.writeUserEnvelope(w, r, http.StatusOK, target)
 		return
 	}
 
@@ -522,7 +553,7 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.logUnblockOutcome(r, actor, target.ID, target.TenantID, req, true, "")
-	api.writeUserEnvelope(w, http.StatusOK, saved)
+	api.writeUserEnvelope(w, r, http.StatusOK, saved)
 }
 
 // decodeBlockRequest parses + validates the POST /block body. Writes
@@ -715,8 +746,42 @@ func (api *adminUsersAPI) logUnblockOutcome(
 }
 
 // writeUserEnvelope encodes a *models.User into the AdminUserEnvelope
-// JSON:API shape and writes it on the response.
-func (api *adminUsersAPI) writeUserEnvelope(w http.ResponseWriter, status int, u *models.User) {
+// JSON:API shape and writes it on the response. The is_system_admin
+// attribute is resolved from the dedicated grant registry (#1784) — it
+// is no longer a column on the users row. A best-effort lookup
+// failure renders the attribute as false rather than 500-ing the whole
+// response (the rest of the envelope is the load-bearing content; the
+// flag is an FE hint for the "cannot impersonate" disabled-button copy).
+//
+// For call sites that ALREADY resolved the admin flag earlier in the
+// request (e.g. blockUser's admin-on-admin --force guard), call
+// writeUserEnvelopeKnownAdmin to thread the boolean through and avoid
+// a duplicate registry round-trip. writeUserEnvelope itself runs the
+// lookup for callers that don't already have it.
+func (api *adminUsersAPI) writeUserEnvelope(w http.ResponseWriter, r *http.Request, status int, u *models.User) {
+	api.writeUserEnvelopeKnownAdmin(w, r, status, u, api.lookupIsSystemAdmin(r.Context(), u.ID))
+}
+
+// lookupIsSystemAdmin runs the grant-registry Exists query, treating
+// any error as "not admin" with a Warn log — same best-effort posture
+// as the inlined version that used to live in writeUserEnvelope.
+func (api *adminUsersAPI) lookupIsSystemAdmin(ctx context.Context, userID string) bool {
+	if api.factorySet == nil || api.factorySet.SystemAdminGrantRegistry == nil {
+		return false
+	}
+	ok, err := api.factorySet.SystemAdminGrantRegistry.Exists(ctx, userID)
+	if err != nil {
+		slog.Warn("admin user envelope: grant lookup failed",
+			"user_id", userID, "error", err)
+		return false
+	}
+	return ok
+}
+
+// writeUserEnvelopeKnownAdmin is the variant for call sites that have
+// already resolved the user's admin flag in the same request. Skips the
+// grant-registry round-trip writeUserEnvelope would otherwise perform.
+func (api *adminUsersAPI) writeUserEnvelopeKnownAdmin(w http.ResponseWriter, r *http.Request, status int, u *models.User, isAdmin bool) {
 	envelope := AdminUserEnvelope{
 		Data: AdminUserResource{
 			Type: "users",
@@ -726,7 +791,7 @@ func (api *adminUsersAPI) writeUserEnvelope(w http.ResponseWriter, status int, u
 				Email:         u.Email,
 				Name:          u.Name,
 				IsActive:      u.IsActive,
-				IsSystemAdmin: u.IsSystemAdmin,
+				IsSystemAdmin: isAdmin,
 				TenantID:      u.TenantID,
 			},
 		},

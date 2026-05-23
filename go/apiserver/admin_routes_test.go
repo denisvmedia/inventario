@@ -14,13 +14,13 @@ import (
 	"github.com/denisvmedia/inventario/models"
 )
 
-// promoteToSystemAdmin flips IsSystemAdmin on the seeded test user so
-// the admin-gate test can compare the gated vs ungated paths without
-// having to wire a second user fixture.
+// promoteToSystemAdmin grants the seeded test user system-admin via
+// the system_admin_grants registry (#1784) so the admin-gate test can
+// compare the gated vs ungated paths without having to wire a second
+// user fixture. Idempotent.
 func promoteToSystemAdmin(c *qt.C, params apiserver.Params, user *models.User) {
 	c.Helper()
-	user.IsSystemAdmin = true
-	must.Must(params.FactorySet.UserRegistry.Update(context.Background(), *user))
+	must.Must(params.FactorySet.SystemAdminGrantRegistry.Grant(context.Background(), user.ID, nil))
 }
 
 func TestAdminPing_DeniesNonAdmin(t *testing.T) {

@@ -417,18 +417,23 @@ func ensureOrphanUser(ctx context.Context, registrySet *registry.Set, tenant *mo
 }
 
 // ensureSystemAdminUser idempotently provisions `sysadmin@test-org.com`,
-// a platform system administrator (IsSystemAdmin = true) the
-// admin-section e2e suite (#1758) authenticates as. It mirrors the
-// production `inventario admin grant-system-admin` CLI bootstrap, but
-// runs inside the seed so the e2e harness (whose local stack is
-// memory-mode — the admin CLI rejects memory:// DSNs) gets the fixture.
-// The caller gates this on opts.SeedSystemAdmin so an unauthenticated
-// /api/v1/seed call cannot mint a cross-tenant admin in production.
+// a platform system administrator the admin-section e2e suite (#1758)
+// authenticates as. It mirrors the production `inventario admin
+// grant-system-admin` CLI bootstrap, but runs inside the seed so the
+// e2e harness (whose local stack is memory-mode — the admin CLI
+// rejects memory:// DSNs) gets the fixture. The caller gates this on
+// opts.SeedSystemAdmin so an unauthenticated /api/v1/seed call cannot
+// mint a cross-tenant admin in production.
 //
 // The helper is fully idempotent and self-healing: it runs before the
-// location-count gate, and on a re-seed it reconciles a drifted fixture
-// (deactivated, or stripped of the flag) back to the expected state
-// rather than no-op'ing.
+// location-count gate, and on a re-seed it reconciles a drifted
+// fixture (deactivated user, or missing grant row) back to the
+// expected state rather than no-op'ing.
+//
+// As of #1784 the system-admin privilege lives in
+// `system_admin_grants`, not on the users row — so the reconciliation
+// is split into (a) ensure user is_active and (b) ensure a grant row
+// exists.
 //
 // The system admin also gets a USD-valued default group so login lands
 // cleanly (no /no-group race) and so it never collides with the CZK/EUR
@@ -450,10 +455,9 @@ func ensureSystemAdminUser(ctx context.Context, registrySet *registry.Set, tenan
 			TenantAwareEntityID: models.TenantAwareEntityID{
 				TenantID: tenant.ID,
 			},
-			Email:         sysadminEmail,
-			Name:          "Test System Admin",
-			IsActive:      true,
-			IsSystemAdmin: true,
+			Email:    sysadminEmail,
+			Name:     "Test System Admin",
+			IsActive: true,
 		}
 		if err := newUser.SetPassword("TestPassword123"); err != nil {
 			return err
@@ -463,16 +467,30 @@ func ensureSystemAdminUser(ctx context.Context, registrySet *registry.Set, tenan
 			return errxtrace.Wrap("failed to create system-admin test user", err)
 		}
 		sysadmin = created
-	case !sysadmin.IsActive || !sysadmin.IsSystemAdmin:
-		// Reconcile drift: a prior run (or a manual edit) may have left
-		// the fixture deactivated or without the flag.
+	case !sysadmin.IsActive:
+		// Reconcile drift: a prior run (or a manual edit) may have
+		// left the fixture deactivated.
 		sysadmin.IsActive = true
-		sysadmin.IsSystemAdmin = true
 		updated, err := registrySet.UserRegistry.Update(ctx, *sysadmin)
 		if err != nil {
 			return errxtrace.Wrap("failed to reconcile system-admin test user", err)
 		}
 		sysadmin = updated
+	}
+
+	// Idempotent — already-granted users return hadGrant=true with no
+	// row mutation. A nil registry here is a miswired FactorySet that
+	// would otherwise produce a non-admin sysadmin fixture and break
+	// every admin-section e2e expectation downstream; fail loudly
+	// instead of silently no-op'ing.
+	if registrySet.SystemAdminGrantRegistry == nil {
+		return errxtrace.Wrap(
+			"system-admin seed fixture requires SystemAdminGrantRegistry; FactorySet is miswired",
+			registry.ErrInvalidConfig,
+		)
+	}
+	if _, err := registrySet.SystemAdminGrantRegistry.Grant(ctx, sysadmin.ID, nil); err != nil {
+		return errxtrace.Wrap("failed to grant system-admin to seeded fixture", err)
 	}
 
 	if _, err := findOrCreateDefaultGroup(ctx, registrySet, sysadmin, models.Currency("USD")); err != nil {
@@ -491,16 +509,7 @@ func ensureBlockTargetUser(ctx context.Context, registrySet *registry.Set, tenan
 	const blockTargetEmail = "blocktarget@test-org.com"
 	for _, user := range users {
 		if user.TenantID == tenant.ID && user.Email == blockTargetEmail {
-			// Reconcile drift: force the fixture back to a plain,
-			// active account so the next run starts from a clean state.
-			if !user.IsActive || user.IsSystemAdmin {
-				user.IsActive = true
-				user.IsSystemAdmin = false
-				if _, err := registrySet.UserRegistry.Update(ctx, *user); err != nil {
-					return errxtrace.Wrap("failed to reconcile block-target test user", err)
-				}
-			}
-			return nil
+			return reconcileBlockTargetDrift(ctx, registrySet, user)
 		}
 	}
 
@@ -517,6 +526,35 @@ func ensureBlockTargetUser(ctx context.Context, registrySet *registry.Set, tenan
 	}
 	if _, err := registrySet.UserRegistry.Create(ctx, target); err != nil {
 		return errxtrace.Wrap("failed to create block-target test user", err)
+	}
+	return nil
+}
+
+// reconcileBlockTargetDrift forces an already-seeded block-target
+// fixture back to a clean state: active, no system-admin grant. A
+// failed block/unblock run can leave is_active=false, and a drifted
+// admin tooling run can have granted system-admin — the next seed
+// should reset both. Extracted from ensureBlockTargetUser so the
+// caller stays under the nestif complexity budget.
+func reconcileBlockTargetDrift(ctx context.Context, registrySet *registry.Set, user *models.User) error {
+	if !user.IsActive {
+		user.IsActive = true
+		if _, err := registrySet.UserRegistry.Update(ctx, *user); err != nil {
+			return errxtrace.Wrap("failed to reconcile block-target test user", err)
+		}
+	}
+	// A nil registry here would leave a drifted block-target fixture
+	// silently holding a system-admin grant (if a prior run granted it)
+	// — the e2e block/unblock spec then exercises a system admin rather
+	// than the plain user it expects. Fail loud on the miswiring instead.
+	if registrySet.SystemAdminGrantRegistry == nil {
+		return errxtrace.Wrap(
+			"block-target reconcile requires SystemAdminGrantRegistry; FactorySet is miswired",
+			registry.ErrInvalidConfig,
+		)
+	}
+	if _, err := registrySet.SystemAdminGrantRegistry.RevokeAtomic(ctx, user.ID, true); err != nil {
+		return errxtrace.Wrap("failed to revoke any drifted system-admin grant from block-target", err)
 	}
 	return nil
 }

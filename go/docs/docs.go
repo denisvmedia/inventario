@@ -12767,7 +12767,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "is_system_admin": {
-                    "description": "IsSystemAdmin grants platform-wide admin access (#1745).",
+                    "description": "IsSystemAdmin is a transient wire-only field reflecting the user's\nentry in ` + "`" + `system_admin_grants` + "`" + ` (#1784). It is NEVER persisted on the\nusers row — the privilege lives in the grant table. Handlers that\nemit a /auth/me-style payload (the authenticated user reading their\nown identity) populate it from ` + "`" + `SystemAdminGrantRegistry.Exists` + "`" + `\nbefore encoding; the FE uses it as an advisory hint to gate sidebar\nand route visibility (the backend re-checks via ` + "`" + `RequireSystemAdmin` + "`" + `\non every /admin/* request).\n\nPersistence safety: there is no ` + "`" + `//migrator:schema:field` + "`" + ` annotation\nso the migration generator never re-adds the column, and the ` + "`" + `db:\"-\"` + "`" + `\ntag tells sqlx to skip the field in both SELECT and INSERT/UPDATE,\nso this stays purely in-memory. A caller that smuggles ` + "`" + `true` + "`" + ` here\ngains nothing — Go authorization paths never read the field; they\nall consult the grant registry directly.",
                     "type": "boolean"
                 },
                 "last_login_at": {

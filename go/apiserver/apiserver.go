@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -48,6 +49,20 @@ var defaultAPIMiddlewares = []func(http.Handler) http.Handler{
 	defaultRequestContentType("application/vnd.api+json"),
 	middleware.AllowContentType("application/json", "application/vnd.api+json"),
 }
+
+// renderDecodeOnce guards the package-global `render.Decode` swap so it
+// happens at most once across every APIServer() call. The previous
+// per-call assignment was racy under `go test -race`: two parallel tests
+// calling APIServer() concurrently both wrote to the same package
+// variable, and the race detector flagged whichever pair of tests
+// happened to be running when the second write landed.
+//
+// sync.Once gives the lazy "first-APIServer-call wins, the rest are
+// no-ops" semantics without an init() side-effect at import time —
+// packages that import apiserver but never call APIServer() (e.g. some
+// table-driven tests of helper functions) leave render.Decode at its
+// upstream default.
+var renderDecodeOnce sync.Once
 
 // createUserAwareMiddlewares creates middleware stack with user authentication and RLS context.
 // For non-group-scoped routes. Group-scoped routes need GroupSlugResolverMiddleware
@@ -214,7 +229,9 @@ func (p *Params) Validate() error {
 }
 
 func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
-	render.Decode = JSONAPIAwareDecoder
+	renderDecodeOnce.Do(func() {
+		render.Decode = JSONAPIAwareDecoder
+	})
 
 	r := chi.NewRouter()
 	// CORS middleware — strict and explicit origin-based policy.
@@ -323,19 +340,20 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			panic("init MFA service: " + err.Error())
 		}
 		r.Route("/auth", Auth(AuthParams{
-			UserRegistry:            params.FactorySet.UserRegistry,
-			RefreshTokenRegistry:    params.FactorySet.RefreshTokenRegistry,
-			GroupMembershipRegistry: params.FactorySet.GroupMembershipRegistry,
-			LoginEventRegistry:      params.FactorySet.LoginEventRegistry,
-			MFARegistry:             params.FactorySet.UserMFASecretRegistry,
-			BlacklistService:        blacklist,
-			RateLimiter:             rateLimiter,
-			CSRFService:             csrfSvc,
-			AuditService:            auditSvc,
-			JWTSecret:               params.JWTSecret,
-			EmailService:            emailSvc,
-			MFAService:              mfaSvc,
-			ImpersonationStore:      impersonationStore,
+			UserRegistry:             params.FactorySet.UserRegistry,
+			RefreshTokenRegistry:     params.FactorySet.RefreshTokenRegistry,
+			GroupMembershipRegistry:  params.FactorySet.GroupMembershipRegistry,
+			LoginEventRegistry:       params.FactorySet.LoginEventRegistry,
+			MFARegistry:              params.FactorySet.UserMFASecretRegistry,
+			SystemAdminGrantRegistry: params.FactorySet.SystemAdminGrantRegistry,
+			BlacklistService:         blacklist,
+			RateLimiter:              rateLimiter,
+			CSRFService:              csrfSvc,
+			AuditService:             auditSvc,
+			JWTSecret:                params.JWTSecret,
+			EmailService:             emailSvc,
+			MFAService:               mfaSvc,
+			ImpersonationStore:       impersonationStore,
 		}))
 
 		// Unauthenticated public routes: apply the global per-IP rate limit as a

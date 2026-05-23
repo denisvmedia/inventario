@@ -105,12 +105,14 @@ var (
 	// invariant still blocks the leave. #1652.
 	ErrLastMember = errx.NewSentinel("cannot remove the last member from a group")
 
-	// ErrLastSystemAdmin signals that RevokeSystemAdminAtomic refused to
-	// drop the platform's system-admin count to zero. Defined at the
-	// registry layer so both backends can return the same sentinel from
-	// inside the lock-protected revoke path, and so the CLI / future HTTP
-	// callers branch on a single identity. The CLI exposes the override
-	// via `--allow-zero`; the HTTP path will never expose it. #1745.
+	// ErrLastSystemAdmin signals that
+	// SystemAdminGrantRegistry.RevokeAtomic refused to drop the
+	// platform's system-admin count to zero. Defined at the registry
+	// layer so both backends (postgres + memory) can return the same
+	// sentinel from inside the lock-protected revoke path, and so the
+	// CLI / future HTTP callers branch on a single identity. The CLI
+	// exposes the override via `--allow-zero`; the HTTP path will never
+	// expose it. #1745 / #1784.
 	ErrLastSystemAdmin = errx.NewSentinel("cannot revoke the last system administrator")
 
 	// ErrBackofficeUserNotFound is returned by BackofficeUserRegistry
