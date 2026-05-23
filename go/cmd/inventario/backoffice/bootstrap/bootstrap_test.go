@@ -178,16 +178,15 @@ func TestBootstrap_ForceAllowsSecond(t *testing.T) {
 	c.Assert(users, qt.HasLen, 2)
 }
 
-// TestBootstrap_RejectsMemoryDSN pins the persistence guard: the
-// memory backend has no place to keep rows across CLI invocations,
-// so the command fails-closed with a hint.
+// TestBootstrap_RejectsMemoryDSN pins the persistence guard: a
+// memory:// DSN is rejected by the shared DatabaseConfig.Validate at
+// the database-config layer (cmd/inventario/shared/database.go: "only
+// support PostgreSQL"), and the bootstrap CLI surfaces that wrapped
+// error. The back-office plane intentionally has no memory backend
+// because operator identities must survive process restarts.
 func TestBootstrap_RejectsMemoryDSN(t *testing.T) {
 	c := qt.New(t)
 
-	// No memory-as-postgres alias here — we want the real memory:// DSN
-	// path to flow through DatabaseConfig.Validate first. That validator
-	// itself rejects non-postgres DSNs at the database config layer
-	// (see cmd/inventario/shared/database.go: "only support PostgreSQL").
 	_, err := runBootstrap(c, "memory://",
 		"--email=admin@example.com",
 		"--name=Ops Admin",
@@ -229,4 +228,21 @@ func TestBootstrap_RequiresName(t *testing.T) {
 	_, err := runBootstrap(c, "postgres://test", "--email=a@example.com")
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "--name is required")
+}
+
+// TestBootstrap_RejectsMalformedEmail pins that BackofficeUser model
+// validation (EmailPattern via ValidateWithContext) runs inside the
+// service layer — the registry's floor only checks "not empty + role
+// enum", so without the model-level call a malformed email would
+// round-trip into the table.
+func TestBootstrap_RejectsMalformedEmail(t *testing.T) {
+	c := qt.New(t)
+	setupMemoryAsPostgres(c)
+
+	_, err := runBootstrap(c, "postgres://test",
+		"--email=not-an-email",
+		"--name=Ops Admin",
+	)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "validation failed")
 }

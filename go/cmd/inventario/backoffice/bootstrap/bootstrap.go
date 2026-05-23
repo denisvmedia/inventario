@@ -99,11 +99,11 @@ func (c *Command) registerFlags() {
 func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 	out := c.Cmd().OutOrStdout()
 
+	// dbConfig.Validate already rejects non-postgres DSNs at the
+	// shared-validator layer (memory://, file:// etc all fail with
+	// "only support PostgreSQL"). No second guard needed here.
 	if err := dbConfig.Validate(); err != nil {
 		return errxtrace.Wrap("database configuration error", err)
-	}
-	if strings.HasPrefix(dbConfig.DBDSN, "memory://") {
-		return errors.New("backoffice commands are not supported for memory databases; use PostgreSQL")
 	}
 
 	email := strings.TrimSpace(cfg.Email)

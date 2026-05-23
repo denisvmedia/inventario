@@ -2,7 +2,6 @@ package models
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/jellydator/validation"
@@ -98,8 +97,6 @@ var (
 	_ validation.Validatable            = (*BackofficeUser)(nil)
 	_ validation.ValidatableWithContext = (*BackofficeUser)(nil)
 	_ IDable                            = (*BackofficeUser)(nil)
-	_ json.Marshaler                    = (*BackofficeUser)(nil)
-	_ json.Unmarshaler                  = (*BackofficeUser)(nil)
 )
 
 func (*BackofficeUser) Validate() error {
@@ -114,20 +111,4 @@ func (u *BackofficeUser) ValidateWithContext(ctx context.Context) error {
 	}
 
 	return validation.ValidateStructWithContext(ctx, u, fields...)
-}
-
-func (u *BackofficeUser) MarshalJSON() ([]byte, error) {
-	type Alias BackofficeUser
-	tmp := *u
-	return json.Marshal(Alias(tmp))
-}
-
-func (u *BackofficeUser) UnmarshalJSON(data []byte) error {
-	type Alias BackofficeUser
-	aux := &struct {
-		*Alias
-	}{
-		Alias: (*Alias)(u),
-	}
-	return json.Unmarshal(data, &aux)
 }

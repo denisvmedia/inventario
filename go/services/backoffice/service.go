@@ -29,17 +29,13 @@ type Service struct {
 	cleanup    func() error
 }
 
-// NewService constructs a Service backed by the postgres registry. The
-// memory backend is rejected explicitly because back-office identities
-// must survive process restarts (Phase 1's only writer is the CLI; the
-// CLI's job IS persistence). Mirrors services/admin.NewService.
+// NewService constructs a Service backed by the postgres registry.
+// dbConfig.Validate already rejects non-postgres DSNs (memory://,
+// file://, etc.), so by the time control reaches the registry lookup
+// the DSN is guaranteed to be postgres. Mirrors services/admin.NewService.
 func NewService(dbConfig *shared.DatabaseConfig) (*Service, error) {
 	if err := dbConfig.Validate(); err != nil {
 		return nil, fmt.Errorf("database configuration error: %w", err)
-	}
-
-	if strings.HasPrefix(dbConfig.DBDSN, "memory://") {
-		return nil, fmt.Errorf("backoffice commands are not supported for memory databases as they don't provide persistence; please use a PostgreSQL database")
 	}
 
 	registryFunc, ok := registry.GetRegistry(dbConfig.DBDSN)
@@ -210,15 +206,14 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 
 // generatePassword produces a strong random password the CLI prints
 // once to stdout. 18 bytes of base64 = 24 ASCII chars with mixed-case
-// + digits + URL-safe symbols, comfortably above models.ValidatePassword's
-// length / character-class requirements without bringing in a separate
-// generator library.
+// + digits, comfortably above models.ValidatePassword's length
+// requirement.
 //
-// We append "Aa1" to guarantee the upper-case + lower-case + digit
-// classes are present even on the (astronomically unlikely) draw where
-// the random bytes happen to map to a base64 string missing one of
-// them — keeps Bootstrap from failing a follow-up ValidatePassword
-// check on bad luck.
+// The "Aa1" suffix is load-bearing: a 24-char random base64 string has
+// a non-trivial probability of missing at least one of the upper /
+// lower / digit character classes models.ValidatePassword requires.
+// The suffix is what guarantees the validation check passes — not a
+// safety net for an unlikely draw.
 func generatePassword() (string, error) {
 	buf := make([]byte, 18)
 	if _, err := rand.Read(buf); err != nil {
