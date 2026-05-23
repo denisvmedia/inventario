@@ -201,6 +201,78 @@ subject (`user_id`) and the operator (`impersonated_by`).
 
 ---
 
+## 6. Rolling deploy / rollback — system_admin_grants migration (#1784)
+
+The platform-admin privilege moved from `users.is_system_admin` to the
+dedicated `system_admin_grants` table in #1784. The migration ships as
+three sequenced steps with strict ordering rules around the application
+binary.
+
+### Forward-apply order
+
+1. **Migration A** — schema-add: `CREATE TABLE system_admin_grants`
+   (timestamp `1780600000_add_system_admin_grants`). Pure DDL; no app
+   change required.
+2. **Migration B** — data backfill: copies every
+   `users.is_system_admin = true` row into `system_admin_grants` using
+   `INSERT ... ON CONFLICT (user_id) DO NOTHING` (timestamp
+   `1780700000_backfill_system_admin_grants`). Idempotent — safe to
+   re-run.
+3. **Application binary** — deploy the new (grants-reading) build.
+   `RequireSystemAdmin` and every admin handler now consult
+   `SystemAdminGrantRegistry.Exists` instead of the struct field.
+4. **Migration C** — schema-drop: removes `users.is_system_admin`
+   plus its partial index (timestamp
+   `1780800000_drop_users_is_system_admin`).
+
+**Critical ordering**: the new app binary MUST be in place BEFORE
+migration C runs. If C lands first, every old-binary instance still
+reads `user.IsSystemAdmin` as the zero-value `false` and 403s every
+admin user until the rolling deploy completes. A safe rollout pulls
+all old replicas before applying C.
+
+### Recovery from a partial migrator run
+
+- **Stops between A and B**: the grants table exists but is empty; the
+  old binary keeps working off `users.is_system_admin`. Re-run
+  `inventario db migrate up` — the backfill's `ON CONFLICT (user_id)
+  DO NOTHING` makes the second pass a no-op for rows that already
+  copied. Safe to retry indefinitely.
+- **Stops between B and C**: both columns and the grants table are
+  populated. Either roll forward (deploy the new binary, apply C) or
+  roll back via the down migrations in reverse — there is no
+  consistency drift here because the new binary writes to grants AND
+  the old binary reads `is_system_admin`. The two sources stay in
+  lock-step until C runs.
+
+### Rollback (production safety)
+
+Rollback order is the reverse of forward, with one binary constraint:
+
+1. Apply migration **C-down** — re-adds `users.is_system_admin` with
+   default `false` and re-creates the partial index. The column is
+   empty; admins read as false on EVERY request until B-down runs.
+2. Apply migration **B-down** — re-sets `users.is_system_admin = true`
+   for every user with a current `system_admin_grants` row. The
+   WHERE clause skips rows that already read true so `updated_at`
+   churn is bounded to the rows the rollback actually had to change.
+   The grants table itself is NOT dropped; its lifecycle belongs to
+   the schema-add migration (A-down).
+3. Only AFTER B-down completes is it safe to roll back the
+   application binary to a pre-#1784 build. The old binary's
+   `RequireSystemAdmin` reads `user.IsSystemAdmin`; rolling it back
+   between C-down and B-down would 403 every admin user.
+4. (Optional) Apply migration **A-down** to drop the grants table.
+   Only do this if you intend to abandon #1784 entirely — leaving the
+   table dormant costs nothing and makes a future re-forward
+   trivial.
+
+The data-backfill exception (per AGENTS.md) was granted for this
+migration set on issue #1784; the SQL was reviewed alongside the
+schema migrations.
+
+---
+
 ## See also
 
 - [`devdocs/security/admin-threat-model.md`](security/admin-threat-model.md)

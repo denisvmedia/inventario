@@ -18,9 +18,9 @@ import (
 
 // ErrLastSystemAdmin is re-exported from the registry layer for callers
 // (CLI, tests) that still import this package. The sentinel itself lives
-// at the registry layer so RevokeSystemAdminAtomic can return it from
-// inside the lock-protected revoke path. New callers should branch on
-// registry.ErrLastSystemAdmin directly. #1745.
+// at the registry layer so SystemAdminGrantRegistry.RevokeAtomic can
+// return it from inside the lock-protected revoke path. New callers
+// should branch on registry.ErrLastSystemAdmin directly. #1745 / #1784.
 var ErrLastSystemAdmin = registry.ErrLastSystemAdmin
 
 // Service provides administrative operations for CLI commands
@@ -521,14 +521,14 @@ func (s *Service) GrantSystemAdmin(ctx context.Context, idOrEmail string) (resul
 	return user, hadFlag, nil
 }
 
-// RevokeSystemAdmin clears IsSystemAdmin on the resolved user. When
-// allowZero is false (the default), the registry refuses to revoke the
-// last remaining system admin so an operator can't lock themselves out
-// of every admin surface — the count is checked AND the flag is cleared
-// inside the same transaction (postgres) / under the same registry mutex
-// (memory), so the operation is atomic against concurrent revokes.
-// Idempotent: revoking a user who is not a system admin returns
-// hadFlag=false with no error.
+// RevokeSystemAdmin deletes the resolved user's row from
+// `system_admin_grants` (#1784). When allowZero is false (the default),
+// the registry refuses to revoke the last remaining system admin so an
+// operator can't lock themselves out of every admin surface — the
+// count is checked AND the row is deleted inside the same transaction
+// (postgres) / under the same registry mutex (memory), so the operation
+// is atomic against concurrent revokes. Idempotent: revoking a user who
+// holds no grant returns hadFlag=false with no error.
 //
 // allowZero=true bypasses the guard; intended for the deliberate
 // "I'm shutting down the platform" path, exposed on the CLI as
