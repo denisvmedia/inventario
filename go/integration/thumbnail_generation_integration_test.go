@@ -62,6 +62,7 @@ func TestThumbnailGenerationIntegration(t *testing.T) {
 	fileEntity := &models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{ID: "test-file-123"},
+			TenantID: testUser.TenantID,
 		},
 		Type: models.FileTypeImage,
 		File: &models.File{
@@ -77,7 +78,7 @@ func TestThumbnailGenerationIntegration(t *testing.T) {
 
 	// Step 3: Verify thumbnails were created in storage
 	t.Log("🔍 Verifying thumbnails in storage...")
-	verifyThumbnailsInStorage(c, ctx, uploadLocation, originalPath, fileService)
+	verifyThumbnailsInStorage(c, ctx, uploadLocation, originalPath, fileEntity.TenantID, fileService)
 
 	// Step 4: Test signed URL generation with thumbnails
 	t.Log("🔗 Testing signed URL generation with thumbnails...")
@@ -85,7 +86,7 @@ func TestThumbnailGenerationIntegration(t *testing.T) {
 
 	// Step 5: Test thumbnail cleanup
 	t.Log("🗑️ Testing thumbnail cleanup...")
-	verifyThumbnailCleanup(c, ctx, uploadLocation, fileEntity.ID, originalPath, fileService)
+	verifyThumbnailCleanup(c, ctx, uploadLocation, fileEntity.TenantID, fileEntity.ID, originalPath, fileService)
 
 	t.Log("✅ Thumbnail integration test completed successfully!")
 }
@@ -126,14 +127,14 @@ func createTestImageFile(c *qt.C, ctx context.Context, uploadLocation string) st
 }
 
 // verifyThumbnailsInStorage checks that thumbnail files exist in blob storage
-func verifyThumbnailsInStorage(c *qt.C, ctx context.Context, uploadLocation, originalPath string, fileService *services.FileService) {
+func verifyThumbnailsInStorage(c *qt.C, ctx context.Context, uploadLocation, originalPath, tenantID string, fileService *services.FileService) {
 	b, err := blob.OpenBucket(ctx, uploadLocation)
 	c.Assert(err, qt.IsNil)
 	defer b.Close()
 
 	// Check that thumbnails exist - use the file ID from the file entity
 	testFileID := "test-file-123" // This matches the ID in the fileEntity above
-	thumbnailPaths := fileService.GetThumbnailPaths(testFileID)
+	thumbnailPaths := fileService.GetThumbnailPaths(tenantID, testFileID)
 
 	c.Assert(thumbnailPaths, qt.HasLen, 2) // small and medium
 
@@ -178,9 +179,9 @@ func verifySignedURLGeneration(c *qt.C, fileSigningService *services.FileSigning
 }
 
 // verifyThumbnailCleanup tests that thumbnails are deleted when using the file service
-func verifyThumbnailCleanup(c *qt.C, ctx context.Context, uploadLocation, fileID, originalPath string, fileService *services.FileService) {
+func verifyThumbnailCleanup(c *qt.C, ctx context.Context, uploadLocation, tenantID, fileID, originalPath string, fileService *services.FileService) {
 	// Get thumbnail paths before deletion
-	thumbnailPaths := fileService.GetThumbnailPaths(fileID)
+	thumbnailPaths := fileService.GetThumbnailPaths(tenantID, fileID)
 
 	// Verify thumbnails exist before cleanup
 	b, err := blob.OpenBucket(ctx, uploadLocation)

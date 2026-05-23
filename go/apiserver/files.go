@@ -771,11 +771,30 @@ func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate thumbnail path using the new structure
-	thumbnailPath := fmt.Sprintf("thumbnails/%s_%s.jpg", fileID, size)
+	// Resolve the owning tenant via the FileEntity row — the row is
+	// what decides which tenant's namespace the thumbnail lives in
+	// (#1793). The signed-URL middleware has already validated that
+	// the caller is allowed to read this file, so we need a row-level
+	// lookup with RLS bypass here.
+	fileReg, err := api.factorySet.FileRegistryFactory.CreateUserRegistry(r.Context())
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	file, err := fileReg.Get(r.Context(), fileID)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
 
-	// Check if thumbnail exists using file service
-	exists, err := api.fileService.ThumbnailExists(r.Context(), fileID, size)
+	// Resolve the canonical (or legacy fallback) thumbnail key.
+	thumbnailPath, err := api.fileService.ThumbnailReadPath(r.Context(), file.TenantID, fileID, size)
+	if err != nil {
+		internalServerError(w, r, errxtrace.Wrap("failed to resolve thumbnail path", err))
+		return
+	}
+
+	exists, err := api.fileService.ThumbnailExists(r.Context(), file.TenantID, fileID, size)
 	if err != nil {
 		internalServerError(w, r, errxtrace.Wrap("failed to check thumbnail existence", err))
 		return

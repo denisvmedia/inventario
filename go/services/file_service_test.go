@@ -490,6 +490,7 @@ func TestFileService_GenerateThumbnails(t *testing.T) {
 			fileEntity := &models.FileEntity{
 				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 					EntityID: models.EntityID{ID: "test-file-" + tt.name},
+					TenantID: "test-tenant",
 				},
 				Type: models.FileTypeImage,
 				File: &models.File{
@@ -506,7 +507,7 @@ func TestFileService_GenerateThumbnails(t *testing.T) {
 
 			if tt.shouldGenerateThumbnails {
 				// Check that thumbnails were created
-				thumbnailPaths := service.GetThumbnailPaths(fileEntity.ID)
+				thumbnailPaths := service.GetThumbnailPaths(fileEntity.TenantID, fileEntity.ID)
 				c.Assert(thumbnailPaths, qt.HasLen, 2) // small and medium
 
 				for sizeName, thumbnailPath := range thumbnailPaths {
@@ -516,7 +517,7 @@ func TestFileService_GenerateThumbnails(t *testing.T) {
 				}
 			} else {
 				// Check that no thumbnails were created
-				thumbnailPaths := service.GetThumbnailPaths(fileEntity.ID)
+				thumbnailPaths := service.GetThumbnailPaths(fileEntity.TenantID, fileEntity.ID)
 				for _, thumbnailPath := range thumbnailPaths {
 					exists, err := b.Exists(ctx, thumbnailPath)
 					c.Assert(err, qt.IsNil)
@@ -534,31 +535,35 @@ func TestFileService_GetThumbnailPaths(t *testing.T) {
 
 	tests := []struct {
 		name     string
+		tenantID string
 		fileID   string
 		expected map[string]string
 	}{
 		{
-			name:   "File ID with thumbnails",
-			fileID: "test-file-123",
+			name:     "File ID with thumbnails",
+			tenantID: "tenant-a",
+			fileID:   "test-file-123",
 			expected: map[string]string{
-				"small":  "thumbnails/test-file-123_small.jpg",
-				"medium": "thumbnails/test-file-123_medium.jpg",
+				"small":  "t/tenant-a/thumbnails/test-file-123_small.jpg",
+				"medium": "t/tenant-a/thumbnails/test-file-123_medium.jpg",
 			},
 		},
 		{
-			name:   "Another file ID",
-			fileID: "photo-456",
+			name:     "Another file ID",
+			tenantID: "tenant-a",
+			fileID:   "photo-456",
 			expected: map[string]string{
-				"small":  "thumbnails/photo-456_small.jpg",
-				"medium": "thumbnails/photo-456_medium.jpg",
+				"small":  "t/tenant-a/thumbnails/photo-456_small.jpg",
+				"medium": "t/tenant-a/thumbnails/photo-456_medium.jpg",
 			},
 		},
 		{
-			name:   "UUID file ID",
-			fileID: "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+			name:     "UUID file ID",
+			tenantID: "tenant-b",
+			fileID:   "f47ac10b-58cc-4372-a567-0e02b2c3d479",
 			expected: map[string]string{
-				"small":  "thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479_small.jpg",
-				"medium": "thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479_medium.jpg",
+				"small":  "t/tenant-b/thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479_small.jpg",
+				"medium": "t/tenant-b/thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479_medium.jpg",
 			},
 		},
 	}
@@ -567,8 +572,25 @@ func TestFileService_GetThumbnailPaths(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			result := service.GetThumbnailPaths(tt.fileID)
+			result := service.GetThumbnailPaths(tt.tenantID, tt.fileID)
 			c.Assert(result, qt.DeepEquals, tt.expected)
 		})
+	}
+}
+
+// TestFileService_GetThumbnailPaths_AlwaysTenantPrefixed is the structural
+// invariant that #1793 promises: no matter what file id you pass, the
+// emitted thumbnail keys live inside the supplied tenant's namespace.
+func TestFileService_GetThumbnailPaths_AlwaysTenantPrefixed(t *testing.T) {
+	c := qt.New(t)
+	factorySet := memory.NewFactorySet()
+	service := NewFileService(factorySet, "/tmp/uploads")
+
+	for _, fileID := range []string{"x", "../../escape", "tenant-x/y/z"} {
+		paths := service.GetThumbnailPaths("safe-tenant", fileID)
+		for size, p := range paths {
+			c.Assert(p[:len("t/safe-tenant/")], qt.Equals, "t/safe-tenant/",
+				qt.Commentf("size=%s fileID=%q must live under safe-tenant namespace, got %q", size, fileID, p))
+		}
 	}
 }
