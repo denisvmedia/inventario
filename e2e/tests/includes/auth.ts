@@ -138,8 +138,11 @@ export async function login(
 ): Promise<string | null> {
   log(recorder, `🔐 Performing login as ${credentials.email}...`);
 
-  // Wait for login form to be visible
-  await page.waitForSelector('input[type="email"]', { timeout: 10000 });
+  // Wait for login form to be visible. Generous timeout because the
+  // login route lazy-loads under heavy parallel load — when many
+  // workers hit the same vite dev server simultaneously the bundle
+  // fetch + initial render can take 15-20s on a busy laptop.
+  await page.waitForSelector('input[type="email"]', { timeout: 30000 });
 
   // Fill in credentials
   await page.fill('input[type="email"]', credentials.email);
