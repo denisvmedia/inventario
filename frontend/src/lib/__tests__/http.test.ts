@@ -9,7 +9,11 @@ import {
   setCsrfToken,
   setImpersonationReturn,
 } from "@/lib/auth-storage"
-import { clearBackofficeAuth, getBackofficeAccessToken } from "@/features/backoffice/auth/storage"
+import {
+  clearBackofficeAuth,
+  getBackofficeAccessToken,
+  setBackofficeAccessToken,
+} from "@/features/backoffice/auth/storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 import {
   __resetNavigationForTests,
@@ -432,6 +436,57 @@ describe("401 flow", () => {
     expect(getCsrfToken()).toBeNull()
     expect(navigate).toHaveBeenCalledOnce()
     expect(navigate.mock.calls[0][1]).toBe("session_expired")
+  })
+
+  it("backoffice 401 + no back-office session: does NOT navigate to /backoffice/login", async () => {
+    // Regression: <ImpersonationProvider> in the tenant Shell probes
+    // /admin/impersonation/current for every authenticated tenant user
+    // (the banner consumer is on the tenant plane). After #1838 hardened
+    // /admin/* on the back-office plane, the probe 401s for any user
+    // without a back-office session. Before this guard, the http client
+    // dutifully tried `/backoffice/auth/refresh` (404, no cookie), then
+    // bounced the user to /backoffice/login on every tenant page render.
+    // Verify the 401 surfaces to the caller's onError without any
+    // navigation when there was no back-office session to "expire" in the
+    // first place.
+    setAccessToken("tenant-good")
+    const navigate = vi.fn()
+    setNavigateToLogin(navigate)
+    server.use(
+      msw.get(api("/admin/impersonation/current"), () =>
+        HttpResponse.json({ error: "no operator session" }, { status: 401 })
+      ),
+      msw.post(api("/backoffice/auth/refresh"), () =>
+        HttpResponse.json({ error: "no cookie" }, { status: 404 })
+      )
+    )
+    await expect(http.get("/admin/impersonation/current")).rejects.toBeInstanceOf(HttpError)
+    expect(navigate).not.toHaveBeenCalled()
+    // Tenant session must survive — the back-office 401 is unrelated.
+    expect(getAccessToken()).toBe("tenant-good")
+  })
+
+  it("backoffice 401 + had back-office session: DOES navigate to /backoffice/login", async () => {
+    // Companion to the no-session case above: when a back-office operator
+    // genuinely loses their session (refresh cookie expired or revoked),
+    // the bounce to /backoffice/login is correct — there *was* something
+    // to expire. Guard regressions where the guard becomes "never bounce."
+    setBackofficeAccessToken("operator-stale")
+    const navigate = vi.fn()
+    setNavigateToLogin(navigate)
+    server.use(
+      msw.get(api("/admin/impersonation/current"), () =>
+        HttpResponse.json({ error: "expired" }, { status: 401 })
+      ),
+      msw.post(api("/backoffice/auth/refresh"), () =>
+        HttpResponse.json({ error: "refresh-bad" }, { status: 401 })
+      )
+    )
+    await expect(http.get("/admin/impersonation/current")).rejects.toBeInstanceOf(HttpError)
+    expect(getBackofficeAccessToken()).toBeNull()
+    expect(navigate).toHaveBeenCalledOnce()
+    expect(navigate.mock.calls[0][1]).toBe("session_expired")
+    expect(navigate.mock.calls[0][2]).toBe("backoffice")
   })
 
   it("background /auth/me 401: does NOT clear auth or navigate", async () => {

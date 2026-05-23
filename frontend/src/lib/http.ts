@@ -520,6 +520,19 @@ async function handle401(
     return recoverFromImpersonationExpiry(url)
   }
   const backoffice = isBackofficePath(originalPath)
+  // Capture whether the plane that just 401'd actually had a session BEFORE
+  // attempting refresh — the refresh failure path below clears the tokens,
+  // so checking after would always be false.
+  //
+  // The bounce to the plane's login screen is only correct when there *was*
+  // a session that expired. A tenant-only user touching a back-office-gated
+  // path (e.g. `<ImpersonationProvider>` in the tenant Shell probing
+  // /admin/impersonation/current after #1838 hardened /admin/* on the
+  // back-office plane) has no back-office tokens at all — bouncing them to
+  // /backoffice/login on every page render is a regression. Let those
+  // callers' onError handle the 401 quietly instead.
+  const hadBackofficeSession = !!getBackofficeAccessToken()
+  const hadTenantSession = !!getAccessToken()
   try {
     if (backoffice) {
       await refreshBackofficeAccessToken()
@@ -529,12 +542,12 @@ async function handle401(
   } catch (refreshErr) {
     if (backoffice) {
       clearBackofficeAuth()
-      if (shouldRedirectFromCurrentPath()) {
+      if (hadBackofficeSession && shouldRedirectFromCurrentPath()) {
         navigateToLogin(currentReturnTo(), "session_expired", "backoffice")
       }
     } else {
       clearAuth()
-      if (shouldRedirectFromCurrentPath()) {
+      if (hadTenantSession && shouldRedirectFromCurrentPath()) {
         navigateToLogin(currentReturnTo(), "session_expired")
       }
     }
