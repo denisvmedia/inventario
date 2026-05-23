@@ -61,24 +61,29 @@ func TestAdmin_AcceptsBackofficeJWT(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 }
 
-// TestImpersonation_RejectsBackofficeJWT is the mirror of
-// TestAdmin_RejectsTenantJWTAfterMigration for the legacy impersonation
-// subtree: the impersonation start endpoint stays on the tenant-side
-// JWTMiddleware (#1785 Phase 3 left the impersonation lifecycle gated by
-// RequireSystemAdmin until a back-office-native redesign lands).
-// JWTMiddleware rejects any token with `aud == "backoffice"` or a non-
-// empty `admin_id` claim — see jwt_middleware.go:104-109 — so a back-
-// office token cannot satisfy the impersonation route.
-func TestImpersonation_RejectsBackofficeJWT(t *testing.T) {
+// TestImpersonation_RejectsTenantJWT pins the boundary on the
+// impersonation start endpoint after #1785 Phase 5 moved the
+// impersonation lifecycle onto the back-office auth plane. A tenant
+// JWT — even one whose user holds a system-admin grant — MUST NOT
+// reach the impersonation handler, because the route is gated by
+// RequireBackofficeAuth (audience check) inside adminBackofficeRoutes.
+// The companion positive case (a back-office token is accepted) is
+// covered end-to-end by the impersonation_test.go happy path; this
+// test only locks in the audience rejection.
+func TestImpersonation_RejectsTenantJWT(t *testing.T) {
 	c := qt.New(t)
 	params, user, _ := newParams()
-	_, backofficeToken := WithBackofficeAdmin(t, params)
+	// Grant system-admin on the tenant user — under the legacy
+	// RequireSystemAdmin gate this would have admitted the request.
+	// After Phase 5 the back-office audience guard fires first and the
+	// grant is irrelevant on this route.
+	promoteToSystemAdmin(c, params, user)
 
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodPost,
 		"/api/v1/admin/users/"+user.ID+"/impersonate", nil)
-	addBackofficeAuthHeader(req, backofficeToken)
+	addTestUserAuthHeader(req, user.ID)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
