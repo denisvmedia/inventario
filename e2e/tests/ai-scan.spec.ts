@@ -18,7 +18,7 @@ import { test } from '../fixtures/app-fixture.js';
 import { expect } from '@playwright/test';
 import { createLocation, deleteLocation } from './includes/locations.js';
 import { createArea, deleteArea } from './includes/areas.js';
-import { navigateTo, TO_LOCATIONS } from './includes/navigate.js';
+import { navigateTo, TO_COMMODITIES, TO_LOCATIONS } from './includes/navigate.js';
 
 // PRE-EXISTING MASTER REGRESSION — the spec landed in PR #1835 without
 // picking up the (page, recorder, ...) contract that createLocation /
@@ -70,6 +70,13 @@ test.describe.skip('AI vision scan flow [BLOCKED: helper-signature + nav drift, 
         }),
       })
     );
+
+    // Navigate to the commodities list so `commodities-add-button` is
+    // in the DOM. createArea lands on the area-detail page, which has
+    // its own "Add commodity" testid but not the top-level one this
+    // spec targets — without this step the click below waits 30s and
+    // the whole test times out.
+    await navigateTo(page, recorder, TO_COMMODITIES);
 
     // Open the Add item dialog from the commodities list.
     await page.locator('[data-testid="commodities-add-button"]').first().click();
@@ -134,6 +141,11 @@ test.describe.skip('AI vision scan flow [BLOCKED: helper-signature + nav drift, 
         }),
       })
     );
+
+    // Same /commodities navigation as the happy-path test —
+    // `commodities-add-button` lives on the commodities list page,
+    // not on the area-detail page createArea lands on.
+    await navigateTo(page, recorder, TO_COMMODITIES);
 
     await page.locator('[data-testid="commodities-add-button"]').first().click();
     await page.locator('[data-testid="commodity-form-ai-step"]').waitFor();
