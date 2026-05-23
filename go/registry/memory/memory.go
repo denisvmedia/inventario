@@ -67,6 +67,11 @@ func NewFactorySet() *registry.FactorySet {
 	// not part of the per-request Set since back-office identities are
 	// cross-cutting infra, not user-aware data.
 	fs.BackofficeUserRegistry = NewBackofficeUserRegistry()
+	// Platform-admin grant store (issue #1784) — orthogonal to the
+	// back-office identity table. system_admin_grants holds *which
+	// tenant users* hold platform-wide admin privilege; it has no
+	// tenant scope (mirrors AuditLogRegistry).
+	fs.SystemAdminGrantRegistry = NewSystemAdminGrantRegistry()
 	groupReg := NewLocationGroupRegistry()
 	fs.LocationGroupRegistry = groupReg
 	membershipReg := NewGroupMembershipRegistry()

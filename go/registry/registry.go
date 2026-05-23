@@ -1646,6 +1646,46 @@ type UserRegistry interface {
 	CountSessionsByUser(ctx context.Context, userID string) (int, error)
 }
 
+// SystemAdminGrantRegistry stores the dedicated grant rows that confer
+// platform-wide system-admin privilege on a user (#1784). Splitting the
+// privilege off the users row removes the escalation footgun of a
+// "just UPDATE users SET is_system_admin = true" path — only the CLI
+// has a write path into this table; every HTTP surface is read-only.
+//
+// The registry is NOT tenant-scoped: system-admin is a platform privilege
+// orthogonal to tenants. Same posture as AuditLogRegistry.
+type SystemAdminGrantRegistry interface {
+	// Exists returns true when the user has a grant row. Hot path —
+	// RequireSystemAdmin runs this on every /api/v1/admin/* request.
+	// Postgres backs the lookup with a unique index on user_id; memory
+	// keeps a simple map keyed by user id.
+	Exists(ctx context.Context, userID string) (bool, error)
+
+	// Grant inserts a grant row. Idempotent: when the user is already
+	// a system admin, returns (true, nil) and does not mutate the row.
+	// grantedBy is the operator who authorised the grant; nil for CLI
+	// bootstrap (no authenticated session).
+	Grant(ctx context.Context, userID string, grantedBy *string) (hadGrant bool, err error)
+
+	// RevokeAtomic removes the grant row while serializing against
+	// concurrent revokes. With allowZero=false, enforces the "at least
+	// one grant remains" invariant — returns ErrLastSystemAdmin
+	// otherwise. Idempotent: when the user has no grant, returns
+	// (false, nil) with no row touched. The postgres impl serialises
+	// via pg_advisory_xact_lock('system_admin_mutations') — the same
+	// lock key the legacy users.is_system_admin path used — so a
+	// rolling deploy is race-free even mid-cutover. allowZero=true
+	// bypasses the guard; exposed on the CLI as --allow-zero only.
+	//
+	//revive:disable-next-line:flag-parameter
+	RevokeAtomic(ctx context.Context, userID string, allowZero bool) (hadGrant bool, err error)
+
+	// List returns every grant row, ordered by granted_at ASC. Backs
+	// the `inventario admin list-system-admins` CLI command (the CLI
+	// joins to users for the rendered table).
+	List(ctx context.Context) ([]*models.SystemAdminGrant, error)
+}
+
 // AdminUserSortField names the columns the admin user listing endpoint
 // understands for sorting. Names are part of the public API surface; the
 // FE codegen treats them as opaque strings sent in `?sort`.
@@ -1858,6 +1898,7 @@ type Set struct {
 	StorageQuotaReminderRegistry   StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the idempotency store for the storage quota warning worker; service-mode only (#1585)
 	MaintenanceReminderRegistry    MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the idempotency store for the maintenance reminder worker; service-mode only (#1368)
 	CurrencyMigrationRegistry      CurrencyMigrationRegistry     // Currency migration operation rows + audit + HMAC token signing (issue #1550 / epic #202)
+	SystemAdminGrantRegistry       SystemAdminGrantRegistry      // Platform-admin grant rows (#1784); no tenant scope, no HTTP write surface
 }
 
 // Search-related types and functions
