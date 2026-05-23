@@ -18,6 +18,7 @@ import (
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/export/types"
+	"github.com/denisvmedia/inventario/internal/blobkeys"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -328,9 +329,24 @@ func (s *ExportService) generateExport(ctx context.Context, export models.Export
 		}
 	}()
 
-	// Generate blob key (filename)
+	// Resolve the owning tenant from the export row — exports inherit
+	// their tenant from the user who triggered them; ProcessExport has
+	// already populated user context above. Falling back to the export
+	// row's own TenantID keeps tests that drive generateExport directly
+	// (without going through ProcessExport) working.
+	tenantID := export.TenantID
+	if tenantID == "" {
+		if user := appctx.UserFromContext(ctx); user != nil {
+			tenantID = user.TenantID
+		}
+	}
+	if tenantID == "" {
+		return "", nil, errors.New("tenant context is required to generate an export")
+	}
+
+	// Generate blob key (filename) — tenant-prefixed under #1793.
 	timestamp := time.Now().Format("20060102_150405")
-	blobKey := fmt.Sprintf("exports/export_%s_%s.xml", strings.ToLower(string(export.Type)), timestamp)
+	blobKey := blobkeys.BuildExportBlobKey(tenantID, string(export.Type), timestamp)
 
 	// Create blob writer
 	writer, err := b.NewWriter(ctx, blobKey, nil)
