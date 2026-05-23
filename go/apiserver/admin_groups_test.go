@@ -18,17 +18,20 @@ import (
 
 // Groups admin handler tests (#1748). Cover the cross-tenant list (filter
 // combinations), the detail endpoint (tenant chip + member_count), the
-// idempotent soft-delete, the system-admin gate, and the audit trail.
-// Tests reuse promoteToSystemAdmin from admin_routes_test.go.
+// idempotent soft-delete, the back-office admin gate, and the audit trail.
+// After the #1785 Phase 3 migration the admin gate is RequireBackofficeAuth,
+// so the auth header is a back-office bearer minted by WithBackofficeAdmin.
 
-// adminGroupFixture stands up a system-admin actor plus three additional
-// location groups across two tenants so the list/filter assertions have
-// real data to work with. Returns the params, the admin user, and the
-// IDs of the three seeded groups (the order matches the seeds slice).
-func adminGroupFixture(c *qt.C) (apiserver.Params, *models.User, []string) {
+// adminGroupFixture stands up a back-office admin actor plus three
+// additional location groups across two tenants so the list/filter
+// assertions have real data to work with. Returns the params, the seed
+// tenant user (still useful as the `CreatedBy` fixture identity), the
+// back-office bearer token to attach, and the IDs of the three seeded
+// groups (the order matches the seeds slice).
+func adminGroupFixture(t *testing.T, c *qt.C) (apiserver.Params, *models.User, string, []string) {
 	c.Helper()
 	params, user, _ := newParams()
-	promoteToSystemAdmin(c, params, user)
+	_, adminToken := WithBackofficeAdmin(t, params)
 
 	ctx := context.Background()
 	// A second tenant so the tenantID filter has something to discriminate.
@@ -70,16 +73,16 @@ func adminGroupFixture(c *qt.C) (apiserver.Params, *models.User, []string) {
 		created := must.Must(params.FactorySet.LocationGroupRegistry.Create(ctx, g))
 		ids = append(ids, created.ID)
 	}
-	return params, user, ids
+	return params, user, adminToken, ids
 }
 
-func TestAdminListGroups_AllowsSystemAdmin(t *testing.T) {
+func TestAdminListGroups_AllowsBackofficeAdmin(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := adminGroupFixture(c)
+	params, _, adminToken, _ := adminGroupFixture(t, c)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups", nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -111,18 +114,18 @@ func TestAdminListGroups_AllowsSystemAdmin(t *testing.T) {
 	c.Assert(charlie.Tenant.ID, qt.Equals, charlie.TenantID)
 }
 
-func TestAdminListGroups_DeniesNonAdmin(t *testing.T) {
+func TestAdminListGroups_DeniesTenantUser(t *testing.T) {
 	c := qt.New(t)
 	params, user, _ := newParams()
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
+	// Tenant JWT — RequireBackofficeAuth rejects at the audience guard.
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups", nil)
 	addTestUserAuthHeader(req, user.ID)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
-	c.Assert(rr.Body.String(), qt.Contains, "admin.forbidden")
+	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
 }
 
 func TestAdminListGroups_DeniesUnauthenticated(t *testing.T) {
@@ -139,7 +142,7 @@ func TestAdminListGroups_DeniesUnauthenticated(t *testing.T) {
 
 func TestAdminListGroups_FiltersAndPaginatesAndSorts(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := adminGroupFixture(c)
+	params, _, adminToken, _ := adminGroupFixture(t, c)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	// The fixture's "Other Org" tenant ID is needed for the tenantID
@@ -212,7 +215,7 @@ func TestAdminListGroups_FiltersAndPaginatesAndSorts(t *testing.T) {
 	for _, tc := range tests {
 		c.Run(tc.name, func(c *qt.C) {
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups"+tc.query, nil)
-			addTestUserAuthHeader(req, user.ID)
+			addBackofficeAuthHeader(req, adminToken)
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 
@@ -231,7 +234,7 @@ func TestAdminListGroups_FiltersAndPaginatesAndSorts(t *testing.T) {
 func TestAdminGetGroup_ReturnsRowWithTenantChipAndMemberCount(t *testing.T) {
 	c := qt.New(t)
 	params, user, _ := newParams()
-	promoteToSystemAdmin(c, params, user)
+	_, adminToken := WithBackofficeAdmin(t, params)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	// newParams seeds exactly one group on the actor's tenant with one
@@ -241,7 +244,7 @@ func TestAdminGetGroup_ReturnsRowWithTenantChipAndMemberCount(t *testing.T) {
 	group := groups[0]
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/admin/groups/%s", group.ID), nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -265,7 +268,7 @@ func TestAdminGetGroup_ReturnsRowWithTenantChipAndMemberCount(t *testing.T) {
 func TestAdminListGroups_OrphanedGroupStaysVisible(t *testing.T) {
 	c := qt.New(t)
 	params, user, _ := newParams()
-	promoteToSystemAdmin(c, params, user)
+	_, adminToken := WithBackofficeAdmin(t, params)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	ctx := context.Background()
@@ -280,7 +283,7 @@ func TestAdminListGroups_OrphanedGroupStaysVisible(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups", nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -305,7 +308,7 @@ func TestAdminListGroups_OrphanedGroupStaysVisible(t *testing.T) {
 func TestAdminGetGroup_OrphanedGroupReturnedWithNilTenant(t *testing.T) {
 	c := qt.New(t)
 	params, user, _ := newParams()
-	promoteToSystemAdmin(c, params, user)
+	_, adminToken := WithBackofficeAdmin(t, params)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	ctx := context.Background()
@@ -319,7 +322,7 @@ func TestAdminGetGroup_OrphanedGroupReturnedWithNilTenant(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/admin/groups/%s", orphan.ID), nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -333,21 +336,22 @@ func TestAdminGetGroup_OrphanedGroupReturnedWithNilTenant(t *testing.T) {
 
 func TestAdminGetGroup_404OnMissingID(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := adminGroupFixture(c)
+	params, _, adminToken, _ := adminGroupFixture(t, c)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups/does-not-exist", nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
-func TestAdminGetGroup_DeniesNonAdmin(t *testing.T) {
+func TestAdminGetGroup_DeniesTenantUser(t *testing.T) {
 	c := qt.New(t)
-	params, user, ids := adminGroupFixture(c)
-	// Demote: adminGroupFixture promotes, so build a separate non-admin.
+	params, user, _, ids := adminGroupFixture(t, c)
+	// A plain (non-admin) tenant user — RequireBackofficeAuth rejects
+	// the tenant token at the audience guard before any handler runs.
 	nonAdmin := createTestUserDirect(c, params, user.TenantID, "plain@example.com", true, false)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
@@ -356,17 +360,17 @@ func TestAdminGetGroup_DeniesNonAdmin(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
 }
 
 func TestAdminDeleteGroup_MarksPendingDeletion(t *testing.T) {
 	c := qt.New(t)
-	params, user, ids := adminGroupFixture(c)
+	params, _, adminToken, ids := adminGroupFixture(t, c)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	// ids[0] is the active "Alpha Group".
 	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/admin/groups/%s", ids[0]), nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -383,14 +387,14 @@ func TestAdminDeleteGroup_MarksPendingDeletion(t *testing.T) {
 
 func TestAdminDeleteGroup_IdempotentReDelete(t *testing.T) {
 	c := qt.New(t)
-	params, user, ids := adminGroupFixture(c)
+	params, _, adminToken, ids := adminGroupFixture(t, c)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	// ids[1] is the "Bravo Group" seeded already in pending_deletion —
 	// a re-delete must still return 200 with the current status, never
 	// a 4xx.
 	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/admin/groups/%s", ids[1]), nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -413,20 +417,20 @@ func TestAdminDeleteGroup_IdempotentReDelete(t *testing.T) {
 
 func TestAdminDeleteGroup_404OnMissingID(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := adminGroupFixture(c)
+	params, _, adminToken, _ := adminGroupFixture(t, c)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/groups/does-not-exist", nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
-func TestAdminDeleteGroup_DeniesNonAdmin(t *testing.T) {
+func TestAdminDeleteGroup_DeniesTenantUser(t *testing.T) {
 	c := qt.New(t)
-	params, user, ids := adminGroupFixture(c)
+	params, user, _, ids := adminGroupFixture(t, c)
 	nonAdmin := createTestUserDirect(c, params, user.TenantID, "plain@example.com", true, false)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
@@ -435,7 +439,7 @@ func TestAdminDeleteGroup_DeniesNonAdmin(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
 
 	// The guard rejected before the transition could fire.
 	stored := must.Must(params.FactorySet.LocationGroupRegistry.Get(context.Background(), ids[0]))
@@ -444,11 +448,12 @@ func TestAdminDeleteGroup_DeniesNonAdmin(t *testing.T) {
 
 func TestAdminListGroups_WritesAuditLog(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := adminGroupFixture(c)
+	params, _, adminToken, _ := adminGroupFixture(t, c)
+	admin := backofficeAdminForToken(t, params, adminToken)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups", nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -457,16 +462,17 @@ func TestAdminListGroups_WritesAuditLog(t *testing.T) {
 	c.Assert(entries, qt.HasLen, 1)
 	c.Assert(entries[0].Success, qt.IsTrue)
 	c.Assert(entries[0].UserID, qt.IsNotNil)
-	c.Assert(*entries[0].UserID, qt.Equals, user.ID)
+	c.Assert(*entries[0].UserID, qt.Equals, admin.ID)
 }
 
 func TestAdminDeleteGroup_WritesAuditLogWithActorGroupAndTenant(t *testing.T) {
 	c := qt.New(t)
-	params, user, ids := adminGroupFixture(c)
+	params, user, adminToken, ids := adminGroupFixture(t, c)
+	admin := backofficeAdminForToken(t, params, adminToken)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/admin/groups/%s", ids[0]), nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -475,15 +481,17 @@ func TestAdminDeleteGroup_WritesAuditLogWithActorGroupAndTenant(t *testing.T) {
 	c.Assert(entries, qt.HasLen, 1)
 	entry := entries[0]
 	c.Assert(entry.Success, qt.IsTrue)
-	// Admin user ID (actor).
+	// Back-office admin ID (actor) — RequireBackofficeAuth's actor is a
+	// BackofficeUser, NOT the tenant user the fixture also produces.
 	c.Assert(entry.UserID, qt.IsNotNil)
-	c.Assert(*entry.UserID, qt.Equals, user.ID)
+	c.Assert(*entry.UserID, qt.Equals, admin.ID)
 	// Group ID (subject).
 	c.Assert(entry.EntityID, qt.IsNotNil)
 	c.Assert(*entry.EntityID, qt.Equals, ids[0])
 	c.Assert(entry.EntityType, qt.IsNotNil)
 	c.Assert(*entry.EntityType, qt.Equals, "group")
-	// Tenant ID of the group.
+	// Tenant ID of the group's tenant (the actor's back-office identity
+	// is cross-tenant; the row's tenant is the target group's tenant).
 	c.Assert(entry.TenantID, qt.IsNotNil)
 	c.Assert(*entry.TenantID, qt.Equals, user.TenantID)
 	// ids[0] was active, so a genuine first delete: the breadcrumb must

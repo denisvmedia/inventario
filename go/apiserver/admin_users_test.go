@@ -21,35 +21,45 @@ import (
 )
 
 // Block + unblock handler tests (#1747). Every AC in the issue spec
-// maps to one (or more) of the subtests below. Tests live alongside
-// admin_routes_test.go and reuse its `promoteToSystemAdmin` helper to
-// flip the IsSystemAdmin flag on a fixture user without standing up a
-// second tenant.
+// maps to one (or more) of the subtests below. After the #1785 Phase 3
+// migration the admin CRUD surface is gated by RequireBackofficeAuth,
+// so the actor is a back-office user (not a tenant system admin). Each
+// test reaches the endpoint with a back-office bearer token issued via
+// the WithBackofficeAdmin helper (see admin_routes_test.go).
 
 // adminTestEnv bundles the moving parts every block/unblock test needs
 // so the per-test setup stays one line. Standing this up via a helper
 // keeps the table-driven cases focused on inputs + expectations rather
 // than ceremony.
+//
+// `admin` is the back-office actor whose ID appears in audit rows.
+// `adminToken` is the Bearer back-office JWT — pass it to
+// doAdminJSONRequest. `tenantID` is the tenant the test's target users
+// live in (the singleton tenant created by newParams) — back-office
+// users have no tenant, so the tenant id needs to flow in explicitly.
 type adminTestEnv struct {
-	params  apiserver.Params
-	handler http.Handler
-	admin   *models.User
+	params     apiserver.Params
+	handler    http.Handler
+	admin      *models.BackofficeUser
+	adminToken string
+	tenantID   string
 }
 
-// newAdminEnv returns a Params with a single system-admin fixture user
-// (the test's "actor") and the assembled HTTP handler. The admin user
-// returned is the one whose auth header should be attached to admin
-// requests — promote a separate fixture (via createSecondUser) when
-// the test needs a distinct subject.
+// newAdminEnv returns a Params with a seeded back-office admin and the
+// assembled HTTP handler. Use env.adminToken as the Bearer for admin
+// CRUD requests; env.admin.ID matches the actor recorded on audit rows;
+// env.tenantID identifies the tenant target users should be created in.
 func newAdminEnv(c *qt.C) adminTestEnv {
 	c.Helper()
-	params, user, _ := newParams()
-	promoteToSystemAdmin(c, params, user)
+	params, tenantUser, _ := newParams()
+	admin, token := WithBackofficeAdmin(c.TB.(*testing.T), params)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 	return adminTestEnv{
-		params:  params,
-		handler: handler,
-		admin:   user,
+		params:     params,
+		handler:    handler,
+		admin:      admin,
+		adminToken: token,
+		tenantID:   tenantUser.TenantID,
 	}
 }
 
@@ -101,13 +111,18 @@ func unblockBody(reason string) map[string]any {
 // variant in doJSONAPIRequest would still work but the explicit JSON
 // content type matches what the FE sends and keeps the test honest.
 //
+// `bearerToken` is set verbatim as the Bearer Authorization header.
+// After the #1785 Phase 3 migration this is a back-office access token
+// (mint via WithBackofficeAdmin or signBackofficeAccessToken); the
+// admin CRUD gate REJECTS tenant tokens. Pass "" to skip the header.
+//
 // `body` is encoded by switching on its concrete type:
 //   - nil → no body
 //   - []byte / json.RawMessage / string → passed through verbatim
 //     (lets tests send malformed JSON or trailing-token payloads that
 //     `json.Marshal` would otherwise sanitise into valid JSON)
 //   - anything else → `json.Marshal`
-func doAdminJSONRequest(t *testing.T, handler http.Handler, method, path, userID string, body any) *httptest.ResponseRecorder {
+func doAdminJSONRequest(t *testing.T, handler http.Handler, method, path, bearerToken string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	var raw []byte
 	switch v := body.(type) {
@@ -131,8 +146,8 @@ func doAdminJSONRequest(t *testing.T, handler http.Handler, method, path, userID
 		t.Fatalf("new request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if userID != "" {
-		addTestUserAuthHeader(req, userID)
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
 	}
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -142,11 +157,11 @@ func doAdminJSONRequest(t *testing.T, handler http.Handler, method, path, userID
 func TestAdminBlockUser_HappyPath(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "ordinary@example.com", true, false)
+	target := createTestUserDirect(c, env.params, env.tenantID, "ordinary@example.com", true, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/block",
-		env.admin.ID, blockBody("policy violation", false))
+		env.adminToken, blockBody("policy violation", false))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.id"), target.ID)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.type"), "users")
@@ -160,34 +175,41 @@ func TestAdminBlockUser_HappyPath(t *testing.T) {
 func TestAdminBlockUser_Idempotent(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "ordinary@example.com", false, false)
+	target := createTestUserDirect(c, env.params, env.tenantID, "ordinary@example.com", false, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/block",
-		env.admin.ID, blockBody("policy violation", false))
+		env.adminToken, blockBody("policy violation", false))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.is_active"), false)
 }
 
-func TestAdminBlockUser_SelfBlockRejected(t *testing.T) {
+// TestAdminBlockUser_SelfBlockStructurallyImpossible documents the
+// post-#1785 Phase 3 invariant: a back-office operator can never
+// target their own ID via /admin/users/{userID}/block because the
+// operator's identity is a backoffice_users row whose ID never appears
+// in the tenant users table. The handler's `target.ID == actor.ID`
+// guard remains as defence-in-depth, but the registry-level lookup
+// short-circuits to 404 first — there is no tenant user with the
+// back-office admin's id to load.
+func TestAdminBlockUser_SelfBlockStructurallyImpossible(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/"+env.admin.ID+"/block",
-		env.admin.ID, blockBody("trying to lock myself out", false))
-	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
-	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.AdminBlockSelfBlockedCode)
+		env.adminToken, blockBody("trying to lock myself out", false))
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
 func TestAdminBlockUser_AdminWithoutForceRejected(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	peer := createTestUserDirect(c, env.params, env.admin.TenantID, "peer-admin@example.com", true, true)
+	peer := createTestUserDirect(c, env.params, env.tenantID, "peer-admin@example.com", true, true)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/"+peer.ID+"/block",
-		env.admin.ID, blockBody("peer review", false))
+		env.adminToken, blockBody("peer review", false))
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.AdminBlockAdminRequiresForceCode)
 
@@ -200,11 +222,11 @@ func TestAdminBlockUser_AdminWithoutForceRejected(t *testing.T) {
 func TestAdminBlockUser_AdminWithForceAllowedAndAudited(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	peer := createTestUserDirect(c, env.params, env.admin.TenantID, "peer-admin@example.com", true, true)
+	peer := createTestUserDirect(c, env.params, env.tenantID, "peer-admin@example.com", true, true)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/"+peer.ID+"/block",
-		env.admin.ID, blockBody("compromise drill", true))
+		env.adminToken, blockBody("compromise drill", true))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.is_active"), false)
 
@@ -228,11 +250,11 @@ func TestAdminBlockUser_AdminWithForceAllowedAndAudited(t *testing.T) {
 func TestAdminBlockUser_AuditRowCarriesReason(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "ordinary@example.com", true, false)
+	target := createTestUserDirect(c, env.params, env.tenantID, "ordinary@example.com", true, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/block",
-		env.admin.ID, blockBody("policy violation: rule 7", false))
+		env.adminToken, blockBody("policy violation: rule 7", false))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 
 	rows := must.Must(env.params.FactorySet.AuditLogRegistry.List(context.Background()))
@@ -262,7 +284,7 @@ func TestAdminBlockUser_UnknownUserReturns404(t *testing.T) {
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/does-not-exist/block",
-		env.admin.ID, blockBody("policy violation", false))
+		env.adminToken, blockBody("policy violation", false))
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
@@ -290,33 +312,35 @@ func TestAdminBlockUser_BadBodyVariants(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			env := newAdminEnv(c)
-			target := createTestUserDirect(c, env.params, env.admin.TenantID, "ordinary@example.com", true, false)
+			target := createTestUserDirect(c, env.params, env.tenantID, "ordinary@example.com", true, false)
 
 			rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 				"/api/v1/admin/users/"+target.ID+"/block",
-				env.admin.ID, tc.body)
+				env.adminToken, tc.body)
 			c.Assert(rr.Code, qt.Equals, tc.wantCode)
 		})
 	}
 }
 
-func TestAdminBlockUser_NonAdminForbidden(t *testing.T) {
+func TestAdminBlockUser_TenantTokenRejected(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := newParams() // not promoted
+	params, user, _ := newParams()
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 	target := createTestUserDirect(c, params, user.TenantID, "ordinary@example.com", true, false)
 
+	// A tenant access token (createTestJWTToken) — RequireBackofficeAuth
+	// rejects at the audience guard with 401, regardless of the user's
+	// IsSystemAdmin flag.
 	rr := doAdminJSONRequest(t, handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/block",
-		user.ID, blockBody("policy violation", false))
-	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
-	c.Assert(rr.Body.String(), qt.Contains, "admin.forbidden")
+		createTestJWTToken(user.ID), blockBody("policy violation", false))
+	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
 }
 
 func TestAdminBlockUser_UnauthenticatedRejected(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "ordinary@example.com", true, false)
+	target := createTestUserDirect(c, env.params, env.tenantID, "ordinary@example.com", true, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/block",
@@ -327,11 +351,11 @@ func TestAdminBlockUser_UnauthenticatedRejected(t *testing.T) {
 func TestAdminUnblockUser_HappyPath(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "ordinary@example.com", false, false)
+	target := createTestUserDirect(c, env.params, env.tenantID, "ordinary@example.com", false, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/unblock",
-		env.admin.ID, unblockBody("appeal accepted"))
+		env.adminToken, unblockBody("appeal accepted"))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.is_active"), true)
 
@@ -342,11 +366,11 @@ func TestAdminUnblockUser_HappyPath(t *testing.T) {
 func TestAdminUnblockUser_Idempotent(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "ordinary@example.com", true, false)
+	target := createTestUserDirect(c, env.params, env.tenantID, "ordinary@example.com", true, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/unblock",
-		env.admin.ID, unblockBody("nothing to do"))
+		env.adminToken, unblockBody("nothing to do"))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.is_active"), true)
 }
@@ -357,18 +381,18 @@ func TestAdminUnblockUser_UnknownUserReturns404(t *testing.T) {
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/does-not-exist/unblock",
-		env.admin.ID, unblockBody("test"))
+		env.adminToken, unblockBody("test"))
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
 func TestAdminUnblockUser_AuditRowCarriesReason(t *testing.T) {
 	c := qt.New(t)
 	env := newAdminEnv(c)
-	target := createTestUserDirect(c, env.params, env.admin.TenantID, "ordinary@example.com", false, false)
+	target := createTestUserDirect(c, env.params, env.tenantID, "ordinary@example.com", false, false)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/unblock",
-		env.admin.ID, unblockBody("appeal accepted: ticket 1234"))
+		env.adminToken, unblockBody("appeal accepted: ticket 1234"))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 
 	rows := must.Must(env.params.FactorySet.AuditLogRegistry.List(context.Background()))
@@ -404,11 +428,11 @@ func TestAdminUnblockUser_BadBodyVariants(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			env := newAdminEnv(c)
-			target := createTestUserDirect(c, env.params, env.admin.TenantID, "ordinary@example.com", false, false)
+			target := createTestUserDirect(c, env.params, env.tenantID, "ordinary@example.com", false, false)
 
 			rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 				"/api/v1/admin/users/"+target.ID+"/unblock",
-				env.admin.ID, tc.body)
+				env.adminToken, tc.body)
 			c.Assert(rr.Code, qt.Equals, tc.wantCode)
 		})
 	}
@@ -449,7 +473,7 @@ func TestAdminBlockUser_AccessTokenIssuedBeforeBlockFails(t *testing.T) {
 	// Build params with a real in-memory blacklister so the BlacklistUserTokens
 	// call inside the block cascade is observable by subsequent /system requests.
 	params, admin, _ := newParams()
-	promoteToSystemAdmin(c, params, admin)
+	_, adminToken := WithBackofficeAdmin(t, params)
 	bl := services.NewInMemoryTokenBlacklister()
 	params.TokenBlacklister = bl
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
@@ -482,7 +506,7 @@ func TestAdminBlockUser_AccessTokenIssuedBeforeBlockFails(t *testing.T) {
 	// Execute the block as the admin actor.
 	blockRR := doAdminJSONRequest(t, handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/block",
-		admin.ID, blockBody("integration test", false))
+		adminToken, blockBody("integration test", false))
 	c.Assert(blockRR.Code, qt.Equals, http.StatusOK,
 		qt.Commentf("block must succeed; body=%s", blockRR.Body.String()))
 
@@ -499,7 +523,7 @@ func TestAdminBlockUser_AccessTokenIssuedBeforeBlockFails(t *testing.T) {
 func TestAdminBlockUser_RefreshTokenRevokedByCascade(t *testing.T) {
 	c := qt.New(t)
 	params, admin, _ := newParams()
-	promoteToSystemAdmin(c, params, admin)
+	_, adminToken := WithBackofficeAdmin(t, params)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	target := createTestUserDirect(c, params, admin.TenantID, "ordinary@example.com", true, false)
@@ -523,7 +547,7 @@ func TestAdminBlockUser_RefreshTokenRevokedByCascade(t *testing.T) {
 
 	blockRR := doAdminJSONRequest(t, handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/block",
-		admin.ID, blockBody("integration test", false))
+		adminToken, blockBody("integration test", false))
 	c.Assert(blockRR.Code, qt.Equals, http.StatusOK)
 
 	postActive := must.Must(params.FactorySet.RefreshTokenRegistry.ListActiveByUserID(context.Background(), target.ID))
@@ -539,7 +563,7 @@ func TestAdminBlockUser_RefreshTokenRevokedByCascade(t *testing.T) {
 func TestAdminBlockUser_IdempotentBlockReRunsCascade(t *testing.T) {
 	c := qt.New(t)
 	params, admin, _ := newParams()
-	promoteToSystemAdmin(c, params, admin)
+	_, adminToken := WithBackofficeAdmin(t, params)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	// Seed an already-inactive user — simulates the "previously
@@ -567,7 +591,7 @@ func TestAdminBlockUser_IdempotentBlockReRunsCascade(t *testing.T) {
 	// must fire.
 	rr := doAdminJSONRequest(t, handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/block",
-		admin.ID, blockBody("re-block to scrub stale tokens", false))
+		adminToken, blockBody("re-block to scrub stale tokens", false))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 
 	postActive := must.Must(params.FactorySet.RefreshTokenRegistry.ListActiveByUserID(context.Background(), target.ID))
@@ -575,75 +599,14 @@ func TestAdminBlockUser_IdempotentBlockReRunsCascade(t *testing.T) {
 		qt.Commentf("idempotent re-block must run the cascade and revoke the planted token"))
 }
 
-// createTestJWTTokenWithClaims signs an arbitrary MapClaims for the
-// given user. Used by the impersonation self-block test so it can
-// stamp `imp` / `impersonated_by` onto the access token the same way
-// the (forthcoming) impersonation primitive will. Mirrors the shape of
-// createTestJWTToken but stays test-local so the production helper
-// doesn't grow a knob it never uses.
-func createTestJWTTokenWithClaims(t *testing.T, claims jwt.MapClaims) string {
-	t.Helper()
-	if _, ok := claims["exp"]; !ok {
-		claims["exp"] = time.Now().Add(24 * time.Hour).Unix()
-	}
-	// Default to an access token so the forged token clears the
-	// token-type enforcement in validateJWTToken (#1778). Callers can
-	// override token_type explicitly to test the rejection path.
-	if _, ok := claims["token_type"]; !ok {
-		claims["token_type"] = "access"
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(testJWTSecret)
-	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-	return signed
-}
-
-// TestAdminBlockUser_SelfBlockViaImpersonationRejected pins the B2
-// fix: the self-block guard must compare against the operator-of-
-// record (the `impersonated_by` claim), not the impersonated user's
-// JWT user_id. Without this, an operator could route a block-self
-// request through an impersonated peer-admin session and bypass the
-// guard.
-//
-// Scenario: env.admin is the operator and impersonates `peer` (also
-// a system admin so the impersonated session clears the admin gate).
-// The bearer token's user_id is `peer.ID` with `imp=true` and
-// `impersonated_by=env.admin.ID`. The operator then issues a block
-// against env.admin.ID — without the operator-aware guard the
-// handler would compare target.ID (env.admin.ID) to actor.ID
-// (peer.ID) and let it through.
-func TestAdminBlockUser_SelfBlockViaImpersonationRejected(t *testing.T) {
-	c := qt.New(t)
-	env := newAdminEnv(c)
-	peer := createTestUserDirect(c, env.params, env.admin.TenantID, "peer-admin@example.com", true, true)
-
-	token := createTestJWTTokenWithClaims(t, jwt.MapClaims{
-		"user_id":         peer.ID,
-		"imp":             true,
-		"impersonated_by": env.admin.ID,
-	})
-
-	body, err := json.Marshal(blockBody("self-block via impersonation", true))
-	c.Assert(err, qt.IsNil)
-	req, err := http.NewRequest(http.MethodPost,
-		"/api/v1/admin/users/"+env.admin.ID+"/block", bytes.NewReader(body))
-	c.Assert(err, qt.IsNil)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	rr := httptest.NewRecorder()
-	env.handler.ServeHTTP(rr, req)
-
-	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity,
-		qt.Commentf("self-block via impersonated session must be 422; body=%s", rr.Body.String()))
-	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.AdminBlockSelfBlockedCode)
-
-	// And the operator's own account stays active — the guard fired
-	// before any registry write.
-	reloaded := must.Must(env.params.FactorySet.UserRegistry.Get(context.Background(), env.admin.ID))
-	c.Assert(reloaded.IsActive, qt.IsTrue)
-}
+// The legacy TestAdminBlockUser_SelfBlockViaImpersonationRejected
+// covered an attack where an operator routed a block-self through an
+// impersonated peer-admin session. After the #1785 Phase 3 migration
+// /api/v1/admin/users/.../block is gated by RequireBackofficeAuth,
+// which rejects every tenant token (impersonation tokens included) at
+// the audience guard — so the attack vector is closed structurally at
+// the middleware, not in the handler. The cross-plane regression test
+// in admin_middleware_test.go pins that boundary.
 
 // TestAdminBlockUser_IdempotentOnPeerAdminWithoutForce pins the S4
 // fix: re-blocking an already-inactive peer system admin must be a
@@ -656,11 +619,11 @@ func TestAdminBlockUser_IdempotentOnPeerAdminWithoutForce(t *testing.T) {
 	// Peer is a system admin AND already inactive — the
 	// admin-without-force guard would normally reject without force,
 	// but the idempotent path must short-circuit it.
-	peer := createTestUserDirect(c, env.params, env.admin.TenantID, "peer-admin@example.com", false, true)
+	peer := createTestUserDirect(c, env.params, env.tenantID, "peer-admin@example.com", false, true)
 
 	rr := doAdminJSONRequest(t, env.handler, http.MethodPost,
 		"/api/v1/admin/users/"+peer.ID+"/block",
-		env.admin.ID, blockBody("idempotent peer-admin no-op", false))
+		env.adminToken, blockBody("idempotent peer-admin no-op", false))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.is_active"), false)
 
@@ -690,7 +653,7 @@ func TestAdminBlockUser_IdempotentOnPeerAdminWithoutForce(t *testing.T) {
 func TestAdminUnblockUser_LeavesStalenessRingIntact(t *testing.T) {
 	c := qt.New(t)
 	params, admin, _ := newParams()
-	promoteToSystemAdmin(c, params, admin)
+	_, adminToken := WithBackofficeAdmin(t, params)
 	bl := services.NewInMemoryTokenBlacklister()
 	params.TokenBlacklister = bl
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
@@ -700,7 +663,7 @@ func TestAdminUnblockUser_LeavesStalenessRingIntact(t *testing.T) {
 	// Block — installs an entry in the staleness ring.
 	blockRR := doAdminJSONRequest(t, handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/block",
-		admin.ID, blockBody("policy violation", false))
+		adminToken, blockBody("policy violation", false))
 	c.Assert(blockRR.Code, qt.Equals, http.StatusOK)
 
 	since, blacklisted, err := bl.UserBlacklistedSince(context.Background(), target.ID)
@@ -711,7 +674,7 @@ func TestAdminUnblockUser_LeavesStalenessRingIntact(t *testing.T) {
 	// Unblock — must leave the ring untouched.
 	unblockRR := doAdminJSONRequest(t, handler, http.MethodPost,
 		"/api/v1/admin/users/"+target.ID+"/unblock",
-		admin.ID, unblockBody("appeal accepted"))
+		adminToken, unblockBody("appeal accepted"))
 	c.Assert(unblockRR.Code, qt.Equals, http.StatusOK)
 
 	sinceAfter, blacklistedAfter, err := bl.UserBlacklistedSince(context.Background(), target.ID)

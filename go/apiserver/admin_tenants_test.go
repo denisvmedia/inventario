@@ -17,18 +17,17 @@ import (
 )
 
 // adminTenantFixture creates a deterministic fixture used by the
-// /admin/tenants endpoint tests. Returns the params with the seeded
-// admin user already promoted to system admin and the slugs of the
-// three additional tenants so each test can assert on shape rather
-// than fragile string equality with auto-generated IDs.
-func adminTenantFixture(c *qt.C) (apiserver.Params, *models.User, []string) {
+// /admin/tenants endpoint tests. After the #1785 Phase 3 migration the
+// admin gate is RequireBackofficeAuth, so the fixture returns a
+// back-office bearer token alongside the seed tenant user (still
+// useful for tenant ID assertions). The three additional tenants give
+// the paging/filter/sort assertions real data beyond the singleton
+// "Test Organization" from newParams.
+func adminTenantFixture(t *testing.T, c *qt.C) (apiserver.Params, *models.User, string, []string) {
 	c.Helper()
 	params, user, _ := newParams()
-	promoteToSystemAdmin(c, params, user)
+	_, adminToken := WithBackofficeAdmin(t, params)
 
-	// Seed three additional tenants so paging/filter/sort assertions
-	// have something to work with beyond the singleton "Test
-	// Organization" from newParams.
 	ctx := context.Background()
 	seeds := []models.Tenant{
 		{Name: "Acme Corp", Slug: "acme", Status: models.TenantStatusActive, PlanID: models.PlanUnlimited.ID},
@@ -40,16 +39,16 @@ func adminTenantFixture(c *qt.C) (apiserver.Params, *models.User, []string) {
 		created := must.Must(params.FactorySet.TenantRegistry.Create(ctx, t))
 		slugs = append(slugs, created.Slug)
 	}
-	return params, user, slugs
+	return params, user, adminToken, slugs
 }
 
-func TestAdminListTenants_AllowsSystemAdmin(t *testing.T) {
+func TestAdminListTenants_AllowsBackofficeAdmin(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := adminTenantFixture(c)
+	params, _, adminToken, _ := adminTenantFixture(t, c)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/tenants", nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -64,7 +63,7 @@ func TestAdminListTenants_AllowsSystemAdmin(t *testing.T) {
 	c.Assert(rr.Header().Get("X-Total"), qt.Equals, "4")
 }
 
-func TestAdminListTenants_DeniesNonAdmin(t *testing.T) {
+func TestAdminListTenants_DeniesTenantUser(t *testing.T) {
 	c := qt.New(t)
 	params, user, _ := newParams()
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
@@ -74,8 +73,8 @@ func TestAdminListTenants_DeniesNonAdmin(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
-	c.Assert(rr.Body.String(), qt.Contains, "admin.forbidden")
+	// RequireBackofficeAuth rejects the tenant JWT at the audience guard.
+	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
 }
 
 func TestAdminListTenants_DeniesUnauthenticated(t *testing.T) {
@@ -92,7 +91,7 @@ func TestAdminListTenants_DeniesUnauthenticated(t *testing.T) {
 
 func TestAdminListTenants_FiltersAndPaginatesAndSorts(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := adminTenantFixture(c)
+	params, _, adminToken, _ := adminTenantFixture(t, c)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	tests := []struct {
@@ -134,7 +133,7 @@ func TestAdminListTenants_FiltersAndPaginatesAndSorts(t *testing.T) {
 	for _, tc := range tests {
 		c.Run(tc.name, func(c *qt.C) {
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/tenants"+tc.query, nil)
-			addTestUserAuthHeader(req, user.ID)
+			addBackofficeAuthHeader(req, adminToken)
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 
@@ -152,11 +151,11 @@ func TestAdminListTenants_FiltersAndPaginatesAndSorts(t *testing.T) {
 
 func TestAdminGetTenant_ReturnsRowWithCounts(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := adminTenantFixture(c)
+	params, user, adminToken, _ := adminTenantFixture(t, c)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/admin/tenants/%s", user.TenantID), nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -171,18 +170,18 @@ func TestAdminGetTenant_ReturnsRowWithCounts(t *testing.T) {
 
 func TestAdminGetTenant_404OnMissingID(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := adminTenantFixture(c)
+	params, _, adminToken, _ := adminTenantFixture(t, c)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/tenants/does-not-exist", nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
-func TestAdminGetTenant_DeniesNonAdmin(t *testing.T) {
+func TestAdminGetTenant_DeniesTenantUser(t *testing.T) {
 	c := qt.New(t)
 	params, user, _ := newParams()
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
@@ -192,16 +191,17 @@ func TestAdminGetTenant_DeniesNonAdmin(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
 }
 
 func TestAdminListTenants_WritesAuditLog(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := adminTenantFixture(c)
+	params, _, adminToken, _ := adminTenantFixture(t, c)
+	admin := backofficeAdminForToken(t, params, adminToken)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/tenants", nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -210,16 +210,16 @@ func TestAdminListTenants_WritesAuditLog(t *testing.T) {
 	c.Assert(entries, qt.HasLen, 1)
 	c.Assert(entries[0].Success, qt.IsTrue)
 	c.Assert(entries[0].UserID, qt.IsNotNil)
-	c.Assert(*entries[0].UserID, qt.Equals, user.ID)
+	c.Assert(*entries[0].UserID, qt.Equals, admin.ID)
 }
 
 func TestAdminGetTenant_AuditLog_Success(t *testing.T) {
 	c := qt.New(t)
-	params, user, _ := adminTenantFixture(c)
+	params, user, adminToken, _ := adminTenantFixture(t, c)
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/admin/tenants/%s", user.TenantID), nil)
-	addTestUserAuthHeader(req, user.ID)
+	addBackofficeAuthHeader(req, adminToken)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
