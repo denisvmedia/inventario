@@ -834,14 +834,13 @@ func TestAuthAPI_Refresh_BearerSchemeIsCaseInsensitive(t *testing.T) {
 	}
 
 	cases := []struct {
-		name        string
-		authHeader  string
-		description string
+		name       string
+		authHeader string
 	}{
-		{"lower-case bearer", "bearer " + impTokenString, "RFC 7235 §2.1 case-insensitive scheme"},
-		{"upper-case BEARER", "BEARER " + impTokenString, "RFC 7235 §2.1 case-insensitive scheme"},
-		{"mixed-case BeArEr", "BeArEr " + impTokenString, "RFC 7235 §2.1 case-insensitive scheme"},
-		{"canonical Bearer", "Bearer " + impTokenString, "baseline sanity"},
+		{"lower-case bearer", "bearer " + impTokenString},
+		{"upper-case BEARER", "BEARER " + impTokenString},
+		{"mixed-case BeArEr", "BeArEr " + impTokenString},
+		{"canonical Bearer", "Bearer " + impTokenString},
 	}
 
 	for _, tc := range cases {
