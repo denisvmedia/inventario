@@ -154,6 +154,9 @@ func (r *UserRegistry) Update(ctx context.Context, user models.User) (*models.Us
 
 	err := reg.Update(ctx, user, nil)
 	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "User", "entity_id", user.GetID()))
+		}
 		return nil, errxtrace.Wrap("failed to update user", err)
 	}
 

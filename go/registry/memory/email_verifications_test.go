@@ -159,6 +159,17 @@ func TestEmailVerificationRegistry_Update(t *testing.T) {
 	c.Assert(reloaded.IsVerified(), qt.IsTrue)
 }
 
+func TestEmailVerificationRegistry_Update_NotFound(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewEmailVerificationRegistry()
+
+	ev := newTestEmailVerification("token-update-missing")
+	ev.ID = "no-such-id"
+	_, err := r.Update(ctx, ev)
+	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+}
+
 func TestEmailVerificationRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()

@@ -183,6 +183,23 @@ func TestEmailVerificationRegistry_Update(t *testing.T) {
 	c.Assert(reloaded.IsVerified(), qt.IsTrue)
 }
 
+// TestEmailVerificationRegistry_Update_NotFound pins parity with the memory
+// backend: Update against an unknown ID returns registry.ErrNotFound rather
+// than silently succeeding with a zero-row UPDATE. See #1814.
+func TestEmailVerificationRegistry_Update_NotFound(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := context.Background()
+	user := getTestUser(c, registrySet)
+
+	ev := newTestEmailVerification(user, "token-update-missing")
+	ev.ID = "no-such-id"
+	_, err := registrySet.EmailVerificationRegistry.Update(ctx, ev)
+	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+}
+
 func TestEmailVerificationRegistry_Delete(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()

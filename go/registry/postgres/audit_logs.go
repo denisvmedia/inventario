@@ -101,6 +101,9 @@ func (r *AuditLogRegistry) Update(ctx context.Context, entry models.AuditLog) (*
 
 	reg := r.newSQLRegistry()
 	if err := reg.Update(ctx, entry, nil); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "AuditLog", "entity_id", entry.GetID()))
+		}
 		return nil, errxtrace.Wrap("failed to update audit log entry", err)
 	}
 
