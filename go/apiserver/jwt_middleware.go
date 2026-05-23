@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -23,14 +22,17 @@ import (
 // full-scope access tokens in URLs leak via Referer headers, proxy/access
 // logs and browser history. Genuine browser file/thumbnail downloads use
 // HMAC-signed URLs (SignedURLMiddleware), not JWTs.
+//
+// The Bearer auth-scheme name is matched case-insensitively per RFC 7235 §2.1
+// (delegated to parseBearerToken).
 func extractTokenFromRequest(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		return "", fmt.Errorf("authorization header required")
 	}
 
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader {
+	tokenString, ok := parseBearerToken(authHeader)
+	if !ok {
 		return "", fmt.Errorf("bearer token required")
 	}
 	return tokenString, nil
