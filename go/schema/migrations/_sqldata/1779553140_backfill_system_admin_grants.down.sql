@@ -21,7 +21,7 @@
 -- after a no-op rollback touches zero rows.)
 --
 -- The DOWN deliberately does NOT delete from `system_admin_grants` — the
--- schema-add migration (#1780600000) owns that table's lifecycle, and a
+-- schema-add migration (#1779553130) owns that table's lifecycle, and a
 -- partial rollback should still leave the table intact and re-runnable.
 
 UPDATE users
