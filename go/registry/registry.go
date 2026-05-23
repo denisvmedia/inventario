@@ -1625,8 +1625,8 @@ type UserRegistry interface {
 // privilege off the users row removes the escalation footgun of a
 // "just UPDATE users SET is_system_admin = true" path.
 //
-// Write-surface invariant: no unauthenticated HTTP handler can mutate
-// this table. Production write paths are the `inventario admin` CLI
+// Write-surface invariant: no production HTTP handler can mutate this
+// table. Production write paths are the `inventario admin` CLI
 // (grant-system-admin / revoke-system-admin) only. The lone exception
 // is the debug seed flow at POST /api/v1/seed, which can mint a grant
 // via ensureSystemAdminUser — but that path is gated on
