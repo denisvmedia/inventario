@@ -907,9 +907,12 @@ func (s *GroupService) AcceptInvite(ctx context.Context, token, userID, userEmai
 //   - #1221: if the invite carries an invitee_email (the #1533
 //     email-flow path), the accepting user's email must match it
 //     case-insensitively. Legacy token-only invites (invitee_email ==
-//     nil) and email-flow invites whose stored address normalizes to
-//     empty bypass the email check — the admin vouched for whoever
-//     they handed the URL to.
+//     nil) bypass the email check — the admin vouched for whoever they
+//     handed the URL to. An invitee_email that normalizes to the empty
+//     string (only possible via a direct registry write — the JSON-API
+//     binder in createInvite rejects whitespace-only input) is treated
+//     as fail-closed: no caller email matches, so the invite is
+//     unredeemable. Trusting it would silently bypass the gate.
 //
 // Extracted as a free function so AcceptInvite stays under the gocyclo
 // budget while keeping every rejection sentinel grep-friendly.
@@ -927,9 +930,6 @@ func validateInviteForAccept(invite *models.GroupInvite, userEmail, expectedTena
 		return nil
 	}
 	inviteEmail := strings.ToLower(strings.TrimSpace(*invite.InviteeEmail))
-	if inviteEmail == "" {
-		return nil
-	}
 	caller := strings.ToLower(strings.TrimSpace(userEmail))
 	if inviteEmail != caller {
 		return errxtrace.Classify(ErrInviteEmailMismatch)

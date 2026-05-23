@@ -290,11 +290,19 @@ func (api *RegistrationAPI) resolveInvite(r *http.Request, token, callerEmail st
 	// trim+lowercase both sides defensively even though handleRegister
 	// already normalizes req.Email, because the function is logically
 	// reusable from other entry points. Legacy copy-paste invites
-	// (invitee_email == nil) skip this check.
+	// (invitee_email == nil) skip this check. The duplicate-of-AcceptInvite
+	// check is intentional: this endpoint speaks plain `http.Error` with
+	// 4xx statuses (no JSON-API envelope), so it can't reuse
+	// validateInviteForAccept's sentinel-classified errors directly. Both
+	// paths normalize identically so they agree on what "match" means.
+	// An invitee_email that normalizes to empty (impossible via the
+	// JSON-API binder, only via a direct registry write) is treated as
+	// fail-closed — the comparison just falls through to "not equal" and
+	// rejects every caller, rather than silently bypassing the gate.
 	if invite.InviteeEmail != nil {
 		inviteEmail := strings.ToLower(strings.TrimSpace(*invite.InviteeEmail))
 		caller := strings.ToLower(strings.TrimSpace(callerEmail))
-		if inviteEmail != "" && inviteEmail != caller {
+		if inviteEmail != caller {
 			return false, &registrationError{
 				status:      http.StatusBadRequest,
 				userMessage: "This invite is for a different email address. Please register with the email address the invite was sent to.",

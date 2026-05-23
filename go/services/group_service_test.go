@@ -576,14 +576,16 @@ func TestGroupService_InviteFlow(t *testing.T) {
 	c.Assert(fetchedInvite.ID, qt.Equals, invite.ID)
 	c.Assert(fetchedGroup.ID, qt.Equals, group.ID)
 
-	// Accept invite (legacy token-only invite — userEmail is ignored).
-	membership, err := svc.AcceptInvite(ctx, invite.Token, "user-2", "", "tenant-1")
+	// Accept invite (legacy token-only invite — userEmail is ignored;
+	// pass a non-empty value so the test guards against a regression
+	// that accidentally tightened the nil-check to a non-empty check).
+	membership, err := svc.AcceptInvite(ctx, invite.Token, "user-2", "any-email@example.com", "tenant-1")
 	c.Assert(err, qt.IsNil)
 	c.Assert(membership.MemberUserID, qt.Equals, "user-2")
 	c.Assert(membership.Role, qt.Equals, models.GroupRoleUser)
 
 	// Cannot accept the same invite again
-	_, err = svc.AcceptInvite(ctx, invite.Token, "user-3", "", "tenant-1")
+	_, err = svc.AcceptInvite(ctx, invite.Token, "user-3", "any-email@example.com", "tenant-1")
 	c.Assert(err, qt.IsNotNil)
 
 	// Verify user-2 is now a member
@@ -641,8 +643,10 @@ func TestGroupService_RevokeInviteForGroup_CannotRevokeUsed(t *testing.T) {
 	invite, err := svc.CreateInvite(ctx, "tenant-1", group.ID, "user-1", 24*time.Hour)
 	c.Assert(err, qt.IsNil)
 
-	// Accept the invite (legacy token-only invite — userEmail is ignored).
-	_, err = svc.AcceptInvite(ctx, invite.Token, "user-2", "", "tenant-1")
+	// Accept the invite (legacy token-only invite — userEmail is ignored;
+	// pass a non-empty value as a regression guard, matching the basic
+	// invite-flow test above).
+	_, err = svc.AcceptInvite(ctx, invite.Token, "user-2", "any-email@example.com", "tenant-1")
 	c.Assert(err, qt.IsNil)
 
 	// Cannot revoke a used invite
@@ -1050,6 +1054,14 @@ func TestGroupService_AcceptInvite_EmailMismatchRejected(t *testing.T) {
 	c.Assert(err, qt.ErrorIs, services.ErrInviteEmailMismatch)
 	c.Assert(svc.IsGroupMember(ctx, group.ID, "user-2"), qt.IsFalse,
 		qt.Commentf("rejected accept must not create a membership"))
+
+	// The invite must stay unconsumed so the legitimate invitee can
+	// still redeem it (the CAS MarkUsed runs only after every
+	// pre-redemption check passes).
+	fresh, _, err := svc.GetInviteInfo(ctx, invite.Token)
+	c.Assert(err, qt.IsNil)
+	c.Assert(fresh.IsUsed(), qt.IsFalse,
+		qt.Commentf("email-mismatch rejection must leave the invite unconsumed"))
 }
 
 // TestGroupService_AcceptInvite_EmailMatchAccepted — #1221: matching
