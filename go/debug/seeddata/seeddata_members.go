@@ -101,26 +101,14 @@ func seedGroupMembers(ctx context.Context, set *registry.Set, tenant *models.Ten
 		return fmt.Errorf("create family owner membership: %w", err)
 	}
 
-	// admin's Family-group membership intentionally JoinedAt LATER than
-	// every group admin owns. `pickDefaultMembership` (the tiebreaker
-	// `GroupService.EnsureUserDefaultGroup` uses when `GroupPurgeService.
-	// repromoteDefaultGroupForUsers` re-elects a default after admin's
-	// then-current default is purged) sorts by `joined_at ASC` and picks
-	// the oldest. Backdating Family the same way the owner row is
-	// backdated would let Family win that tiebreaker — re-promoting
-	// admin onto Family where they only carry GroupRoleUser. Every
-	// subsequent admin write (POST /locations, /commodities, /files…)
-	// then 403s with "Group admin access required" from
-	// `structuralWriteGate(requireGroupRoleForWrite(GroupRoleAdmin))`
-	// and the e2e suite collapses (storage-usage, warranties,
-	// user-isolation, files, mail — 14 tests in sequence). The
-	// macOS-webkit lane is where this lands deterministically; the
-	// docker linux lanes happen to never trip the purge → re-promote
-	// chain inside a single workflow attempt. Pinning Family strictly
-	// later than admin's own primary-group owner stamp (set at request
-	// time inside SeedData) keeps Family visible in the switcher (which
-	// only requires the membership row to exist) while taking it out
-	// of the default-promotion lottery entirely.
+	// Invariant: admin's Family membership must JoinedAt strictly LATER
+	// than admin's own owner memberships. The default-group re-election
+	// tiebreaker (`pickDefaultMembership` in services/group_service.go)
+	// sorts by joined_at ASC and picks the oldest — and admin only carries
+	// GroupRoleUser on Family. Letting Family win that tiebreaker
+	// re-promotes admin onto a group where they cannot write, breaking the
+	// rest of the e2e suite the next time `GroupPurgeService` re-elects a
+	// default (#1841).
 	if _, err := set.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenant.ID,
