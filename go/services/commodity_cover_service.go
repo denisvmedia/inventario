@@ -69,8 +69,9 @@ func NewCommodityCoverService(signing *FileSigningService) *CommodityCoverServic
 //
 // Caller must supply the user id used to sign the URLs; an empty userID
 // short-circuits to an empty result because the signed URL would be
-// unverifiable.
-func (s *CommodityCoverService) ResolveMany(ctx context.Context, fileReg registry.FileRegistry, commodities []*models.Commodity, userID string) map[string]ResolvedCover {
+// unverifiable. `binding` couples the produced URLs to the caller's
+// browser session (see services.ExtractSessionBinding).
+func (s *CommodityCoverService) ResolveMany(ctx context.Context, fileReg registry.FileRegistry, commodities []*models.Commodity, userID string, binding SessionBinding) map[string]ResolvedCover {
 	out := make(map[string]ResolvedCover, len(commodities))
 	if userID == "" || fileReg == nil || len(commodities) == 0 {
 		return out
@@ -80,7 +81,7 @@ func (s *CommodityCoverService) ResolveMany(ctx context.Context, fileReg registr
 		if c == nil || c.ID == "" {
 			continue
 		}
-		cover, ok := s.resolveOne(ctx, fileReg, c, userID)
+		cover, ok := s.resolveOne(ctx, fileReg, c, userID, binding)
 		if !ok {
 			continue
 		}
@@ -92,16 +93,16 @@ func (s *CommodityCoverService) ResolveMany(ctx context.Context, fileReg registr
 // ResolveOne is the single-commodity convenience that the GET handler
 // uses. Returns ok=false when no photo is attached or the URL signing
 // fails — callers should fall back to the type emoji.
-func (s *CommodityCoverService) ResolveOne(ctx context.Context, fileReg registry.FileRegistry, commodity *models.Commodity, userID string) (ResolvedCover, bool) {
+func (s *CommodityCoverService) ResolveOne(ctx context.Context, fileReg registry.FileRegistry, commodity *models.Commodity, userID string, binding SessionBinding) (ResolvedCover, bool) {
 	if userID == "" || fileReg == nil || commodity == nil || commodity.ID == "" {
 		return ResolvedCover{}, false
 	}
-	return s.resolveOne(ctx, fileReg, commodity, userID)
+	return s.resolveOne(ctx, fileReg, commodity, userID, binding)
 }
 
-func (s *CommodityCoverService) resolveOne(ctx context.Context, fileReg registry.FileRegistry, commodity *models.Commodity, userID string) (ResolvedCover, bool) {
+func (s *CommodityCoverService) resolveOne(ctx context.Context, fileReg registry.FileRegistry, commodity *models.Commodity, userID string, binding SessionBinding) (ResolvedCover, bool) {
 	if commodity.CoverFileID != nil && *commodity.CoverFileID != "" {
-		if cover, ok := s.signCover(commodity.ID, fetchExplicitCover(ctx, fileReg, commodity.ID, *commodity.CoverFileID), CoverSourceExplicit, userID); ok {
+		if cover, ok := s.signCover(commodity.ID, fetchExplicitCover(ctx, fileReg, commodity.ID, *commodity.CoverFileID), CoverSourceExplicit, userID, binding); ok {
 			return cover, true
 		}
 		// Fall through to first-photo if the override is unusable
@@ -114,18 +115,18 @@ func (s *CommodityCoverService) resolveOne(ctx context.Context, fileReg registry
 	if !ok {
 		return ResolvedCover{}, false
 	}
-	return s.signCover(commodity.ID, first, CoverSourceFirstPhoto, userID)
+	return s.signCover(commodity.ID, first, CoverSourceFirstPhoto, userID, binding)
 }
 
 // signCover builds a ResolvedCover from a file entity by minting signed
 // thumbnail URLs. Returns ok=false on any signing failure or when the
 // file is nil — both treated by callers as "skip and let the FE
 // fallback render the emoji".
-func (s *CommodityCoverService) signCover(commodityID string, file *models.FileEntity, source CoverSource, userID string) (ResolvedCover, bool) {
+func (s *CommodityCoverService) signCover(commodityID string, file *models.FileEntity, source CoverSource, userID string, binding SessionBinding) (ResolvedCover, bool) {
 	if file == nil {
 		return ResolvedCover{}, false
 	}
-	_, thumbnails, err := s.signing.GenerateSignedURLsWithThumbnails(file, userID)
+	_, thumbnails, err := s.signing.GenerateSignedURLsWithThumbnails(file, userID, binding)
 	if err != nil || len(thumbnails) == 0 {
 		return ResolvedCover{}, false
 	}

@@ -29,8 +29,13 @@ func SignedURLMiddleware(
 				return
 			}
 
-			// Validate the signed URL
-			claims, err := fileSigningService.ValidateSignedURL(r.URL.Path, r.URL.Query())
+			// Validate the signed URL. The session binding is derived from
+			// the request's refresh_token cookie; a URL minted with a
+			// binding only validates when the same cookie is presented,
+			// which couples the URL to the browser session that produced
+			// it and prevents replay from a leaked Referer / proxy log.
+			binding := services.ExtractSessionBinding(r)
+			claims, err := fileSigningService.ValidateSignedURL(r.URL.Path, r.URL.Query(), binding)
 			if err != nil {
 				slog.Warn("Invalid signed URL access attempt",
 					"path", r.URL.Path,

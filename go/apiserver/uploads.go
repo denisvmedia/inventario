@@ -157,7 +157,7 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 	api.generateThumbnailInline(r.Context(), createdFile, user.ID)
 
 	// Generate signed URLs with thumbnails for immediate use
-	originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(createdFile, user.ID)
+	originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(createdFile, user.ID, services.ExtractSessionBinding(r))
 	if err != nil {
 		// Log error but don't fail the upload - signed URLs are optional
 		slog.Error("Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)

@@ -1,6 +1,8 @@
 package services_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"testing"
@@ -62,7 +64,7 @@ func TestFileSigningService_GenerateSignedURL(t *testing.T) {
 
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
-			signedURL, err := service.GenerateSignedURL(tt.fileID, tt.fileExt, tt.userID)
+			signedURL, err := service.GenerateSignedURL(tt.fileID, tt.fileExt, tt.userID, "")
 
 			if tt.expectError {
 				c.Assert(err, qt.IsNotNil)
@@ -85,6 +87,13 @@ func TestFileSigningService_GenerateSignedURL(t *testing.T) {
 				c.Assert(query.Get("sig"), qt.Not(qt.Equals), "")
 				c.Assert(query.Get("exp"), qt.Not(qt.Equals), "")
 				c.Assert(query.Get("uid"), qt.Equals, tt.userID)
+
+				// The binding MUST NOT leak as a query parameter — it
+				// is folded into the HMAC only. If a future change ever
+				// surfaces it in the URL the leak this issue closes
+				// (#1781) reopens immediately.
+				c.Assert(query.Get("binding"), qt.Equals, "")
+				c.Assert(query.Get("sb"), qt.Equals, "")
 
 				// Check expiration is in the future
 				expStr := query.Get("exp")
@@ -109,7 +118,7 @@ func TestFileSigningService_ValidateSignedURL_ValidCases(t *testing.T) {
 	fileID := "test-file-123"
 	fileExt := "pdf"
 	userID := "user-456"
-	signedURL, err := service.GenerateSignedURL(fileID, fileExt, userID)
+	signedURL, err := service.GenerateSignedURL(fileID, fileExt, userID, "")
 	c.Assert(err, qt.IsNil)
 
 	// Parse the URL to get path and query parameters
@@ -130,7 +139,7 @@ func TestFileSigningService_ValidateSignedURL_ValidCases(t *testing.T) {
 
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
-			claims, err := service.ValidateSignedURL(tt.path, tt.query)
+			claims, err := service.ValidateSignedURL(tt.path, tt.query, "")
 
 			c.Assert(err, qt.IsNil)
 			c.Assert(claims, qt.IsNotNil)
@@ -152,7 +161,7 @@ func TestFileSigningService_ValidateSignedURL_ErrorCases(t *testing.T) {
 	fileID := "test-file-123"
 	fileExt := "pdf"
 	userID := "user-456"
-	signedURL, err := service.GenerateSignedURL(fileID, fileExt, userID)
+	signedURL, err := service.GenerateSignedURL(fileID, fileExt, userID, "")
 	c.Assert(err, qt.IsNil)
 
 	// Parse the URL to get path and query parameters
@@ -211,7 +220,7 @@ func TestFileSigningService_ValidateSignedURL_ErrorCases(t *testing.T) {
 
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
-			claims, err := service.ValidateSignedURL(tt.path, tt.query)
+			claims, err := service.ValidateSignedURL(tt.path, tt.query, "")
 
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tt.errorMsg)
@@ -263,7 +272,7 @@ func TestFileSigningService_ExtractFileIDFromPath_ValidPaths(t *testing.T) {
 			query.Set("uid", "test-user")
 			query.Set("fid", "test-file-id")
 
-			_, err := service.ValidateSignedURL(tt.path, query)
+			_, err := service.ValidateSignedURL(tt.path, query, "")
 
 			// Valid paths should fail with "invalid signature" error, not path format error
 			c.Assert(err, qt.IsNotNil)
@@ -305,7 +314,7 @@ func TestFileSigningService_ExtractFileIDFromPath_InvalidPaths(t *testing.T) {
 			query.Set("exp", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10))
 			query.Set("uid", "test-user")
 
-			_, err := service.ValidateSignedURL(tt.path, query)
+			_, err := service.ValidateSignedURL(tt.path, query, "")
 
 			// Invalid paths should fail, but we don't care about the specific error message
 			// as it could be path format or other validation errors
@@ -325,8 +334,8 @@ func TestFileSigningService_SecurityProperties(t *testing.T) {
 		otherKey := []byte("different-key-32-bytes-long!!!")
 		otherService := services.NewFileSigningService(otherKey, expiration)
 
-		url1, err1 := service.GenerateSignedURL("file-123", "pdf", "user-456")
-		url2, err2 := otherService.GenerateSignedURL("file-123", "pdf", "user-456")
+		url1, err1 := service.GenerateSignedURL("file-123", "pdf", "user-456", "")
+		url2, err2 := otherService.GenerateSignedURL("file-123", "pdf", "user-456", "")
 
 		c.Assert(err1, qt.IsNil)
 		c.Assert(err2, qt.IsNil)
@@ -335,19 +344,19 @@ func TestFileSigningService_SecurityProperties(t *testing.T) {
 		// URL from service1 should not validate with service2
 		parsed, err := url.Parse(url1)
 		c.Assert(err, qt.IsNil)
-		_, err = otherService.ValidateSignedURL(parsed.Path, parsed.Query())
+		_, err = otherService.ValidateSignedURL(parsed.Path, parsed.Query(), "")
 		c.Assert(err, qt.IsNotNil)
 		c.Assert(err.Error(), qt.Equals, "invalid signature")
 	})
 
 	c.Run("signatures with different timestamps are different", func(c *qt.C) {
-		url1, err1 := service.GenerateSignedURL("file-123", "pdf", "user-456")
+		url1, err1 := service.GenerateSignedURL("file-123", "pdf", "user-456", "")
 		c.Assert(err1, qt.IsNil)
 
 		// Wait a full second to ensure different timestamp (Unix timestamp has 1-second resolution)
 		time.Sleep(1100 * time.Millisecond)
 
-		url2, err2 := service.GenerateSignedURL("file-123", "pdf", "user-456")
+		url2, err2 := service.GenerateSignedURL("file-123", "pdf", "user-456", "")
 		c.Assert(err2, qt.IsNil)
 
 		// URLs should be different due to different timestamps
@@ -356,13 +365,13 @@ func TestFileSigningService_SecurityProperties(t *testing.T) {
 		// But both should validate successfully
 		parsed1, err := url.Parse(url1)
 		c.Assert(err, qt.IsNil)
-		claims1, err := service.ValidateSignedURL(parsed1.Path, parsed1.Query())
+		claims1, err := service.ValidateSignedURL(parsed1.Path, parsed1.Query(), "")
 		c.Assert(err, qt.IsNil)
 		c.Assert(claims1, qt.IsNotNil)
 
 		parsed2, err := url.Parse(url2)
 		c.Assert(err, qt.IsNil)
-		claims2, err := service.ValidateSignedURL(parsed2.Path, parsed2.Query())
+		claims2, err := service.ValidateSignedURL(parsed2.Path, parsed2.Query(), "")
 		c.Assert(err, qt.IsNil)
 		c.Assert(claims2, qt.IsNotNil)
 	})
@@ -443,7 +452,7 @@ func TestFileSigningService_GenerateSignedURLsWithThumbnails(t *testing.T) {
 				},
 			}
 
-			originalURL, thumbnails, err := service.GenerateSignedURLsWithThumbnails(fileEntity, tt.userID)
+			originalURL, thumbnails, err := service.GenerateSignedURLsWithThumbnails(fileEntity, tt.userID, "")
 
 			c.Assert(err, qt.IsNil)
 			c.Assert(originalURL, qt.Not(qt.Equals), "")
@@ -521,7 +530,7 @@ func TestFileSigningService_GetThumbnailPath(t *testing.T) {
 				},
 			}
 
-			_, thumbnails, err := service.GenerateSignedURLsWithThumbnails(fileEntity, "user-id")
+			_, thumbnails, err := service.GenerateSignedURLsWithThumbnails(fileEntity, "user-id", "")
 			c.Assert(err, qt.IsNil)
 
 			switch tt.sizeName {
@@ -531,5 +540,185 @@ func TestFileSigningService_GetThumbnailPath(t *testing.T) {
 				c.Assert(thumbnails["medium"], qt.Contains, tt.expected)
 			}
 		})
+	}
+}
+
+// TestExtractSessionBinding covers the helper that lifts the binding off
+// the incoming request: nil request, no cookie, empty cookie, and a real
+// cookie should all behave per spec.
+func TestExtractSessionBinding(t *testing.T) {
+	c := qt.New(t)
+
+	c.Run("nil request returns empty", func(c *qt.C) {
+		c.Assert(services.ExtractSessionBinding(nil), qt.Equals, services.SessionBinding(""))
+	})
+
+	c.Run("missing cookie returns empty", func(c *qt.C) {
+		r := httptest.NewRequest(http.MethodGet, "/whatever", nil)
+		c.Assert(services.ExtractSessionBinding(r), qt.Equals, services.SessionBinding(""))
+	})
+
+	c.Run("empty cookie value returns empty", func(c *qt.C) {
+		r := httptest.NewRequest(http.MethodGet, "/whatever", nil)
+		r.AddCookie(&http.Cookie{Name: "refresh_token", Value: ""})
+		c.Assert(services.ExtractSessionBinding(r), qt.Equals, services.SessionBinding(""))
+	})
+
+	c.Run("present cookie produces stable, non-empty binding", func(c *qt.C) {
+		r1 := httptest.NewRequest(http.MethodGet, "/whatever", nil)
+		r1.AddCookie(&http.Cookie{Name: "refresh_token", Value: "the-cookie-value"})
+		r2 := httptest.NewRequest(http.MethodGet, "/whatever", nil)
+		r2.AddCookie(&http.Cookie{Name: "refresh_token", Value: "the-cookie-value"})
+
+		b1 := services.ExtractSessionBinding(r1)
+		b2 := services.ExtractSessionBinding(r2)
+
+		c.Assert(string(b1), qt.Not(qt.Equals), "")
+		c.Assert(b1, qt.Equals, b2)
+	})
+
+	c.Run("different cookies produce different bindings", func(c *qt.C) {
+		r1 := httptest.NewRequest(http.MethodGet, "/whatever", nil)
+		r1.AddCookie(&http.Cookie{Name: "refresh_token", Value: "cookie-A"})
+		r2 := httptest.NewRequest(http.MethodGet, "/whatever", nil)
+		r2.AddCookie(&http.Cookie{Name: "refresh_token", Value: "cookie-B"})
+
+		c.Assert(services.ExtractSessionBinding(r1), qt.Not(qt.Equals), services.ExtractSessionBinding(r2))
+	})
+
+	c.Run("other cookies do not contribute", func(c *qt.C) {
+		r := httptest.NewRequest(http.MethodGet, "/whatever", nil)
+		r.AddCookie(&http.Cookie{Name: "session", Value: "looks-juicy"})
+		r.AddCookie(&http.Cookie{Name: "access_token", Value: "also-juicy"})
+		c.Assert(services.ExtractSessionBinding(r), qt.Equals, services.SessionBinding(""))
+	})
+}
+
+// TestFileSigningService_SessionBindingMatrix is the heart of #1781: the
+// signature MUST only verify when the binding presented at validate time
+// equals the binding the URL was minted with.
+func TestFileSigningService_SessionBindingMatrix(t *testing.T) {
+	signingKey := []byte("test-signing-key-32-bytes-long!!")
+	expiration := 15 * time.Minute
+	service := services.NewFileSigningService(signingKey, expiration)
+
+	const fileID = "file-1"
+	const fileExt = "pdf"
+	const userID = "user-1"
+
+	type row struct {
+		name        string
+		mintWith    services.SessionBinding
+		validateAs  services.SessionBinding
+		expectValid bool
+	}
+
+	rows := []row{
+		{
+			name:        "bound mint, same binding validates",
+			mintWith:    "session-A",
+			validateAs:  "session-A",
+			expectValid: true,
+		},
+		{
+			name:        "bound mint, different binding rejected",
+			mintWith:    "session-A",
+			validateAs:  "session-B",
+			expectValid: false,
+		},
+		{
+			name:        "bound mint, empty binding rejected",
+			mintWith:    "session-A",
+			validateAs:  "",
+			expectValid: false,
+		},
+		{
+			name:        "unbound mint, empty binding validates (back-compat)",
+			mintWith:    "",
+			validateAs:  "",
+			expectValid: true,
+		},
+		{
+			name:        "unbound mint, any binding rejected",
+			mintWith:    "",
+			validateAs:  "session-A",
+			expectValid: false,
+		},
+	}
+
+	for _, r := range rows {
+		t.Run(r.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			signed, err := service.GenerateSignedURL(fileID, fileExt, userID, r.mintWith)
+			c.Assert(err, qt.IsNil)
+
+			parsed, err := url.Parse(signed)
+			c.Assert(err, qt.IsNil)
+
+			// The binding must never appear in the URL — that is the
+			// whole point of binding via cookie.
+			c.Assert(parsed.Query().Get("binding"), qt.Equals, "")
+			c.Assert(parsed.Query().Get("sb"), qt.Equals, "")
+
+			claims, err := service.ValidateSignedURL(parsed.Path, parsed.Query(), r.validateAs)
+			if r.expectValid {
+				c.Assert(err, qt.IsNil)
+				c.Assert(claims, qt.IsNotNil)
+				c.Assert(claims.FileID, qt.Equals, fileID)
+				c.Assert(claims.UserID, qt.Equals, userID)
+			} else {
+				c.Assert(err, qt.IsNotNil)
+				c.Assert(err.Error(), qt.Equals, "invalid signature")
+				c.Assert(claims, qt.IsNil)
+			}
+		})
+	}
+}
+
+// TestFileSigningService_ThumbnailsCarryBinding ensures the thumbnail URL
+// path also inherits the binding so a leaked thumbnail URL can't be used
+// from a foreign session either.
+func TestFileSigningService_ThumbnailsCarryBinding(t *testing.T) {
+	c := qt.New(t)
+
+	signingKey := []byte("test-signing-key-32-bytes-long!!")
+	service := services.NewFileSigningService(signingKey, 15*time.Minute)
+
+	fileEntity := &models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			EntityID: models.EntityID{ID: "img-1"},
+		},
+		Type: models.FileTypeImage,
+		File: &models.File{
+			Path:         "img-1",
+			OriginalPath: "img-1.png",
+			Ext:          ".png",
+			MIMEType:     "image/png",
+		},
+	}
+
+	originalURL, thumbnails, err := service.GenerateSignedURLsWithThumbnails(fileEntity, "user-1", "session-A")
+	c.Assert(err, qt.IsNil)
+	c.Assert(thumbnails, qt.HasLen, 2)
+
+	// Original URL must reject foreign binding.
+	parsed, err := url.Parse(originalURL)
+	c.Assert(err, qt.IsNil)
+	_, err = service.ValidateSignedURL(parsed.Path, parsed.Query(), "session-B")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Equals, "invalid signature")
+
+	// Each thumbnail URL must also reject foreign binding.
+	for size, raw := range thumbnails {
+		parsed, err := url.Parse(raw)
+		c.Assert(err, qt.IsNil, qt.Commentf("thumbnail %q failed to parse", size))
+		_, err = service.ValidateSignedURL(parsed.Path, parsed.Query(), "session-B")
+		c.Assert(err, qt.IsNotNil, qt.Commentf("thumbnail %q should reject foreign binding", size))
+		c.Assert(err.Error(), qt.Equals, "invalid signature")
+
+		// And accept the original binding.
+		_, err = service.ValidateSignedURL(parsed.Path, parsed.Query(), "session-A")
+		c.Assert(err, qt.IsNil, qt.Commentf("thumbnail %q should accept original binding", size))
 	}
 }

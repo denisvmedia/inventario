@@ -216,7 +216,7 @@ func TestSignedURLMiddleware(t *testing.T) {
 	c.Run("valid signed URL", func(c *qt.C) {
 		// Generate a valid signed URL against the seeded file (its ID was
 		// minted by the registry, not the literal "test-file").
-		signedURL, err := fileSigningService.GenerateSignedURL(seededFileID, "pdf", testUser.ID)
+		signedURL, err := fileSigningService.GenerateSignedURL(seededFileID, "pdf", testUser.ID, "")
 		c.Assert(err, qt.IsNil)
 
 		// Parse the URL
@@ -249,7 +249,7 @@ func TestSignedURLMiddleware(t *testing.T) {
 		userRegistry.addUser(inactiveUser)
 
 		// Generate signed URL for inactive user
-		signedURL, err := fileSigningService.GenerateSignedURL("test-file", "pdf", inactiveUser.ID)
+		signedURL, err := fileSigningService.GenerateSignedURL("test-file", "pdf", inactiveUser.ID, "")
 		c.Assert(err, qt.IsNil)
 
 		// Parse the URL
@@ -273,7 +273,7 @@ func TestSignedURLMiddleware(t *testing.T) {
 		shortExpirationService := services.NewFileSigningService(signingKey, 1*time.Nanosecond)
 
 		// Generate signed URL that will expire immediately
-		signedURL, err := shortExpirationService.GenerateSignedURL("test-file", "pdf", testUser.ID)
+		signedURL, err := shortExpirationService.GenerateSignedURL("test-file", "pdf", testUser.ID, "")
 		c.Assert(err, qt.IsNil)
 
 		// Wait for expiration
@@ -297,7 +297,7 @@ func TestSignedURLMiddleware(t *testing.T) {
 
 	c.Run("user not found with valid signature", func(c *qt.C) {
 		// Generate signed URL for non-existent user
-		signedURL, err := fileSigningService.GenerateSignedURL("test-file", "pdf", "non-existent-user")
+		signedURL, err := fileSigningService.GenerateSignedURL("test-file", "pdf", "non-existent-user", "")
 		c.Assert(err, qt.IsNil)
 
 		// Parse the URL
@@ -365,7 +365,7 @@ func TestSignedURLMiddleware_SecurityScenarios(t *testing.T) {
 
 	c.Run("user cannot access file with another user's signature", func(c *qt.C) {
 		// Generate signed URL for user1
-		signedURL, err := fileSigningService.GenerateSignedURL("test-file", "pdf", user1.ID)
+		signedURL, err := fileSigningService.GenerateSignedURL("test-file", "pdf", user1.ID, "")
 		c.Assert(err, qt.IsNil)
 
 		// Parse and modify the URL to use user2's ID
@@ -390,7 +390,7 @@ func TestSignedURLMiddleware_SecurityScenarios(t *testing.T) {
 
 	c.Run("tampering with file ID invalidates signature", func(c *qt.C) {
 		// Generate signed URL for a file
-		signedURL, err := fileSigningService.GenerateSignedURL("original-file", "pdf", user1.ID)
+		signedURL, err := fileSigningService.GenerateSignedURL("original-file", "pdf", user1.ID, "")
 		c.Assert(err, qt.IsNil)
 
 		// Parse the URL
@@ -408,6 +408,112 @@ func TestSignedURLMiddleware_SecurityScenarios(t *testing.T) {
 		wrappedHandler.ServeHTTP(w, req)
 
 		// Should fail due to signature mismatch
+		c.Assert(w.Code, qt.Equals, http.StatusUnauthorized)
+		c.Assert(w.Body.String(), qt.Equals, "Invalid or expired file URL\n")
+	})
+}
+
+// TestSignedURLMiddleware_SessionBinding is the e2e guard for #1781: a URL
+// minted while the caller's refresh_token cookie was present MUST NOT be
+// usable from a request that lacks that cookie (or carries a different
+// one). The cookie does NOT leak via Referer / proxy logs / browser
+// history, so this closes the ~15-minute access window the issue
+// described.
+func TestSignedURLMiddleware_SessionBinding(t *testing.T) {
+	c := qt.New(t)
+
+	signingKey := []byte("test-signing-key-32-bytes-long!!")
+	fileSigningService := services.NewFileSigningService(signingKey, 15*time.Minute)
+	userRegistry := newMockUserRegistry()
+
+	testUser := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "binding-user"},
+			TenantID: "binding-tenant",
+		},
+		Email:    "binding@example.com",
+		Name:     "Binding User",
+		IsActive: true,
+	}
+	userRegistry.addUser(testUser)
+
+	fs := memory.NewFactorySet()
+	seededFile, err := fs.FileRegistryFactory.CreateServiceRegistry().Create(context.Background(), models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID: testUser.TenantID,
+		},
+	})
+	c.Assert(err, qt.IsNil)
+
+	middleware := apiserver.SignedURLMiddleware(fileSigningService, userRegistry, fs.FileRegistryFactory, fs.LocationGroupRegistry)
+	wrappedHandler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("success"))
+	}))
+
+	// Mint the URL with the binding the live browser would produce.
+	mintReq := httptest.NewRequest(http.MethodGet, "/mint", nil)
+	mintReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: "session-cookie-A"})
+	mintBinding := services.ExtractSessionBinding(mintReq)
+	c.Assert(string(mintBinding), qt.Not(qt.Equals), "")
+
+	signedURL, err := fileSigningService.GenerateSignedURL(seededFile.ID, "pdf", testUser.ID, mintBinding)
+	c.Assert(err, qt.IsNil)
+
+	parsed, err := url.Parse(signedURL)
+	c.Assert(err, qt.IsNil)
+
+	c.Run("same-session cookie succeeds", func(c *qt.C) {
+		req := httptest.NewRequest(http.MethodGet, parsed.Path+"?"+parsed.RawQuery, nil)
+		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "session-cookie-A"})
+		w := httptest.NewRecorder()
+		wrappedHandler.ServeHTTP(w, req)
+		c.Assert(w.Code, qt.Equals, http.StatusOK)
+		c.Assert(w.Body.String(), qt.Equals, "success")
+	})
+
+	c.Run("missing cookie is rejected", func(c *qt.C) {
+		req := httptest.NewRequest(http.MethodGet, parsed.Path+"?"+parsed.RawQuery, nil)
+		w := httptest.NewRecorder()
+		wrappedHandler.ServeHTTP(w, req)
+		c.Assert(w.Code, qt.Equals, http.StatusUnauthorized)
+		c.Assert(w.Body.String(), qt.Equals, "Invalid or expired file URL\n")
+	})
+
+	c.Run("different cookie is rejected", func(c *qt.C) {
+		req := httptest.NewRequest(http.MethodGet, parsed.Path+"?"+parsed.RawQuery, nil)
+		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "session-cookie-B"})
+		w := httptest.NewRecorder()
+		wrappedHandler.ServeHTTP(w, req)
+		c.Assert(w.Code, qt.Equals, http.StatusUnauthorized)
+		c.Assert(w.Body.String(), qt.Equals, "Invalid or expired file URL\n")
+	})
+
+	c.Run("URL minted without binding still works for unbound caller", func(c *qt.C) {
+		// Back-compat: a tool that mints without a cookie present must
+		// still validate from a caller that also has no cookie. The URL
+		// is no worse than the pre-#1781 behaviour.
+		unbound, err := fileSigningService.GenerateSignedURL(seededFile.ID, "pdf", testUser.ID, "")
+		c.Assert(err, qt.IsNil)
+		parsedUnbound, err := url.Parse(unbound)
+		c.Assert(err, qt.IsNil)
+
+		req := httptest.NewRequest(http.MethodGet, parsedUnbound.Path+"?"+parsedUnbound.RawQuery, nil)
+		w := httptest.NewRecorder()
+		wrappedHandler.ServeHTTP(w, req)
+		c.Assert(w.Code, qt.Equals, http.StatusOK)
+	})
+
+	c.Run("URL minted without binding is rejected for bound caller", func(c *qt.C) {
+		unbound, err := fileSigningService.GenerateSignedURL(seededFile.ID, "pdf", testUser.ID, "")
+		c.Assert(err, qt.IsNil)
+		parsedUnbound, err := url.Parse(unbound)
+		c.Assert(err, qt.IsNil)
+
+		req := httptest.NewRequest(http.MethodGet, parsedUnbound.Path+"?"+parsedUnbound.RawQuery, nil)
+		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "session-cookie-A"})
+		w := httptest.NewRecorder()
+		wrappedHandler.ServeHTTP(w, req)
 		c.Assert(w.Code, qt.Equals, http.StatusUnauthorized)
 		c.Assert(w.Body.String(), qt.Equals, "Invalid or expired file URL\n")
 	})
