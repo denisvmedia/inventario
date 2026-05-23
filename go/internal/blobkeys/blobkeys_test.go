@@ -158,15 +158,38 @@ func TestRewriteForTenant_EmptyInputs(t *testing.T) {
 func TestKeysAlwaysCarryTenantNamespace(t *testing.T) {
 	// Structural invariant: no helper may emit a key that escapes the
 	// tenant's namespace, however absurd the inputs. This is the core
-	// defence-in-depth property issue #1793 asks for.
+	// defence-in-depth property issue #1793 asks for. Beyond the
+	// prefix check we also assert the rendered key contains no `..`
+	// traversal token — `t/<tenant>/files/../../escape.pdf` would
+	// "carry the prefix" yet resolve outside the namespace on
+	// filesystem-backed buckets.
 	c := qt.New(t)
 	tenant := "tenant-a"
 	prefix := blobkeys.TenantPrefix(tenant)
 
-	c.Assert(strings.HasPrefix(blobkeys.BuildFileBlobKey(tenant, "../../escape", ".pdf"), prefix), qt.IsTrue)
-	c.Assert(strings.HasPrefix(blobkeys.BuildFileUploadKey(tenant, "../../escape.pdf"), prefix), qt.IsTrue)
-	c.Assert(strings.HasPrefix(blobkeys.BuildThumbnailBlobKey(tenant, "../../escape", "small"), prefix), qt.IsTrue)
-	c.Assert(strings.HasPrefix(blobkeys.BuildExportBlobKey(tenant, "any", "ts"), prefix), qt.IsTrue)
-	c.Assert(strings.HasPrefix(blobkeys.BuildRestoreUploadKey(tenant, "../escape.xml"), prefix), qt.IsTrue)
-	c.Assert(strings.HasPrefix(blobkeys.BuildSeedKey(tenant, "anything"), prefix), qt.IsTrue)
+	hostileInputs := []string{
+		blobkeys.BuildFileBlobKey(tenant, "../../escape", ".pdf"),
+		blobkeys.BuildFileUploadKey(tenant, "../../escape.pdf"),
+		blobkeys.BuildThumbnailBlobKey(tenant, "../../escape", "small"),
+		blobkeys.BuildExportBlobKey(tenant, "any", "ts"),
+		blobkeys.BuildRestoreUploadKey(tenant, "../escape.xml"),
+		blobkeys.BuildSeedKey(tenant, "../etc/passwd"),
+		blobkeys.BuildFileUploadKey(tenant, `..\windows\system32\config\sam`),
+	}
+	for i, got := range hostileInputs {
+		c.Assert(strings.HasPrefix(got, prefix), qt.IsTrue,
+			qt.Commentf("[%d] %q must carry tenant prefix", i, got))
+		c.Assert(strings.Contains(got, ".."), qt.IsFalse,
+			qt.Commentf("[%d] %q must not contain traversal token", i, got))
+		c.Assert(strings.Contains(got, "\\"), qt.IsFalse,
+			qt.Commentf("[%d] %q must not contain backslash", i, got))
+		// After stripping the tenant prefix the remainder must have no
+		// further `..` segments and no backslashes — those would let a
+		// filesystem-backed bucket resolve outside `t/<tenant>/`.
+		rest := strings.TrimPrefix(got, prefix)
+		for seg := range strings.SplitSeq(rest, "/") {
+			c.Assert(seg, qt.Not(qt.Equals), "..",
+				qt.Commentf("[%d] segment %q is a traversal token", i, seg))
+		}
+	}
 }

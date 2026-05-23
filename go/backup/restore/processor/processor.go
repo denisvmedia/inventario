@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -2007,9 +2008,17 @@ func (l *RestoreOperationProcessor) handleDataStart(
 	// importing tenant's namespace, never the exporter's (defence-
 	// in-depth: a malicious XML cannot point a restore at another
 	// tenant's bucket slot).
-	if user := appctx.UserFromContext(ctx); user != nil && user.TenantID != "" {
-		xmlFile.OriginalPath = rewriteImportKey(xmlFile.OriginalPath, user.TenantID)
+	//
+	// Fail-closed: a restore that reached this point without a tenant
+	// context is a wiring bug — the Process pipeline always populates
+	// it from `Export.CreatedByUserID`. Proceeding here would write
+	// the blob under the XML-declared key, defeating the whole point
+	// of the rewrite.
+	user := appctx.UserFromContext(ctx)
+	if user == nil || user.TenantID == "" {
+		return 0, errors.New("tenant context is required to restore file data")
 	}
+	xmlFile.OriginalPath = rewriteImportKey(xmlFile.OriginalPath, user.TenantID)
 	size, err := l.handleFileDataElement(ctx, decoder, xmlFile, existing, idMapping, options)
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to stream file data", err, errx.Attrs("xml_id", xmlFile.ID))
@@ -2273,26 +2282,16 @@ func ensureFileTags(tags models.StringSlice) models.StringSlice {
 // namespace before re-prefixing under the importing tenant.
 //
 // Returns the input unchanged if it does not carry a tenant prefix or
-// the prefix is malformed (no trailing slash after the tenant segment).
+// the prefix is malformed (no trailing slash after the tenant segment;
+// kept as a defensive guard even though every caller funnels through
+// HasTenantPrefix first).
 func stripTenantPrefix(key string) string {
 	if !blobkeys.HasTenantPrefix(key) {
 		return key
 	}
-	rest := key[len(blobkeys.Prefix):]
-	slash := indexByte(rest, '/')
-	if slash < 0 {
+	_, after, found := strings.Cut(key[len(blobkeys.Prefix):], "/")
+	if !found {
 		return key
 	}
-	return rest[slash+1:]
-}
-
-// indexByte is a tiny escape hatch from `strings` to avoid widening
-// the import set for one helper. Inlined by the compiler.
-func indexByte(s string, c byte) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == c {
-			return i
-		}
-	}
-	return -1
+	return after
 }

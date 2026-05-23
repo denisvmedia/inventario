@@ -64,6 +64,25 @@ func TenantPrefix(tenantID string) string {
 	return Prefix + tenantID + "/"
 }
 
+// sanitizeSegment defence-in-depth-normalises a single per-call
+// basename or identifier so the resulting blob key cannot escape the
+// tenant namespace under any backend's traversal rules. Replaces
+// `/`, `\`, and the `..` traversal token with `_`.
+//
+// Callers normally feed already-sanitized strings (`filekit.UploadFileName`,
+// `textutils.CleanFilename`, server-minted UUIDs); this is the structural
+// safety net so a future caller that bypasses upstream sanitisation
+// cannot punch a hole in the tenant namespace through these helpers.
+func sanitizeSegment(s string) string {
+	if s == "" {
+		return s
+	}
+	s = strings.ReplaceAll(s, "\\", "_")
+	s = strings.ReplaceAll(s, "/", "_")
+	s = strings.ReplaceAll(s, "..", "_")
+	return s
+}
+
 // BuildFileBlobKey produces the canonical blob key for an original file
 // upload: `t/<tenant>/files/<file-id><ext>`. The extension argument is
 // expected to start with a dot (".pdf", ".jpg"); an empty string is
@@ -73,7 +92,10 @@ func TenantPrefix(tenantID string) string {
 // the key is stable across renames and cannot be guessed from a Path
 // the operator might choose.
 func BuildFileBlobKey(tenantID, fileID, ext string) string {
-	return fmt.Sprintf("%s%s/%s/%s%s", Prefix, tenantID, FilesSegment, fileID, ext)
+	return fmt.Sprintf("%s%s/%s/%s%s",
+		Prefix, tenantID, FilesSegment,
+		sanitizeSegment(fileID), sanitizeSegment(ext),
+	)
 }
 
 // BuildFileUploadKey is the upload-time variant of BuildFileBlobKey for
@@ -90,7 +112,7 @@ func BuildFileBlobKey(tenantID, fileID, ext string) string {
 // (`t/<tenant>/files/<basename>`) so readers don't care which writer
 // minted the row.
 func BuildFileUploadKey(tenantID, basename string) string {
-	return fmt.Sprintf("%s%s/%s/%s", Prefix, tenantID, FilesSegment, basename)
+	return fmt.Sprintf("%s%s/%s/%s", Prefix, tenantID, FilesSegment, sanitizeSegment(basename))
 }
 
 // BuildThumbnailBlobKey produces the canonical blob key for a derived
@@ -98,7 +120,10 @@ func BuildFileUploadKey(tenantID, basename string) string {
 // thumbnails are JPEG regardless of the source format — the file
 // service re-encodes during generation.
 func BuildThumbnailBlobKey(tenantID, fileID, size string) string {
-	return fmt.Sprintf("%s%s/%s/%s_%s.jpg", Prefix, tenantID, ThumbnailsSegment, fileID, size)
+	return fmt.Sprintf("%s%s/%s/%s_%s.jpg",
+		Prefix, tenantID, ThumbnailsSegment,
+		sanitizeSegment(fileID), sanitizeSegment(size),
+	)
 }
 
 // BuildExportBlobKey produces the canonical blob key for a generated
@@ -108,7 +133,8 @@ func BuildThumbnailBlobKey(tenantID, fileID, size string) string {
 func BuildExportBlobKey(tenantID, exportType, timestamp string) string {
 	return fmt.Sprintf("%s%s/%s/export_%s_%s.xml",
 		Prefix, tenantID, ExportsSegment,
-		strings.ToLower(exportType), timestamp,
+		sanitizeSegment(strings.ToLower(exportType)),
+		sanitizeSegment(timestamp),
 	)
 }
 
@@ -118,7 +144,7 @@ func BuildExportBlobKey(tenantID, exportType, timestamp string) string {
 // be sanitized (the upload pipeline runs every name through
 // filekit.UploadFileName before reaching us).
 func BuildRestoreUploadKey(tenantID, filename string) string {
-	return fmt.Sprintf("%s%s/%s/%s", Prefix, tenantID, RestoresSegment, filename)
+	return fmt.Sprintf("%s%s/%s/%s", Prefix, tenantID, RestoresSegment, sanitizeSegment(filename))
 }
 
 // BuildSeedKey produces the canonical blob key for a demo / seed
@@ -129,7 +155,7 @@ func BuildRestoreUploadKey(tenantID, filename string) string {
 // `seedBasename` is the seed-internal name (e.g. `seed-<uuid>.jpg`)
 // that the noopUploader / bucketUploader generates.
 func BuildSeedKey(tenantID, seedBasename string) string {
-	return fmt.Sprintf("%s%s/%s", Prefix, tenantID, seedBasename)
+	return fmt.Sprintf("%s%s/%s", Prefix, tenantID, sanitizeSegment(seedBasename))
 }
 
 // HasTenantPrefix reports whether the given blob key already lives

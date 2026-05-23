@@ -93,14 +93,31 @@ func (s *Service) Run(ctx context.Context, opts Options) (*Stats, error) {
 	defer bucket.Close()
 
 	fileReg := s.factorySet.FileRegistryFactory.CreateServiceRegistry()
-	rows, err := fileReg.List(ctx)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to list file rows", err)
-	}
 
 	stats := &Stats{}
-	for _, file := range rows {
-		s.processRow(ctx, bucket, fileReg, file, opts, logger, stats)
+	// Stream rows in fixed-size pages so the migration doesn't allocate
+	// the full file table at once — production deployments may have
+	// millions of rows. Pagination is offset/ID-ordered; mutations
+	// during the sweep don't shift ordering because rows are updated
+	// (not deleted), and idempotency lets a re-run pick up anything we
+	// somehow missed.
+	const pageSize = 500
+	offset := 0
+	for {
+		page, total, err := fileReg.ListPaginated(ctx, offset, pageSize, nil, nil, nil, nil)
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to list file rows", err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		for _, file := range page {
+			s.processRow(ctx, bucket, fileReg, file, opts, logger, stats)
+		}
+		offset += len(page)
+		if offset >= total {
+			break
+		}
 	}
 
 	return stats, nil
@@ -214,6 +231,7 @@ func (s *Service) maybeMigrateThumbs(
 	stats.ThumbsMissing += missing
 	if err != nil {
 		logger.Warn("blobbackfill: thumbnail migration error", "file_id", file.ID, "err", err)
+		stats.RowsErrored++
 	}
 }
 

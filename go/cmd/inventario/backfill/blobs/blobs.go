@@ -88,7 +88,9 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 
 	registryFunc, ok := registry.GetRegistry(dbConfig.DBDSN)
 	if !ok {
-		return fmt.Errorf("unsupported database type in DSN: %s", dbConfig.DBDSN)
+		// Don't echo dbConfig.DBDSN — Postgres DSNs embed credentials
+		// in the URL, and the error message ends up in CLI output / logs.
+		return errors.New("unsupported database type in DSN")
 	}
 	factorySet, err := registryFunc(registry.Config(dbConfig.DBDSN))
 	if err != nil {
