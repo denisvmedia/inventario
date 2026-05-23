@@ -773,9 +773,9 @@ func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the owning tenant via the FileEntity row — the row is
 	// what decides which tenant's namespace the thumbnail lives in
-	// (#1793). The signed-URL middleware has already validated that
-	// the caller is allowed to read this file, so we need a row-level
-	// lookup with RLS bypass here.
+	// (#1793). The user-scoped registry already enforces tenant/group
+	// access, and the signed-URL middleware has separately validated
+	// that the caller is allowed to read this file.
 	fileReg, err := api.factorySet.FileRegistryFactory.CreateUserRegistry(r.Context())
 	if err != nil {
 		internalServerError(w, r, err)
@@ -787,16 +787,12 @@ func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve the canonical (or legacy fallback) thumbnail key.
-	thumbnailPath, err := api.fileService.ThumbnailReadPath(r.Context(), file.TenantID, fileID, size)
+	// Single bucket open: returns the canonical or legacy thumbnail key
+	// and whether it actually exists; placeholder generation is the
+	// not-exists branch.
+	thumbnailPath, exists, err := api.fileService.ResolveThumbnail(r.Context(), file.TenantID, fileID, size)
 	if err != nil {
-		internalServerError(w, r, errxtrace.Wrap("failed to resolve thumbnail path", err))
-		return
-	}
-
-	exists, err := api.fileService.ThumbnailExists(r.Context(), file.TenantID, fileID, size)
-	if err != nil {
-		internalServerError(w, r, errxtrace.Wrap("failed to check thumbnail existence", err))
+		internalServerError(w, r, errxtrace.Wrap("failed to resolve thumbnail", err))
 		return
 	}
 

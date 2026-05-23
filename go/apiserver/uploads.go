@@ -315,7 +315,8 @@ func (api *uploadsAPI) readUploadedFiles(r *http.Request, tenantID string, kind 
 			return nil, errxtrace.Wrap("unable to read part in multipart form", err)
 		}
 
-		if part.FileName() == "" {
+		rawName := part.FileName()
+		if rawName == "" {
 			continue
 		}
 
@@ -327,7 +328,8 @@ func (api *uploadsAPI) readUploadedFiles(r *http.Request, tenantID string, kind 
 			}
 		}
 
-		uf, err := api.saveOnePart(r.Context(), part, tenantID, kind, allowedContentTypes)
+		basename := filekit.UploadFileName(rawName)
+		uf, err := api.saveOnePart(r.Context(), part, basename, tenantID, kind, allowedContentTypes)
 		if err != nil {
 			return nil, err
 		}
@@ -335,16 +337,12 @@ func (api *uploadsAPI) readUploadedFiles(r *http.Request, tenantID string, kind 
 	}
 }
 
-// saveOnePart sanitises the basename, computes the tenant-prefixed
-// blob key, and writes the part bytes to the bucket. Returns either
-// a populated uploadedFile or an error (wrapped in uploadHTTPError
-// for the unprocessable-entity-bound MIME mismatch).
-func (api *uploadsAPI) saveOnePart(ctx context.Context, part io.Reader, tenantID string, kind uploadKind, allowedContentTypes []string) (uploadedFile, error) {
-	type filenamed interface{ FileName() string }
-	var basename string
-	if p, ok := part.(filenamed); ok {
-		basename = filekit.UploadFileName(p.FileName())
-	}
+// saveOnePart computes the tenant-prefixed blob key from the
+// caller-supplied (already-sanitised) basename and writes the part
+// bytes to the bucket. Returns either a populated uploadedFile or an
+// error (wrapped in uploadHTTPError for the unprocessable-entity-bound
+// MIME mismatch).
+func (api *uploadsAPI) saveOnePart(ctx context.Context, part io.Reader, basename, tenantID string, kind uploadKind, allowedContentTypes []string) (uploadedFile, error) {
 	var blobKey string
 	switch kind {
 	case uploadKindRestore:

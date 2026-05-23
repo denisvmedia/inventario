@@ -282,79 +282,43 @@ func (s *FileService) DeleteLinkedFiles(ctx context.Context, entityType, entityI
 	return nil
 }
 
-// ThumbnailExists checks if a thumbnail file exists for a given file and size.
-// `tenantID` selects the canonical tenant-prefixed namespace (#1793);
-// for legacy rows whose thumbnails still live under the flat
-// `thumbnails/<id>_<size>.jpg` shape, the check falls through to the
-// legacy key so an unbackfilled row still surfaces an existing
-// thumbnail instead of hitting placeholder generation in a loop.
-func (s *FileService) ThumbnailExists(ctx context.Context, tenantID, fileID, size string) (bool, error) {
-	// Validate size parameter
+// ResolveThumbnail resolves the bucket-relative key from which a
+// thumbnail should be read for the given file, and whether it actually
+// exists in the bucket. Canonical tenant-prefixed key (#1793) is tried
+// first; legacy flat-key fallback (`thumbnails/<id>_<size>.jpg`) lets
+// rows that pre-date the backfill keep rendering. When neither key
+// exists, the canonical key is returned with `exists=false` so callers
+// can render a placeholder against the post-migration layout.
+//
+// One bucket open per call — combines what `ThumbnailExists` and
+// `ThumbnailReadPath` did in separate passes.
+func (s *FileService) ResolveThumbnail(ctx context.Context, tenantID, fileID, size string) (path string, exists bool, err error) {
 	if size != "small" && size != "medium" {
-		return false, errxtrace.Classify(ErrInvalidThumbnailSize, errx.Attrs("size", size))
+		return "", false, errxtrace.Classify(ErrInvalidThumbnailSize, errx.Attrs("size", size))
 	}
 
-	// Open bucket and check if file exists
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {
-		return false, errxtrace.Wrap("failed to open bucket", err)
+		return "", false, errxtrace.Wrap("failed to open bucket", err)
 	}
 	defer b.Close()
 
-	// Canonical (tenant-prefixed) location first.
-	thumbnailPath := s.getThumbnailPath(tenantID, fileID, size)
-	exists, err := b.Exists(ctx, thumbnailPath)
-	if err != nil {
-		return false, errxtrace.Wrap("failed to check thumbnail existence", err, errx.Attrs("thumbnail_path", thumbnailPath))
-	}
-	if exists {
-		return true, nil
-	}
-
-	// Legacy flat-key fallback for rows the backfill hasn't reached.
-	legacyPath := fmt.Sprintf("thumbnails/%s_%s.jpg", fileID, size)
-	legacyExists, err := b.Exists(ctx, legacyPath)
-	if err != nil {
-		return false, errxtrace.Wrap("failed to check legacy thumbnail existence", err, errx.Attrs("thumbnail_path", legacyPath))
-	}
-	return legacyExists, nil
-}
-
-// ThumbnailReadPath returns the bucket-relative key from which a
-// thumbnail should be read for the given file. Mirrors the resolution
-// logic in ThumbnailExists: canonical tenant-prefixed key first, then
-// the legacy flat key, then the canonical key as a final fallback
-// (so callers calling this without checking Exists still get a stable
-// answer to feed into bucket.NewReader, even if the read itself will
-// fail).
-func (s *FileService) ThumbnailReadPath(ctx context.Context, tenantID, fileID, size string) (string, error) {
-	if size != "small" && size != "medium" {
-		return "", errxtrace.Classify(ErrInvalidThumbnailSize, errx.Attrs("size", size))
-	}
 	canonical := s.getThumbnailPath(tenantID, fileID, size)
-
-	b, err := blob.OpenBucket(ctx, s.uploadLocation)
+	canonicalExists, err := b.Exists(ctx, canonical)
 	if err != nil {
-		return "", errxtrace.Wrap("failed to open bucket", err)
+		return "", false, errxtrace.Wrap("failed to check thumbnail existence", err, errx.Attrs("thumbnail_path", canonical))
 	}
-	defer b.Close()
+	if canonicalExists {
+		return canonical, true, nil
+	}
 
-	exists, err := b.Exists(ctx, canonical)
-	if err != nil {
-		return "", errxtrace.Wrap("failed to check thumbnail existence", err, errx.Attrs("thumbnail_path", canonical))
-	}
-	if exists {
-		return canonical, nil
-	}
 	legacy := fmt.Sprintf("thumbnails/%s_%s.jpg", fileID, size)
 	legacyExists, err := b.Exists(ctx, legacy)
 	if err != nil {
-		return "", errxtrace.Wrap("failed to check legacy thumbnail existence", err, errx.Attrs("thumbnail_path", legacy))
+		return "", false, errxtrace.Wrap("failed to check legacy thumbnail existence", err, errx.Attrs("thumbnail_path", legacy))
 	}
 	if legacyExists {
-		return legacy, nil
+		return legacy, true, nil
 	}
-	// Neither exists — return the canonical key so the caller can fail
-	// loudly against the post-migration layout.
-	return canonical, nil
+	return canonical, false, nil
 }
