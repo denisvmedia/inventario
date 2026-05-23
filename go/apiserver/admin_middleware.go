@@ -20,12 +20,14 @@ const adminForbiddenCode = "admin.forbidden"
 // handler behind this middleware is allowed to assume the caller is a
 // genuine system admin.
 //
-// The registry argument is required (panics at startup if nil) — the
-// previous static `RequireSystemAdmin(next)` shape that read
-// `user.IsSystemAdmin` is gone: the privilege now lives outside the
-// users row and the gate has to actually hit the grant store on every
-// admin request. The lookup is O(1) thanks to the unique index on
-// user_id.
+// The registry argument is required: a nil grants registry panics at
+// construction time (fail-fast on a misconfigured FactorySet, matching
+// the startup-guard pattern used elsewhere; a misconfigured deployment
+// must not boot and 500-on-every-admin-request). The previous static
+// `RequireSystemAdmin(next)` shape that read `user.IsSystemAdmin` is
+// gone: the privilege now lives outside the users row and the gate
+// has to actually hit the grant store on every admin request. The
+// lookup is O(1) thanks to the unique index on user_id.
 //
 // On registry error the middleware fails CLOSED with 500 — a transient
 // DB error must not silently 403 every admin request (an admin who

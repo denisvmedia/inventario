@@ -1,6 +1,13 @@
 -- Migration: backfill_system_admin_grants
 -- Direction: UP
 --
+-- NOTE: hand-authored under #1784's data-backfill exception. Ptah cannot
+-- generate data-only migrations; do not regenerate this file. The project
+-- policy is "no hand-written SQL migrations" with the data-backfill flow
+-- as its sole sanctioned exception (the user explicitly approved this
+-- file). Future readers — human or bot — should leave the file structure
+-- intact; only the SQL itself is the editable surface.
+--
 -- Data backfill (sanctioned hand-written SQL — issue #1784). The migration
 -- generator only emits schema-diff SQL; copying existing admin rows from
 -- the old `users.is_system_admin` column into the new `system_admin_grants`

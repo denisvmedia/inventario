@@ -1623,8 +1623,16 @@ type UserRegistry interface {
 // SystemAdminGrantRegistry stores the dedicated grant rows that confer
 // platform-wide system-admin privilege on a user (#1784). Splitting the
 // privilege off the users row removes the escalation footgun of a
-// "just UPDATE users SET is_system_admin = true" path — only the CLI
-// has a write path into this table; every HTTP surface is read-only.
+// "just UPDATE users SET is_system_admin = true" path.
+//
+// Write-surface invariant: no unauthenticated HTTP handler can mutate
+// this table. Production write paths are the `inventario admin` CLI
+// (grant-system-admin / revoke-system-admin) only. The lone exception
+// is the debug seed flow at POST /api/v1/seed, which can mint a grant
+// via ensureSystemAdminUser — but that path is gated on
+// INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE (off by default, never set in
+// production deployments; the e2e harness uses it, nothing else does).
+// The same gate also blocks the seed handler itself.
 //
 // The registry is NOT tenant-scoped: system-admin is a platform privilege
 // orthogonal to tenants. Same posture as AuditLogRegistry.

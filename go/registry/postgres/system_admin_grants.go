@@ -72,15 +72,25 @@ func (r *SystemAdminGrantRegistry) Exists(ctx context.Context, userID string) (b
 	return ok, nil
 }
 
-// Grant inserts a grant row. Idempotent: on duplicate (user already a
-// system admin) returns (true, nil) — the unique index on user_id is
-// the source of truth for the dedup, and ON CONFLICT DO NOTHING reads
-// any inserts-not-performed as a successful idempotent call.
+// Grant inserts a grant row. Idempotent: when the user already has a
+// grant returns (true, nil); when the insert mints a fresh row returns
+// (false, nil).
 //
-// The lock is held for the duration of the transaction so the unique
-// constraint is the safety net of last resort, not the primary
-// concurrency control. Two concurrent grants for the same user are
-// serialised; the loser sees the existing row.
+// Concurrency is enforced in two layers:
+//
+//  1. The advisory lock + probe-SELECT serialise the in-process call
+//     sites: every Grant/RevokeAtomic caller in this repository runs
+//     inside `pg_advisory_xact_lock('system_admin_mutations')`, and
+//     the probe under that lock is how we set hadGrant=true for the
+//     idempotent return contract.
+//  2. `ON CONFLICT (user_id) DO NOTHING` on the INSERT is the
+//     defense-in-depth backstop for the out-of-band INSERT path — a
+//     manual SQL INSERT during ops, a follow-up registry method that
+//     forgets to take the lock, or a partial-rollback rerun of the
+//     #1784 data-backfill migration. The unique index on user_id
+//     would otherwise make any such race fail the whole transaction;
+//     this clause turns it into a quiet no-op consistent with the
+//     idempotent contract above.
 func (r *SystemAdminGrantRegistry) Grant(ctx context.Context, userID string, grantedBy *string) (hadGrant bool, err error) {
 	if userID == "" {
 		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
@@ -112,9 +122,16 @@ func (r *SystemAdminGrantRegistry) Grant(ctx context.Context, userID string, gra
 			return errxtrace.Wrap("failed to probe existing system_admin_grants row", scanErr)
 		}
 
+		// ON CONFLICT DO NOTHING is the belt-and-braces backstop against
+		// any caller that bypasses the advisory-lock protocol above; the
+		// probe-SELECT has already established hadGrant=false for the
+		// in-tree call sites, so a conflict here can only come from a
+		// concurrent out-of-band INSERT — we treat it the same as the
+		// probe finding an existing row (no error, idempotent no-op).
 		insertQuery := fmt.Sprintf(
 			`INSERT INTO %s (id, uuid, user_id, granted_by, granted_at)
-			 VALUES ($1, $2, $3, $4, now())`,
+			 VALUES ($1, $2, $3, $4, now())
+			 ON CONFLICT (user_id) DO NOTHING`,
 			r.tableNames.SystemAdminGrants(),
 		)
 		if _, execErr := tx.ExecContext(ctx, insertQuery,

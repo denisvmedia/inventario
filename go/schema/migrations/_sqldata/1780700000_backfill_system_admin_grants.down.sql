@@ -1,6 +1,13 @@
 -- Migration rollback: backfill_system_admin_grants
 -- Direction: DOWN
 --
+-- NOTE: hand-authored under #1784's data-backfill exception. Ptah cannot
+-- generate data-only migrations; do not regenerate this file. The project
+-- policy is "no hand-written SQL migrations" with the data-backfill flow
+-- as its sole sanctioned exception (the user explicitly approved this
+-- file). Future readers — human or bot — should leave the file structure
+-- intact; only the SQL itself is the editable surface.
+--
 -- Restore the previous functional state by re-setting
 -- `users.is_system_admin = true` for any user that currently has a
 -- corresponding row in `system_admin_grants`. Without this, rolling back

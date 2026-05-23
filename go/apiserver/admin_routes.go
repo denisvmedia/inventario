@@ -191,7 +191,9 @@ func Admin(params AdminParams) func(r chi.Router) {
 	// FactorySet nil-guard above runs before this dereference, so a missing
 	// wiring fails at startup with a clear message rather than NPE'ing here.
 	// A nil SystemAdminGrantRegistry inside a non-nil FactorySet is caught
-	// downstream by RequireSystemAdmin's own nil-check (returns 500).
+	// downstream by RequireSystemAdmin's own nil-check, which panics at
+	// construction time — fail-fast on a misconfigured deployment rather
+	// than letting the process boot and 500-on-every-admin-request.
 	requireSystemAdmin := RequireSystemAdmin(params.FactorySet.SystemAdminGrantRegistry)
 	requireSystemAdminOrImpersonating := RequireSystemAdminOrImpersonating(params.FactorySet.SystemAdminGrantRegistry)
 
