@@ -67,6 +67,11 @@ func NewFactorySet() *registry.FactorySet {
 	// not part of the per-request Set since back-office identities are
 	// cross-cutting infra, not user-aware data.
 	fs.BackofficeUserRegistry = NewBackofficeUserRegistry()
+	// Back-office refresh tokens (issue #1785, Phase 2). Separate store
+	// from RefreshTokenRegistry — the FK is backoffice_user_id, no
+	// tenant_id, so the two identity universes cannot cross even if a
+	// hash collided.
+	fs.BackofficeRefreshTokenRegistry = NewBackofficeRefreshTokenRegistry()
 	// Platform-admin grant store (issue #1784) — orthogonal to the
 	// back-office identity table. system_admin_grants holds *which
 	// tenant users* hold platform-wide admin privilege; it has no

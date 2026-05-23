@@ -11,8 +11,8 @@
 -- Data backfill (sanctioned hand-written SQL — issue #1784). The migration
 -- generator only emits schema-diff SQL; copying existing admin rows from
 -- the old `users.is_system_admin` column into the new `system_admin_grants`
--- table needs a hand-written INSERT. The previous migration (#1780600000)
--- added the table; the next migration (#1780800000) will drop the column.
+-- table needs a hand-written INSERT. The previous migration (#1779553130)
+-- added the table; the next migration (#1779553150) will drop the column.
 -- This one carries the data across so there's no observable downtime: at
 -- every point in the apply sequence at least one source of truth carries
 -- the privilege.
