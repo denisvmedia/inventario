@@ -125,12 +125,17 @@ const tenantScanMaxBodyBytes = 1 * 1024 * 1024 // 1 MiB
 //     rate_limit_middleware.go for the same reason.
 //
 //  4. Substring scan: the read body is lowercased and checked against a
-//     small set of quote-anchored substrings. This is intentionally a
-//     cheap, case-insensitive scan rather than a JSON parser — it is
-//     belt-and-suspenders defense-in-depth, not a contract validator.
-//     The patterns matched are:
-//     - snake_case "tenant_id" (also catches snake_case form-encoded
-//     bodies such as "tenant_id=…");
+//     small mixed set of quote-anchored and unanchored substrings. This
+//     is intentionally a cheap, case-insensitive scan rather than a JSON
+//     parser — it is belt-and-suspenders defense-in-depth, not a contract
+//     validator. The patterns matched are:
+//     - snake_case "tenant_id" — UNANCHORED on purpose so it catches
+//     form-encoded bodies such as "tenant_id=…", where the key is not
+//     wrapped in quotes. This can over-fire if a free-text value
+//     happens to contain the literal substring "tenant_id"; accepted
+//     as a known belt-and-suspenders limitation because no handler
+//     currently binds a "tenant_id" field anyway, so the cost of a
+//     spurious 403 is bounded;
 //     - the double-quoted form "\"tenant\"" — a JSON object key cannot
 //     legitimately read free text without those surrounding quotes,
 //     so the quote anchors make this match key-shaped occurrences
@@ -138,8 +143,8 @@ const tenantScanMaxBodyBytes = 1 * 1024 * 1024 // 1 MiB
 //     - the single-quoted form "'tenant'" — pre-existing pattern that
 //     covers non-JSON formats (YAML / JS-embedded) and is left in
 //     place for back-compat. It can over-fire on free text that
-//     contains 'tenant' in single quotes; accepted as a known
-//     belt-and-suspenders limitation;
+//     contains 'tenant' in single quotes; same accepted trade-off as
+//     the snake_case form;
 //     - the camelCase JSON-key forms "\"tenantId\"" / "\"tenantID\""
 //     (covered by the lowercased "\"tenantid\"" substring, quoted
 //     to avoid flagging the bare word "tenantid" inside free text).
@@ -188,8 +193,11 @@ func rejectTenantBody(w http.ResponseWriter, r *http.Request) bool {
 		http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
 		return true
 	}
-	// Restore body for downstream handlers.
-	r.Body = io.NopCloser(bytes.NewBuffer(body))
+	// Restore body for downstream handlers. bytes.NewReader (read-only)
+	// matches PasswordResetRateLimitMiddleware's restoration pattern in
+	// rate_limit_middleware.go — the slice is never written to again
+	// here, so the immutable reader is more accurate.
+	r.Body = io.NopCloser(bytes.NewReader(body))
 
 	bodyLower := strings.ToLower(string(body))
 	if !strings.Contains(bodyLower, "tenant_id") &&

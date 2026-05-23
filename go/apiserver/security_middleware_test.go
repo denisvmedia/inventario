@@ -226,23 +226,34 @@ func buildJSONPadded(size int) []byte {
 // fixed string "ignored"; this lets callers force a specific field-name
 // substring (e.g. "tenant_id") into the body to test the multipart-skip
 // path. Returns the body and the Content-Type header value (which carries
-// the boundary).
-func buildMultipartBody(totalSize int, extraFieldNames ...string) ([]byte, string) {
+// the boundary). Any writer error fails the test immediately — a panic
+// from the multipart pipeline would otherwise surface as a confusing
+// goroutine trace rather than a clear test failure.
+func buildMultipartBody(tb testing.TB, totalSize int, extraFieldNames ...string) ([]byte, string) {
+	tb.Helper()
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 
 	for _, name := range extraFieldNames {
 		h := make(textproto.MIMEHeader)
 		h.Set("Content-Disposition", `form-data; name="`+name+`"`)
-		part, _ := w.CreatePart(h)
-		_, _ = part.Write([]byte("ignored"))
+		part, err := w.CreatePart(h)
+		if err != nil {
+			tb.Fatalf("buildMultipartBody: CreatePart(%q) failed: %v", name, err)
+		}
+		if _, err := part.Write([]byte("ignored")); err != nil {
+			tb.Fatalf("buildMultipartBody: write ignored value for %q failed: %v", name, err)
+		}
 	}
 
 	// Add a file part and pad it out to reach approximately totalSize.
 	fh := make(textproto.MIMEHeader)
 	fh.Set("Content-Disposition", `form-data; name="file"; filename="big.bin"`)
 	fh.Set("Content-Type", "application/octet-stream")
-	part, _ := w.CreatePart(fh)
+	part, err := w.CreatePart(fh)
+	if err != nil {
+		tb.Fatalf("buildMultipartBody: CreatePart(file) failed: %v", err)
+	}
 	// Pad to (approximately) totalSize. We aim a bit shy so that closing
 	// the writer (which appends a trailing boundary) does not over-shoot
 	// dramatically; for the assertions in this test the exact size does
@@ -254,8 +265,12 @@ func buildMultipartBody(totalSize int, extraFieldNames ...string) ([]byte, strin
 	for i := range pad {
 		pad[i] = 'A'
 	}
-	_, _ = part.Write(pad)
-	_ = w.Close()
+	if _, err := part.Write(pad); err != nil {
+		tb.Fatalf("buildMultipartBody: pad write failed: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		tb.Fatalf("buildMultipartBody: writer Close failed: %v", err)
+	}
 
 	return buf.Bytes(), w.FormDataContentType()
 }
@@ -279,8 +294,8 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_SizeCap(t *testing.T) {
 	})
 	handler := apiserver.ValidateNoUserProvidedTenantID()(downstream)
 
-	multipartClean, multipartCleanCT := buildMultipartBody(2 * tenantScanCap)
-	multipartWithTenant, multipartWithTenantCT := buildMultipartBody(2*tenantScanCap, "tenant_id")
+	multipartClean, multipartCleanCT := buildMultipartBody(t, 2*tenantScanCap)
+	multipartWithTenant, multipartWithTenantCT := buildMultipartBody(t, 2*tenantScanCap, "tenant_id")
 
 	tests := []struct {
 		name           string
@@ -317,11 +332,12 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_SizeCap(t *testing.T) {
 			wantBodyPrefix: "Request body too large",
 		},
 		{
+			// Body is exactly cap+1: "x=" (2 bytes) + cap-1 padding 'a's.
 			name:           "form-encoded one byte over cap is rejected with 413",
 			method:         http.MethodPost,
 			target:         "/api/v1/areas",
 			contentType:    "application/x-www-form-urlencoded",
-			body:           append([]byte("x="), bytes.Repeat([]byte("a"), tenantScanCap)...),
+			body:           append([]byte("x="), bytes.Repeat([]byte("a"), tenantScanCap-1)...),
 			wantStatus:     http.StatusRequestEntityTooLarge,
 			wantBodyPrefix: "Request body too large",
 		},
