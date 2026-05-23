@@ -159,8 +159,8 @@ type adminUsersAPI struct {
 // @Param sort query string false "Sort field: email|name|created_at|last_login_at|is_active (prefix with - for desc)"
 // @Param order query string false "Sort direction override: asc|desc (wins over `-` prefix)"
 // @Success 200 {object} jsonapi.AdminUsersResponse "OK"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Tenant not found"
 // @Router /admin/tenants/{tenantID}/users [get]
 func (api *adminUsersAPI) listTenantUsers(w http.ResponseWriter, r *http.Request) {
@@ -224,8 +224,8 @@ func (api *adminUsersAPI) listTenantUsers(w http.ResponseWriter, r *http.Request
 // @Produce json-api
 // @Param userID path string true "User ID"
 // @Success 200 {object} jsonapi.AdminUserResponse "OK"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "User not found"
 // @Router /admin/users/{userID} [get]
 func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
@@ -348,17 +348,17 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 // @Param data body AdminBlockRequest true "Block request"
 // @Success 200 {object} AdminUserEnvelope "OK"
 // @Failure 400 {object} jsonapi.Errors "Bad Request - invalid body"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown user"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - self-block or admin-on-admin without force"
 // @Router /admin/users/{userID}/block [post]
 func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
-	actor := appctx.UserFromContext(r.Context())
+	actor := appctx.AdminActorFromContext(r.Context())
 	if actor == nil {
-		// Defence-in-depth: RequireSystemAdmin should have caught this
-		// already. Reaching here means the middleware chain is wired
-		// wrong; render the same shape RequireSystemAdmin would.
+		// Defence-in-depth: RequireBackofficeAuth should have caught
+		// this already. Reaching here means the middleware chain is
+		// wired wrong; render the standard 401 envelope.
 		_ = unauthorizedError(w, r, ErrMissingUserContext)
 		return
 	}
@@ -377,26 +377,24 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	target, err := api.factorySet.UserRegistry.Get(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
-			api.logBlockOutcome(r, actor, userID, "", req, false, err.Error(), false)
+			api.logBlockOutcome(r, actor.ID, userID, "", req, false, err.Error(), false)
 			_ = renderEntityError(w, r, err)
 			return
 		}
 		slog.Error("admin block: failed to load user", "user_id", userID, "error", err)
-		api.logBlockOutcome(r, actor, userID, "", req, false, err.Error(), false)
+		api.logBlockOutcome(r, actor.ID, userID, "", req, false, err.Error(), false)
 		_ = internalServerError(w, r, err)
 		return
 	}
 
-	// Self-block guard. Under an impersonation session (#1750) the
-	// JWT's user_id is the impersonated user; the operator-of-record
-	// lives in the `impersonated_by` claim. Resolve the real operator
-	// via services.ImpersonatorIDFromContext so an operator can't
-	// self-block by acting through an impersonated identity. The guard
-	// runs above the idempotency check so an operator who tries to
-	// block themselves always sees the typed error, even if their
-	// account is already inactive.
-	if target.ID == operatorIDFromContext(r.Context(), actor) {
-		api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, false, ErrAdminCannotBlockSelf.Error(), false)
+	// Self-block guard. Under the back-office admin gate the target is
+	// a tenant user and the actor is a back-office identity — their IDs
+	// are namespaced separately so an operator literally cannot
+	// self-block via /admin/users/.../block. The guard is preserved
+	// for defence-in-depth in case the back-office id happens to
+	// collide with a tenant user id (extremely unlikely, but cheap).
+	if target.ID == actor.ID {
+		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, ErrAdminCannotBlockSelf.Error(), false)
 		_ = renderEntityError(w, r, ErrAdminCannotBlockSelf)
 		return
 	}
@@ -415,7 +413,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 		// admin-without-force guard so re-blocking an already-blocked
 		// peer admin is a 200 no-op rather than a surprising 422.
 		cascadeErrMsg := api.applyBlockCascade(r, target.ID)
-		api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, false)
+		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, false)
 		api.writeUserEnvelope(w, r, http.StatusOK, target)
 		return
 	}
@@ -426,12 +424,12 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	targetIsAdmin, grantErr := api.factorySet.SystemAdminGrantRegistry.Exists(r.Context(), target.ID)
 	if grantErr != nil {
 		slog.Error("admin block: grant lookup failed", "user_id", target.ID, "error", grantErr)
-		api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, false, grantErr.Error(), false)
+		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, grantErr.Error(), false)
 		_ = internalServerError(w, r, grantErr)
 		return
 	}
 	if targetIsAdmin && !req.Force {
-		api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, false, ErrAdminCannotBlockAdminWithoutForce.Error(), false)
+		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, ErrAdminCannotBlockAdminWithoutForce.Error(), false)
 		_ = renderEntityError(w, r, ErrAdminCannotBlockAdminWithoutForce)
 		return
 	}
@@ -448,7 +446,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	saved, err := api.factorySet.UserRegistry.Update(r.Context(), updated)
 	if err != nil {
 		slog.Error("admin block: failed to deactivate user", "user_id", target.ID, "error", err)
-		api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, false, err.Error(), forced)
+		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, err.Error(), forced)
 		_ = internalServerError(w, r, err)
 		return
 	}
@@ -461,25 +459,12 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	// awareness and the audit row records ErrMsg if either step
 	// blipped.
 	cascadeErrMsg := api.applyBlockCascade(r, target.ID)
-	api.logBlockOutcome(r, actor, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, forced)
+	api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, forced)
 	// Reuse the targetIsAdmin lookup the --force guard already did
 	// instead of doing a second SystemAdminGrantRegistry.Exists call
 	// from inside writeUserEnvelope — a successful block has just
 	// committed, so the admin flag cannot have flipped in between.
 	api.writeUserEnvelopeKnownAdmin(w, r, http.StatusOK, saved, targetIsAdmin)
-}
-
-// operatorIDFromContext returns the ID of the user who actually
-// initiated the request: the impersonator if an impersonation session
-// is active (#1750 — `imp` true with non-empty `impersonated_by`),
-// otherwise actor.ID. Used by the self-block guard so an operator
-// cannot deactivate their own account by routing the block through an
-// impersonated identity.
-func operatorIDFromContext(ctx context.Context, actor *models.User) string {
-	if imp := services.ImpersonatorIDFromContext(ctx); imp != nil && *imp != "" {
-		return *imp
-	}
-	return actor.ID
 }
 
 // unblockUser flips IsActive back to true. Does NOT re-issue tokens —
@@ -497,13 +482,13 @@ func operatorIDFromContext(ctx context.Context, actor *models.User) string {
 // @Param data body AdminUnblockRequest true "Unblock request"
 // @Success 200 {object} AdminUserEnvelope "OK"
 // @Failure 400 {object} jsonapi.Errors "Bad Request - invalid body"
-// @Failure 401 {object} jsonapi.Errors "Unauthorized"
-// @Failure 403 {object} jsonapi.Errors "Forbidden - system-admin required"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown user"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - invalid reason"
 // @Router /admin/users/{userID}/unblock [post]
 func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
-	actor := appctx.UserFromContext(r.Context())
+	actor := appctx.AdminActorFromContext(r.Context())
 	if actor == nil {
 		_ = unauthorizedError(w, r, ErrMissingUserContext)
 		return
@@ -523,12 +508,12 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 	target, err := api.factorySet.UserRegistry.Get(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
-			api.logUnblockOutcome(r, actor, userID, "", req, false, err.Error())
+			api.logUnblockOutcome(r, actor.ID, userID, "", req, false, err.Error())
 			_ = renderEntityError(w, r, err)
 			return
 		}
 		slog.Error("admin unblock: failed to load user", "user_id", userID, "error", err)
-		api.logUnblockOutcome(r, actor, userID, "", req, false, err.Error())
+		api.logUnblockOutcome(r, actor.ID, userID, "", req, false, err.Error())
 		_ = internalServerError(w, r, err)
 		return
 	}
@@ -537,7 +522,7 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 		// Idempotent: the user is already active. Audit and return
 		// 200 — the alternative would be a 422 that the FE doesn't
 		// actually need to branch on.
-		api.logUnblockOutcome(r, actor, target.ID, target.TenantID, req, true, "")
+		api.logUnblockOutcome(r, actor.ID, target.ID, target.TenantID, req, true, "")
 		api.writeUserEnvelope(w, r, http.StatusOK, target)
 		return
 	}
@@ -547,12 +532,12 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 	saved, err := api.factorySet.UserRegistry.Update(r.Context(), updated)
 	if err != nil {
 		slog.Error("admin unblock: failed to reactivate user", "user_id", target.ID, "error", err)
-		api.logUnblockOutcome(r, actor, target.ID, target.TenantID, req, false, err.Error())
+		api.logUnblockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, err.Error())
 		_ = internalServerError(w, r, err)
 		return
 	}
 
-	api.logUnblockOutcome(r, actor, target.ID, target.TenantID, req, true, "")
+	api.logUnblockOutcome(r, actor.ID, target.ID, target.TenantID, req, true, "")
 	api.writeUserEnvelope(w, r, http.StatusOK, saved)
 }
 
@@ -685,7 +670,7 @@ func (api *adminUsersAPI) applyBlockCascade(r *http.Request, userID string) stri
 //revive:disable-next-line:flag-parameter
 func (api *adminUsersAPI) logBlockOutcome(
 	r *http.Request,
-	actor *models.User,
+	actorID string,
 	subjectID, subjectTenantID string,
 	req AdminBlockRequest,
 	success bool,
@@ -701,7 +686,7 @@ func (api *adminUsersAPI) logBlockOutcome(
 	}
 	ev := services.AdminEvent{
 		Action:      action,
-		ActorID:     new(actor.ID),
+		ActorID:     nullableString(actorID),
 		TenantID:    nullableString(subjectTenantID),
 		SubjectType: stringPtr("user"),
 		SubjectID:   nullableString(subjectID),
@@ -720,7 +705,7 @@ func (api *adminUsersAPI) logBlockOutcome(
 // logBlockOutcome but with no force variant — unblock is symmetric.
 func (api *adminUsersAPI) logUnblockOutcome(
 	r *http.Request,
-	actor *models.User,
+	actorID string,
 	subjectID, subjectTenantID string,
 	req AdminUnblockRequest,
 	success bool,
@@ -731,7 +716,7 @@ func (api *adminUsersAPI) logUnblockOutcome(
 	}
 	ev := services.AdminEvent{
 		Action:      AuditActionAdminUserUnblock,
-		ActorID:     new(actor.ID),
+		ActorID:     nullableString(actorID),
 		TenantID:    nullableString(subjectTenantID),
 		SubjectType: stringPtr("user"),
 		SubjectID:   nullableString(subjectID),

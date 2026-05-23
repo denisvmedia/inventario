@@ -17,7 +17,10 @@ type AuditLog struct {
 	//migrator:schema:field name="timestamp" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	Timestamp time.Time `json:"timestamp" db:"timestamp"`
 
-	// UserID is the ID of the user who performed the action (nullable for unauthenticated events).
+	// UserID is the actor id. The column is polymorphic since #1785/Phase 3:
+	//   - For tenant-plane actions (register, login, user-CRUD via tenant JWT), it's a users.id.
+	//   - For back-office-plane admin CRUD (Phase 3 onward), it's a backoffice_users.id.
+	// No FK because of the polymorphism. A future schema change (#1785 follow-up) will add actor_type.
 	//migrator:schema:field name="user_id" type="TEXT"
 	UserID *string `json:"user_id,omitempty" db:"user_id"`
 
