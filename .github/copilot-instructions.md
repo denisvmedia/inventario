@@ -74,7 +74,8 @@ Do **not** flag the following as compile errors or "doesn't compile in Go" — t
 build and run the full test suite on every PR. If those are green and you're flagging a
 compile error, you're wrong — your knowledge of Go syntax is outdated. Defer to the
 build, not to memory. **The Go language version in `go/go.mod` is authoritative; read
-it before commenting on syntax.**
+it before commenting on syntax. Treat any Go-version references in these instructions
+as feature minimums only, not as the exact project patch version.**
 
 For deeper Go-specific review guidance see [`.github/instructions/go.instructions.md`](instructions/go.instructions.md).
 
