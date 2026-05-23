@@ -674,6 +674,35 @@ func TestFileSigningService_SessionBindingMatrix(t *testing.T) {
 			}
 		})
 	}
+
+	// Extra row driven through the real ExtractSessionBinding helper, so a
+	// future encoding-change regression in the helper (e.g. swapping
+	// RawURLEncoding for URLEncoding, or shifting the truncation width)
+	// cannot pass while the literal-string matrix above still does.
+	t.Run("round-trip via ExtractSessionBinding helper", func(t *testing.T) {
+		c := qt.New(t)
+
+		mintReq := httptest.NewRequest(http.MethodGet, "/sign", nil)
+		mintReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: "round-trip-cookie"})
+		mintBinding := services.ExtractSessionBinding(mintReq)
+		c.Assert(string(mintBinding), qt.Not(qt.Equals), "")
+
+		signed, err := service.GenerateSignedURL(fileID, fileExt, userID, mintBinding)
+		c.Assert(err, qt.IsNil)
+		parsed, err := url.Parse(signed)
+		c.Assert(err, qt.IsNil)
+
+		// Same cookie at validate time → success.
+		sameReq := httptest.NewRequest(http.MethodGet, parsed.Path+"?"+parsed.RawQuery, nil)
+		sameReq.AddCookie(&http.Cookie{Name: "refresh_token", Value: "round-trip-cookie"})
+		_, err = service.ValidateSignedURL(parsed.Path, parsed.Query(), services.ExtractSessionBinding(sameReq))
+		c.Assert(err, qt.IsNil)
+
+		// No cookie at validate time → rejected.
+		_, err = service.ValidateSignedURL(parsed.Path, parsed.Query(), services.ExtractSessionBinding(httptest.NewRequest(http.MethodGet, "/x", nil)))
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Equals, "invalid signature")
+	})
 }
 
 // TestFileSigningService_ThumbnailsCarryBinding ensures the thumbnail URL

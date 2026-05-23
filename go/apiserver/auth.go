@@ -35,8 +35,11 @@ const (
 	accessTokenType = "access"
 	// refreshTokenExpiration defines how long refresh tokens remain valid.
 	refreshTokenExpiration = 30 * 24 * time.Hour
-	// refreshTokenCookieName is the name of the httpOnly cookie carrying the refresh token.
-	refreshTokenCookieName = "refresh_token"
+	// refreshTokenCookieName is the name of the httpOnly cookie carrying the
+	// refresh token. The canonical constant lives in appctx so other packages
+	// (notably services.ExtractSessionBinding, #1781) can reference the same
+	// string without creating an apiserver import cycle.
+	refreshTokenCookieName = appctx.RefreshTokenCookieName
 	// refreshTokenCookiePath scopes the refresh cookie to the API namespace.
 	//
 	// It is intentionally `/api/v1` — the common ancestor of BOTH the

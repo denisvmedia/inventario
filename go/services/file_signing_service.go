@@ -15,14 +15,10 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/models"
 )
-
-// refreshTokenCookieName is the cookie that carries the refresh token. It is
-// duplicated from apiserver/auth.go to keep services/ free of an apiserver
-// import (would be a cycle). Keep this in sync if the cookie is ever renamed.
-const refreshTokenCookieName = "refresh_token"
 
 // FileSigningService provides secure file URL signing functionality
 type FileSigningService struct {
@@ -50,14 +46,21 @@ type SessionBinding string
 // unbound (backwards-compatible for non-browser clients without cookies).
 //
 // The binding is the first 16 bytes of SHA-256(cookie value), base64url-
-// encoded. 16 bytes is plenty of collision resistance for an identifier
-// that only has to discriminate concurrent sessions; the HMAC still
+// encoded. The relevant security property is preimage resistance over a
+// high-entropy cookie value (a real refresh token is 32 random bytes), so
+// 16 bytes is overkill — it also keeps the URL compact. The HMAC still
 // supplies the full 32 bytes of secret entropy.
+//
+// Impersonation caveat: during an impersonation session the cookie value
+// is `imp:<jti>`, where the JTI is also a claim on the visible access
+// token. The binding therefore degrades to "knowledge of the access
+// token" for impersonation; a separate leak of both the URL and the
+// bearer is required to replay. See #1781 follow-up for tighter binding.
 func ExtractSessionBinding(r *http.Request) SessionBinding {
 	if r == nil {
 		return ""
 	}
-	cookie, err := r.Cookie(refreshTokenCookieName)
+	cookie, err := r.Cookie(appctx.RefreshTokenCookieName)
 	if err != nil || cookie == nil || cookie.Value == "" {
 		return ""
 	}
