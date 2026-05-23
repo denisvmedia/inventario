@@ -89,6 +89,20 @@ func validateJWTToken(ctx context.Context, tokenString string, jwtSecret []byte,
 		return nil, fmt.Errorf("invalid token type")
 	}
 
+	// Cross-plane defensive guard (#1785, Phase 2): a back-office
+	// access token MUST NEVER satisfy the tenant JWT middleware, even
+	// though it is signed with the same secret. Two independent rejects
+	// — `aud == "backoffice"` and `admin_id` presence — so a token
+	// where one signal is somehow misset is still rejected by the
+	// other. Tenant tokens never carry admin_id; back-office tokens
+	// always carry aud="backoffice".
+	if aud, _ := claims["aud"].(string); aud == backofficeTokenAudience {
+		return nil, fmt.Errorf("invalid token audience")
+	}
+	if adminID, _ := claims["admin_id"].(string); adminID != "" {
+		return nil, fmt.Errorf("token carries backoffice admin_id claim")
+	}
+
 	// Check blacklist when a blacklister is configured.
 	if blacklist != nil {
 		if err := checkTokenBlacklist(ctx, claims, blacklist); err != nil {

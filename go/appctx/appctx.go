@@ -15,6 +15,13 @@ const (
 	// userIDKey is the context key for storing user ID
 	userIDKey  contextKey = "userID"
 	userCtxKey contextKey = "user"
+	// backofficeUserCtxKey is the context key for storing the back-office
+	// (platform-operator) identity attached by RequireBackofficeAuth.
+	// It MUST be distinct from userCtxKey: a tenant user lookup that
+	// returned a back-office user (or vice versa) would be a security
+	// bug, so the two universes live on different keys with separate
+	// accessors.
+	backofficeUserCtxKey contextKey = "backofficeUser"
 )
 
 // UserIDFromContext extracts the user ID from the context

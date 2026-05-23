@@ -110,6 +110,44 @@ definitions:
       tenant_id:
         type: string
     type: object
+  apiserver.BackofficeLoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  apiserver.BackofficeLoginResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      token_type:
+        type: string
+      user:
+        $ref: '#/definitions/apiserver.BackofficeProfile'
+    type: object
+  apiserver.BackofficeLogoutResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  apiserver.BackofficeProfile:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      last_login_at:
+        type: string
+      mfa_enforced:
+        type: boolean
+      name:
+        type: string
+      role:
+        type: string
+    type: object
   apiserver.ChangePasswordRequest:
     properties:
       current_password:
@@ -5267,6 +5305,95 @@ paths:
       summary: Refresh access token
       tags:
       - auth
+  /backoffice/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate a back-office (platform-operator) user with email
+        + password. Issues a `backoffice` aud access token in the body and sets a
+        `backoffice_refresh_token` cookie at `/api/v1/backoffice`.
+      parameters:
+      - description: Login credentials
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.BackofficeLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.BackofficeLoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized - invalid credentials
+          schema:
+            type: string
+        "403":
+          description: Forbidden - account disabled
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests - account locked
+          schema:
+            type: string
+      summary: Back-office login
+      tags:
+      - backoffice-auth
+  /backoffice/auth/logout:
+    post:
+      description: Revoke the current back-office session's refresh token and clear
+        the cookie.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.BackofficeLogoutResponse'
+      summary: Back-office logout
+      tags:
+      - backoffice-auth
+  /backoffice/auth/me:
+    get:
+      description: Return the currently authenticated back-office user's profile.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.BackofficeProfile'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Get current back-office user
+      tags:
+      - backoffice-auth
+  /backoffice/auth/refresh:
+    post:
+      description: Issue a new back-office access token using the `backoffice_refresh_token`
+        cookie.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.BackofficeLoginResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Refresh back-office access token
+      tags:
+      - backoffice-auth
   /currencies:
     get:
       consumes:

@@ -1457,6 +1457,136 @@
                 }
             }
         },
+        "/backoffice/auth/login": {
+            "post": {
+                "description": "Authenticate a back-office (platform-operator) user with email + password. Issues a `backoffice` aud access token in the body and sets a `backoffice_refresh_token` cookie at `/api/v1/backoffice`.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backoffice-auth"
+                ],
+                "summary": "Back-office login",
+                "parameters": [
+                    {
+                        "description": "Login credentials",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.BackofficeLoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.BackofficeLoginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - invalid credentials",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - account disabled",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests - account locked",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/backoffice/auth/logout": {
+            "post": {
+                "description": "Revoke the current back-office session's refresh token and clear the cookie.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backoffice-auth"
+                ],
+                "summary": "Back-office logout",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.BackofficeLogoutResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/backoffice/auth/me": {
+            "get": {
+                "description": "Return the currently authenticated back-office user's profile.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backoffice-auth"
+                ],
+                "summary": "Get current back-office user",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.BackofficeProfile"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/backoffice/auth/refresh": {
+            "post": {
+                "description": "Issue a new back-office access token using the `backoffice_refresh_token` cookie.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backoffice-auth"
+                ],
+                "summary": "Refresh back-office access token",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.BackofficeLoginResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/currencies": {
             "get": {
                 "description": "get list of supported currencies",
@@ -7552,6 +7682,65 @@
                     "type": "string"
                 },
                 "tenant_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.BackofficeLoginRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.BackofficeLoginResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "expires_in": {
+                    "type": "integer"
+                },
+                "token_type": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/apiserver.BackofficeProfile"
+                }
+            }
+        },
+        "apiserver.BackofficeLogoutResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.BackofficeProfile": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_login_at": {
+                    "type": "string"
+                },
+                "mfa_enforced": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "role": {
                     "type": "string"
                 }
             }
