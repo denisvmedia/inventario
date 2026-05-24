@@ -73,17 +73,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     if (bootRefreshState !== "pending") return
     let cancelled = false
-    void tryBootRefresh().then((token) => {
-      if (cancelled) return
-      if (token) {
-        // The /auth/me query was created with `enabled: !!getAccessToken()`,
-        // which evaluated to `false` at mount time (no token yet). Invalidate
-        // the key now so TanStack Query re-evaluates `enabled` and fires the
-        // probe with the freshly stored Bearer token.
-        queryClient.invalidateQueries({ queryKey: authKeys.currentUser() })
-      }
-      setBootRefreshState("settled")
-    })
+    void tryBootRefresh()
+      .then((token) => {
+        if (cancelled) return
+        if (token) {
+          // The /auth/me query was created with `enabled: !!getAccessToken()`,
+          // which evaluated to `false` at mount time (no token yet). Invalidate
+          // the key now so TanStack Query re-evaluates `enabled` and fires the
+          // probe with the freshly stored Bearer token.
+          queryClient.invalidateQueries({ queryKey: authKeys.currentUser() })
+        }
+      })
+      .finally(() => {
+        // .finally so a rejected tryBootRefresh still flips the state to
+        // "settled" — without this, a network blip on the very first probe
+        // would leave bootRefreshState stuck at "pending" forever and
+        // ProtectedRoute would render the boot fallback indefinitely.
+        if (cancelled) return
+        setBootRefreshState("settled")
+      })
     return () => {
       cancelled = true
     }
