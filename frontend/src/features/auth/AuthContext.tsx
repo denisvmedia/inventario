@@ -66,8 +66,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   //                  needed; we never block initialization on the helper.
   // Initialised lazily so the very first render already reflects the
   // correct branch (skipping the refresh when a token is present).
-  const [bootRefreshState, setBootRefreshState] = useState<"pending" | "settled" | "skipped">(
-    () => (getAccessToken() ? "skipped" : "pending")
+  const [bootRefreshState, setBootRefreshState] = useState<"pending" | "settled" | "skipped">(() =>
+    getAccessToken() ? "skipped" : "pending"
   )
 
   useEffect(() => {
@@ -140,8 +140,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Without a token there is nothing to probe — settle synchronously.
     // With a token, the probe is settled on success or on a 401; transient
     // errors keep us in the "still trying" state.
-    const isInitialized =
-      !bootRefreshPending && (!hasToken || (isFetched && !transientError))
+    const isInitialized = !bootRefreshPending && (!hasToken || (isFetched && !transientError))
 
     let resolvedUser: CurrentUser | undefined | null
     if (bootRefreshPending) {

@@ -94,8 +94,6 @@ describe("<OAuthRow />", () => {
     const btn = await screen.findByTestId("oauth-github-button")
     await userEvent.setup().click(btn)
     // sanitizeRedirectPath collapses `https://…` to `/`.
-    expect(assignSpy).toHaveBeenCalledWith(
-      "/api/v1/auth/oauth/github/start?redirect=%2F"
-    )
+    expect(assignSpy).toHaveBeenCalledWith("/api/v1/auth/oauth/github/start?redirect=%2F")
   })
 })

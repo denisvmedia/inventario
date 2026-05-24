@@ -45,8 +45,7 @@ export function ConnectedAccountsCard() {
   const linkedQuery = params.get("oauth_linked")
   useEffect(() => {
     if (!linkedQuery) return
-    const friendly =
-      providers.find((p) => p.name === linkedQuery)?.displayName ?? linkedQuery
+    const friendly = providers.find((p) => p.name === linkedQuery)?.displayName ?? linkedQuery
     toast.success(t("auth:oauth.linkSuccess", { provider: friendly }))
     const next = new URLSearchParams(params)
     next.delete("oauth_linked")
@@ -110,11 +109,7 @@ interface ConnectedAccountRowProps {
   identityCount: number
 }
 
-function ConnectedAccountRow({
-  provider,
-  identity,
-  identityCount,
-}: ConnectedAccountRowProps) {
+function ConnectedAccountRow({ provider, identity, identityCount }: ConnectedAccountRowProps) {
   const { t } = useTranslation()
   const confirm = useConfirm()
   const toast = useAppToast()
@@ -132,9 +127,7 @@ function ConnectedAccountRow({
     if (!ok) return
     try {
       await unlinkMutation.mutateAsync(provider.name)
-      toast.success(
-        t("auth:oauth.unlink.success", { provider: provider.displayName })
-      )
+      toast.success(t("auth:oauth.unlink.success", { provider: provider.displayName }))
     } catch (err) {
       if (isLastMethodError(err)) {
         toast.error(t("auth:oauth.unlink.errorLastMethod"))

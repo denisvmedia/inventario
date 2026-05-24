@@ -64,9 +64,7 @@ describe("useAuth", () => {
     // Boot-refresh (#1394) speculatively probes /auth/refresh on mount. With no
     // refresh cookie the BE returns 401 and AuthContext settles into the
     // unauthenticated branch.
-    server.use(
-      msw.post(api("/auth/refresh"), () => HttpResponse.json(null, { status: 401 }))
-    )
+    server.use(msw.post(api("/auth/refresh"), () => HttpResponse.json(null, { status: 401 })))
     renderWithProviders({ initialPath: "/", routes })
     await waitFor(() =>
       expect(screen.getByTestId("probe").getAttribute("data-initialized")).toBe("true")

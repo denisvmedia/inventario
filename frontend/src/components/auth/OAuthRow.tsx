@@ -5,11 +5,7 @@ import { GithubGlyph } from "@/components/auth/icons/GithubGlyph"
 import { GoogleGlyph } from "@/components/auth/icons/GoogleGlyph"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import {
-  oauthStartUrl,
-  useOAuthProviders,
-  type OAuthProviderName,
-} from "@/features/auth/oauth"
+import { oauthStartUrl, useOAuthProviders, type OAuthProviderName } from "@/features/auth/oauth"
 import { sanitizeRedirectPath } from "@/lib/safe-redirect"
 
 // OAuthRow renders the "or continue with" surface above the password form
@@ -47,13 +43,7 @@ export function OAuthRow() {
           {t("auth:oauth.divider")}
         </span>
       </div>
-      <div
-        className={
-          providers.length === 1
-            ? "grid grid-cols-1 gap-3"
-            : "grid grid-cols-2 gap-3"
-        }
-      >
+      <div className={providers.length === 1 ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
         {providers.map((p) => (
           <ProviderButton key={p.name} provider={p.name} redirect={redirect} />
         ))}
@@ -62,13 +52,7 @@ export function OAuthRow() {
   )
 }
 
-function ProviderButton({
-  provider,
-  redirect,
-}: {
-  provider: OAuthProviderName
-  redirect: string
-}) {
+function ProviderButton({ provider, redirect }: { provider: OAuthProviderName; redirect: string }) {
   const { t } = useTranslation()
   function handleClick() {
     // Full-page navigation: the BE returns a 302 to the provider — fetch
@@ -78,8 +62,7 @@ function ProviderButton({
     // navigation attempt.
     window.location.assign(oauthStartUrl(provider, redirect))
   }
-  const label =
-    provider === "google" ? t("auth:oauth.google") : t("auth:oauth.github")
+  const label = provider === "google" ? t("auth:oauth.google") : t("auth:oauth.github")
   return (
     <Button
       variant="outline"
@@ -93,4 +76,3 @@ function ProviderButton({
     </Button>
   )
 }
-

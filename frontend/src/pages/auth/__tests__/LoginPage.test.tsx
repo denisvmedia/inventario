@@ -49,9 +49,7 @@ beforeEach(() => {
   // don't override this still need a handler so MSW doesn't surface an
   // unhandled-request error. Default to no providers — the row hides
   // itself and the login form behaves identically to the pre-#1394 layout.
-  server.use(
-    msw.get(api("/auth/oauth/providers"), () => HttpResponse.json({ providers: [] }))
-  )
+  server.use(msw.get(api("/auth/oauth/providers"), () => HttpResponse.json({ providers: [] })))
 })
 
 describe("<LoginPage />", () => {

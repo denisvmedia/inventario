@@ -190,9 +190,9 @@ describe("useUnlinkOAuthIdentity", () => {
     // assert via waitFor on the cached value rather than the transient
     // `isInvalidated` flag (which races the immediate refetch).
     await waitFor(() => {
-      expect(queryClient.getQueryState(authKeys.oauthIdentities())?.dataUpdateCount).toBeGreaterThan(
-        1
-      )
+      expect(
+        queryClient.getQueryState(authKeys.oauthIdentities())?.dataUpdateCount
+      ).toBeGreaterThan(1)
     })
   })
 

@@ -38,9 +38,7 @@ beforeEach(() => {
   __resetHttpForTests()
   // OAuthRow (#1394) probes /auth/oauth/providers on mount. Default to an
   // empty list so the row hides itself; per-test handlers can override.
-  server.use(
-    msw.get(api("/auth/oauth/providers"), () => HttpResponse.json({ providers: [] }))
-  )
+  server.use(msw.get(api("/auth/oauth/providers"), () => HttpResponse.json({ providers: [] })))
 })
 
 describe("<RegisterPage />", () => {
