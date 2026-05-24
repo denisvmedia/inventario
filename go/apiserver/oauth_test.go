@@ -791,3 +791,148 @@ func TestOAuthUnlink_TwoIdentities_AllowedWithoutPassword(t *testing.T) {
 
 // (maskEmail is covered indirectly via TestOAuthCallback_MFAEnrolled_RefusesOAuthOnlySignIn,
 // which asserts the masked email lands in the redirect URL.)
+
+// =============================================================================
+// SEC: cross-tenant guard (#1394)
+// =============================================================================
+
+// seedUserInTenant stores a user under a caller-specified tenant ID so a
+// test can seed a user that belongs to a tenant DIFFERENT from the one the
+// callback's router is bound to. Returns the persisted row.
+func (f *oauthFixture) seedUserInTenant(tenantID, email string, isActive bool) *models.User {
+	f.t.Helper()
+	u := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: tenantID,
+		},
+		Email:    strings.ToLower(strings.TrimSpace(email)),
+		Name:     "Cross Tenant",
+		IsActive: isActive,
+	}
+	if err := u.SetPassword("Password123"); err != nil {
+		f.t.Fatalf("seed user in tenant: set password: %v", err)
+	}
+	created, err := f.userRegistry.Create(context.Background(), u)
+	if err != nil {
+		f.t.Fatalf("seed user in tenant: create: %v", err)
+	}
+	return created
+}
+
+func TestOAuthCallback_ExistingIdentity_CrossTenant_Refused(t *testing.T) {
+	// The (provider, provider_user_id) index is globally unique, so a user
+	// on tenant A can be matched on a callback running under tenant B.
+	// SEC: refuse — 302 to /login?oauth_error=tenant_mismatch and write a
+	// tenant_mismatch login_events row. Never mint a session.
+	c := qt.New(t)
+	f := newOAuthFixture(t, oauthFixtureOpts{})
+
+	// User belongs to a foreign tenant; identity row carries the foreign
+	// tenant_id but the same global (provider, provider_user_id) pair the
+	// callback's stub returns.
+	foreignTenantID := "other-tenant-id"
+	user := f.seedUserInTenant(foreignTenantID, "foreign@example.com", true)
+	identity := models.OAuthIdentity{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: foreignTenantID},
+		UserID:              user.ID,
+		Provider:            models.OAuthProviderGoogle,
+		ProviderUserID:      "google-sub-1",
+		Email:               "foreign@example.com",
+	}
+	_, err := f.identityRegistry.Create(context.Background(), identity)
+	c.Assert(err, qt.IsNil, qt.Commentf("seed foreign identity"))
+
+	state := f.signState(models.OAuthProviderGoogle, "")
+	rec := f.callCallback(models.OAuthProviderGoogle, state, "code-cross-tenant", state)
+
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(loc.Path, qt.Equals, "/login")
+	c.Assert(loc.Query().Get("oauth_error"), qt.Equals, "tenant_mismatch")
+
+	// No refresh cookie issued — the token-issue path was skipped.
+	for _, cookie := range rec.Result().Cookies() {
+		c.Assert(cookie.Name, qt.Not(qt.Equals), "refresh_token")
+	}
+
+	// login_events captures the tenant_mismatch outcome under the
+	// callback's tenant (not the foreign tenant).
+	events := f.loginEvents()
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].Outcome, qt.Equals, models.LoginOutcomeTenantMismatch)
+	c.Assert(events[0].TenantID, qt.Equals, oauthTestTenantID)
+}
+
+func TestOAuthLinkCallback_CrossTenant_Refused(t *testing.T) {
+	// Link state mints LinkUserID pointing at a user on a foreign tenant.
+	// Even though the user row exists and is active, the callback's tenant
+	// context differs — refuse to write the identity row.
+	c := qt.New(t)
+	f := newOAuthFixture(t, oauthFixtureOpts{})
+
+	foreignTenantID := "other-tenant-id"
+	user := f.seedUserInTenant(foreignTenantID, "linkme@example.com", true)
+
+	state := f.signState(models.OAuthProviderGoogle, user.ID)
+	rec := f.callCallback(models.OAuthProviderGoogle, state, "code-link-cross", state)
+
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(loc.Path, qt.Equals, "/login")
+	c.Assert(loc.Query().Get("oauth_error"), qt.Equals, "tenant_mismatch")
+
+	// No identity row was created for the foreign user.
+	rows := f.listIdentities(user)
+	c.Assert(rows, qt.HasLen, 0)
+
+	// login_events: tenant_mismatch under the callback's tenant.
+	events := f.loginEvents()
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].Outcome, qt.Equals, models.LoginOutcomeTenantMismatch)
+	c.Assert(events[0].TenantID, qt.Equals, oauthTestTenantID)
+}
+
+// =============================================================================
+// SEC: unverified email new-user provision (#1394)
+// =============================================================================
+
+func TestOAuthCallback_NoMatch_UnverifiedEmail_Refused(t *testing.T) {
+	// Provider sent an unverified email AND no local user matches → the
+	// new-user-provisioning branch MUST refuse. Without this, an attacker
+	// could squat someone else's email at the provider and have us mint a
+	// fresh active Inventario account keyed on it.
+	c := qt.New(t)
+	profile := oauthsvc.Profile{
+		ProviderUserID: "google-sub-unverified-new",
+		Email:          "claimed@example.com",
+		EmailVerified:  false,
+		DisplayName:    "Claimed",
+	}
+	f := newOAuthFixture(t, oauthFixtureOpts{stubProfile: &profile})
+
+	state := f.signState(models.OAuthProviderGoogle, "")
+	rec := f.callCallback(models.OAuthProviderGoogle, state, "code-new-unverified", state)
+
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(loc.Path, qt.Equals, "/login")
+	c.Assert(loc.Query().Get("oauth_error"), qt.Equals, "email_unverified")
+
+	// No user was created.
+	_, err = f.userRegistry.GetByEmail(context.Background(), oauthTestTenantID, "claimed@example.com")
+	c.Assert(err, qt.IsNotNil)
+
+	// No identity row was created either.
+	all, err := f.identityRegistry.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(all, qt.HasLen, 0)
+
+	// login_events captures the unverified-email outcome with no user ID.
+	events := f.loginEvents()
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].Outcome, qt.Equals, models.LoginOutcomeEmailNotVerified)
+	c.Assert(events[0].UserID, qt.IsNil)
+}

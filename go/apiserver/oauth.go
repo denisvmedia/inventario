@@ -372,6 +372,21 @@ func (api *OAuthAPI) completeSignInFlow(
 			http.Error(w, "User account is not available", http.StatusForbidden)
 			return
 		}
+		// SEC: reject cross-tenant callback completions. The
+		// (provider, provider_user_id) index is GLOBALLY unique — that's
+		// intentional, so the same Google account can't log in to two
+		// Inventario accounts simultaneously — but it means a user owned
+		// by tenant A can be resolved when the callback is running on
+		// tenant B's host. Refuse to sign in or link across tenants. The
+		// outcome surfaces a tenant_mismatch row in login_events so this
+		// shows up clearly in the audit history.
+		if user.TenantID != tenantID {
+			slog.Error("OAuth callback: cross-tenant sign-in attempted (existing identity)",
+				"user_id", user.ID, "user_tenant", user.TenantID, "callback_tenant", tenantID, "provider", providerName)
+			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeTenantMismatch, method, r)
+			http.Redirect(w, r, oauthErrorURL("tenant_mismatch", st.RedirectAfter), http.StatusFound)
+			return
+		}
 		api.completeOAuthLogin(w, r, user, providerName, tenantID, method, st.RedirectAfter)
 		return
 	}
@@ -385,6 +400,18 @@ func (api *OAuthAPI) completeSignInFlow(
 	}
 
 	if user != nil {
+		// SEC: defense-in-depth tenant check on email-match. GetByEmail is
+		// tenant-scoped via its tenantID parameter, but a future change to
+		// the registry contract MUST NOT silently widen the lookup — make
+		// the invariant explicit at the call site so a cross-tenant
+		// auto-link can never happen even if the lower layer regresses.
+		if user.TenantID != tenantID {
+			slog.Error("OAuth callback: cross-tenant sign-in attempted (email match)",
+				"user_id", user.ID, "user_tenant", user.TenantID, "callback_tenant", tenantID, "provider", providerName)
+			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeTenantMismatch, method, r)
+			http.Redirect(w, r, oauthErrorURL("tenant_mismatch", st.RedirectAfter), http.StatusFound)
+			return
+		}
 		// SEC-2: refuse if the local user is deactivated — same outcome
 		// the password path emits at auth.go's IsActive check. Doing this
 		// before the EmailVerified branch keeps a disabled account from
@@ -412,6 +439,22 @@ func (api *OAuthAPI) completeSignInFlow(
 			return
 		}
 		api.completeOAuthLogin(w, r, user, providerName, tenantID, method, st.RedirectAfter)
+		return
+	}
+
+	// SEC: never provision a brand-new user from an unverified provider
+	// email. Issue #1394 spec explicitly forbids auto-linking on
+	// unverified emails; creating a user is one step beyond that risk —
+	// it stamps the unverified email into our own users.email column and
+	// flips IsActive=true (bypassing the in-app verification round-trip).
+	// An attacker who claims someone else's email at GitHub (with email
+	// hidden / unverified) could otherwise seed an Inventario account
+	// keyed on that email and later collide with the legitimate owner.
+	if !profile.EmailVerified {
+		slog.Warn("OAuth callback: refusing to provision new user from unverified provider email",
+			"provider", providerName, "email", profile.Email)
+		api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, nil, models.LoginOutcomeEmailNotVerified, method, r)
+		http.Redirect(w, r, oauthErrorURL("email_unverified", st.RedirectAfter), http.StatusFound)
 		return
 	}
 
@@ -457,6 +500,21 @@ func (api *OAuthAPI) completeLinkFlow(
 	if err != nil || user == nil || !user.IsActive {
 		slog.Warn("OAuth link: user from state missing or inactive", "user_id", st.LinkUserID, "error", err)
 		http.Error(w, "User account is not available", http.StatusForbidden)
+		return
+	}
+	// SEC: reject cross-tenant link completions. The link flow takes the
+	// user ID from the signed state token, which was minted in handleLinkStart
+	// against the user's session on tenant A. If the callback URL is then
+	// completed against tenant B's host (e.g. the user manually rewrote the
+	// callback host, or a stolen state replayed elsewhere), refuse to attach
+	// the provider identity. Without this, the link path would otherwise
+	// write a row with tenant_id=B but user_id pointing into tenant A —
+	// corrupting tenant boundaries.
+	if user.TenantID != tenantID {
+		slog.Error("OAuth link: cross-tenant link attempted",
+			"user_id", user.ID, "user_tenant", user.TenantID, "callback_tenant", tenantID, "provider", providerName)
+		api.auth.recordLoginEventWithMethod(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeTenantMismatch, method, r)
+		http.Redirect(w, r, oauthErrorURL("tenant_mismatch", st.RedirectAfter), http.StatusFound)
 		return
 	}
 

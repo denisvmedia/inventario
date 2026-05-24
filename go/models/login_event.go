@@ -44,6 +44,13 @@ const (
 	// reader scanning "successful sign-ins" doesn't double-count link
 	// events as fresh credential checks.
 	LoginOutcomeIdentityLinked LoginOutcome = "identity_linked"
+	// LoginOutcomeTenantMismatch is recorded by the OAuth callback when the
+	// user resolved by (provider, provider_user_id) or by email lookup
+	// belongs to a different tenant than the one the callback is running
+	// under (#1394). The handler fails closed: never sign in or link
+	// across tenants, even on a globally-unique identity match. Surfaced
+	// in the audit history so a cross-tenant probe shows up clearly.
+	LoginOutcomeTenantMismatch LoginOutcome = "tenant_mismatch"
 )
 
 // LoginMethod is the credential family that produced the event. "password"
