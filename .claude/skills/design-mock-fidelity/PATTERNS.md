@@ -23,7 +23,7 @@ Reach for the existing `WarrantyBadge` component for warranty surfaces — don't
 const tone = status ? COMMODITY_STATUS_TONES[status] : ""
 <Badge variant="outline" className={cn(tone, "border-current/20 font-medium gap-1")}>
   <Icon className="size-3" />
-  {t(`commodities:status.${status}`)}
+  {status ? t(`commodities:status.${status}`) : ""}
 </Badge>
 ```
 
