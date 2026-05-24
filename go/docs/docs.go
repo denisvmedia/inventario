@@ -13066,12 +13066,14 @@ const docTemplate = `{
             "enum": [
                 "password",
                 "oauth_google",
-                "oauth_github"
+                "oauth_github",
+                "oauth_other"
             ],
             "x-enum-varnames": [
                 "LoginMethodPassword",
                 "LoginMethodOAuthGoogle",
-                "LoginMethodOAuthGitHub"
+                "LoginMethodOAuthGitHub",
+                "LoginMethodOAuthOther"
             ]
         },
         "models.LoginOutcome": {
@@ -13084,7 +13086,8 @@ const docTemplate = `{
                 "email_not_verified",
                 "mfa_required",
                 "bad_mfa",
-                "mfa_admin_reset"
+                "mfa_admin_reset",
+                "identity_linked"
             ],
             "x-enum-varnames": [
                 "LoginOutcomeOK",
@@ -13094,7 +13097,8 @@ const docTemplate = `{
                 "LoginOutcomeEmailNotVerified",
                 "LoginOutcomeMFARequired",
                 "LoginOutcomeBadMFA",
-                "LoginOutcomeMFAAdminReset"
+                "LoginOutcomeMFAAdminReset",
+                "LoginOutcomeIdentityLinked"
             ]
         },
         "models.MaintenanceSchedule": {

@@ -3914,11 +3914,13 @@ definitions:
     - password
     - oauth_google
     - oauth_github
+    - oauth_other
     type: string
     x-enum-varnames:
     - LoginMethodPassword
     - LoginMethodOAuthGoogle
     - LoginMethodOAuthGitHub
+    - LoginMethodOAuthOther
   models.LoginOutcome:
     enum:
     - ok
@@ -3929,6 +3931,7 @@ definitions:
     - mfa_required
     - bad_mfa
     - mfa_admin_reset
+    - identity_linked
     type: string
     x-enum-varnames:
     - LoginOutcomeOK
@@ -3939,6 +3942,7 @@ definitions:
     - LoginOutcomeMFARequired
     - LoginOutcomeBadMFA
     - LoginOutcomeMFAAdminReset
+    - LoginOutcomeIdentityLinked
   models.MaintenanceSchedule:
     properties:
       commodity_id:
