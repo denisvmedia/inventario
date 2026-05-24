@@ -50,6 +50,13 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.IntVar(&cfg.GlobalRateLimit, "global-rate-limit", cfg.GlobalRateLimit, "Global per-IP request limit for API endpoints")
 	flags.StringVar(&cfg.GlobalRateWindow, "global-rate-window", cfg.GlobalRateWindow, "Global API rate limit window duration (e.g., 1h, 30m)")
 	flags.BoolVar(&cfg.GlobalRateLimitDisabled, "no-global-rate-limit", cfg.GlobalRateLimitDisabled, "Disable global API rate limiting entirely (for testing only — do not use in production)")
+	flags.BoolVar(
+		&cfg.TestTenantHeaderEnabled,
+		"test-tenant-header-enabled",
+		cfg.TestTenantHeaderEnabled,
+		"Honor the X-Inventario-Test-Tenant request header for tenant resolution "+
+			"(#1851 e2e cross-tenant flows; for testing only — do not use in production)",
+	)
 	flags.StringVar(&cfg.GlobalRateTrustedProxies, "global-rate-trusted-proxies", cfg.GlobalRateTrustedProxies, "Comma-separated trusted proxy CIDRs/IPs used when resolving client IP for global rate limiting")
 	flags.StringVar(&cfg.CSRFRedisURL, "csrf-redis-url", cfg.CSRFRedisURL, "Redis URL for CSRF token storage (e.g., redis://localhost:6379/0); omit to use in-memory storage")
 	flags.StringVar(&cfg.AllowedOrigins, "allowed-origins", cfg.AllowedOrigins, "Comma-separated list of allowed CORS origins (e.g., https://example.com)")

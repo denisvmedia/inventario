@@ -57,6 +57,16 @@ async function maybeStartOAuthStub(): Promise<Record<string, string>> {
     INVENTARIO_RUN_OAUTH_GOOGLE_AUTH_URL_OVERRIDE: `${stubURL}/authorize`,
     INVENTARIO_RUN_OAUTH_GOOGLE_TOKEN_URL_OVERRIDE: `${stubURL}/token`,
     INVENTARIO_RUN_OAUTH_GOOGLE_USERINFO_URL_OVERRIDE: `${stubURL}/userinfo`,
+    // Test-only tenant override (#1851). When the OAuth stub is up the
+    // cross-tenant Playwright spec needs to drive callbacks against a
+    // second tenant without provisioning per-tenant DNS or a multi-
+    // host fixture. Enabling this flag lets the BE honor the
+    // X-Inventario-Test-Tenant header for tenant resolution. The
+    // companion INVENTARIO_SEED_ALLOW_CREATE_TENANT lets the same
+    // spec mint the second tenant via /api/v1/seed. Both are
+    // server-side gates that production deployments leave OFF.
+    INVENTARIO_RUN_TEST_TENANT_HEADER_ENABLED: 'true',
+    INVENTARIO_SEED_ALLOW_CREATE_TENANT: 'true',
   };
 }
 
@@ -248,6 +258,28 @@ export async function seedDatabase(): Promise<void> {
     console.error('Error seeding database:', error);
     throw error;
   }
+}
+
+/**
+ * Seed a named tenant via the public seed endpoint. Used by the OAuth
+ * cross-tenant spec (#1851) to provision a second tenant without
+ * touching the back-office admin surface or shelling out to the CLI.
+ *
+ * Relies on INVENTARIO_SEED_ALLOW_CREATE_TENANT=true on the BE so the
+ * seed handler will create the row when the slug is unknown. The OAuth
+ * stub env bundle sets that flag whenever OAUTH_STUB_ENABLED=true.
+ */
+export async function seedTenant(tenantSlug: string): Promise<void> {
+  console.log(`Seeding tenant '${tenantSlug}'...`);
+  const response = await axios.post(
+    `${BACKEND_URL}/api/v1/seed`,
+    { tenant_slug: tenantSlug },
+    { headers: { 'Content-Type': 'application/json' } }
+  );
+  if (response.status !== 200) {
+    throw new Error(`Failed to seed tenant '${tenantSlug}': ${response.statusText}`);
+  }
+  console.log(`Tenant '${tenantSlug}' seeded`);
 }
 
 /**

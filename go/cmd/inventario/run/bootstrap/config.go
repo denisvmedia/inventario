@@ -153,6 +153,18 @@ type Config struct {
 	OAuthGoogleAuthURLOverride     string `yaml:"-" env:"OAUTH_GOOGLE_AUTH_URL_OVERRIDE" env-default:""`
 	OAuthGoogleTokenURLOverride    string `yaml:"-" env:"OAUTH_GOOGLE_TOKEN_URL_OVERRIDE" env-default:""`
 	OAuthGoogleUserInfoURLOverride string `yaml:"-" env:"OAUTH_GOOGLE_USERINFO_URL_OVERRIDE" env-default:""`
+
+	// TestTenantHeaderEnabled is a TEST-ONLY hook that lets a request
+	// override the Host-derived tenant via the X-Inventario-Test-Tenant
+	// header (#1851). It exists exclusively so the Playwright e2e suite
+	// can exercise cross-tenant flows (notably the OAuth callback's
+	// LoginOutcomeTenantMismatch redirect from #1394) without provisioning
+	// per-tenant DNS or a multi-host fixture. NEVER set this in a
+	// production deployment — a request-supplied tenant header would let
+	// a caller pivot the entire pre-auth surface (registration, OAuth
+	// callback, public-tenant-context handlers) onto an arbitrary tenant.
+	// The bootstrap layer logs a loud warning when this is enabled.
+	TestTenantHeaderEnabled bool `yaml:"-" env:"TEST_TENANT_HEADER_ENABLED" env-default:"false"`
 }
 
 // SetDefaults applies repository-wide defaults for fields left at their zero

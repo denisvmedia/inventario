@@ -422,6 +422,63 @@ func TestSeedDataSystemAdminGate(t *testing.T) {
 	c.Assert(emails["blocktarget@test-org.com"], qt.IsTrue)
 }
 
+// TestSeedDataMissingTenantSlug_FailsClosedByDefault asserts the
+// strict production contract: passing a non-empty TenantSlug for a
+// tenant that doesn't exist returns an error rather than creating one.
+// The CreateTenantIfMissing toggle (#1851) is the only path that
+// changes this — see TestSeedDataMissingTenantSlug_CreatesWhenOptIn.
+func TestSeedDataMissingTenantSlug_FailsClosedByDefault(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+	_, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{
+		TenantSlug: "does-not-exist",
+		// CreateTenantIfMissing left at zero (false).
+	})
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "tenant with slug 'does-not-exist' not found")
+
+	// Confirm no tenant was created as a side-effect.
+	registrySet := factorySet.CreateServiceRegistrySet()
+	tenants, err := registrySet.TenantRegistry.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(tenants, qt.HasLen, 0)
+}
+
+// TestSeedDataMissingTenantSlug_CreatesWhenOptIn covers the
+// CreateTenantIfMissing path (#1851): the seed handler binds it from
+// the INVENTARIO_SEED_ALLOW_CREATE_TENANT env var, so this test
+// exercises the underlying SeedData behavior the e2e fixture relies on
+// to provision a second tenant via the public seed endpoint.
+func TestSeedDataMissingTenantSlug_CreatesWhenOptIn(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	factorySet := memory.NewFactorySet()
+	_, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{
+		TenantSlug:            "tenant2",
+		CreateTenantIfMissing: true,
+	})
+	c.Assert(err, qt.IsNil)
+
+	registrySet := factorySet.CreateServiceRegistrySet()
+	tenant, err := registrySet.TenantRegistry.GetBySlug(ctx, "tenant2")
+	c.Assert(err, qt.IsNil)
+	c.Assert(tenant.Slug, qt.Equals, "tenant2")
+	c.Assert(tenant.Status, qt.Equals, models.TenantStatusActive)
+
+	// The test-org-only fixtures must NOT leak into the newly-created
+	// non-test-org tenant — the existing `tenant.Slug == "test-org"`
+	// gate in SeedData must still hold for create-if-missing tenants.
+	users, err := registrySet.UserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	for _, u := range users {
+		c.Assert(u.Email, qt.Not(qt.Equals), "orphan@test-org.com")
+		c.Assert(u.Email, qt.Not(qt.Equals), "blocktarget@test-org.com")
+		c.Assert(u.Email, qt.Not(qt.Equals), "sysadmin@test-org.com")
+	}
+}
+
 // referenceNow returns the wall-clock value used by warranty-bucket
 // assertions; mirrors the seed's relative-date computation so a
 // commodity seeded with WarrantyDaysFromNow=5 lands in the "expiring"
