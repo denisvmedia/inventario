@@ -60,7 +60,15 @@ export function ConnectedAccountsCard() {
   // or GitHub, so this entire surface is non-interactive. Hiding it (rather
   // than rendering an empty card) keeps the settings page from sprouting
   // dead chrome.
-  if (providersQuery.isLoading) return <ConnectedAccountsSkeleton />
+  //
+  // Both queries must settle before we render the row list: rendering a
+  // linked provider as "Not linked" while identitiesQuery is still loading
+  // would briefly show the wrong CTA + flip to the linked state once the
+  // identities resolve. Hide the card on error too — a transient 5xx
+  // shouldn't sprout a misleading "Not linked" state either; the user can
+  // retry by reloading.
+  if (providersQuery.isLoading || identitiesQuery.isLoading) return <ConnectedAccountsSkeleton />
+  if (providersQuery.isError || identitiesQuery.isError) return null
   if (providers.length === 0) return null
 
   // Map each enabled provider to either a linked-row (identity present) or

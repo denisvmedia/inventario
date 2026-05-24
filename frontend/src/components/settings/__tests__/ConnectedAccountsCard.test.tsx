@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
@@ -13,6 +13,13 @@ import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
+
+// Capture the original window.location at module load so afterEach can
+// restore it after tests that override the descriptor with a fake assign
+// spy. Without this restore, a redirect-spy test leaks its mocked
+// location into subsequent tests / files and breaks anything that reads
+// window.location.origin etc.
+const originalLocation = window.location
 
 function renderCard() {
   return renderWithProviders({
@@ -35,6 +42,14 @@ beforeEach(() => {
   __resetGroupContextForTests()
   __resetHttpForTests()
   setAccessToken("good-token")
+})
+
+afterEach(() => {
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    writable: true,
+    value: originalLocation,
+  })
 })
 
 describe("<ConnectedAccountsCard />", () => {
