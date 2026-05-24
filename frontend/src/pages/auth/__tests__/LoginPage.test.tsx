@@ -45,6 +45,13 @@ beforeEach(() => {
   clearPendingInvite()
   __resetGroupContextForTests()
   __resetHttpForTests()
+  // OAuthRow (#1394) probes /auth/oauth/providers on mount. Tests that
+  // don't override this still need a handler so MSW doesn't surface an
+  // unhandled-request error. Default to no providers — the row hides
+  // itself and the login form behaves identically to the pre-#1394 layout.
+  server.use(
+    msw.get(api("/auth/oauth/providers"), () => HttpResponse.json({ providers: [] }))
+  )
 })
 
 describe("<LoginPage />", () => {
@@ -207,5 +214,22 @@ describe("<LoginPage />", () => {
     await waitFor(() =>
       expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/household")
     )
+  })
+
+  // #1394 — when the OAuth callback redirects here with
+  // `?oauth_link_required=1&email=…&provider=…`, the page shows a
+  // dedicated banner prompting the user to sign in with their password
+  // before linking the provider from Settings.
+  it("renders the OAuth link-required banner when the query param is set", () => {
+    renderLogin("/login?oauth_link_required=1&email=denis%40example.com&provider=google")
+    const banner = screen.getByTestId("oauth-link-required-banner")
+    expect(banner).toBeInTheDocument()
+    expect(banner).toHaveTextContent(/google/i)
+    expect(banner).toHaveTextContent(/denis@example\.com/i)
+  })
+
+  it("omits the OAuth link-required banner when the query param is absent", () => {
+    renderLogin("/login")
+    expect(screen.queryByTestId("oauth-link-required-banner")).not.toBeInTheDocument()
   })
 })

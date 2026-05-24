@@ -1,14 +1,18 @@
 // Tiny feature-flag reader. Each flag is a Vite env var like
-// `VITE_FEATURE_OAUTH_LOGIN=1` that maps to a boolean. Default is off.
+// `VITE_FEATURE_TWO_FACTOR_AUTH=1` that maps to a boolean. Default is off.
 //
 // Real flag delivery (per-user, remote toggle) is out of scope for the new
 // frontend's first slice — for now this just exposes a single chokepoint so
 // auth-stub call sites (#1380 2FA, #1394 OAuth) don't sprinkle
 // `import.meta.env.VITE_…` directly through the component tree.
+//
+// `OAUTH_LOGIN` retired in #1394: the OAuth row now appears whenever the
+// BE's /auth/oauth/providers list is non-empty, so the feature is gated by
+// the operator's actual provider config — no FE flag needed.
 
 // Single source of truth for the supported flag names — keep the union in
 // sync if you add a new VITE_FEATURE_<NAME>.
-export type FeatureFlag = "OAUTH_LOGIN" | "TWO_FACTOR_AUTH" | "AUTH_STATS_TEASER"
+export type FeatureFlag = "TWO_FACTOR_AUTH" | "AUTH_STATS_TEASER"
 
 function readFlag(name: FeatureFlag): boolean {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
