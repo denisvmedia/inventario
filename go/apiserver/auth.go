@@ -763,6 +763,10 @@ func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request)
 	// canonical boot probe. Authorization is still enforced server-side
 	// via RequireSystemAdmin on every /admin/* request.
 	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, user)
+	// Stamp the wire-only has_password flag (#1394) so the FE knows
+	// whether to render the "Set a password" form for OAuth-only users
+	// or the regular "Change password" flow.
+	user.HasPassword = user.HasPasswordSet()
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(user); err != nil {

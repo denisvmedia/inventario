@@ -2036,7 +2036,9 @@ export type paths = {
         };
         /**
          * OAuth callback (provider redirect target)
-         * @description Validates the signed state + state cookie, exchanges the authorization code with the provider, and either signs the caller in (existing identity), auto-links a verified-email match, prompts password sign-in (unverified email), or creates a new account. On success the handler 302s the browser back to the FE redirect path the state carried.
+         * @description Validates state + cookie, exchanges the code, and either signs the caller in (existing identity),
+         *     auto-links a verified-email match, prompts a password sign-in (unverified email), or creates a new
+         *     account. Redirects to the FE path the state carried.
          */
         get: {
             parameters: {
@@ -11799,6 +11801,16 @@ export type components = {
              */
             default_group_id?: string;
             email?: string;
+            /**
+             * @description HasPassword is a transient wire-only field reflecting whether the
+             *     user has a non-empty password_hash. OAuth-only accounts (#1394)
+             *     have an empty hash until they explicitly set one from the FE; the
+             *     FE branches on this to render "Set a password" instead of "Change
+             *     password". Same posture as IsSystemAdmin — no migrator annotation,
+             *     `db:"-"` so sqlx skips it. Populated by handlers that emit a
+             *     /auth/me-style payload before encoding.
+             */
+            has_password?: boolean;
             id?: string;
             is_active?: boolean;
             /**
