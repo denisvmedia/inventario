@@ -495,6 +495,156 @@ test.describe('Remove Member — last admin protection (#1257)', () => {
     }
   });
 
+  // #1652 (FE half of Invariant B): the row-level dropdown disables the
+  // remove button on the last-owner row, but a stale members snapshot or
+  // role-data drift can let a click through. When that happens, MembersPage
+  // must render a typed toast ("…delete the group instead") so the user has
+  // an actionable remediation instead of the generic "Couldn't load" copy.
+  // We force the typed 422 response via page.route() rather than corrupting
+  // real DB state; the BE-side enforcement of Invariant B is already
+  // covered at the registry layer (postgres/group_memberships_test.go) and
+  // the service layer (services/group_service_test.go) with race tests.
+  test('MembersPage toast surfaces the lastMember typed copy on a 422 (#1652)', async ({ page, request }) => {
+    const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
+    const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
+    if (!authToken) {
+      test.skip();
+      return;
+    }
+
+    const groupName = `LastMember Toast UI ${Date.now()}`;
+    const createResp = await request.post('/api/v1/groups', {
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+        'Authorization': `Bearer ${authToken}`,
+        'X-CSRF-Token': csrfToken,
+      },
+      data: { data: { type: 'groups', attributes: { name: groupName, icon: '🧪' } } },
+    });
+    expect(createResp.status(), await createResp.text()).toBe(201);
+    const createdBody = await createResp.json();
+    const groupId = createdBody.data.id as string;
+    const groupSlug = createdBody.data.attributes.slug as string;
+
+    try {
+      // Discover the owner's real member_user_id from the live roster
+      // before installing the route mock — the mocked GET below has to
+      // claim the same id for the self row, or the page renders the user
+      // as a non-self member and the gate that hides actions on `isMe`
+      // wouldn't fire / would fire on the wrong row.
+      const membersResp = await request.get(`/api/v1/groups/${groupId}/members`, {
+        headers: {
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      expect(membersResp.status()).toBe(200);
+      const realMembers = await membersResp.json();
+      const ownerUserId = realMembers.data[0].attributes.member_user_id as string;
+
+      const fakeOtherUserId = 'u2-other-toast-1652';
+      const fakeOtherShort = fakeOtherUserId.slice(0, 8);
+      const fakeRoster = {
+        data: [
+          {
+            id: 'm1-real-owner',
+            type: 'memberships',
+            attributes: {
+              group_id: groupId,
+              member_user_id: ownerUserId,
+              role: 'owner',
+              joined_at: '2026-04-01T00:00:00Z',
+              user: { id: ownerUserId, name: 'Owner', email: 'owner@example.com' },
+            },
+          },
+          {
+            id: 'm2-fake-user',
+            type: 'memberships',
+            attributes: {
+              group_id: groupId,
+              member_user_id: fakeOtherUserId,
+              role: 'user',
+              joined_at: '2026-04-02T00:00:00Z',
+              user: { id: fakeOtherUserId, name: 'Bea Smith', email: 'bea@example.com' },
+            },
+          },
+        ],
+      };
+
+      // Mock the roster GET to surface a second non-self row whose
+      // actions menu the test can drive. The route is scoped to this
+      // group only so neighbouring tests are unaffected. Auth + CSRF
+      // headers are not asserted — the goal is the FE handler wiring,
+      // not re-testing the request shape.
+      await page.route(`**/api/v1/groups/${groupId}/members`, async (route) => {
+        if (route.request().method() === 'GET') {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/vnd.api+json',
+            body: JSON.stringify(fakeRoster),
+          });
+          return;
+        }
+        await route.continue();
+      });
+
+      // Mock the DELETE on the fake non-self row to return the typed
+      // 422 envelope the BE would emit when Invariant B trips. Hitting
+      // this from a normal-state stack is impossible (Invariant A wins
+      // the owner-first ordering), so the route mock is the only way to
+      // exercise the FE branch in a real browser.
+      await page.route(
+        `**/api/v1/groups/${groupId}/members/${fakeOtherUserId}`,
+        async (route) => {
+          if (route.request().method() === 'DELETE') {
+            await route.fulfill({
+              status: 422,
+              contentType: 'application/vnd.api+json',
+              body: JSON.stringify({
+                errors: [{ code: 'group.last_member', detail: 'last member' }],
+              }),
+            });
+            return;
+          }
+          await route.continue();
+        },
+      );
+
+      await page.goto(`/g/${encodeURIComponent(groupSlug)}/members`);
+      await page.waitForSelector('[data-testid="members-list"]', { timeout: 10000 });
+
+      await page.click(`[data-testid="member-actions-${fakeOtherShort}"]`);
+      await page.click(`[data-testid="remove-member-btn-${fakeOtherUserId}"]`);
+      // The confirm dialog is the shared useConfirm primitive; the accept
+      // button carries the `confirm-accept` testid the project uses.
+      await page.click('[data-testid="confirm-accept"]');
+
+      // Sonner renders into a portal as a role=status region; locate the
+      // toast by its localized copy. Matching "delete the group instead"
+      // pins the typed branch (members:errors.lastMember) vs. the generic
+      // parseServerError fallback ("Couldn't load…").
+      await expect(page.getByText(/delete the group instead/i)).toBeVisible({
+        timeout: 5000,
+      });
+    } finally {
+      // Even though we mocked the DELETE response, the cleanup below
+      // hits the real BE — that's what actually removes the test group.
+      await page.unroute(`**/api/v1/groups/${groupId}/members`);
+      await page.unroute(`**/api/v1/groups/${groupId}/members/${'u2-other-toast-1652'}`);
+      const deleteResp = await request.delete(`/api/v1/groups/${groupId}`, {
+        headers: {
+          'Content-Type': 'application/vnd.api+json',
+          'Accept': 'application/vnd.api+json',
+          'Authorization': `Bearer ${authToken}`,
+          'X-CSRF-Token': csrfToken,
+        },
+        data: { confirm_word: groupName, password: 'TestPassword123' },
+      });
+      expect(deleteResp.status()).toBe(204);
+    }
+  });
+
   test('Remove button on the sole admin is disabled with tooltip', async ({ page, request }) => {
     const authToken = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
     const csrfToken = await page.evaluate(() => sessionStorage.getItem('inventario_csrf_token') || '');
