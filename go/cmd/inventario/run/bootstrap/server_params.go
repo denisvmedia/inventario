@@ -189,6 +189,8 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		return serverSetup{}, err
 	}
 
+	maybeWireTestTenantHeader(cfg, &params)
+
 	if err = validation.Validate(params); err != nil {
 		slog.Error("Invalid server parameters", "error", err)
 		return serverSetup{}, err
@@ -277,4 +279,28 @@ func wireCommodityScan(cfg *Config, params *apiserver.Params) error {
 	// more than (cap+1) bytes.
 	params.CommodityScanMaxPhotoBytes = cfg.AIVisionMaxPhotoBytes
 	return nil
+}
+
+// maybeWireTestTenantHeader installs the test-only
+// X-Inventario-Test-Tenant override (#1851) when the operator flips
+// cfg.TestTenantHeaderEnabled (env: INVENTARIO_RUN_TEST_TENANT_HEADER_
+// ENABLED, CLI: --test-tenant-header-enabled). It wraps whatever
+// resolver buildServerParams produced in a TestHeaderTenantResolver
+// AND opens the matching exemption in ValidateNoUserProvidedTenantID
+// so the namespaced header isn't blanket-rejected before the resolver
+// sees it. Both effects are no-ops when the flag is off, which is the
+// production default — the helper exists mainly to keep
+// buildServerParams under the gocyclo budget.
+func maybeWireTestTenantHeader(cfg *Config, params *apiserver.Params) {
+	if !cfg.TestTenantHeaderEnabled {
+		return
+	}
+	slog.Warn("Test-only tenant override header is ENABLED — do not use this in production",
+		"header", apiserver.TestTenantHeaderName)
+	inner := params.TenantResolver
+	if inner == nil {
+		inner = &apiserver.HostTenantResolver{}
+	}
+	params.TenantResolver = &apiserver.TestHeaderTenantResolver{Inner: inner}
+	params.TestTenantHeaderEnabled = true
 }

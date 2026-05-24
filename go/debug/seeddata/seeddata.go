@@ -77,6 +77,17 @@ type SeedOptions struct {
 	// handler, init-data) pass the server's configured upload
 	// location through verbatim.
 	UploadLocation string
+
+	// CreateTenantIfMissing turns the strict "tenant with slug 'X' not
+	// found" error into a side-effecting "create the tenant row, then
+	// seed inside it" path. Used by the e2e cross-tenant fixture (#1851)
+	// to provision a second tenant via the public seed endpoint without
+	// needing a CLI shell-out or a back-office admin route. OFF by
+	// default; the seed handler reads INVENTARIO_SEED_ALLOW_CREATE_TENANT
+	// to flip it on (the env-var-gated pattern matches SeedSystemAdmin
+	// — never sourced from the request body). Has effect only when
+	// TenantSlug is non-empty.
+	CreateTenantIfMissing bool
 }
 
 // SeedData seeds the database with example data. Returns alreadySeeded=true
@@ -96,7 +107,7 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Find or create tenant.
-	tenant, err := findOrCreateTenant(ctx, registrySet, opts.TenantSlug)
+	tenant, err := findOrCreateTenant(ctx, registrySet, opts)
 	if err != nil {
 		return false, err
 	}
@@ -265,14 +276,45 @@ func seedTestOrgFixtures(ctx context.Context, registrySet *registry.Set, tenant 
 }
 
 // findOrCreateTenant finds an existing tenant by slug or creates a new
-// test tenant.
-func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, tenantSlug string) (*models.Tenant, error) {
-	if tenantSlug != "" {
-		tenant, err := registrySet.TenantRegistry.GetBySlug(ctx, tenantSlug)
-		if err != nil {
-			return nil, fmt.Errorf("tenant with slug '%s' not found: %w", tenantSlug, err)
+// test tenant. When opts.TenantSlug is non-empty and the row is
+// missing, opts.CreateTenantIfMissing decides whether to fail-closed
+// (the default, preserves the strict production contract) or to
+// create-then-seed (e2e cross-tenant fixture path, #1851; the seed
+// handler binds opts.CreateTenantIfMissing to
+// INVENTARIO_SEED_ALLOW_CREATE_TENANT).
+func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, opts SeedOptions) (*models.Tenant, error) {
+	if opts.TenantSlug != "" {
+		tenant, err := registrySet.TenantRegistry.GetBySlug(ctx, opts.TenantSlug)
+		if err == nil {
+			return tenant, nil
 		}
-		return tenant, nil
+		// Only fall through to create-if-missing on the explicit "not
+		// found" sentinel. Any other lookup error (DB down, RLS
+		// rejection, deserialization failure, etc.) must surface
+		// unchanged — masking it behind a create would both hide the
+		// root cause AND risk creating a duplicate-named tenant when
+		// the row already exists but the read failed for a transient
+		// reason.
+		if !errors.Is(err, registry.ErrNotFound) {
+			return nil, fmt.Errorf("tenant lookup for slug '%s' failed: %w", opts.TenantSlug, err)
+		}
+		if !opts.CreateTenantIfMissing {
+			return nil, fmt.Errorf("tenant with slug '%s' not found: %w", opts.TenantSlug, err)
+		}
+		// Create-if-missing: provision a new active tenant with a
+		// human-friendly name derived from the slug. Slug stays as
+		// the operator supplied it. Status defaults to active so the
+		// seed flow can immediately mint users/groups inside it.
+		newTenant := models.Tenant{
+			Name:   "Test Tenant " + opts.TenantSlug,
+			Slug:   opts.TenantSlug,
+			Status: models.TenantStatusActive,
+		}
+		created, createErr := registrySet.TenantRegistry.Create(ctx, newTenant)
+		if createErr != nil {
+			return nil, fmt.Errorf("create tenant '%s': %w", opts.TenantSlug, createErr)
+		}
+		return created, nil
 	}
 
 	existingTenants, err := registrySet.TenantRegistry.List(ctx)

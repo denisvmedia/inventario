@@ -49,7 +49,8 @@
  * emits a loud slog.Warn when they are set. NEVER turn these on in a
  * production deployment.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, APIRequestContext, Browser, BrowserContext, Page } from '@playwright/test';
+import { seedTenant } from '../setup/setup-stack.js';
 
 // Toggle the provider exercised by the test. Today: "google". Adding
 // "github" needs a stub server expansion (it's currently Google-shaped)
@@ -77,6 +78,16 @@ const STUB_BASE_URL = `http://127.0.0.1:${STUB_PORT}`;
 // Inline this rather than importing setup/urls.ts so the spec file
 // stays loadable even when run with a non-default base URL.
 const TEST_TIMEOUT_MS = 60_000;
+
+// OAuth specs share a single in-process stub server that holds the
+// active profile as module-level state (see e2e/setup/oauth-stub-
+// server.ts). Two parallel workers calling setStubProfile() race each
+// other and corrupt the response /userinfo returns to the BE callback
+// — exactly the flakiness that bit #1851's separate-file first
+// implementation. Pinning the OAuth describes to serial-within-file
+// removes the race without forcing the rest of the e2e suite to run
+// single-worker.
+test.describe.configure({ mode: 'serial' });
 
 test.describe('#1394 OAuth sign-in — Google provider via stub @oauth', () => {
   // Long timeout: the BE redirect chain + stub round-trip + JWT mint can
@@ -263,4 +274,339 @@ async function setStubProfile(profile: typeof STUB_PROFILE): Promise<void> {
   if (!resp.ok) {
     throw new Error(`stub set-profile failed: ${resp.status} ${await resp.text()}`);
   }
+}
+
+// ============================================================================
+// #1851 — OAuth sign-in cross-tenant isolation
+// ----------------------------------------------------------------------------
+// Follow-up to #1394 / PR #1850. The BE half (find-by-(provider,sub)
+// returning a foreign-tenant identity must refuse the callback with a
+// LoginOutcomeTenantMismatch redirect) is unit-tested in
+// go/apiserver/oauth_test.go. This block is the end-to-end half:
+// drive the full BE redirect chain through the OAuth stub against
+// TWO tenants and observe the same guard from a real browser.
+//
+// ---- Tenant steering mechanism ----
+// The e2e stack runs a single BE on a single host — there is no
+// per-tenant DNS or hostname to switch between. The BE gates a
+// TEST-ONLY tenant override header behind
+// INVENTARIO_RUN_TEST_TENANT_HEADER_ENABLED=true (set automatically
+// by setup-stack.ts when OAUTH_STUB_ENABLED=true). When that flag is
+// on, every request that carries X-Inventario-Test-Tenant: <slug>
+// has its tenant resolved from the header instead of the Host.
+//
+// Playwright's browser.newContext({ extraHTTPHeaders }) sends the
+// header on EVERY request the browser makes in that context —
+// page navigations, OAuth redirects through the stub, and direct
+// context.request.* API calls alike — so a context pinned to
+// tenant-2 drives the BE callback under tenant-2 even though the BE
+// was reached via localhost.
+//
+// ---- Second tenant provisioning ----
+// setup-stack.ts also flips INVENTARIO_SEED_ALLOW_CREATE_TENANT=true
+// when the OAuth stub is enabled, so this block mints the second
+// tenant via the public POST /api/v1/seed { tenant_slug: "<slug>" }
+// endpoint without needing a CLI shell-out or a back-office admin
+// route. Both env-gated flags are server-side; the request body
+// never carries privilege.
+// ============================================================================
+
+// Two tenants the spec needs. `test-org` is the canonical seeded
+// tenant (see setup-stack.ts → INVENTARIO_RUN_MEMORY_TENANT_SLUG).
+// `t1851-other` is minted in beforeAll via seedTenant. The slug is
+// namespaced with the issue number so a parallel suite that one day
+// uses a "tenant2" slug doesn't collide.
+const TENANT_1_SLUG = 'test-org';
+const TENANT_2_SLUG = 't1851-other';
+
+// Deterministic alice profile — created on tenant-1 in setup, then
+// replayed on tenant-2 to exercise the LoginOutcomeTenantMismatch
+// redirect. The `sub` keys the global (provider, provider_user_id)
+// lookup that triggers the guard.
+const ALICE_PROFILE = {
+  sub: 'stub-google-sub-1851-alice',
+  email: 'alice-1851@example.test',
+  emailVerified: true,
+  name: 'Alice Cross-Tenant',
+};
+
+test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tenant', () => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+
+  test.beforeAll(async () => {
+    test.skip(
+      process.env.OAUTH_STUB_ENABLED !== 'true',
+      'OAuth cross-tenant e2e requires OAUTH_STUB_ENABLED=true (see spec header).'
+    );
+
+    // Liveness probe — the stub server must be up before the BE
+    // redirect chain runs through it. A clear error here beats a
+    // downstream timeout.
+    const probe = await fetch(`${STUB_BASE_URL}/userinfo`, {
+      headers: { Authorization: 'Bearer stub-access-token' },
+    });
+    if (!probe.ok) {
+      throw new Error(
+        `OAuth stub /userinfo not reachable at ${STUB_BASE_URL} (status ${probe.status}). Did setup-stack.ts start the stub?`
+      );
+    }
+
+    // Mint the second tenant. Idempotent — re-running the spec
+    // hits the find-by-slug branch instead of create.
+    await seedTenant(TENANT_2_SLUG);
+  });
+
+  test.beforeEach(async () => {
+    // Re-pin the profile to ALICE before every test so the previous
+    // test's STUB_PROFILE in the #1394 describe doesn't leak in. The
+    // outer file-level serial mode guarantees this runs to completion
+    // before the test action fires.
+    await setStubProfile(ALICE_PROFILE);
+  });
+
+  test('callback on tenant-2 with identity owned by tenant-1 → redirected to tenant_mismatch, no session', async ({
+    browser,
+  }) => {
+    // ---- Setup: register alice on tenant-1 via OAuth ----
+    // Drive a normal sign-in flow against TENANT_1 so the OAuth
+    // identity row lands with tenant_id=TENANT_1. The subsequent
+    // tenant-2 attempt will collide on the global (provider, sub)
+    // index and exercise the cross-tenant guard.
+    const tenant1 = await newTenantContext(browser, TENANT_1_SLUG);
+    await runOAuthFlowOnTenantContext(tenant1.page);
+
+    const tenant1AccessToken = await refreshAndExpectSuccess(tenant1.context.request, TENANT_1_SLUG);
+    const aliceOnTenant1 = await fetchMe(tenant1.context.request, tenant1AccessToken, TENANT_1_SLUG);
+    expect(aliceOnTenant1.email).toBe(ALICE_PROFILE.email);
+    const aliceOnTenant1ID = aliceOnTenant1.id;
+
+    // Sign out so the second attempt isn't already authenticated.
+    await tenant1.context.request.post('/api/v1/auth/logout', {
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tenant1AccessToken}` },
+      data: {},
+    });
+    await tenant1.context.close();
+
+    // ---- Attempt: replay the SAME OAuth profile on tenant-2 ----
+    // The stub still returns the alice profile (sub stable across
+    // calls). The BE callback resolves tenant_id=TENANT_2 from the
+    // header, looks up identity by (provider, sub), finds alice's
+    // identity row owning tenant_id=TENANT_1, and refuses: 302 to
+    // /login?oauth_error=tenant_mismatch.
+    const tenant2 = await newTenantContext(browser, TENANT_2_SLUG);
+
+    await tenant2.page.goto('/login');
+    const googleButton = tenant2.page.locator(`[data-testid="oauth-${PROVIDER}-button"]`);
+    await expect(googleButton).toBeVisible({ timeout: 10_000 });
+
+    await Promise.all([
+      tenant2.page.waitForURL(
+        (url) => url.pathname === '/login' && url.search.includes('oauth_error=tenant_mismatch'),
+        { timeout: 20_000 }
+      ),
+      googleButton.click(),
+    ]);
+
+    // The BE 302'd back to /login?oauth_error=tenant_mismatch. The FE
+    // surfaces the banner from the existing oauth_error query handler
+    // (#1394). The URL itself is the load-bearing assertion for the
+    // BE-level guard.
+    expect(tenant2.page.url(), 'callback must end at /login?oauth_error=tenant_mismatch').toContain(
+      'oauth_error=tenant_mismatch'
+    );
+
+    // No refresh-token cookie issued — the BE writes the cookie only
+    // on the success branch. /auth/refresh must therefore reject the
+    // empty cookie jar with 401.
+    const tenant2Refresh = await tenant2.context.request.post('/api/v1/auth/refresh', {
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      data: {},
+    });
+    expect(
+      tenant2Refresh.status(),
+      `tenant-2 refresh must fail (no session minted): got ${tenant2Refresh.status()}`
+    ).toBe(401);
+
+    // Alice's tenant-1 identity must be unchanged: she still exists
+    // in tenant-1 with the same user.id. The tenant-2 attempt must
+    // not have created a new user row, linked a new identity, or
+    // touched her tenant assignment.
+    const tenant1Recheck = await newTenantContext(browser, TENANT_1_SLUG);
+    await runOAuthFlowOnTenantContext(tenant1Recheck.page);
+    const aliceRefreshAfter = await refreshAndExpectSuccess(tenant1Recheck.context.request, TENANT_1_SLUG);
+    const aliceAfter = await fetchMe(tenant1Recheck.context.request, aliceRefreshAfter, TENANT_1_SLUG);
+    expect(aliceAfter.id, 'alice must remain the same tenant-1 user — cross-tenant attempt must not have created a duplicate').toBe(
+      aliceOnTenant1ID
+    );
+    await tenant1Recheck.context.close();
+    await tenant2.context.close();
+  });
+
+  test('tenant-1 session targeting tenant-2 host must not leak tenant-1 data', async ({
+    browser,
+  }) => {
+    // Sign alice in on tenant-1 to get a bearer token, then point
+    // request calls at tenant-2 by flipping the override header on
+    // each call. The user-aware registries are scoped by the JWT's
+    // user (not the request-tenant context), so this exercises BOTH
+    // axes of isolation: the JWT carries tenant_1, the override
+    // says tenant_2 — the response must never reflect a successful
+    // cross-tenant read of OTHER users' data on tenant-2.
+    const tenant1 = await newTenantContext(browser, TENANT_1_SLUG);
+    await runOAuthFlowOnTenantContext(tenant1.page);
+    const accessToken = await refreshAndExpectSuccess(tenant1.context.request, TENANT_1_SLUG);
+    const alice = await fetchMe(tenant1.context.request, accessToken, TENANT_1_SLUG);
+    expect(alice.email).toBe(ALICE_PROFILE.email);
+
+    // Probe /api/v1/auth/me cross-tenant. The endpoint reads the
+    // user out of the JWT, so it must return alice (tenant-1) — NOT
+    // any tenant-2 user. The override header must not be able to
+    // swap the authenticated identity. Two acceptable outcomes:
+    //
+    //   1. 200 + alice's own row — the JWT identity is the boundary
+    //      and the override header is ignored downstream of auth.
+    //   2. 401/403 — the BE refuses the cross-tenant probe outright,
+    //      which is the stronger isolation posture.
+    //
+    // Both are valid; the test rejects only the failure mode where
+    // the BE returns a DIFFERENT user under the cross-tenant header.
+    //
+    // (A second probe of a group-scoped resource like /api/v1/locations
+    // looks attractive but isn't meaningful here: OAuth-provisioned
+    // alice has no default group, so the endpoint 404s on both the
+    // baseline and the cross-tenant request — the response gives no
+    // signal about isolation.)
+    const crossTenantMeResp = await tenant1.context.request.get('/api/v1/auth/me', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        'X-Inventario-Test-Tenant': TENANT_2_SLUG,
+      },
+    });
+    if (crossTenantMeResp.status() === 200) {
+      const crossMe = (await crossTenantMeResp.json()) as { id: string; email: string };
+      expect(
+        crossMe.id,
+        '/auth/me with cross-tenant override must NOT return a different user — JWT identity is the boundary'
+      ).toBe(alice.id);
+      expect(crossMe.email).toBe(ALICE_PROFILE.email);
+    } else {
+      expect(crossTenantMeResp.status()).toBeGreaterThanOrEqual(400);
+    }
+
+    // Also probe /api/v1/users/me/login-history under the override
+    // header. The history list is keyed by the JWT's user.ID, so
+    // every event must belong to alice (login_event.user_id == alice).
+    // A row attributed to a different user.id would mean the
+    // cross-tenant request crossed the JWT-identity boundary —
+    // exactly the leak this test guards against.
+    const crossTenantHistoryResp = await tenant1.context.request.get('/api/v1/users/me/login-history', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        'X-Inventario-Test-Tenant': TENANT_2_SLUG,
+      },
+    });
+    if (crossTenantHistoryResp.status() === 200) {
+      const history = (await crossTenantHistoryResp.json()) as {
+        events?: Array<{ user_id?: string; user_email?: string }>;
+      };
+      for (const ev of history.events ?? []) {
+        if (ev.user_id !== undefined) {
+          expect(
+            ev.user_id,
+            `cross-tenant login-history must NOT contain events for any user other than alice (saw ${ev.user_id})`
+          ).toBe(alice.id);
+        }
+        if (ev.user_email !== undefined) {
+          expect(ev.user_email).toBe(ALICE_PROFILE.email);
+        }
+      }
+    } else {
+      expect(crossTenantHistoryResp.status()).toBeGreaterThanOrEqual(400);
+    }
+
+    await tenant1.context.close();
+  });
+});
+
+/**
+ * newTenantContext spins up a fresh browser context pinned to a tenant
+ * via the test-only `X-Inventario-Test-Tenant` header. Playwright sends
+ * this header on every request the context makes — page navigations,
+ * OAuth redirects through the stub, and direct `context.request.*`
+ * API calls alike — so the BE resolves the chosen tenant for the
+ * whole session.
+ */
+async function newTenantContext(
+  browser: Browser,
+  tenantSlug: string
+): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext({
+    extraHTTPHeaders: { 'X-Inventario-Test-Tenant': tenantSlug },
+  });
+  const page = await context.newPage();
+  return { context, page };
+}
+
+/**
+ * runOAuthFlowOnTenantContext drives the Google-stub sign-in from /login
+ * to whichever post-auth URL the BE redirects to (/, /no-group, or — for
+ * the tenant-mismatch path — /login). Used by the cross-tenant tests for
+ * the "land on a successful session" steps. Callers that need to assert
+ * on a specific landing URL should not use this helper.
+ */
+async function runOAuthFlowOnTenantContext(page: Page): Promise<void> {
+  await page.goto('/login');
+  const googleButton = page.locator(`[data-testid="oauth-${PROVIDER}-button"]`);
+  await expect(googleButton).toBeVisible({ timeout: 10_000 });
+  await Promise.all([
+    page.waitForURL(
+      (url) => url.pathname === '/' || url.pathname === '/no-group' || url.pathname === '/login',
+      { timeout: 20_000 }
+    ),
+    googleButton.click(),
+  ]);
+}
+
+/**
+ * refreshAndExpectSuccess spends the OAuth-set refresh cookie via
+ * /auth/refresh and returns the issued access token. Asserts a 200
+ * response (the cookie path is /api/v1, sent on every BE call from
+ * the same Playwright context).
+ */
+async function refreshAndExpectSuccess(
+  request: APIRequestContext,
+  tenantSlug: string
+): Promise<string> {
+  const refreshResp = await request.post('/api/v1/auth/refresh', {
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    data: {},
+  });
+  expect(
+    refreshResp.status(),
+    `refresh on tenant '${tenantSlug}' failed: ${await refreshResp.text()}`
+  ).toBe(200);
+  const body = (await refreshResp.json()) as { access_token: string };
+  expect(body.access_token, `tenant '${tenantSlug}' refresh did not return an access token`).toBeTruthy();
+  return body.access_token;
+}
+
+/**
+ * fetchMe returns the /auth/me payload for the currently-authenticated
+ * caller. Used to assert which user the BE believes the JWT belongs to.
+ */
+async function fetchMe(
+  request: APIRequestContext,
+  accessToken: string,
+  tenantSlug: string
+): Promise<{ id: string; email: string; name: string; has_password: boolean }> {
+  const meResp = await request.get('/api/v1/auth/me', {
+    headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` },
+  });
+  expect(
+    meResp.status(),
+    `/auth/me on tenant '${tenantSlug}' failed: ${await meResp.text()}`
+  ).toBe(200);
+  return meResp.json();
 }

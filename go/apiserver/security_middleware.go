@@ -32,9 +32,25 @@ const tenantSecurityViolationMsg = "Security violation: tenant information canno
 // rejectTenantHeader checks request headers for any name containing
 // "tenant" (case-insensitive). Returns true — having written a 403 — when a
 // violation was found; false when the headers are clean.
-func rejectTenantHeader(w http.ResponseWriter, r *http.Request) bool {
+//
+// allowTestTenantHeader exempts exactly one well-known header
+// (TestTenantHeaderName, "X-Inventario-Test-Tenant") from the scan when
+// the test-only tenant override is enabled (#1851; gated server-side by
+// INVENTARIO_RUN_TEST_TENANT_HEADER_ENABLED). The exemption is by
+// header NAME match only — every other "tenant"-named header still
+// fails closed, so the override doesn't widen the attack surface
+// beyond the single namespaced channel the e2e cross-tenant spec
+// drives. The flag is wired through ValidateNoUserProvidedTenantID
+// → APIServer → bootstrap, where it stays off in any non-test
+// deployment.
+//
+//revive:disable-next-line:flag-parameter // allowTestTenantHeader is a single feature gate, not a control-coupled mode switch — see doc above.
+func rejectTenantHeader(w http.ResponseWriter, r *http.Request, allowTestTenantHeader bool) bool {
 	for headerName, headerValues := range r.Header {
 		if !strings.Contains(strings.ToLower(headerName), "tenant") {
+			continue
+		}
+		if allowTestTenantHeader && strings.EqualFold(headerName, TestTenantHeaderName) {
 			continue
 		}
 		slog.Error("Security violation: user-provided tenant ID in header",
@@ -230,12 +246,20 @@ func rejectTenantBody(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// ValidateNoUserProvidedTenantID creates middleware that rejects any user-provided tenant information
-// This is critical for preventing cross-tenant data access attacks
-func ValidateNoUserProvidedTenantID() func(http.Handler) http.Handler {
+// ValidateNoUserProvidedTenantID creates middleware that rejects any user-provided tenant information.
+// This is critical for preventing cross-tenant data access attacks.
+//
+// allowTestTenantHeader propagates the test-only override gate from
+// bootstrap (#1851 / INVENTARIO_RUN_TEST_TENANT_HEADER_ENABLED): when
+// true, exempts only TestTenantHeaderName from the header scan so the
+// cross-tenant Playwright fixture can drive callbacks under a chosen
+// tenant. Every other tenant-named header still fails closed.
+//
+//revive:disable-next-line:flag-parameter // allowTestTenantHeader is a single feature gate, not a control-coupled mode switch — see doc above.
+func ValidateNoUserProvidedTenantID(allowTestTenantHeader bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if rejectTenantHeader(w, r) ||
+			if rejectTenantHeader(w, r, allowTestTenantHeader) ||
 				rejectTenantQueryParam(w, r) ||
 				rejectTenantBody(w, r) {
 				return
