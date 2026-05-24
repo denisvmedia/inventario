@@ -61,9 +61,9 @@ metadata:
   namespace: inv-system
 type: Opaque
 stringData:
-  email: |
+  email: |-
 $(printf '%s' "$ADMIN_EMAIL" | sed 's/^/    /')
-  password: |
+  password: |-
 $(printf '%s' "$ADMIN_PASSWORD" | sed 's/^/    /')
 EOF
 else
@@ -79,6 +79,8 @@ GH_URL=$(lookup "github.url")
 if [ -n "$GH_APP_ID" ] && [ -n "$GH_INSTALL_ID" ] && [ -n "$GH_PRIVATE_KEY" ]; then
     note "Applying argocd/github-app-creds"
     # PEM may contain newlines; embed via stringData so kubectl handles escaping.
+    # All values use chomped block scalars (`|-`) — keeps multi-line PEM intact
+    # while stripping the spurious trailing newline that a `|` clip would add.
     cat <<EOF | remote_apply
 apiVersion: v1
 kind: Secret
@@ -93,7 +95,7 @@ stringData:
   url: $GH_URL
   githubAppID: "$GH_APP_ID"
   githubAppInstallationID: "$GH_INSTALL_ID"
-  githubAppPrivateKey: |
+  githubAppPrivateKey: |-
 $(printf '%s' "$GH_PRIVATE_KEY" | sed 's/^/    /')
 EOF
 else
@@ -116,9 +118,9 @@ metadata:
   namespace: tailscale
 type: Opaque
 stringData:
-  client_id: |
+  client_id: |-
 $(printf '%s' "$TS_ID" | sed 's/^/    /')
-  client_secret: |
+  client_secret: |-
 $(printf '%s' "$TS_SECRET" | sed 's/^/    /')
 EOF
 else
