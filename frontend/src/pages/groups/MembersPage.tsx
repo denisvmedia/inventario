@@ -57,7 +57,7 @@ import type { GroupRole, MemberRow } from "@/features/group/api"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatDate } from "@/lib/intl"
-import { parseServerError } from "@/lib/server-error"
+import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { cn } from "@/lib/utils"
 
@@ -87,6 +87,18 @@ const ROLE_BADGE_CLASS: Record<GroupRole, string> = {
 // owner is a transfer-of-ownership action, not an invite role. The BE
 // rejects role=owner on POST /invites with 422; the UI mirrors that.
 const INVITE_ROLE_OPTIONS: GroupRole[] = ["viewer", "user", "admin"]
+
+// Typed 422 codes the membership endpoints surface for the ≥1-owner /
+// ≥1-member invariants (#1652). The row-level dropdown gates these
+// pre-emptively (disabled when `isLastOwner`), so we only land here on
+// a race or role-data drift — but the toast still needs to point at
+// the actionable remediation rather than dumping "the last owner"
+// straight from the server. Mirrors admin/MembershipEditor.tsx's
+// MEMBER_ERROR_KEY pattern so the two surfaces stay coherent.
+const REMOVE_ERROR_CODE: Record<string, string> = {
+  "group.last_owner": "members:errors.lastOwner",
+  "group.last_member": "members:errors.lastMember",
+}
 
 function inviteUrl(token: string | undefined): string {
   if (!token) return ""
@@ -427,6 +439,15 @@ function MemberRowView({
         role: next as GroupRole,
       })
     } catch (err) {
+      // #1652: a demote that would drop the group below ≥1 owner trips
+      // ErrLastOwner; the row gate disables the dropdown but a stale
+      // membership snapshot (loading flicker, optimistic UI) can let a
+      // click through, so we still need the typed copy here.
+      const codeKey = REMOVE_ERROR_CODE[getServerErrorCode(err) ?? ""]
+      if (codeKey) {
+        toast.error(t(codeKey))
+        return
+      }
       toast.error(parseServerError(err, t("members:loadError")))
     }
   }
@@ -444,6 +465,16 @@ function MemberRowView({
     try {
       await removeMutation.mutateAsync({ groupId, memberUserId })
     } catch (err) {
+      // #1652: defense-in-depth toast for the two invariants — ErrLastOwner
+      // ("transfer ownership first") vs. ErrLastMember ("delete the group
+      // instead"). The row-level gate (isLastOwner → disableMutation)
+      // covers the common path; this catches races and role-data drift
+      // where Invariant B is the only thing keeping a group non-empty.
+      const codeKey = REMOVE_ERROR_CODE[getServerErrorCode(err) ?? ""]
+      if (codeKey) {
+        toast.error(t(codeKey))
+        return
+      }
       toast.error(parseServerError(err, t("members:loadError")))
     }
   }
