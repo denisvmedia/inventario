@@ -458,44 +458,24 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
     const alice = await fetchMe(tenant1.context.request, accessToken, TENANT_1_SLUG);
     expect(alice.email).toBe(ALICE_PROFILE.email);
 
-    // Probe a tenant-scoped resource on tenant-2 with tenant-1's bearer.
-    // The contract: no successful read of tenant-foreign data. The BE
-    // is allowed to either reject the request (4xx) or return alice's
-    // own data scoped by her JWT — what it must NEVER do is return
-    // rows belonging to a different tenant.
-    const crossTenantLocationsResp = await tenant1.context.request.get(
-      '/api/v1/locations?page=1&per_page=50',
-      {
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          'X-Inventario-Test-Tenant': TENANT_2_SLUG,
-        },
-      }
-    );
-
-    if (crossTenantLocationsResp.status() >= 400) {
-      // Strong-isolation BE refused outright; the body is unimportant.
-      expect(crossTenantLocationsResp.status()).toBeGreaterThanOrEqual(400);
-    } else {
-      const body = (await crossTenantLocationsResp.json()) as {
-        data?: Array<{ attributes?: { tenant_id?: string } }>;
-      };
-      for (const row of body.data ?? []) {
-        // The slug check is a coarse marker — the real boundary is
-        // tenant UUID. If the public schema exposes tenant_id, fail
-        // if it matches tenant-2's slug.
-        const rowTenantID = row.attributes?.tenant_id;
-        if (rowTenantID !== undefined) {
-          expect(rowTenantID, 'row must not carry a tenant-2 marker').not.toContain(TENANT_2_SLUG);
-        }
-      }
-    }
-
-    // Also probe /api/v1/auth/me cross-tenant. The endpoint reads the
+    // Probe /api/v1/auth/me cross-tenant. The endpoint reads the
     // user out of the JWT, so it must return alice (tenant-1) — NOT
     // any tenant-2 user. The override header must not be able to
-    // swap the authenticated identity.
+    // swap the authenticated identity. Two acceptable outcomes:
+    //
+    //   1. 200 + alice's own row — the JWT identity is the boundary
+    //      and the override header is ignored downstream of auth.
+    //   2. 401/403 — the BE refuses the cross-tenant probe outright,
+    //      which is the stronger isolation posture.
+    //
+    // Both are valid; the test rejects only the failure mode where
+    // the BE returns a DIFFERENT user under the cross-tenant header.
+    //
+    // (A second probe of a group-scoped resource like /api/v1/locations
+    // looks attractive but isn't meaningful here: OAuth-provisioned
+    // alice has no default group, so the endpoint 404s on both the
+    // baseline and the cross-tenant request — the response gives no
+    // signal about isolation.)
     const crossTenantMeResp = await tenant1.context.request.get('/api/v1/auth/me', {
       headers: {
         Accept: 'application/json',
@@ -511,9 +491,39 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
       ).toBe(alice.id);
       expect(crossMe.email).toBe(ALICE_PROFILE.email);
     } else {
-      // 401/403 is also acceptable — the BE refused the cross-tenant
-      // probe outright, which is the stronger isolation behavior.
       expect(crossTenantMeResp.status()).toBeGreaterThanOrEqual(400);
+    }
+
+    // Also probe /api/v1/users/me/login-history under the override
+    // header. The history list is keyed by the JWT's user.ID, so
+    // every event must belong to alice (login_event.user_id == alice).
+    // A row attributed to a different user.id would mean the
+    // cross-tenant request crossed the JWT-identity boundary —
+    // exactly the leak this test guards against.
+    const crossTenantHistoryResp = await tenant1.context.request.get('/api/v1/users/me/login-history', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        'X-Inventario-Test-Tenant': TENANT_2_SLUG,
+      },
+    });
+    if (crossTenantHistoryResp.status() === 200) {
+      const history = (await crossTenantHistoryResp.json()) as {
+        events?: Array<{ user_id?: string; user_email?: string }>;
+      };
+      for (const ev of history.events ?? []) {
+        if (ev.user_id !== undefined) {
+          expect(
+            ev.user_id,
+            `cross-tenant login-history must NOT contain events for any user other than alice (saw ${ev.user_id})`
+          ).toBe(alice.id);
+        }
+        if (ev.user_email !== undefined) {
+          expect(ev.user_email).toBe(ALICE_PROFILE.email);
+        }
+      }
+    } else {
+      expect(crossTenantHistoryResp.status()).toBeGreaterThanOrEqual(400);
     }
 
     await tenant1.context.close();

@@ -56,6 +56,31 @@ func TestTestHeaderTenantResolver_EmptyHeaderFallsBack(t *testing.T) {
 	c.Assert(slug, qt.Equals, "from-host")
 }
 
+func TestTestHeaderTenantResolver_WhitespaceOnlyHeaderFallsBack(t *testing.T) {
+	c := qt.New(t)
+	r := &apiserver.TestHeaderTenantResolver{Inner: &stubResolver{slug: "from-host"}}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(apiserver.TestTenantHeaderName, "  \t  ")
+
+	slug, err := r.ResolveTenant(req)
+	c.Assert(err, qt.IsNil)
+	c.Assert(slug, qt.Equals, "from-host",
+		qt.Commentf("whitespace-only header must NOT short-circuit Inner with an empty slug"))
+}
+
+func TestTestHeaderTenantResolver_TrimsSurroundingWhitespace(t *testing.T) {
+	c := qt.New(t)
+	r := &apiserver.TestHeaderTenantResolver{Inner: &stubResolver{slug: "from-host"}}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(apiserver.TestTenantHeaderName, "  tenant-from-header  ")
+
+	slug, err := r.ResolveTenant(req)
+	c.Assert(err, qt.IsNil)
+	c.Assert(slug, qt.Equals, "tenant-from-header")
+}
+
 func TestTestHeaderTenantResolver_NilInnerNoHeaderReturnsEmpty(t *testing.T) {
 	c := qt.New(t)
 	r := &apiserver.TestHeaderTenantResolver{}

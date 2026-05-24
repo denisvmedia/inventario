@@ -288,6 +288,16 @@ func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, opts See
 		if err == nil {
 			return tenant, nil
 		}
+		// Only fall through to create-if-missing on the explicit "not
+		// found" sentinel. Any other lookup error (DB down, RLS
+		// rejection, deserialization failure, etc.) must surface
+		// unchanged — masking it behind a create would both hide the
+		// root cause AND risk creating a duplicate-named tenant when
+		// the row already exists but the read failed for a transient
+		// reason.
+		if !errors.Is(err, registry.ErrNotFound) {
+			return nil, fmt.Errorf("tenant lookup for slug '%s' failed: %w", opts.TenantSlug, err)
+		}
 		if !opts.CreateTenantIfMissing {
 			return nil, fmt.Errorf("tenant with slug '%s' not found: %w", opts.TenantSlug, err)
 		}

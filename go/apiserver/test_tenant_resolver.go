@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"net/http"
+	"strings"
 )
 
 // TestTenantHeaderName is the request header consulted by TestHeaderTenantResolver.
@@ -22,9 +23,13 @@ type TestHeaderTenantResolver struct {
 	Inner TenantResolver
 }
 
-// ResolveTenant returns the test-header value when set, else delegates to Inner.
+// ResolveTenant returns the trimmed test-header value when set to a
+// non-empty slug, else delegates to Inner. Whitespace-only header
+// values are treated as "not set" so a stray "  " in the header
+// doesn't poison tenant resolution by short-circuiting the inner
+// resolver with an empty slug.
 func (t *TestHeaderTenantResolver) ResolveTenant(r *http.Request) (string, error) {
-	if v := r.Header.Get(TestTenantHeaderName); v != "" {
+	if v := strings.TrimSpace(r.Header.Get(TestTenantHeaderName)); v != "" {
 		return v, nil
 	}
 	if t.Inner == nil {

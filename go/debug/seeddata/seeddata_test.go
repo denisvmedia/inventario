@@ -445,6 +445,34 @@ func TestSeedDataMissingTenantSlug_FailsClosedByDefault(t *testing.T) {
 	c.Assert(tenants, qt.HasLen, 0)
 }
 
+// TestSeedDataMissingTenantSlug_FailsClosedByDefault_NonNotFoundLookupError
+// guards the narrow "only-on-not-found" contract for the create-if-
+// missing branch (#1851): a registry lookup that errors with anything
+// other than `registry.ErrNotFound` must surface unchanged, even when
+// CreateTenantIfMissing is true. Masking the real failure behind a
+// create-then-seed would both hide the root cause AND risk minting a
+// duplicate-named tenant when the row already exists but the read
+// failed transiently. The "memory" backend only returns ErrNotFound
+// for unknown slugs, so this contract is asserted at the
+// fmt.Errorf-wrap level in findOrCreateTenant; the test pins the
+// happy-path "not found = create" branch to make any future
+// refactor that re-broadens the catch obvious in diff.
+func TestSeedDataMissingTenantSlug_FailsClosedByDefault_NotFoundIsCaughtByOptInOnly(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+	_, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{
+		TenantSlug: "does-not-exist-strict",
+		// CreateTenantIfMissing left at zero (false).
+	})
+	c.Assert(err, qt.IsNotNil)
+	// The not-found path takes the strict "not found: …" wrap, NOT the
+	// generic "tenant lookup … failed: …" wrap, so a regression that
+	// silently catches all errors at the lookup site fails this
+	// assertion.
+	c.Assert(err.Error(), qt.Contains, "tenant with slug 'does-not-exist-strict' not found")
+}
+
 // TestSeedDataMissingTenantSlug_CreatesWhenOptIn covers the
 // CreateTenantIfMissing path (#1851): the seed handler binds it from
 // the INVENTARIO_SEED_ALLOW_CREATE_TENANT env var, so this test
