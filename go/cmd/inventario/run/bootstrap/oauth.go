@@ -59,25 +59,17 @@ func buildOAuth(cfg *Config) (oauthSetup, error) {
 	}
 
 	if id, secret := strings.TrimSpace(cfg.OAuthGoogleClientID), strings.TrimSpace(cfg.OAuthGoogleClientSecret); id != "" && secret != "" {
-		authOverride := strings.TrimSpace(cfg.OAuthGoogleAuthURLOverride)
-		tokenOverride := strings.TrimSpace(cfg.OAuthGoogleTokenURLOverride)
-		userInfoOverride := strings.TrimSpace(cfg.OAuthGoogleUserInfoURLOverride)
-		if authOverride != "" || tokenOverride != "" || userInfoOverride != "" {
-			// LOUD warning: these overrides should never appear in a
-			// production deployment. The e2e harness flips them on so
-			// the stub server can serve Google's three endpoints.
-			slog.Warn("OAuth: Google endpoint overrides active — TEST-ONLY; never set in production",
-				"auth_override", authOverride,
-				"token_override", tokenOverride,
-				"userinfo_override", userInfoOverride)
+		overrides, err := resolveGoogleOverrides(cfg)
+		if err != nil {
+			return oauthSetup{}, err
 		}
 		provider, err := oauth.NewGoogleProvider(oauth.GoogleProviderConfig{
 			ClientID:     id,
 			ClientSecret: secret,
 			RedirectURL:  base + "/api/v1/auth/oauth/google/callback",
-			AuthURL:      authOverride,
-			TokenURL:     tokenOverride,
-			UserInfoURL:  userInfoOverride,
+			AuthURL:      overrides.AuthURL,
+			TokenURL:     overrides.TokenURL,
+			UserInfoURL:  overrides.UserInfoURL,
 		})
 		if err != nil {
 			return oauthSetup{}, fmt.Errorf("oauth bootstrap: google: %w", err)
@@ -104,4 +96,56 @@ func buildOAuth(cfg *Config) (oauthSetup, error) {
 	}
 
 	return oauthSetup{Registry: registry, StateSigner: signer}, nil
+}
+
+// googleOverrides holds the resolved (auth, token, userinfo) endpoint URL
+// overrides. Empty fields mean "use the real Google endpoint"; all three
+// non-empty means the e2e stub server is wired in.
+type googleOverrides struct {
+	AuthURL     string
+	TokenURL    string
+	UserInfoURL string
+}
+
+// resolveGoogleOverrides reads the test-only Google endpoint URL overrides
+// from cfg and enforces all-or-nothing. Returns the resolved overrides,
+// or a descriptive error if exactly 1 or 2 of the three are set.
+//
+// A partial set is a security hazard: mixing the stub authorize URL with
+// the real Google token endpoint would leak the authorization code +
+// client secret to Google when the stub is the expected recipient. The
+// e2e harness only ever flips all three together; refuse to start in any
+// other shape so a misconfiguration can't silently land in production.
+func resolveGoogleOverrides(cfg *Config) (googleOverrides, error) {
+	ov := googleOverrides{
+		AuthURL:     strings.TrimSpace(cfg.OAuthGoogleAuthURLOverride),
+		TokenURL:    strings.TrimSpace(cfg.OAuthGoogleTokenURLOverride),
+		UserInfoURL: strings.TrimSpace(cfg.OAuthGoogleUserInfoURLOverride),
+	}
+	count := 0
+	if ov.AuthURL != "" {
+		count++
+	}
+	if ov.TokenURL != "" {
+		count++
+	}
+	if ov.UserInfoURL != "" {
+		count++
+	}
+	if count != 0 && count != 3 {
+		return googleOverrides{}, fmt.Errorf(
+			"oauth bootstrap: google endpoint overrides must set auth, token, and userinfo together (got auth=%q, token=%q, userinfo=%q)",
+			ov.AuthURL, ov.TokenURL, ov.UserInfoURL,
+		)
+	}
+	if count == 3 {
+		// LOUD warning: these overrides should never appear in a
+		// production deployment. The e2e harness flips them on so the
+		// stub server can serve Google's three endpoints.
+		slog.Warn("OAuth: Google endpoint overrides active — TEST-ONLY; never set in production",
+			"auth_override", ov.AuthURL,
+			"token_override", ov.TokenURL,
+			"userinfo_override", ov.UserInfoURL)
+	}
+	return ov, nil
 }
