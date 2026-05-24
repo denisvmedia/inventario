@@ -84,6 +84,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
           queryClient.invalidateQueries({ queryKey: authKeys.currentUser() })
         }
       })
+      // .catch BEFORE .finally so a rejected tryBootRefresh doesn't surface
+      // as an unhandled promise rejection on the page — .finally runs but
+      // does not consume rejection state (Node + browser both still flag it).
+      // The boot probe legitimately fails on cold tabs without a refresh
+      // cookie; silently swallowing here is correct.
+      .catch(() => undefined)
       .finally(() => {
         // .finally so a rejected tryBootRefresh still flips the state to
         // "settled" — without this, a network blip on the very first probe
