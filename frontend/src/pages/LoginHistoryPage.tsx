@@ -175,12 +175,17 @@ const OUTCOME_I18N_KEY: Record<string, string> = {
   bad_mfa: "settings:loginHistory.outcomes.bad_mfa",
   // Operator-side recovery (#1645): inventario users mfa-reset.
   mfa_admin_reset: "settings:loginHistory.outcomes.mfa_admin_reset",
+  // #1394: successful OAuth identity link (not a sign-in event).
+  identity_linked: "settings:loginHistory.outcomes.identity_linked",
 }
 
 const METHOD_I18N_KEY: Record<string, string> = {
   password: "settings:loginHistory.methods.password",
   oauth_google: "settings:loginHistory.methods.oauth_google",
   oauth_github: "settings:loginHistory.methods.oauth_github",
+  // #1394: forward-compat fallback for any future OAuth provider that
+  // lands before the FE catalog catches up.
+  oauth_other: "settings:loginHistory.methods.oauth_other",
 }
 
 type OutcomeKey =
@@ -192,6 +197,7 @@ type OutcomeKey =
   | "mfa_required"
   | "bad_mfa"
   | "mfa_admin_reset"
+  | "identity_linked"
 
 interface OutcomeConfig {
   icon: typeof CheckCircle2
@@ -221,4 +227,7 @@ const OUTCOME_CONFIG: Record<OutcomeKey, OutcomeConfig> = {
     color: "text-status-expiring",
     bg: "bg-status-expiring/10",
   },
+  // #1394: identity link is a positive auth-state change, not a sign-in.
+  // Same treatment as the successful "ok" outcome.
+  identity_linked: { icon: CheckCircle2, color: "text-status-active", bg: "bg-status-active/10" },
 }
