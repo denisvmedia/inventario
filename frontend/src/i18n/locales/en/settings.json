@@ -90,6 +90,7 @@
     "methods": {
       "oauth_github": "GitHub",
       "oauth_google": "Google",
+      "oauth_other": "OAuth",
       "password": "Password"
     },
     "outcomes": {
@@ -98,9 +99,11 @@
       "bad_mfa": "Failed: bad MFA code",
       "bad_password": "Failed: bad password",
       "email_not_verified": "Email not verified",
+      "identity_linked": "Linked sign-in method",
       "mfa_admin_reset": "MFA reset by support",
       "mfa_required": "MFA required",
       "ok": "Success",
+      "tenant_mismatch": "Cross-tenant OAuth refused",
       "unknown": "Unknown"
     },
     "subtitle": "Recent sign-in attempts for your account. Failed attempts are recorded too so you can spot suspicious activity.",

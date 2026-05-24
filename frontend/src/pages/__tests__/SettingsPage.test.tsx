@@ -74,6 +74,11 @@ const baseHandlers = [
     })
   ),
   msw.get(api("/groups"), () => HttpResponse.json({ data: [] })),
+  // ConnectedAccountsCard (#1394) queries this on every settings render;
+  // default to no providers so the card hides itself and the privacy
+  // section stays compact unless a test explicitly overrides.
+  msw.get(api("/auth/oauth/providers"), () => HttpResponse.json({ providers: [] })),
+  msw.get(api("/auth/oauth/identities"), () => HttpResponse.json({ identities: [] })),
 ]
 
 // withGroupHandlers extends baseHandlers with a current group + a GET
@@ -177,9 +182,11 @@ describe("<SettingsPage />", () => {
     expect(sessionsRow).toHaveAttribute("href", "/profile/sessions")
     const historyRow = screen.getByTestId("privacy-row-loginHistory")
     expect(historyRow).toHaveAttribute("href", "/profile/login-history")
-    // Connected accounts stays a ComingSoonBanner per #1644 acceptance
-    // (split into its own follow-up #1395).
-    expect(screen.getByTestId("coming-soon-banner-connectedAccounts")).toBeInTheDocument()
+    // Connected accounts (#1394) — when the BE reports no enabled
+    // providers (the baseHandlers default in this test), the card hides
+    // itself entirely so the section stays compact for deployments
+    // without OAuth.
+    expect(screen.queryByTestId("connected-accounts-card")).not.toBeInTheDocument()
   })
 
   it("account danger zone's delete button opens a confirm dialog explaining unavailability", async () => {

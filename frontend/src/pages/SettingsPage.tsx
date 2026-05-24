@@ -19,8 +19,8 @@ import {
   User,
 } from "lucide-react"
 
-import { ComingSoonBanner } from "@/components/coming-soon"
 import { FeedbackDialog } from "@/components/feedback/FeedbackDialog"
+import { ConnectedAccountsCard } from "@/components/settings/ConnectedAccountsCard"
 import { MFASettingsRow } from "@/components/settings/MFASettingsRow"
 import { useSessionsList } from "@/features/sessions/hooks"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
@@ -805,8 +805,10 @@ function PrivacySection() {
           testId="privacy-row-loginHistory"
         />
       </div>
-      {/* Connected accounts stays a ComingSoonBanner per #1644 acceptance. */}
-      <ComingSoonBanner surface="connectedAccounts" />
+      {/* Connected accounts (#1394) — only renders when the BE reports at
+          least one enabled provider; otherwise the card hides itself so
+          the section stays compact for deployments without OAuth. */}
+      <ConnectedAccountsCard />
     </div>
   )
 }

@@ -1873,6 +1873,356 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/auth/oauth/identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's linked OAuth identities
+         * @description Returns each OAuth provider the authenticated user has linked along with the email recorded at link time.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.linkedIdentitiesResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oauth/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List OAuth providers enabled in this deployment
+         * @description Returns the providers operators have configured (Google, GitHub). Empty list when OAuth is not configured.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.providerListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oauth/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unlink an OAuth provider from the caller's account
+         * @description Removes the identity row mapping the caller to the named provider. Refused with 409 if it is the caller's only remaining sign-in method.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Provider name (google|github) */
+                    provider: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+                /** @description Unknown provider */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+                /** @description Conflict - cannot remove the last remaining sign-in method */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oauth/{provider}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * OAuth callback (provider redirect target)
+         * @description Validates state + cookie, exchanges the code, and either signs the caller in (existing identity),
+         *     auto-links a verified-email match, prompts a password sign-in (unverified email), or creates a new
+         *     account. Redirects to the FE path the state carried.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Authorization code returned by the provider */
+                    code: string;
+                    /** @description Signed state token issued by /start */
+                    state: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Provider name (google|github) */
+                    provider: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Redirect to the FE redirect path the state carried */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request - invalid state or code */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+                /** @description Unknown provider */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+                /** @description Internal error during exchange or user provisioning */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oauth/{provider}/link/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start link-an-additional-OAuth-provider flow
+         * @description Authenticated variant of /start: the resulting callback links the new identity to the caller's user rather than creating a fresh account.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Relative FE path to land on after link */
+                    redirect?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Provider name (google|github) */
+                    provider: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Redirect to provider */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+                /** @description Unknown provider */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oauth/{provider}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start OAuth sign-in flow
+         * @description Begins the authorization-code flow against the named provider. The handler signs short-lived state + PKCE pair and 302s the browser to the provider's consent screen.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Relative FE path to land on after sign-in */
+                    redirect?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Provider name (google|github) */
+                    provider: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Redirect to provider */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unknown provider */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+                /** @description Internal error generating state token */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -8970,6 +9320,21 @@ export type components = {
             /** @description Version information */
             version?: string;
         };
+        "apiserver.linkedIdentitiesResponse": {
+            identities?: components["schemas"]["apiserver.linkedIdentityEntry"][];
+        };
+        "apiserver.linkedIdentityEntry": {
+            email?: string;
+            linked_at?: string;
+            provider?: string;
+        };
+        "apiserver.providerListEntry": {
+            display_name?: string;
+            name?: string;
+        };
+        "apiserver.providerListResponse": {
+            providers?: components["schemas"]["apiserver.providerListEntry"][];
+        };
         "debug.Info": {
             database_driver?: string;
             error?: unknown;
@@ -11221,9 +11586,9 @@ export type components = {
         /** @enum {string} */
         "models.LocationGroupStatus": "active" | "pending_deletion";
         /** @enum {string} */
-        "models.LoginMethod": "password";
+        "models.LoginMethod": "password" | "oauth_google" | "oauth_github" | "oauth_other";
         /** @enum {string} */
-        "models.LoginOutcome": "ok" | "bad_password" | "account_locked" | "account_disabled" | "email_not_verified" | "mfa_required" | "bad_mfa" | "mfa_admin_reset";
+        "models.LoginOutcome": "ok" | "bad_password" | "account_locked" | "account_disabled" | "email_not_verified" | "mfa_required" | "bad_mfa" | "mfa_admin_reset" | "identity_linked" | "tenant_mismatch";
         "models.MaintenanceSchedule": {
             /**
              * @description CommodityID is the schedule's owning commodity. ON DELETE CASCADE
@@ -11436,6 +11801,16 @@ export type components = {
              */
             default_group_id?: string;
             email?: string;
+            /**
+             * @description HasPassword is a transient wire-only field reflecting whether the
+             *     user has a non-empty password_hash. OAuth-only accounts (#1394)
+             *     have an empty hash until they explicitly set one from the FE; the
+             *     FE branches on this to render "Set a password" instead of "Change
+             *     password". Same posture as IsSystemAdmin — no migrator annotation,
+             *     `db:"-"` so sqlx skips it. Populated by handlers that emit a
+             *     /auth/me-style payload before encoding.
+             */
+            has_password?: boolean;
             id?: string;
             is_active?: boolean;
             /**

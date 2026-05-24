@@ -85,3 +85,39 @@ func getFileSigningKey(configKey string) ([]byte, error) {
 
 	return key, nil
 }
+
+// getOAuthStateKey retrieves the OAuth state-signing key from
+// config/environment or generates a secure random one. Mirrors
+// getJWTSecret and getFileSigningKey: accepts hex-encoded or plain
+// strings of at least 32 bytes; otherwise falls back to a randomly
+// generated 32-byte key whose hex is written once to stderr so operators
+// can capture and persist it. Multi-replica deployments MUST supply a
+// stable value or signed states won't survive a request that lands on
+// a different replica after the provider redirect.
+func getOAuthStateKey(configKey string) ([]byte, error) {
+	if configKey != "" {
+		if decoded, err := hex.DecodeString(configKey); err == nil && len(decoded) >= 32 {
+			slog.Info("Using OAuth state key from configuration (hex decoded)")
+			return decoded, nil
+		}
+		if len(configKey) >= 32 {
+			slog.Info("Using OAuth state key from configuration")
+			return []byte(configKey), nil
+		}
+		slog.Warn("Configured OAuth state key is too short (minimum 32 characters), generating random key")
+	}
+
+	slog.Warn("No OAuth state key configured, generating random key")
+	slog.Warn("For production use, set INVENTARIO_RUN_OAUTH_STATE_KEY environment variable or oauth-state-key in config file with a secure 32+ byte key")
+
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Warn("Generated random OAuth state key; persist it via INVENTARIO_RUN_OAUTH_STATE_KEY to keep in-flight OAuth flows valid across restarts and replicas")
+	fmt.Fprintf(os.Stderr, "INVENTARIO_RUN_OAUTH_STATE_KEY=%s\n", hex.EncodeToString(key))
+
+	return key, nil
+}

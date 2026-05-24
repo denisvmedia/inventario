@@ -44,6 +44,25 @@ export function useCurrentUser() {
   })
 }
 
+// useHasPassword reports whether the signed-in user has an in-app password
+// hash on file. OAuth-only sign-ups (#1394) land with an empty hash — the FE
+// uses this hint to swap the regular Change Password form (requires
+// `current_password`) for the Set-Password form (no current password to
+// verify). The BE's /auth/change-password handler re-derives the branch
+// from the row's PasswordHash, so this is a UI-only hint.
+//
+// The /auth/me payload doesn't carry `has_password` on the wire today;
+// reading via a tolerant cast keeps the hook forward-compatible if the
+// BE ever adds the field. Default `true` so the regular flow renders for
+// every existing user and OAuth-only state is opt-in via the explicit
+// "Set a password" CTA (Settings → Connected Accounts).
+export function useHasPassword(): boolean {
+  const { data: user } = useCurrentUser()
+  if (!user) return true
+  const wire = (user as unknown as { has_password?: boolean }).has_password
+  return wire === undefined ? true : wire
+}
+
 // Reports whether the signed-in user carries the `is_system_admin` flag.
 // The flag rides on the /auth/me payload (models.User) — the admin BE
 // foundation (#1745) added it. Returns `false` while the boot probe is

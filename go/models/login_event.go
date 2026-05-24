@@ -38,15 +38,42 @@ const (
 	// It shows up in the user's login history so they know the second
 	// factor was removed out-of-band rather than by them (#1645).
 	LoginOutcomeMFAAdminReset LoginOutcome = "mfa_admin_reset"
+	// LoginOutcomeIdentityLinked is recorded by the OAuth callback when an
+	// authenticated user successfully attached a new provider identity to
+	// their account (#1394). Distinct from LoginOutcomeOK so an audit
+	// reader scanning "successful sign-ins" doesn't double-count link
+	// events as fresh credential checks.
+	LoginOutcomeIdentityLinked LoginOutcome = "identity_linked"
+	// LoginOutcomeTenantMismatch is recorded by the OAuth callback when the
+	// user resolved by (provider, provider_user_id) or by email lookup
+	// belongs to a different tenant than the one the callback is running
+	// under (#1394). The handler fails closed: never sign in or link
+	// across tenants, even on a globally-unique identity match. Surfaced
+	// in the audit history so a cross-tenant probe shows up clearly.
+	LoginOutcomeTenantMismatch LoginOutcome = "tenant_mismatch"
 )
 
 // LoginMethod is the credential family that produced the event. "password"
-// is the only value in v1; OAuth methods land with #1394 / #1395.
+// is the original value; OAuth methods land with #1394.
 type LoginMethod string
 
 const (
 	// LoginMethodPassword is the email + password flow.
 	LoginMethodPassword LoginMethod = "password"
+	// LoginMethodOAuthGoogle is the Google OAuth sign-in flow (#1394).
+	// Recorded on both the start-of-session callback and any subsequent
+	// link-from-settings attempt so the history page reads consistently
+	// with the password flow.
+	LoginMethodOAuthGoogle LoginMethod = "oauth_google"
+	// LoginMethodOAuthGitHub is the GitHub OAuth sign-in flow (#1394).
+	LoginMethodOAuthGitHub LoginMethod = "oauth_github"
+	// LoginMethodOAuthOther is a defensive sentinel for the
+	// "OAuthProvider value out of the known set" case. The OAuth callback
+	// should never hit this in correct code — every provider that round-
+	// trips through the registry has a matching LoginMethodOAuth* constant
+	// — but recording an event with method="oauth_other" is strictly
+	// better than silently mislabelling the row "password" (#1394).
+	LoginMethodOAuthOther LoginMethod = "oauth_other"
 )
 
 // LoginEvent is the append-only audit trail of credential-check attempts

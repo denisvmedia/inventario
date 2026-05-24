@@ -3,6 +3,7 @@ import axios from 'axios';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { BACKEND_URL, BASE_URL, USE_PREBUILT } from './urls.js';
+import { startOAuthStub, stopOAuthStub } from './oauth-stub-server.js';
 
 // Sleep utility
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -21,6 +22,44 @@ const backendRoot = resolve(projectRoot, 'go');
 /**
  * Start the backend server
  */
+/**
+ * When OAUTH_STUB_ENABLED=true, start the OAuth stub server first and
+ * return the env-var bundle that points the BE at it (Google provider
+ * only — GitHub follow-up). The vars are merged into the BE spawn env
+ * below so the bootstrap layer registers the provider with the
+ * stub-server URLs.
+ *
+ * Returns an empty object when the stub is disabled, so the spread in
+ * the backend's env block is a no-op.
+ */
+async function maybeStartOAuthStub(): Promise<Record<string, string>> {
+  if (process.env.OAUTH_STUB_ENABLED !== 'true') {
+    return {};
+  }
+  const stubURL = await startOAuthStub();
+  return {
+    INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_ID:
+      process.env.INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_ID ?? 'stub-client-id',
+    INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_SECRET:
+      process.env.INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_SECRET ?? 'stub-client-secret',
+    // Pin the redirect base at the FE-facing URL (Vite on :5173 in dev
+    // mode; backend on :3333 when USE_PREBUILT=true) so the BE's final
+    // 302 to "/" lands on the same origin the browser started at. This
+    // matters because the FE auth cookie / localStorage are scoped per
+    // origin — bouncing across :5173 → :3333 mid-flow would drop the
+    // session state on the floor.
+    INVENTARIO_RUN_OAUTH_REDIRECT_BASE_URL:
+      process.env.INVENTARIO_RUN_OAUTH_REDIRECT_BASE_URL ?? BASE_URL,
+    // 32-byte fixed key so the BE doesn't generate a random one and
+    // print it; the test never needs to verify states across restarts.
+    INVENTARIO_RUN_OAUTH_STATE_KEY:
+      process.env.INVENTARIO_RUN_OAUTH_STATE_KEY ?? 'e2e-stub-oauth-state-key-32-bytes!',
+    INVENTARIO_RUN_OAUTH_GOOGLE_AUTH_URL_OVERRIDE: `${stubURL}/authorize`,
+    INVENTARIO_RUN_OAUTH_GOOGLE_TOKEN_URL_OVERRIDE: `${stubURL}/token`,
+    INVENTARIO_RUN_OAUTH_GOOGLE_USERINFO_URL_OVERRIDE: `${stubURL}/userinfo`,
+  };
+}
+
 export async function startBackend(): Promise<void> {
   console.log('Starting backend server...');
   console.log(`Working directory: ${projectRoot}`);
@@ -70,12 +109,19 @@ export async function startBackend(): Promise<void> {
     throw error;
   }
 
+  // Optionally start the OAuth stub server before the BE so the override
+  // env vars are baked into the spawn env. The stub is a no-op when
+  // OAUTH_STUB_ENABLED!=='true', so callers that don't exercise OAuth
+  // (the default) see no behaviour change.
+  const oauthStubEnv = await maybeStartOAuthStub();
+
   console.log('Executing: go run -tags with_frontend ./cmd/inventario/... run');
   backendProcess = spawn('go', ['run', '-tags', 'with_frontend', './cmd/inventario/...', 'run'], {
     cwd: backendRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
+      ...oauthStubEnv,
       PATH: process.env.PATH,
       // E2E runs are intentionally high-throughput and parallelized.
       // Keep auth/global rate limiting disabled unless explicitly overridden.
@@ -336,6 +382,13 @@ export async function stopStack(): Promise<void> {
   if (frontendProcess) {
     frontendProcess.kill('SIGTERM');
     frontendProcess = null;
+  }
+
+  // Stop the OAuth stub server if it's up. Safe to call when disabled.
+  try {
+    await stopOAuthStub();
+  } catch (err) {
+    console.warn('Failed to stop OAuth stub:', err);
   }
 
   console.log('All services stopped');

@@ -90,4 +90,16 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.IntVar(&cfg.AIVisionMaxPhotos, "ai-vision-max-photos", cfg.AIVisionMaxPhotos, "Maximum number of photos accepted per scan request")
 	flags.IntVar(&cfg.AIVisionMaxPhotoBytes, "ai-vision-max-photo-bytes", cfg.AIVisionMaxPhotoBytes, "Maximum bytes accepted per photo (defaults to 10 MiB)")
 	flags.IntVar(&cfg.AIVisionRateLimitPerHour, "ai-vision-rate-limit-per-hour", cfg.AIVisionRateLimitPerHour, "Per-user hourly scan rate limit (0 disables the limit)")
+
+	// OAuth third-party sign-in (issue #1394). Each provider requires
+	// BOTH a client id AND a client secret to be enabled; the redirect
+	// base URL is required for any provider to work. OAuth state key
+	// signs the per-request state tokens — leave empty for dev, supply
+	// a stable value for multi-replica deployments.
+	flags.StringVar(&cfg.OAuthGoogleClientID, "oauth-google-client-id", cfg.OAuthGoogleClientID, "OAuth client id for Google sign-in (#1394); empty disables Google")
+	flags.StringVar(&cfg.OAuthGoogleClientSecret, "oauth-google-client-secret", cfg.OAuthGoogleClientSecret, "OAuth client secret for Google sign-in (#1394)")
+	flags.StringVar(&cfg.OAuthGitHubClientID, "oauth-github-client-id", cfg.OAuthGitHubClientID, "OAuth client id for GitHub sign-in (#1394); empty disables GitHub")
+	flags.StringVar(&cfg.OAuthGitHubClientSecret, "oauth-github-client-secret", cfg.OAuthGitHubClientSecret, "OAuth client secret for GitHub sign-in (#1394)")
+	flags.StringVar(&cfg.OAuthRedirectBaseURL, "oauth-redirect-base-url", cfg.OAuthRedirectBaseURL, "Public base URL used to build provider redirect URIs (e.g., https://app.inventario.example); required for any OAuth provider")
+	flags.StringVar(&cfg.OAuthStateKey, "oauth-state-key", cfg.OAuthStateKey, "OAuth state signing key (minimum 32 characters, auto-generated if not provided)")
 }

@@ -102,3 +102,23 @@ export const changePasswordSchema = z
     }
   })
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
+
+// Set-password form (#1394) for OAuth-only users whose row was provisioned
+// with an empty password_hash. Same shape as changePasswordSchema minus the
+// "current" verification — the BE's /auth/change-password handler skips the
+// current-password check when the user has no hash on file.
+export const setPasswordSchema = z
+  .object({
+    newPassword: z.string().min(8, "auth:validation.passwordMinLength"),
+    confirmPassword: z.string().min(1, "auth:validation.passwordConfirmRequired"),
+  })
+  .superRefine((value, ctx) => {
+    if (value.newPassword !== value.confirmPassword) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["confirmPassword"],
+        message: "auth:validation.passwordsMismatch",
+      })
+    }
+  })
+export type SetPasswordInput = z.infer<typeof setPasswordSchema>
