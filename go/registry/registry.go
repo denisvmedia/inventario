@@ -1885,6 +1885,40 @@ type LoginEventRegistry interface {
 	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int, error)
 }
 
+// OAuthIdentityRegistry stores links between Inventario users and external
+// OAuth provider accounts (#1394). Implementations run in service mode (RLS
+// bypass) because the OAuth callback resolves the row by
+// (provider, provider_user_id) BEFORE any user session exists — the
+// background-worker RLS policy handles the read path; the SQL adds
+// `tenant_id = $tenantID` (and equivalents) as defense-in-depth on every
+// method that takes a tenantID.
+type OAuthIdentityRegistry interface {
+	Registry[models.OAuthIdentity]
+
+	// GetByProviderSubject returns the row keyed by (provider, providerUserID).
+	// The pair is globally unique, so no tenant qualifier is needed here.
+	// Returns ErrNotFound when no row matches — the callback uses this
+	// outcome to decide between "log in existing user" and "find by email
+	// or create".
+	GetByProviderSubject(ctx context.Context, provider models.OAuthProvider, providerUserID string) (*models.OAuthIdentity, error)
+
+	// ListByUser returns every identity linked to userID, scoped to tenantID
+	// as defense-in-depth (the RLS policy already enforces tenant + user
+	// isolation when the read runs in user mode). Ordering: provider asc
+	// so the UI list reads stable.
+	ListByUser(ctx context.Context, tenantID, userID string) ([]*models.OAuthIdentity, error)
+
+	// GetByUserAndProvider returns the single row keyed by (tenantID, userID,
+	// provider), or ErrNotFound. Used by the unlink endpoint and by the
+	// "is this provider already linked?" check on the link path.
+	GetByUserAndProvider(ctx context.Context, tenantID, userID string, provider models.OAuthProvider) (*models.OAuthIdentity, error)
+
+	// DeleteByUserAndProvider removes the (tenantID, userID, provider) row
+	// idempotently. Returns no error if no row exists — the caller has
+	// already enforced the "must keep at least one auth method" guard.
+	DeleteByUserAndProvider(ctx context.Context, tenantID, userID string, provider models.OAuthProvider) error
+}
+
 // UserMFASecretRegistry stores per-user TOTP credentials (#1380 / #1645).
 // The (tenant_id, user_id) tuple is unique — at most one row per user.
 // Implementations run in service mode (RLS bypass): the registry is
@@ -2030,6 +2064,7 @@ type Set struct {
 	CurrencyMigrationRegistry      CurrencyMigrationRegistry     // Currency migration operation rows + audit + HMAC token signing (issue #1550 / epic #202)
 	CommodityScanAuditRegistry     CommodityScanAuditRegistry    // CommodityScanAuditRegistry records every AI vision scan request (#1720); also backs the per-user rate limiter
 	SystemAdminGrantRegistry       SystemAdminGrantRegistry      // Platform-admin grant rows (#1784); no tenant scope, no HTTP write surface
+	OAuthIdentityRegistry          OAuthIdentityRegistry         // OAuth provider link rows (#1394); service-mode (looked up before user session exists in callback)
 }
 
 // Search-related types and functions

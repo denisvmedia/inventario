@@ -56,6 +56,10 @@ func NewFactorySet() *registry.FactorySet {
 	fs.TenantRegistry = tenantReg
 	fs.EmailVerificationRegistry = NewEmailVerificationRegistry()
 	fs.PasswordResetRegistry = NewPasswordResetRegistry()
+	// OAuth identities (#1394) — service-mode lookup keyed by
+	// (provider, provider_user_id) during the callback before any user
+	// session exists.
+	fs.OAuthIdentityRegistry = NewOAuthIdentityRegistry()
 	userReg := NewUserRegistry()
 	fs.UserRegistry = userReg
 	fs.RefreshTokenRegistry = NewRefreshTokenRegistry()

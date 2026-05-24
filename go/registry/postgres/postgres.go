@@ -51,6 +51,10 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.SystemAdminGrantRegistry = NewSystemAdminGrantRegistry(dbx)
 	fs.EmailVerificationRegistry = NewEmailVerificationRegistry(dbx)
 	fs.PasswordResetRegistry = NewPasswordResetRegistry(dbx)
+	// OAuth identities (#1394) — service-mode lookup keyed by
+	// (provider, provider_user_id) during the callback before any user
+	// session exists.
+	fs.OAuthIdentityRegistry = NewOAuthIdentityRegistry(dbx)
 	fs.ThumbnailGenerationJobRegistryFactory = NewThumbnailGenerationJobRegistry(dbx)
 	fs.UserConcurrencySlotRegistryFactory = NewUserConcurrencySlotRegistry(dbx)
 	fs.OperationSlotRegistryFactory = NewOperationSlotRegistryFactory(dbx)

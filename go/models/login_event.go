@@ -41,12 +41,19 @@ const (
 )
 
 // LoginMethod is the credential family that produced the event. "password"
-// is the only value in v1; OAuth methods land with #1394 / #1395.
+// is the original value; OAuth methods land with #1394.
 type LoginMethod string
 
 const (
 	// LoginMethodPassword is the email + password flow.
 	LoginMethodPassword LoginMethod = "password"
+	// LoginMethodOAuthGoogle is the Google OAuth sign-in flow (#1394).
+	// Recorded on both the start-of-session callback and any subsequent
+	// link-from-settings attempt so the history page reads consistently
+	// with the password flow.
+	LoginMethodOAuthGoogle LoginMethod = "oauth_google"
+	// LoginMethodOAuthGitHub is the GitHub OAuth sign-in flow (#1394).
+	LoginMethodOAuthGitHub LoginMethod = "oauth_github"
 )
 
 // LoginEvent is the append-only audit trail of credential-check attempts
