@@ -46,14 +46,24 @@ type GoogleProviderConfig struct {
 	// endpoint. nil → http.DefaultClient. Tests inject an httptest stub
 	// here.
 	HTTPClient *http.Client
+	// AuthURL, TokenURL, and UserInfoURL are test-only overrides that
+	// redirect the provider's three external endpoints at a local stub.
+	// Production deployments MUST leave these empty so the provider uses
+	// google.Endpoint + googleUserInfoURL. Wiring is gated at the
+	// bootstrap layer behind the INVENTARIO_RUN_OAUTH_GOOGLE_*_OVERRIDE
+	// env vars (#1394 e2e). See bootstrap/oauth.go for the gate.
+	AuthURL     string
+	TokenURL    string
+	UserInfoURL string
 }
 
 // GoogleProvider is the Provider implementation backed by Google's OIDC
 // endpoints. Scopes are fixed at `openid email profile` — the minimum
 // needed to read a stable subject + a verified email + a display name.
 type GoogleProvider struct {
-	cfg        *oauth2.Config
-	httpClient *http.Client
+	cfg         *oauth2.Config
+	httpClient  *http.Client
+	userInfoURL string
 }
 
 // NewGoogleProvider constructs a GoogleProvider from cfg. Returns an
@@ -73,15 +83,32 @@ func NewGoogleProvider(cfg GoogleProviderConfig) (*GoogleProvider, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
+	// Endpoint defaults to google.Endpoint. AuthURL / TokenURL are
+	// individually overridable so a deployment can swap just one (e.g.
+	// pointing the token endpoint at a proxy) without giving up the
+	// real auth URL — and so the e2e stub can drive both with a single
+	// httptest.Server.
+	endpoint := google.Endpoint
+	if cfg.AuthURL != "" {
+		endpoint.AuthURL = cfg.AuthURL
+	}
+	if cfg.TokenURL != "" {
+		endpoint.TokenURL = cfg.TokenURL
+	}
+	userInfoURL := googleUserInfoURL
+	if cfg.UserInfoURL != "" {
+		userInfoURL = cfg.UserInfoURL
+	}
 	return &GoogleProvider{
 		cfg: &oauth2.Config{
 			ClientID:     cfg.ClientID,
 			ClientSecret: cfg.ClientSecret,
 			RedirectURL:  cfg.RedirectURL,
 			Scopes:       []string{"openid", "email", "profile"},
-			Endpoint:     google.Endpoint,
+			Endpoint:     endpoint,
 		},
-		httpClient: client,
+		httpClient:  client,
+		userInfoURL: userInfoURL,
 	}, nil
 }
 
@@ -115,7 +142,7 @@ func (p *GoogleProvider) Exchange(ctx context.Context, code, codeVerifier string
 		return Profile{}, fmt.Errorf("oauth/google: token exchange: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, googleUserInfoURL, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.userInfoURL, http.NoBody)
 	if err != nil {
 		return Profile{}, fmt.Errorf("oauth/google: build userinfo request: %w", err)
 	}

@@ -142,6 +142,17 @@ type Config struct {
 	OAuthGitHubClientSecret string `yaml:"oauth_github_client_secret" env:"OAUTH_GITHUB_CLIENT_SECRET" env-default:""`
 	OAuthRedirectBaseURL    string `yaml:"oauth_redirect_base_url" env:"OAUTH_REDIRECT_BASE_URL" env-default:""`
 	OAuthStateKey           string `yaml:"oauth_state_key" env:"OAUTH_STATE_KEY" env-default:""`
+
+	// OAuthGoogle{Auth,Token,UserInfo}URLOverride are TEST-ONLY hooks
+	// that redirect Google's three OAuth endpoints at a local stub
+	// server. NEVER set these in a production deployment — they bypass
+	// the real google.Endpoint + userinfo URLs. Used exclusively by the
+	// #1394 e2e flow to exercise the BE's find-or-create-or-link logic
+	// without making outbound network calls to Google. Empty in any
+	// real config; populated only when the e2e stub server is up.
+	OAuthGoogleAuthURLOverride     string `yaml:"-" env:"OAUTH_GOOGLE_AUTH_URL_OVERRIDE" env-default:""`
+	OAuthGoogleTokenURLOverride    string `yaml:"-" env:"OAUTH_GOOGLE_TOKEN_URL_OVERRIDE" env-default:""`
+	OAuthGoogleUserInfoURLOverride string `yaml:"-" env:"OAUTH_GOOGLE_USERINFO_URL_OVERRIDE" env-default:""`
 }
 
 // SetDefaults applies repository-wide defaults for fields left at their zero

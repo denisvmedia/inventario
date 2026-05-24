@@ -59,10 +59,25 @@ func buildOAuth(cfg *Config) (oauthSetup, error) {
 	}
 
 	if id, secret := strings.TrimSpace(cfg.OAuthGoogleClientID), strings.TrimSpace(cfg.OAuthGoogleClientSecret); id != "" && secret != "" {
+		authOverride := strings.TrimSpace(cfg.OAuthGoogleAuthURLOverride)
+		tokenOverride := strings.TrimSpace(cfg.OAuthGoogleTokenURLOverride)
+		userInfoOverride := strings.TrimSpace(cfg.OAuthGoogleUserInfoURLOverride)
+		if authOverride != "" || tokenOverride != "" || userInfoOverride != "" {
+			// LOUD warning: these overrides should never appear in a
+			// production deployment. The e2e harness flips them on so
+			// the stub server can serve Google's three endpoints.
+			slog.Warn("OAuth: Google endpoint overrides active — TEST-ONLY; never set in production",
+				"auth_override", authOverride,
+				"token_override", tokenOverride,
+				"userinfo_override", userInfoOverride)
+		}
 		provider, err := oauth.NewGoogleProvider(oauth.GoogleProviderConfig{
 			ClientID:     id,
 			ClientSecret: secret,
 			RedirectURL:  base + "/api/v1/auth/oauth/google/callback",
+			AuthURL:      authOverride,
+			TokenURL:     tokenOverride,
+			UserInfoURL:  userInfoOverride,
 		})
 		if err != nil {
 			return oauthSetup{}, fmt.Errorf("oauth bootstrap: google: %w", err)
