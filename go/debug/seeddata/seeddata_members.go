@@ -101,6 +101,14 @@ func seedGroupMembers(ctx context.Context, set *registry.Set, tenant *models.Ten
 		return fmt.Errorf("create family owner membership: %w", err)
 	}
 
+	// Invariant: admin's Family membership must be JoinedAt strictly LATER
+	// than admin's own owner memberships. The default-group re-election
+	// tiebreaker (`pickDefaultMembership` in services/group_service.go)
+	// sorts by joined_at ASC and picks the oldest — and admin only carries
+	// GroupRoleUser on Family. Letting Family win that tiebreaker
+	// re-promotes admin onto a group where they cannot write, breaking the
+	// rest of the e2e suite the next time `GroupPurgeService` re-elects a
+	// default (#1841).
 	if _, err := set.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenant.ID,
@@ -108,7 +116,7 @@ func seedGroupMembers(ctx context.Context, set *registry.Set, tenant *models.Ten
 		GroupID:      family.ID,
 		MemberUserID: user1.ID,
 		Role:         models.GroupRoleUser,
-		JoinedAt:     now.AddDate(0, 0, -60),
+		JoinedAt:     now.AddDate(0, 0, 1),
 	}); err != nil {
 		return fmt.Errorf("add user1 to family group: %w", err)
 	}

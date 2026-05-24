@@ -9,7 +9,11 @@ import {
   setCsrfToken,
   setImpersonationReturn,
 } from "@/lib/auth-storage"
-import { clearBackofficeAuth, getBackofficeAccessToken } from "@/features/backoffice/auth/storage"
+import {
+  clearBackofficeAuth,
+  getBackofficeAccessToken,
+  setBackofficeAccessToken,
+} from "@/features/backoffice/auth/storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 import {
   __resetNavigationForTests,
@@ -333,6 +337,53 @@ describe("error handling", () => {
     })
   })
 
+  it("503 carrying a typed JSON:API product error (#1720/#1835) does NOT bounce to /maintenance", async () => {
+    // Some endpoints use 503 to surface a typed product-level error rather
+    // than an infra outage — `commodity_scan.provider_disabled` is the
+    // canonical one (#1720, AI vision provider off by config). The feature
+    // handler maps the typed code to an inline banner, so the global
+    // 503 → /maintenance bounce must skip it; otherwise the shell unmounts
+    // before the banner ever paints.
+    server.use(
+      msw.get(api("/groups"), () =>
+        HttpResponse.json(
+          {
+            errors: [
+              {
+                code: "commodity_scan.provider_disabled",
+                status: "503",
+                title: "provider disabled",
+              },
+            ],
+          },
+          { status: 503 }
+        )
+      )
+    )
+    const navigate = vi.fn()
+    setNavigateToMaintenance(navigate)
+    await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it("503 with an UNTYPED errors[] code (no dot) still bounces — guards against widening", async () => {
+    // The typed-error detection keys off `code` containing a dot
+    // (`<feature>.<reason>`). A plain string code without a dot is the
+    // legacy/untyped shape and SHOULD still trigger the maintenance bounce.
+    server.use(
+      msw.get(api("/groups"), () =>
+        HttpResponse.json(
+          { errors: [{ code: "service_unavailable", status: "503" }] },
+          { status: 503 }
+        )
+      )
+    )
+    const navigate = vi.fn()
+    setNavigateToMaintenance(navigate)
+    await expect(http.get("/groups")).rejects.toBeInstanceOf(HttpError)
+    expect(navigate).toHaveBeenCalledOnce()
+  })
+
   it("503 does NOT re-bounce when the user is already on /maintenance (#1542 — avoids reload loop)", async () => {
     server.use(msw.get(api("/groups"), () => HttpResponse.json(null, { status: 503 })))
     const navigate = vi.fn()
@@ -432,6 +483,57 @@ describe("401 flow", () => {
     expect(getCsrfToken()).toBeNull()
     expect(navigate).toHaveBeenCalledOnce()
     expect(navigate.mock.calls[0][1]).toBe("session_expired")
+  })
+
+  it("backoffice 401 + no back-office session: does NOT navigate to /backoffice/login", async () => {
+    // Regression: <ImpersonationProvider> in the tenant Shell probes
+    // /admin/impersonation/current for every authenticated tenant user
+    // (the banner consumer is on the tenant plane). After #1838 hardened
+    // /admin/* on the back-office plane, the probe 401s for any user
+    // without a back-office session. Before this guard, the http client
+    // dutifully tried `/backoffice/auth/refresh` (404, no cookie), then
+    // bounced the user to /backoffice/login on every tenant page render.
+    // Verify the 401 surfaces to the caller's onError without any
+    // navigation when there was no back-office session to "expire" in the
+    // first place.
+    setAccessToken("tenant-good")
+    const navigate = vi.fn()
+    setNavigateToLogin(navigate)
+    server.use(
+      msw.get(api("/admin/impersonation/current"), () =>
+        HttpResponse.json({ error: "no operator session" }, { status: 401 })
+      ),
+      msw.post(api("/backoffice/auth/refresh"), () =>
+        HttpResponse.json({ error: "no cookie" }, { status: 404 })
+      )
+    )
+    await expect(http.get("/admin/impersonation/current")).rejects.toBeInstanceOf(HttpError)
+    expect(navigate).not.toHaveBeenCalled()
+    // Tenant session must survive — the back-office 401 is unrelated.
+    expect(getAccessToken()).toBe("tenant-good")
+  })
+
+  it("backoffice 401 + had back-office session: DOES navigate to /backoffice/login", async () => {
+    // Companion to the no-session case above: when a back-office operator
+    // genuinely loses their session (refresh cookie expired or revoked),
+    // the bounce to /backoffice/login is correct — there *was* something
+    // to expire. Guard regressions where the guard becomes "never bounce."
+    setBackofficeAccessToken("operator-stale")
+    const navigate = vi.fn()
+    setNavigateToLogin(navigate)
+    server.use(
+      msw.get(api("/admin/impersonation/current"), () =>
+        HttpResponse.json({ error: "expired" }, { status: 401 })
+      ),
+      msw.post(api("/backoffice/auth/refresh"), () =>
+        HttpResponse.json({ error: "refresh-bad" }, { status: 401 })
+      )
+    )
+    await expect(http.get("/admin/impersonation/current")).rejects.toBeInstanceOf(HttpError)
+    expect(getBackofficeAccessToken()).toBeNull()
+    expect(navigate).toHaveBeenCalledOnce()
+    expect(navigate.mock.calls[0][1]).toBe("session_expired")
+    expect(navigate.mock.calls[0][2]).toBe("backoffice")
   })
 
   it("background /auth/me 401: does NOT clear auth or navigate", async () => {
