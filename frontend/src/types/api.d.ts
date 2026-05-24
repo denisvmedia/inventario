@@ -11588,7 +11588,7 @@ export type components = {
         /** @enum {string} */
         "models.LoginMethod": "password" | "oauth_google" | "oauth_github" | "oauth_other";
         /** @enum {string} */
-        "models.LoginOutcome": "ok" | "bad_password" | "account_locked" | "account_disabled" | "email_not_verified" | "mfa_required" | "bad_mfa" | "mfa_admin_reset" | "identity_linked";
+        "models.LoginOutcome": "ok" | "bad_password" | "account_locked" | "account_disabled" | "email_not_verified" | "mfa_required" | "bad_mfa" | "mfa_admin_reset" | "identity_linked" | "tenant_mismatch";
         "models.MaintenanceSchedule": {
             /**
              * @description CommodityID is the schedule's owning commodity. ON DELETE CASCADE

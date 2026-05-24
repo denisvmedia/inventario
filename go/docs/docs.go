@@ -13087,7 +13087,8 @@ const docTemplate = `{
                 "mfa_required",
                 "bad_mfa",
                 "mfa_admin_reset",
-                "identity_linked"
+                "identity_linked",
+                "tenant_mismatch"
             ],
             "x-enum-varnames": [
                 "LoginOutcomeOK",
@@ -13098,7 +13099,8 @@ const docTemplate = `{
                 "LoginOutcomeMFARequired",
                 "LoginOutcomeBadMFA",
                 "LoginOutcomeMFAAdminReset",
-                "LoginOutcomeIdentityLinked"
+                "LoginOutcomeIdentityLinked",
+                "LoginOutcomeTenantMismatch"
             ]
         },
         "models.MaintenanceSchedule": {

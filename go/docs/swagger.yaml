@@ -3932,6 +3932,7 @@ definitions:
     - bad_mfa
     - mfa_admin_reset
     - identity_linked
+    - tenant_mismatch
     type: string
     x-enum-varnames:
     - LoginOutcomeOK
@@ -3943,6 +3944,7 @@ definitions:
     - LoginOutcomeBadMFA
     - LoginOutcomeMFAAdminReset
     - LoginOutcomeIdentityLinked
+    - LoginOutcomeTenantMismatch
   models.MaintenanceSchedule:
     properties:
       commodity_id:
