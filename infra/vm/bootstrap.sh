@@ -92,7 +92,18 @@ if [ -n "$TS_IP" ]; then
     # macOS sed and GNU sed differ; perl is portable.
     perl -pi -e "s|https://127\.0\.0\.1:|https://${TS_IP}:|g; s|https://localhost:|https://${TS_IP}:|g" \
         "$LAPTOP_KUBECONFIG"
-    note "kubeconfig server rewritten to https://${TS_IP}:<port> (tailnet IP)"
+
+    # The vcluster kube-apiserver TLS cert is signed for 127.0.0.1, 10.96.0.1,
+    # and the in-cluster API IP — NOT for the tailnet IP. Without tls-server-name,
+    # kubectl from the laptop would fail with "certificate is valid for 127.0.0.1
+    # ..., not <tailnet IP>". Tell kubectl to verify against 127.0.0.1 (a SAN
+    # that IS in the cert) while still dialling the tailnet IP. Idempotent.
+    if ! grep -q '^    tls-server-name:' "$LAPTOP_KUBECONFIG"; then
+        perl -i -pe '$_ .= "    tls-server-name: 127.0.0.1\n" if /^    server: https:/;' \
+            "$LAPTOP_KUBECONFIG"
+    fi
+
+    note "kubeconfig server rewritten to https://${TS_IP}:<port> (tls-server-name: 127.0.0.1)"
 else
     warn "Couldn't fetch tailnet IP. kubeconfig still points at 127.0.0.1 —"
     warn "either ssh-tunnel port 443/6443 or edit the server: field manually."
