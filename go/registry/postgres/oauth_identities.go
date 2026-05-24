@@ -67,11 +67,26 @@ func (r *OAuthIdentityRegistry) Create(ctx context.Context, oi models.OAuthIdent
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolationCode {
-			return nil, errxtrace.Classify(registry.ErrAlreadyExists, errx.Attrs(
+			// Distinguish the two unique constraints so callers can tell
+			// "this provider account belongs to another user" (global
+			// (provider, provider_user_id) collision) from "this user
+			// already has this provider linked" (per-user
+			// (tenant_id, user_id, provider) collision). Both classify as
+			// ErrAlreadyExists; the attrs carry the distinguishing
+			// context for logging + audit.
+			attrs := []any{
 				"entity_type", "OAuthIdentity",
 				"provider", string(oi.Provider),
-				"provider_user_id", oi.ProviderUserID,
-			))
+			}
+			if pgErr.ConstraintName == "idx_oauth_identities_tenant_user_provider" {
+				attrs = append(attrs, "user_id", oi.UserID, "scope", "user_provider")
+			} else {
+				attrs = append(attrs,
+					"provider_user_id", oi.ProviderUserID,
+					"scope", "provider_subject",
+				)
+			}
+			return nil, errxtrace.Classify(registry.ErrAlreadyExists, errx.Attrs(attrs...))
 		}
 		return nil, errxtrace.Wrap("failed to create OAuth identity", err)
 	}

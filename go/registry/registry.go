@@ -2135,6 +2135,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.UserRegistry, validation.Required),
 		validation.Field(&s.CommodityScanAuditRegistry, validation.Required),
 		validation.Field(&s.SystemAdminGrantRegistry, validation.Required),
+		validation.Field(&s.OAuthIdentityRegistry, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, s, fields...)

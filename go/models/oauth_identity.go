@@ -109,6 +109,16 @@ type OAuthIdentityIndexes struct {
 	//migrator:schema:index name="idx_oauth_identities_tenant_user" fields="tenant_id,user_id" table="user_oauth_identities"
 	_ int
 
+	// Per-user provider uniqueness — a user can have at most one row per
+	// provider. The API addresses identities by {provider} per user
+	// (link/unlink/list); without this, a buggy code path could write two
+	// google rows for the same user and the FE would not know which one
+	// to display. The global (provider, provider_user_id) uniqueness
+	// already prevents two different users from claiming the same
+	// provider account; this index closes the symmetric direction.
+	//migrator:schema:index name="idx_oauth_identities_tenant_user_provider" fields="tenant_id,user_id,provider" unique="true" table="user_oauth_identities"
+	_ int
+
 	// Tenant isolation index — same shape every other tenant-scoped
 	// table uses; lets the RLS qual short-circuit on a single column.
 	//migrator:schema:index name="idx_oauth_identities_tenant_id" fields="tenant_id" table="user_oauth_identities"
