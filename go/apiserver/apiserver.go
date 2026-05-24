@@ -2,10 +2,12 @@ package apiserver
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -257,7 +259,45 @@ func (p *Params) Validate() error {
 		validation.Field(&p.ImpersonationTTL, validation.Min(time.Duration(0))),
 	)
 
-	return validation.ValidateStruct(p, fields...)
+	if err := validation.ValidateStruct(p, fields...); err != nil {
+		return err
+	}
+
+	// OAuth dependency set must be all-present or all-absent (#1394).
+	// The /auth/oauth/* sub-router silently 404s on missing providers,
+	// which is the correct shape when OAuth is disabled — but a caller
+	// passing one or two of the three pieces gets the same silent 404
+	// instead of a loud bootstrap failure that tells them which piece
+	// is missing. Enforce the all-or-none invariant here so the
+	// misconfiguration surfaces at bootstrap.
+	hasRegistry := p.OAuthRegistry != nil
+	hasSigner := p.OAuthStateSigner != nil
+	hasIdentities := p.FactorySet != nil && p.FactorySet.OAuthIdentityRegistry != nil
+	provided := 0
+	if hasRegistry {
+		provided++
+	}
+	if hasSigner {
+		provided++
+	}
+	if hasIdentities {
+		provided++
+	}
+	if provided != 0 && provided != 3 {
+		missing := make([]string, 0, 3)
+		if !hasRegistry {
+			missing = append(missing, "OAuthRegistry")
+		}
+		if !hasSigner {
+			missing = append(missing, "OAuthStateSigner")
+		}
+		if !hasIdentities {
+			missing = append(missing, "FactorySet.OAuthIdentityRegistry")
+		}
+		return fmt.Errorf("oauth: dependency set is partially configured — missing: %s (must be all-present or all-absent)", strings.Join(missing, ", "))
+	}
+
+	return nil
 }
 
 func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
