@@ -4,7 +4,8 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
+
+	errxtrace "github.com/go-extras/errx/stacktrace"
 )
 
 // pkceVerifierBytes is the number of raw random bytes used to generate a
@@ -33,20 +34,10 @@ type PKCE struct {
 func NewPKCE() (PKCE, error) {
 	buf := make([]byte, pkceVerifierBytes)
 	if _, err := rand.Read(buf); err != nil {
-		return PKCE{}, fmt.Errorf("oauth: generate PKCE verifier: %w", err)
+		return PKCE{}, errxtrace.Wrap("oauth: generate PKCE verifier", err)
 	}
 	verifier := base64.RawURLEncoding.EncodeToString(buf)
 	sum := sha256.Sum256([]byte(verifier))
 	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
 	return PKCE{Verifier: verifier, Challenge: challenge}, nil
-}
-
-// challengeFor recomputes the S256 challenge for a given verifier. The
-// verifier is base64-url encoded random bytes; the challenge is the
-// base64-url-encoded SHA-256 of those bytes. Exposed for tests; the
-// production callback never recomputes the challenge (the provider does
-// that comparison).
-func challengeFor(verifier string) string {
-	sum := sha256.Sum256([]byte(verifier))
-	return base64.RawURLEncoding.EncodeToString(sum[:])
 }

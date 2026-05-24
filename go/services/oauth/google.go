@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
@@ -71,13 +72,13 @@ type GoogleProvider struct {
 // not catchable at request time.
 func NewGoogleProvider(cfg GoogleProviderConfig) (*GoogleProvider, error) {
 	if cfg.ClientID == "" {
-		return nil, fmt.Errorf("oauth/google: ClientID is required")
+		return nil, errxtrace.ClassifyNew("oauth/google: ClientID is required")
 	}
 	if cfg.ClientSecret == "" {
-		return nil, fmt.Errorf("oauth/google: ClientSecret is required")
+		return nil, errxtrace.ClassifyNew("oauth/google: ClientSecret is required")
 	}
 	if cfg.RedirectURL == "" {
-		return nil, fmt.Errorf("oauth/google: RedirectURL is required")
+		return nil, errxtrace.ClassifyNew("oauth/google: RedirectURL is required")
 	}
 	client := cfg.HTTPClient
 	if client == nil {
@@ -139,32 +140,32 @@ func (p *GoogleProvider) Exchange(ctx context.Context, code, codeVerifier string
 		oauth2.SetAuthURLParam("code_verifier", codeVerifier),
 	)
 	if err != nil {
-		return Profile{}, fmt.Errorf("oauth/google: token exchange: %w", err)
+		return Profile{}, errxtrace.Wrap("oauth/google: token exchange", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.userInfoURL, http.NoBody)
 	if err != nil {
-		return Profile{}, fmt.Errorf("oauth/google: build userinfo request: %w", err)
+		return Profile{}, errxtrace.Wrap("oauth/google: build userinfo request", err)
 	}
 	tok.SetAuthHeader(req)
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return Profile{}, fmt.Errorf("oauth/google: userinfo request: %w", err)
+		return Profile{}, errxtrace.Wrap("oauth/google: userinfo request", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return Profile{}, fmt.Errorf("oauth/google: userinfo HTTP %d: %s", resp.StatusCode, string(body))
+		return Profile{}, errxtrace.ClassifyNew(fmt.Sprintf("oauth/google: userinfo HTTP %d: %s", resp.StatusCode, string(body)))
 	}
 	var info googleUserInfoResponse
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return Profile{}, fmt.Errorf("oauth/google: decode userinfo: %w", err)
+		return Profile{}, errxtrace.Wrap("oauth/google: decode userinfo", err)
 	}
 	if info.Sub == "" {
-		return Profile{}, fmt.Errorf("oauth/google: userinfo missing sub")
+		return Profile{}, errxtrace.ClassifyNew("oauth/google: userinfo missing sub")
 	}
 	if info.Email == "" {
-		return Profile{}, fmt.Errorf("oauth/google: userinfo missing email")
+		return Profile{}, errxtrace.ClassifyNew("oauth/google: userinfo missing email")
 	}
 
 	displayName := info.Name

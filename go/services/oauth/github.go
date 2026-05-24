@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"golang.org/x/oauth2"
 	githuboauth "golang.org/x/oauth2/github"
 
@@ -70,13 +71,13 @@ type GitHubProvider struct {
 // error if ClientID, ClientSecret, or RedirectURL is empty.
 func NewGitHubProvider(cfg GitHubProviderConfig) (*GitHubProvider, error) {
 	if cfg.ClientID == "" {
-		return nil, fmt.Errorf("oauth/github: ClientID is required")
+		return nil, errxtrace.ClassifyNew("oauth/github: ClientID is required")
 	}
 	if cfg.ClientSecret == "" {
-		return nil, fmt.Errorf("oauth/github: ClientSecret is required")
+		return nil, errxtrace.ClassifyNew("oauth/github: ClientSecret is required")
 	}
 	if cfg.RedirectURL == "" {
-		return nil, fmt.Errorf("oauth/github: RedirectURL is required")
+		return nil, errxtrace.ClassifyNew("oauth/github: RedirectURL is required")
 	}
 	client := cfg.HTTPClient
 	if client == nil {
@@ -115,7 +116,7 @@ func (p *GitHubProvider) Exchange(ctx context.Context, code, codeVerifier string
 		oauth2.SetAuthURLParam("code_verifier", codeVerifier),
 	)
 	if err != nil {
-		return Profile{}, fmt.Errorf("oauth/github: token exchange: %w", err)
+		return Profile{}, errxtrace.Wrap("oauth/github: token exchange", err)
 	}
 
 	user, err := p.fetchUser(ctx, tok)
@@ -123,7 +124,7 @@ func (p *GitHubProvider) Exchange(ctx context.Context, code, codeVerifier string
 		return Profile{}, err
 	}
 	if user.ID == 0 {
-		return Profile{}, fmt.Errorf("oauth/github: /user response missing id")
+		return Profile{}, errxtrace.ClassifyNew("oauth/github: /user response missing id")
 	}
 
 	email, verified, err := p.resolvePrimaryEmail(ctx, tok, user.Email)
@@ -149,22 +150,22 @@ func (p *GitHubProvider) Exchange(ctx context.Context, code, codeVerifier string
 func (p *GitHubProvider) fetchUser(ctx context.Context, tok *oauth2.Token) (githubUserResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubUserURL, http.NoBody)
 	if err != nil {
-		return githubUserResponse{}, fmt.Errorf("oauth/github: build /user request: %w", err)
+		return githubUserResponse{}, errxtrace.Wrap("oauth/github: build /user request", err)
 	}
 	tok.SetAuthHeader(req)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return githubUserResponse{}, fmt.Errorf("oauth/github: /user request: %w", err)
+		return githubUserResponse{}, errxtrace.Wrap("oauth/github: /user request", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return githubUserResponse{}, fmt.Errorf("oauth/github: /user HTTP %d: %s", resp.StatusCode, string(body))
+		return githubUserResponse{}, errxtrace.ClassifyNew(fmt.Sprintf("oauth/github: /user HTTP %d: %s", resp.StatusCode, string(body)))
 	}
 	var u githubUserResponse
 	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
-		return githubUserResponse{}, fmt.Errorf("oauth/github: decode /user: %w", err)
+		return githubUserResponse{}, errxtrace.Wrap("oauth/github: decode /user", err)
 	}
 	return u, nil
 }
@@ -181,22 +182,22 @@ func (p *GitHubProvider) fetchUser(ctx context.Context, tok *oauth2.Token) (gith
 func (p *GitHubProvider) resolvePrimaryEmail(ctx context.Context, tok *oauth2.Token, userEmail string) (string, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubUserEmailsURL, http.NoBody)
 	if err != nil {
-		return "", false, fmt.Errorf("oauth/github: build /user/emails request: %w", err)
+		return "", false, errxtrace.Wrap("oauth/github: build /user/emails request", err)
 	}
 	tok.SetAuthHeader(req)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return "", false, fmt.Errorf("oauth/github: /user/emails request: %w", err)
+		return "", false, errxtrace.Wrap("oauth/github: /user/emails request", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return "", false, fmt.Errorf("oauth/github: /user/emails HTTP %d: %s", resp.StatusCode, string(body))
+		return "", false, errxtrace.ClassifyNew(fmt.Sprintf("oauth/github: /user/emails HTTP %d: %s", resp.StatusCode, string(body)))
 	}
 	var emails []githubEmailEntry
 	if err := json.NewDecoder(resp.Body).Decode(&emails); err != nil {
-		return "", false, fmt.Errorf("oauth/github: decode /user/emails: %w", err)
+		return "", false, errxtrace.Wrap("oauth/github: decode /user/emails", err)
 	}
 
 	// 1st pass — exact primary+verified match.
@@ -219,5 +220,5 @@ func (p *GitHubProvider) resolvePrimaryEmail(ctx context.Context, tok *oauth2.To
 	if userEmail != "" {
 		return userEmail, false, nil
 	}
-	return "", false, fmt.Errorf("oauth/github: no usable email address found")
+	return "", false, errxtrace.ClassifyNew("oauth/github: no usable email address found")
 }

@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 
+	errxtrace "github.com/go-extras/errx/stacktrace"
+
 	"github.com/denisvmedia/inventario/models"
 )
 
@@ -110,11 +112,11 @@ func NewRegistry() *Registry {
 // is a feature for tests that inject a stub Provider.
 func (r *Registry) Register(p Provider) error {
 	if p == nil {
-		return fmt.Errorf("oauth: nil provider")
+		return errxtrace.ClassifyNew("oauth: nil provider")
 	}
 	name := p.Name()
 	if !name.IsValid() {
-		return fmt.Errorf("oauth: invalid provider name %q", string(name))
+		return errxtrace.ClassifyNew(fmt.Sprintf("oauth: invalid provider name %q", string(name)))
 	}
 	if _, exists := r.providers[name]; !exists {
 		r.order = append(r.order, name)

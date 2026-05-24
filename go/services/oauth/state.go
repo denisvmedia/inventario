@@ -6,12 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"path"
 	"strings"
 	"time"
+
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 )
 
 // DefaultStateTTL is the lifetime of a signed state token. Five minutes is
@@ -81,7 +83,7 @@ type StateSigner struct {
 // can't downgrade to a low-entropy MAC.
 func NewStateSigner(key []byte) (*StateSigner, error) {
 	if len(key) < 32 {
-		return nil, fmt.Errorf("oauth: state signing key must be at least 32 bytes (got %d)", len(key))
+		return nil, errxtrace.ClassifyNew(fmt.Sprintf("oauth: state signing key must be at least 32 bytes (got %d)", len(key)))
 	}
 	dup := make([]byte, len(key))
 	copy(dup, key)
@@ -102,7 +104,7 @@ func (s *StateSigner) WithTTL(ttl time.Duration) *StateSigner {
 func NewNonce() (string, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("oauth: nonce rand.Read: %w", err)
+		return "", errxtrace.Wrap("oauth: nonce rand.Read", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
@@ -121,14 +123,14 @@ func (s *StateSigner) Sign(state State) (string, error) {
 		state.ExpiresAt = now.Add(s.ttl).Unix()
 	}
 	if state.Nonce == "" {
-		return "", fmt.Errorf("oauth: state.Nonce is required")
+		return "", errxtrace.ClassifyNew("oauth: state.Nonce is required")
 	}
 	if state.Verifier == "" {
-		return "", fmt.Errorf("oauth: state.Verifier is required")
+		return "", errxtrace.ClassifyNew("oauth: state.Verifier is required")
 	}
 	payload, err := json.Marshal(state)
 	if err != nil {
-		return "", fmt.Errorf("oauth: marshal state: %w", err)
+		return "", errxtrace.Wrap("oauth: marshal state", err)
 	}
 	mac := hmac.New(sha256.New, s.key)
 	mac.Write(payload)
@@ -141,7 +143,7 @@ func (s *StateSigner) Sign(state State) (string, error) {
 // Callers MUST NOT branch on the specific failure mode and MUST treat
 // any error as "reject the callback" — leaking which check failed lets a
 // caller probe the signing key one bit at a time.
-var ErrStateInvalid = errors.New("oauth: invalid or expired state token")
+var ErrStateInvalid = errx.NewSentinel("oauth: invalid or expired state token")
 
 // Verify parses and verifies token, returning the decoded State on
 // success. Returns ErrStateInvalid on every failure mode.
