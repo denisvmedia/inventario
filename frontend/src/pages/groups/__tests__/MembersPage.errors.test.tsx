@@ -218,4 +218,36 @@ describe("<MembersPage /> typed error toasts (#1652)", () => {
     expect(msg).not.toMatch(/last owner/i)
     expect(msg).not.toMatch(/delete the group instead/i)
   })
+
+  it("surfaces the lastOwner copy when PATCH role-change returns group.last_owner", async () => {
+    // handleRoleChange shares the same typed-code map as handleRemove, so a
+    // failed demotion that trips ErrLastOwner (e.g. the owner picks "User"
+    // from another owner's role dropdown via a stale snapshot) must also
+    // surface the actionable copy. Reuse the same two-row roster; drive the
+    // second row's inline role select rather than the remove menu item.
+    server.use(
+      groupsHandler,
+      userMeHandler,
+      twoMemberRoster,
+      invitesEmpty,
+      msw.patch(api("/groups/g1/members/u2-other"), () =>
+        HttpResponse.json(
+          { errors: [{ code: "group.last_owner", detail: "sole owner" }] },
+          { status: 422 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderMembers()
+    await waitFor(() => expect(screen.getByTestId("members-list")).toBeInTheDocument())
+    // The role-change controls live inside the same actions dropdown the
+    // remove tests open; the dropdown also lists the role tier menu items.
+    await user.click(screen.getByTestId("member-actions-u2-other"))
+    // Bea is currently "user"; clicking the "admin" item submits the PATCH
+    // (any role other than the current one would do — admin is unambiguous).
+    await user.click(await screen.findByTestId("member-role-u2-other-admin"))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
+    expect((toast.error as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/last owner/i)
+  })
 })
