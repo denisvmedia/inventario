@@ -1,6 +1,6 @@
 ---
 name: screenshot-review
-description: Generate local screenshots of the Inventario React frontend via `e2e/screenshots.mjs` and review them visually for bugs (unresolved i18n keys, broken layout, wrong currency, truncated dates, dark-mode regressions, missing fallbacks, etc). On user request the workflow runs end-to-end. After any frontend change made by the agent in `frontend/`, the skill activates to OFFER this review explicitly to the user — never auto-runs. On further explicit user request the captures may be published to an `assets/screenshots-<issue>` branch via `e2e/push-screenshots.sh` and embedded as an Issue/PR comment via `mcp__github_and_git__add_issue_comment`. Strict rule: never produce screenshots, push them, or comment on Issues without an explicit user "yes" for each step. The user owns the call because screenshots take time, need a running binary, and may surface unrelated bugs the user might not want to triage right now.
+description: 'Generate local screenshots of the Inventario React frontend via `e2e/screenshots.mjs` and review them visually for bugs (unresolved i18n keys, broken layout, wrong currency, truncated dates, dark-mode regressions, missing fallbacks). Use for visual testing, UI review, dark-mode checks, verifying frontend appearance, checking how a page looks, or eyeballing visual regressions. Triggers on phrases like "screenshot the app", "check how it looks", "visual review", "verify the UI", "post screenshots on the issue", or "make sure the page renders right". After a frontend change in `frontend/`, OFFER this review to the user — never auto-runs. On further explicit user request, captures may be published to an `assets/screenshots-ISSUE` branch via `e2e/push-screenshots.sh` and embedded as an Issue/PR comment via `mcp__github_and_git__add_issue_comment`. Strict rule — never produce screenshots, push them, or comment on Issues without an explicit user "yes" per step. Skip for backend-only, docs-only, type-only, or pure-test changes.'
 ---
 
 # Screenshot review (local)
@@ -20,7 +20,7 @@ You can act on #1 and #3. You cannot act on #2 — only offer. Each of #1 and #3
 - **Never run a screenshot pass unsolicited.** If the user hasn't asked, propose it; then wait.
 - **The user's last word wins.** A "skip it" earlier in the session means skip it for the rest of the session unless they reverse it.
 - **No screenshots in the working-branch diff.** Captures live under `.research/screenshots/<label>/` and that path is in the maintainer's global `.gitignore` — that's intentional. Don't `git add -f` past the ignore.
-- **Publishing is a separate, opt-in step.** When the user wants reviewers to see captures, the canonical flow is `e2e/push-screenshots.sh <issue>` → `assets/screenshots-<issue>` branch → Issue comment with raw URLs. Never run that flow without an explicit user "yes" for the publish step (an earlier yes for capture is not consent for publish). See "Optional: sharing the captures" below.
+- **Publishing is a separate, opt-in step.** The flow is `e2e/push-screenshots.sh <issue>` → `assets/screenshots-<issue>` branch → Issue comment with raw URLs. See "Optional: sharing the captures" for mechanics.
 - **Don't substitute Playwright e2e specs for this.** `e2e/screenshots.mjs` is a separate Node script that boots the binary, logs in, and saves PNGs. The Playwright spec suite is unrelated — see the `inventario-e2e` skill for that.
 
 ## When to OFFER (don't decide for the user)
@@ -88,7 +88,7 @@ The `OUT` env var lets the script write directly into the canonical local-only f
 
 ### 3. Read every PNG
 
-Use the `Read` tool on each `.png` — Claude is multimodal, the image content goes into your context. Open them in **numeric order** (the script prefixes 01-, 02-, …) so you walk the user's flow as they would experience it.
+Use the `Read` tool on each `.png` in **numeric order** (the script prefixes 01-, 02-, …) so you walk the user's flow as they would experience it.
 
 For each one, ask yourself:
 
@@ -114,9 +114,9 @@ Mark surfaces that look correct, too. The maintainer reads the screenshots thems
 
 The captures should remain under `.research/screenshots/<label>/` and untracked by the working branch. Verify with `mcp__github_and_git__git_status` that `.research/screenshots/<label>/` is invisible — the maintainer's global gitignore on `.research/` keeps it untracked. If you see it staged on the working branch, stop and unstage before continuing. (Publishing is a separate flow that operates on a *different* branch — see below.)
 
-## Optional: sharing the captures (only on explicit user request)
+## Optional: sharing the captures
 
-Default is local-only — review on screen, never push. **Only** when the user explicitly says something like "push these to issue #1527" or "post these as a comment on the issue", run the publish flow. Each step below needs its own "yes":
+The default is local-only — review on screen, never push. Publishing is the opt-in flow defined in "The hard rules" above. Run it only when the user explicitly authorizes it for that step.
 
 ### Step A — Push the captures to a side branch
 
@@ -166,13 +166,6 @@ Don't re-push, re-comment, or rename the branch later in the session unless the 
 - Personal: `/profile`, `/settings`
 
 When you offer the pass, name the surfaces relevant to the change, not the full set. "Dashboard + locations" is more useful than "all 16".
-
-## What this skill is NOT
-
-- **Not** a way to autonomously verify the user's frontend changes. Visual review needs human input ("does that look right?") that you can't reliably substitute for.
-- **Not** the right tool for first-time scaffolding work where there's nothing visually meaningful to compare against. Offer it once there's actually a page that renders.
-- **Not** a replacement for accessibility / contrast tooling. Axe via Playwright is what catches a11y violations in CI.
-- **Not** pre-merge gating. Even a successful screenshot review doesn't block merge — that's CI's job.
 
 ## Phrasing examples
 

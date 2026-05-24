@@ -1,6 +1,6 @@
 ---
 name: design-mock-fidelity
-description: Use this skill at the moment you sit down to replicate or extend a UI surface in `frontend/` against `design-mocks/`. It is the dense, paste-ready playbook for hitting 1:1 fidelity with the mock without re-deriving spacing, tokens, or component anatomy from scratch. Activates whenever the agent is about to author markup, classNames, or component composition for `frontend/src/**` AND a corresponding (or analogous) surface exists in `design-mocks/src/**`. Companion to `frontend-work`: that skill orchestrates pre-flight / post-flight; this skill carries the replication recipes and the surface-index that lets you open exactly one mock file instead of grepping. Skip when the surface is purely backend/test/types or when there is no visual analogue in the mock at any altitude.
+description: 'Replicate or extend Inventario UI in `frontend/` to match the `design-mocks/` reference pixel-for-pixel — same Tailwind tokens, same spacing, same shadcn/ui component anatomy. Use when implementing a design, matching a mockup, porting a screen from the mock, building a new page or component for `frontend/src/**`, or fixing visual fidelity drift. Triggers on phrases like "implement design", "match the mockup", "port from design-mocks", "pixel-perfect", "make it look like the mock", "convert mock to code", "UI fidelity", or any request to author markup, classNames, or component composition for `frontend/src/**` when an analogous file exists in `design-mocks/src/**`. Provides a path-to-path index plus ready-to-paste TSX patterns for badges, buttons, dialogs, layout primitives, and typography. Companion to `frontend-work` — that skill handles pre-flight/post-flight; this one carries the replication recipes. Skip for backend/test/types-only changes or when no visual analogue exists in the mock.'
 ---
 
 # Design mock fidelity
@@ -29,12 +29,22 @@ If you only *think* you need it — read **Step 1**. If the surface index resolv
 
 ## Hard rules (never violate)
 
+This is the single checklist. It works as a pre-flight contract and a post-flight drift detector — if you find yourself doing the opposite of any rule, stop and re-identify the pattern in the mock.
+
 1. **`design-mocks/` is read-only.** Do not Edit, Write, move, rename, or `git add` anything under that path. It's a sync mirror of an upstream repo and your edits get wiped. If something looks wrong *in the mock*, surface it verbally to the user — it gets fixed upstream.
 2. **Default fidelity is 1:1.** Same DOM structure, same Tailwind classes, same icon imports, same copy structure. Drift is a deliberate, logged decision — see `devdocs/frontend/design-deviations.md` and the entry template at the top of that file.
-3. **Tokens, never raw colors.** No `text-amber-500`, `#f59e0b`, `bg-green-100`, etc. The mock uses semantic tokens (`text-status-active`, `bg-chart-1/15`, `text-destructive`). If a needed token doesn't exist, it gets added to `frontend/src/index.css` in both `:root` and `.dark`, registered in `@theme inline`, and matches the OKLCH values in `design-mocks/src/index.css`.
-4. **No `forwardRef`, no `@tailwindcss/animate`, no `hsl()` in token *definitions*.** Tailwind v4 uses `React.ComponentProps<>` and `tw-animate-css`. Token definitions in `index.css` are raw OKLCH with no `hsl()` wrapper. The one place where `hsl(var(--…))` legitimately appears is the shadcn sidebar's `<SidebarRail>` outline trick (`shadow-[0_0_0_1px_hsl(var(--sidebar-border))]`, mirrored in `frontend/src/components/ui/sidebar.tsx`) — leave that alone when porting; don't introduce new `hsl()` wrappers anywhere else.
-5. **No purple, no indigo, no violet anywhere.** This palette is warm-neutral + amber. Any chart of more than five series uses the chart-1..5 cycle, not new hues.
-6. **Don't add elevation shadows on top of shadcn primitives.** shadcn primitives already ship the shadows the design language calls for: `card.tsx` → `shadow-sm`, `dialog.tsx` / `sheet.tsx` → `shadow-lg`, `popover.tsx` / `dropdown-menu.tsx` → `shadow-md`–`shadow-lg`, sidebar floating/inset → `shadow-sm`, sidebar rail → an inset 1px `shadow-[…]` outline. Keep those as-is for 1:1 fidelity. The rule is *don't paint extra `shadow-*` onto your own surfaces*: bespoke cards, custom containers, hand-rolled chips, list rows — those use borders + the token palette, not new shadows. If a primitive already has a shadow and the mock keeps it, you keep it too.
+3. **Tokens, never raw colors.** No `text-amber-500`, `#f59e0b`, `bg-green-100`, `border-red-300`, etc. The mock uses semantic tokens (`text-status-active`, `bg-chart-1/15`, `text-destructive`). If a needed token doesn't exist, add it to `frontend/src/index.css` in both `:root` and `.dark`, register it in `@theme inline`, and match the OKLCH values in `design-mocks/src/index.css`. No purple, no indigo, no violet anywhere — the palette is warm-neutral + amber. Charts beyond five series cycle `chart-1..5`, not new hues.
+4. **No `forwardRef`, no `@tailwindcss/animate`, no `hsl()` in token *definitions*.** Tailwind v4 uses `React.ComponentProps<>` and `tw-animate-css`. Token declarations in `index.css` are raw OKLCH with no `hsl()` wrapper. The one place where `hsl(var(--…))` legitimately appears is the shadcn sidebar's `<SidebarRail>` outline trick (`shadow-[0_0_0_1px_hsl(var(--sidebar-border))]`, mirrored in `frontend/src/components/ui/sidebar.tsx`) — preserve that when you see it; don't introduce new `hsl()` wrappers anywhere else.
+5. **Don't add elevation shadows on top of shadcn primitives.** shadcn primitives already ship the shadows the design language calls for: `card.tsx` → `shadow-sm`, `dialog.tsx` / `sheet.tsx` → `shadow-lg`, `popover.tsx` / `dropdown-menu.tsx` → `shadow-md`–`shadow-lg`, sidebar floating/inset → `shadow-sm`, sidebar rail → an inset 1px `shadow-[…]` outline, `input.tsx` → `shadow-xs`. Keep those as-is. The rule is *don't paint extra `shadow-*` onto your own surfaces*: bespoke cards, custom containers, hand-rolled chips, list rows — those use borders + tokens, never new shadows.
+6. **Use canonical spacing.** `p-6 / gap-6 / py-3.5 / space-y-5` are the recurring values. If they don't fit, you're mismatching the section type — re-identify the pattern instead of inventing a new gap or padding.
+7. **No native browser modals.** No `window.confirm`, `alert()`, `prompt()`. Use `<AlertDialog>`, `<Dialog>`, or sonner toasts.
+8. **Named exports only for views and components.** No default exports.
+9. **No inline `style={{ … }}` for static visual choices.** Static colors, paddings, font sizes, radii belong in Tailwind utilities or `index.css` tokens. Inline styles are legitimate only when a *runtime value* must flow into CSS that utilities can't express: data-driven geometry/dimensions (`width: ${pct}%`, `height: ${dim}`), data-driven colors pulling from a token (`backgroundColor: var(--status-${status})`), background images from runtime URLs, transforms in zoom/pan UIs, and shadcn primitives that take CSS vars via `style` (e.g. `<SidebarProvider style={{ "--sidebar-width": "16rem" }}>`). The dashboard breakdown bar in `views/DashboardView.tsx:236` does both at once — width and a token-derived background — and that's the canonical example.
+10. **One icon library.** `lucide-react` is the only one. Pick the closest glyph or change the metaphor; never add a second library.
+11. **The primitive set is fixed.** shadcn/ui (`new-york` style) + Radix via the `radix-ui` umbrella + `cmdk` for command palettes. No "I'll use `react-select` instead of `<Combobox>` because…". New primitives only via `radix-ui` or the shadcn CLI.
+12. **Reuse domain components.** Reach for `WarrantyBadge`, `CurrencyCombobox`, etc. before composing markup yourself.
+13. **Every visible string is `t("…")`-wrapped**, even prototype labels. No hardcoded English copy in `frontend/`.
+14. **No new CSS files.** All styling lives in Tailwind utilities + the single `index.css` token sheet. There is no second stylesheet.
 
 ## Step 1 — Locate the canonical surface (don't search; index)
 
@@ -286,217 +296,7 @@ Note: never use chart tokens to convey status — they're for data viz only. For
 
 ### Pattern micro-library
 
-**Badge — neutral**:
-
-```tsx
-<Badge>Default</Badge>
-<Badge variant="secondary">Secondary</Badge>
-<Badge variant="outline">Outline</Badge>
-```
-
-**Badge — status (domain pattern)**:
-
-The mock uses `WARRANTY_STATUS_CONFIG[status].color / .bg / .label` and the same shape for commodity status. The frontend has *split* these into two differently-shaped constants:
-
-- **Warranty:** `WARRANTY_STATUS_CONFIG` in `frontend/src/components/warranty/config.ts` — fields are `{ i18nKey, icon, text, bg, bgSolid, border }`. Note `text` (not `color`) for the foreground class, and `i18nKey` instead of a literal label so the chip is translatable.
-- **Commodity:** `COMMODITY_STATUS_TONES` in `frontend/src/features/commodities/constants.ts` — a flat `Record<status, string>` of pre-joined utility strings (`"text-status-active border-status-active/30 bg-status-active/10"`), no separate fields. Pair with the `commodities:status.*` i18n namespace for the label.
-
-Reach for the existing `WarrantyBadge` component for warranty surfaces — don't compose a chip from scratch. For commodity status, the canonical pattern in the frontend is:
-
-```tsx
-const tone = status ? COMMODITY_STATUS_TONES[status] : ""
-<Badge variant="outline" className={cn(tone, "border-current/20 font-medium gap-1")}>
-  <Icon className="size-3" />
-  {t(`commodities:status.${status}`)}
-</Badge>
-```
-
-For warranty status outside `WarrantyBadge` (e.g. dashboard breakdowns), pull from `WARRANTY_STATUS_CONFIG[status]`:
-
-```tsx
-const visual = WARRANTY_STATUS_CONFIG[status]
-const Icon = visual.icon
-<Badge variant="outline" className={cn(visual.text, visual.bg, visual.border, "font-medium gap-1")}>
-  <Icon className="size-3" />
-  {t(visual.i18nKey)}
-</Badge>
-```
-
-**Tag pill** (with `lucide` `Hash` glyph, color from `chart-*` cycle):
-
-```tsx
-<span className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium select-none bg-chart-1/15 text-chart-1 border-chart-1/30">
-  <Hash className="size-2.5 shrink-0" />
-  kitchen
-</span>
-```
-
-**Button — sizes & icon scale** (icon size MUST match button size):
-
-| Button size | Class | Icon size |
-|---|---|---|
-| `default` | `h-9` | `size-4` |
-| `sm` | `h-8` | `size-3.5` |
-| `lg` | `h-10` | `size-4` |
-| `xs` | `h-6` | `size-3` |
-| `icon` | `size-9` | `size-4` |
-| `icon-sm` | `size-8` | `size-3.5` |
-| `icon-xs` | `size-6` | `size-3` |
-
-```tsx
-<Button>Default</Button>
-<Button variant="outline" size="sm">Small outline</Button>
-<Button variant="ghost" size="icon" aria-label="Add"><Plus className="size-4" /></Button>
-<Button variant="destructive" size="sm" className="gap-1.5">
-  <Trash2 className="size-3.5" />
-  Delete
-</Button>
-```
-
-**Field with label** (no validation):
-
-```tsx
-<div className="space-y-1.5">
-  <Label htmlFor="field-id">Label</Label>
-  <Input id="field-id" placeholder="Enter value…" value={val} onChange={(e) => setVal(e.target.value)} />
-</div>
-```
-
-**Field with validation** (RHF + Zod, the actual frontend pattern — see `devdocs/frontend/forms.md` and any `pages/*Page.tsx`).
-
-The repo does not have shadcn `Field`/`FieldLabel`/`FieldError` primitives. Schemas live in `frontend/src/features/<name>/schemas.ts` and their `message` fields are *i18n keys* (`"auth:validation.emailRequired"`), not English strings — the page resolves them with `t()` at render time. The field shape:
-
-```tsx
-<div className="space-y-1.5">
-  <Label htmlFor="profile-name">{t("auth:fields.name")}</Label>
-  <Input
-    id="profile-name"
-    aria-invalid={!!form.formState.errors.name}
-    {...form.register("name")}
-  />
-  {form.formState.errors.name ? (
-    <p className="field-error text-xs text-destructive">
-      {t(form.formState.errors.name.message ?? "")}
-    </p>
-  ) : null}
-</div>
-```
-
-`field-error` is a class hook for tests / styling overrides; keep it on every error `<p>`. Pair with `data-testid` on both the input and the error node when the form has tests.
-
-**Save button placement** (always at the bottom of a form section, in `pt-2`):
-
-```tsx
-<div className="pt-2">
-  <Button size="sm">Save changes</Button>
-</div>
-```
-
-**Dialog** (icon-headed title is the house style):
-
-```tsx
-<Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-  <DialogContent className="sm:max-w-md">
-    <DialogHeader>
-      <DialogTitle className="flex items-center gap-2">
-        <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
-          <Icon className="size-4 text-primary" />
-        </div>
-        Dialog Title
-      </DialogTitle>
-      <DialogDescription>Supporting text.</DialogDescription>
-    </DialogHeader>
-    {/* body */}
-    <DialogFooter className="gap-2">
-      <Button variant="outline" onClick={onClose}>Cancel</Button>
-      <Button onClick={onConfirm}>Confirm</Button>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
-```
-
-**AlertDialog (destructive)** — never `window.confirm`:
-
-```tsx
-<AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
-  <AlertDialogContent>
-    <AlertDialogHeader>
-      <AlertDialogTitle>Delete item</AlertDialogTitle>
-      <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
-    </AlertDialogHeader>
-    <AlertDialogFooter>
-      <AlertDialogCancel>Cancel</AlertDialogCancel>
-      <AlertDialogAction
-        onClick={handleDelete}
-        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-      >
-        Delete
-      </AlertDialogAction>
-    </AlertDialogFooter>
-  </AlertDialogContent>
-</AlertDialog>
-```
-
-**Dropdown menu** (with destructive-tinted item):
-
-```tsx
-<DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="ghost" size="icon" aria-label="Actions"><MoreHorizontal className="size-4" /></Button>
-  </DropdownMenuTrigger>
-  <DropdownMenuContent align="end">
-    <DropdownMenuItem>Edit</DropdownMenuItem>
-    <DropdownMenuSeparator />
-    <DropdownMenuItem className="text-destructive focus:text-destructive">
-      <Trash2 className="size-4 mr-2" />Delete
-    </DropdownMenuItem>
-  </DropdownMenuContent>
-</DropdownMenu>
-```
-
-**Empty state — inline** (in a list/card):
-
-```tsx
-<div className="flex flex-col items-center justify-center gap-3 py-16">
-  <Icon className="size-8 text-muted-foreground/30" />
-  <p className="text-sm text-muted-foreground">Nothing here yet.</p>
-</div>
-```
-
-**Empty state — full-page**: use the named exports from `design-mocks/src/views/EmptyStatesView.tsx` as the recipe. Patterns: `NotFoundView`, `NoLocationGroupView`, `NoGroupOnboardingView`, `NoLocationView`, `NoAreaView`, `MaintenanceView`. Don't compose your own — port the matching one.
-
-**Hoverable list row** (Dashboard "Expiring Warranties" pattern):
-
-```tsx
-<button
-  className="flex w-full items-center justify-between px-6 py-3.5 text-left transition-colors hover:bg-muted/50"
-  onClick={() => onItemClick(item.id)}
->
-  <div>
-    <p className="text-sm font-medium">{item.name}</p>
-    <p className="text-xs text-muted-foreground">{item.brand} · {areaName(item.areaId)}</p>
-  </div>
-  <Badge variant="outline" className="text-status-expiring bg-status-expiring/10 border-current/20 shrink-0 ml-4">
-    {days} days left
-  </Badge>
-</button>
-```
-
-**Reveal-on-hover actions** (rows that show extra controls only when hovered):
-
-```tsx
-<div className="group flex items-center justify-between py-3 hover:bg-muted/40">
-  <span className="text-sm">Item</span>
-  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-    <Button size="icon-sm" variant="ghost" aria-label="Edit"><Pencil className="size-3.5" /></Button>
-    <Button size="icon-sm" variant="ghost" aria-label="Delete"><Trash2 className="size-3.5" /></Button>
-  </div>
-</div>
-```
-
-**Sidebar nav group** (the canonical AppSidebar pattern):
-
-Open `design-mocks/src/components/AppSidebar.tsx` and copy the `<SidebarGroup>` block — that file is short and you'll want to read it in full for the user-dropdown footer + rail + collapsed-mode classes (`group-data-[collapsible=icon]:*`).
+See [`PATTERNS.md`](./PATTERNS.md) for ready-to-paste TSX for every recurring surface: badges (neutral + status), tag pills, button sizing, fields (with/without validation), save-button placement, dialogs, alert dialogs, dropdown menus, empty states, hoverable rows, reveal-on-hover actions, and sidebar nav groups. Open that file once when you start a surface — the patterns are organized by visual element, not by view.
 
 ### Data-layer conventions
 
@@ -527,23 +327,6 @@ Before declaring done:
 1. **Side-by-side check.** With the mock view file open and the frontend file open, scan top to bottom for: header structure → spacing rhythm → component primitives → token use → icon set → copy structure. Five minutes of eyeballing catches 90% of drift.
 2. **Run typecheck/tests.** `make test` from repo root or the frontend-specific scripts. Visual fidelity ≠ correctness — both must pass.
 3. **Offer the screenshot pass.** This is the `screenshot-review` skill's job. Phrase it as one short line naming the surfaces you touched. Wait for explicit "yes." Mechanics live in [`screenshot-review`](../screenshot-review/SKILL.md).
-
-## Drift markers — catch yourself
-
-Stop if you find yourself doing any of these. Each one is a sign you've slipped from the contract:
-
-- **Picking a Tailwind color name.** `text-amber-500`, `bg-green-100`, `border-red-300`. Always tokens.
-- **Adding a bespoke shadow.** shadcn primitives already ship the right elevations (`card.tsx` `shadow-sm`, `dialog.tsx` / `sheet.tsx` `shadow-lg`, `popover.tsx` / `dropdown-menu.tsx` `shadow-md`–`shadow-lg`, sidebar floating/inset `shadow-sm`, sidebar rail's inset 1px outline, `input.tsx` `shadow-xs`) — keep them. The drift signal is decorating *your own* surfaces with elevation: hand-rolled cards/chips/list rows. Those use borders + tokens, no extra `shadow-*`.
-- **Inventing a new gap or padding.** If `p-6 / gap-6 / py-3.5 / space-y-5` doesn't fit, you're mismatching the section type. Re-identify the pattern.
-- **`forwardRef`, `@tailwindcss/animate`, or `hsl()` in token *definitions*.** All three are banned. The narrow exception for `hsl(var(--…))` is the sidebar-rail outline (`shadow-[0_0_0_1px_hsl(var(--sidebar-border))]`) — preserve that when you see it; don't add `hsl()` wrappers anywhere else, and never in `index.css` token declarations.
-- **`window.confirm`, `alert()`, `prompt()`.** Use `<AlertDialog>`, `<Dialog>`, sonner toasts.
-- **Default-export from a view.** Named exports only.
-- **Inline `style={{ … }}` for arbitrary visual choices.** Static colors, paddings, font sizes, radii — those belong in Tailwind utilities or `index.css` tokens. Inline styles are legitimate only when a *runtime value* has to flow into CSS that utilities can't express: data-driven geometry/dimensions (`width: ${pct}%`, `height: ${dim}`), data-driven colors that pull from a token (`backgroundColor: var(--status-${status})`), background images from runtime URLs, transforms in zoom/pan UIs, and shadcn primitives that take CSS vars via `style` (e.g. `<SidebarProvider style={{ "--sidebar-width": "16rem" }}>`). The dashboard breakdown bar in `views/DashboardView.tsx:236` does both at once — width and a token-derived background — and that's the canonical example. If your inline style isn't pulling a runtime value through, it's the wrong tool.
-- **A new icon library.** `lucide-react` is the only one. Pick the closest glyph or change the metaphor; never add a second library.
-- **Substituting a primitive.** No "I'll use `react-select` instead of `<Combobox>` because…". The primitive set is fixed: shadcn/ui (`new-york` style) + Radix via the `radix-ui` umbrella + `cmdk` for command palettes. New primitives only via `radix-ui` or the shadcn CLI.
-- **Re-rolling a domain component from scratch.** Reach for `WarrantyBadge`, `CurrencyCombobox` etc. before composing markup yourself.
-- **Hardcoded English copy in `frontend/`.** Every visible string is `t("…")`-wrapped, even prototype labels.
-- **A new CSS file.** All styling lives in Tailwind utilities + the single `index.css` token sheet. There is no second stylesheet.
 
 ## What this skill does NOT do
 
