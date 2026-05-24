@@ -103,6 +103,7 @@
       "mfa_admin_reset": "MFA reset by support",
       "mfa_required": "MFA required",
       "ok": "Success",
+      "tenant_mismatch": "Cross-tenant OAuth refused",
       "unknown": "Unknown"
     },
     "subtitle": "Recent sign-in attempts for your account. Failed attempts are recorded too so you can spot suspicious activity.",
