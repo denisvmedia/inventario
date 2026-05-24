@@ -31,6 +31,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
+	"github.com/denisvmedia/inventario/services/oauth"
 )
 
 // RestoreStatusQuerier reports the aggregate status of restore operations
@@ -220,6 +221,16 @@ type Params struct {
 	// commodity_scan.photo_too_large before the entire part is read
 	// into memory.
 	CommodityScanMaxPhotoBytes int
+
+	// OAuthRegistry holds the third-party sign-in providers enabled in
+	// this deployment (#1394). Empty means OAuth is unconfigured — the
+	// /auth/oauth/providers endpoint surfaces an empty list and start /
+	// callback paths return 404. OAuthStateSigner is the HMAC signer for
+	// the per-request state tokens; required whenever any OAuth route
+	// is mounted (so the apiserver builds a signer with a random fallback
+	// key even when no provider is configured).
+	OAuthRegistry    *oauth.Registry
+	OAuthStateSigner *oauth.StateSigner
 }
 
 func (p *Params) Validate() error {
@@ -374,6 +385,9 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			JWTSecret:                params.JWTSecret,
 			EmailService:             emailSvc,
 			MFAService:               mfaSvc,
+			OAuthRegistry:            params.OAuthRegistry,
+			OAuthStateSigner:         params.OAuthStateSigner,
+			OAuthIdentityRegistry:    params.FactorySet.OAuthIdentityRegistry,
 		}))
 
 		// Back-office auth plane (issue #1785, Phase 2). Completely

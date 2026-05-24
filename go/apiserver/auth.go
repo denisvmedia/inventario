@@ -22,6 +22,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
+	"github.com/denisvmedia/inventario/services/oauth"
 )
 
 const (
@@ -840,6 +841,14 @@ type AuthParams struct {
 	EmailService             services.EmailService
 	MFAService               *services.MFAService
 	JWTSecret                []byte
+	// OAuth wires the third-party sign-in sub-router (#1394). All three
+	// fields must be set together; leaving them all nil leaves the
+	// /auth/oauth/* routes unmounted. OAuthIdentityRegistry is the
+	// service-mode registry used by the callback because that path runs
+	// before any user session is established.
+	OAuthRegistry         *oauth.Registry
+	OAuthStateSigner      *oauth.StateSigner
+	OAuthIdentityRegistry registry.OAuthIdentityRegistry
 }
 
 // Auth sets up the authentication API routes.
@@ -880,6 +889,22 @@ func Auth(params AuthParams) func(r chi.Router) {
 		r.With(requireAuth).Post("/mfa/verify", api.handleMFAVerify)
 		r.With(requireAuth).Post("/mfa/disable", api.handleMFADisable)
 		r.With(requireAuth).Post("/mfa/regenerate-backup-codes", api.handleMFARegenerateBackupCodes)
+
+		// OAuth sub-router (#1394). Mounted unconditionally so the
+		// /auth/oauth/providers endpoint is always probe-able by the FE
+		// and so the swagger route-coverage test sees every documented
+		// path. When the deployment lacks an OAuthStateSigner or
+		// OAuthIdentityRegistry the sub-router falls back to a
+		// transient in-process signer and a nil identity store; the
+		// providers list will be empty and any start/callback hit will
+		// 404 cleanly via the registry lookup.
+		r.Route("/oauth", OAuth(OAuthParams{
+			Auth:          api,
+			Registry:      params.OAuthRegistry,
+			State:         params.OAuthStateSigner,
+			IdentityStore: params.OAuthIdentityRegistry,
+			UserRegistry:  params.UserRegistry,
+		}, requireAuth))
 	}
 }
 
@@ -1034,20 +1059,32 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if req.CurrentPassword == "" || req.NewPassword == "" {
-		http.Error(w, "Current and new passwords are required", http.StatusBadRequest)
+	if req.NewPassword == "" {
+		http.Error(w, "New password is required", http.StatusBadRequest)
 		return
 	}
 
-	// Verify the current password before allowing the change.
-	// A wrong current password is a validation error, not an authentication failure —
-	// the user IS authenticated; they simply provided incorrect input.
-	if !user.CheckPassword(req.CurrentPassword) {
-		slog.Warn("Password change failed: incorrect current password", "user_id", user.ID, "email", user.Email)
-		errMsg := "incorrect current password"
-		api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
-		http.Error(w, "Current password is incorrect", http.StatusUnprocessableEntity)
-		return
+	// OAuth-only users have an empty PasswordHash (issue #1394) and need
+	// a way to set their first password without having to satisfy a
+	// "current password" check they can't pass. Skip the current-
+	// password verification when the user has no password on file yet;
+	// the access token they're authenticated with is itself the proof
+	// of identity for the first-time set.
+	if user.PasswordHash != "" {
+		if req.CurrentPassword == "" {
+			http.Error(w, "Current and new passwords are required", http.StatusBadRequest)
+			return
+		}
+		// Verify the current password before allowing the change.
+		// A wrong current password is a validation error, not an authentication failure —
+		// the user IS authenticated; they simply provided incorrect input.
+		if !user.CheckPassword(req.CurrentPassword) {
+			slog.Warn("Password change failed: incorrect current password", "user_id", user.ID, "email", user.Email)
+			errMsg := "incorrect current password"
+			api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
+			http.Error(w, "Current password is incorrect", http.StatusUnprocessableEntity)
+			return
+		}
 	}
 
 	// Validate the new password meets complexity requirements.
