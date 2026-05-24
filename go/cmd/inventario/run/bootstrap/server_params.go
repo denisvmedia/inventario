@@ -28,6 +28,30 @@ type serverSetup struct {
 	closeReadinessRedisPinger func()
 }
 
+// applyCORSConfig parses the configured allowed-origins list and falls
+// back to dev defaults when running against the memory backend with no
+// origins configured. Extracted from buildServerParams to keep the
+// parent function's cyclomatic complexity inside the linter budget.
+func applyCORSConfig(cfg *Config, dsn string, params *apiserver.Params) error {
+	params.CORSConfig = apiserver.DefaultCORSConfig()
+	origins, err := apiserver.ParseAllowedOrigins(cfg.AllowedOrigins)
+	if err != nil {
+		slog.Error("Failed to parse allowed CORS origins", "error", err)
+		return err
+	}
+	params.CORSConfig.AllowedOrigins = origins
+	if len(origins) > 0 {
+		return nil
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(dsn)), "memory://") {
+		params.CORSConfig.AllowedOrigins = apiserver.DefaultDevAllowedOrigins()
+		slog.Warn("No CORS origins explicitly configured; using local development defaults in memory-db mode. Set --allowed-origins for custom values.")
+		return nil
+	}
+	slog.Warn("No CORS origins explicitly configured; cross-origin requests are denied. Set --allowed-origins to allow specific origins.")
+	return nil
+}
+
 // buildServerParams constructs apiserver.Params from cfg + the resolved registry
 // factorySet. On any failure it releases the Redis readiness clients it
 // allocated locally so the caller never observes a partial state. On success
@@ -136,20 +160,8 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		}
 	}()
 
-	// Parse allowed origins (comma-separated) with fail-closed default.
-	params.CORSConfig = apiserver.DefaultCORSConfig()
-	params.CORSConfig.AllowedOrigins, err = apiserver.ParseAllowedOrigins(cfg.AllowedOrigins)
-	if err != nil {
-		slog.Error("Failed to parse allowed CORS origins", "error", err)
+	if err = applyCORSConfig(cfg, dsn, &params); err != nil {
 		return serverSetup{}, err
-	}
-	if len(params.CORSConfig.AllowedOrigins) == 0 {
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(dsn)), "memory://") {
-			params.CORSConfig.AllowedOrigins = apiserver.DefaultDevAllowedOrigins()
-			slog.Warn("No CORS origins explicitly configured; using local development defaults in memory-db mode. Set --allowed-origins for custom values.")
-		} else {
-			slog.Warn("No CORS origins explicitly configured; cross-origin requests are denied. Set --allowed-origins to allow specific origins.")
-		}
 	}
 
 	params.PublicURL = strings.TrimSpace(cfg.PublicURL)
@@ -169,6 +181,11 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 
 	if err = wireCommodityScan(cfg, &params); err != nil {
 		slog.Error("Failed to wire commodity scan service", "error", err)
+		return serverSetup{}, err
+	}
+
+	if err = wireOAuth(cfg, &params); err != nil {
+		slog.Error("Failed to wire OAuth providers", "error", err)
 		return serverSetup{}, err
 	}
 

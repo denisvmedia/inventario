@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom"
-import { ArrowRight, Mail } from "lucide-react"
+import { ArrowRight, Link2, Mail } from "lucide-react"
 
 import { AuthLayout } from "@/components/auth/AuthLayout"
 import { MFAChallenge } from "@/components/auth/MFAChallenge"
@@ -53,6 +53,30 @@ export function LoginPage() {
 
   const reason = params.get("reason")
   const sessionMessage = reason ? t(SESSION_REASON_KEY[reason] ?? "auth:session.ended") : null
+
+  // OAuth link-required banner (#1394). BE 302s here with
+  // `?oauth_link_required=1&email=…&provider=…` when the provider's profile
+  // matched a local user whose email is NOT verified at the provider — we
+  // refuse to auto-link and instead prompt the user to sign in with their
+  // password so they can link the provider from Settings → Connected
+  // Accounts. The banner stays visible across edits (it's a state of the
+  // page, not a stale server error).
+  const oauthLinkRequired = params.get("oauth_link_required") === "1"
+  const oauthLinkEmail = params.get("email") ?? ""
+  const oauthLinkProvider = params.get("provider") ?? ""
+  // OAuth error banner (#1394). The BE can append `?oauth_error=state` for a
+  // signed-state mismatch (CSRF / replay) or `?oauth_error=provider` for an
+  // exchange / network failure. Both surfaces stay separate from
+  // `oauth_link_required` because they need a destructive Alert variant.
+  const oauthErrorCode = params.get("oauth_error")
+  const oauthErrorMessage = (() => {
+    if (oauthErrorCode === "state") return t("auth:oauth.errorState")
+    if (oauthErrorCode === "provider")
+      return t("auth:oauth.errorProvider", {
+        provider: oauthLinkProvider || t("auth:oauth.providerFallback"),
+      })
+    return null
+  })()
 
   // Reset the server error whenever the user edits a field, so a stale
   // notice doesn't sit on top of valid input.
@@ -150,6 +174,24 @@ export function LoginPage() {
         {sessionMessage ? (
           <Alert className="session-message" data-testid="session-message">
             <AlertDescription>{sessionMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {oauthLinkRequired ? (
+          <Alert data-testid="oauth-link-required-banner">
+            <Link2 aria-hidden="true" />
+            <AlertDescription>
+              {t("auth:oauth.linkRequired", {
+                provider: oauthLinkProvider || t("auth:oauth.providerFallback"),
+                email: oauthLinkEmail || t("auth:oauth.emailFallback"),
+              })}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {oauthErrorMessage ? (
+          <Alert variant="destructive" data-testid="oauth-error-banner">
+            <AlertDescription>{oauthErrorMessage}</AlertDescription>
           </Alert>
         ) : null}
 

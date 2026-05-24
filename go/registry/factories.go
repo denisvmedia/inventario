@@ -196,6 +196,11 @@ type FactorySet struct {
 	// no tenant_id. The Phase 4 login handler reads it to decide whether
 	// to issue a MFA challenge; the operator CLI mints / wipes rows.
 	BackofficeUserMFASecretRegistry BackofficeUserMFASecretRegistry
+
+	// OAuthIdentityRegistry persists the link between Inventario users and
+	// external OAuth provider accounts (#1394). Service-mode only — the
+	// OAuth callback resolves identities before any user session exists.
+	OAuthIdentityRegistry OAuthIdentityRegistry
 }
 
 // Ping checks readiness of the backing registry dependency (e.g. database).
@@ -337,6 +342,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		CurrencyMigrationRegistry:      currencyMigrationRegistry,
 		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
 		SystemAdminGrantRegistry:       fs.SystemAdminGrantRegistry,
+		OAuthIdentityRegistry:          fs.OAuthIdentityRegistry,
 	}, nil
 }
 
@@ -380,5 +386,6 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		CurrencyMigrationRegistry:      fs.CurrencyMigrationRegistryFactory.CreateServiceRegistry(),
 		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
 		SystemAdminGrantRegistry:       fs.SystemAdminGrantRegistry,
+		OAuthIdentityRegistry:          fs.OAuthIdentityRegistry,
 	}
 }

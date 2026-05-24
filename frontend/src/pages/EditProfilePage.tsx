@@ -8,12 +8,18 @@ import { ArrowLeft, ArrowRight, CheckCircle2, Lock, Mail, User } from "lucide-re
 import { ComingSoonBanner } from "@/components/coming-soon"
 import { PasswordInput } from "@/components/auth/PasswordInput"
 import { PasswordStrengthMeter } from "@/components/auth/PasswordStrengthMeter"
+import { SetPasswordForm } from "@/components/auth/SetPasswordForm"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/features/auth/AuthContext"
-import { useChangePassword, useLogout, useUpdateProfile } from "@/features/auth/hooks"
+import {
+  useChangePassword,
+  useHasPassword,
+  useLogout,
+  useUpdateProfile,
+} from "@/features/auth/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useGroups } from "@/features/group/hooks"
 import { withGroupQuery } from "@/lib/group-aware-url"
@@ -41,6 +47,11 @@ export function EditProfilePage() {
   const updateMutation = useUpdateProfile()
   const changePasswordMutation = useChangePassword()
   const logoutMutation = useLogout()
+  // #1394: OAuth-only users (provisioned with empty password_hash) see
+  // the Set-Password form instead of the regular Change Password card.
+  // Defaults to true while the BE wire field is absent, so existing users
+  // never see the wrong shape.
+  const hasPassword = useHasPassword()
 
   const [profileError, setProfileError] = useState<string | null>(null)
   const [profileSaved, setProfileSaved] = useState(false)
@@ -297,18 +308,27 @@ export function EditProfilePage() {
           </div>
         </form>
 
-        <button
-          type="button"
-          onClick={() => setPasswordOpen((prev) => !prev)}
-          aria-expanded={passwordOpen}
-          data-testid="password-toggle"
-          className="password-toggle inline-flex w-fit items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary"
-        >
-          <Lock className="size-4" aria-hidden="true" />
-          {passwordOpen ? t("settings:profile.password.hide") : t("settings:profile.password.show")}
-        </button>
+        {hasPassword ? (
+          <button
+            type="button"
+            onClick={() => setPasswordOpen((prev) => !prev)}
+            aria-expanded={passwordOpen}
+            data-testid="password-toggle"
+            className="password-toggle inline-flex w-fit items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary"
+          >
+            <Lock className="size-4" aria-hidden="true" />
+            {passwordOpen
+              ? t("settings:profile.password.hide")
+              : t("settings:profile.password.show")}
+          </button>
+        ) : (
+          // OAuth-only users see the Set-Password form directly — no
+          // toggle, because there's no "current password" path that
+          // would compete with it. #1394.
+          <SetPasswordForm />
+        )}
 
-        {passwordOpen ? (
+        {hasPassword && passwordOpen ? (
           <form
             className="password-form space-y-4 rounded-xl border border-border bg-card p-5"
             onSubmit={passwordForm.handleSubmit(onPasswordSubmit)}

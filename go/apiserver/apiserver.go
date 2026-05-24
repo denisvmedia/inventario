@@ -2,10 +2,12 @@ package apiserver
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +33,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
+	"github.com/denisvmedia/inventario/services/oauth"
 )
 
 // RestoreStatusQuerier reports the aggregate status of restore operations
@@ -220,6 +223,16 @@ type Params struct {
 	// commodity_scan.photo_too_large before the entire part is read
 	// into memory.
 	CommodityScanMaxPhotoBytes int
+
+	// OAuthRegistry holds the third-party sign-in providers enabled in
+	// this deployment (#1394). Empty means OAuth is unconfigured — the
+	// /auth/oauth/providers endpoint surfaces an empty list and start /
+	// callback paths return 404. OAuthStateSigner is the HMAC signer for
+	// the per-request state tokens; required whenever any OAuth route
+	// is mounted (so the apiserver builds a signer with a random fallback
+	// key even when no provider is configured).
+	OAuthRegistry    *oauth.Registry
+	OAuthStateSigner *oauth.StateSigner
 }
 
 func (p *Params) Validate() error {
@@ -246,7 +259,45 @@ func (p *Params) Validate() error {
 		validation.Field(&p.ImpersonationTTL, validation.Min(time.Duration(0))),
 	)
 
-	return validation.ValidateStruct(p, fields...)
+	if err := validation.ValidateStruct(p, fields...); err != nil {
+		return err
+	}
+
+	// OAuth dependency set must be all-present or all-absent (#1394).
+	// The /auth/oauth/* sub-router silently 404s on missing providers,
+	// which is the correct shape when OAuth is disabled — but a caller
+	// passing one or two of the three pieces gets the same silent 404
+	// instead of a loud bootstrap failure that tells them which piece
+	// is missing. Enforce the all-or-none invariant here so the
+	// misconfiguration surfaces at bootstrap.
+	hasRegistry := p.OAuthRegistry != nil
+	hasSigner := p.OAuthStateSigner != nil
+	hasIdentities := p.FactorySet != nil && p.FactorySet.OAuthIdentityRegistry != nil
+	provided := 0
+	if hasRegistry {
+		provided++
+	}
+	if hasSigner {
+		provided++
+	}
+	if hasIdentities {
+		provided++
+	}
+	if provided != 0 && provided != 3 {
+		missing := make([]string, 0, 3)
+		if !hasRegistry {
+			missing = append(missing, "OAuthRegistry")
+		}
+		if !hasSigner {
+			missing = append(missing, "OAuthStateSigner")
+		}
+		if !hasIdentities {
+			missing = append(missing, "FactorySet.OAuthIdentityRegistry")
+		}
+		return fmt.Errorf("oauth: dependency set is partially configured — missing: %s (must be all-present or all-absent)", strings.Join(missing, ", "))
+	}
+
+	return nil
 }
 
 func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
@@ -374,6 +425,9 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			JWTSecret:                params.JWTSecret,
 			EmailService:             emailSvc,
 			MFAService:               mfaSvc,
+			OAuthRegistry:            params.OAuthRegistry,
+			OAuthStateSigner:         params.OAuthStateSigner,
+			OAuthIdentityRegistry:    params.FactorySet.OAuthIdentityRegistry,
 		}))
 
 		// Back-office auth plane (issue #1785, Phase 2). Completely

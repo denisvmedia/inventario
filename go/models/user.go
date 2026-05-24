@@ -125,6 +125,22 @@ type User struct {
 	// gains nothing — Go authorization paths never read the field; they
 	// all consult the grant registry directly.
 	IsSystemAdmin bool `json:"is_system_admin" db:"-" userinput:"false"`
+
+	// HasPassword is a transient wire-only field reflecting whether the
+	// user has a non-empty password_hash. OAuth-only accounts (#1394)
+	// have an empty hash until they explicitly set one from the FE; the
+	// FE branches on this to render "Set a password" instead of "Change
+	// password". Same posture as IsSystemAdmin — no migrator annotation,
+	// `db:"-"` so sqlx skips it. Populated by handlers that emit a
+	// /auth/me-style payload before encoding.
+	HasPassword bool `json:"has_password" db:"-" userinput:"false"`
+}
+
+// HasPasswordSet reports whether the user has a non-empty password hash.
+// OAuth-only accounts (#1394) start with an empty hash; callers stamping
+// the wire-only HasPassword flag use this to compute the value.
+func (u *User) HasPasswordSet() bool {
+	return u.PasswordHash != ""
 }
 
 // PostgreSQL-specific indexes for users
