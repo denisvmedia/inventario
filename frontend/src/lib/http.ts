@@ -247,6 +247,29 @@ async function parseBody(response: Response): Promise<unknown> {
   return await response.text()
 }
 
+// hasTypedProductError checks the response body for a JSON:API errors[]
+// entry carrying a typed feature-namespaced code
+// (e.g. `commodity_scan.provider_disabled`). Those are product-level
+// errors riding on 503 by BE convention (#1720), distinct from "the
+// whole API is down" — the feature handler maps them to an inline
+// banner, so the global 503 → /maintenance bounce in performRequest
+// must skip them.
+//
+// A code is considered "typed" when it contains a dot — every typed BE
+// error code is `<feature>.<reason>`. Untyped server errors (plain
+// "internal server error" string bodies, JSON:API "Service Unavailable"
+// titles) keep the maintenance bounce.
+function hasTypedProductError(body: unknown): boolean {
+  if (body === null || typeof body !== "object") return false
+  const errors = (body as { errors?: unknown }).errors
+  if (!Array.isArray(errors)) return false
+  return errors.some((e) => {
+    if (e === null || typeof e !== "object") return false
+    const code = (e as { code?: unknown }).code
+    return typeof code === "string" && code.includes(".")
+  })
+}
+
 async function refreshAccessToken(): Promise<string> {
   if (refreshInFlight) return refreshInFlight
   refreshInFlight = (async () => {
@@ -498,6 +521,19 @@ async function handle401(
     return recoverFromImpersonationExpiry(url)
   }
   const backoffice = isBackofficePath(originalPath)
+  // Capture whether the plane that just 401'd actually had a session BEFORE
+  // attempting refresh — the refresh failure path below clears the tokens,
+  // so checking after would always be false.
+  //
+  // The bounce to the plane's login screen is only correct when there *was*
+  // a session that expired. A tenant-only user touching a back-office-gated
+  // path (e.g. `<ImpersonationProvider>` in the tenant Shell probing
+  // /admin/impersonation/current after #1838 hardened /admin/* on the
+  // back-office plane) has no back-office tokens at all — bouncing them to
+  // /backoffice/login on every page render is a regression. Let those
+  // callers' onError handle the 401 quietly instead.
+  const hadBackofficeSession = !!getBackofficeAccessToken()
+  const hadTenantSession = !!getAccessToken()
   try {
     if (backoffice) {
       await refreshBackofficeAccessToken()
@@ -507,12 +543,12 @@ async function handle401(
   } catch (refreshErr) {
     if (backoffice) {
       clearBackofficeAuth()
-      if (shouldRedirectFromCurrentPath()) {
+      if (hadBackofficeSession && shouldRedirectFromCurrentPath()) {
         navigateToLogin(currentReturnTo(), "session_expired", "backoffice")
       }
     } else {
       clearAuth()
-      if (shouldRedirectFromCurrentPath()) {
+      if (hadTenantSession && shouldRedirectFromCurrentPath()) {
         navigateToLogin(currentReturnTo(), "session_expired")
       }
     }
@@ -570,20 +606,32 @@ async function performRequest<T = unknown>(
   if (response.status === 401) {
     return (await handle401(url, path, init, response)) as HttpResponse<T>
   }
+  const data = (await parseBody(response)) as T
   if (response.status === 503) {
     // BE convention (#1542): a 503 means the API is in scheduled maintenance
     // or otherwise unreachable. Bounce the user to /maintenance with the
     // Retry-After + X-Maintenance-Status headers carried as URL params so a
     // refresh keeps showing the page. The actual HttpError still propagates
     // so any onError that wanted to react (e.g. revalidation queries) can.
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/maintenance")) {
+    //
+    // Exception (#1720 / #1835): some endpoints use 503 to carry a typed
+    // product-level error (e.g. `commodity_scan.provider_disabled` when the
+    // AI vision provider is intentionally turned off — a per-feature error,
+    // not an infra outage). Those responses carry a JSON:API errors[].code
+    // that the feature handler already maps to an inline banner; bouncing
+    // the whole shell to /maintenance hides that banner. Skip the global
+    // bounce when the response body looks like a typed product error.
+    if (
+      typeof window !== "undefined" &&
+      !window.location.pathname.startsWith("/maintenance") &&
+      !hasTypedProductError(data)
+    ) {
       navigateToMaintenance({
         retryAfter: response.headers.get("Retry-After"),
         componentStatus: response.headers.get("X-Maintenance-Status"),
       })
     }
   }
-  const data = (await parseBody(response)) as T
   if (!response.ok) {
     throw new HttpError(
       `Request to ${url} failed with ${response.status}`,

@@ -79,9 +79,15 @@ export const BLOCK_TARGET_TEST_CREDENTIALS = {
  */
 export async function isLoginPage(page: Page): Promise<boolean> {
   try {
-    // Check URL first
-    const currentUrl = page.url();
-    if (currentUrl.includes('/login')) {
+    // Match the tenant /login route exactly. Substring matching used to be
+    // enough, but #1844 added a sibling /backoffice/login surface — also
+    // containing the literal "/login" — for the platform-operator plane,
+    // and falsely treating that as the tenant login bounces the helper into
+    // filling the back-office form (whose POST goes to
+    // /api/v1/backoffice/auth/login, not /api/v1/auth/login, so the
+    // waitForResponse predicate in login() times out).
+    const pathname = new URL(page.url()).pathname;
+    if (pathname === '/login' || pathname.startsWith('/login/')) {
       return true;
     }
 
@@ -138,8 +144,11 @@ export async function login(
 ): Promise<string | null> {
   log(recorder, `🔐 Performing login as ${credentials.email}...`);
 
-  // Wait for login form to be visible
-  await page.waitForSelector('input[type="email"]', { timeout: 10000 });
+  // Wait for login form to be visible. Generous timeout because the
+  // login route lazy-loads under heavy parallel load — when many
+  // workers hit the same vite dev server simultaneously the bundle
+  // fetch + initial render can take 15-20s on a busy laptop.
+  await page.waitForSelector('input[type="email"]', { timeout: 30000 });
 
   // Fill in credentials
   await page.fill('input[type="email"]', credentials.email);
@@ -202,10 +211,15 @@ export async function login(
     await recoverFromNoGroupRace(page, recorder);
   }
 
-  // If we're still on login page but the page has rendered, manually
-  // navigate to home (defensive — should not happen given the
+  // If we're still on the tenant login page but the page has rendered,
+  // manually navigate to home (defensive — should not happen given the
   // waitForFunction above, but keeps parity with prior behaviour).
-  if (page.url().includes('/login')) {
+  // Exact-path match so the sibling /backoffice/login surface (#1844)
+  // doesn't trip this branch — landing on /backoffice/login means an
+  // unrelated back-office redirect won the race; goto('/') would just
+  // bounce right back via RootRedirect → guard chain, so let the caller
+  // deal with that state instead of hiding it.
+  if (new URL(page.url()).pathname === '/login') {
     log(recorder, '🔄 Still on /login after auth completed, navigating home...');
     await page.goto('/');
   }

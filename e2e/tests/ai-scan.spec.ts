@@ -18,16 +18,7 @@ import { test } from '../fixtures/app-fixture.js';
 import { expect } from '@playwright/test';
 import { createLocation, deleteLocation } from './includes/locations.js';
 import { createArea, deleteArea } from './includes/areas.js';
-import { navigateTo, TO_LOCATIONS } from './includes/navigate.js';
-
-// PRE-EXISTING MASTER REGRESSION — the spec landed in PR #1835 without
-// picking up the (page, recorder, ...) contract that createLocation /
-// createArea / navigateTo grew in PR #1666. Wiring `recorder` through
-// is mechanical, but the post-create navigation to /commodities (where
-// `commodities-add-button` lives) also drifted somewhere between #1531
-// (area detail page redesign) and now and needs reworking. Masked on
-// master by the fast-fail gate until PR #1849 fixed it. Skipped here
-// as scope-control for #1849; tracked as a follow-up to #1720/#1835.
+import { navigateTo, TO_COMMODITIES, TO_LOCATIONS } from './includes/navigate.js';
 
 function makeTestData() {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -42,7 +33,15 @@ function makeTestData() {
 // helper); use a wildcard glob.
 const SCAN_URL_GLOB = '**/api/v1/g/*/commodities/scan';
 
-test.describe.skip('AI vision scan flow [BLOCKED: helper-signature + nav drift, follow-up to #1720]', () => {
+// The two specs in this describe block share the admin@test-org.com
+// fixture (login, default group, etc.). Running them in parallel
+// against the same backend lets ensureAuthenticated / login race —
+// the second test's session-establish step can race the first test's
+// in-flight CSRF rotation and bounce to a guarded route before the
+// login form renders, producing a "input[type='email'] not visible"
+// timeout. `serial` opts both into the same worker; cleanup of the
+// first runs before the setup of the second.
+test.describe.serial('AI vision scan flow', () => {
   test('happy path: scan → review → use values prefills Basics', async ({ page, recorder }) => {
     const { location, area } = makeTestData();
     await navigateTo(page, recorder, TO_LOCATIONS);
@@ -70,6 +69,13 @@ test.describe.skip('AI vision scan flow [BLOCKED: helper-signature + nav drift, 
         }),
       })
     );
+
+    // Navigate to the commodities list so `commodities-add-button` is
+    // in the DOM. createArea lands on the area-detail page, which has
+    // its own "Add commodity" testid but not the top-level one this
+    // spec targets — without this step the click below waits 30s and
+    // the whole test times out.
+    await navigateTo(page, recorder, TO_COMMODITIES);
 
     // Open the Add item dialog from the commodities list.
     await page.locator('[data-testid="commodities-add-button"]').first().click();
@@ -103,7 +109,11 @@ test.describe.skip('AI vision scan flow [BLOCKED: helper-signature + nav drift, 
     await page.locator('[data-testid="commodity-form-ai-use-values"]').click();
     await expect(page.locator('input#commodity-name')).toHaveValue('Stub Item');
 
-    // Cleanup.
+    // Cleanup. deleteArea looks up the area tile on the location-detail
+    // page, but we're currently on /commodities (the Add Item dialog
+    // routed us here via use-values). Navigate back to /locations first
+    // — the helper drills into the parent location card from there.
+    await navigateTo(page, recorder, TO_LOCATIONS);
     await deleteArea(page, recorder, area.name, location.name);
     await deleteLocation(page, recorder, location.name);
   });
@@ -135,6 +145,11 @@ test.describe.skip('AI vision scan flow [BLOCKED: helper-signature + nav drift, 
       })
     );
 
+    // Same /commodities navigation as the happy-path test —
+    // `commodities-add-button` lives on the commodities list page,
+    // not on the area-detail page createArea lands on.
+    await navigateTo(page, recorder, TO_COMMODITIES);
+
     await page.locator('[data-testid="commodities-add-button"]').first().click();
     await page.locator('[data-testid="commodity-form-ai-step"]').waitFor();
 
@@ -153,9 +168,12 @@ test.describe.skip('AI vision scan flow [BLOCKED: helper-signature + nav drift, 
     await page.locator('[data-testid="commodity-form-ai-fill-manually"]').click();
     await expect(page.locator('input#commodity-name')).toBeVisible();
 
-    // Cleanup.
-    await page.keyboard.press('Escape');
-    await page.locator('[data-testid="commodity-form-close-confirm-discard"]').click();
+    // Cleanup. After Fill-manually the dialog sits on the empty Basics
+    // step — Escape would only fire the discard-confirm dialog if the
+    // user had typed something, which we haven't. Navigating away does
+    // the same job (route change unmounts the dialog) and lands us on
+    // /locations where deleteArea expects to be.
+    await navigateTo(page, recorder, TO_LOCATIONS);
     await deleteArea(page, recorder, area.name, location.name);
     await deleteLocation(page, recorder, location.name);
   });
