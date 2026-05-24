@@ -1074,7 +1074,18 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	// password verification when the user has no password on file yet;
 	// the access token they're authenticated with is itself the proof
 	// of identity for the first-time set.
-	if user.PasswordHash != "" {
+	//
+	// SEC-L1 (#1394): when the branch fires the audit verb shifts from
+	// "password_change" to "password_set_initial" so an audit reader can
+	// distinguish "user rotated their password" from "OAuth-only user
+	// established a password for the first time" without reconstructing
+	// the user's pre-change state.
+	initialSet := user.PasswordHash == ""
+	auditAction := "password_change"
+	if initialSet {
+		auditAction = "password_set_initial"
+	}
+	if !initialSet {
 		if req.CurrentPassword == "" {
 			http.Error(w, "Current and new passwords are required", http.StatusBadRequest)
 			return
@@ -1085,7 +1096,7 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 		if !user.CheckPassword(req.CurrentPassword) {
 			slog.Warn("Password change failed: incorrect current password", "user_id", user.ID, "email", user.Email)
 			errMsg := "incorrect current password"
-			api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
+			api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, false, r, &errMsg)
 			http.Error(w, "Current password is incorrect", http.StatusUnprocessableEntity)
 			return
 		}
@@ -1094,7 +1105,7 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	// Validate the new password meets complexity requirements.
 	if err := models.ValidatePassword(req.NewPassword); err != nil {
 		errMsg := "new password does not meet complexity requirements"
-		api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
+		api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1103,14 +1114,14 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	if err := user.SetPassword(req.NewPassword); err != nil {
 		slog.Error("Failed to hash new password", "user_id", user.ID, "error", err)
 		errMsg := "failed to hash new password"
-		api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
+		api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, "Failed to process new password", http.StatusInternalServerError)
 		return
 	}
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
 		slog.Error("Failed to update user password", "user_id", user.ID, "error", err)
 		errMsg := "failed to update user password"
-		api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, false, r, &errMsg)
+		api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
 		return
 	}
@@ -1132,8 +1143,8 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	slog.Info("Password changed successfully", "user_id", user.ID, "email", user.Email)
-	api.logAuth(r.Context(), "password_change", &user.ID, &user.TenantID, true, r, nil)
+	slog.Info("Password changed successfully", "user_id", user.ID, "email", user.Email, "initial", initialSet)
+	api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, true, r, nil)
 	api.sendPasswordChangedNotification(user)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1142,6 +1153,27 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	}); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+// userMFAEnabled reports whether user has a fully-enrolled TOTP row in
+// user_mfa_secrets. Returns (false, nil) when the MFA registry is not
+// configured for this deployment or no row exists. Lookup errors are
+// surfaced — fail-closed: the OAuth callback (#1394) and any future
+// caller MUST treat a lookup error as "do not mint a session" so a
+// transient registry blip cannot silently bypass MFA for an enrolled
+// user.
+func (api *AuthAPI) userMFAEnabled(ctx context.Context, user *models.User) (bool, error) {
+	if api.mfaRegistry == nil {
+		return false, nil
+	}
+	mfaRow, err := api.mfaRegistry.GetByUser(ctx, user.TenantID, user.ID)
+	if errors.Is(err, registry.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return mfaRow.IsEnabled(), nil
 }
 
 // maybeIssueMFAChallenge is the MFA gate that runs after a successful
@@ -1216,15 +1248,26 @@ func (api *AuthAPI) logAuth(ctx context.Context, action string, userID, tenantID
 	})
 }
 
-// recordLoginEvent persists a single login_events row (issue #1379). It is
-// no-op when the registry is not configured (tests + memory-mode bootstrap
-// can still skip it without panics) and best-effort otherwise: a failure
-// to write the audit row is logged but does not change the auth outcome.
+// recordLoginEvent persists a single login_events row (issue #1379) using
+// LoginMethodPassword. Thin wrapper around recordLoginEventWithMethod for
+// the original password-flow callers; the OAuth callback (#1394) uses the
+// method-aware variant directly so its rows land with the right
+// oauth_<provider> label.
+func (api *AuthAPI) recordLoginEvent(ctx context.Context, tenantID, email string, userID *string, outcome models.LoginOutcome, r *http.Request) {
+	api.recordLoginEventWithMethod(ctx, tenantID, email, userID, outcome, models.LoginMethodPassword, r)
+}
+
+// recordLoginEventWithMethod is the method-aware version of recordLoginEvent.
+// Behaviour is identical except the caller picks the LoginMethod stamped on
+// the row. It is no-op when the registry is not configured (tests +
+// memory-mode bootstrap can still skip it without panics) and best-effort
+// otherwise: a failure to write the audit row is logged but does not change
+// the auth outcome.
 //
 // userID is a pointer because unknown-email failures resolve to NULL —
 // we record the attempt against the email the client typed but cannot
 // link it to a row in users.
-func (api *AuthAPI) recordLoginEvent(ctx context.Context, tenantID, email string, userID *string, outcome models.LoginOutcome, r *http.Request) {
+func (api *AuthAPI) recordLoginEventWithMethod(ctx context.Context, tenantID, email string, userID *string, outcome models.LoginOutcome, method models.LoginMethod, r *http.Request) {
 	if api.loginEventRegistry == nil {
 		return
 	}
@@ -1240,7 +1283,7 @@ func (api *AuthAPI) recordLoginEvent(ctx context.Context, tenantID, email string
 		UserID:              userID,
 		Email:               email,
 		Outcome:             outcome,
-		Method:              models.LoginMethodPassword,
+		Method:              method,
 		IPAddress:           clientIPTruncated(r),
 		UserAgent:           r.UserAgent(),
 	}

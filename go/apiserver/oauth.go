@@ -2,10 +2,10 @@ package apiserver
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -108,6 +108,18 @@ type OAuthParams struct {
 // `/{p}/callback`) run without RequireAuth — by definition the caller has
 // no session yet. The link/unlink endpoints are wrapped with requireAuth
 // at registration time.
+//
+// CSRF design note (SEC-L2): the link-start endpoint is a GET that 302s
+// to the provider's authorization endpoint. A CSRF token requirement here
+// would break the redirect flow — browsers don't carry a custom CSRF
+// header through a top-level navigation, and signed-state + cookie-bound
+// nonce already protect the inbound /callback. The window an attacker has
+// to forge "click this link to start an OAuth link to MY provider account"
+// is narrowed by (a) the access token still being required to start the
+// link flow, (b) the cookie-bound state check on the callback rejecting
+// any state not minted in the same browser, and (c) the operator-side
+// allow-list of redirect prefixes preventing the attacker from
+// exfiltrating the resulting session.
 func OAuth(params OAuthParams, requireAuth func(http.Handler) http.Handler) func(r chi.Router) {
 	api := &OAuthAPI{
 		auth:          params.Auth,
@@ -340,6 +352,13 @@ func (api *OAuthAPI) completeSignInFlow(
 	providerName models.OAuthProvider, profile oauthsvc.Profile,
 	st oauthsvc.State, tenantID string, method models.LoginMethod,
 ) {
+	// Normalize the provider email up-front (REV-1). users.email is stored
+	// lowercase, GetByEmail does exact equality, and Google/GitHub return
+	// mixed-case (e.g. "User@Example.com"). Without this normalization an
+	// existing local "user@example.com" silently falls through to the
+	// new-user-provisioning branch, duplicating the row.
+	profile.Email = strings.ToLower(strings.TrimSpace(profile.Email))
+
 	existingIdentity, err := api.identityStore.GetByProviderSubject(r.Context(), providerName, profile.ProviderUserID)
 	if err != nil && !errors.Is(err, registry.ErrNotFound) {
 		slog.Error("OAuth callback: identity lookup failed", "provider", providerName, "error", err)
@@ -353,7 +372,7 @@ func (api *OAuthAPI) completeSignInFlow(
 			http.Error(w, "User account is not available", http.StatusForbidden)
 			return
 		}
-		api.completeOAuthLogin(w, r, user, tenantID, method, st.RedirectAfter)
+		api.completeOAuthLogin(w, r, user, providerName, tenantID, method, st.RedirectAfter)
 		return
 	}
 
@@ -366,13 +385,24 @@ func (api *OAuthAPI) completeSignInFlow(
 	}
 
 	if user != nil {
+		// SEC-2: refuse if the local user is deactivated — same outcome
+		// the password path emits at auth.go's IsActive check. Doing this
+		// before the EmailVerified branch keeps a disabled account from
+		// learning whether its email had been used at a given provider.
+		if !user.IsActive {
+			slog.Warn("OAuth callback: email-match auto-link refused for deactivated user",
+				"user_id", user.ID, "provider", providerName)
+			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeAccountDisabled, method, r)
+			http.Redirect(w, r, oauthErrorURL("account_disabled", st.RedirectAfter), http.StatusFound)
+			return
+		}
 		if !profile.EmailVerified {
 			// Unverified email at the provider AND a local user with
 			// that email exists → never auto-link. Tell the FE to
 			// prompt the user to sign in with their password and
 			// link from settings.
-			api.auth.recordLoginEvent(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeEmailNotVerified, r)
-			http.Redirect(w, r, oauthLinkRequiredURL(st.RedirectAfter, profile.Email), http.StatusFound)
+			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeEmailNotVerified, method, r)
+			http.Redirect(w, r, oauthLinkRequiredURL(st.RedirectAfter, profile.Email, providerName), http.StatusFound)
 			return
 		}
 		// Verified — auto-link.
@@ -381,7 +411,7 @@ func (api *OAuthAPI) completeSignInFlow(
 			http.Error(w, "OAuth link failed", http.StatusInternalServerError)
 			return
 		}
-		api.completeOAuthLogin(w, r, user, tenantID, method, st.RedirectAfter)
+		api.completeOAuthLogin(w, r, user, providerName, tenantID, method, st.RedirectAfter)
 		return
 	}
 
@@ -389,6 +419,13 @@ func (api *OAuthAPI) completeSignInFlow(
 	newUser, err := api.provisionUserFromProfile(r.Context(), tenantID, profile)
 	if err != nil {
 		slog.Error("OAuth callback: user provisioning failed", "email", profile.Email, "error", err)
+		// REV-6: if the provider sent us a profile that fails our own
+		// User validation (no email, invalid characters, …), don't echo
+		// the validator output to the wire — surface a generic banner.
+		if errors.Is(err, errProvisionUserInvalidProfile) {
+			http.Redirect(w, r, oauthErrorURL("invalid_profile", st.RedirectAfter), http.StatusFound)
+			return
+		}
 		http.Error(w, "OAuth account creation failed", http.StatusInternalServerError)
 		return
 	}
@@ -398,7 +435,7 @@ func (api *OAuthAPI) completeSignInFlow(
 		http.Error(w, "OAuth account creation failed", http.StatusInternalServerError)
 		return
 	}
-	api.completeOAuthLogin(w, r, newUser, tenantID, method, st.RedirectAfter)
+	api.completeOAuthLogin(w, r, newUser, providerName, tenantID, method, st.RedirectAfter)
 }
 
 // completeLinkFlow attaches the provider identity to the user who initiated
@@ -411,6 +448,11 @@ func (api *OAuthAPI) completeLinkFlow(
 	providerName models.OAuthProvider, profile oauthsvc.Profile,
 	st oauthsvc.State, tenantID string, method models.LoginMethod,
 ) {
+	// Normalize the provider email — same reason as completeSignInFlow
+	// (REV-1). The link path writes the email into user_oauth_identities;
+	// we don't want a row's email column to drift away from lowercase.
+	profile.Email = strings.ToLower(strings.TrimSpace(profile.Email))
+
 	user, err := api.userRegistry.Get(r.Context(), st.LinkUserID)
 	if err != nil || user == nil || !user.IsActive {
 		slog.Warn("OAuth link: user from state missing or inactive", "user_id", st.LinkUserID, "error", err)
@@ -435,8 +477,11 @@ func (api *OAuthAPI) completeLinkFlow(
 		return
 	}
 	if existingIdentity != nil && existingIdentity.UserID == user.ID {
-		// Idempotent re-link — just 302 back.
-		api.auth.recordLoginEvent(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeOK, r)
+		// Idempotent re-link — emit identity_linked so the audit reader
+		// doesn't count this as a fresh credential check (REV-8) and
+		// write a security-audit row (SEC-3) just like the create path.
+		api.auth.recordLoginEventWithMethod(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeIdentityLinked, method, r)
+		api.auth.logAuth(r.Context(), "oauth_link_added", &user.ID, &user.TenantID, true, r, nil)
 		http.Redirect(w, r, redirectOrDefault(st.RedirectAfter, "/settings"), http.StatusFound)
 		return
 	}
@@ -446,19 +491,56 @@ func (api *OAuthAPI) completeLinkFlow(
 		http.Error(w, "OAuth link failed", http.StatusInternalServerError)
 		return
 	}
-	api.auth.recordLoginEvent(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeOK, r)
+	// REV-8: distinct outcome so successful link events do not double-
+	// count as sign-ins in the audit history page.
+	api.auth.recordLoginEventWithMethod(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeIdentityLinked, method, r)
+	// SEC-3: mirror the audit pattern used elsewhere in auth.go for
+	// security-sensitive events so security ops can search a single
+	// stream for "OAuth provider attached to account".
+	api.auth.logAuth(r.Context(), "oauth_link_added", &user.ID, &user.TenantID, true, r, nil)
+	slog.Info("OAuth identity linked", "user_id", user.ID, "provider", providerName)
 	_ = method // method is informational here; the link path does not mint tokens.
 	http.Redirect(w, r, redirectOrDefault(st.RedirectAfter, "/settings"), http.StatusFound)
 }
 
 // completeOAuthLogin runs the same token-issue + cookie-write sequence as
 // AuthAPI.login, then 302s the user back to the FE app path the state
-// carried.
+// carried. MFA-enrolled users are NOT auto-signed-in: SEC-1 gates the
+// token-issue path on api.auth.userMFAEnabled and 302s to a separate
+// FE banner when the gate fires.
 func (api *OAuthAPI) completeOAuthLogin(
 	w http.ResponseWriter, r *http.Request,
-	user *models.User, tenantID string,
-	method models.LoginMethod, redirectAfter string,
+	user *models.User, providerName models.OAuthProvider,
+	tenantID string, method models.LoginMethod, redirectAfter string,
 ) {
+	// SEC-1: refuse to mint tokens when the user has TOTP enrolled.
+	// The password login path runs maybeIssueMFAChallenge between the
+	// password check and persistRefreshToken; the OAuth flow has to
+	// honour the same gate or a user with TOTP enabled could bypass
+	// the second factor by signing in via Google/GitHub. The OAuth
+	// callback is a browser 302 (not a JSON POST), so we don't mint an
+	// mfa_token here — the FE consumes mfa_token only on the JSON
+	// /auth/login step-1 path, and re-using it would require additional
+	// FE plumbing the v1 cut isn't ready for. Conservative behaviour:
+	// reject with a redirect to /login with a banner asking the user to
+	// sign in with email + password to complete MFA, after which they
+	// can use the OAuth provider freely (since the link is already
+	// recorded; no second pass is needed).
+	mfaEnabled, err := api.auth.userMFAEnabled(r.Context(), user)
+	if err != nil {
+		slog.Error("OAuth callback: MFA enrollment lookup failed", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to verify MFA state", http.StatusInternalServerError)
+		return
+	}
+	if mfaEnabled {
+		slog.Info("OAuth callback: MFA enrolled — refusing OAuth-only sign-in",
+			"user_id", user.ID, "provider", providerName)
+		api.auth.recordLoginEventWithMethod(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeMFARequired, method, r)
+		api.auth.logAuth(r.Context(), "oauth_login_mfa_required", &user.ID, &user.TenantID, true, r, nil)
+		http.Redirect(w, r, oauthMFARequiredURL(redirectAfter, user.Email, providerName), http.StatusFound)
+		return
+	}
+
 	rti, rawRefreshToken, err := api.auth.persistRefreshToken(r.Context(), r, user)
 	if err != nil {
 		slog.Error("OAuth callback: failed to persist refresh token", "user_id", user.ID, "error", err)
@@ -513,10 +595,23 @@ func (api *OAuthAPI) recordOAuthLoginEvent(r *http.Request, tenantID string, use
 	}
 }
 
+// errProvisionUserInvalidProfile is the sentinel returned by
+// provisionUserFromProfile when the provider sent us a profile that fails
+// our User model validation (REV-6). Callers translate it into a banner
+// rather than echoing the validator output to the wire, which could leak
+// our validation rules into a "fix your email" round-trip the user has
+// no control over.
+var errProvisionUserInvalidProfile = errors.New("oauth: provider profile failed user validation")
+
 // provisionUserFromProfile creates a brand-new user for an OAuth sign-up.
 // password_hash is left empty — the user has no password yet. They can
 // set one later via /auth/change-password (which has a branch for the
 // password_hash="" case).
+//
+// REV-6: the user struct runs ValidateWithContext BEFORE the create call so
+// a malformed provider profile (e.g. a Google email that somehow contained
+// invalid characters) gets caught here and surfaced as
+// errProvisionUserInvalidProfile, not as a generic 500 from the registry.
 func (api *OAuthAPI) provisionUserFromProfile(ctx context.Context, tenantID string, profile oauthsvc.Profile) (*models.User, error) {
 	displayName := strings.TrimSpace(profile.DisplayName)
 	if displayName == "" {
@@ -532,6 +627,12 @@ func (api *OAuthAPI) provisionUserFromProfile(ctx context.Context, tenantID stri
 		// IsActive=true because the provider already verified the email;
 		// we skip the in-app verification round-trip on OAuth sign-up.
 		IsActive: true,
+	}
+
+	if err := user.ValidateWithContext(ctx); err != nil {
+		slog.Warn("OAuth callback: provider profile failed user validation",
+			"email", user.Email, "error", err)
+		return nil, errProvisionUserInvalidProfile
 	}
 
 	created, err := api.userRegistry.Create(ctx, user)
@@ -617,7 +718,10 @@ func (api *OAuthAPI) handleUnlink(w http.ResponseWriter, r *http.Request) {
 	}
 	if api.identityStore == nil {
 		// Nothing to unlink — surface 204 to keep the unlink endpoint
-		// idempotent in a deployment that doesn't wire OAuth.
+		// idempotent in a deployment that doesn't wire OAuth. Audit
+		// the (no-op) attempt so security ops see the request shape
+		// in the same stream as the real removals (SEC-3).
+		api.auth.logAuth(r.Context(), "oauth_link_removed", &user.ID, &user.TenantID, true, r, nil)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -637,7 +741,11 @@ func (api *OAuthAPI) handleUnlink(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !hasThisProvider {
-		// Idempotent — nothing to do.
+		// Idempotent — nothing to do. Still audit so the read-trail is
+		// consistent with the "real removal" case (SEC-3): an attacker
+		// who somehow reached this endpoint while no link existed must
+		// leave the same fingerprint as a legitimate caller.
+		api.auth.logAuth(r.Context(), "oauth_link_removed", &user.ID, &user.TenantID, true, r, nil)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -651,6 +759,11 @@ func (api *OAuthAPI) handleUnlink(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to unlink identity", http.StatusInternalServerError)
 		return
 	}
+	// SEC-3: record the security-sensitive event in the same audit
+	// stream as oauth_link_added so a single query reads both sides of
+	// every OAuth identity's lifecycle.
+	api.auth.logAuth(r.Context(), "oauth_link_removed", &user.ID, &user.TenantID, true, r, nil)
+	slog.Info("OAuth identity unlinked", "user_id", user.ID, "provider", providerName)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -708,6 +821,13 @@ func clearOAuthStateCookie(w http.ResponseWriter, r *http.Request) {
 
 // loginMethodFor maps a provider name onto the LoginEvent.Method enum.
 // Centralized so the callback never branches on a string literal.
+//
+// REV-7: the default branch is LoginMethodOAuthOther rather than
+// LoginMethodPassword. This sentinel is unreachable in correct code (the
+// lookupProvider helper rejects unknown providers before we get here), but
+// returning "password" would silently mislabel any future hole as a
+// password sign-in in the audit history. "oauth_other" surfaces the bug
+// instead of hiding it.
 func loginMethodFor(p models.OAuthProvider) models.LoginMethod {
 	switch p {
 	case models.OAuthProviderGoogle:
@@ -715,7 +835,7 @@ func loginMethodFor(p models.OAuthProvider) models.LoginMethod {
 	case models.OAuthProviderGitHub:
 		return models.LoginMethodOAuthGitHub
 	}
-	return models.LoginMethodPassword
+	return models.LoginMethodOAuthOther
 }
 
 // sanitizeAllowedRedirect runs the raw FE redirect through both the
@@ -744,23 +864,79 @@ func redirectOrDefault(cleaned, defaultPath string) string {
 
 // oauthLinkRequiredURL builds the FE-facing redirect that prompts the
 // user to sign in with their password and link the provider from
-// settings afterwards. The email is included so the FE can prefill
-// the sign-in form — note that we did NOT auto-link, so revealing the
-// email is no worse than the existing user-enumeration surface (the
-// user already entered that email at the provider).
-func oauthLinkRequiredURL(_ /*redirectAfter*/, email string) string {
-	// Build manually rather than via url.URL to keep the path stable
-	// regardless of which FE route handles the prompt.
-	if email == "" {
-		return "/login?oauth_link_required=1"
+// settings afterwards. The email is included so the FE can prefill the
+// sign-in form (note that we did NOT auto-link, so revealing the email
+// is no worse than the existing user-enumeration surface — the user
+// already entered that email at the provider).
+//
+// REV-2: built via net/url.Values so emails with '+', '&', or '#'
+// (perfectly legal in RFC 5321) survive the round-trip to the FE
+// unchanged. The previous JSON-encode-then-strip-quotes approach
+// returned the raw email and broke FE query parsing.
+//
+// REV-3: also threads the provider name so the FE's banner can name
+// the provider whose flow the user just came back from.
+func oauthLinkRequiredURL(_ /*redirectAfter*/ string, email string, provider models.OAuthProvider) string {
+	v := url.Values{}
+	v.Set("oauth_link_required", "1")
+	if email != "" {
+		v.Set("email", email)
 	}
-	// Use a JSON-encode round-trip to escape the email. We don't want a
-	// rogue ? or # in a malicious email to break parsing on the FE.
-	encoded, err := json.Marshal(email)
-	if err != nil {
-		return "/login?oauth_link_required=1"
+	if provider != "" {
+		v.Set("provider", string(provider))
 	}
-	// Strip the surrounding quotes from the JSON encoding.
-	emailToken := string(encoded[1 : len(encoded)-1])
-	return "/login?oauth_link_required=1&email=" + emailToken
+	return "/login?" + v.Encode()
+}
+
+// oauthErrorURL builds the FE-facing redirect for the non-fatal error
+// branches: SEC-2 ("account_disabled") and REV-6 ("invalid_profile"). The
+// FE's LoginPage reads ?oauth_error=<code> and renders the destructive
+// Alert variant. We deliberately ignore the original redirectAfter target
+// for error redirects — the user lands on the login form, not the page
+// they were trying to reach. (Arg kept for callsite symmetry / future use.)
+func oauthErrorURL(code string, _ /*redirectAfter*/ string) string {
+	v := url.Values{}
+	v.Set("oauth_error", code)
+	return "/login?" + v.Encode()
+}
+
+// oauthMFARequiredURL builds the FE-facing redirect when SEC-1 fires:
+// the user has TOTP enrolled and we refuse to mint OAuth-only tokens.
+// The FE LoginPage doesn't have a dedicated banner for this yet — the
+// user lands on /login and signs in with email + password (which then
+// runs the existing maybeIssueMFAChallenge gate). The query parameters
+// are written so a future FE update can render "please complete sign-in
+// with your second factor — Google linking is preserved" without a BE
+// change.
+func oauthMFARequiredURL(_ /*redirectAfter*/, email string, provider models.OAuthProvider) string {
+	v := url.Values{}
+	v.Set("mfa_required", "1")
+	if provider != "" {
+		v.Set("oauth_provider", string(provider))
+	}
+	if email != "" {
+		v.Set("email", maskEmail(email))
+	}
+	return "/login?" + v.Encode()
+}
+
+// maskEmail returns a redacted form of email suitable for surfacing in a
+// URL the user can copy or share. Empty input → empty output. Inputs
+// without "@" are returned untouched (treated as already-masked / opaque).
+//
+// The mask preserves the first character of the local-part and the entire
+// domain, replacing the rest of the local-part with three dots. "a@b.com"
+// is preserved verbatim (single-char locals would otherwise reveal as
+// "a...@b.com" which gives away nothing).
+func maskEmail(email string) string {
+	at := strings.IndexByte(email, '@')
+	if at < 0 {
+		return email
+	}
+	local := email[:at]
+	domain := email[at:]
+	if len(local) <= 1 {
+		return email
+	}
+	return string(local[0]) + "..." + domain
 }
