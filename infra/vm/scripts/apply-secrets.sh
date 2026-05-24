@@ -45,6 +45,9 @@ ADMIN_EMAIL=$(lookup "admin.email")
 ADMIN_PASSWORD=$(lookup "admin.password")
 if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
     note "Applying inv-system/inventario-admin"
+    # Emit values as YAML block scalars so passwords with special chars (':', '{', '#', newlines)
+    # don't break manifest parsing or open an injection path. Same pattern as
+    # the github private key block below.
     cat <<EOF | remote_apply
 apiVersion: v1
 kind: Namespace
@@ -58,8 +61,10 @@ metadata:
   namespace: inv-system
 type: Opaque
 stringData:
-  email: $ADMIN_EMAIL
-  password: $ADMIN_PASSWORD
+  email: |
+$(printf '%s' "$ADMIN_EMAIL" | sed 's/^/    /')
+  password: |
+$(printf '%s' "$ADMIN_PASSWORD" | sed 's/^/    /')
 EOF
 else
     warn "admin.{email,password} missing in secrets; skipping inv-system/inventario-admin"
@@ -102,6 +107,7 @@ TS_ID=$(lookup "tailscale.oauth_client_id")
 TS_SECRET=$(lookup "tailscale.oauth_client_secret")
 if [ -n "$TS_ID" ] && [ -n "$TS_SECRET" ]; then
     note "Applying tailscale/operator-oauth"
+    # Block scalars for the same reason as inv-system/inventario-admin above.
     cat <<EOF | remote_apply
 apiVersion: v1
 kind: Secret
@@ -110,8 +116,10 @@ metadata:
   namespace: tailscale
 type: Opaque
 stringData:
-  client_id: $TS_ID
-  client_secret: $TS_SECRET
+  client_id: |
+$(printf '%s' "$TS_ID" | sed 's/^/    /')
+  client_secret: |
+$(printf '%s' "$TS_SECRET" | sed 's/^/    /')
 EOF
 else
     warn "tailscale.oauth_client_{id,secret} missing; skipping tailscale/operator-oauth"

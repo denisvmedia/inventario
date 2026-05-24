@@ -1,7 +1,9 @@
 # Inventario preview-env infra orchestrator (#1853).
 #
-# All targets require VM=user@host (the bootstrap target VM). The orchestration
-# always runs from the laptop; nothing runs locally that needs root.
+# Most targets require VM=user@host (the bootstrap target VM). The orchestration
+# always runs from the laptop; nothing runs locally that needs root. The
+# `preflight` target is the exception — it only checks laptop-side tooling and
+# does not need VM.
 #
 # Required laptop tools: ssh, scp, sops, age. Helm/kubectl are nice-to-have
 # (the installer ships them on the VM via vcluster standalone).
@@ -18,7 +20,7 @@ REQUIRE_VM = @[ -n "$(VM)" ] || { echo "ERROR: VM is required, e.g. make $@ VM=u
 .PHONY: help preflight bootstrap upgrade recover destroy status logs shell
 
 help:
-	@echo "Inventario preview-env infra targets (all require VM=user@host)"
+	@echo "Inventario preview-env infra targets (VM=user@host required except preflight)"
 	@echo ""
 	@echo "  bootstrap    Bring a clean Ubuntu 26.04 VM up to a working preview-env host."
 	@echo "  upgrade      Re-run bootstrap; idempotent. Use for vcluster/argocd version bumps."

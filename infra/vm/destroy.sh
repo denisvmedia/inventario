@@ -23,12 +23,14 @@ note "SSH preflight: $VM"
 ssh -o ConnectTimeout=10 -o BatchMode=yes "$VM" 'echo ok' >/dev/null
 
 note "Stopping vcluster.service and removing data"
+# Always attempt stop/disable — systemctl is idempotent and tolerates a missing
+# unit when we ignore the error. The previous list-unit-files gate was unreliable
+# (it can exit 0 with "0 unit files listed") and gated the data-dir removal
+# unnecessarily.
 ssh "$VM" 'set -e
-    if systemctl list-unit-files vcluster.service >/dev/null 2>&1; then
-        sudo systemctl disable --now vcluster.service 2>/dev/null || true
-        sudo rm -f /etc/systemd/system/vcluster.service
-        sudo systemctl daemon-reload
-    fi
+    sudo systemctl disable --now vcluster.service 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/vcluster.service
+    sudo systemctl daemon-reload
     sudo rm -rf /etc/vcluster /var/lib/vcluster
     sudo rm -f /usr/local/bin/vcluster /usr/local/bin/kubectl
     echo "vcluster + data removed"

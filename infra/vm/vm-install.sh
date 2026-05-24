@@ -111,11 +111,22 @@ if [ -n "${TS_OAUTH_ID:-}" ] && [ -n "${TS_OAUTH_SECRET:-}" ]; then
     "$KUBECTL" create namespace tailscale --dry-run=client -o yaml | "$KUBECTL" apply -f -
     "$HELM" repo add tailscale https://pkgs.tailscale.com/helmcharts >/dev/null 2>&1 || true
     "$HELM" repo update >/dev/null
+    # Write OAuth into a temp values file with restrictive permissions instead
+    # of passing via --set-string, which would leak the secret into /proc/*/cmdline
+    # and any audit log that captures process args.
+    TS_VALUES=$(umask 077 && mktemp "$REMOTE_TMP/ts-op-values.XXXXXX.yaml")
+    trap 'rm -f "$TS_VALUES"' EXIT
+    cat >"$TS_VALUES" <<EOF
+oauth:
+  clientId: "$TS_OAUTH_ID"
+  clientSecret: "$TS_OAUTH_SECRET"
+EOF
     "$HELM" upgrade --install tailscale-operator tailscale/tailscale-operator \
         --namespace tailscale \
-        --set-string oauth.clientId="$TS_OAUTH_ID" \
-        --set-string oauth.clientSecret="$TS_OAUTH_SECRET" \
+        --values "$TS_VALUES" \
         --wait --timeout 5m
+    rm -f "$TS_VALUES"
+    trap - EXIT
 else
     warn "tailscale.oauth_client_{id,secret} not in secrets; skipping Tailscale Operator install."
     warn "Provide them in the sops bundle and re-run bootstrap. See #1855."
