@@ -38,6 +38,12 @@ const (
 	// It shows up in the user's login history so they know the second
 	// factor was removed out-of-band rather than by them (#1645).
 	LoginOutcomeMFAAdminReset LoginOutcome = "mfa_admin_reset"
+	// LoginOutcomeIdentityLinked is recorded by the OAuth callback when an
+	// authenticated user successfully attached a new provider identity to
+	// their account (#1394). Distinct from LoginOutcomeOK so an audit
+	// reader scanning "successful sign-ins" doesn't double-count link
+	// events as fresh credential checks.
+	LoginOutcomeIdentityLinked LoginOutcome = "identity_linked"
 )
 
 // LoginMethod is the credential family that produced the event. "password"
@@ -54,6 +60,13 @@ const (
 	LoginMethodOAuthGoogle LoginMethod = "oauth_google"
 	// LoginMethodOAuthGitHub is the GitHub OAuth sign-in flow (#1394).
 	LoginMethodOAuthGitHub LoginMethod = "oauth_github"
+	// LoginMethodOAuthOther is a defensive sentinel for the
+	// "OAuthProvider value out of the known set" case. The OAuth callback
+	// should never hit this in correct code — every provider that round-
+	// trips through the registry has a matching LoginMethodOAuth* constant
+	// — but recording an event with method="oauth_other" is strictly
+	// better than silently mislabelling the row "password" (#1394).
+	LoginMethodOAuthOther LoginMethod = "oauth_other"
 )
 
 // LoginEvent is the append-only audit trail of credential-check attempts

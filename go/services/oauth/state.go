@@ -43,9 +43,18 @@ const stateVersion = 1
 //     callback uses its presence to skip the find-or-create branch and
 //     attach the resulting identity to the existing user instead.
 type State struct {
-	Version       int    `json:"v"`
-	Provider      string `json:"p"`
-	Nonce         string `json:"n"`
+	Version  int    `json:"v"`
+	Provider string `json:"p"`
+	Nonce    string `json:"n"`
+	// Verifier is the PKCE code_verifier (RFC 7636) for this round-trip.
+	// PKCE §7.1 warns about leaving the verifier in URL-visible storage:
+	// we accept that trade-off here in exchange for being stateless. The
+	// state token is HMAC-signed (an attacker who intercepts it cannot
+	// forge a fresh one) and SameSite=Lax + HttpOnly state cookie binding
+	// pins the token to the browser that started the flow, so a leaked
+	// verifier alone is not sufficient to complete an exchange. A future
+	// move to server-side state storage (Redis or DB) would let us drop
+	// the verifier from the URL; tracked under #1394 follow-ups.
 	Verifier      string `json:"cv"`
 	RedirectAfter string `json:"r,omitempty"`
 	LinkUserID    string `json:"luid,omitempty"`

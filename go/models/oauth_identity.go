@@ -47,7 +47,7 @@ func (p OAuthProvider) IsValid() bool {
 //migrator:schema:table name="user_oauth_identities"
 //migrator:schema:rls:enable table="user_oauth_identities" comment="Enable RLS for multi-tenant OAuth identity isolation"
 //migrator:schema:rls:policy name="oauth_identity_user_isolation" table="user_oauth_identities" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Users can read and modify only their own OAuth identities"
-//migrator:schema:rls:policy name="oauth_identity_background_worker_access" table="user_oauth_identities" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="OAuth callback runs before any user session exists; uses background-worker role to look up identities by (provider, provider_user_id)"
+//migrator:schema:rls:policy name="oauth_identity_background_worker_access" table="user_oauth_identities" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="OAuth callback is the only background-worker writer; runs before any user session exists and looks up identities by (provider, provider_user_id) — no scheduled job touches this table"
 type OAuthIdentity struct {
 	//migrator:embedded mode="inline"
 	TenantAwareEntityID
@@ -100,8 +100,13 @@ type OAuthIdentityIndexes struct {
 	//migrator:schema:index name="idx_oauth_identities_provider_subject" fields="provider,provider_user_id" unique="true" table="user_oauth_identities"
 	_ int
 
-	// Per-user lookup ("show me everything linked to this user").
-	//migrator:schema:index name="idx_oauth_identities_user_id" fields="user_id" table="user_oauth_identities"
+	// Tenant + user composite — read pattern is "list every identity
+	// linked to this user (within this tenant)" issued by ListByUser. The
+	// composite supersedes a single-column user_id index because every
+	// query that scans by user_id also pins tenant_id (the RLS qual does
+	// it for the user-mode read path, and the registry's defense-in-depth
+	// adds it for the service-mode background-worker path).
+	//migrator:schema:index name="idx_oauth_identities_tenant_user" fields="tenant_id,user_id" table="user_oauth_identities"
 	_ int
 
 	// Tenant isolation index — same shape every other tenant-scoped
