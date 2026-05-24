@@ -10,6 +10,7 @@
 // browser via window.location.assign — no fetch, no JSON.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { getAccessToken } from "@/lib/auth-storage"
 import { http, HttpError } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -117,11 +118,19 @@ export function useOAuthProviders() {
 // useOAuthIdentities reads the caller's linked providers. The ConnectedAccounts
 // panel renders one row per identity plus a "Link <Provider>" row for each
 // enabled-but-not-linked provider.
+//
+// `enabled` guard: the only consumer is the authenticated Settings page, so
+// gating the fetch on the presence of an access token avoids a doomed
+// /auth/oauth/identities → 401 → /auth/refresh chain when the hook
+// inadvertently mounts during an unauthenticated render (e.g. a tree mounted
+// above ProtectedRoute, or a future top-of-the-tree component). Cheap
+// defensive change — mirrors `useCurrentUser` in `./hooks.ts`.
 export function useOAuthIdentities() {
   return useQuery<OAuthIdentity[]>({
     queryKey: authKeys.oauthIdentities(),
     queryFn: ({ signal }) => getOAuthIdentities(signal),
     staleTime: 30 * 1000,
+    enabled: !!getAccessToken(),
   })
 }
 

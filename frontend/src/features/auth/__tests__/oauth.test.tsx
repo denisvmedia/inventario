@@ -144,6 +144,19 @@ describe("useOAuthIdentities", () => {
     expect(result.current.data).toHaveLength(1)
     expect(result.current.data?.[0].provider).toBe("google")
   })
+
+  // #1394 — defensive guard: without an access token the hook must not fire
+  // a doomed /auth/oauth/identities → 401 → /auth/refresh chain. MSW would
+  // surface the unhandled request as a test failure if the hook called
+  // out anyway.
+  it("does not fetch when no access token is present", async () => {
+    // Deliberately no setAccessToken() and no MSW handler — relying on
+    // `enabled: !!getAccessToken()` to skip the fetch entirely.
+    const { wrapper } = makeWrapper()
+    const { result } = renderHook(() => useOAuthIdentities(), { wrapper })
+    expect(result.current.fetchStatus).toBe("idle")
+    expect(result.current.data).toBeUndefined()
+  })
 })
 
 describe("useUnlinkOAuthIdentity", () => {
