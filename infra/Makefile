@@ -12,6 +12,12 @@
 
 SHELL := /bin/bash
 
+# Resolve script paths relative to this Makefile, not the caller's cwd, so
+# `make -C infra bootstrap` (as the README documents) and `make -f infra/Makefile`
+# both work. Without this the recipes' literal `infra/vm/...` paths would only
+# work when invoked from the repo root and would 404 under `-C infra`.
+THIS_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+
 VM ?=
 SVC ?= vcluster.service
 
@@ -48,7 +54,7 @@ preflight:
 
 bootstrap: preflight
 	$(REQUIRE_VM)
-	bash infra/vm/bootstrap.sh "$(VM)"
+	bash "$(THIS_DIR)vm/bootstrap.sh" "$(VM)"
 
 upgrade: bootstrap
 
@@ -56,7 +62,7 @@ recover: bootstrap
 
 destroy:
 	$(REQUIRE_VM)
-	bash infra/vm/destroy.sh "$(VM)"
+	bash "$(THIS_DIR)vm/destroy.sh" "$(VM)"
 
 status:
 	$(REQUIRE_VM)
