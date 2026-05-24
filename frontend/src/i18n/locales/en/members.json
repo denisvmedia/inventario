@@ -7,6 +7,10 @@
   },
   "adminOnlyHelp": "Only admins and owners can change roles, remove members, or manage invites.",
   "empty": "This group has no members yet.",
+  "errors": {
+    "lastMember": "Couldn't remove. That would leave the group empty — delete the group instead.",
+    "lastOwner": "Couldn't remove. They're the last owner — promote another member to owner first."
+  },
   "invite": {
     "actions": {
       "resend": "Resend invite",
