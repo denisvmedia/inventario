@@ -129,6 +129,19 @@ type Config struct {
 	AWSRegion            string `yaml:"aws_region" env:"AWS_REGION" env-default:""`
 	MandrillAPIKey       string `yaml:"mandrill_api_key" env:"MANDRILL_API_KEY" env-default:""`
 	MandrillBaseURL      string `yaml:"mandrill_base_url" env:"MANDRILL_BASE_URL" env-default:"https://mandrillapp.com"`
+
+	// OAuth* settings drive the third-party sign-in flow (#1394). Each
+	// provider is enabled only when its (client_id, client_secret) pair
+	// is supplied AND OAuthRedirectBaseURL is set. OAuthStateKey signs
+	// the per-request state tokens — leave empty in dev (a random key is
+	// generated at boot with a warning), provide a stable value
+	// (≥ 32 bytes) on multi-replica or restart-stable deployments.
+	OAuthGoogleClientID     string `yaml:"oauth_google_client_id" env:"OAUTH_GOOGLE_CLIENT_ID" env-default:""`
+	OAuthGoogleClientSecret string `yaml:"oauth_google_client_secret" env:"OAUTH_GOOGLE_CLIENT_SECRET" env-default:""`
+	OAuthGitHubClientID     string `yaml:"oauth_github_client_id" env:"OAUTH_GITHUB_CLIENT_ID" env-default:""`
+	OAuthGitHubClientSecret string `yaml:"oauth_github_client_secret" env:"OAUTH_GITHUB_CLIENT_SECRET" env-default:""`
+	OAuthRedirectBaseURL    string `yaml:"oauth_redirect_base_url" env:"OAUTH_REDIRECT_BASE_URL" env-default:""`
+	OAuthStateKey           string `yaml:"oauth_state_key" env:"OAUTH_STATE_KEY" env-default:""`
 }
 
 // SetDefaults applies repository-wide defaults for fields left at their zero
