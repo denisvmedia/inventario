@@ -37,7 +37,12 @@ func NewOAuthIdentityRegistry() *OAuthIdentityRegistry {
 // The (provider, provider_user_id) pair must be globally unique; a duplicate
 // returns ErrAlreadyExists so the callback can distinguish "first-time link"
 // from "already attached to some account" without an extra round-trip.
-func (r *OAuthIdentityRegistry) Create(ctx context.Context, oi models.OAuthIdentity) (*models.OAuthIdentity, error) {
+//
+// The duplicate check + insert run under the same write lock so two
+// concurrent Create calls cannot both pass the check and insert a clashing
+// pair. The previous shape ran GetByProviderSubject outside the lock,
+// which let a race insert two rows with the same global key.
+func (r *OAuthIdentityRegistry) Create(_ context.Context, oi models.OAuthIdentity) (*models.OAuthIdentity, error) {
 	if oi.UserID == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
 	}
@@ -51,18 +56,6 @@ func (r *OAuthIdentityRegistry) Create(ctx context.Context, oi models.OAuthIdent
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ProviderUserID"))
 	}
 
-	existing, err := r.GetByProviderSubject(ctx, oi.Provider, oi.ProviderUserID)
-	if err != nil && !errors.Is(err, registry.ErrNotFound) {
-		return nil, err
-	}
-	if existing != nil {
-		return nil, errxtrace.Classify(registry.ErrAlreadyExists, errx.Attrs(
-			"entity_type", "OAuthIdentity",
-			"provider", string(oi.Provider),
-			"provider_user_id", oi.ProviderUserID,
-		))
-	}
-
 	oi.ID = uuid.New().String()
 	if oi.UUID == "" {
 		oi.UUID = uuid.New().String()
@@ -72,10 +65,34 @@ func (r *OAuthIdentityRegistry) Create(ctx context.Context, oi models.OAuthIdent
 	}
 
 	r.lock.Lock()
-	r.items.Set(oi.ID, &oi)
-	r.lock.Unlock()
+	defer r.lock.Unlock()
 
+	// Duplicate check inside the lock so a concurrent Create can't slip a
+	// clashing row between the check and the insert. We CANNOT call the
+	// public GetByProviderSubject here — it acquires the same lock and
+	// would deadlock.
+	if existing := r.getByProviderSubjectNoLock(oi.Provider, oi.ProviderUserID); existing != nil {
+		return nil, errxtrace.Classify(registry.ErrAlreadyExists, errx.Attrs(
+			"entity_type", "OAuthIdentity",
+			"provider", string(oi.Provider),
+			"provider_user_id", oi.ProviderUserID,
+		))
+	}
+
+	r.items.Set(oi.ID, &oi)
 	return &oi, nil
+}
+
+// getByProviderSubjectNoLock is the lock-free variant used by Create's
+// in-lock duplicate check. Callers MUST already hold r.lock.
+func (r *OAuthIdentityRegistry) getByProviderSubjectNoLock(provider models.OAuthProvider, providerUserID string) *models.OAuthIdentity {
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		oi := pair.Value
+		if oi.Provider == provider && oi.ProviderUserID == providerUserID {
+			return oi
+		}
+	}
+	return nil
 }
 
 // GetByProviderSubject looks up the row keyed by (provider, providerUserID).
