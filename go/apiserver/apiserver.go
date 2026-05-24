@@ -174,10 +174,18 @@ type Params struct {
 	CSRFService                csrf.Service                       // CSRF token service (Redis or in-memory)
 	CORSConfig                 CORSConfig                         // CORS configuration for API routes
 	TenantResolver             TenantResolver                     // resolves host → tenant; nil = single-tenant (HostTenantResolver with no BaseDomain)
-	EmailService               services.EmailService              // Transactional email service (queue + providers)
-	PublicURL                  string                             // Public base URL used in transactional links
-	SupportEmail               string                             // Destination for /api/v1/feedback submissions (issue #1387). Empty leaves the route mounted but it returns 503.
-	RedisPinger                RedisPinger                        // Optional Redis dependency check for /readyz
+	// TestTenantHeaderEnabled is the TEST-ONLY gate for the #1851 cross-tenant
+	// e2e fixture: exempts the namespaced X-Inventario-Test-Tenant header from
+	// the rejectTenantHeader scan AND lets the tenant resolver consult that
+	// header instead of the Host. Wired through bootstrap from
+	// INVENTARIO_RUN_TEST_TENANT_HEADER_ENABLED; defaults false. Never enable
+	// in a production deployment — the bootstrap layer emits a loud warning
+	// at startup when it is set.
+	TestTenantHeaderEnabled bool
+	EmailService            services.EmailService // Transactional email service (queue + providers)
+	PublicURL               string                // Public base URL used in transactional links
+	SupportEmail            string                // Destination for /api/v1/feedback submissions (issue #1387). Empty leaves the route mounted but it returns 503.
+	RedisPinger             RedisPinger           // Optional Redis dependency check for /readyz
 
 	// FeatureCurrencyMigration gates the /currency-migrations endpoints
 	// and the requireGroupNotMigrating lock middleware (issue #202 / #1551).
@@ -309,8 +317,11 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// CORS middleware — strict and explicit origin-based policy.
 	r.Use(NewCORSMiddleware(params.CORSConfig).Handler)
 
-	// SECURITY: Add tenant ID validation middleware FIRST (before any other processing)
-	r.Use(ValidateNoUserProvidedTenantID())
+	// SECURITY: Add tenant ID validation middleware FIRST (before any other processing).
+	// params.TestTenantHeaderEnabled is the #1851 e2e gate that exempts the
+	// single namespaced X-Inventario-Test-Tenant header from the scan; it stays
+	// false in any non-test deployment.
+	r.Use(ValidateNoUserProvidedTenantID(params.TestTenantHeaderEnabled))
 	r.Use(RejectSpecificTenantHeaders())
 
 	// Set a timeout value on the request context (ctx), that will signal

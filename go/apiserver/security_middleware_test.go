@@ -41,7 +41,7 @@ func TestValidateNoUserProvidedTenantID_AdminSubtreeQueryExemption(t *testing.T)
 	downstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := apiserver.ValidateNoUserProvidedTenantID()(downstream)
+	handler := apiserver.ValidateNoUserProvidedTenantID(false)(downstream)
 
 	tests := []struct {
 		name       string
@@ -109,7 +109,7 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBodyCamelCaseVariants(t *tes
 	downstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := apiserver.ValidateNoUserProvidedTenantID()(downstream)
+	handler := apiserver.ValidateNoUserProvidedTenantID(false)(downstream)
 
 	tests := []struct {
 		name        string
@@ -198,7 +198,7 @@ func TestValidateNoUserProvidedTenantID_AdminSubtreeBodyCheckEnforced(t *testing
 	downstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := apiserver.ValidateNoUserProvidedTenantID()(downstream)
+	handler := apiserver.ValidateNoUserProvidedTenantID(false)(downstream)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups",
 		strings.NewReader(`{"tenant_id":"tenant-xyz"}`))
@@ -306,7 +306,7 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_SizeCap(t *testing.T) {
 	downstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := apiserver.ValidateNoUserProvidedTenantID()(downstream)
+	handler := apiserver.ValidateNoUserProvidedTenantID(false)(downstream)
 
 	multipartClean, multipartCleanCT := buildMultipartBody(t, 2*tenantScanCap)
 	multipartWithTenant, multipartWithTenantCT := buildMultipartBody(t, 2*tenantScanCap, "tenant_id")
@@ -424,7 +424,7 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_HugeBodyNoOOM(t *testin
 	downstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := apiserver.ValidateNoUserProvidedTenantID()(downstream)
+	handler := apiserver.ValidateNoUserProvidedTenantID(false)(downstream)
 
 	const giant = 10 * 1024 * 1024 // 10 MiB
 	body := bytes.Repeat([]byte("a"), giant)
@@ -435,4 +435,68 @@ func TestValidateNoUserProvidedTenantID_RejectTenantBody_HugeBodyNoOOM(t *testin
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusRequestEntityTooLarge)
+}
+
+// TestValidateNoUserProvidedTenantID_TestTenantHeaderExemption covers the
+// #1851 e2e gate. With the exemption enabled, the single namespaced
+// X-Inventario-Test-Tenant header passes the rejectTenantHeader scan —
+// every other tenant-named header still fails closed. With the
+// exemption disabled (the production default), even the namespaced
+// header is rejected. This is the gate the cross-tenant Playwright
+// fixture relies on to drive callbacks under a chosen tenant.
+func TestValidateNoUserProvidedTenantID_TestTenantHeaderExemption(t *testing.T) {
+	downstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	tests := []struct {
+		name            string
+		allowTestHeader bool
+		headerName      string
+		headerValue     string
+		wantStatus      int
+	}{
+		{
+			name:            "namespaced test header allowed when gate is on",
+			allowTestHeader: true,
+			headerName:      apiserver.TestTenantHeaderName,
+			headerValue:     "tenant2",
+			wantStatus:      http.StatusOK,
+		},
+		{
+			name:            "namespaced test header rejected when gate is off",
+			allowTestHeader: false,
+			headerName:      apiserver.TestTenantHeaderName,
+			headerValue:     "tenant2",
+			wantStatus:      http.StatusForbidden,
+		},
+		{
+			name:            "generic X-Tenant-ID rejected even when gate is on",
+			allowTestHeader: true,
+			headerName:      "X-Tenant-ID",
+			headerValue:     "tenant2",
+			wantStatus:      http.StatusForbidden,
+		},
+		{
+			name:            "any other tenant-named header rejected even when gate is on",
+			allowTestHeader: true,
+			headerName:      "X-My-Tenant-Override",
+			headerValue:     "tenant2",
+			wantStatus:      http.StatusForbidden,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			handler := apiserver.ValidateNoUserProvidedTenantID(tc.allowTestHeader)(downstream)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/oauth/providers", nil)
+			req.Header.Set(tc.headerName, tc.headerValue)
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			c.Assert(rr.Code, qt.Equals, tc.wantStatus)
+		})
+	}
 }

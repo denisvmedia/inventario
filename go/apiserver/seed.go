@@ -19,6 +19,16 @@ import (
 // privilege-escalation hole. Only the e2e harness sets it.
 const envSeedSystemAdminFixture = "INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE"
 
+// envSeedAllowCreateTenant is the opt-in env var that lets the seed
+// create a tenant row when the request supplies a tenant_slug that
+// doesn't exist (#1851). It is OFF by default for the same reason
+// envSeedSystemAdminFixture is — /api/v1/seed is unauthenticated, so
+// allowing arbitrary tenant creation from it would let any caller
+// mint isolation boundaries in a misconfigured deployment. The e2e
+// harness sets this when it needs a second tenant for the
+// cross-tenant OAuth fixture.
+const envSeedAllowCreateTenant = "INVENTARIO_SEED_ALLOW_CREATE_TENANT"
+
 type seedAPI struct {
 	factorySet     *registry.FactorySet
 	uploadLocation string
@@ -80,6 +90,11 @@ func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 		// from the environment, never from the (attacker-controllable)
 		// request body.
 		SeedSystemAdmin: os.Getenv(envSeedSystemAdminFixture) == "true",
+		// Opt-in only — see envSeedAllowCreateTenant. Same env-gated
+		// pattern as SeedSystemAdmin: never sourced from the request
+		// body so a misconfigured production deployment can't be
+		// coaxed into minting tenants from the public seed surface.
+		CreateTenantIfMissing: os.Getenv(envSeedAllowCreateTenant) == "true",
 	}
 
 	alreadySeeded, err := seeddata.SeedData(api.factorySet, opts)
