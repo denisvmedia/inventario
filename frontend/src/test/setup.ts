@@ -1,10 +1,11 @@
 import "@testing-library/jest-dom/vitest"
-import { afterAll, afterEach, beforeAll, expect, vi } from "vitest"
+import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from "vitest"
 import { cleanup } from "@testing-library/react"
 import { toHaveNoViolations } from "jest-axe"
 
 import { server } from "./server"
 import { initI18n } from "@/i18n"
+import { markBootRefreshAttemptedForTests } from "@/features/auth/bootRefresh"
 
 expect.extend(toHaveNoViolations)
 
@@ -129,6 +130,17 @@ if (!Element.prototype.releasePointerCapture) {
 beforeAll(async () => {
   await initI18n({ lng: "en" })
   server.listen({ onUnhandledRequest: "error" })
+})
+// Default the OAuth-callback boot-refresh (#1394) into the "already attempted"
+// state for every test. Without this stamp, every test that mounts
+// <AuthProvider> with no access token would fire a speculative POST
+// /auth/refresh on mount, and MSW's `onUnhandledRequest: "error"` would
+// surface as a test failure unless every test added a handler. Tests that
+// specifically exercise the boot-refresh path import
+// `__resetBootRefreshForTests` from features/auth/bootRefresh and reset the
+// flag in their own `beforeEach`.
+beforeEach(() => {
+  markBootRefreshAttemptedForTests()
 })
 afterEach(() => {
   cleanup()

@@ -220,11 +220,24 @@ describe("<LoginPage />", () => {
   // `?oauth_link_required=1&email=…&provider=…`, the page shows a
   // dedicated banner prompting the user to sign in with their password
   // before linking the provider from Settings.
-  it("renders the OAuth link-required banner when the query param is set", () => {
+  it("renders the OAuth link-required banner with the provider name when ?provider= is set", () => {
     renderLogin("/login?oauth_link_required=1&email=denis%40example.com&provider=google")
     const banner = screen.getByTestId("oauth-link-required-banner")
     expect(banner).toBeInTheDocument()
     expect(banner).toHaveTextContent(/google/i)
+    expect(banner).toHaveTextContent(/denis@example\.com/i)
+  })
+
+  // #1394 — defensive fallback: if a redirect ever lands here without
+  // `?provider=`, the banner falls back to a generic "your provider"
+  // string rather than rendering an empty hole. The BE fix-up batch is
+  // closing the gap by always emitting `provider=`, but the FE keeps the
+  // fallback for forward-compat.
+  it("falls back to 'your provider' when ?provider= is missing from the link-required redirect", () => {
+    renderLogin("/login?oauth_link_required=1&email=denis%40example.com")
+    const banner = screen.getByTestId("oauth-link-required-banner")
+    expect(banner).toBeInTheDocument()
+    expect(banner).toHaveTextContent(/your provider/i)
     expect(banner).toHaveTextContent(/denis@example\.com/i)
   })
 

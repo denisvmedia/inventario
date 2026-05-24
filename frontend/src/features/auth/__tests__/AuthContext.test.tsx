@@ -6,9 +6,10 @@ import { screen, waitFor, act } from "@testing-library/react"
 import { server } from "@/test/server"
 import { renderWithProviders } from "@/test/render"
 import { AuthProvider, useAuth } from "@/features/auth/AuthContext"
+import { __resetBootRefreshForTests } from "@/features/auth/bootRefresh"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
-import { clearAuth, setAccessToken } from "@/lib/auth-storage"
+import { clearAuth, getAccessToken, setAccessToken } from "@/lib/auth-storage"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
@@ -16,6 +17,7 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+  __resetBootRefreshForTests()
 })
 
 function Probe() {
@@ -58,13 +60,45 @@ const routes = (
 )
 
 describe("useAuth", () => {
-  it("starts initialized=true and authenticated=false when no access token is present", async () => {
+  it("starts initialized=true and authenticated=false when no access token is present and boot-refresh fails", async () => {
+    // Boot-refresh (#1394) speculatively probes /auth/refresh on mount. With no
+    // refresh cookie the BE returns 401 and AuthContext settles into the
+    // unauthenticated branch.
+    server.use(
+      msw.post(api("/auth/refresh"), () => HttpResponse.json(null, { status: 401 }))
+    )
     renderWithProviders({ initialPath: "/", routes })
-    // No /auth/me probe because the token is missing — we settle synchronously.
     await waitFor(() =>
       expect(screen.getByTestId("probe").getAttribute("data-initialized")).toBe("true")
     )
     expect(screen.getByTestId("probe").getAttribute("data-authenticated")).toBe("false")
+  })
+
+  // #1394 — OAuth callback 302s the browser back into the SPA with NO access
+  // token in localStorage but a valid httpOnly refresh cookie. The boot-time
+  // /auth/refresh has to succeed and seed the token so the app renders the
+  // authenticated shell instead of bouncing the user to /login.
+  it("populates the access token from the refresh cookie on boot and renders the shell", async () => {
+    let refreshCalls = 0
+    server.use(
+      msw.post(api("/auth/refresh"), () => {
+        refreshCalls++
+        return HttpResponse.json({ access_token: "boot-tok", csrf_token: "boot-csrf" })
+      }),
+      msw.get(api("/auth/me"), ({ request }) => {
+        expect(request.headers.get("authorization")).toBe("Bearer boot-tok")
+        return HttpResponse.json({ id: "u1", email: "oauth@example.com", name: "OAuth User" })
+      })
+    )
+    renderWithProviders({ initialPath: "/", routes })
+    await waitFor(() =>
+      expect(screen.getByTestId("probe").getAttribute("data-authenticated")).toBe("true")
+    )
+    expect(screen.getByTestId("probe").getAttribute("data-email")).toBe("oauth@example.com")
+    expect(getAccessToken()).toBe("boot-tok")
+    // One-shot guard: AuthProvider re-renders (incl. StrictMode dev double
+    // mounts) must not refire the request.
+    expect(refreshCalls).toBe(1)
   })
 
   it("exposes the signed-in user once /auth/me resolves", async () => {
