@@ -402,17 +402,29 @@ export async function updateAdminGroupMemberRole(
 // returns `{ active: false }` with no other fields when no session is in
 // progress; the banner uses `active` as its sole render gate.
 //
-// The endpoint 403s for a plain (non-admin, non-impersonated) user — and
-// that is itself a definitive "you are not impersonating anyone" answer,
-// not an error condition. We translate the 403 into an inactive state so
-// the query resolves cleanly for every authenticated user rather than
-// parking in an error state for the non-admin majority. A 401 (genuinely
-// signed out) and 5xx still propagate as errors.
+// The endpoint sits on `RequireBackofficeAuthOrImpersonating` (#1785 Phase
+// 5), so a plain tenant token — the vast majority of authenticated callers
+// — gets a 401, NOT a 403. That 401 is a definitive "you are not signed
+// into the back-office plane and not impersonating anyone" answer, not a
+// session-expiry event, so:
+//
+//  - We pass `skipAuthRefresh: true` so the http client treats the 401 as
+//    an application-level error instead of routing it through the
+//    plane-aware refresh + redirect dance (which, for this path, would
+//    bounce the tenant user to /backoffice/login because the path matches
+//    `isBackofficePath`).
+//  - We translate both 401 and 403 into an inactive state so the query
+//    resolves cleanly for every authenticated user rather than parking in
+//    an error state for the non-admin majority. Anything else (5xx,
+//    network) still propagates as an error.
 export async function getImpersonationState(signal?: AbortSignal): Promise<ImpersonationState> {
   try {
-    return await http.get<ImpersonationState>("/admin/impersonation/current", { signal })
+    return await http.get<ImpersonationState>("/admin/impersonation/current", {
+      signal,
+      skipAuthRefresh: true,
+    })
   } catch (error) {
-    if (error instanceof HttpError && error.status === 403) {
+    if (error instanceof HttpError && (error.status === 401 || error.status === 403)) {
       return { active: false }
     }
     throw error

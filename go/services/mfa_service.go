@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/pquerna/otp"
@@ -24,6 +25,65 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/secrets"
 )
+
+// backupCodeBcryptCost is the cost factor used by GenerateBackupCodes.
+// Production keeps bcrypt.DefaultCost (10) so a leaked column still costs
+// the attacker ~100ms per guess; tests opt down to bcrypt.MinCost via
+// SetBackupCodeBcryptCostForTesting because each MFA setup hashes
+// MFABackupCodeCount (10) codes serially and under `go test -race` that
+// alone is ~8s/setup at DefaultCost — multiplied across the MFA test
+// suite it blows past the per-binary 10-minute panic timeout.
+//
+// Stored as atomic.Int32 because GenerateBackupCodes can run from many
+// goroutines concurrently (parallel test cases hitting the MFA setup
+// endpoint) while a single TestMain / t.Cleanup writes the override;
+// the race detector flags the plain-int form, and atomic load/store
+// keeps the contract (production = DefaultCost when no override is in
+// effect) while making `go test -race` clean.
+//
+// The default value is seeded lazily by newBackupCodeBcryptCost (called
+// at package init via a var initializer) rather than an init() function
+// so we can keep `gochecknoinits` happy.
+var backupCodeBcryptCost = newBackupCodeBcryptCost()
+
+func newBackupCodeBcryptCost() *atomic.Int32 {
+	v := new(atomic.Int32)
+	v.Store(int32(bcrypt.DefaultCost))
+	return v
+}
+
+// testingCleanup is the minimal subset of *testing.T (and *testing.B) that
+// SetBackupCodeBcryptCostForTesting needs — just t.Cleanup(func()).
+// Accepting an interface instead of *testing.T lets this function live
+// in production code without dragging the `testing` package into
+// production builds or registering `-test.*` flags on the process-global
+// flag set.
+type testingCleanup interface {
+	Cleanup(func())
+}
+
+// SetBackupCodeBcryptCostForTesting overrides the cost factor used when
+// hashing fresh backup codes. Mirrors models.SetBcryptCostForTesting:
+// pass a non-nil *testing.T to scope the override via t.Cleanup, or nil
+// from a TestMain that wants the lowered cost for the entire binary run.
+//
+// `cost` is clamped to [bcrypt.MinCost, bcrypt.MaxCost] (4..31) so the
+// int->int32 store is safe; bcrypt itself rejects anything outside
+// MinCost..MaxCost at GenerateFromPassword time, so clamping here is
+// strictly defensive against an overflow in the atomic store.
+func SetBackupCodeBcryptCostForTesting(t testingCleanup, cost int) {
+	switch {
+	case cost < bcrypt.MinCost:
+		cost = bcrypt.MinCost
+	case cost > bcrypt.MaxCost:
+		cost = bcrypt.MaxCost
+	}
+	orig := backupCodeBcryptCost.Load()
+	backupCodeBcryptCost.Store(int32(cost))
+	if t != nil {
+		t.Cleanup(func() { backupCodeBcryptCost.Store(orig) })
+	}
+}
 
 const (
 	// MFAIssuer is the human label that appears in authenticator apps
@@ -223,7 +283,7 @@ func (s *MFAService) GenerateBackupCodes(n int) (plaintext []string, hashes []st
 		// compare against any cosmetic variant the user types
 		// (lowercase, spaces, missing/extra hyphen). The plaintext
 		// returned to the user keeps the hyphen for readability.
-		hash, err := bcrypt.GenerateFromPassword([]byte(normalizeBackupCode(code)), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte(normalizeBackupCode(code)), int(backupCodeBcryptCost.Load()))
 		if err != nil {
 			return nil, nil, fmt.Errorf("mfa: bcrypt: %w", err)
 		}

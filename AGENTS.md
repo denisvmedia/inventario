@@ -260,6 +260,10 @@ Support for multiple database backends via DSN:
 - Application-level tenant isolation
 - Comprehensive input validation and sanitization
 - File upload restrictions and MIME type validation
+- **Bcrypt cost in tests: `bcrypt.MinCost` (4), never `bcrypt.DefaultCost`.** Production password hashing stays at `DefaultCost` (10, ~80ms per op). In tests this multiplies out — `-race` adds ~10x overhead and a single apiserver test binary can blow the per-package 10-minute panic timeout when many fixtures seed users. The fix:
+  - Production code paths that hash tenant-user passwords (`models.User.SetPassword`) and tenant MFA backup codes (`services.MFAService.GenerateBackupCodes`) take their cost from a package-level variable.
+  - Tests register `models.SetBcryptCostForTesting(t, bcrypt.MinCost)` and `services.SetBackupCodeBcryptCostForTesting(t, bcrypt.MinCost)` via `TestMain` or at the top of each test. A `bcrypt_init_test.go` per package is the canonical landing site. When `t` is non-nil, the helpers restore the previous value via `t.Cleanup` to keep overrides scoped.
+  - Never call `bcrypt.GenerateFromPassword(..., bcrypt.DefaultCost)` in a `*_test.go` file. A package missing the `bcrypt_init_test.go` override that creates many users will silently double the test wall-clock under `-race`.
 
 ## Common Development Tasks
 
