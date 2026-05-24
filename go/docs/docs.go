@@ -1426,6 +1426,230 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/oauth/identities": {
+            "get": {
+                "description": "Returns each OAuth provider the authenticated user has linked along with the email recorded at link time.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "oauth"
+                ],
+                "summary": "List the caller's linked OAuth identities",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.linkedIdentitiesResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/oauth/providers": {
+            "get": {
+                "description": "Returns the providers operators have configured (Google, GitHub). Empty list when OAuth is not configured.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "oauth"
+                ],
+                "summary": "List OAuth providers enabled in this deployment",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.providerListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/oauth/{provider}": {
+            "delete": {
+                "description": "Removes the identity row mapping the caller to the named provider. Refused with 409 if it is the caller's only remaining sign-in method.",
+                "tags": [
+                    "oauth"
+                ],
+                "summary": "Unlink an OAuth provider from the caller's account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider name (google|github)",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Unknown provider",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - cannot remove the last remaining sign-in method",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/oauth/{provider}/callback": {
+            "get": {
+                "description": "Validates the signed state + state cookie, exchanges the authorization code with the provider, and either signs the caller in (existing identity), auto-links a verified-email match, prompts password sign-in (unverified email), or creates a new account. On success the handler 302s the browser back to the FE redirect path the state carried.",
+                "tags": [
+                    "oauth"
+                ],
+                "summary": "OAuth callback (provider redirect target)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider name (google|github)",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Authorization code returned by the provider",
+                        "name": "code",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Signed state token issued by /start",
+                        "name": "state",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Redirect to the FE redirect path the state carried"
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid state or code",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Unknown provider",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal error during exchange or user provisioning",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/oauth/{provider}/link/start": {
+            "get": {
+                "description": "Authenticated variant of /start: the resulting callback links the new identity to the caller's user rather than creating a fresh account.",
+                "tags": [
+                    "oauth"
+                ],
+                "summary": "Start link-an-additional-OAuth-provider flow",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider name (google|github)",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Relative FE path to land on after link",
+                        "name": "redirect",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Redirect to provider"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Unknown provider",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/oauth/{provider}/start": {
+            "get": {
+                "description": "Begins the authorization-code flow against the named provider. The handler signs short-lived state + PKCE pair and 302s the browser to the provider's consent screen.",
+                "tags": [
+                    "oauth"
+                ],
+                "summary": "Start OAuth sign-in flow",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider name (google|github)",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Relative FE path to land on after sign-in",
+                        "name": "redirect",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Redirect to provider"
+                    },
+                    "404": {
+                        "description": "Unknown provider",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal error generating state token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/refresh": {
             "post": {
                 "description": "Issue a new short-lived access token using the refresh token stored in the httpOnly cookie.",
@@ -8360,6 +8584,53 @@ const docTemplate = `{
                 }
             }
         },
+        "apiserver.linkedIdentitiesResponse": {
+            "type": "object",
+            "properties": {
+                "identities": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.linkedIdentityEntry"
+                    }
+                }
+            }
+        },
+        "apiserver.linkedIdentityEntry": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "linked_at": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.providerListEntry": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.providerListResponse": {
+            "type": "object",
+            "properties": {
+                "providers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.providerListEntry"
+                    }
+                }
+            }
+        },
         "debug.Info": {
             "type": "object",
             "properties": {
@@ -12793,10 +13064,14 @@ const docTemplate = `{
         "models.LoginMethod": {
             "type": "string",
             "enum": [
-                "password"
+                "password",
+                "oauth_google",
+                "oauth_github"
             ],
             "x-enum-varnames": [
-                "LoginMethodPassword"
+                "LoginMethodPassword",
+                "LoginMethodOAuthGoogle",
+                "LoginMethodOAuthGitHub"
             ]
         },
         "models.LoginOutcome": {

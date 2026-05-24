@@ -561,6 +561,36 @@ definitions:
         description: Version information
         type: string
     type: object
+  apiserver.linkedIdentitiesResponse:
+    properties:
+      identities:
+        items:
+          $ref: '#/definitions/apiserver.linkedIdentityEntry'
+        type: array
+    type: object
+  apiserver.linkedIdentityEntry:
+    properties:
+      email:
+        type: string
+      linked_at:
+        type: string
+      provider:
+        type: string
+    type: object
+  apiserver.providerListEntry:
+    properties:
+      display_name:
+        type: string
+      name:
+        type: string
+    type: object
+  apiserver.providerListResponse:
+    properties:
+      providers:
+        items:
+          $ref: '#/definitions/apiserver.providerListEntry'
+        type: array
+    type: object
   debug.Info:
     properties:
       database_driver:
@@ -3882,9 +3912,13 @@ definitions:
   models.LoginMethod:
     enum:
     - password
+    - oauth_google
+    - oauth_github
     type: string
     x-enum-varnames:
     - LoginMethodPassword
+    - LoginMethodOAuthGoogle
+    - LoginMethodOAuthGitHub
   models.LoginOutcome:
     enum:
     - ok
@@ -5325,6 +5359,164 @@ paths:
       summary: Complete MFA enrollment
       tags:
       - auth
+  /auth/oauth/{provider}:
+    delete:
+      description: Removes the identity row mapping the caller to the named provider.
+        Refused with 409 if it is the caller's only remaining sign-in method.
+      parameters:
+      - description: Provider name (google|github)
+        in: path
+        name: provider
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Unknown provider
+          schema:
+            type: string
+        "409":
+          description: Conflict - cannot remove the last remaining sign-in method
+          schema:
+            type: string
+      summary: Unlink an OAuth provider from the caller's account
+      tags:
+      - oauth
+  /auth/oauth/{provider}/callback:
+    get:
+      description: Validates the signed state + state cookie, exchanges the authorization
+        code with the provider, and either signs the caller in (existing identity),
+        auto-links a verified-email match, prompts password sign-in (unverified email),
+        or creates a new account. On success the handler 302s the browser back to
+        the FE redirect path the state carried.
+      parameters:
+      - description: Provider name (google|github)
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Authorization code returned by the provider
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: Signed state token issued by /start
+        in: query
+        name: state
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Redirect to the FE redirect path the state carried
+        "400":
+          description: Bad Request - invalid state or code
+          schema:
+            type: string
+        "404":
+          description: Unknown provider
+          schema:
+            type: string
+        "500":
+          description: Internal error during exchange or user provisioning
+          schema:
+            type: string
+      summary: OAuth callback (provider redirect target)
+      tags:
+      - oauth
+  /auth/oauth/{provider}/link/start:
+    get:
+      description: 'Authenticated variant of /start: the resulting callback links
+        the new identity to the caller''s user rather than creating a fresh account.'
+      parameters:
+      - description: Provider name (google|github)
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Relative FE path to land on after link
+        in: query
+        name: redirect
+        type: string
+      responses:
+        "302":
+          description: Redirect to provider
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Unknown provider
+          schema:
+            type: string
+      summary: Start link-an-additional-OAuth-provider flow
+      tags:
+      - oauth
+  /auth/oauth/{provider}/start:
+    get:
+      description: Begins the authorization-code flow against the named provider.
+        The handler signs short-lived state + PKCE pair and 302s the browser to the
+        provider's consent screen.
+      parameters:
+      - description: Provider name (google|github)
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Relative FE path to land on after sign-in
+        in: query
+        name: redirect
+        type: string
+      responses:
+        "302":
+          description: Redirect to provider
+        "404":
+          description: Unknown provider
+          schema:
+            type: string
+        "500":
+          description: Internal error generating state token
+          schema:
+            type: string
+      summary: Start OAuth sign-in flow
+      tags:
+      - oauth
+  /auth/oauth/identities:
+    get:
+      description: Returns each OAuth provider the authenticated user has linked along
+        with the email recorded at link time.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.linkedIdentitiesResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: List the caller's linked OAuth identities
+      tags:
+      - oauth
+  /auth/oauth/providers:
+    get:
+      description: Returns the providers operators have configured (Google, GitHub).
+        Empty list when OAuth is not configured.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.providerListResponse'
+      summary: List OAuth providers enabled in this deployment
+      tags:
+      - oauth
   /auth/refresh:
     post:
       description: Issue a new short-lived access token using the refresh token stored
