@@ -13,13 +13,27 @@ import { describe, expect, it } from "vitest"
   1. **No ad-hoc page widths.** A top-level route MUST NOT use a raw
      `max-w-*` literal (or the token classes `max-w-page-narrow` /
      `max-w-page-wide`) on its outermost wrapper. The width comes from
-     `<Page width="narrow" | "wide" | "full">` and nothing else.
+     `<Page width="narrow" | "wide" | "full">` and nothing else. Applies
+     to ALL tags including `<Page>` itself — `<Page className="max-w-3xl">`
+     would defeat the contract.
 
-  2. **No ad-hoc page H1s.** A top-level route's heading SHOULD render via
-     `<PageHeader>` rather than a hand-rolled `<h1 className="text-3xl …">`.
-     Files using <PageHeader> are exempt from this rule; files in the
-     `SPECIAL_PURPOSE_PAGES` allow list are too (centered error/auth/empty
-     states with bespoke chrome).
+  2. **<Page> is imported and rendered.** Top-level routes must (a)
+     import `@/components/ui/page` and (b) actually open a `<Page>` (or
+     `<PageFrame>`, the dual-mode helper in `CommodityDetailPage`) JSX
+     element. The combined check kills the "unused import" case the
+     pure-import regex used to miss. We deliberately do NOT enforce
+     "<Page> is the outermost element of every return" — that needs a
+     real AST parser to handle inline JSX expressions whose `)` lives at
+     the same indent as the `return`'s closer, and the import + JSX-use
+     pair already catches the realistic failure modes. Header
+     consistency falls out of this naturally: a page using `<Page>` is
+     free to compose `<PageHeader>` (the canonical path) or, for
+     entity-detail surfaces with custom chrome (icon + breadcrumb +
+     action cluster), a hand-rolled header that follows canonical
+     typography (`text-2xl/3xl font-semibold tracking-tight`). We don't
+     grep typography directly because the false-positive rate is too
+     high; the `<PageHeader>` primitive in `components/ui/page.tsx`
+     covers the canonical path on its own.
 
   3. **Width tokens stay singular.** The `max-w-page-narrow` /
      `max-w-page-wide` utilities only exist inside the `<Page>` component
@@ -175,7 +189,7 @@ describe("page-layout convention guard (issue #1889)", () => {
     expect(violations).toEqual([])
   })
 
-  it("non-special pages import AND render the canonical <Page> primitive", () => {
+  it("non-special pages import and render the canonical <Page> primitive", () => {
     const violations: string[] = []
     for (const { rel, src } of allPages) {
       const normalised = rel.replace(/\\/g, "/")
@@ -189,11 +203,29 @@ describe("page-layout convention guard (issue #1889)", () => {
       // <Page>) and don't need their own. Heuristic: any file under
       // admin/ that's not the layout itself.
       if (normalised.startsWith("admin/")) continue
-      // Both import AND JSX use — an unused import would still pass the
-      // pure-import regex (Copilot/CodeRabbit feedback on #1889).
+      // Two layered checks (Copilot / CodeRabbit feedback on #1889):
+      //   1. `@/components/ui/page` is imported — kills the case where
+      //      the import was added but nothing in the file uses it.
+      //   2. `<Page>` (or the `PageFrame` dual-mode helper from
+      //      `CommodityDetailPage`) is opened somewhere in the JSX, NOT
+      //      just referenced in a string or a comment.
+      // We deliberately stop short of requiring `<Page>` to be the
+      // OUTERMOST element of every return. Doing that rigorously needs
+      // a JSX/TS AST parser — a regex over `return (...)` blocks gets
+      // confused by inline expressions whose `)` sits at the same indent
+      // as the return's own closer, picking up a substring of the body
+      // instead of the full return. The import + JSX-use check catches
+      // the realistic failure modes (unused imports, nested-only usage)
+      // without that cost; structural enforcement of "Page is the root
+      // wrapper" lives in the rule-1 max-w guard above (which flags any
+      // ad-hoc `max-w-*` on the actual outermost element across all
+      // returns, regardless of tag).
       const importsPageModule = /from\s+["']@\/components\/ui\/page["']/.test(src)
-      const rendersPageComponent = /<Page\b/.test(src)
-      if (!(importsPageModule && rendersPageComponent)) {
+      // Match `<Page` or `<PageFrame` opening tags. `\b` boundary stops
+      // it from matching `<PageHeader` (which is a separate sibling, not
+      // a wrapper) or `<Pages` (no such component, but defensive).
+      const rendersPageWrapper = /<Page(?:Frame)?\s/.test(src) || /<Page(?:Frame)?>/.test(src)
+      if (!(importsPageModule && rendersPageWrapper)) {
         violations.push(rel)
       }
     }
