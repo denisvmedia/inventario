@@ -16,6 +16,7 @@ this skeleton landed in [#1853](https://github.com/denisvmedia/inventario/issues
 infra/
 ├── Makefile               targets: bootstrap upgrade recover destroy status logs shell
 ├── README.md              this file
+├── SECRETS.md             secrets setup walkthrough (age, GH App, TS OAuth, DR) — #1854
 └── vm/
     ├── bootstrap.sh       laptop orchestrator — ssh, sops, upload, apply
     ├── vm-install.sh      remote installer — tailscale, vcluster, TS-op, ArgoCD
@@ -24,7 +25,9 @@ infra/
     │   └── apply-secrets.sh   translate sops bundle into k8s Secrets
     └── secrets/
         ├── .gitignore
-        └── secrets.example.yaml   schema reference (safe to commit)
+        ├── .sops.yaml             creation_rules → age recipient (added in #1854)
+        ├── secrets.example.yaml   schema reference (safe to commit)
+        └── secrets.enc.yaml       sops-encrypted bundle (added in #1854)
 ```
 
 ## Quick start
@@ -50,7 +53,7 @@ data that orchestration needs to be useful:
 
 | Need | Filled by | Without it |
 |---|---|---|
-| `infra/vm/secrets/secrets.enc.yaml` (sops bundle) | [#1854](https://github.com/denisvmedia/inventario/issues/1854) | `tailscale up` must be run manually on the VM; TS-op and GH App creds unavailable. |
+| `infra/vm/secrets/secrets.enc.yaml` (sops bundle) | [#1854](https://github.com/denisvmedia/inventario/issues/1854) — see [`SECRETS.md`](./SECRETS.md) | `tailscale up` must be run manually on the VM; TS-op and GH App creds unavailable. |
 | Tailscale Operator helm values overlay | [#1855](https://github.com/denisvmedia/inventario/issues/1855) | Default chart values used (works for basic Service/Ingress). |
 | `helm/inventario/` PR-preview overlay | [#1856](https://github.com/denisvmedia/inventario/issues/1856) | ApplicationSet template can't reference it yet. |
 | `infra/argocd/*.yaml` (AppProject, ApplicationSet, master Application) | [#1858](https://github.com/denisvmedia/inventario/issues/1858) | ArgoCD installs but no Applications appear; PR labels do nothing. |

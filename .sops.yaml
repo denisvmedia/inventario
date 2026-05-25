@@ -1,0 +1,23 @@
+# sops creation rules — decides which key encrypts which file.
+# See: https://github.com/getsops/sops#using-sops-yaml-conf-to-select-kms-pgp-and-age-for-new-files
+#
+# To add a teammate's age key as a second recipient (so they can decrypt too):
+#   1. Get their public key (output of `age-keygen -y ~/.config/sops/age/keys.txt` on their laptop)
+#   2. Append it after a `,` in the `age:` field below
+#   3. Re-encrypt existing files: `sops updatekeys infra/vm/secrets/secrets.enc.yaml`
+#   4. Commit both changes in the same PR
+#
+# Rotation procedure: see infra/SECRETS.md → "Key rotation".
+
+creation_rules:
+  # path_regex matches the file path RELATIVE TO THIS .sops.yaml — which lives
+  # at the repo root because sops walks up from $PWD (not from the file path)
+  # to find its config. Scoping each rule to `^infra/vm/secrets/` prevents the
+  # rule from accidentally firing on unrelated `*.local.yaml` / `*.enc.yaml`
+  # elsewhere in the repo. Both rules pin the same age recipient: .local.yaml
+  # lets `sops -e secrets.local.yaml > secrets.enc.yaml` work without --age;
+  # .enc.yaml covers in-place `sops` editor sessions.
+  - path_regex: ^infra/vm/secrets/.*\.enc\.yaml$
+    age: age1dz6m6gzmu9tuqhkvdhz9gnvgmjqry7u6a69w670u22kjht5amsjsdx2re0
+  - path_regex: ^infra/vm/secrets/.*\.local\.yaml$
+    age: age1dz6m6gzmu9tuqhkvdhz9gnvgmjqry7u6a69w670u22kjht5amsjsdx2re0
