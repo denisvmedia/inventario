@@ -3,7 +3,7 @@
 {{- $secretName := include "inventario.secretName" . -}}
 {{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
 {{- $redisUrl := include "inventario.redisUrl" . -}}
-{{- $setupHook := ternary "post-install,pre-upgrade" "pre-install,pre-upgrade" .Values.demo.postgresql.enabled -}}
+{{- $setupHook := .Values.setupJob.hookOverride | default (ternary "post-install,pre-upgrade" "pre-install,pre-upgrade" .Values.demo.postgresql.enabled) -}}
 {{- $usePersistentUploads := and .Values.persistence.enabled (hasPrefix "file://" (include "inventario.uploadLocation" .)) -}}
 apiVersion: batch/v1
 kind: Job

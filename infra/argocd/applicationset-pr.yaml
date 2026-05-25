@@ -15,6 +15,12 @@ metadata:
   name: inventario-pr-previews
   namespace: argocd
 spec:
+  # Switch from the default fasttemplate engine to Go templates so we can use
+  # `{{.number}}` / `{{.head_sha}}` / `{{ slice .head_sha 0 7 }}` syntax in the
+  # template below. Without this, fasttemplate would substitute `{{number}}`
+  # (no dot) and would silently pass `{{.number}}` through literally, breaking
+  # Application name validation (RFC 1123 forbids `{}` chars).
+  goTemplate: true
   generators:
     - pullRequest:
         github:
@@ -49,7 +55,7 @@ spec:
             # bootstrap.sh substitutes <TAILNET> at apply time.
             values: |
               image:
-                tag: 'sha-{{ slice .head_sha 0 7 }}'
+                tag: 'sha-{{ .head_short_sha_7 }}'
               ingress:
                 annotations:
                   tailscale.com/hostname: 'inv-vcl01-pr{{.number}}'

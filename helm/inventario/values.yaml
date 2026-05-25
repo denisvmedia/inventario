@@ -513,6 +513,20 @@ secrets:
 setupJob:
   enabled: true
 
+  # Override the Helm hook annotation on the setup Job. The chart default is
+  # `post-install,pre-upgrade` when demo.postgresql.enabled (so Postgres exists
+  # before bootstrap/migrate runs and migrations re-run on upgrade), or
+  # `pre-install,pre-upgrade` otherwise (external Postgres assumed up).
+  #
+  # ArgoCD interprets a comma-separated hook list as BOTH hooks active and
+  # schedules the Job in BOTH PreSync AND PostSync phases — so the Job runs
+  # in PreSync before the other resources land, times out waiting for
+  # Postgres, and the sync stalls. Set this to `post-install` (single hook)
+  # for ArgoCD-managed deployments where pre-upgrade migrations aren't
+  # needed in-place (e.g. ephemeral PR previews that are wiped per push).
+  # Empty string keeps the default chart behaviour.
+  hookOverride: ""
+
   bootstrap:
     # Whether to run the DB bootstrap step (creates migrator DB user).
     # Set to false if you manage DB users externally.

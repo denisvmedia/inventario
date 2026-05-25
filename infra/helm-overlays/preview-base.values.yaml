@@ -41,6 +41,16 @@ demo:
 
 # Bootstrap + migrate runs via the chart's existing helm hook on install/upgrade
 # (templates/job-setup.yaml). Idempotent — re-applies safely.
+#
+# Override the hook annotation to single `post-install` instead of the chart
+# default `post-install,pre-upgrade`. ArgoCD treats the comma list as both
+# PreSync + PostSync and schedules the Job in BOTH phases, so it runs in
+# PreSync before Postgres exists, hangs waiting for the DB, and stalls the
+# sync. Single `post-install` runs only in PostSync after Postgres is up.
+# For ephemeral PR previews (and the wipe-on-push master), in-place upgrade
+# migrations aren't needed.
+setupJob:
+  hookOverride: post-install
 
 # Expose via Tailscale Ingress, NOT LoadBalancer. The TS operator (#1855)
 # provisions a tailnet proxy node from the Ingress + `className: tailscale`
