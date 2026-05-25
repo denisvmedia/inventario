@@ -155,9 +155,10 @@ describe("page-layout convention guard (issue #1889)", () => {
         // The `<Page>` wrapper is the canonical entry — width comes from
         // the `width` prop, not a className literal. Pages that wrap with
         // <Page> may add other classes (`gap-8`, `relative`, …) but never
-        // raw `max-w-*`. Other top-level wrappers (`<div>`, `<header>`,
-        // `<main>`) must also not carry a `max-w-*` literal.
-        if (tag === "Page") continue
+        // a raw `max-w-*` literal. Other top-level wrappers (`<div>`,
+        // `<header>`, `<main>`) must also not carry a `max-w-*` literal.
+        // No bypass for any tag — `<Page className="max-w-3xl">` would
+        // defeat the contract too (Copilot/CodeRabbit feedback on #1889).
         if (FORBIDDEN_MAX_W.test(className ?? "")) {
           violations.push(`${rel}: <${tag} className="…${className}…">`)
         }
@@ -174,23 +175,25 @@ describe("page-layout convention guard (issue #1889)", () => {
     expect(violations).toEqual([])
   })
 
-  it("non-special pages use either <Page> or a <PageHeader> for the page title", () => {
+  it("non-special pages import AND render the canonical <Page> primitive", () => {
     const violations: string[] = []
     for (const { rel, src } of allPages) {
       const normalised = rel.replace(/\\/g, "/")
       if (SPECIAL_PURPOSE_PAGES.has(normalised)) continue
       // Sub-panels mounted by other pages (and the AdminLayout itself,
       // which provides the Page wrapper for /admin/* children) don't need
-      // their own Page/PageHeader. Heuristic: files that don't export a
-      // `*Page` symbol or aren't a recognised route component fall here.
+      // their own Page.
       if (normalised === "admin/AdminLayout.tsx") continue
       if (normalised === "areas/AreaItemsPanel.tsx") continue
-      const hasPage = /from\s+["']@\/components\/ui\/page["']/.test(src)
       // Admin sub-pages live under AdminLayout (which wraps them in
       // <Page>) and don't need their own. Heuristic: any file under
       // admin/ that's not the layout itself.
       if (normalised.startsWith("admin/")) continue
-      if (!hasPage) {
+      // Both import AND JSX use — an unused import would still pass the
+      // pure-import regex (Copilot/CodeRabbit feedback on #1889).
+      const importsPageModule = /from\s+["']@\/components\/ui\/page["']/.test(src)
+      const rendersPageComponent = /<Page\b/.test(src)
+      if (!(importsPageModule && rendersPageComponent)) {
         violations.push(rel)
       }
     }

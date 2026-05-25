@@ -105,11 +105,11 @@ export function ExportNewPage() {
 
   if (!groupReady) {
     return (
-      <div className="flex flex-col gap-4 p-6" data-testid="page-export-new-loading">
+      <Page width="narrow" className="gap-4" data-testid="page-export-new-loading">
         <Skeleton className="h-8 w-1/2" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-24 w-full" />
-      </div>
+      </Page>
     )
   }
 

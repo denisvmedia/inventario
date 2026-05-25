@@ -7,7 +7,7 @@ import { RestoreHistoryList } from "@/components/exports/RestoreHistoryList"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Page } from "@/components/ui/page"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { type Export } from "@/features/export/api"
 import {
@@ -106,65 +106,70 @@ export function ExportDetailPage() {
 
   return (
     <Page width="narrow" data-testid="page-export-detail">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-2">
-          <Button asChild variant="link" className="self-start px-0">
-            <Link to={`/g/${encodeURIComponent(slug)}/exports`}>
-              <ArrowLeft className="mr-1.5 size-4" aria-hidden="true" />
-              {t("exports:list.title")}
-            </Link>
-          </Button>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{t("exports:detail.title")}</h1>
+      <PageHeader
+        size="detail"
+        title={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <span>{t("exports:detail.title")}</span>
             {exp.status && <ExportStatusBadge status={exp.status} />}
             {exp.imported && <Badge variant="secondary">{t("exports:list.imported")}</Badge>}
             {isDeleted && <Badge variant="destructive">{t("exports:list.deletedBadge")}</Badge>}
-          </div>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            {exp.description?.trim() || t("exports:detail.noDescription")}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onDownload}
-            disabled={!isCompleted || isDeleted || downloadMutation.isPending}
-            data-testid="export-detail-download"
+          </span>
+        }
+        subtitle={exp.description?.trim() || t("exports:detail.noDescription")}
+        subtitleClassName="max-w-prose text-sm"
+        backLink={
+          <Link
+            to={`/g/${encodeURIComponent(slug)}/exports`}
+            className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
           >
-            {downloadMutation.isPending ? (
-              <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Download className="mr-1.5 size-4" aria-hidden="true" />
-            )}
-            {t("exports:actions.download")}
-          </Button>
-          <Button
-            asChild
-            disabled={!isCompleted || isDeleted || migrationLock.locked}
-            aria-disabled={!isCompleted || isDeleted || migrationLock.locked || undefined}
-            title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-          >
-            <Link
-              to={`/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(exp.id)}/restore`}
-              data-testid="export-detail-restore"
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            {t("exports:list.title")}
+          </Link>
+        }
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onDownload}
+              disabled={!isCompleted || isDeleted || downloadMutation.isPending}
+              data-testid="export-detail-download"
             >
-              <RotateCcw className="mr-1.5 size-4" aria-hidden="true" />
-              {t("exports:actions.restore")}
-            </Link>
-          </Button>
-          <Button
-            variant="ghost"
-            type="button"
-            onClick={onDelete}
-            disabled={isDeleted}
-            data-testid="export-detail-delete"
-            aria-label={t("exports:actions.delete")}
-          >
-            <Trash2 className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
-      </header>
+              {downloadMutation.isPending ? (
+                <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="mr-1.5 size-4" aria-hidden="true" />
+              )}
+              {t("exports:actions.download")}
+            </Button>
+            <Button
+              asChild
+              disabled={!isCompleted || isDeleted || migrationLock.locked}
+              aria-disabled={!isCompleted || isDeleted || migrationLock.locked || undefined}
+              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+            >
+              <Link
+                to={`/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(exp.id)}/restore`}
+                data-testid="export-detail-restore"
+              >
+                <RotateCcw className="mr-1.5 size-4" aria-hidden="true" />
+                {t("exports:actions.restore")}
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={onDelete}
+              disabled={isDeleted}
+              data-testid="export-detail-delete"
+              aria-label={t("exports:actions.delete")}
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+            </Button>
+          </>
+        }
+      />
 
       {exp.imported && (
         <Alert data-testid="export-detail-imported-banner">

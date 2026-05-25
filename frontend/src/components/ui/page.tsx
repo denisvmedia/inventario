@@ -55,13 +55,17 @@ type PageHeaderProps = Omit<ComponentProps<"header">, "title"> & {
   backLink?: ReactNode
   size?: PageHeaderSize
   /**
-   * Render `title` as the visible text node only (no surrounding `<h1>`).
-   * Reserved for pages that need a richer heading layout (status badges,
-   * inline action clusters) while still adopting canonical typography.
+   * Extra classes appended to the rendered `<h1>` element. Reserved for
+   * callers that need to tweak the canonical typography (e.g. a richer
+   * status-badge cluster wrapped inside the title slot, or a tighter
+   * tracking override). Does NOT replace the `<h1>` wrapper — the heading
+   * always renders as an `<h1>` so the route's accessible name stays
+   * stable.
    */
   titleClassName?: string
   /**
-   * Wraps `subtitle` for callers that need extra constraint (e.g. `max-w-prose`).
+   * Extra classes appended to the rendered subtitle `<p>` (e.g.
+   * `max-w-prose`, `text-sm`).
    */
   subtitleClassName?: string
 }
