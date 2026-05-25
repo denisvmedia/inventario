@@ -68,6 +68,11 @@ jobs:
           short_sha="${PR_HEAD_SHA:0:7}"
           short_host="inv-vcl01-pr${PR_NUMBER}"
 
+          # NOTE: do NOT hard-wrap paragraphs inside this heredoc. GitHub-
+          # flavoured markdown renders every source newline as a `<br>` in
+          # comments (unlike CommonMark, which collapses single newlines into
+          # spaces). One paragraph = one long line; only blank lines between
+          # logical paragraphs.
           if [ "$IS_CLOSED" = "true" ]; then
               status="🗑️ Preview torn down (PR closed)"
               body=$(cat <<EOF
@@ -75,9 +80,7 @@ jobs:
 
           ${status}
 
-          The ApplicationSet pruned the per-PR Application within ~60s of the
-          PR closing. Tailscale proxy device auto-removes from the tailnet
-          (\`ephemeral-pr\` ProxyClass).
+          The ApplicationSet pruned the per-PR Application within ~60s of the PR closing. Tailscale proxy device auto-removes from the tailnet (\`ephemeral-pr\` ProxyClass).
           EOF
           )
           elif [ "$UNLABELED_PREVIEW" = "true" ]; then
@@ -101,21 +104,13 @@ jobs:
 
           ${status}
 
-          - Deployed hostname (Tailscale MagicDNS, tailnet members only):
-            \`${short_host}\`
-          - Admin login: \`admin@example.com\` / \`PreviewAdmin123\`
-            *(dev-only credential, gated behind Tailscale ACL)*
+          - Deployed hostname (Tailscale MagicDNS, tailnet members only): \`${short_host}\`
+          - Admin login: \`admin@example.com\` / \`PreviewAdmin123\` *(dev-only credential, gated behind Tailscale ACL)*
           - Head: \`${PR_HEAD_SHA}\`
 
-          The hostname is shown as plain text on purpose: the Tailscale-
-          issued TLS cert only covers the FQDN, and a short-hostname HTTP
-          redirect ends up cert-mismatched. Tailnet members know how to
-          combine \`<hostname>\` + their tailnet's MagicDNS suffix to reach
-          the working HTTPS URL.
+          The hostname is shown as plain text on purpose: the Tailscale-issued TLS cert only covers the FQDN, and a short-hostname HTTP redirect ends up cert-mismatched. Tailnet members know how to combine \`<hostname>\` + their tailnet's MagicDNS suffix to reach the working HTTPS URL.
 
-          Status reflects what ArgoCD has been asked to deploy, not whether
-          the sync has completed yet. Allow ~3-5 minutes after a push for
-          the docker build + ArgoCD sync to finish.
+          Status reflects what ArgoCD has been asked to deploy, not whether the sync has completed yet. Allow ~3-5 minutes after a push for the docker build + ArgoCD sync to finish.
 
           ---
           <sub>Updated automatically by [pr-preview-status.yml](https://github.com/${{ github.repository }}/blob/master/.github/workflows/pr-preview-status.yml) on each PR event.</sub>
