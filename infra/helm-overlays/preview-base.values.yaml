@@ -1,0 +1,60 @@
+# Shared overlay used by BOTH:
+#   - infra/argocd/applicationset-pr.yaml (per-PR previews)
+#   - infra/argocd/application-master.yaml (static master)
+#
+# Both Applications layer this file via ArgoCD's helm.valueFiles (referencing
+# a second `ref: values` source so the file is pulled from the repo alongside
+# the chart). Per-Application dynamic bits — image.tag pinned to the head SHA,
+# the tailnet FQDN for ingress.hosts/tls, the per-PR tailscale.com/hostname
+# annotation — are layered on top via helm.values (inline). Helm deep-merges
+# objects so annotations combine cleanly; arrays (hosts, tls) come from the
+# inline layer in full.
+#
+# Why one shared file instead of separate pr-preview / master overlays:
+# the static portion is identical, and putting per-environment values
+# (tailnet name) into a file ArgoCD reads from git would break the
+# bootstrap.sh `<TAILNET>` substitution that lives at kubectl-apply time
+# in infra/argocd/*.yaml. Keeping the static slice tailnet-agnostic here
+# is the only consistent design.
+
+image:
+  repository: ghcr.io/denisvmedia/inventario
+  pullPolicy: IfNotPresent
+  # image.tag is layered on per-Application (sha-<7> for PR, sha-<7> of HEAD for master).
+
+# Combined-mode Deployment — API + workers in one pod. Single replica works
+# for ephemeral previews where state lives in demo.* sidecars.
+run:
+  all:
+    enabled: true
+    replicaCount: 1
+
+# In-cluster Postgres / Redis / MinIO for self-contained previews. No external
+# dependencies, no persistence. Data is lost on pod restart — by design.
+demo:
+  postgresql:
+    enabled: true
+  redis:
+    enabled: true
+  minio:
+    enabled: true
+
+# Bootstrap + migrate runs via the chart's existing helm hook on install/upgrade
+# (templates/job-setup.yaml). Idempotent — re-applies safely.
+
+# Expose via Tailscale Ingress, NOT LoadBalancer. The TS operator (#1855)
+# provisions a tailnet proxy node from the Ingress + `className: tailscale`
+# and handles cert termination outside the chart.
+service:
+  type: ClusterIP
+  port: 3333
+
+ingress:
+  enabled: true
+  className: tailscale
+  annotations:
+    # http-redirect from :80 to https://<FQDN>/ — built into TS operator,
+    # validated in the #1867 spike. tailscale.com/hostname is layered
+    # per-Application (PR number for previews, fixed `inv-vcl01-master`
+    # for master).
+    tailscale.com/http-redirect: "true"

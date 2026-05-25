@@ -46,6 +46,17 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq curl jq ca-certificates conntrack socat
 
+# --- Force NTP resync ---
+# Snapshot-rollback gotcha: rolling back from a `qm snapshot --vmstate 1` snapshot
+# restores the kernel time-of-day clock to the snapshot moment (T0). systemd-timesyncd
+# is slow to step a large drift on its own, leaving the clock 10+ hours behind real time
+# until next natural poll. Anything JWT-based then fails with "iat in the past / token
+# expired" (GitHub App tokens, etc.). Toggle NTP off+on to force an immediate step.
+note "Forcing NTP resync (guards against snapshot-rollback clock drift)"
+timedatectl set-ntp false 2>/dev/null || true
+timedatectl set-ntp true 2>/dev/null || true
+sleep 5
+
 # --- tailscaled ---
 if ! command -v tailscale >/dev/null; then
     note "Installing tailscale"

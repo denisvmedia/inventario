@@ -73,11 +73,34 @@ if [ -n "$SECRETS_JSON" ]; then
 fi
 
 # --- Apply ArgoCD manifests (AppProject, ApplicationSet, master Application) (#1858) ---
+# `<TAILNET>` in the manifests is substituted to the tailnet MagicDNS suffix
+# from the sops bundle (e.g. `<TAILNET>`) so the rendered Ingress hosts
+# end up at the tailnet-correct FQDN.
 if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
-    note "Applying ArgoCD manifests from $ARGOCD_DIR"
-    for m in "$ARGOCD_DIR"/*.yaml; do
-        ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -' < "$m"
-    done
+    TAILNET_NAME=""
+    if [ -n "$SECRETS_JSON" ]; then
+        TAILNET_NAME=$(jq -r '.tailscale.tailnet_name // ""' <<<"$SECRETS_JSON")
+    fi
+    if [ -z "$TAILNET_NAME" ]; then
+        warn "$ARGOCD_DIR present but tailscale.tailnet_name missing from sops bundle."
+        warn "Applying with literal <TAILNET> placeholder — Applications will Ingress to broken hosts."
+        TAILNET_NAME="<TAILNET>"
+    fi
+    note "Applying ArgoCD manifests from $ARGOCD_DIR (tailnet: $TAILNET_NAME)"
+    # AppProject must land BEFORE Application/ApplicationSet that reference it.
+    # Three explicit globs — `application*.yaml` would otherwise also match
+    # `applicationset*.yaml` (literal prefix) and apply it twice in wrong order.
+    apply_argocd_yaml() {
+        local pattern="$1"
+        for m in "$ARGOCD_DIR"/$pattern; do
+            [ -f "$m" ] || continue
+            sed "s|<TAILNET>|${TAILNET_NAME}|g" "$m" | \
+                ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
+        done
+    }
+    apply_argocd_yaml 'appproject*.yaml'
+    apply_argocd_yaml 'application-*.yaml'
+    apply_argocd_yaml 'applicationset*.yaml'
 else
     warn "$ARGOCD_DIR has no manifests yet (lands in #1858)."
     warn "ArgoCD is installed but no AppProject/ApplicationSet/Application is registered."

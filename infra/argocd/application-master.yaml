@@ -1,0 +1,55 @@
+# Static Application that tracks master HEAD. Auto-syncs whenever a new
+# commit lands on master (and the corresponding sha-<7> image hits GHCR).
+#
+# Same multi-source pattern as the per-PR Applications from
+# applicationset-pr.yaml so the shared preview-base.values.yaml overlay
+# can be referenced via $values.
+#
+# `<TAILNET>` is substituted by infra/vm/bootstrap.sh from the sops bundle's
+# tailscale.tailnet_name at kubectl apply time.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: inv-vcl01-master
+  namespace: argocd
+  labels:
+    inventario-preview: "true"
+spec:
+  project: previews
+
+  sources:
+    - repoURL: https://github.com/denisvmedia/inventario
+      targetRevision: master
+      path: helm/inventario
+      helm:
+        valueFiles:
+          - $values/infra/helm-overlays/preview-base.values.yaml
+        values: |
+          ingress:
+            annotations:
+              tailscale.com/hostname: inv-vcl01-master
+            hosts:
+              - host: 'inv-vcl01-master.<TAILNET>.ts.net'
+                paths:
+                  - path: /
+                    pathType: Prefix
+            tls:
+              - hosts:
+                  - 'inv-vcl01-master.<TAILNET>.ts.net'
+                secretName: ""
+    - repoURL: https://github.com/denisvmedia/inventario
+      targetRevision: master
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: inv-vcl01-master
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

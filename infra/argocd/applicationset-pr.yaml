@@ -1,0 +1,79 @@
+# ApplicationSet with GitHub PR generator. Creates one Application per open
+# PR labeled `preview` on denisvmedia/inventario; removes the Application
+# (and prunes its resources) when the label drops off or the PR closes.
+#
+# Authenticates via `appSecretName: github-app-creds` (Secret created by
+# infra/vm/scripts/apply-secrets.sh from the sops bundle's github.app_*).
+#
+# `<TAILNET>` is the placeholder substituted by infra/vm/bootstrap.sh before
+# kubectl apply, using tailscale.tailnet_name from the sops bundle (e.g.
+# `<TAILNET>` for the canonical tailnet of this setup).
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: inventario-pr-previews
+  namespace: argocd
+spec:
+  generators:
+    - pullRequest:
+        github:
+          owner: denisvmedia
+          repo: inventario
+          labels:
+            - preview
+          appSecretName: github-app-creds
+        requeueAfterSeconds: 60
+
+  template:
+    metadata:
+      name: 'inv-vcl01-pr{{.number}}'
+      labels:
+        inventario-preview: "true"
+        inventario-pr: '{{.number}}'
+    spec:
+      project: previews
+
+      # Multi-source: source[0] is the chart at the PR's head SHA; source[1]
+      # provides the repo for $values lookups so valueFiles can reference
+      # files outside the chart path (`infra/helm-overlays/...`).
+      sources:
+        - repoURL: https://github.com/denisvmedia/inventario
+          targetRevision: '{{.head_sha}}'
+          path: helm/inventario
+          helm:
+            valueFiles:
+              - $values/infra/helm-overlays/preview-base.values.yaml
+            # Per-PR dynamic values layered on top of the shared overlay.
+            # ApplicationSet substitutes {{.number}} / {{.head_sha}};
+            # bootstrap.sh substitutes <TAILNET> at apply time.
+            values: |
+              image:
+                tag: 'sha-{{ slice .head_sha 0 7 }}'
+              ingress:
+                annotations:
+                  tailscale.com/hostname: 'inv-vcl01-pr{{.number}}'
+                hosts:
+                  - host: 'inv-vcl01-pr{{.number}}.<TAILNET>.ts.net'
+                    paths:
+                      - path: /
+                        pathType: Prefix
+                tls:
+                  - hosts:
+                      - 'inv-vcl01-pr{{.number}}.<TAILNET>.ts.net'
+                    secretName: ""
+        - repoURL: https://github.com/denisvmedia/inventario
+          targetRevision: '{{.head_sha}}'
+          ref: values
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'inv-vcl01-pr{{.number}}'
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
