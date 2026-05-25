@@ -116,12 +116,17 @@ if [ -n "${TS_OAUTH_ID:-}" ] && [ -n "${TS_OAUTH_SECRET:-}" ]; then
     # Layer OAuth on top of static values via a second --values overlay (later
     # file wins on key conflict). Writing oauth to a temp file avoids leaking
     # the secret through `--set-string` in /proc/*/cmdline / process-args audit.
+    # Emit values as chomped block scalars (`|-`) instead of double-quoted
+    # strings — defensive against credentials containing YAML-sensitive chars
+    # (`"`, `\`, newlines). Same pattern as infra/vm/scripts/apply-secrets.sh.
     TS_OAUTH_VALUES=$(umask 077 && mktemp "$REMOTE_TMP/ts-op-oauth.XXXXXX.yaml")
     trap 'rm -f "$TS_OAUTH_VALUES"' EXIT
     cat >"$TS_OAUTH_VALUES" <<EOF
 oauth:
-  clientId: "$TS_OAUTH_ID"
-  clientSecret: "$TS_OAUTH_SECRET"
+  clientId: |-
+$(printf '%s' "$TS_OAUTH_ID" | sed 's/^/    /')
+  clientSecret: |-
+$(printf '%s' "$TS_OAUTH_SECRET" | sed 's/^/    /')
 EOF
     "$HELM" upgrade --install tailscale-operator tailscale/tailscale-operator \
         --namespace tailscale \
