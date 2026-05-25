@@ -87,10 +87,7 @@ if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
         TAILNET_NAME="<TAILNET>"
     fi
     note "Applying ArgoCD manifests from $ARGOCD_DIR (tailnet: $TAILNET_NAME)"
-    # Four explicit globs in dependency order:
-    #   - proxyclass*.yaml: TS Operator CRDs that Applications/Ingresses
-    #     reference via annotation (e.g. ephemeral-pr) — must exist first
-    #     or the operator falls back to defaults silently.
+    # Three explicit globs in dependency order:
     #   - appproject*.yaml: AppProject must land BEFORE Application/
     #     ApplicationSet that reference it via .spec.project.
     #   - application-*.yaml: the static master Application.
@@ -115,7 +112,6 @@ if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
                 ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
         done
     }
-    apply_argocd_yaml 'proxyclass*.yaml'
     apply_argocd_yaml 'appproject*.yaml'
     apply_argocd_yaml 'application-*.yaml'
     apply_argocd_yaml 'applicationset*.yaml'
