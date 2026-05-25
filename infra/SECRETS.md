@@ -1,0 +1,382 @@
+# Secrets setup (#1854)
+
+Operating reference for the sops+age secret bundle that `infra/vm/bootstrap.sh`
+consumes. Covers one-time setup, the GitHub App + Tailscale OAuth flows, and
+the disaster-recovery runbook.
+
+> Full beginner README will live in #1863. This file is the focused secrets
+> walkthrough.
+
+## Architecture in one paragraph
+
+All identity-critical state lives in `infra/vm/secrets/secrets.enc.yaml`
+encrypted with **sops + age**. The only thing that must live **off-VM** is one
+age private key on the laptop (with a copy in your password manager). The
+encrypted bundle is committed to the repo. `bootstrap.sh` decrypts it locally
+on the laptop, ships the plaintext to the VM tmpfs, and `apply-secrets.sh`
+turns the JSON into three Kubernetes Secrets (`inv-system/inventario-admin`,
+`argocd/github-app-creds`, `tailscale/operator-oauth`).
+
+## Files in this layout
+
+```
+.sops.yaml                       ← repo-root: creation_rules + age recipients
+                                   (sops walks up from $PWD to find this)
+infra/vm/secrets/
+├── .gitignore                   ← ignores *.plain.*, secrets.{yaml,json}
+├── secrets.example.yaml         ← schema reference, safe to commit
+└── secrets.enc.yaml             ← THE bundle, sops-encrypted
+```
+
+---
+
+## One-time setup (you do this once, ever)
+
+### 1. Generate the age keypair
+
+On your laptop, **once** in your entire life:
+
+```bash
+mkdir -p ~/.config/sops/age
+age-keygen -o ~/.config/sops/age/keys.txt
+chmod 600 ~/.config/sops/age/keys.txt
+```
+
+This prints a `age1...` **public** key to stdout (and stores both halves in
+`keys.txt`). The public key goes into `.sops.yaml` and into this repo. The
+private key file stays on your laptop and never leaves it via git.
+
+**macOS-specific gotcha**: sops on macOS looks for the age key at
+`~/Library/Application Support/sops/age/keys.txt` (the OS-native
+"Application Support" XDG path), NOT at `~/.config/sops/age/keys.txt`.
+If you keep the key at the latter (cleaner), make a symlink so sops finds it:
+
+```bash
+mkdir -p "$HOME/Library/Application Support/sops/age"
+ln -sf "$HOME/.config/sops/age/keys.txt" \
+       "$HOME/Library/Application Support/sops/age/keys.txt"
+```
+
+Alternative: set `SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt` in your
+shell rc. The symlink is the less invasive option.
+
+**Critical**: back up `~/.config/sops/age/keys.txt` to your password manager
+(1Password / Bitwarden / etc.) right now, before doing anything else. If you
+lose it, the secrets bundle becomes a brick — there's no recovery path. Other
+team members who get added later will get their own age key and become an
+additional recipient on the bundle (`age:` accepts a comma-separated list).
+
+The public key (`age1...`) needs to land in the repo-root `.sops.yaml`. If
+you're the first person setting this up, write it there directly (see
+"Adding teammates" below for the multi-recipient layout). If `.sops.yaml`
+already lists one recipient (the current case in this repo), add yours as
+a second one and re-encrypt — also covered in "Adding teammates".
+
+### 2. Create the GitHub App
+
+ArgoCD's `repo-server` (for `git clone` of the inventario repo) and the
+ApplicationSet PR generator (for listing PRs and reading labels) consume
+a GitHub App credential — no PAT, no custom bot component. Permissions are
+read-only; ArgoCD never writes to GitHub.
+
+1. Open <https://github.com/settings/apps/new>
+2. Fill in:
+   - **GitHub App name**: `inventario-deploy-bot` (must be globally unique on
+     GitHub; suffix with your handle if taken)
+   - **Homepage URL**: `https://github.com/denisvmedia/inventario`
+   - **Webhook** → **Active**: uncheck (we poll, not webhook — see [#1852 pivot](https://github.com/denisvmedia/inventario/issues/1852#issuecomment-4528693792))
+   - **Repository permissions**:
+     - **Contents**: Read-only
+     - **Metadata**: Read-only (always required by GitHub)
+     - **Pull requests**: Read-only
+     - (everything else stays "No access")
+   - **Subscribe to events**: none (we poll)
+   - **Where can this GitHub App be installed?**: **Only on this account**
+3. Click **Create GitHub App**.
+4. On the resulting App page, record the **App ID** (top of page, e.g.
+   `App ID: 123456`).
+5. Click **Generate a private key**. A `.pem` file downloads — keep it
+   somewhere safe for the next step.
+6. In the left sidebar, click **Install App** → next to your username, click
+   **Install** → choose **Only select repositories** → pick
+   `denisvmedia/inventario` → **Install**.
+7. After install, the URL becomes `https://github.com/settings/installations/<NNNNN>`.
+   Record the `NNNNN` — that's the **Installation ID**.
+
+Stash these three values (App ID, Installation ID, private key PEM) for
+the "Filling the bundle" step below.
+
+### 3. Create the Tailscale OAuth client
+
+For the Tailscale Kubernetes Operator (#1855) to create ephemeral tailnet
+nodes for each Service/Ingress AND to bootstrap its own tailnet identity.
+
+1. Open <https://login.tailscale.com/admin/settings/oauth>
+2. Click **Generate OAuth client**.
+3. **Description**: `inventario-vcluster-operator`
+4. **Scopes** — tick BOTH (one alone is not enough):
+   - **Devices → Core → Write** (Read is implied; operator creates ephemeral
+     proxy devices).
+   - **Keys → Auth Keys → Write** (operator mints one-shot auth-keys per
+     proxy device).
+   Everything else stays unchecked, including `API Access Tokens` which is
+   sometimes pre-ticked — uncheck it (principle of least privilege).
+5. **Tags** — pick BOTH (one alone is not enough):
+   - `tag:k8s-operator` — the operator pod's own tailnet identity.
+   - `tag:k8s` — every proxy node the operator spawns for a Service/Ingress.
+   The `tagOwners` configuration in your Tailscale ACL must match (see
+   "Tailscale ACL — `tagOwners`" sub-section below). Get the ACL right
+   BEFORE generating the client — Tailscale checks tag ownership at
+   client-create time, and a mis-configured ACL forces you to regenerate.
+6. Click **Generate Client**.
+7. Copy the **Client ID** (visible from then on in the table) and the
+   **Client Secret** (visible **once**, can't be retrieved later — save it
+   immediately).
+
+Stash these two values for the "Filling the bundle" step below.
+
+#### Tailscale ACL — `tagOwners` (one-time, easy to forget)
+
+After creating the OAuth client, you also need the tags it'll use to be
+**owned** by something in the Tailscale ACL — otherwise the operator
+boots with `creating operator authkey: requested tags [tag:k8s-operator]
+are invalid or not permitted (400)`.
+
+Open <https://login.tailscale.com/admin/acls> and add (or extend) the
+`tagOwners` block — **note the empty owners list on `tag:k8s-operator`,
+this is intentional** (see "Why empty `[]`" below):
+
+```json
+"tagOwners": {
+  "tag:k8s-operator": [],
+  "tag:k8s":          ["tag:k8s-operator"]
+}
+```
+
+What this means:
+
+- **`tag:k8s-operator`** — the operator pod's own tailnet identity
+  (one node, permanent). Empty owners list `[]` means "anyone with
+  `auth_keys:write` scope on this tailnet can mint auth-keys for this
+  tag", which is exactly what the operator needs to bootstrap itself.
+- **`tag:k8s`** — the tag the operator stamps on every ephemeral proxy
+  node it spawns per `Service` / `Ingress`. Owning this with
+  `["tag:k8s-operator"]` is the standard "chain of trust": only a device
+  carrying `tag:k8s-operator` (the operator itself) can issue auth-keys
+  for `tag:k8s` proxy nodes.
+
+#### Why empty `[]` and not `["<your-email>"]`?
+
+Counter-intuitive but correct: Tailscale's OAuth-as-caller permission
+model treats an OAuth client as a **tagged device**, not as the user who
+created it. Listing a user email there would let the user-the-human mint
+auth-keys for `tag:k8s-operator` — but the OAuth client isn't acting as
+that user. The empty list (`[]`) is the canonical operator-bootstrap pattern
+documented at <https://tailscale.com/kb/1236/kubernetes-operator>.
+
+Symptom of getting this wrong: operator crashes with
+`creating operator authkey: requested tags [tag:k8s-operator] are invalid
+or not permitted (400)`. We've been there.
+
+Save in the ACL editor — changes apply instantly. The operator pod
+(if already deployed and CrashLoopBackoff'ing on this) will recover on
+its next restart, or force it with
+`kubectl -n tailscale rollout restart deploy/operator`.
+
+### 4. Pick the admin email + password
+
+The Inventario `inv-system/inventario-admin` Secret holds the super-admin
+login the app uses on first start.
+
+```bash
+# Generate a strong random password (or use your own)
+openssl rand -base64 24
+```
+
+Stash both for "Filling the bundle".
+
+### 5. Optional: Tailscale auth-key (for `make recover` on a fresh VM)
+
+vcluster-dev is already authenticated to your tailnet, so `make bootstrap`
+on this VM doesn't need an auth-key. But for the disaster-recovery scenario
+(VM totally gone → spin up new VM → `make recover`), you'll need a reusable
+auth-key so `tailscale up` on the fresh VM can join the tailnet headless.
+
+1. <https://login.tailscale.com/admin/settings/keys>
+2. **Generate auth key** → tick **Reusable** + **Ephemeral: NO** + **Tags**: same as #3.
+3. Set TTL to whatever you're comfortable with (90 days is the max, then it
+   needs rotation).
+
+This one is optional for now — if missing, `vm-install.sh` falls back to
+warning "run `tailscale up` manually". For Phase 1 with just one VM it's
+acceptable to skip.
+
+---
+
+## Filling the bundle
+
+With all the values from steps 1-5 in hand, populate the encrypted bundle:
+
+```bash
+cd <repo-root>
+
+# 1. Start from the schema reference (safe placeholders).
+cp infra/vm/secrets/secrets.example.yaml infra/vm/secrets/secrets.local.yaml
+chmod 600 infra/vm/secrets/secrets.local.yaml
+
+# 2. Fill in real values — admin.{email,password},
+#    tailscale.{auth_key, oauth_client_id, oauth_client_secret, tailnet_name},
+#    github.{app_id, app_installation_id, app_private_key, url}.
+#    Leave the velero block out entirely until #1865 ships — Phase 1 doesn't
+#    need it, and committing empty placeholders into the encrypted bundle
+#    creates a footgun (someone later adds a real key in plaintext).
+$EDITOR infra/vm/secrets/secrets.local.yaml
+
+# 3. Encrypt. The repo-root .sops.yaml picks the right age recipient
+#    automatically because the *.local.yaml path matches a creation_rule.
+sops -e infra/vm/secrets/secrets.local.yaml > infra/vm/secrets/secrets.enc.yaml
+chmod 600 infra/vm/secrets/secrets.enc.yaml
+
+# 4. Verify round-trip BEFORE deleting plaintext. All expected keys should
+#    appear "filled"; velero.* should not appear at all if you followed the
+#    note in step 2.
+sops -d --output-type json infra/vm/secrets/secrets.enc.yaml | jq -r '
+  paths(scalars) as $p |
+  ($p|join(".")) + ": " +
+  (getpath($p) | tostring | if length > 0 then "filled" else "empty" end)
+'
+
+# 5. Shred the plaintext.
+SIZE=$(wc -c < infra/vm/secrets/secrets.local.yaml)
+dd if=/dev/urandom of=infra/vm/secrets/secrets.local.yaml bs=$SIZE count=1 conv=notrunc 2>/dev/null
+rm -f infra/vm/secrets/secrets.local.yaml
+
+# 6. End-to-end test against a real VM.
+make -C infra bootstrap VM=user@vm-host
+
+# 7. Commit secrets.enc.yaml (+ .sops.yaml if first time) and open a PR.
+```
+
+---
+
+## Day-to-day: editing the bundle
+
+After initial setup, edit values with the `sops` interactive editor:
+
+```bash
+sops infra/vm/secrets/secrets.enc.yaml
+# Opens $EDITOR with the plaintext. Save and exit → sops re-encrypts in place.
+```
+
+Then re-run `make -C infra bootstrap VM=...` — bootstrap is idempotent and
+will re-apply changed Secret values, then trigger rolling restarts of the
+affected workloads (argocd-repo-server / argocd-applicationset-controller on
+GitHub App cred changes; tailscale-operator on TS OAuth changes).
+
+---
+
+## Disaster recovery — "the VM is gone"
+
+Scenario: h3 is gone, or VM 101 is unrecoverable, or someone `qm destroy`d it.
+
+What you need on-hand:
+- Your laptop with `~/.config/sops/age/keys.txt` intact (or restore from your
+  password manager)
+- This repo checked out (or re-clonable)
+- A fresh Ubuntu 26.04 VM somewhere with ssh access
+
+Recovery:
+
+```bash
+# 1. Restore age key from password manager if needed
+mkdir -p ~/.config/sops/age
+# paste contents into ~/.config/sops/age/keys.txt
+chmod 600 ~/.config/sops/age/keys.txt
+
+# 2. Spin up the new VM (any provider — Hetzner, DigitalOcean, Proxmox...)
+
+# 3. ssh-copy-id so passwordless ssh works
+ssh-copy-id user@new-vm-ip
+
+# 4. Run recover (alias for bootstrap)
+make -C infra recover VM=user@new-vm-ip
+```
+
+`bootstrap.sh` decrypts the bundle locally with your age key, ships it to the
+fresh VM, and re-creates **the same** admin credentials, **the same** tailnet
+hostname (`inv-vcl01`), **the same** GitHub App association, **the same**
+Tailscale operator OAuth. From any tailnet peer, `inv-vcl01.<tailnet>.ts.net`
+resolves to the new VM, certificates auto-renew, ArgoCD picks up the master
+Application again.
+
+You don't need to notify anyone or change any URL. The only off-VM dependency
+is your age private key — protect it accordingly.
+
+---
+
+## Key rotation
+
+### Adding a teammate (or rotating the age private key — same flow)
+
+`.sops.yaml` at the repo root accepts a comma-separated list of age
+recipients; each can decrypt the bundle independently.
+
+1. Generate a new age key (or get the teammate's public key from theirs):
+   `age-keygen -o ~/.config/sops/age/keys2.txt`
+2. Edit repo-root `.sops.yaml` so BOTH rules list the new recipient
+   alongside the existing one (keep the scoping prefix and both file-type
+   regexes — drift here means some files get encrypted with the old key
+   only):
+   ```yaml
+   creation_rules:
+     - path_regex: ^infra/vm/secrets/.*\.enc\.yaml$
+       age: >-
+         age1old...,
+         age1new...
+     - path_regex: ^infra/vm/secrets/.*\.local\.yaml$
+       age: >-
+         age1old...,
+         age1new...
+   ```
+3. Re-encrypt the bundle with both recipients: `sops updatekeys infra/vm/secrets/secrets.enc.yaml`
+4. Commit + push.
+5. (Rotation only) Switch your `~/.config/sops/age/keys.txt` to the new key.
+6. (Rotation only) Edit `.sops.yaml` to **remove** the old recipient from
+   BOTH rules, run `sops updatekeys` again, commit.
+7. (Rotation only) Securely shred `~/.config/sops/age/keys.txt.old` and the
+   password-manager copy.
+
+### Rotating the GitHub App private key (App-side compromise, or just hygiene)
+
+GH Apps allow multiple active private keys. Painless flow:
+
+1. App settings → **Generate a private key** → download new PEM.
+2. `sops infra/vm/secrets/secrets.enc.yaml` → replace `github.app_private_key`
+   with new PEM contents.
+3. `make -C infra upgrade VM=...` → applies new Secret to argocd namespace,
+   rolling-restarts `argocd-repo-server` + `argocd-applicationset-controller`.
+4. Wait 24h (sanity buffer) → App settings → delete old key.
+
+### Rotating the Tailscale OAuth client secret
+
+1. <https://login.tailscale.com/admin/settings/oauth> → **Revoke** old client (or generate new one first then revoke).
+2. Update `tailscale.oauth_client_id` + `tailscale.oauth_client_secret` in
+   the sops bundle.
+3. `make -C infra upgrade VM=...` → rolls the tailscale-operator pod.
+
+---
+
+## Troubleshooting
+
+- **`sops -d` says "Failed to get the data key required to decrypt"**:
+  your age private key doesn't match any recipient in the file. Either
+  you're on the wrong laptop, the key was rotated and you lost the password-
+  manager backup, or `SOPS_AGE_KEY_FILE` env var points at the wrong path.
+- **`bootstrap.sh` warns "secrets.enc.yaml missing"**: file isn't in
+  `infra/vm/secrets/`. You're either on a branch where it hasn't landed yet,
+  or you haven't pulled the latest master.
+- **ArgoCD applicationset-controller crashloops with "github auth failed"**:
+  GH App credentials in `secrets.enc.yaml` are stale or wrong. Re-check the
+  3 fields, re-encrypt, re-bootstrap.
+- **TS operator pod crashloops**: same with `tailscale.oauth_client_{id,secret}`.
+  Check Tailscale admin console hasn't revoked the client.
