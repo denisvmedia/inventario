@@ -40,22 +40,27 @@ sops_get() {
     ' "$SECRETS_FILE" 2>/dev/null
 }
 
+# --- Force NTP resync (MUST run before apt) ---
+# Snapshot-rollback gotcha: rolling back from a `qm snapshot --vmstate 1` snapshot
+# restores the kernel time-of-day clock to the snapshot moment (T0). systemd-timesyncd
+# is slow to step a large drift on its own, leaving the clock 10+ hours behind real time
+# until next natural poll. Consequences:
+#   - `apt-get update` rejects archive InRelease files with "is not valid yet"
+#     (Valid-Until check on signed metadata; on Ubuntu 26.04 this hard-fails the
+#     update and downstream `apt-get install` returns exit 100).
+#   - Anything JWT-based fails with "iat in the past / token expired" (GitHub App
+#     installation-token exchange, ArgoCD repo-server auth, etc.).
+# Toggle NTP off+on to force an immediate step; sleep gives chronyd time to converge.
+note "Forcing NTP resync (guards against snapshot-rollback clock drift)"
+timedatectl set-ntp false 2>/dev/null || true
+timedatectl set-ntp true 2>/dev/null || true
+sleep 5
+
 # --- apt prereqs (#1867 noted conntrack + socat missing on stock Ubuntu 26.04) ---
 note "apt prereqs"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq curl jq ca-certificates conntrack socat
-
-# --- Force NTP resync ---
-# Snapshot-rollback gotcha: rolling back from a `qm snapshot --vmstate 1` snapshot
-# restores the kernel time-of-day clock to the snapshot moment (T0). systemd-timesyncd
-# is slow to step a large drift on its own, leaving the clock 10+ hours behind real time
-# until next natural poll. Anything JWT-based then fails with "iat in the past / token
-# expired" (GitHub App tokens, etc.). Toggle NTP off+on to force an immediate step.
-note "Forcing NTP resync (guards against snapshot-rollback clock drift)"
-timedatectl set-ntp false 2>/dev/null || true
-timedatectl set-ntp true 2>/dev/null || true
-sleep 5
 
 # --- tailscaled ---
 if ! command -v tailscale >/dev/null; then
