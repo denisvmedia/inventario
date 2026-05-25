@@ -60,6 +60,14 @@ setupJob:
   argocdMode: true
   initData:
     adminPassword: "PreviewAdmin123"
+    # Populate the demo with example locations, areas, commodities, etc. so
+    # the preview is interesting to browse. The chart's setup Job (after
+    # migrations + admin user) spins up a temporary `inventario run` server
+    # inside the Job pod and POSTs to `/api/v1/seed` with the admin email +
+    # tenant slug. Idempotent on Helm upgrades (skipped via
+    # SETUP_SKIP_SEED_ON_UPGRADE, but each PR preview is a fresh install so
+    # we always seed). Negligible extra Job time (~15s).
+    seedDatabase: true
 
 # Expose via Tailscale Ingress, NOT LoadBalancer. The TS operator (#1855)
 # provisions a tailnet proxy node from the Ingress + `className: tailscale`
