@@ -526,13 +526,14 @@ setupJob:
   # ArgoCD-native mode for the setup Job. When true:
   #   - the `helm.sh/hook` annotation is dropped entirely (Job is no longer
   #     a Helm hook, just a regular Sync-phase resource);
-  #   - `argocd.argoproj.io/sync-wave: "-5"` is added so the Job applies
-  #     and completes before the main Deployment (wave 0) — the wait-for-
-  #     postgres logic in the Job init containers handles ordering against
-  #     the Postgres pod inside the same wave;
   #   - `argocd.argoproj.io/sync-options: Force=true,Replace=true` is added
   #     so ArgoCD replaces (delete-then-create) the immutable Job on each
   #     sync rather than failing the apply.
+  # The Job runs in the default sync-wave alongside ServiceAccount/Secret/
+  # ConfigMap/Postgres/Deployment. Its own pg_isready loop in the bootstrap
+  # init container handles waiting for Postgres; the main Deployment pod
+  # CrashLoops on the schema-version guard until the Job has migrated.
+  #
   # This is the right setting for any ArgoCD-managed install; the only
   # reason it's not the default is to keep the chart drop-in compatible
   # with non-ArgoCD `helm install` flows that expect post-install hooks.
