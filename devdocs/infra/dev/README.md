@@ -12,7 +12,7 @@
 | Question | Answer |
 |---|---|
 | **What does it give a contributor?** | Label a PR `preview` → within ~5 min the PR comment posts a hostname `inv-vcl01-prN`. Any tailnet member opens `https://inv-vcl01-prN.<tailnet>.ts.net/` and gets a fully-functional Inventario with that PR's code, demo Postgres/Redis/MinIO, and seeded sample data. Unlabel or close the PR → preview disappears within a poll cycle. |
-| **What is the cluster?** | A single-VM Kubernetes cluster on Proxmox (VM 101 @ host `h3.infra.5x5.cz`, Ubuntu 26.04) running [vcluster](https://www.vcluster.com) standalone with [ArgoCD](https://argo-cd.readthedocs.io) on top and the [Tailscale Kubernetes Operator](https://tailscale.com/kb/1236/kubernetes-operator) for tailnet-bound Ingresses. |
+| **What is the cluster?** | A single Ubuntu 26.04 VM (you provision it on any hypervisor or cloud — Proxmox, Hetzner, DigitalOcean, …) running [vcluster](https://www.vcluster.com) standalone with [ArgoCD](https://argo-cd.readthedocs.io) on top and the [Tailscale Kubernetes Operator](https://tailscale.com/kb/1236/kubernetes-operator) for tailnet-bound Ingresses. |
 | **How does a PR turn into a preview?** | ArgoCD's [ApplicationSet](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/) PR generator polls GitHub every 60 s, sees PRs labeled `preview`, spawns an `Application` per PR that templates the helm chart at the PR's head commit. ArgoCD syncs the chart into a per-PR namespace. The Tailscale Operator notices the chart's Ingress, provisions a tailnet proxy node with a `tailscale.com/hostname` annotation, and the URL becomes reachable. |
 | **What's NOT in scope (yet)?** | Auto-rollout when only the `master` tag's digest changes ([#1885](https://github.com/denisvmedia/inventario/issues/1885)); production-grade admin password from sops ([#1883](https://github.com/denisvmedia/inventario/issues/1883)); in-place migrations under ArgoCD upgrade ([#1884](https://github.com/denisvmedia/inventario/issues/1884)); chart-side `tls[].secretName` polish ([#1882](https://github.com/denisvmedia/inventario/issues/1882)); direct tailnet exposure of the ArgoCD UI and vcluster API ([#1892](https://github.com/denisvmedia/inventario/issues/1892)). |
 
@@ -79,12 +79,12 @@ Two ancillary loops keep the system healthy:
                                  |  ssh + Tailscale (laptop is also a tailnet member)
                                  v
 +---------------------------------------------------------------------+
-| Proxmox host  h3.infra.5x5.cz                                       |
+| Hypervisor host  (your Proxmox / Hetzner / etc.)                    |
 |                                                                     |
 |   +-----------------------------------------------------------+     |
-|   | VM 101  (Ubuntu 26.04, 4 vCPU, 8 GiB RAM)                 |     |
+|   | The VM  (Ubuntu 26.04, ~4 vCPU, ~8 GiB RAM)               |     |
 |   |   Tailscale hostname: inv-vcl01                           |     |
-|   |   Snapshot: pre1853deploy202605241651 (pre-install state) |     |
+|   |   Pre-bootstrap snapshot recommended (for rollback)       |     |
 |   |                                                           |     |
 |   |   +------------------------------------------+            |     |
 |   |   | vcluster standalone v0.34.0              |            |     |

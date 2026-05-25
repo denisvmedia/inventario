@@ -277,7 +277,7 @@ GitHub App cred changes; tailscale-operator on TS OAuth changes).
 
 ## Disaster recovery — "the VM is gone"
 
-Scenario: h3 is gone, or VM 101 is unrecoverable, or someone `qm destroy`d it.
+Scenario: your hypervisor host is gone, or the VM is unrecoverable, or someone destroyed it.
 
 What you need on-hand:
 - Your laptop with `~/.config/sops/age/keys.txt` intact (or restore from your
