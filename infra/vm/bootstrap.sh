@@ -22,6 +22,7 @@ ARGOCD_DIR="$REPO_ROOT/infra/argocd"
 VM_INSTALL="$SCRIPT_DIR/vm-install.sh"
 HELM_VALUES_DIR="$SCRIPT_DIR/helm-values"
 APPLY_SECRETS="$SCRIPT_DIR/scripts/apply-secrets.sh"
+CLUSTER_EXTRAS_DIR="$SCRIPT_DIR/cluster-extras"
 
 note() { printf '\n==> %s\n' "$*" >&2; }
 warn() { printf '\n[!] %s\n' "$*" >&2; }
@@ -72,12 +73,75 @@ if [ -n "$SECRETS_JSON" ]; then
     fi
 fi
 
+# --- Apply cluster-extras manifests (#1858 — hourly TS device cleanup) ---
+# In-cluster resources that aren't ArgoCD-managed but need to live in the
+# cluster for the long term. Currently: a CronJob in the `tailscale`
+# namespace that reuses the operator's OAuth credentials (`operator-oauth`
+# Secret applied above) to delete stale Tailscale device records for
+# closed PR previews. See the header comment in
+# infra/vm/cluster-extras/ts-orphan-cleanup.yaml for the full rationale.
+#
+# Gated on the `tailscale` namespace existing: vm-install.sh creates it
+# only when tailscale.oauth_client_{id,secret} are present in the sops
+# bundle, so a bootstrap-without-secrets path leaves the namespace
+# absent and `kubectl apply` of a CronJob into it would hard-fail under
+# `set -e`. Skip with a warning in that case — preserves the
+# "bootstrap can still run without secrets" property.
+if [ -d "$CLUSTER_EXTRAS_DIR" ] && compgen -G "$CLUSTER_EXTRAS_DIR/*.yaml" >/dev/null; then
+    if ssh "$VM" 'sudo /usr/local/bin/kubectl get namespace tailscale' >/dev/null 2>&1; then
+        note "Applying cluster-extras manifests from $CLUSTER_EXTRAS_DIR"
+        for m in "$CLUSTER_EXTRAS_DIR"/*.yaml; do
+            ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -' < "$m"
+        done
+    else
+        warn "$CLUSTER_EXTRAS_DIR present but namespace 'tailscale' missing (TS Operator was skipped)."
+        warn "Skipping cluster-extras apply. Provide tailscale.oauth_client_{id,secret} in the sops bundle and re-run."
+    fi
+fi
+
 # --- Apply ArgoCD manifests (AppProject, ApplicationSet, master Application) (#1858) ---
+# `<TAILNET>` in the manifests is substituted to the tailnet MagicDNS suffix
+# from the sops bundle so the rendered Ingress hosts end up at the
+# tailnet-correct FQDN.
 if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
-    note "Applying ArgoCD manifests from $ARGOCD_DIR"
-    for m in "$ARGOCD_DIR"/*.yaml; do
-        ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -' < "$m"
-    done
+    TAILNET_NAME=""
+    if [ -n "$SECRETS_JSON" ]; then
+        TAILNET_NAME=$(jq -r '.tailscale.tailnet_name // ""' <<<"$SECRETS_JSON")
+    fi
+    if [ -z "$TAILNET_NAME" ]; then
+        warn "$ARGOCD_DIR present but tailscale.tailnet_name missing from sops bundle."
+        warn "Applying with literal <TAILNET> placeholder — Applications will Ingress to broken hosts."
+        TAILNET_NAME="<TAILNET>"
+    fi
+    note "Applying ArgoCD manifests from $ARGOCD_DIR (tailnet: $TAILNET_NAME)"
+    # Three explicit globs in dependency order:
+    #   - appproject*.yaml: AppProject must land BEFORE Application/
+    #     ApplicationSet that reference it via .spec.project.
+    #   - application-*.yaml: the static master Application.
+    #   - applicationset*.yaml: the PR-preview ApplicationSet.
+    # Explicit globs (vs one `application*.yaml`) avoid the literal-prefix
+    # collision where `application*.yaml` would also match
+    # `applicationset*.yaml` and apply it twice in the wrong order.
+    #
+    # Use bash's `${var//search/replace}` (literal substitution) instead of
+    # sed: sed treats `&` in the replacement as the matched text and `\` as
+    # an escape, so a tailnet name containing either would corrupt the
+    # manifest. Tailscale tailnet names (`<adjective>-<noun>`) don't currently
+    # contain those characters, but the substitution is robust this way and
+    # stays pure bash — no extra interpreter dependency.
+    apply_argocd_yaml() {
+        local pattern="$1"
+        local m content
+        for m in "$ARGOCD_DIR"/$pattern; do
+            [ -f "$m" ] || continue
+            content=$(cat "$m")
+            printf '%s' "${content//<TAILNET>/$TAILNET_NAME}" | \
+                ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
+        done
+    }
+    apply_argocd_yaml 'appproject*.yaml'
+    apply_argocd_yaml 'application-*.yaml'
+    apply_argocd_yaml 'applicationset*.yaml'
 else
     warn "$ARGOCD_DIR has no manifests yet (lands in #1858)."
     warn "ArgoCD is installed but no AppProject/ApplicationSet/Application is registered."

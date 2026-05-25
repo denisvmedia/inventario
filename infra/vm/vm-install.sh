@@ -40,6 +40,87 @@ sops_get() {
     ' "$SECRETS_FILE" 2>/dev/null
 }
 
+# --- Force NTP resync (MUST run before apt) ---
+# Snapshot-rollback gotcha: rolling back from a `qm snapshot --vmstate 1` snapshot
+# restores the kernel time-of-day clock to the snapshot moment (T0). systemd-timesyncd
+# is slow to step a large drift on its own, leaving the clock 10+ hours behind real time
+# until next natural poll. Consequences:
+#   - `apt-get update` rejects archive InRelease files with "is not valid yet"
+#     (Valid-Until check on signed metadata; on Ubuntu 26.04 this hard-fails the
+#     update and downstream `apt-get install` returns exit 100).
+#   - Anything JWT-based fails with "iat in the past / token expired" (GitHub App
+#     installation-token exchange, ArgoCD repo-server auth, etc.).
+# Toggle NTP off+on to force an immediate step, restart systemd-timesyncd so it
+# polls a fresh server, then poll timedatectl until "System clock synchronized:
+# yes" before continuing. A plain `sleep 5` after `set-ntp true` is NOT enough:
+# on a fresh boot, timesyncd's first poll can take 15-30s to complete and apt
+# will still see the old clock if we proceed immediately.
+note "Forcing NTP resync (guards against snapshot-rollback clock drift)"
+timedatectl set-ntp false 2>/dev/null || true
+timedatectl set-ntp true 2>/dev/null || true
+systemctl restart systemd-timesyncd 2>/dev/null || true
+ntp_synced=no
+for i in $(seq 1 30); do
+    if timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -qi yes; then
+        printf '    NTP synchronized after %ss\n' "$i" >&2
+        ntp_synced=yes
+        break
+    fi
+    sleep 1
+done
+# Hard-fail if the clock never stepped — downstream apt-get update / JWT
+# operations would otherwise produce confusing "not valid yet" / "iat in the
+# past" errors that read as totally unrelated to clock skew. Better to stop
+# here with a targeted message so the operator knows what to fix
+# (NTP firewall block, missing systemd-timesyncd, broken /etc/systemd/timesyncd.conf).
+if [ "$ntp_synced" != "yes" ]; then
+    echo "NTP failed to synchronize within 30s. Current state:" >&2
+    timedatectl status >&2
+    echo "Refusing to continue — downstream apt + JWT operations require a correct clock." >&2
+    exit 1
+fi
+
+# --- Wait for dpkg lock ---
+# Ubuntu cloud images ship with unattended-upgrades enabled, and the first
+# boot triggers a refresh that takes the /var/lib/dpkg/lock-frontend for a
+# few minutes. If we race it, `apt-get update` exits 100 with "Could not get
+# lock /var/lib/dpkg/lock-frontend. It is held by process N (unattended-upgr)"
+# and the whole bootstrap aborts under `set -e`. Wait it out with a generous
+# timeout — unattended-upgrades on a fresh VM typically completes in 1-3 min,
+# but a particularly busy first boot has been seen to take 5+ min.
+#
+# Lock-holder detection uses `fuser` (psmisc package). It's preinstalled on
+# every Ubuntu cloud image we target (psmisc is a dependency of
+# ubuntu-minimal), but on a stripped base where it's missing we degrade
+# gracefully: skip the explicit wait with a warning and let apt-get retry
+# its own internal lock acquisition (which has a much shorter timeout, so
+# we may still hit the original race — but that's strictly better than
+# hard-exiting here under `set -e`).
+note "Waiting for dpkg lock (unattended-upgrades may be running on first boot)"
+if ! command -v fuser >/dev/null 2>&1; then
+    warn "fuser not found (psmisc package missing on this base image)."
+    warn "Skipping dpkg-lock wait — apt-get may briefly race unattended-upgrades."
+else
+    dpkg_timeout=600
+    dpkg_elapsed=0
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
+          fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+        if [ "$dpkg_elapsed" -ge "$dpkg_timeout" ]; then
+            echo "dpkg lock still held after ${dpkg_timeout}s. Holders:" >&2
+            fuser -v /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock 2>&1 | head -20 >&2
+            echo "Refusing to continue — apt operations will fail." >&2
+            exit 1
+        fi
+        if [ "$((dpkg_elapsed % 30))" -eq 0 ]; then
+            printf '    still locked after %ss, waiting...\n' "$dpkg_elapsed" >&2
+        fi
+        sleep 5
+        dpkg_elapsed=$((dpkg_elapsed + 5))
+    done
+    [ "$dpkg_elapsed" -gt 0 ] && printf '    dpkg lock free after %ss\n' "$dpkg_elapsed" >&2
+fi
+
 # --- apt prereqs (#1867 noted conntrack + socat missing on stock Ubuntu 26.04) ---
 note "apt prereqs"
 export DEBIAN_FRONTEND=noninteractive

@@ -1,0 +1,33 @@
+# AppProject for all preview environments — PR-driven and the static master.
+# Scopes the source repo and destination namespaces so a misconfigured
+# Application can't reach outside `inv-vcl01-*`.
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: previews
+  namespace: argocd
+spec:
+  description: Inventario preview environments (PR-previews + master)
+
+  # Only this repo, no forks / other sources.
+  sourceRepos:
+    - https://github.com/denisvmedia/inventario
+
+  # All ephemeral previews land under inv-vcl01-* namespaces; ArgoCD itself
+  # lives in argocd, so we don't need to list it as a destination.
+  destinations:
+    - namespace: inv-vcl01-*
+      server: https://kubernetes.default.svc
+
+  # Each Application creates its own namespace via `CreateNamespace=true`.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  # Everything inside an inv-vcl01-* namespace is fair game (Deployments,
+  # Services, ConfigMaps, Secrets, the Tailscale Ingress, the chart's setup
+  # Job, etc.).
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
