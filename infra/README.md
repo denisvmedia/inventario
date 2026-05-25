@@ -262,7 +262,12 @@ Walkthrough: [SECRETS.md §4 "Pick the admin email + password"](./SECRETS.md#4-p
 
 ### 3.5 Fill the encrypted bundle
 
+Run these commands from the **repo root** (the paths below are relative to
+it). `cd` into the repo first if you're not there:
+
 ```bash
+cd /path/to/inventario        # if not already there
+
 # 1. Start from the schema reference.
 cp infra/vm/secrets/secrets.example.yaml /tmp/secrets.plain.yaml
 
@@ -517,12 +522,23 @@ PR's Actions tab on GitHub and check the `Docker image` workflow:
   to the filter.
 - Failed → fix the build, push, sync continues.
 
-If you're certain the image exists:
+If you're certain the image exists, double-check from the registry's side.
+Two options:
 
-```bash
-docker manifest inspect ghcr.io/denisvmedia/inventario:sha-<head-7-chars>
-# should return a JSON manifest, not "manifest unknown"
-```
+- **GHCR web UI** (no extra tooling): browse
+  [github.com/denisvmedia/inventario/pkgs/container/inventario](https://github.com/denisvmedia/inventario/pkgs/container/inventario)
+  → "Tagged versions" → confirm `sha-<head-7-chars>` is listed.
+- **CLI** (requires Docker or `crane`):
+  ```bash
+  # Docker (if installed on the laptop):
+  docker manifest inspect ghcr.io/denisvmedia/inventario:sha-<head-7-chars>
+  # OR crane (no daemon required; `brew install crane` / `go install github.com/google/go-containerregistry/cmd/crane@latest`):
+  crane manifest ghcr.io/denisvmedia/inventario:sha-<head-7-chars>
+  # both should return a JSON manifest, not "manifest unknown"
+  ```
+
+Docker is NOT in the prerequisite list — these are optional troubleshooting
+paths, the GHCR UI is enough.
 
 ### Application stuck `Progressing` with the app pod in CrashLoop
 
@@ -693,9 +709,21 @@ KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd get applications
 Recovery preserves:
 
 - **Tailscale hostname.** The new VM joins under the same `inv-vcl01`
-  identity (via the same OAuth client minting a fresh auth key). MagicDNS
-  routes to the new VM automatically — bookmarks and saved URLs keep
-  working with no user-side action.
+  identity by running `tailscale up --authkey=<tailscale.auth_key from
+  sops> --hostname=inv-vcl01`. MagicDNS routes to the new VM
+  automatically — bookmarks and saved URLs keep working with no user-side
+  action. (The TS OAuth client carried in the same sops bundle is a
+  separate credential, used by the in-cluster Tailscale Operator to mint
+  per-Ingress proxy devices; it is NOT what the VM itself authenticates
+  with.)
+
+  > [!IMPORTANT]
+  > For `make recover` to work without manual intervention, the
+  > `tailscale.auth_key` in the sops bundle MUST be a **reusable**
+  > preauth key (Tailscale admin → Settings → Keys → Generate auth
+  > key → tick **Reusable** and **Pre-approved**, tag `tag:k8s-vm` or
+  > your preferred VM tag). One-shot keys are consumed by the first
+  > bootstrap and leave recovery without a credential.
 - **ArgoCD admin credentials, GitHub App, OAuth client.** All sourced from
   the sops bundle on disk.
 - **Open PR previews.** ApplicationSet polls GitHub on first run and
