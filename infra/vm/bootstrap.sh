@@ -75,16 +75,28 @@ fi
 
 # --- Apply cluster-extras manifests (#1858 — hourly TS device cleanup) ---
 # In-cluster resources that aren't ArgoCD-managed but need to live in the
-# cluster for the long term. Currently: a CronJob that reuses the operator's
-# OAuth credentials (already applied as `operator-oauth` Secret above) to
-# delete stale Tailscale device records for closed PR previews. See the
-# header comment in infra/vm/cluster-extras/ts-orphan-cleanup.yaml for the
-# full rationale.
+# cluster for the long term. Currently: a CronJob in the `tailscale`
+# namespace that reuses the operator's OAuth credentials (`operator-oauth`
+# Secret applied above) to delete stale Tailscale device records for
+# closed PR previews. See the header comment in
+# infra/vm/cluster-extras/ts-orphan-cleanup.yaml for the full rationale.
+#
+# Gated on the `tailscale` namespace existing: vm-install.sh creates it
+# only when tailscale.oauth_client_{id,secret} are present in the sops
+# bundle, so a bootstrap-without-secrets path leaves the namespace
+# absent and `kubectl apply` of a CronJob into it would hard-fail under
+# `set -e`. Skip with a warning in that case — preserves the
+# "bootstrap can still run without secrets" property.
 if [ -d "$CLUSTER_EXTRAS_DIR" ] && compgen -G "$CLUSTER_EXTRAS_DIR/*.yaml" >/dev/null; then
-    note "Applying cluster-extras manifests from $CLUSTER_EXTRAS_DIR"
-    for m in "$CLUSTER_EXTRAS_DIR"/*.yaml; do
-        ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -' < "$m"
-    done
+    if ssh "$VM" 'sudo /usr/local/bin/kubectl get namespace tailscale' >/dev/null 2>&1; then
+        note "Applying cluster-extras manifests from $CLUSTER_EXTRAS_DIR"
+        for m in "$CLUSTER_EXTRAS_DIR"/*.yaml; do
+            ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -' < "$m"
+        done
+    else
+        warn "$CLUSTER_EXTRAS_DIR present but namespace 'tailscale' missing (TS Operator was skipped)."
+        warn "Skipping cluster-extras apply. Provide tailscale.oauth_client_{id,secret} in the sops bundle and re-run."
+    fi
 fi
 
 # --- Apply ArgoCD manifests (AppProject, ApplicationSet, master Application) (#1858) ---
