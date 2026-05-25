@@ -103,33 +103,41 @@ for i in $(seq 1 30); do
     sleep 5
 done
 
-# --- Tailscale Kubernetes Operator (#1855 owns the helm values overlay) ---
+# --- Tailscale Kubernetes Operator (#1855) ---
 TS_OAUTH_ID=$(sops_get "tailscale.oauth_client_id")
 TS_OAUTH_SECRET=$(sops_get "tailscale.oauth_client_secret")
+TS_OP_STATIC_VALUES="$REMOTE_TMP/helm-values/tailscale-operator.yaml"
 if [ -n "${TS_OAUTH_ID:-}" ] && [ -n "${TS_OAUTH_SECRET:-}" ]; then
+    [ -f "$TS_OP_STATIC_VALUES" ] || { echo "missing $TS_OP_STATIC_VALUES (bootstrap.sh upload)" >&2; exit 1; }
     note "Installing Tailscale Kubernetes Operator"
     "$KUBECTL" create namespace tailscale --dry-run=client -o yaml | "$KUBECTL" apply -f -
     "$HELM" repo add tailscale https://pkgs.tailscale.com/helmcharts >/dev/null 2>&1 || true
     "$HELM" repo update >/dev/null
-    # Write OAuth into a temp values file with restrictive permissions instead
-    # of passing via --set-string, which would leak the secret into /proc/*/cmdline
-    # and any audit log that captures process args.
-    TS_VALUES=$(umask 077 && mktemp "$REMOTE_TMP/ts-op-values.XXXXXX.yaml")
-    trap 'rm -f "$TS_VALUES"' EXIT
-    cat >"$TS_VALUES" <<EOF
+    # Layer OAuth on top of static values via a second --values overlay (later
+    # file wins on key conflict). Writing oauth to a temp file avoids leaking
+    # the secret through `--set-string` in /proc/*/cmdline / process-args audit.
+    # Emit values as chomped block scalars (`|-`) instead of double-quoted
+    # strings — defensive against credentials containing YAML-sensitive chars
+    # (`"`, `\`, newlines). Same pattern as infra/vm/scripts/apply-secrets.sh.
+    TS_OAUTH_VALUES=$(umask 077 && mktemp "$REMOTE_TMP/ts-op-oauth.XXXXXX.yaml")
+    trap 'rm -f "$TS_OAUTH_VALUES"' EXIT
+    cat >"$TS_OAUTH_VALUES" <<EOF
 oauth:
-  clientId: "$TS_OAUTH_ID"
-  clientSecret: "$TS_OAUTH_SECRET"
+  clientId: |-
+$(printf '%s' "$TS_OAUTH_ID" | sed 's/^/    /')
+  clientSecret: |-
+$(printf '%s' "$TS_OAUTH_SECRET" | sed 's/^/    /')
 EOF
     "$HELM" upgrade --install tailscale-operator tailscale/tailscale-operator \
         --namespace tailscale \
-        --values "$TS_VALUES" \
+        --values "$TS_OP_STATIC_VALUES" \
+        --values "$TS_OAUTH_VALUES" \
         --wait --timeout 5m
-    rm -f "$TS_VALUES"
+    rm -f "$TS_OAUTH_VALUES"
     trap - EXIT
 else
     warn "tailscale.oauth_client_{id,secret} not in secrets; skipping Tailscale Operator install."
-    warn "Provide them in the sops bundle and re-run bootstrap. See #1855."
+    warn "Provide them in the sops bundle and re-run bootstrap. See infra/SECRETS.md."
 fi
 
 # --- ArgoCD (#1858 owns the ApplicationSet/AppProject/Application manifests) ---
