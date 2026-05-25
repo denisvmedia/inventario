@@ -1,0 +1,38 @@
+# Tailscale Operator ProxyClass for PR-preview Ingresses.
+#
+# Why a separate ProxyClass: the per-PR preview deployments need their TS
+# proxy device to be EPHEMERAL — automatically removed from the tailnet
+# shortly after the proxy pod terminates. Without this, a snapshot rollback,
+# `kubectl delete --force` on a namespace, or any unclean shutdown leaves
+# a stale offline device record holding the hostname (`inv-vcl01-prN`),
+# and the operator can only mint a new proxy under a `-1`/`-2` suffixed
+# hostname until the original device's key expires (default 180 days).
+#
+# Mechanism: `tailscaled` registers a device as ephemeral when first
+# invoked with `tailscale up --ephemeral`. The operator's containerboot
+# entrypoint reads TS_EXTRA_ARGS and appends it to the `tailscale up` line
+# (https://github.com/tailscale/tailscale/blob/main/cmd/containerboot/main.go,
+# the TS_EXTRA_ARGS env var is the standard pass-through). Setting it via
+# this ProxyClass means only the proxies that opt in (via the Ingress
+# annotation `tailscale.com/proxy-class: ephemeral-pr`) become ephemeral —
+# the master Application's Ingress stays on the operator default (non-
+# ephemeral), so `inv-vcl01-master` remains a stable, long-lived device.
+#
+# Tradeoff acknowledged: TS_EXTRA_ARGS is the documented escape hatch but
+# the TS team marks it as "not recommended" for Tailscale-specific vars
+# (might break in future operator versions). The alternative is a separate
+# OAuth client minted with ephemeral scope — more moving parts. Revisit if
+# this env var stops working after a TS operator upgrade.
+
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyClass
+metadata:
+  name: ephemeral-pr
+  namespace: tailscale
+spec:
+  statefulSet:
+    pod:
+      tailscaleContainer:
+        env:
+          - name: TS_EXTRA_ARGS
+            value: "--ephemeral"

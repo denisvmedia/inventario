@@ -66,6 +66,16 @@ spec:
               ingress:
                 annotations:
                   tailscale.com/hostname: 'inv-vcl01-pr{{.number}}'
+                  # Register the per-PR proxy device as ephemeral via the
+                  # ephemeral-pr ProxyClass (defined in
+                  # infra/argocd/proxyclass-ephemeral-pr.yaml). When the
+                  # Application is pruned (label removed / PR closed /
+                  # cluster wiped), the proxy pod terminates and the
+                  # tailnet device record auto-deletes within ~60s instead
+                  # of holding the hostname for the default 180 days. The
+                  # master Application intentionally does NOT set this —
+                  # `inv-vcl01-master` is a stable long-lived device.
+                  tailscale.com/proxy-class: ephemeral-pr
                 hosts:
                   - host: 'inv-vcl01-pr{{.number}}.<TAILNET>.ts.net'
                     paths:

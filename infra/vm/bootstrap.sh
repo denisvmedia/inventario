@@ -87,9 +87,18 @@ if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
         TAILNET_NAME="<TAILNET>"
     fi
     note "Applying ArgoCD manifests from $ARGOCD_DIR (tailnet: $TAILNET_NAME)"
-    # AppProject must land BEFORE Application/ApplicationSet that reference it.
-    # Three explicit globs — `application*.yaml` would otherwise also match
-    # `applicationset*.yaml` (literal prefix) and apply it twice in wrong order.
+    # Four explicit globs in dependency order:
+    #   - proxyclass*.yaml: TS Operator CRDs that Applications/Ingresses
+    #     reference via annotation (e.g. ephemeral-pr) — must exist first
+    #     or the operator falls back to defaults silently.
+    #   - appproject*.yaml: AppProject must land BEFORE Application/
+    #     ApplicationSet that reference it via .spec.project.
+    #   - application-*.yaml: the static master Application.
+    #   - applicationset*.yaml: the PR-preview ApplicationSet.
+    # Explicit globs (vs one `application*.yaml`) avoid the literal-prefix
+    # collision where `application*.yaml` would also match
+    # `applicationset*.yaml` and apply it twice in the wrong order.
+    #
     # Use bash's `${var//search/replace}` (literal substitution) instead of
     # sed: sed treats `&` in the replacement as the matched text and `\` as
     # an escape, so a tailnet name containing either would corrupt the
@@ -106,6 +115,7 @@ if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
                 ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
         done
     }
+    apply_argocd_yaml 'proxyclass*.yaml'
     apply_argocd_yaml 'appproject*.yaml'
     apply_argocd_yaml 'application-*.yaml'
     apply_argocd_yaml 'applicationset*.yaml'
