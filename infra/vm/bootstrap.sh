@@ -20,6 +20,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 SECRETS_FILE="$REPO_ROOT/infra/vm/secrets/secrets.enc.yaml"
 ARGOCD_DIR="$REPO_ROOT/infra/argocd"
 VM_INSTALL="$SCRIPT_DIR/vm-install.sh"
+HELM_VALUES_DIR="$SCRIPT_DIR/helm-values"
 APPLY_SECRETS="$SCRIPT_DIR/scripts/apply-secrets.sh"
 
 note() { printf '\n==> %s\n' "$*" >&2; }
@@ -48,8 +49,10 @@ REMOTE_TMP=$(ssh "$VM" 'mktemp -d /tmp/inv-bootstrap.XXXXXX')
 cleanup() { ssh "$VM" "rm -rf $REMOTE_TMP" 2>/dev/null || true; }
 trap cleanup EXIT
 
-note "Uploading installer to $VM:$REMOTE_TMP"
+note "Uploading installer + helm-values to $VM:$REMOTE_TMP"
 scp -q "$VM_INSTALL" "$VM":"$REMOTE_TMP/vm-install.sh"
+# helm-values/ ships static chart overlays vm-install.sh layers oauth on top of.
+scp -qr "$HELM_VALUES_DIR" "$VM":"$REMOTE_TMP/helm-values"
 
 if [ -n "$SECRETS_JSON" ]; then
     ssh "$VM" "umask 077 && cat > $REMOTE_TMP/secrets.plain.json" <<<"$SECRETS_JSON"
