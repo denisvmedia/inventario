@@ -16,7 +16,6 @@ data:
   INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION: {{ .Values.app.thumbnailSlotDuration | quote }}
   INVENTARIO_RUN_PUBLIC_URL: {{ .Values.app.publicUrl | quote }}
   INVENTARIO_RUN_ALLOWED_ORIGINS: {{ .Values.app.allowedOrigins | quote }}
-  INVENTARIO_RUN_TAILNET_SUFFIX: {{ .Values.app.tailnetSuffix | quote }}
   INVENTARIO_RUN_GLOBAL_RATE_LIMIT: {{ .Values.app.globalRateLimit | quote }}
   INVENTARIO_RUN_GLOBAL_RATE_WINDOW: {{ .Values.app.globalRateWindow | quote }}
   INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: {{ .Values.app.globalRateLimitDisabled | quote }}

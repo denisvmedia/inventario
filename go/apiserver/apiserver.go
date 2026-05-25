@@ -241,16 +241,6 @@ type Params struct {
 	// key even when no provider is configured).
 	OAuthRegistry    *oauth.Registry
 	OAuthStateSigner *oauth.StateSigner
-
-	// TailnetSuffix is the Tailscale MagicDNS suffix to redirect short
-	// hostnames to (#1858). When non-empty, requests whose Host doesn't
-	// already end with `.<TailnetSuffix>` are 301-redirected to the FQDN
-	// version with HTTPS — fixes the cert-mismatch UX where contributors
-	// click a short tailnet URL in a PR comment and land on a
-	// `https://<short>/` page with no matching TLS cert. Empty disables
-	// the middleware (right default for non-tailnet deployments where
-	// cert-manager covers the request Host directly).
-	TailnetSuffix string
 }
 
 func (p *Params) Validate() error {
@@ -324,13 +314,6 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	})
 
 	r := chi.NewRouter()
-
-	// Tailnet host redirect — short Host → FQDN with HTTPS. Intentionally
-	// the FIRST middleware: it short-circuits on Host alone before any
-	// auth, CORS, or tenant resolution work happens, so the redirect is
-	// cheap and doesn't leak any state. No-op when TailnetSuffix is empty.
-	r.Use(TailnetHostRedirect(params.TailnetSuffix))
-
 	// CORS middleware — strict and explicit origin-based policy.
 	r.Use(NewCORSMiddleware(params.CORSConfig).Handler)
 

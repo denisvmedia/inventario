@@ -340,18 +340,6 @@ app:
   # Env: INVENTARIO_RUN_ALLOWED_ORIGINS
   allowedOrigins: ""
 
-  # Tailscale MagicDNS suffix (e.g. "<TAILNET>.ts.net") for the
-  # short-host → FQDN redirect middleware (#1858). When set, the apiserver
-  # 301-redirects requests whose Host doesn't already end with the suffix
-  # to the FQDN version with HTTPS — fixes the cert-mismatch UX where a
-  # browser hitting `http://<short>/` would otherwise get bounced by the
-  # Tailscale Operator's same-host HTTP→HTTPS redirect to `https://<short>/`
-  # and fail TLS validation (TS certs only cover the FQDN). Leave empty
-  # for non-tailnet deployments where cert-manager covers the request
-  # Host directly.
-  # Env: INVENTARIO_RUN_TAILNET_SUFFIX
-  tailnetSuffix: ""
-
   # Global per-IP API rate limit (requests per window).
   # Only applies to unauthenticated public routes (registration, password-reset,
   # currencies, seed). Auth and protected routes are exempt.

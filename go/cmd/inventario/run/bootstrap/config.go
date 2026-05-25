@@ -56,12 +56,6 @@ type Config struct {
 	CSRFRedisURL                  string `yaml:"csrf_redis_url" env:"CSRF_REDIS_URL" env-default:""`
 	AllowedOrigins                string `yaml:"allowed_origins" env:"ALLOWED_ORIGINS" env-default:""`
 	PublicURL                     string `yaml:"public_url" env:"PUBLIC_URL" env-default:""`
-	// TailnetSuffix activates the short-host → FQDN redirect middleware
-	// (#1858). When set (e.g. "<TAILNET>.ts.net"), requests whose Host
-	// doesn't already end with `.<TailnetSuffix>` get a 301 to the FQDN
-	// version with HTTPS. Empty (default) disables — right for non-tailnet
-	// deployments where cert-manager covers the request Host directly.
-	TailnetSuffix string `yaml:"tailnet_suffix" env:"TAILNET_SUFFIX" env-default:""`
 
 	LogEmailURLs bool `yaml:"log_email_urls" env:"LOG_EMAIL_URLS" env-default:"false"`
 
