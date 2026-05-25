@@ -112,29 +112,57 @@ brew install --cask tailscale         # menubar app + CLI
 
 ### Linux
 
+`kubectl` and `helm` are not in the default Debian/Ubuntu/Fedora apt/dnf
+repositories — the official install methods (binary download / get-helm-3
+script) work uniformly across distros and avoid per-distro repo-add ceremony.
+`sops` ships as a `.deb`/`.rpm` from the upstream releases page.
+
 ```bash
 # Debian / Ubuntu
 sudo apt-get update
-sudo apt-get install -y openssh-client age kubectl helm make
-# sops: not in apt yet; grab the latest release
+sudo apt-get install -y openssh-client age make curl jq
+
+# kubectl: official binary install
+curl -fsSLO "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && rm kubectl
+
+# helm: official install script
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# sops: latest .deb from GitHub releases
+SOPS_VER=$(curl -fsSL https://api.github.com/repos/getsops/sops/releases/latest \
+  | jq -r '.tag_name | ltrimstr("v")')
 curl -fsSL -o /tmp/sops.deb \
-  https://github.com/getsops/sops/releases/latest/download/sops_3.10.2_amd64.deb
+  "https://github.com/getsops/sops/releases/download/v${SOPS_VER}/sops_${SOPS_VER}_amd64.deb"
 sudo dpkg -i /tmp/sops.deb && rm /tmp/sops.deb
+
 # tailscale: official installer
 curl -fsSL https://tailscale.com/install.sh | sh
 ```
 
 ```bash
-# Arch
+# Arch — kubectl/helm/sops all in extra
 sudo pacman -S openssh sops age kubectl helm make
 yay -S tailscale-bin                  # AUR for the desktop GUI; or pacman for cli-only
 ```
 
 ```bash
-# Fedora
-sudo dnf install -y openssh-clients age kubectl helm make
-sudo dnf copr enable -y @sops/sops && sudo dnf install -y sops
-sudo dnf install -y https://pkgs.tailscale.com/stable/fedora/$(rpm -E %fedora)/tailscale.rpm
+# Fedora — same approach as Debian for kubectl/helm/sops since defaults vary
+sudo dnf install -y openssh-clients age make curl jq
+
+# kubectl: official binary install (same as Debian block above).
+curl -fsSLO "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && rm kubectl
+
+# helm: official install script
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# sops: latest .rpm from GitHub releases
+SOPS_VER=$(curl -fsSL https://api.github.com/repos/getsops/sops/releases/latest \
+  | jq -r '.tag_name | ltrimstr("v")')
+sudo dnf install -y "https://github.com/getsops/sops/releases/download/v${SOPS_VER}/sops-${SOPS_VER}-1.x86_64.rpm"
+
+sudo dnf install -y "https://pkgs.tailscale.com/stable/fedora/$(rpm -E %fedora)/tailscale.rpm"
 ```
 
 Then verify:
@@ -219,9 +247,16 @@ section — see [SECRETS.md §3 "Tailscale ACL — tagOwners"](./SECRETS.md#tail
 
 ### 3.4 Pick the admin email + password
 
-These show up in the seeded preview as the platform admin account. They are
-not exposed to the public internet, but they ARE accessible to anyone on
-your tailnet — pick a real password.
+The `admin.email` / `admin.password` fields in the sops bundle are reserved
+for a future production overlay — they are NOT what PR-preview environments
+log in with today. The preview overlay
+[`infra/helm-overlays/preview-base.values.yaml`](./helm-overlays/preview-base.values.yaml)
+hard-codes `admin@example.com` / `PreviewAdmin123` for the seeded admin user,
+and that's what you use to sign into a preview URL. Reading the sops bundle
+for prod-style admin credentials is tracked under
+[#1883](https://github.com/denisvmedia/inventario/issues/1883); for Phase 1
+you can put any non-empty placeholder values in `admin.email` /
+`admin.password` and they'll simply be ignored by the chart.
 
 Walkthrough: [SECRETS.md §4 "Pick the admin email + password"](./SECRETS.md#4-pick-the-admin-email--password).
 
@@ -243,8 +278,15 @@ sops --encrypt /tmp/secrets.plain.yaml > infra/vm/secrets/secrets.enc.yaml
 # 4. Round-trip check BEFORE deleting the plaintext.
 sops --decrypt infra/vm/secrets/secrets.enc.yaml | diff - /tmp/secrets.plain.yaml
 
-# 5. Shred the plaintext.
-shred -u /tmp/secrets.plain.yaml      # macOS: srm -m /tmp/secrets.plain.yaml
+# 5. Remove the plaintext. `shred` is GNU coreutils — present on most Linux
+#    distros but NOT on macOS (and `srm` was removed from macOS too). On a
+#    FileVault-encrypted Mac, `rm` is fine — `/tmp` lives on the encrypted
+#    volume, so the plaintext is unrecoverable after shutdown. On Linux
+#    without coreutils, install `shred` (`apt install coreutils`, etc.) or
+#    fall back to `rm` if your disk is LUKS-encrypted.
+rm /tmp/secrets.plain.yaml
+# Linux with coreutils, defence-in-depth:
+#   shred -u /tmp/secrets.plain.yaml
 ```
 
 Full walkthrough: [SECRETS.md §"Filling the bundle"](./SECRETS.md#filling-the-bundle).
@@ -397,13 +439,24 @@ KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n inv-vcl01-pr<N> logs deploy/inv-v
 
 ### master deployment
 
-`Application inv-vcl01-master` auto-syncs every push to master, reachable at
-`https://inv-vcl01-master.<your-tailnet-name>.ts.net/`. Caveat: the master
-deployment uses the moving `image.tag: master`, which doesn't trigger an
-ArgoCD re-sync by itself (rendered manifest doesn't change between commits).
-For now, pod restart picks up the new image (`imagePullPolicy: Always`); a
-git-generator ApplicationSet that templates the head SHA into the image tag
-is tracked under [#1885](https://github.com/denisvmedia/inventario/issues/1885).
+`Application inv-vcl01-master` tracks the master branch and is reachable at
+`https://inv-vcl01-master.<your-tailnet-name>.ts.net/`. **Important caveat**:
+master pushes do NOT trigger an automatic re-deploy today. The chart
+references the moving `image.tag: master` (constant text across commits),
+so ArgoCD sees no manifest diff and never re-applies; the running pods stay
+on whatever digest they pulled at last restart. To pick up a new master
+image manually:
+
+```bash
+KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n inv-vcl01-master \
+  rollout restart deploy/inv-vcl01-master-inventario
+```
+
+(`imagePullPolicy: Always` ensures the next pull grabs the new digest.)
+Proper auto-rollout — a git-generator ApplicationSet that templates the
+head SHA into `image.tag` so each master push produces a real manifest
+diff — is tracked under
+[#1885](https://github.com/denisvmedia/inventario/issues/1885).
 
 ### Redeploy at the same commit
 
@@ -529,15 +582,28 @@ Force the cleanup CronJob or wait an hour; see
 
 ### ArgoCD UI returns 401 after rotating the admin secret
 
-The initial admin Secret (`argocd-initial-admin-secret`) only contains
-the bootstrap-time password. If you've already changed the password
-through the UI and forgotten it, reset:
+The initial admin Secret (`argocd-initial-admin-secret`) only contains the
+bootstrap-time password and is sometimes removed by the chart after first
+login. `argocd admin initial-password` only reads that Secret back — it does
+NOT generate a new password. To actually reset, patch `argocd-secret` with
+a fresh bcrypt hash:
 
 ```bash
+# 1. Pick a new password and bcrypt it. htpasswd is in apache2-utils
+#    (Debian/Ubuntu) or httpd-tools (Fedora). On macOS: brew install httpd.
+NEW_PASS='your-new-password'
+NEW_HASH=$(htpasswd -nbBC 10 "" "$NEW_PASS" | tr -d ':\n' | sed 's/^\$2y/\$2a/')
+
+# 2. Patch the Secret. passwordMtime forces ArgoCD to re-read on next request.
+KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd patch secret argocd-secret \
+  -p "{\"stringData\": {\"admin.password\": \"${NEW_HASH}\", \"admin.passwordMtime\": \"$(date +%FT%T%Z)\"}}"
+
+# 3. Restart argocd-server to drop any cached auth.
 KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd \
-  exec deploy/argocd-server -- argocd admin initial-password
-# prints a fresh one-time password
+  rollout restart deploy/argocd-server
 ```
+
+Log in with `admin` / `$NEW_PASS`.
 
 ### GitHub App API rate limit ("403 API rate limit exceeded")
 
@@ -558,8 +624,14 @@ In normal operation, the `ts-orphan-cleanup` CronJob handles this hourly.
 If you see devices piling up despite the CronJob:
 
 ```bash
+# Find the most recent ts-orphan-cleanup Job (CronJobs suffix the Job name
+# with a timestamp), then tail its pod's logs. `kubectl logs job/<name>`
+# resolves to the Job's pods automatically.
+JOB=$(KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n tailscale get jobs \
+        -o jsonpath='{range .items[*]}{.metadata.name} {.metadata.creationTimestamp}{"\n"}{end}' \
+      | grep '^ts-orphan-cleanup-' | sort -k2 | tail -1 | awk '{print $1}')
 KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n tailscale \
-  logs job -l job-name --tail=50 | grep -E 'ts-orphan-cleanup|OAuth|tag:k8s'
+  logs "job/${JOB}" --tail=50 | grep -E 'orphan|OAuth|tag:k8s|Deleted'
 ```
 
 - `OAuth client cannot grant scopes "devices:core"` → the OAuth client is
