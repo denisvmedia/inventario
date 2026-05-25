@@ -80,6 +80,34 @@ if [ "$ntp_synced" != "yes" ]; then
     exit 1
 fi
 
+# --- Wait for dpkg lock ---
+# Ubuntu cloud images ship with unattended-upgrades enabled, and the first
+# boot triggers a refresh that takes the /var/lib/dpkg/lock-frontend for a
+# few minutes. If we race it, `apt-get update` exits 100 with "Could not get
+# lock /var/lib/dpkg/lock-frontend. It is held by process N (unattended-upgr)"
+# and the whole bootstrap aborts under `set -e`. Wait it out with a generous
+# timeout — unattended-upgrades on a fresh VM typically completes in 1-3 min,
+# but a particularly busy first boot has been seen to take 5+ min.
+note "Waiting for dpkg lock (unattended-upgrades may be running on first boot)"
+dpkg_timeout=600
+dpkg_elapsed=0
+while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+      fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
+      fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+    if [ "$dpkg_elapsed" -ge "$dpkg_timeout" ]; then
+        echo "dpkg lock still held after ${dpkg_timeout}s. Holders:" >&2
+        fuser -v /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock 2>&1 | head -20 >&2
+        echo "Refusing to continue — apt operations will fail." >&2
+        exit 1
+    fi
+    if [ "$((dpkg_elapsed % 30))" -eq 0 ]; then
+        printf '    still locked after %ss, waiting...\n' "$dpkg_elapsed" >&2
+    fi
+    sleep 5
+    dpkg_elapsed=$((dpkg_elapsed + 5))
+done
+[ "$dpkg_elapsed" -gt 0 ] && printf '    dpkg lock free after %ss\n' "$dpkg_elapsed" >&2
+
 # --- apt prereqs (#1867 noted conntrack + socat missing on stock Ubuntu 26.04) ---
 note "apt prereqs"
 export DEBIAN_FRONTEND=noninteractive
