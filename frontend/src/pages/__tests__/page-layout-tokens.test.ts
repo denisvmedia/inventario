@@ -221,10 +221,18 @@ describe("page-layout convention guard (issue #1889)", () => {
       // ad-hoc `max-w-*` on the actual outermost element across all
       // returns, regardless of tag).
       const importsPageModule = /from\s+["']@\/components\/ui\/page["']/.test(src)
-      // Match `<Page` or `<PageFrame` opening tags. `\b` boundary stops
-      // it from matching `<PageHeader` (which is a separate sibling, not
-      // a wrapper) or `<Pages` (no such component, but defensive).
-      const rendersPageWrapper = /<Page(?:Frame)?\s/.test(src) || /<Page(?:Frame)?>/.test(src)
+      // Concat the bodies of all top-level `return (...)` blocks and look
+      // for a `<Page>` or `<PageFrame>` opening tag inside that scope.
+      // Scoping to return blocks (rather than scanning raw `src`) means a
+      // stray `<Page>` literal in a JSDoc comment or a string can't spoof
+      // the guard (CodeRabbit feedback on #1889). `\b` boundary keeps the
+      // regex from matching `<PageHeader` (a sibling, not a wrapper) or a
+      // hypothetical `<Pages>`.
+      const returnJsx = Array.from(
+        src.matchAll(/return\s*\(\s*([\s\S]*?)\n\s{0,4}\)/g),
+        (m) => m[1]
+      ).join("\n")
+      const rendersPageWrapper = /<Page(?:Frame)?\b[^>]*\/?>/.test(returnJsx)
       if (!(importsPageModule && rendersPageWrapper)) {
         violations.push(rel)
       }
