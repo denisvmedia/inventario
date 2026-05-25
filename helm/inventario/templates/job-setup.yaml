@@ -37,7 +37,20 @@ metadata:
     {{- end }}
 spec:
   backoffLimit: 3
+  {{- if not .Values.setupJob.argocdMode }}
+  # Auto-delete the Job 24h after it completes — keeps `kubectl get jobs`
+  # clean for `helm install` consumers where the Job is a one-shot hook.
+  #
+  # Intentionally OMITTED in argocdMode: when ArgoCD's selfHeal=true sees
+  # the Job missing (after TTL GC) but present in git, it recreates the
+  # resource and migrations re-run every ~24h. Migrations are idempotent
+  # so this is harmless but noisy. Keeping the Completed Job in place
+  # means selfHeal sees no drift and only re-applies when an actual sync
+  # is triggered (new commit, manual sync). Old Jobs are pruned naturally
+  # whenever a new commit lands and ArgoCD's Replace=true delete-then-
+  # creates them.
   ttlSecondsAfterFinished: 86400
+  {{- end }}
   template:
     metadata:
       labels:

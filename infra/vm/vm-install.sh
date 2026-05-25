@@ -59,13 +59,26 @@ note "Forcing NTP resync (guards against snapshot-rollback clock drift)"
 timedatectl set-ntp false 2>/dev/null || true
 timedatectl set-ntp true 2>/dev/null || true
 systemctl restart systemd-timesyncd 2>/dev/null || true
+ntp_synced=no
 for i in $(seq 1 30); do
     if timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -qi yes; then
         printf '    NTP synchronized after %ss\n' "$i" >&2
+        ntp_synced=yes
         break
     fi
     sleep 1
 done
+# Hard-fail if the clock never stepped — downstream apt-get update / JWT
+# operations would otherwise produce confusing "not valid yet" / "iat in the
+# past" errors that read as totally unrelated to clock skew. Better to stop
+# here with a targeted message so the operator knows what to fix
+# (NTP firewall block, missing systemd-timesyncd, broken /etc/systemd/timesyncd.conf).
+if [ "$ntp_synced" != "yes" ]; then
+    echo "NTP failed to synchronize within 30s. Current state:" >&2
+    timedatectl status >&2
+    echo "Refusing to continue — downstream apt + JWT operations require a correct clock." >&2
+    exit 1
+fi
 
 # --- apt prereqs (#1867 noted conntrack + socat missing on stock Ubuntu 26.04) ---
 note "apt prereqs"

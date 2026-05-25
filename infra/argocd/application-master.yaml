@@ -28,10 +28,14 @@ spec:
         values: |
           image:
             # `master` is the moving tag published by .github/workflows/docker.yml
-            # on every push to master. Re-pulled on each ArgoCD sync (imagePullPolicy
-            # defaults to Always for the `master`/`latest` mutable tag families).
-            # Per-PR Applications instead pin `sha-<7>` for reproducible deploys.
+            # on every push to master. pullPolicy: Always overrides the chart
+            # default (IfNotPresent — right for PR's immutable sha-<7> pins but
+            # wrong here) so each pod restart re-pulls the current digest behind
+            # the tag instead of keeping a stale cached layer. Per-PR
+            # Applications inherit the chart default since their `sha-<7>` tag
+            # is immutable.
             tag: master
+            pullPolicy: Always
           ingress:
             annotations:
               tailscale.com/hostname: inv-vcl01-master

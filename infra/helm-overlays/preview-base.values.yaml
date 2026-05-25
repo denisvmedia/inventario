@@ -19,8 +19,12 @@
 
 image:
   repository: ghcr.io/denisvmedia/inventario
-  pullPolicy: IfNotPresent
-  # image.tag is layered on per-Application (sha-<7> for PR, sha-<7> of HEAD for master).
+  # image.tag is layered on per-Application: PR Applications pin an
+  # immutable `sha-<7>`, the master Application uses the moving `master`
+  # tag and overrides pullPolicy to Always so k8s actually re-fetches the
+  # digest. We DON'T set image.pullPolicy here on purpose — chart default
+  # is IfNotPresent (right for immutable sha tags), and the master
+  # Application explicitly overrides to Always for the moving tag.
 
 # Combined-mode Deployment — API + workers in one pod. Single replica works
 # for ephemeral previews where state lives in demo.* sidecars.
@@ -42,14 +46,17 @@ demo:
 # Bootstrap + migrate runs via the chart's setup Job (templates/job-setup.yaml).
 # Idempotent — re-applies safely.
 #
-# argocdMode=true switches the Job from Helm-hook-based ordering (which
-# doesn't map cleanly to ArgoCD phases — see comment in helm/inventario/values.yaml)
-# to ArgoCD-native sync-wave ordering: Job runs in wave -5, completes
-# (migrations + admin user bootstrap), then the main Deployment starts in
-# wave 0 with a populated schema. Without this, the main pod hits the
-# schema-version guard in bootstrap.go and refuses to start, which deadlocks
-# any hook-based Job that requires a Healthy main first (PostSync) or a
-# provisioned Postgres Service that PreSync hooks never get to see.
+# argocdMode=true drops the chart's helm.sh/hook annotation (Helm hooks don't
+# map cleanly to ArgoCD phases — PostSync waits for Healthy main; main needs
+# migrated schema; deadlock) and adds argocd.argoproj.io/sync-options:
+# "Force=true,Replace=true" so ArgoCD can delete-then-create the immutable
+# Job on each sync. Job applies in the default sync-wave alongside everything
+# else; its existing pg_isready loop in the bootstrap init container handles
+# waiting for Postgres. The main Deployment pod CrashLoops on bootstrap.go's
+# schema-version guard until the Job has run migrations — same handoff as a
+# non-ArgoCD `helm install` with the post-install hook. This mode also drops
+# `ttlSecondsAfterFinished` on the Job (template-level) so ArgoCD selfHeal
+# doesn't see drift and re-trigger migrations every 24h.
 #
 # initData.adminPassword: must be set explicitly — the chart's `env-default`
 # of "admin123" fails the binary's password complexity check
