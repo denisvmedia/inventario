@@ -59,7 +59,7 @@ services:
 
   # Mailpit health sidecar — performs HTTP readiness probe against Mailpit API
   mailpit-sidecar:
-    image: busybox:1.37
+    image: busybox:1.38
     restart: unless-stopped
     depends_on:
       mailpit:
