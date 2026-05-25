@@ -39,18 +39,27 @@ demo:
   minio:
     enabled: true
 
-# Bootstrap + migrate runs via the chart's existing helm hook on install/upgrade
-# (templates/job-setup.yaml). Idempotent — re-applies safely.
+# Bootstrap + migrate runs via the chart's setup Job (templates/job-setup.yaml).
+# Idempotent — re-applies safely.
 #
-# Override the hook annotation to single `post-install` instead of the chart
-# default `post-install,pre-upgrade`. ArgoCD treats the comma list as both
-# PreSync + PostSync and schedules the Job in BOTH phases, so it runs in
-# PreSync before Postgres exists, hangs waiting for the DB, and stalls the
-# sync. Single `post-install` runs only in PostSync after Postgres is up.
-# For ephemeral PR previews (and the wipe-on-push master), in-place upgrade
-# migrations aren't needed.
+# argocdMode=true switches the Job from Helm-hook-based ordering (which
+# doesn't map cleanly to ArgoCD phases — see comment in helm/inventario/values.yaml)
+# to ArgoCD-native sync-wave ordering: Job runs in wave -5, completes
+# (migrations + admin user bootstrap), then the main Deployment starts in
+# wave 0 with a populated schema. Without this, the main pod hits the
+# schema-version guard in bootstrap.go and refuses to start, which deadlocks
+# any hook-based Job that requires a Healthy main first (PostSync) or a
+# provisioned Postgres Service that PreSync hooks never get to see.
+#
+# initData.adminPassword: must be set explicitly — the chart's `env-default`
+# of "admin123" fails the binary's password complexity check
+# (≥8 chars + uppercase). For tailnet-gated previews this isn't a secret;
+# it's the well-known dev login. Real production overlays should source it
+# from a sops bundle via secrets.existingSecret.
 setupJob:
-  hookOverride: post-install
+  argocdMode: true
+  initData:
+    adminPassword: "PreviewAdmin123"
 
 # Expose via Tailscale Ingress, NOT LoadBalancer. The TS operator (#1855)
 # provisions a tailnet proxy node from the Ingress + `className: tailscale`

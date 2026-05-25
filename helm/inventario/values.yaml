@@ -514,18 +514,29 @@ setupJob:
   enabled: true
 
   # Override the Helm hook annotation on the setup Job. The chart default is
-  # `post-install,pre-upgrade` when demo.postgresql.enabled (so Postgres exists
-  # before bootstrap/migrate runs and migrations re-run on upgrade), or
-  # `pre-install,pre-upgrade` otherwise (external Postgres assumed up).
-  #
-  # ArgoCD interprets a comma-separated hook list as BOTH hooks active and
-  # schedules the Job in BOTH PreSync AND PostSync phases — so the Job runs
-  # in PreSync before the other resources land, times out waiting for
-  # Postgres, and the sync stalls. Set this to `post-install` (single hook)
-  # for ArgoCD-managed deployments where pre-upgrade migrations aren't
-  # needed in-place (e.g. ephemeral PR previews that are wiped per push).
-  # Empty string keeps the default chart behaviour.
+  # `post-install,pre-upgrade` when demo.postgresql.enabled, or
+  # `pre-install,pre-upgrade` otherwise. Set to a single hook (e.g.
+  # `post-install`) to avoid one of the two phases. Empty preserves default.
+  # NOTE: for ArgoCD deployments, prefer `argocdMode: true` below over
+  # tweaking the helm hook — Helm hooks don't map cleanly to ArgoCD phases
+  # (PreSync hooks run before non-hook resources exist; PostSync hooks
+  # require Healthy main resources, deadlocking with schema-dependent apps).
   hookOverride: ""
+
+  # ArgoCD-native mode for the setup Job. When true:
+  #   - the `helm.sh/hook` annotation is dropped entirely (Job is no longer
+  #     a Helm hook, just a regular Sync-phase resource);
+  #   - `argocd.argoproj.io/sync-wave: "-5"` is added so the Job applies
+  #     and completes before the main Deployment (wave 0) — the wait-for-
+  #     postgres logic in the Job init containers handles ordering against
+  #     the Postgres pod inside the same wave;
+  #   - `argocd.argoproj.io/sync-options: Force=true,Replace=true` is added
+  #     so ArgoCD replaces (delete-then-create) the immutable Job on each
+  #     sync rather than failing the apply.
+  # This is the right setting for any ArgoCD-managed install; the only
+  # reason it's not the default is to keep the chart drop-in compatible
+  # with non-ArgoCD `helm install` flows that expect post-install hooks.
+  argocdMode: false
 
   bootstrap:
     # Whether to run the DB bootstrap step (creates migrator DB user).
