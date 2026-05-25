@@ -13,6 +13,8 @@ this skeleton landed in [#1853](https://github.com/denisvmedia/inventario/issues
 ## What this directory ships (#1853)
 
 ```
+.sops.yaml                  ← REPO ROOT: sops creation_rules + age recipients
+                              (sops walks up from $PWD to find this)
 infra/
 ├── Makefile               targets: bootstrap upgrade recover destroy status logs shell
 ├── README.md              this file
@@ -25,7 +27,6 @@ infra/
     │   └── apply-secrets.sh   translate sops bundle into k8s Secrets
     └── secrets/
         ├── .gitignore
-        ├── .sops.yaml             creation_rules → age recipient (added in #1854)
         ├── secrets.example.yaml   schema reference (safe to commit)
         └── secrets.enc.yaml       sops-encrypted bundle (added in #1854)
 ```

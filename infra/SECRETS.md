@@ -20,11 +20,12 @@ turns the JSON into three Kubernetes Secrets (`inv-system/inventario-admin`,
 ## Files in this layout
 
 ```
+.sops.yaml                       ← repo-root: creation_rules + age recipients
+                                   (sops walks up from $PWD to find this)
 infra/vm/secrets/
-├── .gitignore               ← already in repo; ignores *.plain.*, secrets.{yaml,json}
-├── .sops.yaml               ← sops creation_rules (added once you have an age recipient)
-├── secrets.example.yaml     ← schema reference, safe to commit
-└── secrets.enc.yaml         ← THE bundle, sops-encrypted
+├── .gitignore                   ← ignores *.plain.*, secrets.{yaml,json}
+├── secrets.example.yaml         ← schema reference, safe to commit
+└── secrets.enc.yaml             ← THE bundle, sops-encrypted
 ```
 
 ---
@@ -65,14 +66,18 @@ lose it, the secrets bundle becomes a brick — there's no recovery path. Other
 team members who get added later will get their own age key and become an
 additional recipient on the bundle (`age:` accepts a comma-separated list).
 
-Tell me the public key (`age1...`) and I'll write `.sops.yaml` and the
-encrypted bundle.
+The public key (`age1...`) needs to land in the repo-root `.sops.yaml`. If
+you're the first person setting this up, write it there directly (see
+"Adding teammates" below for the multi-recipient layout). If `.sops.yaml`
+already lists one recipient (the current case in this repo), add yours as
+a second one and re-encrypt — also covered in "Adding teammates".
 
 ### 2. Create the GitHub App
 
-Inventario's bot uses a GitHub App (not a PAT) to read PR state and clone
-the repo. Permissions are read-only — the bot doesn't post comments or
-labels.
+ArgoCD's `repo-server` (for `git clone` of the inventario repo) and the
+ApplicationSet PR generator (for listing PRs and reading labels) consume
+a GitHub App credential — no PAT, no custom bot component. Permissions are
+read-only; ArgoCD never writes to GitHub.
 
 1. Open <https://github.com/settings/apps/new>
 2. Fill in:
@@ -98,29 +103,37 @@ labels.
 7. After install, the URL becomes `https://github.com/settings/installations/<NNNNN>`.
    Record the `NNNNN` — that's the **Installation ID**.
 
-Tell me the **App ID**, **Installation ID**, and paste the **private key PEM**
-(I'll put it in the encrypted bundle, never in clear repo).
+Stash these three values (App ID, Installation ID, private key PEM) for
+the "Filling the bundle" step below.
 
 ### 3. Create the Tailscale OAuth client
 
 For the Tailscale Kubernetes Operator (#1855) to create ephemeral tailnet
-nodes for each Service/Ingress.
+nodes for each Service/Ingress AND to bootstrap its own tailnet identity.
 
 1. Open <https://login.tailscale.com/admin/settings/oauth>
 2. Click **Generate OAuth client**.
 3. **Description**: `inventario-vcluster-operator`
-4. **Scopes**: tick `Devices` → `Write` (operator needs to create devices).
-   No other scope.
-5. **Tags**: pick or create a tag the operator will own (e.g. `tag:k8s`).
-   You'll need to make sure that tag is **owned by** the user/group that has
-   permissions to use this OAuth client — see the
-   [Tailscale ACL docs](https://tailscale.com/kb/1018/acls#tag-owners).
+4. **Scopes** — tick BOTH (one alone is not enough):
+   - **Devices → Core → Write** (Read is implied; operator creates ephemeral
+     proxy devices).
+   - **Keys → Auth Keys → Write** (operator mints one-shot auth-keys per
+     proxy device).
+   Everything else stays unchecked, including `API Access Tokens` which is
+   sometimes pre-ticked — uncheck it (principle of least privilege).
+5. **Tags** — pick BOTH (one alone is not enough):
+   - `tag:k8s-operator` — the operator pod's own tailnet identity.
+   - `tag:k8s` — every proxy node the operator spawns for a Service/Ingress.
+   The `tagOwners` configuration in your Tailscale ACL must match (see
+   "Tailscale ACL — `tagOwners`" sub-section below). Get the ACL right
+   BEFORE generating the client — Tailscale checks tag ownership at
+   client-create time, and a mis-configured ACL forces you to regenerate.
 6. Click **Generate Client**.
 7. Copy the **Client ID** (visible from then on in the table) and the
    **Client Secret** (visible **once**, can't be retrieved later — save it
    immediately).
 
-Tell me the **Client ID** and **Client Secret**.
+Stash these two values for the "Filling the bundle" step below.
 
 #### Tailscale ACL — `tagOwners` (one-time, easy to forget)
 
@@ -180,7 +193,7 @@ login the app uses on first start.
 openssl rand -base64 24
 ```
 
-Tell me an **email** + the **password** you want baked in.
+Stash both for "Filling the bundle".
 
 ### 5. Optional: Tailscale auth-key (for `make recover` on a fresh VM)
 
@@ -200,20 +213,49 @@ acceptable to skip.
 
 ---
 
-## What I'll do once you give me the values above
+## Filling the bundle
 
-1. Write `infra/vm/secrets/.sops.yaml` with your age public key as the recipient.
-2. Build `infra/vm/secrets/secrets.enc.yaml` populated with all 8-ish values
-   (admin / tailscale.{auth_key?, oauth_client_id, oauth_client_secret, tailnet_name} /
-   github.{app_id, app_installation_id, app_private_key, url}).
-3. Verify locally: `sops -d --output-type json infra/vm/secrets/secrets.enc.yaml | jq .` round-trips.
-4. Run `make -C infra bootstrap VM=buster@vcluster-dev` end-to-end on the
-   clean VM to confirm:
-   - Tailscale operator helm install succeeds
-   - `kubectl -n tailscale get pods` shows operator Ready
-   - `kubectl -n argocd get secret github-app-creds` exists with our label
-   - `kubectl -n inv-system get secret inventario-admin` exists
-5. Commit + PR.
+With all the values from steps 1-5 in hand, populate the encrypted bundle:
+
+```bash
+cd <repo-root>
+
+# 1. Start from the schema reference (safe placeholders).
+cp infra/vm/secrets/secrets.example.yaml infra/vm/secrets/secrets.local.yaml
+chmod 600 infra/vm/secrets/secrets.local.yaml
+
+# 2. Fill in real values — admin.{email,password},
+#    tailscale.{auth_key, oauth_client_id, oauth_client_secret, tailnet_name},
+#    github.{app_id, app_installation_id, app_private_key, url}.
+#    Leave the velero block out entirely until #1865 ships — Phase 1 doesn't
+#    need it, and committing empty placeholders into the encrypted bundle
+#    creates a footgun (someone later adds a real key in plaintext).
+$EDITOR infra/vm/secrets/secrets.local.yaml
+
+# 3. Encrypt. The repo-root .sops.yaml picks the right age recipient
+#    automatically because the *.local.yaml path matches a creation_rule.
+sops -e infra/vm/secrets/secrets.local.yaml > infra/vm/secrets/secrets.enc.yaml
+chmod 600 infra/vm/secrets/secrets.enc.yaml
+
+# 4. Verify round-trip BEFORE deleting plaintext. All expected keys should
+#    appear "filled"; velero.* should not appear at all if you followed the
+#    note in step 2.
+sops -d --output-type json infra/vm/secrets/secrets.enc.yaml | jq -r '
+  paths(scalars) as $p |
+  ($p|join(".")) + ": " +
+  (getpath($p) | tostring | if length > 0 then "filled" else "empty" end)
+'
+
+# 5. Shred the plaintext.
+SIZE=$(wc -c < infra/vm/secrets/secrets.local.yaml)
+dd if=/dev/urandom of=infra/vm/secrets/secrets.local.yaml bs=$SIZE count=1 conv=notrunc 2>/dev/null
+rm -f infra/vm/secrets/secrets.local.yaml
+
+# 6. End-to-end test against a real VM.
+make -C infra bootstrap VM=user@vm-host
+
+# 7. Commit secrets.enc.yaml (+ .sops.yaml if first time) and open a PR.
+```
 
 ---
 
@@ -274,22 +316,35 @@ is your age private key — protect it accordingly.
 
 ## Key rotation
 
-### Rotating the age private key (you got phished, or laptop stolen)
+### Adding a teammate (or rotating the age private key — same flow)
 
-1. Generate a new age key: `age-keygen -o ~/.config/sops/age/keys2.txt`
-2. Edit `.sops.yaml` to add the **new** public key alongside the **old** one:
+`.sops.yaml` at the repo root accepts a comma-separated list of age
+recipients; each can decrypt the bundle independently.
+
+1. Generate a new age key (or get the teammate's public key from theirs):
+   `age-keygen -o ~/.config/sops/age/keys2.txt`
+2. Edit repo-root `.sops.yaml` so BOTH rules list the new recipient
+   alongside the existing one (keep the scoping prefix and both file-type
+   regexes — drift here means some files get encrypted with the old key
+   only):
    ```yaml
    creation_rules:
-     - path_regex: \.enc\.yaml$
+     - path_regex: ^infra/vm/secrets/.*\.enc\.yaml$
+       age: >-
+         age1old...,
+         age1new...
+     - path_regex: ^infra/vm/secrets/.*\.local\.yaml$
        age: >-
          age1old...,
          age1new...
    ```
 3. Re-encrypt the bundle with both recipients: `sops updatekeys infra/vm/secrets/secrets.enc.yaml`
 4. Commit + push.
-5. Switch your `~/.config/sops/age/keys.txt` to the new key.
-6. Edit `.sops.yaml` to **remove** the old recipient, run `sops updatekeys` again, commit.
-7. Securely shred `~/.config/sops/age/keys.txt.old` and the password-manager copy.
+5. (Rotation only) Switch your `~/.config/sops/age/keys.txt` to the new key.
+6. (Rotation only) Edit `.sops.yaml` to **remove** the old recipient from
+   BOTH rules, run `sops updatekeys` again, commit.
+7. (Rotation only) Securely shred `~/.config/sops/age/keys.txt.old` and the
+   password-manager copy.
 
 ### Rotating the GitHub App private key (App-side compromise, or just hygiene)
 
