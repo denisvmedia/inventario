@@ -26,6 +26,12 @@ spec:
         valueFiles:
           - $values/infra/helm-overlays/preview-base.values.yaml
         values: |
+          image:
+            # `master` is the moving tag published by .github/workflows/docker.yml
+            # on every push to master. Re-pulled on each ArgoCD sync (imagePullPolicy
+            # defaults to Always for the `master`/`latest` mutable tag families).
+            # Per-PR Applications instead pin `sha-<7>` for reproducible deploys.
+            tag: master
           ingress:
             annotations:
               tailscale.com/hostname: inv-vcl01-master

@@ -21,6 +21,13 @@ spec:
   # (no dot) and would silently pass `{{.number}}` through literally, breaking
   # Application name validation (RFC 1123 forbids `{}` chars).
   goTemplate: true
+  # Fail rendering loudly on any undefined key in the template (e.g. a typo
+  # like `{{.numbr}}` or a PR generator field rename in a future ArgoCD
+  # version). Default behavior would emit `<no value>` and silently produce
+  # broken Applications that fail at apply or — worse — succeed with
+  # malformed resource names.
+  goTemplateOptions:
+    - missingkey=error
   generators:
     - pullRequest:
         github:
