@@ -22,6 +22,7 @@ ARGOCD_DIR="$REPO_ROOT/infra/argocd"
 VM_INSTALL="$SCRIPT_DIR/vm-install.sh"
 HELM_VALUES_DIR="$SCRIPT_DIR/helm-values"
 APPLY_SECRETS="$SCRIPT_DIR/scripts/apply-secrets.sh"
+CLUSTER_EXTRAS_DIR="$SCRIPT_DIR/cluster-extras"
 
 note() { printf '\n==> %s\n' "$*" >&2; }
 warn() { printf '\n[!] %s\n' "$*" >&2; }
@@ -70,6 +71,20 @@ if [ -n "$SECRETS_JSON" ]; then
     else
         warn "$APPLY_SECRETS not executable; skipping k8s Secret apply step."
     fi
+fi
+
+# --- Apply cluster-extras manifests (#1858 — hourly TS device cleanup) ---
+# In-cluster resources that aren't ArgoCD-managed but need to live in the
+# cluster for the long term. Currently: a CronJob that reuses the operator's
+# OAuth credentials (already applied as `operator-oauth` Secret above) to
+# delete stale Tailscale device records for closed PR previews. See the
+# header comment in infra/vm/cluster-extras/ts-orphan-cleanup.yaml for the
+# full rationale.
+if [ -d "$CLUSTER_EXTRAS_DIR" ] && compgen -G "$CLUSTER_EXTRAS_DIR/*.yaml" >/dev/null; then
+    note "Applying cluster-extras manifests from $CLUSTER_EXTRAS_DIR"
+    for m in "$CLUSTER_EXTRAS_DIR"/*.yaml; do
+        ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -' < "$m"
+    done
 fi
 
 # --- Apply ArgoCD manifests (AppProject, ApplicationSet, master Application) (#1858) ---

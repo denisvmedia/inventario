@@ -1,0 +1,178 @@
+# In-cluster cleanup for stale Tailscale device records (#1858 epic, #1890).
+#
+# Why this exists:
+#   The Tailscale Operator MINTS device records when a proxy pod registers
+#   (CREATE via OAuth-issued auth key) but does NOT DELETE the corresponding
+#   tailnet device record when the proxy StatefulSet is decommissioned (the
+#   operator just tears down the K8s resource; the device key persists in
+#   the tailnet admin until default 180-day expiry). Result: every closed
+#   PR / unlabeled PR / snapshot-rolled-back cluster leaves an offline
+#   device behind, holding the original hostname slot, so the NEXT deploy
+#   of the same PR number gets a `-1`/`-2` suffix.
+#
+# Architecture:
+#   Hourly CronJob in the `tailscale` namespace reuses the operator's OAuth
+#   credentials (`operator-oauth` Secret applied by apply-secrets.sh from
+#   the sops bundle's tailscale.oauth_client_id / oauth_client_secret).
+#   The single OAuth client carries multiple scopes: `auth_keys` (for the
+#   operator to mint proxy auth keys) AND `devices:core` (for the operator
+#   to manage its own device record — and, transitively, for us to manage
+#   the proxy device records the operator mints). The TS OAuth scope name
+#   for device management is `devices:core` (not `devices` — that is
+#   rejected by the token endpoint with "OAuth client cannot grant
+#   scopes"; verified empirically). The same client_id is the source of
+#   truth for the whole TS Operator surface — no separate cleanup OAuth
+#   to rotate.
+#
+# Heuristic for deletion:
+#   - Device has `tag:k8s` (TS Operator-provisioned proxies inherit this
+#     tag from the operator's defaultProxyTags configuration).
+#   - Device hostname matches our naming convention
+#     (`inv-vcl01-(pr<N>|master)(-<N>)?` — base name, plus any `-N`
+#     suffix the operator may have appended on a hostname collision so
+#     prior-deploy orphans get cleaned up alongside fresh ones).
+#   - Device has been offline for > 1 hour. The threshold guards against
+#     deleting an in-flight reschedule: pod restart is < 1m, an unhealthy
+#     proxy may flap for a few minutes; 1h means "definitely abandoned".
+#
+# Trade-off vs reactive cleanup (GH Actions on PR close):
+#   - + Single source of credentials (sops bundle), no GH secret to rotate.
+#   - + Catches orphans from non-PR-event paths: snapshot rollback,
+#       `kubectl delete namespace`, operator restart that loses state.
+#   - - Up to 1h delay between PR close and device removal. Acceptable —
+#       the device being orphan for an hour doesn't affect functionality;
+#       only the NEXT deploy of the same PR number is gated on cleanup,
+#       and that deploy doesn't happen sooner than the operator notices
+#       the label.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ts-orphan-cleanup
+  namespace: tailscale
+data:
+  cleanup.sh: |
+    #!/bin/sh
+    set -eu
+
+    : "${TS_OAUTH_CLIENT_ID:?missing TS_OAUTH_CLIENT_ID env}"
+    : "${TS_OAUTH_CLIENT_SECRET:?missing TS_OAUTH_CLIENT_SECRET env}"
+
+    # Mint a short-lived bearer token from OAuth client credentials.
+    # `scope=devices:core` covers both LIST and DELETE in the TS API.
+    # NOTE: the scope name is `devices:core`, not `devices` — the latter
+    # is rejected by the token endpoint with "OAuth client cannot grant
+    # scopes 'devices'" even when the client has the device-management
+    # capability granted in the admin UI.
+    token=$(curl -sS --fail -X POST "https://api.tailscale.com/api/v2/oauth/token" \
+        -u "${TS_OAUTH_CLIENT_ID}:${TS_OAUTH_CLIENT_SECRET}" \
+        -d "grant_type=client_credentials" \
+        -d "scope=devices:core" \
+        | jq -r '.access_token // empty')
+    if [ -z "$token" ]; then
+        echo "ERROR: OAuth token mint returned empty access_token." >&2
+        echo "  Check that operator-oauth Secret has the correct client_id/client_secret" >&2
+        echo "  and that the OAuth client has devices:core write scope on tag:k8s." >&2
+        exit 1
+    fi
+
+    devices_json=$(curl -sS --fail "https://api.tailscale.com/api/v2/tailnet/-/devices" \
+        -H "Authorization: Bearer ${token}")
+
+    # Pick devices to delete:
+    #   - tagged tag:k8s (i.e. operator-provisioned proxy nodes — not the
+    #     operator itself, which carries tag:k8s-operator);
+    #   - hostname matches our preview-env naming;
+    #   - offline for > 1 hour (lastSeen older than now - 3600s).
+    # jq's `fromdateiso8601` handles the RFC 3339 timestamps the API
+    # returns. `now` is current time in epoch seconds.
+    to_delete=$(echo "$devices_json" | jq -r '
+        .devices[]
+        | select(
+            (.tags // []) | any(. == "tag:k8s")
+        )
+        | select(
+            .hostname | test("^inv-vcl01-(pr[0-9]+|master)(-[0-9]+)?$")
+        )
+        | select(
+            (.lastSeen | fromdateiso8601) < (now - 3600)
+        )
+        | "\(.nodeId) \(.hostname)"
+    ')
+
+    if [ -z "$to_delete" ]; then
+        echo "No orphan tailnet devices to clean up."
+        exit 0
+    fi
+
+    echo "$to_delete" | while IFS=' ' read -r id hostname; do
+        [ -z "$id" ] && continue
+        http_code=$(curl -sS -o /tmp/del.out -w "%{http_code}" \
+            -X DELETE "https://api.tailscale.com/api/v2/device/${id}" \
+            -H "Authorization: Bearer ${token}")
+        if [ "$http_code" = "200" ] || [ "$http_code" = "204" ]; then
+            echo "Deleted ${hostname} (nodeId=${id})"
+        else
+            echo "WARN: DELETE /api/v2/device/${id} (hostname=${hostname}) returned HTTP ${http_code}: $(cat /tmp/del.out)" >&2
+        fi
+    done
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ts-orphan-cleanup
+  namespace: tailscale
+spec:
+  # Hourly — fast enough that orphan accumulation never gets bad, slow
+  # enough not to spam the TS API or interfere with in-flight reschedules.
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: OnFailure
+          # Run as a small alpine pod; apk-install curl + jq once per Job
+          # invocation (~2s, ~5 MiB image). Keeps the image free of pinned
+          # registry dependencies; could later be swapped for a pre-built
+          # tools image if invocation count grows enough to matter.
+          containers:
+            - name: cleanup
+              image: alpine:3.20
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: TS_OAUTH_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: operator-oauth
+                      key: client_id
+                - name: TS_OAUTH_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: operator-oauth
+                      key: client_secret
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  apk add --no-cache curl jq >/dev/null
+                  exec /bin/sh /script/cleanup.sh
+              volumeMounts:
+                - name: script
+                  mountPath: /script
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
+          volumes:
+            - name: script
+              configMap:
+                name: ts-orphan-cleanup
+                defaultMode: 0755
