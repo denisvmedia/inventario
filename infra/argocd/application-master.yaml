@@ -36,6 +36,12 @@ spec:
             # is immutable.
             tag: master
             pullPolicy: Always
+          app:
+            # Same short-host → FQDN redirect as the per-PR Applications. The
+            # master Application is reachable as `http://inv-vcl01-master`
+            # (no PR suffix) and the middleware bounces to the cert-valid
+            # FQDN. <TAILNET> is substituted at apply time by bootstrap.sh.
+            tailnetSuffix: '<TAILNET>.ts.net'
           ingress:
             annotations:
               tailscale.com/hostname: inv-vcl01-master

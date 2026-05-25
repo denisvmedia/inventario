@@ -61,6 +61,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.CSRFRedisURL, "csrf-redis-url", cfg.CSRFRedisURL, "Redis URL for CSRF token storage (e.g., redis://localhost:6379/0); omit to use in-memory storage")
 	flags.StringVar(&cfg.AllowedOrigins, "allowed-origins", cfg.AllowedOrigins, "Comma-separated list of allowed CORS origins (e.g., https://example.com)")
 	flags.StringVar(&cfg.PublicURL, "public-url", cfg.PublicURL, "Public base URL used in transactional email links (e.g., https://inventario.example.com)")
+	flags.StringVar(&cfg.TailnetSuffix, "tailnet-suffix", cfg.TailnetSuffix, "Tailscale MagicDNS suffix (e.g. <TAILNET>.ts.net). When set, requests on a short hostname get 301-redirected to the FQDN with HTTPS — fixes the cert-mismatch UX for tailnet-served PR previews. Empty disables.")
 
 	flags.StringVar(&cfg.EmailProvider, "email-provider", cfg.EmailProvider, "Email provider: stub, smtp, sendgrid, ses, mandrill, or mailchimp")
 	flags.BoolVar(&cfg.LogEmailURLs, "log-email-urls", cfg.LogEmailURLs, "Log full verification/password-reset URLs in stub email mode (includes sensitive tokens; unsafe for shared logs)")

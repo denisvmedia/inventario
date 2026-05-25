@@ -169,6 +169,8 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		return serverSetup{}, err
 	}
 
+	params.TailnetSuffix = strings.TrimSpace(cfg.TailnetSuffix)
+
 	params.FeatureCurrencyMigration = cfg.FeatureCurrencyMigration
 
 	emailLifecycle, err := buildEmailService(cfg)

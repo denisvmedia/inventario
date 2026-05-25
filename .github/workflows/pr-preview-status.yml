@@ -1,0 +1,125 @@
+# PR-preview status comment (#1858 epic).
+#
+# Posts (and maintains) a single sticky comment on PRs labeled `preview` so
+# reviewers/contributors don't have to guess the tailnet hostname. The comment
+# links to the short host (`http://inv-vcl01-prN`) — public PR readers can't
+# resolve it (it's a MagicDNS name, tailnet-internal), but anyone on the
+# tailnet ACL's `tag:k8s` follows the link, the apiserver's
+# TailnetHostRedirect middleware (#1858) 301-bounces to the FQDN HTTPS URL
+# the Tailscale cert actually covers, and they land on a working preview.
+#
+# Why a single sticky comment instead of one per push: PRs would otherwise
+# accumulate dozens of "preview redeploying" notifications over their
+# lifetime. The `marocchino/sticky-pull-request-comment` action finds the
+# previous comment by `header` and edits it in place.
+#
+# Event mapping:
+#   - `labeled` (label == preview)   → "🟢 Deploying" comment
+#   - `synchronize` (label present)  → update SHA, "🟢 Re-deploying"
+#   - `unlabeled` (label was preview)→ "🗑️ Preview torn down"
+#   - `closed`   (label was present) → "🗑️ Preview torn down (PR closed)"
+#
+# The ApplicationSet's PR generator polls GitHub every 60s and tears down the
+# preview itself; this workflow doesn't trigger any deploy/teardown action,
+# it only mirrors state into a human-visible comment.
+
+name: PR preview status
+
+on:
+  pull_request:
+    types: [labeled, unlabeled, synchronize, closed]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  comment:
+    name: Update preview comment
+    # Run when:
+    #   - the `preview` label is being added or removed (event.label.name)
+    #   - the PR is being pushed-to OR closed AND already has the label
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'preview') ||
+      (github.event.action == 'unlabeled' && github.event.label.name == 'preview') ||
+      ((github.event.action == 'synchronize' || github.event.action == 'closed') &&
+       contains(github.event.pull_request.labels.*.name, 'preview'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compose comment body
+        id: body
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_ACTION: ${{ github.event.action }}
+          IS_CLOSED: ${{ github.event.pull_request.state == 'closed' }}
+          UNLABELED_PREVIEW: ${{ github.event.action == 'unlabeled' && github.event.label.name == 'preview' }}
+        run: |
+          set -euo pipefail
+          short_sha="${PR_HEAD_SHA:0:7}"
+          short_host="inv-vcl01-pr${PR_NUMBER}"
+
+          # Determine status from the event.
+          if [ "$IS_CLOSED" = "true" ]; then
+              status="🗑️ Preview torn down (PR closed)"
+              body=$(cat <<EOF
+          ### Inventario preview env
+
+          ${status}
+
+          The ApplicationSet pruned the per-PR Application within ~60s of the
+          PR closing. Tailscale proxy device auto-removes from the tailnet
+          (\`ephemeral-pr\` ProxyClass).
+          EOF
+          )
+          elif [ "$UNLABELED_PREVIEW" = "true" ]; then
+              status="🗑️ Preview torn down (\`preview\` label removed)"
+              body=$(cat <<EOF
+          ### Inventario preview env
+
+          ${status}
+
+          Re-label the PR with \`preview\` to redeploy.
+          EOF
+          )
+          else
+              if [ "$EVENT_ACTION" = "synchronize" ]; then
+                  status="🟢 Re-deploying \`${short_sha}\`"
+              else
+                  status="🟢 Deploying \`${short_sha}\`"
+              fi
+              body=$(cat <<EOF
+          ### Inventario preview env
+
+          ${status}
+
+          - Preview URL: <http://${short_host}> *(tailnet-only; the apiserver redirects to the cert-valid FQDN)*
+          - Admin login: \`admin@example.com\` / \`PreviewAdmin123\` *(dev-only credential, gated behind Tailscale ACL)*
+          - Head: \`${PR_HEAD_SHA}\`
+
+          Status reflects what ArgoCD has been asked to deploy, not whether the
+          sync has completed yet. Allow ~3–5 minutes after a push for the docker
+          build + ArgoCD sync to finish.
+
+          ---
+          <sub>Updated automatically by [pr-preview-status.yml](https://github.com/${{ github.repository }}/blob/master/.github/workflows/pr-preview-status.yml) on each PR event.</sub>
+          EOF
+          )
+          fi
+
+          # Emit multi-line output for the sticky-comment action.
+          {
+              echo "body<<__EOF__"
+              echo "$body"
+              echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update sticky comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          # `header` is the marker the action uses to find the previous
+          # comment to edit. Hidden inside an HTML comment in the body, so
+          # not visible to reviewers but unique enough not to collide.
+          header: inventario-preview
+          number: ${{ github.event.pull_request.number }}
+          message: ${{ steps.body.outputs.body }}

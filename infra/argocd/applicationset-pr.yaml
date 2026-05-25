@@ -63,6 +63,13 @@ spec:
             values: |
               image:
                 tag: 'sha-{{ .head_short_sha_7 }}'
+              app:
+                # 301-redirect requests on the short hostname (e.g.
+                # `http://inv-vcl01-pr1881`) to the FQDN HTTPS URL the
+                # Tailscale cert actually covers. <TAILNET> is substituted
+                # at apply time by bootstrap.sh from the sops bundle's
+                # tailscale.tailnet_name.
+                tailnetSuffix: '<TAILNET>.ts.net'
               ingress:
                 annotations:
                   tailscale.com/hostname: 'inv-vcl01-pr{{.number}}'
