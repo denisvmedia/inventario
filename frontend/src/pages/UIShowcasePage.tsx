@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -69,20 +70,17 @@ export function UIShowcasePage() {
   return (
     <>
       <RouteTitle title="UI Showcase (dev)" />
-      <div
-        className="mx-auto flex w-full max-w-6xl flex-col gap-8 p-6"
-        data-testid="page-ui-showcase"
-      >
-        <header className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">UI Showcase</h1>
-            <Badge variant="secondary">dev only</Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Reference catalog of shadcn/Radix primitives shipped in this app — kept here to spot
-            regressions during design-system work.
-          </p>
-        </header>
+      <Page width="wide" className="gap-8" data-testid="page-ui-showcase">
+        <PageHeader
+          title={
+            <span className="inline-flex items-center gap-2">
+              UI Showcase
+              <Badge variant="secondary">dev only</Badge>
+            </span>
+          }
+          subtitle="Reference catalog of shadcn/Radix primitives shipped in this app — kept here to spot regressions during design-system work."
+          subtitleClassName="text-sm"
+        />
 
         <Tabs defaultValue="buttons">
           <TabsList>
@@ -91,6 +89,7 @@ export function UIShowcasePage() {
             <TabsTrigger value="overlays">Overlays</TabsTrigger>
             <TabsTrigger value="feedback">Feedback</TabsTrigger>
             <TabsTrigger value="layout">Layout</TabsTrigger>
+            <TabsTrigger value="page">Page</TabsTrigger>
             <TabsTrigger value="typography">Typography</TabsTrigger>
             <TabsTrigger value="tokens">Tokens</TabsTrigger>
           </TabsList>
@@ -110,6 +109,9 @@ export function UIShowcasePage() {
           <TabsContent value="layout" className="mt-6">
             <LayoutSection />
           </TabsContent>
+          <TabsContent value="page" className="mt-6">
+            <PageLayoutSection />
+          </TabsContent>
           <TabsContent value="typography" className="mt-6">
             <TypographySection />
           </TabsContent>
@@ -117,7 +119,7 @@ export function UIShowcasePage() {
             <TokensSection />
           </TabsContent>
         </Tabs>
-      </div>
+      </Page>
     </>
   )
 }
@@ -395,6 +397,94 @@ function LayoutSection() {
           <p>Section B</p>
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+// PageLayoutSection enumerates the canonical Page + PageHeader variants
+// introduced by issue #1889. Width-token preview is a representative slab
+// (Page itself centers within the surrounding container, so we cap each
+// preview with the matching token class so the comparison reads at a
+// glance). The intent: a single screen where designers + devs can
+// eyeball every approved combination instead of opening real routes.
+function PageLayoutSection() {
+  return (
+    <div className="space-y-6">
+      <ShowcaseRow title="Width tokens">
+        <div className="flex w-full flex-col gap-3">
+          <p className="text-xs text-muted-foreground">
+            Two canonical widths cover every top-level route. <code>full</code> is the deliberate
+            third bucket realised by omitting a max-width entirely.
+          </p>
+          <div className="flex w-full flex-col gap-2">
+            <div
+              className="h-8 max-w-page-narrow rounded-md bg-primary/20 px-3 text-xs leading-8"
+              data-page-width="narrow"
+            >
+              narrow — 48rem / 768px (settings, profile, single-column forms)
+            </div>
+            <div
+              className="h-8 max-w-page-wide rounded-md bg-primary/30 px-3 text-xs leading-8"
+              data-page-width="wide"
+            >
+              wide — 80rem / 1280px (lists, detail pages, dashboards)
+            </div>
+            <div
+              className="h-8 rounded-md bg-primary/40 px-3 text-xs leading-8"
+              data-page-width="full"
+            >
+              full — no cap (special: full-bleed media viewers, hero-only surfaces)
+            </div>
+          </div>
+        </div>
+      </ShowcaseRow>
+
+      <ShowcaseRow title='PageHeader — size="page" (top-level routes)'>
+        <div className="w-full rounded-md border border-dashed border-border p-4">
+          <PageHeader title="Warranties" subtitle="Track coverage across everything you own." />
+        </div>
+      </ShowcaseRow>
+
+      <ShowcaseRow title='PageHeader — size="page" with actions'>
+        <div className="w-full rounded-md border border-dashed border-border p-4">
+          <PageHeader
+            title="Commodities"
+            subtitle="Everything you own, at a glance."
+            actions={
+              <Button size="sm">
+                <Plus className="size-4" />
+                Add item
+              </Button>
+            }
+          />
+        </div>
+      </ShowcaseRow>
+
+      <ShowcaseRow title='PageHeader — size="detail" with back link'>
+        <div className="w-full rounded-md border border-dashed border-border p-4">
+          <PageHeader
+            size="detail"
+            title="Edit profile"
+            subtitle="Update your account details."
+            backLink={
+              <span className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors">
+                ← My profile
+              </span>
+            }
+          />
+        </div>
+      </ShowcaseRow>
+
+      <ShowcaseRow title="PageHeader — with leading icon">
+        <div className="w-full rounded-md border border-dashed border-border p-4">
+          <PageHeader
+            size="detail"
+            title="Operator profile"
+            subtitle="Back-office self-card."
+            icon={<ShieldAlert className="size-5 text-muted-foreground" aria-hidden="true" />}
+          />
+        </div>
+      </ShowcaseRow>
     </div>
   )
 }

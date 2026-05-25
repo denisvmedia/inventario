@@ -5,6 +5,7 @@ import { Package, Pencil, Trash2 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Page } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DropOverlay } from "@/components/files/DropOverlay"
 import { EntityFilesPanel } from "@/components/files/EntityFilesPanel"
@@ -118,13 +119,13 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
 
   if (area.isError) {
     return (
-      <div className="flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full">
+      <Page width="wide">
         <RouteTitle title={t("locations:areaDetail.errorTitle")} />
         <Alert variant="destructive" data-testid="area-detail-error">
           <AlertTitle>{t("locations:areaDetail.errorTitle")}</AlertTitle>
           <AlertDescription>{t("locations:areaDetail.errorDescription")}</AlertDescription>
         </Alert>
-      </div>
+      </Page>
     )
   }
 
@@ -140,8 +141,9 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
   return (
     <>
       <RouteTitle title={area.data?.name ?? t("locations:areaDetail.fallbackTitle")} />
-      <div
-        className="relative flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full"
+      <Page
+        width="wide"
+        className="relative"
         data-testid="page-area-detail"
         {...dropZone.bindProps}
       >
@@ -235,7 +237,7 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
             />
           </>
         ) : null}
-      </div>
+      </Page>
 
       <AreaFormDialog
         open={editOpen}

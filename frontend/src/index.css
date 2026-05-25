@@ -54,6 +54,17 @@
   --color-tag-muted: var(--tag-muted);
 }
 
+@theme {
+  /*
+    Canonical page-content widths — issue #1889. Two named tokens cover every
+    top-level route; `full` is a deliberate third bucket realised by omitting
+    a max-width entirely. New top-level pages must pick one via <Page width>
+    rather than reaching for arbitrary `max-w-*` literals.
+  */
+  --container-page-narrow: 48rem; /* 768px — focused single-column forms (settings, profile) */
+  --container-page-wide: 80rem; /* 1280px — data-heavy lists, detail pages, dashboards */
+}
+
 /*
   Theme tokens — copied 1:1 from denisvmedia/inventario-design (the canonical
   visual contract). Update both repos in lockstep; do not drift here.

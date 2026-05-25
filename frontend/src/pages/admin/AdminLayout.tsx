@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
 import { LocationsBreadcrumb } from "@/components/locations/LocationsBreadcrumb"
+import { Page } from "@/components/ui/page"
 import { cn } from "@/lib/utils"
 
 // The /admin/* sub-routes that get a secondary-nav pill. `end` keeps the
@@ -41,7 +42,7 @@ export function AdminLayout() {
   const sectionLabelKey = currentNavLabelKey(location.pathname)
 
   return (
-    <div className="flex flex-col gap-6">
+    <Page width="wide">
       <div className="flex items-center gap-2">
         <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 shrink-0">
           <ShieldCheck className="size-4 text-primary" />
@@ -77,6 +78,6 @@ export function AdminLayout() {
       </nav>
 
       <Outlet />
-    </div>
+    </Page>
   )
 }

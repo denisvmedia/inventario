@@ -31,6 +31,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Page } from "@/components/ui/page"
 import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
@@ -136,6 +137,30 @@ function parseTab(raw: string | null): TabKey {
 // query-string mirror / edit dialog / drop zone all run in both
 // variants — the only difference is the outer chrome and a "Back to
 // list" affordance vs. the Sheet's built-in close button.
+// PageFrame swaps between a plain sheet body and the canonical Page wrapper.
+// Keeps every render site (loading / error / not-found / main) routed through
+// the same width token without duplicating the branching. Hoisted to module
+// scope to satisfy react-hooks/static-components.
+function PageFrame({
+  isSheet,
+  className,
+  children,
+  ...rest
+}: React.ComponentProps<"div"> & { isSheet: boolean }) {
+  if (isSheet) {
+    return (
+      <div className={className} {...rest}>
+        {children}
+      </div>
+    )
+  }
+  return (
+    <Page width="wide" className={className} {...rest}>
+      {children}
+    </Page>
+  )
+}
+
 export interface CommodityDetailContentProps {
   /**
    * The commodity id to load. Pre-extracted from the URL by the page
@@ -164,10 +189,12 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // overflow-y-auto>` — leaving it off the inner wrapper avoids the
   // double-scrollbar bug copilot flagged.
   const isSheet = variant === "sheet"
-  const errorWrapperClass = isSheet ? "px-5 py-6" : "p-6 max-w-4xl mx-auto w-full"
-  const mainWrapperClass = isSheet
-    ? "relative flex flex-col gap-0 px-5 pb-5"
-    : "relative flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full"
+  // Page-mode width comes from the canonical wide token via <Page width="wide">
+  // (`PageFrame` below). The literal class strings here stay scoped to the sheet
+  // variant so the page-layout convention guard's `max-w-*` check never trips
+  // on a top-level page wrapper.
+  const errorWrapperClass = isSheet ? "px-5 py-6" : undefined
+  const mainWrapperClass = isSheet ? "relative flex flex-col gap-0 px-5 pb-5" : "relative"
   const { currentGroup } = useCurrentGroup()
   const migrationLock = useGroupMigrationLock()
   const slug = currentGroup?.slug
@@ -294,7 +321,11 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
 
   if (detail.isLoading) {
     return (
-      <div className={errorWrapperClass} data-testid="commodity-detail-loading">
+      <PageFrame
+        isSheet={isSheet}
+        className={errorWrapperClass}
+        data-testid="commodity-detail-loading"
+      >
         <Skeleton className="h-8 w-64" />
         <Skeleton className="mt-2 h-4 w-32" />
         <div className="mt-6 grid grid-cols-2 gap-3">
@@ -302,12 +333,12 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             <Skeleton key={i} className="h-12 rounded-md" />
           ))}
         </div>
-      </div>
+      </PageFrame>
     )
   }
   if (detail.isError) {
     return (
-      <div className={errorWrapperClass}>
+      <PageFrame isSheet={isSheet} className={errorWrapperClass}>
         <Alert variant="destructive" data-testid="commodity-detail-error">
           <AlertTitle>{t("commodities:detail.errorTitle")}</AlertTitle>
           <AlertDescription>{t("commodities:detail.errorDescription")}</AlertDescription>
@@ -316,12 +347,12 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           <ArrowLeft className="size-4" aria-hidden="true" />
           {t("commodities:detail.backToList")}
         </Button>
-      </div>
+      </PageFrame>
     )
   }
   if (!commodity) {
     return (
-      <div className={errorWrapperClass}>
+      <PageFrame isSheet={isSheet} className={errorWrapperClass}>
         <Card data-testid="commodity-detail-not-found">
           <CardHeader>
             <CardTitle>{t("commodities:detail.notFoundTitle")}</CardTitle>
@@ -331,7 +362,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             <Button onClick={() => navigate(-1)}>{t("commodities:detail.backToList")}</Button>
           </CardContent>
         </Card>
-      </div>
+      </PageFrame>
     )
   }
 
@@ -439,7 +470,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           the sheet is open over the list, the list page already set
           the title and the user expects it to stay. */}
       {isSheet ? null : <RouteTitle title={t("commodities:detail.documentTitle")} />}
-      <div
+      <PageFrame
+        isSheet={isSheet}
         className={mainWrapperClass}
         data-testid={isSheet ? "sheet-commodity-detail" : "page-commodity-detail"}
         {...dropZone.bindProps}
@@ -811,7 +843,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             />
           )}
         </div>
-      </div>
+      </PageFrame>
 
       <CommodityFormDialog
         open={editOpen}

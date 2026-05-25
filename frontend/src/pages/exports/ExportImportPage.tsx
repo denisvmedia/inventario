@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useImportBackup, useUploadRestoreFile } from "@/features/export/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -62,25 +63,30 @@ export function ExportImportPage() {
 
   if (!groupReady) {
     return (
-      <div className="flex flex-col gap-4 p-6" data-testid="page-export-import-loading">
+      <Page width="narrow" className="gap-4" data-testid="page-export-import-loading">
         <Skeleton className="h-8 w-1/2" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </Page>
     )
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6" data-testid="page-export-import">
-      <header className="flex flex-col gap-2">
-        <Button asChild variant="link" className="self-start px-0">
-          <Link to={`/g/${encodeURIComponent(slug)}/exports`}>
-            <ArrowLeft className="mr-1.5 size-4" aria-hidden="true" />
+    <Page width="narrow" data-testid="page-export-import">
+      <PageHeader
+        size="detail"
+        title={t("exports:importView.title")}
+        subtitle={t("exports:importView.intro")}
+        subtitleClassName="max-w-prose text-sm"
+        backLink={
+          <Link
+            to={`/g/${encodeURIComponent(slug)}/exports`}
+            className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
             {t("exports:list.title")}
           </Link>
-        </Button>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("exports:importView.title")}</h1>
-        <p className="max-w-prose text-sm text-muted-foreground">{t("exports:importView.intro")}</p>
-      </header>
+        }
+      />
 
       {(uploadMutation.isError || importMutation.isError) && (
         <Alert variant="destructive" data-testid="import-error">
@@ -170,6 +176,6 @@ export function ExportImportPage() {
           </AlertDescription>
         )}
       </form>
-    </div>
+    </Page>
   )
 }

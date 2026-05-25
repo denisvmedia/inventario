@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Page, PageHeader } from "@/components/ui/page"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useSearch } from "@/features/search/hooks"
 import { clearRecent, getRecent, type RecentEntry } from "@/features/search/recent"
@@ -75,11 +76,8 @@ export function SearchPage() {
   return (
     <>
       <RouteTitle title={t("search:title")} />
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-8" data-testid="search-page">
-        <header className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">{t("search:title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("search:subtitle")}</p>
-        </header>
+      <Page width="narrow" className="gap-8" data-testid="search-page">
+        <PageHeader title={t("search:title")} subtitle={t("search:subtitle")} />
 
         <form onSubmit={onSubmit} className="flex items-center gap-2" role="search">
           <div className="relative flex-1">
@@ -118,7 +116,7 @@ export function SearchPage() {
         ) : (
           <EmptyState groupSlug={currentGroup?.slug ?? null} />
         )}
-      </div>
+      </Page>
     </>
   )
 }

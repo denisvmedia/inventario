@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Page, PageHeader } from "@/components/ui/page"
 import { useAuth } from "@/features/auth/AuthContext"
 import {
   useChangePassword,
@@ -181,20 +182,21 @@ export function EditProfilePage() {
   return (
     <>
       <RouteTitle title={t("settings:profile.edit.title")} />
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-8" data-testid="edit-profile-page">
-        <div className="space-y-1">
-          <Link
-            to={withGroupQuery("/profile", currentGroup?.slug)}
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            {t("settings:profile.title")}
-          </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {t("settings:profile.edit.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground">{t("settings:profile.edit.subtitle")}</p>
-        </div>
+      <Page width="narrow" className="gap-8" data-testid="edit-profile-page">
+        <PageHeader
+          size="detail"
+          title={t("settings:profile.edit.title")}
+          subtitle={t("settings:profile.edit.subtitle")}
+          backLink={
+            <Link
+              to={withGroupQuery("/profile", currentGroup?.slug)}
+              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              {t("settings:profile.title")}
+            </Link>
+          }
+        />
 
         <ComingSoonBanner surface="profilePhoto" />
 
@@ -457,7 +459,7 @@ export function EditProfilePage() {
             )}
           </form>
         ) : null}
-      </div>
+      </Page>
     </>
   )
 }

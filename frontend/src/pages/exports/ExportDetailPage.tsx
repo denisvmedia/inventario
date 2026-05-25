@@ -7,6 +7,7 @@ import { RestoreHistoryList } from "@/components/exports/RestoreHistoryList"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Page } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { type Export } from "@/features/export/api"
 import {
@@ -76,17 +77,17 @@ export function ExportDetailPage() {
 
   if (!groupReady || exportQuery.isLoading) {
     return (
-      <div className="flex flex-col gap-4 p-6" data-testid="page-export-detail-loading">
+      <Page width="narrow" className="gap-4" data-testid="page-export-detail-loading">
         <Skeleton className="h-8 w-1/2" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-24 w-full" />
-      </div>
+      </Page>
     )
   }
 
   if (exportQuery.isError || !exp) {
     return (
-      <div className="flex flex-col gap-4 p-6" data-testid="page-export-detail-not-found">
+      <Page width="narrow" className="gap-4" data-testid="page-export-detail-not-found">
         <Alert variant="destructive">
           <AlertTitle>{t("exports:detail.notFound")}</AlertTitle>
           {exportQuery.error instanceof Error && (
@@ -99,12 +100,12 @@ export function ExportDetailPage() {
             {t("exports:list.title")}
           </Link>
         </Button>
-      </div>
+      </Page>
     )
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6" data-testid="page-export-detail">
+    <Page width="narrow" data-testid="page-export-detail">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-2">
           <Button asChild variant="link" className="self-start px-0">
@@ -217,7 +218,7 @@ export function ExportDetailPage() {
           restores={restoresQuery.data?.restores ?? []}
         />
       </section>
-    </div>
+    </Page>
   )
 }
 

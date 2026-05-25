@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Page } from "@/components/ui/page"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -96,7 +97,7 @@ export function ProfilePage() {
   return (
     <>
       <RouteTitle title={t("settings:profile.title")} />
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-6" data-testid="profile-page">
+      <Page width="narrow" className="gap-8" data-testid="profile-page">
         {/* Identity card. Banner + avatar + name + plan badge. The cover
             stripe pattern is taken from the design mock; the avatar shows
             initials because uploads are tracked under #1382. */}
@@ -275,7 +276,7 @@ export function ProfilePage() {
             .
           </p>
         </div>
-      </div>
+      </Page>
     </>
   )
 }

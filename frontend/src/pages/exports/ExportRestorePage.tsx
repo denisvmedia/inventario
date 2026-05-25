@@ -9,6 +9,7 @@ import {
 } from "@/components/exports/RestoreOptionsForm"
 import { Alert, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCreateRestore, useExport } from "@/features/export/hooks"
@@ -81,38 +82,43 @@ export function ExportRestorePage() {
 
   if (!groupReady || exportQuery.isLoading) {
     return (
-      <div className="flex flex-col gap-4 p-6" data-testid="page-export-restore-loading">
+      <Page width="narrow" className="gap-4" data-testid="page-export-restore-loading">
         <Skeleton className="h-8 w-1/2" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </Page>
     )
   }
 
   if (!exp) {
     return (
-      <div className="flex flex-col gap-4 p-6" data-testid="page-export-restore-not-found">
+      <Page width="narrow" className="gap-4" data-testid="page-export-restore-not-found">
         <Alert variant="destructive">
           <AlertTitle>{t("exports:detail.notFound")}</AlertTitle>
         </Alert>
         <Button asChild variant="outline" className="self-start">
           <Link to={`/g/${encodeURIComponent(slug)}/exports`}>{t("exports:list.title")}</Link>
         </Button>
-      </div>
+      </Page>
     )
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6" data-testid="page-export-restore">
-      <header className="flex flex-col gap-2">
-        <Button asChild variant="link" className="self-start px-0">
-          <Link to={detailHref}>
-            <ArrowLeft className="mr-1.5 size-4" aria-hidden="true" />
+    <Page width="narrow" data-testid="page-export-restore">
+      <PageHeader
+        size="detail"
+        title={t("exports:restore.title")}
+        subtitle={t("exports:restore.intro")}
+        subtitleClassName="max-w-prose text-sm"
+        backLink={
+          <Link
+            to={detailHref}
+            className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
             {t("exports:detail.title")}
           </Link>
-        </Button>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("exports:restore.title")}</h1>
-        <p className="max-w-prose text-sm text-muted-foreground">{t("exports:restore.intro")}</p>
-      </header>
+        }
+      />
 
       <form
         onSubmit={onSubmit}
@@ -147,6 +153,6 @@ export function ExportRestorePage() {
           </Button>
         </div>
       </form>
-    </div>
+    </Page>
   )
 }

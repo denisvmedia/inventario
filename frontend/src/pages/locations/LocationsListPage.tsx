@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { LocationFormDialog } from "@/components/locations/LocationFormDialog"
 import { AreaFormDialog } from "@/components/locations/AreaFormDialog"
@@ -203,27 +204,23 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
   return (
     <>
       <RouteTitle title={t("locations:list.documentTitle")} />
-      <div
-        className="flex flex-col gap-6 p-6 max-w-5xl mx-auto w-full"
-        data-testid="page-locations"
-      >
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
-              {t("locations:list.heading")}
-            </h1>
-            <p className="mt-1 text-muted-foreground leading-7">{t("locations:list.subtitle")}</p>
-          </div>
-          <Button
-            type="button"
-            onClick={() => setDialog({ kind: "create-location" })}
-            data-testid="locations-add-button"
-            className="gap-2"
-          >
-            <Plus className="size-4" aria-hidden="true" />
-            {t("locations:list.addLocation")}
-          </Button>
-        </header>
+      <Page width="wide" data-testid="page-locations">
+        <PageHeader
+          title={t("locations:list.heading")}
+          subtitle={t("locations:list.subtitle")}
+          subtitleClassName="leading-7"
+          actions={
+            <Button
+              type="button"
+              onClick={() => setDialog({ kind: "create-location" })}
+              data-testid="locations-add-button"
+              className="gap-2"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              {t("locations:list.addLocation")}
+            </Button>
+          }
+        />
 
         {!isEmpty && !isError ? (
           <div className="relative">
@@ -305,7 +302,7 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
             ) : null}
           </ul>
         )}
-      </div>
+      </Page>
 
       <LocationFormDialog
         open={dialog.kind === "create-location"}

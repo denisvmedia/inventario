@@ -7,6 +7,7 @@ import { SelectedItemsPicker } from "@/components/exports/SelectedItemsPicker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { type ExportSelectedItem, type ExportType } from "@/features/export/api"
 import { useCreateExport } from "@/features/export/hooks"
@@ -113,16 +114,18 @@ export function ExportNewPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6" data-testid="page-export-new">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <h1 className="text-2xl font-semibold tracking-tight">{t("exports:wizard.title")}</h1>
-          <p className="max-w-prose text-sm text-muted-foreground">{t("exports:wizard.intro")}</p>
-        </div>
-        <Button asChild variant="ghost" size="sm">
-          <Link to={`/g/${encodeURIComponent(slug)}/exports`}>{t("exports:wizard.cancel")}</Link>
-        </Button>
-      </header>
+    <Page width="narrow" data-testid="page-export-new">
+      <PageHeader
+        size="detail"
+        title={t("exports:wizard.title")}
+        subtitle={t("exports:wizard.intro")}
+        subtitleClassName="max-w-prose text-sm"
+        actions={
+          <Button asChild variant="ghost" size="sm">
+            <Link to={`/g/${encodeURIComponent(slug)}/exports`}>{t("exports:wizard.cancel")}</Link>
+          </Button>
+        }
+      />
 
       <WizardSteps step={step} />
 
@@ -144,7 +147,7 @@ export function ExportNewPage() {
           onSubmit={onConfirmSubmit}
         />
       )}
-    </div>
+    </Page>
   )
 }
 
