@@ -1,36 +1,54 @@
-# PR-preview status comment (#1858 epic).
+# PR-preview status comment + tailnet device cleanup (#1858 epic).
 #
-# Posts (and maintains) a single sticky comment on PRs labeled `preview` so
-# reviewers/contributors can see what hostname was deployed for the PR
-# without spelunking the ApplicationSet status. The comment shows the
-# deployed hostname as PLAIN TEXT (not a clickable link):
+# Two responsibilities:
 #
-#   - The hostname is only resolvable via Tailscale MagicDNS from within
-#     the tailnet; a public-internet PR reader couldn't reach it anyway.
-#   - The Tailscale Operator's HTTP→HTTPS redirect uses same-host, but the
-#     issued cert only covers the FQDN (`<short>.<tailnet>.ts.net`), so
-#     clicking a short HTTP link in a browser hits a cert mismatch on the
-#     resulting HTTPS redirect. A clickable link would be misleading.
+# 1. Sticky comment on the PR with the deployed hostname and admin
+#    credentials, kept in sync with each event the PR receives while
+#    labeled `preview`.
+#
+# 2. On `closed` and `unlabeled`: in addition to updating the comment,
+#    call the Tailscale API to delete the proxy device record for this
+#    PR's hostname. The TS Operator's StatefulSet is pruned by ArgoCD
+#    automatically when the Application disappears, but the device's
+#    REGISTRATION in the tailnet survives (default key expiry 180
+#    days) unless explicitly removed. Without this step, every closed
+#    PR leaves an orphan device behind that holds the original
+#    hostname slot, so the NEXT deploy of the same PR number gets a
+#    `-1`/`-2` suffix until an operator manually deletes the orphan.
+#
+# The comment is shown as PLAIN TEXT (not a clickable link):
+#   - Hostname is resolvable only via Tailscale MagicDNS from within
+#     the tailnet; a public-internet PR reader couldn't reach it.
+#   - The Tailscale Operator's HTTP→HTTPS redirect uses same-host, but
+#     the issued cert only covers the FQDN, so a short HTTP link in a
+#     browser hits a cert mismatch on the resulting HTTPS redirect. A
+#     clickable link would be misleading.
 #   - Tailnet members reach the preview via the FQDN they know — short
-#     name + their browser's URL editing for protocol/suffix.
+#     name + their tailnet's MagicDNS suffix.
 #
-# A future "preview catalog" service (out of scope here) can take this
-# hostname as input and serve a clickable, browser-aware redirect.
-#
-# Why a single sticky comment instead of one per push: PRs would otherwise
-# accumulate dozens of "preview redeploying" notifications over their
-# lifetime. The `marocchino/sticky-pull-request-comment` action finds the
-# previous comment by `header` and edits it in place.
+# Why a single sticky comment instead of one per push: PRs would
+# otherwise accumulate dozens of "preview redeploying" notifications
+# over their lifetime. The `marocchino/sticky-pull-request-comment`
+# action finds the previous comment by `header` and edits it in place.
 #
 # Event mapping:
-#   - `labeled` (label == preview)   → "🟢 Deploying" comment
-#   - `synchronize` (label present)  → update SHA, "🟢 Re-deploying"
-#   - `unlabeled` (label was preview)→ "🗑️ Preview torn down"
-#   - `closed`   (label was present) → "🗑️ Preview torn down (PR closed)"
+#   - `labeled` (label == preview)    → "🟢 Deploying" comment
+#   - `synchronize` (label present)   → update SHA, "🟢 Re-deploying"
+#   - `unlabeled` (label was preview) → "🗑️ Preview torn down" + device DELETE
+#   - `closed`   (label was present)  → "🗑️ Preview torn down (PR closed)" + device DELETE
 #
-# The ApplicationSet's PR generator polls GitHub every 60s and tears down
-# the preview itself; this workflow doesn't trigger any deploy/teardown
-# action, it only mirrors state into a human-visible comment.
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   TS_OAUTH_CLIENT_ID     — Tailscale OAuth client ID with at least
+#                             `devices:core` write scope on `tag:k8s`
+#                             (creating a dedicated client is cleaner
+#                             than reusing the operator's credentials,
+#                             but technically either works because
+#                             devices:core:write covers DELETE).
+#   TS_OAUTH_CLIENT_SECRET — corresponding OAuth client secret.
+#
+# If the secrets are absent, the device cleanup step logs a warning and
+# exits 0 — the comment step still succeeds; only auto-cleanup is lost
+# (operator can still delete the orphan manually in the TS admin UI).
 
 name: PR preview status
 
@@ -80,7 +98,7 @@ jobs:
 
           ${status}
 
-          The ApplicationSet pruned the per-PR Application within ~60s of the PR closing. Tailscale proxy device auto-removes from the tailnet (\`ephemeral-pr\` ProxyClass).
+          The ApplicationSet pruned the per-PR Application within ~60s of the PR closing — all in-cluster resources (Deployment, Postgres, Redis, MinIO, Ingress) are gone. The Tailscale device record for the proxy is removed automatically by the cleanup step in this workflow (see [pr-preview-status.yml](https://github.com/${{ github.repository }}/blob/master/.github/workflows/pr-preview-status.yml)).
           EOF
           )
           elif [ "$UNLABELED_PREVIEW" = "true" ]; then
@@ -90,7 +108,7 @@ jobs:
 
           ${status}
 
-          Re-label the PR with \`preview\` to redeploy.
+          The ApplicationSet pruned the per-PR Application; the Tailscale proxy device is being deleted automatically. Re-label the PR with \`preview\` to redeploy.
           EOF
           )
           else
@@ -131,3 +149,91 @@ jobs:
           header: inventario-preview
           number: ${{ github.event.pull_request.number }}
           message: ${{ steps.body.outputs.body }}
+
+      # ----------------------------------------------------------------------
+      # Tailscale device auto-cleanup on PR close / unlabel
+      # ----------------------------------------------------------------------
+      # Without this, every closed PR leaves a stale offline device record
+      # in the tailnet (TS device keys default to 180-day expiry; the TS
+      # Operator deletes the K8s StatefulSet on Ingress removal but does NOT
+      # call the TS API to delete the device registration). That stale record
+      # holds the original hostname slot, so the NEXT deploy of the same PR
+      # number gets a `-1`/`-2` suffix until an operator manually deletes it
+      # in the TS admin UI.
+      #
+      # We hit the TS API directly: OAuth client_credentials → bearer token,
+      # list devices filtered by `tag:k8s` AND hostname matching our PR's
+      # naming convention (`inv-vcl01-pr<N>` plus any `-<digit>` suffix the
+      # operator may have appended on a previous hostname collision),
+      # DELETE each match. The `devices:core` write scope covers DELETE in
+      # the TS API (there is no separate delete scope in the OAuth UI).
+      #
+      # Skips with a warning (not a hard failure) if the OAuth secrets
+      # aren't configured — the comment step has already succeeded and the
+      # operator can still cleanup manually via the TS admin UI.
+      - name: Cleanup Tailscale device record
+        if: |
+          github.event.action == 'closed' ||
+          (github.event.action == 'unlabeled' && github.event.label.name == 'preview')
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_CLIENT_SECRET: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          target_host="inv-vcl01-pr${PR_NUMBER}"
+
+          if [ -z "${TS_OAUTH_CLIENT_ID:-}" ] || [ -z "${TS_OAUTH_CLIENT_SECRET:-}" ]; then
+              echo "::warning::TS_OAUTH_CLIENT_ID / TS_OAUTH_CLIENT_SECRET not configured."
+              echo "::warning::Skipping tailnet device cleanup for ${target_host}."
+              echo "::warning::Manual cleanup: admin.tailscale.com → Machines → delete devices matching '${target_host}*'."
+              exit 0
+          fi
+
+          # Mint a short-lived bearer token from OAuth client credentials.
+          # `scope=devices` covers the `devices:core` write needed for
+          # both LIST and DELETE in the TS API.
+          token=$(curl -sS -X POST "https://api.tailscale.com/api/v2/oauth/token" \
+              -u "${TS_OAUTH_CLIENT_ID}:${TS_OAUTH_CLIENT_SECRET}" \
+              -d "grant_type=client_credentials" \
+              -d "scope=devices" \
+              | jq -r '.access_token // empty')
+          if [ -z "$token" ]; then
+              echo "::error::OAuth token mint failed (empty access_token)."
+              echo "::error::Check that the OAuth client has 'devices:core' write scope on the relevant tag (typically tag:k8s)."
+              exit 1
+          fi
+
+          # List devices and pick the ones whose hostname matches the PR's
+          # naming convention. The regex matches both the clean form
+          # (`inv-vcl01-pr1881`) and any suffix-collision form
+          # (`inv-vcl01-pr1881-1`, `-2`, etc.) so prior-deploy orphans
+          # left over from a snapshot rollback or namespace force-delete
+          # also get cleaned up on the next PR close.
+          devices_json=$(curl -sS "https://api.tailscale.com/api/v2/tailnet/-/devices" \
+              -H "Authorization: Bearer ${token}")
+
+          mapfile -t ids < <(echo "$devices_json" | jq -r --arg base "$target_host" '
+              .devices[]
+              | select(
+                    (.tags // []) | any(. == "tag:k8s")
+                ) | select(
+                    .hostname == $base or (.hostname | test("^" + $base + "-[0-9]+$"))
+                ) | .nodeId
+          ')
+
+          if [ "${#ids[@]}" -eq 0 ]; then
+              echo "No tailnet devices matched '${target_host}*' with tag:k8s — nothing to delete."
+              exit 0
+          fi
+
+          for id in "${ids[@]}"; do
+              http_code=$(curl -sS -o /tmp/del.out -w "%{http_code}" \
+                  -X DELETE "https://api.tailscale.com/api/v2/device/${id}" \
+                  -H "Authorization: Bearer ${token}")
+              if [ "$http_code" = "200" ] || [ "$http_code" = "204" ]; then
+                  echo "Deleted tailnet device ${id} (was for ${target_host})"
+              else
+                  echo "::warning::DELETE /api/v2/device/${id} returned HTTP ${http_code}: $(cat /tmp/del.out)"
+              fi
+          done
