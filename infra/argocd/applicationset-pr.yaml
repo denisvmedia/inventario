@@ -6,8 +6,7 @@
 # infra/vm/scripts/apply-secrets.sh from the sops bundle's github.app_*).
 #
 # `<TAILNET>` is the placeholder substituted by infra/vm/bootstrap.sh before
-# kubectl apply, using tailscale.tailnet_name from the sops bundle (e.g.
-# `<TAILNET>` for the canonical tailnet of this setup).
+# kubectl apply, using tailscale.tailnet_name from the sops bundle.
 
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet

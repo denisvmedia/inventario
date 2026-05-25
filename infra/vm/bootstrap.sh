@@ -89,8 +89,8 @@ fi
 
 # --- Apply ArgoCD manifests (AppProject, ApplicationSet, master Application) (#1858) ---
 # `<TAILNET>` in the manifests is substituted to the tailnet MagicDNS suffix
-# from the sops bundle (e.g. `<TAILNET>`) so the rendered Ingress hosts
-# end up at the tailnet-correct FQDN.
+# from the sops bundle so the rendered Ingress hosts end up at the
+# tailnet-correct FQDN.
 if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
     TAILNET_NAME=""
     if [ -n "$SECRETS_JSON" ]; then
