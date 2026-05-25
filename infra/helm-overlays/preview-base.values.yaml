@@ -1,0 +1,94 @@
+# Shared overlay used by BOTH:
+#   - infra/argocd/applicationset-pr.yaml (per-PR previews)
+#   - infra/argocd/application-master.yaml (static master)
+#
+# Both Applications layer this file via ArgoCD's helm.valueFiles (referencing
+# a second `ref: values` source so the file is pulled from the repo alongside
+# the chart). Per-Application dynamic bits — image.tag pinned to the head SHA,
+# the tailnet FQDN for ingress.hosts/tls, the per-PR tailscale.com/hostname
+# annotation — are layered on top via helm.values (inline). Helm deep-merges
+# objects so annotations combine cleanly; arrays (hosts, tls) come from the
+# inline layer in full.
+#
+# Why one shared file instead of separate pr-preview / master overlays:
+# the static portion is identical, and putting per-environment values
+# (tailnet name) into a file ArgoCD reads from git would break the
+# bootstrap.sh `<TAILNET>` substitution that lives at kubectl-apply time
+# in infra/argocd/*.yaml. Keeping the static slice tailnet-agnostic here
+# is the only consistent design.
+
+image:
+  repository: ghcr.io/denisvmedia/inventario
+  # image.tag is layered on per-Application: PR Applications pin an
+  # immutable `sha-<7>`, the master Application uses the moving `master`
+  # tag and overrides pullPolicy to Always so k8s actually re-fetches the
+  # digest. We DON'T set image.pullPolicy here on purpose — chart default
+  # is IfNotPresent (right for immutable sha tags), and the master
+  # Application explicitly overrides to Always for the moving tag.
+
+# Combined-mode Deployment — API + workers in one pod. Single replica works
+# for ephemeral previews where state lives in demo.* sidecars.
+run:
+  all:
+    enabled: true
+    replicaCount: 1
+
+# In-cluster Postgres / Redis / MinIO for self-contained previews. No external
+# dependencies, no persistence. Data is lost on pod restart — by design.
+demo:
+  postgresql:
+    enabled: true
+  redis:
+    enabled: true
+  minio:
+    enabled: true
+
+# Bootstrap + migrate runs via the chart's setup Job (templates/job-setup.yaml).
+# Idempotent — re-applies safely.
+#
+# argocdMode=true drops the chart's helm.sh/hook annotation (Helm hooks don't
+# map cleanly to ArgoCD phases — PostSync waits for Healthy main; main needs
+# migrated schema; deadlock) and adds argocd.argoproj.io/sync-options:
+# "Force=true,Replace=true" so ArgoCD can delete-then-create the immutable
+# Job on each sync. Job applies in the default sync-wave alongside everything
+# else; its existing pg_isready loop in the bootstrap init container handles
+# waiting for Postgres. The main Deployment pod CrashLoops on bootstrap.go's
+# schema-version guard until the Job has run migrations — same handoff as a
+# non-ArgoCD `helm install` with the post-install hook. This mode also drops
+# `ttlSecondsAfterFinished` on the Job (template-level) so ArgoCD selfHeal
+# doesn't see drift and re-trigger migrations every 24h.
+#
+# initData.adminPassword: must be set explicitly — the chart's `env-default`
+# of "admin123" fails the binary's password complexity check
+# (≥8 chars + uppercase). For tailnet-gated previews this isn't a secret;
+# it's the well-known dev login. Real production overlays should source it
+# from a sops bundle via secrets.existingSecret.
+setupJob:
+  argocdMode: true
+  initData:
+    adminPassword: "PreviewAdmin123"
+    # Populate the demo with example locations, areas, commodities, etc. so
+    # the preview is interesting to browse. The chart's setup Job (after
+    # migrations + admin user) spins up a temporary `inventario run` server
+    # inside the Job pod and POSTs to `/api/v1/seed` with the admin email +
+    # tenant slug. Idempotent on Helm upgrades (skipped via
+    # SETUP_SKIP_SEED_ON_UPGRADE, but each PR preview is a fresh install so
+    # we always seed). Negligible extra Job time (~15s).
+    seedDatabase: true
+
+# Expose via Tailscale Ingress, NOT LoadBalancer. The TS operator (#1855)
+# provisions a tailnet proxy node from the Ingress + `className: tailscale`
+# and handles cert termination outside the chart.
+service:
+  type: ClusterIP
+  port: 3333
+
+ingress:
+  enabled: true
+  className: tailscale
+  annotations:
+    # http-redirect from :80 to https://<FQDN>/ — built into TS operator,
+    # validated in the #1867 spike. tailscale.com/hostname is layered
+    # per-Application (PR number for previews, fixed `inv-vcl01-master`
+    # for master).
+    tailscale.com/http-redirect: "true"

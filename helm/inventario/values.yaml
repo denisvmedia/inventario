@@ -513,6 +513,32 @@ secrets:
 setupJob:
   enabled: true
 
+  # Override the Helm hook annotation on the setup Job. The chart default is
+  # `post-install,pre-upgrade` when demo.postgresql.enabled, or
+  # `pre-install,pre-upgrade` otherwise. Set to a single hook (e.g.
+  # `post-install`) to avoid one of the two phases. Empty preserves default.
+  # NOTE: for ArgoCD deployments, prefer `argocdMode: true` below over
+  # tweaking the helm hook — Helm hooks don't map cleanly to ArgoCD phases
+  # (PreSync hooks run before non-hook resources exist; PostSync hooks
+  # require Healthy main resources, deadlocking with schema-dependent apps).
+  hookOverride: ""
+
+  # ArgoCD-native mode for the setup Job. When true:
+  #   - the `helm.sh/hook` annotation is dropped entirely (Job is no longer
+  #     a Helm hook, just a regular Sync-phase resource);
+  #   - `argocd.argoproj.io/sync-options: Force=true,Replace=true` is added
+  #     so ArgoCD replaces (delete-then-create) the immutable Job on each
+  #     sync rather than failing the apply.
+  # The Job runs in the default sync-wave alongside ServiceAccount/Secret/
+  # ConfigMap/Postgres/Deployment. Its own pg_isready loop in the bootstrap
+  # init container handles waiting for Postgres; the main Deployment pod
+  # CrashLoops on the schema-version guard until the Job has migrated.
+  #
+  # This is the right setting for any ArgoCD-managed install; the only
+  # reason it's not the default is to keep the chart drop-in compatible
+  # with non-ArgoCD `helm install` flows that expect post-install hooks.
+  argocdMode: false
+
   bootstrap:
     # Whether to run the DB bootstrap step (creates migrator DB user).
     # Set to false if you manage DB users externally.

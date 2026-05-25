@@ -3,7 +3,7 @@
 {{- $secretName := include "inventario.secretName" . -}}
 {{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
 {{- $redisUrl := include "inventario.redisUrl" . -}}
-{{- $setupHook := ternary "post-install,pre-upgrade" "pre-install,pre-upgrade" .Values.demo.postgresql.enabled -}}
+{{- $setupHook := .Values.setupJob.hookOverride | default (ternary "post-install,pre-upgrade" "pre-install,pre-upgrade" .Values.demo.postgresql.enabled) -}}
 {{- $usePersistentUploads := and .Values.persistence.enabled (hasPrefix "file://" (include "inventario.uploadLocation" .)) -}}
 apiVersion: batch/v1
 kind: Job
@@ -13,12 +13,44 @@ metadata:
     {{- include "inventario.labels" . | nindent 4 }}
     app.kubernetes.io/component: setup
   annotations:
+    {{- if .Values.setupJob.argocdMode }}
+    # ArgoCD-native ordering. helm.sh/hook is intentionally omitted — ArgoCD
+    # maps `post-install` to PostSync (runs AFTER main resources Healthy) and
+    # `pre-upgrade` to PreSync (runs BEFORE the rest sync, so postgres isn't
+    # provisioned yet). Both modes deadlock when the main Deployment refuses
+    # to start without a migrated schema. Instead we run as a regular
+    # Sync-phase resource (no sync-wave): the Job applies in the default
+    # wave 0 alongside ServiceAccount/Secret/ConfigMap/Postgres/Deployment,
+    # and the Job's own pg_isready loop in its bootstrap init container
+    # handles waiting for Postgres to come up. The main Deployment pod will
+    # CrashLoop on the schema-version guard until the Job has run migrations
+    # — same behavior as a `helm install` with the post-install hook.
+    # Replace=true is required because Jobs are immutable in K8s and need
+    # delete-then-create on each sync.
+    "argocd.argoproj.io/sync-options": "Force=true,Replace=true"
+    {{- else }}
+    # Default: helm install / upgrade hooks. Behaves as before for non-
+    # ArgoCD consumers (the operator runs `helm` directly).
     "helm.sh/hook": {{ $setupHook | quote }}
     "helm.sh/hook-weight": "0"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-failed
+    {{- end }}
 spec:
   backoffLimit: 3
+  {{- if not .Values.setupJob.argocdMode }}
+  # Auto-delete the Job 24h after it completes — keeps `kubectl get jobs`
+  # clean for `helm install` consumers where the Job is a one-shot hook.
+  #
+  # Intentionally OMITTED in argocdMode: when ArgoCD's selfHeal=true sees
+  # the Job missing (after TTL GC) but present in git, it recreates the
+  # resource and migrations re-run every ~24h. Migrations are idempotent
+  # so this is harmless but noisy. Keeping the Completed Job in place
+  # means selfHeal sees no drift and only re-applies when an actual sync
+  # is triggered (new commit, manual sync). Old Jobs are pruned naturally
+  # whenever a new commit lands and ArgoCD's Replace=true delete-then-
+  # creates them.
   ttlSecondsAfterFinished: 86400
+  {{- end }}
   template:
     metadata:
       labels:
