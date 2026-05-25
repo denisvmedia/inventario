@@ -102,16 +102,24 @@ image_inputs:
   - '.goreleaser.yaml'
   - 'e2e/**'
   - 'k8s/dev/**'
-  # Helm chart + ArgoCD preview overlays. The Docker image itself doesn't
-  # depend on these, but PR-preview Applications (#1858) pull
+  # Helm chart, ArgoCD manifests, and preview overlays. The Docker image
+  # itself doesn't depend on these, but PR-preview Applications (#1858) pull
   # `ghcr.io/.../inventario:sha-<7>` — which only exists if docker.yml ran
-  # for the PR's head commit. A chart-only or overlay-only PR otherwise
-  # silently skips the build and ApplicationSet pods crash with
+  # for the PR's head commit. A PR that touches only these paths would
+  # otherwise silently skip the build and ApplicationSet pods crash with
   # ImagePullBackOff. Including these here triggers a docker.yml run that
   # cache-hits on every layer (no Dockerfile/source change) and just re-tags
   # pr-N + sha-<7> onto the existing manifest list — ~3 min vs ~15 min cold.
+  #
+  # Coverage rationale: helm/** covers chart changes, infra/helm-overlays/**
+  # covers values overlay changes, infra/argocd/** covers ApplicationSet /
+  # AppProject / master Application changes (all of which alter what the
+  # preview deploys). infra/vm/** is intentionally NOT included — VM
+  # bootstrap scripts affect the cluster provisioning step, not the deployed
+  # workload, and the master cluster runs them on-demand from the laptop.
   - 'helm/**'
   - 'infra/helm-overlays/**'
+  - 'infra/argocd/**'
 
 # ---- Markdown lint -------------------------------------------------------
 # Any markdown file anywhere in the repo, plus the linter's own config.

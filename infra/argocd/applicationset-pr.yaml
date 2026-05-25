@@ -16,7 +16,7 @@ metadata:
   namespace: argocd
 spec:
   # Switch from the default fasttemplate engine to Go templates so we can use
-  # `{{.number}}` / `{{.head_sha}}` / `{{ slice .head_sha 0 7 }}` syntax in the
+  # `{{.number}}` / `{{.head_sha}}` / `{{.head_short_sha_7}}` syntax in the
   # template below. Without this, fasttemplate would substitute `{{number}}`
   # (no dot) and would silently pass `{{.number}}` through literally, breaking
   # Application name validation (RFC 1123 forbids `{}` chars).

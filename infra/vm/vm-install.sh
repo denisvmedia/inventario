@@ -50,11 +50,22 @@ sops_get() {
 #     update and downstream `apt-get install` returns exit 100).
 #   - Anything JWT-based fails with "iat in the past / token expired" (GitHub App
 #     installation-token exchange, ArgoCD repo-server auth, etc.).
-# Toggle NTP off+on to force an immediate step; sleep gives chronyd time to converge.
+# Toggle NTP off+on to force an immediate step, restart systemd-timesyncd so it
+# polls a fresh server, then poll timedatectl until "System clock synchronized:
+# yes" before continuing. A plain `sleep 5` after `set-ntp true` is NOT enough:
+# on a fresh boot, timesyncd's first poll can take 15-30s to complete and apt
+# will still see the old clock if we proceed immediately.
 note "Forcing NTP resync (guards against snapshot-rollback clock drift)"
 timedatectl set-ntp false 2>/dev/null || true
 timedatectl set-ntp true 2>/dev/null || true
-sleep 5
+systemctl restart systemd-timesyncd 2>/dev/null || true
+for i in $(seq 1 30); do
+    if timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -qi yes; then
+        printf '    NTP synchronized after %ss\n' "$i" >&2
+        break
+    fi
+    sleep 1
+done
 
 # --- apt prereqs (#1867 noted conntrack + socat missing on stock Ubuntu 26.04) ---
 note "apt prereqs"

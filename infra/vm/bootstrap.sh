@@ -90,11 +90,19 @@ if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
     # AppProject must land BEFORE Application/ApplicationSet that reference it.
     # Three explicit globs — `application*.yaml` would otherwise also match
     # `applicationset*.yaml` (literal prefix) and apply it twice in wrong order.
+    # Use bash's `${var//search/replace}` (literal substitution) instead of
+    # sed: sed treats `&` in the replacement as the matched text and `\` as
+    # an escape, so a tailnet name containing either would corrupt the
+    # manifest. Tailscale tailnet names (`<adjective>-<noun>`) don't currently
+    # contain those characters, but the substitution is robust this way and
+    # stays pure bash — no extra interpreter dependency.
     apply_argocd_yaml() {
         local pattern="$1"
+        local m content
         for m in "$ARGOCD_DIR"/$pattern; do
             [ -f "$m" ] || continue
-            sed "s|<TAILNET>|${TAILNET_NAME}|g" "$m" | \
+            content=$(cat "$m")
+            printf '%s' "${content//<TAILNET>/$TAILNET_NAME}" | \
                 ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
         done
     }
