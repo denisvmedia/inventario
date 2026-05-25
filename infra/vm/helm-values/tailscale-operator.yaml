@@ -1,0 +1,37 @@
+# Static helm values for the tailscale/tailscale-operator chart (#1855).
+#
+# OAuth credentials (oauth.clientId, oauth.clientSecret) are NOT in this file —
+# they're layered on at install time by vm-install.sh from the sops-decrypted
+# bundle (helm `--values <static> --values <oauth-temp>`; the later file wins
+# on conflict, so credentials never appear in the committed values).
+#
+# Reference chart values:
+# https://github.com/tailscale/tailscale/blob/main/cmd/k8s-operator/deploy/chart/values.yaml
+
+# Tags + operator pod tuning live under operatorConfig.* per the chart schema.
+# The proxy pods the operator spawns per Service/Ingress are tuned via a
+# separate ProxyClass CRD (not top-level helm values) — out of scope here,
+# revisit when #1866 (resource quotas + concurrent preview cap) lands.
+
+operatorConfig:
+  # ACL tags the operator stamps on its own tailnet identity. Must be present
+  # in the Tailscale ACL `tagOwners` block — see infra/SECRETS.md
+  # → "Tailscale ACL — tagOwners" for the canonical layout. Without matching
+  # tagOwners the operator boots with `creating operator authkey: requested
+  # tags [tag:k8s-operator] are invalid or not permitted (400)`.
+  defaultTags:
+    - "tag:k8s-operator"
+
+  # Conservative for the single-VM preview environment. Tune up if you see
+  # OOMKilled events under many concurrent previews.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      memory: 256Mi
+
+proxyConfig:
+  # ACL tag stamped on every proxy node the operator spawns per Service/Ingress.
+  # Same tagOwners requirement as above.
+  defaultTags: "tag:k8s"
