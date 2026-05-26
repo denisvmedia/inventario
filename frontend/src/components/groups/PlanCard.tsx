@@ -61,11 +61,14 @@ export function PlanCard({ groupSlug, ownerName, className }: PlanCardProps) {
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-semibold truncate" data-testid="plan-card-name">
+              {/* h3 not h2: the enclosing Info section already renders the
+                  section-level h2 (#1887). PlanCard's card title is the
+                  next level down. */}
+              <h3 className="text-base font-semibold truncate" data-testid="plan-card-name">
                 {t("groups:settings.plan.title", {
                   name: plan.name ?? "—",
                 })}
-              </h2>
+              </h3>
               <Badge variant="secondary" className="text-xs">
                 {t("groups:settings.plan.activeBadge")}
               </Badge>
