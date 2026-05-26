@@ -49,15 +49,23 @@ export function CreateGroupPage() {
         icon: values.icon || undefined,
         group_currency: values.group_currency.toUpperCase(),
       })
-      toast.success(t("groups:create.successToast"))
-      // Server-generated slug is the canonical address. If the response
-      // is missing one (defensive), fall back to /no-group rather than
-      // build a broken URL.
-      if (created.slug) {
-        navigate(`/g/${encodeURIComponent(created.slug)}`)
-      } else {
-        navigate("/no-group")
+      // The BE invariant is that every persisted group carries a slug
+      // (assigned at create-time inside the transaction). A response
+      // without one means something is off — surface it as an error
+      // and stay on the form rather than silently navigating to
+      // /no-group, which would *also* drop the user's active group
+      // context when they came from GroupSelector → "Create new
+      // group" (the previous fallback). #1886.
+      if (!created.slug) {
+        // Dedicated key so the user isn't told to "try again" (the group
+        // exists; a retry would duplicate it) — they need to reload so
+        // RootRedirect can resolve the freshly-created group via the
+        // invalidated /groups cache.
+        setServerError(t("groups:create.errorMissingSlug"))
+        return
       }
+      toast.success(t("groups:create.successToast"))
+      navigate(`/g/${encodeURIComponent(created.slug)}`)
     } catch (err) {
       setServerError(parseServerError(err, t("groups:create.errorGeneric")))
     }

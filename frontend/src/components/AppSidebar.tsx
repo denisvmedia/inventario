@@ -275,11 +275,20 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
   const { isMobile, setOpenMobile, state } = useSidebar()
   const { user, logout } = useAuth()
   const isSystemAdmin = useIsSystemAdmin()
-  const { currentGroup } = useCurrentGroup()
+  const { groups, currentGroup } = useCurrentGroup()
   const migrationLock = useGroupMigrationLock()
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
+
+  // Inventory + Group(Manage) entries all require an active group to resolve
+  // (`/g/<slug>/...`), so rendering empty section headers when the user
+  // belongs to zero groups leaves two label-only orphans in the sidebar
+  // (#1886). `groups === undefined` means the list is still loading — we
+  // keep the sections mounted in that case so first paint doesn't flash
+  // "no sections → sections" once the cache settles. Personal stays
+  // always-on (its entries are path-clean and resolve without a group).
+  const showGroupSections = groups === undefined || groups.length > 0
 
   function closeMobileSidebar() {
     if (isMobile) setOpenMobile(false)
@@ -371,37 +380,41 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
       </SidebarHeader>
 
       <SidebarContent className="pt-2 group-data-[collapsible=icon]:!overflow-y-auto">
-        <SidebarGroup>
-          <SidebarGroupLabel>{t("common:nav.groupInventory")}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {INVENTORY.map((e) => (
-                <NavRow
-                  key={e.labelKey}
-                  entry={e}
-                  group={currentGroup}
-                  onNavigate={closeMobileSidebar}
-                />
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {showGroupSections ? (
+          <SidebarGroup data-testid="sidebar-inventory-group">
+            <SidebarGroupLabel>{t("common:nav.groupInventory")}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {INVENTORY.map((e) => (
+                  <NavRow
+                    key={e.labelKey}
+                    entry={e}
+                    group={currentGroup}
+                    onNavigate={closeMobileSidebar}
+                  />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
 
-        <SidebarGroup>
-          <SidebarGroupLabel>{t("common:nav.groupManage")}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {MANAGE.map((e) => (
-                <NavRow
-                  key={e.labelKey}
-                  entry={e}
-                  group={currentGroup}
-                  onNavigate={closeMobileSidebar}
-                />
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {showGroupSections ? (
+          <SidebarGroup data-testid="sidebar-manage-group">
+            <SidebarGroupLabel>{t("common:nav.groupManage")}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {MANAGE.map((e) => (
+                  <NavRow
+                    key={e.labelKey}
+                    entry={e}
+                    group={currentGroup}
+                    onNavigate={closeMobileSidebar}
+                  />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
 
         <SidebarGroup>
           <SidebarGroupLabel>{t("common:nav.groupPersonal")}</SidebarGroupLabel>

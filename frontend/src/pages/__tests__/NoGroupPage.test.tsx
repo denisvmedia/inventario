@@ -149,6 +149,44 @@ describe("<NoGroupPage />", () => {
     expect(await screen.findByTestId("no-group-server-error")).toBeInTheDocument()
   })
 
+  it("treats a slug-less 201 as an error and keeps the inline form mounted (#1886)", async () => {
+    // BE invariant: every persisted group has a slug. A 201 without one
+    // is treated as an error path so the user keeps the form open with
+    // feedback instead of seeing a success toast + a stuck page; the
+    // earlier `navigate("/")` fallback hid the real symptom via the
+    // RootRedirect race.
+    server.use(
+      ...baseHandlers,
+      msw.post(api("/groups"), () =>
+        HttpResponse.json(
+          {
+            data: {
+              id: "g-new",
+              type: "groups",
+              attributes: {
+                id: "g-new",
+                name: "Household",
+                group_currency: "USD",
+                icon: "",
+              },
+            },
+          },
+          { status: 201 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderNoGroup()
+    await user.click(await screen.findByTestId("no-group-create-button"))
+    await user.type(await screen.findByTestId("no-group-name-input"), "Household")
+    await user.click(screen.getByTestId("no-group-submit"))
+    expect(await screen.findByTestId("no-group-server-error")).toBeInTheDocument()
+    // The page must not have navigated. <LocationProbe> only renders
+    // when the wildcard route catches a different pathname; it being
+    // absent is the assertion that we stayed at /no-group.
+    expect(screen.queryByTestId("loc")).not.toBeInTheDocument()
+  })
+
   it("the cancel button collapses the form back to the CTA", async () => {
     server.use(...baseHandlers)
     const user = userEvent.setup()
