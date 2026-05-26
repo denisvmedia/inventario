@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Page, PageHeader } from "@/components/ui/page"
 import { StorageCard } from "@/features/storage/StorageCard"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrencyMigrations } from "@/features/currency-migration/hooks"
@@ -137,13 +138,19 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   const isLastOwner = isOwner && ownerCount === 1
 
   if (groupQuery.isLoading) {
-    return <div className="text-sm text-muted-foreground p-6">{t("groups:settings.title")}…</div>
+    return (
+      <Page width="wide">
+        <p className="text-sm text-muted-foreground">{t("groups:settings.title")}…</p>
+      </Page>
+    )
   }
   if (groupQuery.isError || !groupQuery.data) {
     return (
-      <Alert variant="destructive" className="max-w-xl mx-auto mt-6">
-        <AlertDescription>{t("groups:settings.errorGeneric")}</AlertDescription>
-      </Alert>
+      <Page width="wide">
+        <Alert variant="destructive">
+          <AlertDescription>{t("groups:settings.errorGeneric")}</AlertDescription>
+        </Alert>
+      </Page>
     )
   }
 
@@ -152,30 +159,33 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   return (
     <>
       <RouteTitle title={t("groups:settings.title")} />
-      <div
-        className="mx-auto flex w-full max-w-4xl flex-col gap-8"
-        data-testid="group-settings-page"
-      >
-        <header className="space-y-1">
-          {/* Back returns to the previous location rather than hard-coding
-              /profile or /no-group: this page is reachable from the
-              GroupSelector dropdown, the members page, and onboarding;
-              any single destination would be wrong for some of them. */}
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            data-testid="group-settings-back"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            {t("common:actions.back")}
-          </button>
-          <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
-            {group.icon ? <span aria-hidden="true">{group.icon} </span> : null}
-            {group.name}
-          </h1>
-          <p className="text-sm text-muted-foreground">{t("groups:settings.subtitle")}</p>
-        </header>
+      <Page width="wide" className="gap-8" data-testid="group-settings-page">
+        <PageHeader
+          title={
+            <>
+              {group.icon ? <span aria-hidden="true">{group.icon} </span> : null}
+              {group.name}
+            </>
+          }
+          subtitle={t("groups:settings.subtitle")}
+          /*
+            Back returns to the previous location rather than hard-coding
+            /profile or /no-group: this page is reachable from the
+            GroupSelector dropdown, the members page, and onboarding;
+            any single destination would be wrong for some of them.
+          */
+          backLink={
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              data-testid="group-settings-back"
+              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              {t("common:actions.back")}
+            </button>
+          }
+        />
 
         {/* Plan & quota card — mock-parity surface fed by GET
             /g/<slug>/plan (#1389). Sits above the section split so it
@@ -207,7 +217,7 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
             ) : null}
           </div>
         </div>
-      </div>
+      </Page>
     </>
   )
 }

@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Page, PageHeader } from "@/components/ui/page"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { IconPicker } from "@/components/groups/IconPicker"
 import { useCreateGroup } from "@/features/group/hooks"
@@ -65,32 +66,35 @@ export function CreateGroupPage() {
   return (
     <>
       <RouteTitle title={t("groups:create.title")} />
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-8" data-testid="create-group-page">
-        <div className="space-y-1">
-          {/* "Back" returns to wherever the user came from rather than
-              hard-coding /no-group: this page is reachable both from
-              onboarding (zero groups) and from the GroupSelector (creating
-              an additional group), and either label/destination would be
-              wrong half the time. */}
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            data-testid="create-group-back"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            {t("common:actions.back")}
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+      <Page width="narrow" className="gap-8" data-testid="create-group-page">
+        <PageHeader
+          size="detail"
+          title={t("groups:create.title")}
+          subtitle={t("groups:create.subtitle")}
+          icon={
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
               <Building2 className="size-5 text-primary" aria-hidden="true" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">{t("groups:create.title")}</h1>
-              <p className="text-sm text-muted-foreground">{t("groups:create.subtitle")}</p>
-            </div>
-          </div>
-        </div>
+            </span>
+          }
+          /*
+            "Back" returns to wherever the user came from rather than
+            hard-coding /no-group: this page is reachable both from
+            onboarding (zero groups) and from the GroupSelector (creating
+            an additional group), and either label/destination would be
+            wrong half the time.
+          */
+          backLink={
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              data-testid="create-group-back"
+              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              {t("common:actions.back")}
+            </button>
+          }
+        />
 
         <form
           className="space-y-5 rounded-xl border border-border bg-card p-5"
@@ -187,7 +191,7 @@ export function CreateGroupPage() {
             </Button>
           </div>
         </form>
-      </div>
+      </Page>
     </>
   )
 }

@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Page, PageHeader } from "@/components/ui/page"
 import {
   Dialog,
   DialogContent,
@@ -502,32 +503,26 @@ export function CommoditiesListPage() {
   return (
     <>
       <RouteTitle title={t("commodities:list.documentTitle")} />
-      <div
-        className="flex flex-col gap-6 p-6 max-w-5xl mx-auto w-full"
-        data-testid="page-commodities"
-      >
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
-              {t("commodities:list.heading")}
-            </h1>
-            <p className="mt-1 text-muted-foreground leading-7">
-              {t("commodities:list.subtitle", { count: total })}
-            </p>
-          </div>
-          <Button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            data-testid="commodities-add-button"
-            className="gap-2"
-            disabled={migrationLock.locked}
-            title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-            aria-disabled={migrationLock.locked || undefined}
-          >
-            <Plus className="size-4" aria-hidden="true" />
-            {t("commodities:list.addItem")}
-          </Button>
-        </header>
+      <Page width="wide" data-testid="page-commodities">
+        <PageHeader
+          title={t("commodities:list.heading")}
+          subtitle={t("commodities:list.subtitle", { count: total })}
+          subtitleClassName="leading-7"
+          actions={
+            <Button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              data-testid="commodities-add-button"
+              className="gap-2"
+              disabled={migrationLock.locked}
+              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              aria-disabled={migrationLock.locked || undefined}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              {t("commodities:list.addItem")}
+            </Button>
+          }
+        />
 
         <Toolbar
           searchInput={searchInput}
@@ -608,7 +603,7 @@ export function CommoditiesListPage() {
         {totalPages > 1 ? (
           <Pagination page={page} totalPages={totalPages} onChange={goToPage} />
         ) : null}
-      </div>
+      </Page>
 
       <CommodityFormDialog
         open={createOpen}

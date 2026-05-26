@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useGroupLoans } from "@/features/loans/hooks"
 import { daysOverdue, isOpen, type LoanState } from "@/features/loans/api"
@@ -40,11 +41,8 @@ export function LoansListPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6" data-testid="page-lent">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{t("loans:list.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("loans:list.subtitle")}</p>
-      </header>
+    <Page width="wide" data-testid="page-lent">
+      <PageHeader title={t("loans:list.title")} subtitle={t("loans:list.subtitle")} />
 
       <div
         role="tablist"
@@ -156,6 +154,6 @@ export function LoansListPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </Page>
   )
 }

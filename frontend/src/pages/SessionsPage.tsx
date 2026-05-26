@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Page, PageHeader } from "@/components/ui/page"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import type { SessionView } from "@/features/sessions/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -89,18 +90,21 @@ export function SessionsPage() {
   return (
     <>
       <RouteTitle title={t("settings:sessions.title")} />
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6" data-testid="sessions-page">
-        <div className="space-y-1">
-          <Link
-            to={withGroupQuery("/settings", currentGroup?.slug)}
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            {t("settings:privacy.title")}
-          </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("settings:sessions.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("settings:sessions.subtitle")}</p>
-        </div>
+      <Page width="narrow" data-testid="sessions-page">
+        <PageHeader
+          size="detail"
+          title={t("settings:sessions.title")}
+          subtitle={t("settings:sessions.subtitle")}
+          backLink={
+            <Link
+              to={withGroupQuery("/settings", currentGroup?.slug)}
+              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              {t("settings:privacy.title")}
+            </Link>
+          }
+        />
 
         {otherSessionsCount > 0 ? (
           <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
@@ -148,7 +152,7 @@ export function SessionsPage() {
             ))}
           </div>
         )}
-      </div>
+      </Page>
 
       <Dialog open={!!pendingRevoke} onOpenChange={(o) => !o && setPendingRevoke(null)}>
         <DialogContent className="sm:max-w-md">

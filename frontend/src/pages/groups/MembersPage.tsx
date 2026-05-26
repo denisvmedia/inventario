@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Separator } from "@/components/ui/separator"
 import {
   Select,
@@ -143,13 +144,11 @@ export function MembersPage() {
   return (
     <>
       <RouteTitle title={t("members:title")} />
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-6" data-testid="members-page">
-        <header className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
-              {t("members:title")}
-            </h1>
-            <p className="text-sm text-muted-foreground">
+      <Page width="wide" className="gap-8" data-testid="members-page">
+        <PageHeader
+          title={t("members:title")}
+          subtitle={
+            <>
               {t("members:subtitle")}
               {currentGroup?.name ? (
                 <>
@@ -157,16 +156,17 @@ export function MembersPage() {
                   <span className="font-medium text-foreground">{currentGroup.name}</span>
                 </>
               ) : null}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {/* #1660: the Group-settings shortcut button was dropped —
-                the same destination is reachable from the sidebar's
-                Manage › Group settings row and the GroupSelector's
-                shortcut, so duplicating it here added noise without
-                reachability. Invite stays as the sole header CTA, in
-                parity with design-mocks/src/views/MembersView.tsx. */}
-            {canManageMembers ? (
+            </>
+          }
+          /*
+            #1660: the Group-settings shortcut button was dropped — the same
+            destination is reachable from the sidebar's Manage › Group settings
+            row and the GroupSelector's shortcut, so duplicating it here added
+            noise without reachability. Invite stays as the sole header CTA,
+            in parity with design-mocks/src/views/MembersView.tsx.
+          */
+          actions={
+            canManageMembers ? (
               <Button
                 type="button"
                 size="sm"
@@ -177,9 +177,9 @@ export function MembersPage() {
                 <UserPlus className="size-3.5" aria-hidden="true" />
                 {t("members:invite.cta")}
               </Button>
-            ) : null}
-          </div>
-        </header>
+            ) : null
+          }
+        />
 
         <StatsRow
           memberCount={membersQuery.data?.length ?? 0}
@@ -226,7 +226,7 @@ export function MembersPage() {
             groupName={currentGroup.name ?? ""}
           />
         ) : null}
-      </div>
+      </Page>
     </>
   )
 }

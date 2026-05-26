@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
@@ -134,11 +135,8 @@ export function WarrantiesListPage() {
   const rows = buckets[tab]
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-4xl mx-auto w-full" data-testid="page-warranties">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-3xl font-semibold tracking-tight">{t("warranties:list.title")}</h1>
-        <p className="text-muted-foreground">{t("warranties:list.subtitle")}</p>
-      </header>
+    <Page width="wide" data-testid="page-warranties">
+      <PageHeader title={t("warranties:list.title")} subtitle={t("warranties:list.subtitle")} />
 
       {/* Status summary cards — counts mirror the per-tab badges. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="warranties-summary">
@@ -227,7 +225,7 @@ export function WarrantiesListPage() {
           </ul>
         </Card>
       )}
-    </div>
+    </Page>
   )
 }
 

@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   FILE_CATEGORY_TILES,
@@ -271,32 +272,24 @@ export function FilesListPage() {
   }
 
   return (
-    <div className="space-y-6" data-testid="page-files">
+    <Page width="wide" data-testid="page-files">
       <RouteTitle title={t("files:title", { defaultValue: "Files" })} />
-
-      {/* Mock-aligned page header (design-mocks/src/views/FileBrowserView.tsx
-          lines 531-542): h1 uses the canonical scroll-m-20 text-3xl
-          treatment; the lede sits directly under it; the upload button
-          is the size="sm" outline-less primary action on the right edge
-          of the title row (with `shrink-0` so a long lede never squeezes
-          it out of position). */}
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
-            {t("files:title", { defaultValue: "Files" })}
-          </h1>
-          <p className="mt-1 max-w-prose text-muted-foreground">{t("files:subtitle")}</p>
-        </div>
-        <Button
-          size="sm"
-          className="gap-1.5 shrink-0"
-          onClick={() => setUploadOpen(true)}
-          data-testid="files-upload-cta"
-        >
-          <Upload className="size-4" aria-hidden="true" />
-          {t("files:uploadCta")}
-        </Button>
-      </header>
+      <PageHeader
+        title={t("files:title", { defaultValue: "Files" })}
+        subtitle={t("files:subtitle")}
+        subtitleClassName="max-w-prose"
+        actions={
+          <Button
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={() => setUploadOpen(true)}
+            data-testid="files-upload-cta"
+          >
+            <Upload className="size-4" aria-hidden="true" />
+            {t("files:uploadCta")}
+          </Button>
+        }
+      />
 
       <CategoryTiles
         active={activeTile}
@@ -647,7 +640,7 @@ export function FilesListPage() {
       />
 
       <UploadFilesDialog open={uploadOpen} onOpenChange={setUploadOpen} />
-    </div>
+    </Page>
   )
 }
 

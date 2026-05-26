@@ -11,6 +11,7 @@ import { TagsStatsBar } from "@/components/tags/TagsStatsBar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -479,21 +480,21 @@ export function TagsListPage() {
   )
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-2xl mx-auto w-full" data-testid="page-tags">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">{t("tags:title")}</h1>
-          <p className="mt-1 text-muted-foreground">{t("tags:description")}</p>
-        </div>
-        <Button
-          type="button"
-          onClick={() => setDialog({ open: true, mode: "create" })}
-          data-testid="tags-create-button"
-        >
-          <Plus className="mr-1.5 size-4" aria-hidden="true" />
-          {t("tags:create.button")}
-        </Button>
-      </header>
+    <Page width="wide" data-testid="page-tags">
+      <PageHeader
+        title={t("tags:title")}
+        subtitle={t("tags:description")}
+        actions={
+          <Button
+            type="button"
+            onClick={() => setDialog({ open: true, mode: "create" })}
+            data-testid="tags-create-button"
+          >
+            <Plus className="mr-1.5 size-4" aria-hidden="true" />
+            {t("tags:create.button")}
+          </Button>
+        }
+      />
 
       <TagsStatsBar stats={statsQuery.data} loading={statsQuery.isLoading} />
 
@@ -571,6 +572,6 @@ export function TagsListPage() {
           }
         }}
       />
-    </div>
+    </Page>
   )
 }

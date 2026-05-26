@@ -8,6 +8,7 @@ import { RecentlyAdded } from "@/components/dashboard/RecentlyAdded"
 import { ExpiringWarranties } from "@/components/dashboard/ExpiringWarranties"
 import { WarrantyHealth } from "@/components/dashboard/WarrantyHealth"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Page, PageHeader } from "@/components/ui/page"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useDashboardData } from "@/features/dashboard/hooks"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
@@ -85,16 +86,12 @@ export function DashboardPage() {
   return (
     <>
       <RouteTitle title={t("dashboard:documentTitle")} />
-      <div
-        className="flex flex-col gap-8 p-6 max-w-5xl mx-auto w-full"
-        data-testid="page-dashboard"
-      >
-        <header>
-          <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
-            {t("dashboard:heading")}
-          </h1>
-          <p className="mt-1 text-muted-foreground leading-7">{t("dashboard:tagline")}</p>
-        </header>
+      <Page width="wide" className="gap-8" data-testid="page-dashboard">
+        <PageHeader
+          title={t("dashboard:heading")}
+          subtitle={t("dashboard:tagline")}
+          subtitleClassName="leading-7"
+        />
 
         {addItemHref ? (
           // Real <button>, not <Link>, so the cursor matches the
@@ -203,7 +200,7 @@ export function DashboardPage() {
             <WarrantyHealth counts={data.warrantyStatusCounts} isLoading={data.isLoading} />
           </>
         )}
-      </div>
+      </Page>
     </>
   )
 }

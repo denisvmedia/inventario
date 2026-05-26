@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useFile, useUpdateFile } from "@/features/files/hooks"
 import { fileMetadataSchema, type FileMetadataFormInput } from "@/features/files/schemas"
@@ -84,12 +85,9 @@ export function FileEditPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6" data-testid="page-file-edit">
+    <Page width="narrow" data-testid="page-file-edit">
       <RouteTitle title={t("files:edit.title", { defaultValue: "Edit file" })} />
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("files:edit.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("files:edit.subtitle")}</p>
-      </header>
+      <PageHeader size="detail" title={t("files:edit.title")} subtitle={t("files:edit.subtitle")} />
 
       {query.isLoading ? (
         <Card>
@@ -197,6 +195,6 @@ export function FileEditPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </Page>
   )
 }

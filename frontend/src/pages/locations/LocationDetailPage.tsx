@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Page } from "@/components/ui/page"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -197,13 +198,13 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
 
   if (location.isError) {
     return (
-      <div className="flex flex-col gap-6 p-6 max-w-3xl mx-auto w-full">
+      <Page width="wide">
         <RouteTitle title={t("locations:detail.errorTitle")} />
         <Alert variant="destructive" data-testid="location-detail-error">
           <AlertTitle>{t("locations:detail.errorTitle")}</AlertTitle>
           <AlertDescription>{t("locations:detail.errorDescription")}</AlertDescription>
         </Alert>
-      </div>
+      </Page>
     )
   }
 
@@ -213,8 +214,9 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
   return (
     <>
       <RouteTitle title={location.data?.name ?? t("locations:detail.fallbackTitle")} />
-      <div
-        className="relative flex flex-col gap-6 p-6 max-w-3xl mx-auto w-full"
+      <Page
+        width="wide"
+        className="relative"
         data-testid="page-location-detail"
         {...dropZone.bindProps}
       >
@@ -375,7 +377,7 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
             />
           </>
         ) : null}
-      </div>
+      </Page>
 
       <LocationFormDialog
         open={dialog.kind === "edit"}

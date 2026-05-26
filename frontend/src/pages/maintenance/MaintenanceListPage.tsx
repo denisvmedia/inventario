@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { daysUntilDue } from "@/features/maintenance/api"
 import { useGroupMaintenance } from "@/features/maintenance/hooks"
@@ -23,11 +24,11 @@ export function MaintenanceListPage() {
   const rows = list.data?.schedules ?? []
 
   return (
-    <div className="flex flex-col gap-6 p-6" data-testid="page-maintenance">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{t("maintenance:list.heading")}</h1>
-        <p className="text-sm text-muted-foreground">{t("maintenance:list.subheading")}</p>
-      </header>
+    <Page width="wide" data-testid="page-maintenance">
+      <PageHeader
+        title={t("maintenance:list.heading")}
+        subtitle={t("maintenance:list.subheading")}
+      />
 
       <Card>
         <CardHeader>
@@ -123,6 +124,6 @@ export function MaintenanceListPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </Page>
   )
 }

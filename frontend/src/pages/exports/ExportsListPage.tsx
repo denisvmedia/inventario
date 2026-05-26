@@ -8,6 +8,7 @@ import { RestoreDialog } from "@/components/exports/RestoreDialog"
 import { RestoreLogDialog } from "@/components/exports/RestoreLogDialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -80,16 +81,11 @@ export function ExportsListPage() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-8 p-6 mx-auto max-w-4xl" data-testid="page-exports">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <h1
-              className="scroll-m-20 text-3xl font-semibold tracking-tight"
-              data-testid="exports-page-title"
-            >
-              {t("exports:list.title")}
-            </h1>
+    <Page width="wide" className="gap-8" data-testid="page-exports">
+      <PageHeader
+        title={
+          <span className="inline-flex items-center gap-2" data-testid="exports-page-title">
+            {t("exports:list.title")}
             {isLive && (
               <span
                 className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
@@ -102,26 +98,27 @@ export function ExportsListPage() {
                 {t("exports:polling.live")}
               </span>
             )}
-          </div>
-          <p className="max-w-prose text-sm text-muted-foreground">
-            {t("exports:list.description")}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" data-testid="exports-import-button">
-            <Link to={exportUrl(slug, "import")}>
-              <Upload className="mr-1.5 size-4" aria-hidden="true" />
-              {t("exports:actions.import")}
-            </Link>
-          </Button>
-          <Button asChild data-testid="exports-create-button">
-            <Link to={exportUrl(slug, "new")}>
-              <Plus className="mr-1.5 size-4" aria-hidden="true" />
-              {t("exports:actions.createExport")}
-            </Link>
-          </Button>
-        </div>
-      </header>
+          </span>
+        }
+        subtitle={t("exports:list.description")}
+        subtitleClassName="max-w-prose text-sm"
+        actions={
+          <>
+            <Button asChild variant="outline" data-testid="exports-import-button">
+              <Link to={exportUrl(slug, "import")}>
+                <Upload className="mr-1.5 size-4" aria-hidden="true" />
+                {t("exports:actions.import")}
+              </Link>
+            </Button>
+            <Button asChild data-testid="exports-create-button">
+              <Link to={exportUrl(slug, "new")}>
+                <Plus className="mr-1.5 size-4" aria-hidden="true" />
+                {t("exports:actions.createExport")}
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       <Alert data-testid="exports-retention-banner">
         <AlertTitle>{t("exports:retention.title")}</AlertTitle>
@@ -210,6 +207,6 @@ export function ExportsListPage() {
           dryRun={logRestore.dryRun}
         />
       )}
-    </div>
+    </Page>
   )
 }

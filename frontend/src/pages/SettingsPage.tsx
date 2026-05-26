@@ -26,6 +26,7 @@ import { useSessionsList } from "@/features/sessions/hooks"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/features/auth/AuthContext"
@@ -94,13 +95,8 @@ export function SettingsPage() {
   return (
     <>
       <RouteTitle title={t("settings:title")} />
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-8" data-testid="settings-page">
-        <header className="space-y-1">
-          <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
-            {t("settings:title")}
-          </h1>
-          <p className="text-sm text-muted-foreground">{t("settings:subtitle")}</p>
-        </header>
+      <Page width="wide" className="gap-8" data-testid="settings-page">
+        <PageHeader title={t("settings:title")} subtitle={t("settings:subtitle")} />
 
         <div className="flex flex-col gap-6 md:flex-row">
           <SettingsNav active={active} onSelect={setActive} />
@@ -112,7 +108,7 @@ export function SettingsPage() {
             {active === "help" ? <HelpSection /> : null}
           </div>
         </div>
-      </div>
+      </Page>
     </>
   )
 }

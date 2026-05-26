@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Page, PageHeader } from "@/components/ui/page"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import type { LoginEventView } from "@/features/login-history/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -38,23 +39,21 @@ export function LoginHistoryPage() {
   return (
     <>
       <RouteTitle title={t("settings:loginHistory.title")} />
-      <div
-        className="mx-auto flex w-full max-w-2xl flex-col gap-6"
-        data-testid="login-history-page"
-      >
-        <div className="space-y-1">
-          <Link
-            to={withGroupQuery("/settings", currentGroup?.slug)}
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            {t("settings:privacy.title")}
-          </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {t("settings:loginHistory.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground">{t("settings:loginHistory.subtitle")}</p>
-        </div>
+      <Page width="narrow" data-testid="login-history-page">
+        <PageHeader
+          size="detail"
+          title={t("settings:loginHistory.title")}
+          subtitle={t("settings:loginHistory.subtitle")}
+          backLink={
+            <Link
+              to={withGroupQuery("/settings", currentGroup?.slug)}
+              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              {t("settings:privacy.title")}
+            </Link>
+          }
+        />
 
         {failedLast7d > FAILED_ATTEMPTS_BANNER_THRESHOLD ? (
           <div
@@ -91,7 +90,7 @@ export function LoginHistoryPage() {
             ))}
           </ul>
         )}
-      </div>
+      </Page>
     </>
   )
 }

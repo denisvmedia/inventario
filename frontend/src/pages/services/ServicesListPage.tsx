@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useGroupServices } from "@/features/services/hooks"
 import { daysOverdue, isOpen, type ServiceState } from "@/features/services/api"
@@ -42,11 +43,8 @@ export function ServicesListPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6" data-testid="page-in-service">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{t("services:list.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("services:list.subtitle")}</p>
-      </header>
+    <Page width="wide" data-testid="page-in-service">
+      <PageHeader title={t("services:list.title")} subtitle={t("services:list.subtitle")} />
 
       <div
         role="tablist"
@@ -178,6 +176,6 @@ export function ServicesListPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </Page>
   )
 }

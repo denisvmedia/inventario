@@ -3,6 +3,7 @@ import { LogOut, ShieldCheck } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Page, PageHeader } from "@/components/ui/page"
 import { useBackofficeAuth } from "@/features/backoffice/auth/context"
 import { useBackofficeLogout } from "@/features/backoffice/auth/hooks"
 import { hardRedirect } from "@/lib/navigation"
@@ -33,15 +34,14 @@ export function BackofficeMePage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-6">
+    <Page width="narrow">
       <RouteTitle title={t("me.routeTitle")} />
-      <header className="space-y-1.5">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="size-5 text-muted-foreground" aria-hidden="true" />
-          <h1 className="text-2xl font-semibold tracking-tight">{t("me.title")}</h1>
-        </div>
-        <p className="text-sm text-muted-foreground">{t("me.subtitle")}</p>
-      </header>
+      <PageHeader
+        size="detail"
+        title={t("me.title")}
+        subtitle={t("me.subtitle")}
+        icon={<ShieldCheck className="size-5 text-muted-foreground" aria-hidden="true" />}
+      />
 
       <Card data-testid="backoffice-me-card">
         <CardHeader>
@@ -69,7 +69,7 @@ export function BackofficeMePage() {
           {logoutMutation.isPending ? t("me.signingOut") : t("me.signOut")}
         </Button>
       </div>
-    </div>
+    </Page>
   )
 }
 
