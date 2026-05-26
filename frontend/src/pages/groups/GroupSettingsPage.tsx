@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowRightLeft,
+  Bell,
   ChevronRight,
   Database,
   Download,
@@ -66,7 +67,7 @@ import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
-type SectionId = "info" | "members" | "data" | "management"
+type SectionId = "info" | "members" | "notifications" | "data" | "management"
 
 interface SectionMeta {
   id: SectionId
@@ -76,6 +77,7 @@ interface SectionMeta {
 const SECTIONS: SectionMeta[] = [
   { id: "info", icon: Info },
   { id: "members", icon: Users },
+  { id: "notifications", icon: Bell },
   { id: "data", icon: Database },
   { id: "management", icon: ShieldAlert },
 ]
@@ -187,22 +189,17 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
           }
         />
 
-        {/* Plan & quota card — mock-parity surface fed by GET
-            /g/<slug>/plan (#1389). Sits above the section split so it
-            stays visible regardless of which section the user opens —
-            it's a tenant-wide identity, not section-specific. */}
-        <PlanCard groupSlug={group.slug ?? null} ownerName={ownerName} />
-
-        {/* Per-group notification preferences (#1648). Sits next to the
-            Plan card above the section split because it's another
-            tenant/user-wide identity-shaped surface, not section
-            specific — same reasoning as PlanCard's placement. */}
-        <NotificationsCard groupSlug={group.slug ?? null} />
-
         <div className="flex flex-col gap-6 md:flex-row">
           <GroupSettingsNav active={active} onSelect={setActive} />
           <div className="min-w-0 flex-1">
-            {active === "info" ? <InfoSection groupId={groupId} isAdmin={isAdmin} /> : null}
+            {active === "info" ? (
+              <InfoSection
+                groupId={groupId}
+                groupSlug={group.slug ?? null}
+                isAdmin={isAdmin}
+                ownerName={ownerName}
+              />
+            ) : null}
             {active === "members" ? (
               <MembersSection
                 groupId={groupId}
@@ -210,6 +207,9 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
                 isLastOwner={isLastOwner}
                 membersLoading={membersQuery.isLoading}
               />
+            ) : null}
+            {active === "notifications" ? (
+              <NotificationsSection groupSlug={group.slug ?? null} />
             ) : null}
             {active === "data" ? <DataSection groupSlug={group.slug ?? null} /> : null}
             {active === "management" ? (
@@ -266,11 +266,25 @@ function SectionTitle({ children }: { children: ReactNode }) {
 }
 
 // InfoSection — identity (name, icon, slug, currency) + currency
-// migration controls. Admin-only; non-admins see a read-only summary.
+// migration controls. Admin-only edit form; non-admins see a read-only
+// notice. The Plan & quota card (#1389) lives here too — moved out of the
+// per-page header (#1887) so it no longer renders on every settings
+// sub-page. PlanCard is read-only identity, so it renders for non-admins
+// as well.
 // TODO(#1647): description field (Textarea) once BE lands `description` on
 // LocationGroup. Belongs below the icon picker (mock parity with Location +
 // Area description fields).
-function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }) {
+function InfoSection({
+  groupId,
+  groupSlug,
+  isAdmin,
+  ownerName,
+}: {
+  groupId: string
+  groupSlug: string | null
+  isAdmin: boolean
+  ownerName: string | null
+}) {
   const { t } = useTranslation()
   const groupQuery = useGroup(groupId)
   const updateMutation = useUpdateGroup()
@@ -289,9 +303,8 @@ function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }
   // settings has no :groupSlug URL param, so the http rewrite slot is
   // empty here — the API takes the slug explicitly and builds
   // /g/${slug}/currency-migrations itself.
-  const groupSlug = groupQuery.data?.slug ?? ""
-  const migrationsQuery = useCurrencyMigrations(groupSlug, {
-    enabled: !!groupQuery.data && currencyMigrationEnabled,
+  const migrationsQuery = useCurrencyMigrations(groupSlug ?? "", {
+    enabled: !!groupQuery.data && currencyMigrationEnabled && !!groupSlug,
   })
   const migrations = migrationsQuery.data?.migrations ?? []
   const migrationInFlightId = groupQuery.data?.currency_migration_id
@@ -351,6 +364,9 @@ function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }
     return (
       <div className="space-y-6" data-testid="group-section-info">
         <SectionTitle>{t("groups:settings.sections.info")}</SectionTitle>
+        {/* Plan & quota lives in Info (#1887). It's read-only identity,
+            not an admin-gated action, so non-admins see it too. */}
+        <PlanCard groupSlug={groupSlug} ownerName={ownerName} />
         <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
           {t("members:adminOnlyHelp")}
         </div>
@@ -361,6 +377,10 @@ function InfoSection({ groupId, isAdmin }: { groupId: string; isAdmin: boolean }
   return (
     <div className="space-y-6" data-testid="group-section-info">
       <SectionTitle>{t("groups:settings.sections.info")}</SectionTitle>
+
+      {/* Plan & quota (#1389). Lives at the top of Info (#1887) so it
+          no longer renders on every settings sub-page. */}
+      <PlanCard groupSlug={groupSlug} ownerName={ownerName} />
 
       <form
         className="space-y-4 rounded-xl border border-border bg-card p-5"
@@ -633,6 +653,19 @@ function MembersSection({
           {t("groups:settings.leaveCta")}
         </Button>
       </div>
+    </div>
+  )
+}
+
+// NotificationsSection — per-group notification preferences (#1648),
+// pulled out of the per-page header (#1887) so users only see the
+// toggles when they navigate here. The card already carries its own
+// title + subtitle, so we drop the SectionTitle to avoid double
+// headings.
+function NotificationsSection({ groupSlug }: { groupSlug: string | null }) {
+  return (
+    <div className="space-y-6" data-testid="group-section-notifications">
+      <NotificationsCard groupSlug={groupSlug} />
     </div>
   )
 }

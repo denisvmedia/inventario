@@ -89,10 +89,11 @@ const baseHandlers = [
       },
     })
   ),
-  // The PlanCard mounts unconditionally on top of the page (#1389); stub
-  // it once at the base level so every test that renders GroupSettings
-  // can resolve the plan query cleanly. Per-test overrides (e.g. an
-  // error response) can call `server.use(...)` to replace this handler.
+  // The PlanCard mounts on the Info sub-section (#1887; was page-wide
+  // before). Stub the plan endpoint at the base level so every test
+  // that opens Info — which is the default sub-section — can resolve
+  // the plan query cleanly. Per-test overrides (e.g. an error response)
+  // call `server.use(...)` to replace this handler.
   msw.get(api("/g/household/plan"), () =>
     HttpResponse.json({
       plan: {
@@ -107,10 +108,11 @@ const baseHandlers = [
       usage: { items: 7, locations: 2, storage_bytes: 12_582_912 },
     })
   ),
-  // NotificationsCard also mounts unconditionally (#1648). Default
-  // both toggles on so the existing tests don't fail on an empty
-  // response shape; per-test overrides can replace with the values
-  // they need.
+  // NotificationsCard now lives in its own Notifications sub-section
+  // (#1887). The stub is kept at the base level so tests that navigate
+  // there don't need to redeclare it; the query only fires after the
+  // user clicks the nav, so this is dead weight in tests that stay on
+  // Info — fine to keep for consistency. Per-test overrides can replace.
   msw.get(api("/g/household/notifications"), () =>
     HttpResponse.json({ warranty_expiring_alerts: true, weekly_digest: false })
   ),
@@ -371,7 +373,12 @@ describe("<GroupSettingsPage />", () => {
       ...baseHandlers,
       adminMembership
     )
+    const user = userEvent.setup()
     renderSettings()
+    // Notifications moved into its own sub-section (#1887); we have to
+    // navigate there before the card mounts.
+    await waitFor(() => expect(screen.getByTestId("group-settings-page")).toBeInTheDocument())
+    await user.click(screen.getByTestId("group-settings-nav-notifications"))
     expect(await screen.findByTestId("notifications-card")).toBeInTheDocument()
     expect(screen.getByTestId("notifications-toggle-warranty")).toHaveAttribute(
       "aria-checked",
@@ -398,6 +405,8 @@ describe("<GroupSettingsPage />", () => {
     )
     const user = userEvent.setup()
     renderSettings()
+    await waitFor(() => expect(screen.getByTestId("group-settings-page")).toBeInTheDocument())
+    await user.click(screen.getByTestId("group-settings-nav-notifications"))
     const warranty = await screen.findByTestId("notifications-toggle-warranty")
     // baseHandlers default → warranty=on; flipping should send false.
     await user.click(warranty)
@@ -413,10 +422,39 @@ describe("<GroupSettingsPage />", () => {
       ...baseHandlers,
       adminMembership
     )
+    const user = userEvent.setup()
     renderSettings()
+    await waitFor(() => expect(screen.getByTestId("group-settings-page")).toBeInTheDocument())
+    await user.click(screen.getByTestId("group-settings-nav-notifications"))
     expect(await screen.findByTestId("notifications-card-error")).toBeInTheDocument()
     expect(screen.queryByTestId("notifications-card-skeleton")).not.toBeInTheDocument()
     expect(screen.queryByTestId("notifications-card")).not.toBeInTheDocument()
+  })
+
+  // #1887 — the Plan & quota card and Notifications card used to render
+  // on every settings sub-page header. They now live only in their
+  // respective sub-sections (Info / Notifications), so navigating to
+  // another sub-section must not surface either of them. The Members
+  // pane is a representative sibling — if it stays clean, the others
+  // will too.
+  it("scopes Plan and Notifications to their own sub-sections (#1887)", async () => {
+    server.use(...baseHandlers, adminMembership)
+    const user = userEvent.setup()
+    renderSettings()
+    // Info is the default → Plan card mounts; Notifications does not.
+    expect(await screen.findByTestId("plan-card")).toBeInTheDocument()
+    expect(screen.queryByTestId("notifications-card")).not.toBeInTheDocument()
+
+    // Members pane → neither card should be present.
+    await user.click(screen.getByTestId("group-settings-nav-members"))
+    await screen.findByTestId("group-section-members")
+    expect(screen.queryByTestId("plan-card")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("notifications-card")).not.toBeInTheDocument()
+
+    // Notifications pane → Notifications mounts; Plan does not.
+    await user.click(screen.getByTestId("group-settings-nav-notifications"))
+    expect(await screen.findByTestId("notifications-card")).toBeInTheDocument()
+    expect(screen.queryByTestId("plan-card")).not.toBeInTheDocument()
   })
 
   // #1616 — the Migrate Currency CTA must be hidden when the backend
