@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom"
 import {
-  ArrowLeft,
   ArrowRight,
   ArrowRightLeft,
   Bell,
@@ -106,7 +105,6 @@ export function GroupSettingsPage() {
 
 function GroupSettingsBody({ groupId }: { groupId: string }) {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { user } = useAuth()
   const groupQuery = useGroup(groupId)
   const membersQuery = useMembers(groupId)
@@ -175,23 +173,6 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
             </>
           }
           subtitle={t("groups:settings.subtitle")}
-          /*
-            Back returns to the previous location rather than hard-coding
-            /profile or /no-group: this page is reachable from the
-            GroupSelector dropdown, the members page, and onboarding;
-            any single destination would be wrong for some of them.
-          */
-          backLink={
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              data-testid="group-settings-back"
-              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="size-4" aria-hidden="true" />
-              {t("common:actions.back")}
-            </button>
-          }
         />
 
         <div className="flex flex-col gap-6 md:flex-row">
