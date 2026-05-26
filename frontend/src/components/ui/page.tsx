@@ -44,10 +44,14 @@ export function Page({ width = "wide", className, children, ...props }: PageProp
 
 type PageHeaderSize = "page" | "detail"
 
-// Omit `title` from the native <header> attributes — the HTML `title`
-// global attribute is a tooltip string and would collide with our ReactNode
-// `title` slot otherwise.
-type PageHeaderProps = Omit<ComponentProps<"header">, "title"> & {
+// Omit `title` and `children` from the native <header> attributes —
+//   - `title` (the HTML global tooltip attribute) collides with our
+//     ReactNode `title` slot.
+//   - `children` would be silently ignored: PageHeader composes its own
+//     fixed inner structure (icon / title / subtitle / actions / backLink)
+//     and never renders forwarded children. Surfacing it on the public
+//     type would let callers pass content that vanishes at runtime.
+type PageHeaderProps = Omit<ComponentProps<"header">, "title" | "children"> & {
   title: ReactNode
   subtitle?: ReactNode
   icon?: ReactNode

@@ -105,7 +105,12 @@ const PAGE_WRAPPER_TAGS = new Set([
 
 function walk(dir: string): string[] {
   const out: string[] = []
-  for (const entry of readdirSync(dir)) {
+  // Sort entries up-front so the order of `violations` (and the test
+  // failure output that ends up in CI logs) is stable across operating
+  // systems and filesystems (Copilot feedback on #1889 — `readdirSync`
+  // is OS-dependent without an explicit sort).
+  const entries = readdirSync(dir).slice().sort()
+  for (const entry of entries) {
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) {
       // Skip the tests directory itself.

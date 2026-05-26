@@ -439,14 +439,29 @@ function PageLayoutSection() {
         </div>
       </ShowcaseRow>
 
+      {/*
+        Each PageHeader demo renders its own <h1>. Wrapping the demo
+        container in `aria-hidden` keeps these duplicate headings out of
+        the screen-reader document outline — the showcase is a visual
+        catalog of variants, not a navigable surface (Copilot feedback
+        on #1889). UIShowcasePage itself is dev-only (mounted behind
+        `import.meta.env.DEV` in app/router.tsx), so this only affects
+        local development tooling.
+      */}
       <ShowcaseRow title='PageHeader — size="page" (top-level routes)'>
-        <div className="w-full rounded-md border border-dashed border-border p-4">
+        <div
+          aria-hidden="true"
+          className="w-full rounded-md border border-dashed border-border p-4"
+        >
           <PageHeader title="Warranties" subtitle="Track coverage across everything you own." />
         </div>
       </ShowcaseRow>
 
       <ShowcaseRow title='PageHeader — size="page" with actions'>
-        <div className="w-full rounded-md border border-dashed border-border p-4">
+        <div
+          aria-hidden="true"
+          className="w-full rounded-md border border-dashed border-border p-4"
+        >
           <PageHeader
             title="Commodities"
             subtitle="Everything you own, at a glance."
@@ -461,7 +476,10 @@ function PageLayoutSection() {
       </ShowcaseRow>
 
       <ShowcaseRow title='PageHeader — size="detail" with back link'>
-        <div className="w-full rounded-md border border-dashed border-border p-4">
+        <div
+          aria-hidden="true"
+          className="w-full rounded-md border border-dashed border-border p-4"
+        >
           <PageHeader
             size="detail"
             title="Edit profile"
@@ -476,7 +494,10 @@ function PageLayoutSection() {
       </ShowcaseRow>
 
       <ShowcaseRow title="PageHeader — with leading icon">
-        <div className="w-full rounded-md border border-dashed border-border p-4">
+        <div
+          aria-hidden="true"
+          className="w-full rounded-md border border-dashed border-border p-4"
+        >
           <PageHeader
             size="detail"
             title="Operator profile"
