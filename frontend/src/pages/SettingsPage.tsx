@@ -95,7 +95,7 @@ export function SettingsPage() {
   return (
     <>
       <RouteTitle title={t("settings:title")} />
-      <Page width="narrow" className="gap-8" data-testid="settings-page">
+      <Page width="wide" className="gap-8" data-testid="settings-page">
         <PageHeader title={t("settings:title")} subtitle={t("settings:subtitle")} />
 
         <div className="flex flex-col gap-6 md:flex-row">

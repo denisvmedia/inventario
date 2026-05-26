@@ -144,7 +144,7 @@ export function MembersPage() {
   return (
     <>
       <RouteTitle title={t("members:title")} />
-      <Page width="narrow" className="gap-8" data-testid="members-page">
+      <Page width="wide" className="gap-8" data-testid="members-page">
         <PageHeader
           title={t("members:title")}
           subtitle={

@@ -139,14 +139,14 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
 
   if (groupQuery.isLoading) {
     return (
-      <Page width="narrow">
+      <Page width="wide">
         <p className="text-sm text-muted-foreground">{t("groups:settings.title")}…</p>
       </Page>
     )
   }
   if (groupQuery.isError || !groupQuery.data) {
     return (
-      <Page width="narrow">
+      <Page width="wide">
         <Alert variant="destructive">
           <AlertDescription>{t("groups:settings.errorGeneric")}</AlertDescription>
         </Alert>
@@ -159,7 +159,7 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   return (
     <>
       <RouteTitle title={t("groups:settings.title")} />
-      <Page width="narrow" className="gap-8" data-testid="group-settings-page">
+      <Page width="wide" className="gap-8" data-testid="group-settings-page">
         <PageHeader
           title={
             <>
