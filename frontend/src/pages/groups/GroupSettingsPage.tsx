@@ -82,13 +82,18 @@ const SECTIONS: SectionMeta[] = [
   { id: "management", icon: ShieldAlert },
 ]
 
-// /groups/:groupId/settings — group admin panel split across four
+// /groups/:groupId/settings — group admin panel split across five
 // sub-sections behind a left rail (mirrors the user Preferences pattern
 // at /settings):
-//   - Info        identity (name, icon, slug, currency + migrate)
-//   - Members     members link + leave-group panel
-//   - Data        per-group storage usage + exports shortcut
-//   - Management  destructive actions (delete group)
+//   - Info           identity (name, icon, slug, currency + migrate)
+//                    + Plan & quota card (#1887: moved out of the
+//                    page header so it no longer renders everywhere)
+//   - Members        members link + leave-group panel
+//   - Notifications  per-group notification preference toggles
+//                    (#1887: pulled out of the page header into its
+//                    own sub-section)
+//   - Data           per-group storage usage + exports shortcut
+//   - Management     destructive actions (delete group)
 //
 // Group `id` (UUID) is the path key here, not the slug — slugs are
 // random and not in URLs that admin tools reach for. Sub-pages that
