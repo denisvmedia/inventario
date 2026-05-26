@@ -113,6 +113,43 @@ describe("<CreateGroupPage />", () => {
     expect(await screen.findByTestId("create-group-server-error")).toHaveTextContent(/iso code/i)
   })
 
+  it("treats a slug-less success response as an error and keeps the form mounted (#1886)", async () => {
+    // The BE invariant is that every persisted group carries a slug,
+    // so a 201 without one is a contract violation. We surface that as
+    // an inline server error rather than silently navigating to
+    // /no-group — which would also drop the user's active-group
+    // context when they reached the form via GroupSelector.
+    server.use(
+      msw.post(api("/groups"), () =>
+        HttpResponse.json(
+          {
+            data: {
+              id: "g1",
+              type: "groups",
+              attributes: {
+                id: "g1",
+                name: "Household",
+                group_currency: "USD",
+                icon: "",
+              },
+            },
+          },
+          { status: 201 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderCreate()
+    await user.type(screen.getByTestId("group-name-input"), "Household")
+    await user.click(screen.getByTestId("create-group-submit"))
+    expect(await screen.findByTestId("create-group-server-error")).toBeInTheDocument()
+    // The form must still be present — the user can retry without
+    // losing context. A navigation away would unmount CreateGroupPage
+    // and `*` would catch the new pathname via <LocationProbe />.
+    expect(screen.getByTestId("create-group-page")).toBeInTheDocument()
+    expect(screen.queryByTestId("loc")).not.toBeInTheDocument()
+  })
+
   it("has no axe violations on the form", async () => {
     const { container } = renderCreate()
     expect(await axe(container)).toHaveNoViolations()

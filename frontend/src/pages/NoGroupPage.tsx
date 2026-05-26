@@ -47,16 +47,24 @@ export function NoGroupPage() {
     setServerError(null)
     try {
       const created = await createMutation.mutateAsync({ name: trimmed })
-      toast.success(t("groups:create.successToast"))
       // Created group has a slug 22+ chars per the BE invariant, but the
       // generated LocationGroup type marks it optional — guard so we
-      // never construct "/g/" and drop into the 404. Fallback to "/"
-      // mirrors the pre-fix behaviour and lets RootRedirect resolve.
-      if (created.slug) {
-        navigate(`/g/${encodeURIComponent(created.slug)}`)
-      } else {
-        navigate("/")
+      // never construct "/g/" and drop into the 404. Treat the missing
+      // slug as an error path (#1886) so the user keeps the form open
+      // with feedback rather than seeing a toast + a stuck page; the
+      // earlier `navigate("/")` fallback hid the real symptom because
+      // RootRedirect would race the invalidated cache and sometimes
+      // leave the user back on /no-group.
+      if (!created.slug) {
+        // Dedicated key so the user isn't told to "try again" (the group
+        // exists; a retry would duplicate it) — they need to reload so
+        // RootRedirect can resolve the freshly-created group via the
+        // invalidated /groups cache.
+        setServerError(t("groups:create.errorMissingSlug"))
+        return
       }
+      toast.success(t("groups:create.successToast"))
+      navigate(`/g/${encodeURIComponent(created.slug)}`)
     } catch (err) {
       setServerError(parseServerError(err, t("groups:create.errorGeneric")))
     }

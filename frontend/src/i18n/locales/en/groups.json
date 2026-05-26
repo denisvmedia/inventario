@@ -8,6 +8,7 @@
     "currencyPlaceholder": "Pick a currency",
     "currencySearchPlaceholder": "Search ISO 4217 code…",
     "errorGeneric": "Couldn't create the group. Please try again.",
+    "errorMissingSlug": "The group was created but its URL is missing. Reload the page to continue.",
     "iconChange": "Change",
     "iconHelp": "Optional — pick something to make the group easier to recognize in the sidebar.",
     "iconLabel": "Icon",
