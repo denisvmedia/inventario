@@ -77,12 +77,31 @@ const SPECIAL_PURPOSE_PAGES = new Set<string>([
   "admin/admin-shared.tsx",
 ])
 
-// Forbidden max-w literals on top-level page wrappers. The full set of
-// Tailwind v4 max-w tokens — pages must not reach for any of these
-// directly. (Smaller `max-w-prose` / `max-w-md` etc. are fine inside form
-// or banner regions; the guard only looks at the *outermost* element of
-// each return statement.)
-const FORBIDDEN_MAX_W = /max-w-(none|xs|sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl|prose|screen-[a-z]+)/
+// Forbidden max-w literals on top-level page wrappers. Matches every
+// Tailwind v4 max-w form pages might reach for — named tokens, arbitrary
+// bracketed values (`max-w-[780px]`), CSS-variable references
+// (`max-w-(--my-var)`), and broader screen variants
+// (`max-w-screen-2xl`, etc). The `\b` boundary keeps the regex from
+// matching inside other attribute names. Smaller `max-w-md` etc. inside
+// form / banner regions are fine — the guard only inspects the outermost
+// element of each return statement.
+const FORBIDDEN_MAX_W = /\bmax-w-(?:\[[^\]]+\]|\([^)]+\)|[A-Za-z0-9_-]+)/
+
+// Tags whose outermost-position role is "page wrapper" or "page-shaped
+// alternative" (centred-card error state, etc). Bare-JSX returns from
+// helper sub-components — `<span>`, `<button>`, `<Badge>`, `<Card>`,
+// `<Link>`, etc. — are skipped, since those aren't roots of a route and
+// frequently use `max-w-*` for their own inner sizing (e.g. a TenantChip
+// `<span className="max-w-40">`).
+const PAGE_WRAPPER_TAGS = new Set([
+  "div",
+  "section",
+  "main",
+  "header",
+  "article",
+  "Page",
+  "PageFrame",
+])
 
 function walk(dir: string): string[] {
   const out: string[] = []
@@ -105,28 +124,43 @@ function relativeName(path: string): string {
   return path.slice(PAGES_DIR.length + 1)
 }
 
-// Returns the className value of the OUTERMOST element of each return
-// statement in the source. Simple regex — captures `<X className="…"` where
-// X is a div, Page, Frame, header, main, section, or fragment-but-typed.
-// JSX fragments (<>) are followed by the next element, which we recurse
-// into one level (covers `return ( <> <RouteTitle/> <div className=…> )`).
+// Returns the outermost element of each return statement in the source,
+// encoded as `${tag}::${attrs}`. The `attrs` slice is the full attribute
+// region of the opening tag — keeping it raw (rather than parsing out the
+// quoted `className` literal) means expressions like
+// `className={cn("max-w-3xl", ...)}` still flow into the FORBIDDEN_MAX_W
+// regex, instead of being silently skipped (CodeRabbit feedback on #1889).
+//
+// We capture three return shapes:
+//   1. `return ( <Tag …> … </Tag> )`             — parenthesised JSX block
+//   2. `return ( <> <RouteTitle/> <Tag …> … )`   — fragment + RouteTitle prefix
+//   3. `return <Tag …>` / `return <Tag … />`     — bare JSX return (no parens)
+//
+// We can't fully parse JSX from a regex — this stays a heuristic. The
+// fallback for anything we don't catch is the import + `<Page>` check
+// (rule 2), which the violations-without-coverage would still fail.
 function outermostElementClasses(src: string): string[] {
   const classes: string[] = []
-  // Match `return (` followed by JSX. Capture multi-line up to the matching `)`.
-  // We can't fully parse — we just look for the first non-fragment opener
-  // and extract its className.
-  const returns = src.matchAll(/return\s*\(\s*([\s\S]*?)\n\s{0,4}\)/g)
-  for (const ret of returns) {
-    const body = ret[1]
-    // Skip lines that look like inline JSX inside a non-top-level function
-    // (e.g. small helper components). Heuristic: only look at the first
-    // ~30 lines of each match.
-    const head = body.split("\n").slice(0, 30).join("\n")
+  type Candidate = string
 
+  // Form 1+2: parenthesised return blocks.
+  const blockReturns = src.matchAll(/return\s*\(\s*([\s\S]*?)\n\s{0,4}\)/g)
+  const blockHeads: Candidate[] = Array.from(blockReturns, (m) =>
+    m[1].split("\n").slice(0, 30).join("\n")
+  )
+
+  // Form 3: bare-JSX returns — `return <Tag …>` on the same line, no parens.
+  // Capture up to the rest of the line plus a few continuation lines so an
+  // attribute-heavy opening tag still resolves.
+  const inlineReturns = src.matchAll(/return\s+(<[A-Za-z][^\n]*(?:\n[^)]*?)?)/g)
+  const inlineHeads: Candidate[] = Array.from(inlineReturns, (m) => m[1])
+
+  const heads = [...blockHeads, ...inlineHeads]
+  for (const head of heads) {
     // Strip a leading fragment opener so we see the next real element.
     const noFragment = head.replace(/^\s*<>\s*/, "")
-    // The outermost element after stripping any leading <RouteTitle … />
-    // (route titles are head-only and don't carry width concerns).
+    // Strip a leading <RouteTitle … /> (route titles are head-only and
+    // don't carry width concerns).
     const noRouteTitle = noFragment.replace(/<RouteTitle[^>]*\/>\s*/, "")
 
     // Look for the first `<Tag …>` whose tag name starts with [A-Za-z].
@@ -134,17 +168,7 @@ function outermostElementClasses(src: string): string[] {
     if (!first) continue
     const tag = first[1]
     const attrs = first[2]
-
-    // Pull className value if present (single or double quoted, template literals).
-    const classMatch =
-      attrs.match(/className\s*=\s*"([^"]+)"/) ||
-      attrs.match(/className\s*=\s*'([^']+)'/) ||
-      attrs.match(/className\s*=\s*\{`([^`]+)`\}/)
-    if (classMatch) {
-      classes.push(`${tag}::${classMatch[1]}`)
-    } else {
-      classes.push(`${tag}::`)
-    }
+    classes.push(`${tag}::${attrs}`)
   }
   return classes
 }
@@ -165,16 +189,30 @@ describe("page-layout convention guard (issue #1889)", () => {
       if (SPECIAL_PURPOSE_PAGES.has(rel.replace(/\\/g, "/"))) continue
       const outers = outermostElementClasses(src)
       for (const o of outers) {
-        const [tag, className] = o.split("::")
+        // `attrs` is the full attribute slice of the opening tag — keeping
+        // it raw means className expressions like `className={cn(...)}`
+        // are still inspectable (CodeRabbit feedback on #1889). The
+        // `\b` boundary in FORBIDDEN_MAX_W keeps the regex from matching
+        // inside other attribute names that happen to contain "max-w-".
+        const sep = o.indexOf("::")
+        const tag = o.slice(0, sep)
+        const attrs = o.slice(sep + 2)
+        // Only inspect tags that could plausibly be a page wrapper. Helper
+        // sub-components defined alongside the page (TenantChip `<span>`,
+        // status `<Badge>`, etc.) routinely set their own inner max-w-*
+        // and should not be flagged.
+        if (!PAGE_WRAPPER_TAGS.has(tag)) continue
         // The `<Page>` wrapper is the canonical entry — width comes from
         // the `width` prop, not a className literal. Pages that wrap with
         // <Page> may add other classes (`gap-8`, `relative`, …) but never
         // a raw `max-w-*` literal. Other top-level wrappers (`<div>`,
         // `<header>`, `<main>`) must also not carry a `max-w-*` literal.
-        // No bypass for any tag — `<Page className="max-w-3xl">` would
-        // defeat the contract too (Copilot/CodeRabbit feedback on #1889).
-        if (FORBIDDEN_MAX_W.test(className ?? "")) {
-          violations.push(`${rel}: <${tag} className="…${className}…">`)
+        // No bypass for any tag in the allow list — `<Page className="max-w-3xl">`
+        // would defeat the contract too (Copilot/CodeRabbit feedback on
+        // #1889).
+        const match = attrs.match(FORBIDDEN_MAX_W)
+        if (match) {
+          violations.push(`${rel}: <${tag} …${match[0]}…>`)
         }
       }
     }

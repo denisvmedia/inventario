@@ -138,7 +138,11 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   const isLastOwner = isOwner && ownerCount === 1
 
   if (groupQuery.isLoading) {
-    return <div className="text-sm text-muted-foreground p-6">{t("groups:settings.title")}…</div>
+    return (
+      <Page width="narrow">
+        <p className="text-sm text-muted-foreground">{t("groups:settings.title")}…</p>
+      </Page>
+    )
   }
   if (groupQuery.isError || !groupQuery.data) {
     return (
