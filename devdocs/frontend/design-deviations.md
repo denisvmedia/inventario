@@ -267,6 +267,15 @@ _None yet._
 
 ### Settings & Preferences
 
+#### 2026-05-26 — Personal Preferences lands on Account, not Appearance
+
+- **Issue/PR**: #1888 / PR (pending)
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) L41 initialises `useState<SettingsSection>("appearance")` — opening the Preferences view lands on the Appearance tab.
+- **Reality**: `frontend/src/pages/SettingsPage.tsx` initialises `useState<SectionId>("account")` so `/settings` lands on Account. All other sub-tabs (Appearance, Notifications, Privacy, Help) remain siblings reachable via the nav rail.
+- **Why**: User-driven UX correction. Appearance is a low-traffic settings area (theme / density / locale). The high-traffic surfaces under Preferences — email, password, MFA, default group, profile — all live in Account, which is what most users open Preferences to find or change.
+- **Approved by**: user (explicit) — issue #1888 ("Personal Preferences: default landing tab should be Account, not Appearance").
+- **Reversion plan**: Permanent unless the upstream mock flips its own default. The change is a single-line `useState` initialiser — trivial to reconcile if the mock catches up.
+
 #### 2026-05-08 — "Migrate currency…" CTA + 4-step wizard dialog
 
 - **Issue/PR**: #1553 / PR #1604

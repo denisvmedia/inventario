@@ -128,9 +128,20 @@ describe("<SettingsPage />", () => {
     expect(screen.queryByTestId("settings-nav-data")).not.toBeInTheDocument()
   })
 
-  it("appearance section is the default and shows theme/density/locale controls", async () => {
+  // #1888 — Account is the landing tab (was Appearance). Most users open
+  // Preferences for email/password/MFA/profile, not theme/density.
+  it("account section is the default landing (#1888)", async () => {
     server.use(...baseHandlers)
     renderSettings()
+    expect(await screen.findByTestId("section-account")).toBeInTheDocument()
+    expect(screen.queryByTestId("section-appearance")).not.toBeInTheDocument()
+  })
+
+  it("appearance section shows theme/density/locale controls", async () => {
+    server.use(...baseHandlers)
+    const user = userEvent.setup()
+    renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-appearance"))
     expect(await screen.findByTestId("section-appearance")).toBeInTheDocument()
     expect(screen.getByTestId("theme-system")).toBeInTheDocument()
     expect(screen.getByTestId("theme-light")).toBeInTheDocument()
@@ -143,6 +154,7 @@ describe("<SettingsPage />", () => {
     server.use(...baseHandlers)
     const user = userEvent.setup()
     renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-appearance"))
     await user.click(await screen.findByTestId("theme-dark"))
     await waitFor(() => expect(localStorage.getItem("theme-test-1414")).toBe("dark"))
   })
@@ -151,6 +163,7 @@ describe("<SettingsPage />", () => {
     server.use(...baseHandlers)
     const user = userEvent.setup()
     renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-appearance"))
     const select = await screen.findByTestId("density-select")
     await user.selectOptions(select, "compact")
     await waitFor(() => expect(localStorage.getItem("density-test-1414")).toBe("compact"))
@@ -218,14 +231,18 @@ describe("<SettingsPage />", () => {
 
   it("has no axe violations on the appearance section", async () => {
     server.use(...baseHandlers)
+    const user = userEvent.setup()
     const { container } = renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-appearance"))
     await waitFor(() => expect(screen.getByTestId("section-appearance")).toBeInTheDocument())
     expect(await axe(container)).toHaveNoViolations()
   })
 
   it("appearance section adds Default view + preferred currency rows", async () => {
     server.use(...baseHandlers)
+    const user = userEvent.setup()
     renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-appearance"))
     expect(await screen.findByTestId("section-appearance")).toBeInTheDocument()
     expect(screen.getByTestId("default-view-select")).toBeInTheDocument()
     expect(screen.getByTestId("preferred-currency-row")).toBeInTheDocument()
@@ -236,7 +253,9 @@ describe("<SettingsPage />", () => {
   // and follows the same autosave path (PATCH /settings/{field}).
   it("appearance section adds a Region & formatting dropdown (#1683)", async () => {
     server.use(...withGroupHandlers({}))
+    const user = userEvent.setup()
     renderSettings("/settings?g=household")
+    await user.click(await screen.findByTestId("settings-nav-appearance"))
     expect(await screen.findByTestId("section-appearance")).toBeInTheDocument()
     const select = await screen.findByTestId("number-format-locale-select")
     expect(select).toBeInTheDocument()
@@ -257,8 +276,10 @@ describe("<SettingsPage />", () => {
         return HttpResponse.json({ appearanceNumberFormatLocale: body })
       })
     )
+    const user = userEvent.setup()
     renderSettings("/settings?g=household")
     await screen.findByTestId("settings-page")
+    await user.click(await screen.findByTestId("settings-nav-appearance"))
     const select = (await screen.findByTestId("number-format-locale-select", undefined, {
       timeout: 4000,
     })) as HTMLSelectElement
