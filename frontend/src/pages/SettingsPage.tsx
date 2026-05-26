@@ -90,7 +90,10 @@ const SECTIONS: SectionMeta[] = [
 // (e.g. whether to send a warranty reminder email) round-trip.
 export function SettingsPage() {
   const { t } = useTranslation()
-  const [active, setActive] = useState<SectionId>("appearance")
+  // #1888 — landing tab is Account, not Appearance: most users open
+  // Preferences for email/password/MFA/profile (Account), not for theme
+  // and density (Appearance). Appearance remains a sibling tab.
+  const [active, setActive] = useState<SectionId>("account")
 
   return (
     <>

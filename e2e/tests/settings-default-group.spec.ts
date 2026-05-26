@@ -39,9 +39,8 @@ test.describe('Settings — default group (#1592)', () => {
   test('zero-group user sees the create-first-group call-to-action', async ({ page }) => {
     await loginAsOrphan(page);
     await page.goto('/settings');
-    // The settings page renders the Appearance section by default; flip to
-    // Account so the default-group surface is mounted.
-    await page.locator('[data-testid="settings-nav-account"]').click();
+    // Account is the default landing tab (#1888), so the default-group
+    // surface mounts without a nav click.
 
     const cta = page.locator('[data-testid="settings-no-groups-cta"]');
     await expect(cta).toBeVisible({ timeout: 10000 });
@@ -64,7 +63,8 @@ test.describe('Settings — default group (#1592)', () => {
 authTest.describe('Settings — default group, authenticated user (#1592)', () => {
   authTest('admin sees the default-group selector populated with their memberships', async ({ page }) => {
     await page.goto('/settings');
-    await page.locator('[data-testid="settings-nav-account"]').click();
+    // Account is the default landing tab (#1888), so the default-group
+    // selector mounts without a nav click.
 
     const select = page.locator('[data-testid="settings-default-group-select"]');
     await expect(select).toBeVisible({ timeout: 10000 });
