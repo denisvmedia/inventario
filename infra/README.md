@@ -17,7 +17,8 @@ For the credentials walkthrough alone see [`SECRETS.md`](./SECRETS.md).
 > [#1855](https://github.com/denisvmedia/inventario/issues/1855),
 > [#1856](https://github.com/denisvmedia/inventario/issues/1856),
 > [#1858](https://github.com/denisvmedia/inventario/issues/1858),
-> [#1863](https://github.com/denisvmedia/inventario/issues/1863).
+> [#1863](https://github.com/denisvmedia/inventario/issues/1863),
+> [#1892](https://github.com/denisvmedia/inventario/issues/1892).
 
 ---
 
@@ -98,7 +99,7 @@ You need these tools on your laptop:
 | `sops` | Decrypts the secrets bundle locally. |
 | `age` | Asymmetric crypto sops uses for our recipients. |
 | `make` | Orchestrator entry point. |
-| `kubectl` | Optional — bootstrap installs it on the VM, but you'll want it locally to inspect Applications + port-forward ArgoCD. |
+| `kubectl` | Optional — bootstrap installs it on the VM, but you'll want it locally to inspect Applications. |
 | `helm` | Optional — same. |
 | `tailscale` | The tailnet client. You need to be a member of the same tailnet the VM joins, or you can't reach the previews. |
 
@@ -335,10 +336,15 @@ Expected timing on a fresh VM: 3-5 minutes. The script:
 6. Installs the Tailscale Kubernetes Operator via helm (OAuth from sops bundle).
 7. Installs ArgoCD via helm.
 8. Materializes Kubernetes Secrets from the sops bundle.
-9. Applies the `ts-orphan-cleanup` CronJob to the `tailscale` namespace.
+9. Applies the cluster-extras manifests (`ts-orphan-cleanup` CronJob, plus
+   the tailnet Ingress that exposes the ArgoCD UI at
+   `argocd-inv-vcl01.<tailnet>.ts.net`).
 10. Applies the ArgoCD `AppProject`, `Application` (master), and
     `ApplicationSet` (PR previews).
-11. Copies the kubeconfig back to `~/.kube/inv-vcl01.config` on your laptop.
+11. Copies the kubeconfig back to `~/.kube/inv-vcl01.config` on your laptop,
+    with the server set to the stable tailnet FQDN
+    (`inv-vcl01.<tailnet>.ts.net:8443`) so the kubeconfig survives VM
+    redeploys without an IP rewrite.
 
 The script is **idempotent** — re-running it is the upgrade path. The
 `make upgrade` and `make recover` targets are aliases for `make bootstrap`.
@@ -369,9 +375,9 @@ KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd get application inv-vcl01-
 #         sha-master image build to finish on GHCR)
 
 # 6. The ArgoCD UI loads.
-KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd port-forward svc/argocd-server 8080:80 &
-open http://localhost:8080         # macOS; on Linux: xdg-open
-# Admin password:
+#    Open https://argocd-inv-vcl01.<your-tailnet-name>.ts.net/ from any
+#    tailnet member with the right ACL — no port-forward, no kubeconfig.
+#    Admin password (initial bootstrap):
 KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath='{.data.password}' | base64 -d
 ```
@@ -421,21 +427,25 @@ about an hour OR delete the device manually in the
 
 ### Inspect a running preview
 
-There is no direct ArgoCD-UI exposure on the tailnet today (planned in
-[#1892](https://github.com/denisvmedia/inventario/issues/1892)). Until then,
-port-forward from your laptop:
+The ArgoCD UI is exposed as a tailnet service (#1892). Any tailnet member
+with the right ACL can open it directly — no `kubectl port-forward`, no
+kubeconfig, no `localhost:8080` URL:
+
+```
+https://argocd-inv-vcl01.<your-tailnet-name>.ts.net/
+```
+
+Login is `admin` + the initial bootstrap password (read once via
+`kubectl`, then rotate per [section 5 "ArgoCD UI returns 401 after
+rotating the admin secret"](#argocd-ui-returns-401-after-rotating-the-admin-secret)):
 
 ```bash
-KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd \
-  port-forward svc/argocd-server 8080:80
-# open http://localhost:8080
-
-# Admin password (only needed first time; you can rotate after):
 KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd \
   get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
 ```
 
-For raw kubectl access:
+For raw kubectl access (the kubeconfig server is the stable tailnet FQDN —
+`inv-vcl01.<tailnet>.ts.net:8443` — so it keeps working after a VM redeploy):
 
 ```bash
 KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n inv-vcl01-pr<N> get pods
@@ -664,6 +674,31 @@ KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n tailscale \
 Manual cleanup via the [admin Machines view](https://login.tailscale.com/admin/machines)
 is always an option — filter by `tag:k8s`, remove offline rows.
 
+### kubectl fails with "certificate is valid for 127.0.0.1, ..., not <FQDN>"
+
+You're on a cluster bootstrapped before #1892 landed. The vcluster apiserver
+TLS cert was generated WITHOUT the tailnet FQDN in its SAN list, but the
+new bootstrap.sh writes a kubeconfig that points at the FQDN. The
+post-#1892 `/etc/vcluster/vcluster.yaml` carries the correct
+`controlPlane.proxy.extraSANs`, but vcluster only consults it during
+initial cert generation — restarting the service against an existing
+PKI dir won't pick up the new SAN.
+
+Fastest fix: redo the bootstrap from scratch (loses any in-cluster state
+that isn't ArgoCD-managed, which for a Phase 1 preview-env is normally
+nothing important — per-PR namespaces re-sync from the ApplicationSet in
+~5 min):
+
+```bash
+make -C infra destroy VM=user@host
+make -C infra bootstrap VM=user@host
+```
+
+Surgical alternative: stop vcluster, delete the apiserver cert + key files
+under `/var/lib/vcluster/pki/`, restart vcluster. The exact filenames vary
+across vcluster patch versions, so the `make destroy` + `make bootstrap`
+path is generally less error-prone.
+
 ### bootstrap fails on `apt-get update` with "Release file ... is not valid yet"
 
 VM clock skew. The bootstrap NTP resync didn't converge in 30 s — check VM
@@ -771,11 +806,6 @@ issue:
   quotas per preview namespace.** Today each preview can consume up to the
   VM's total budget; under load this would degrade other previews. Quotas
   cap per-PR CPU/memory/storage.
-- **[#1892](https://github.com/denisvmedia/inventario/issues/1892) Expose
-  ArgoCD UI + vcluster API as Tailscale services.** Today both reach via
-  `kubectl port-forward` from a laptop with the kubeconfig; the issue
-  surfaces them as proper tailnet hostnames (`argocd-inv-vcl01.<tailnet>.ts.net`,
-  `k8s-inv-vcl01.<tailnet>.ts.net`) so any tailnet member can bookmark.
 
 Other open follow-ups touch the chart or workflow rather than the runtime:
 [#1882](https://github.com/denisvmedia/inventario/issues/1882) (TLS
@@ -807,6 +837,7 @@ infra/
     ├── destroy.sh            remote teardown (vcluster + data; tailnet preserved)
     ├── helm-values/          static chart overlays vm-install.sh layers OAuth on top of
     ├── cluster-extras/
+    │   ├── argocd-ts-ingress.yaml  tailnet Ingress for the ArgoCD UI (#1892)
     │   └── ts-orphan-cleanup.yaml  hourly TS device GC CronJob
     ├── scripts/
     │   └── apply-secrets.sh  translate sops bundle into k8s Secrets
