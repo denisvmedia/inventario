@@ -174,13 +174,27 @@ mkdir -p /etc/vcluster
 # Schema: https://github.com/loft-sh/vcluster v0.34 controlPlane.proxy.extraSANs.
 # Without tailscale.tailnet_name in the sops bundle we skip the SAN and
 # fall back to the legacy IP-rewrite path in bootstrap.sh.
+#
+# Source the hostname from the live tailscaled (not the configured
+# `TS_HOSTNAME` default) so the cert SAN tracks whatever the VM is
+# currently registered as — important when the operator has manually
+# re-keyed under a different hostname on an already-authenticated VM,
+# where vm-install.sh only warns about the mismatch rather than forcing
+# a reset. Falls back to `TS_HOSTNAME` (the install-time default) when
+# tailscaled isn't authenticated yet (e.g. bootstrap-without-secrets).
+# bootstrap.sh queries the SAME `.Self.HostName` source for the
+# kubeconfig server, so both ends use the same identity.
 EXTRA_SANS_BLOCK=""
 TAILNET_NAME=$(sops_get "tailscale.tailnet_name")
+LIVE_TS_HOSTNAME=$(tailscale status --self=true --peers=false --json 2>/dev/null \
+    | jq -r '.Self.HostName // empty')
+SAN_HOSTNAME="${LIVE_TS_HOSTNAME:-$TS_HOSTNAME}"
 if [ -n "${TAILNET_NAME:-}" ]; then
     EXTRA_SANS_BLOCK="
   proxy:
     extraSANs:
-      - ${TS_HOSTNAME}.${TAILNET_NAME}.ts.net"
+      - ${SAN_HOSTNAME}.${TAILNET_NAME}.ts.net"
+    note "vcluster apiserver cert will include SAN: ${SAN_HOSTNAME}.${TAILNET_NAME}.ts.net"
 else
     warn "tailscale.tailnet_name missing from sops bundle — apiserver cert won't include tailnet FQDN SAN."
     warn "bootstrap.sh will fall back to IP-based kubeconfig with tls-server-name override."

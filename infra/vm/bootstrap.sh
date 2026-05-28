@@ -103,20 +103,26 @@ fi
 #
 # `<TAILNET>` substitution mirrors the ArgoCD apply block below: pure-bash
 # literal substitution (no sed) so a tailnet name containing `&` or `\`
-# cannot corrupt the manifest. Existing cluster-extras files without the
-# placeholder are passed through unchanged by the same operator.
+# cannot corrupt the manifest. Manifests that contain `<TAILNET>` are
+# SKIPPED (with a warning) when tailnet_name is absent — applying with a
+# literal `<TAILNET>` placeholder produces an invalid DNS host that
+# Kubernetes rejects, aborting bootstrap under `set -e`. Untemplated
+# manifests pass through unchanged regardless of tailnet_name presence,
+# preserving the "bootstrap can still run without secrets" property.
 if [ -d "$CLUSTER_EXTRAS_DIR" ] && compgen -G "$CLUSTER_EXTRAS_DIR/*.yaml" >/dev/null; then
     if ssh "$VM" 'sudo /usr/local/bin/kubectl get namespace tailscale' >/dev/null 2>&1; then
-        ce_tailnet="$TAILNET_NAME"
-        if [ -z "$ce_tailnet" ]; then
+        if [ -z "$TAILNET_NAME" ]; then
             warn "$CLUSTER_EXTRAS_DIR present but tailscale.tailnet_name missing from sops bundle."
-            warn "Applying with literal <TAILNET> placeholder — TS Ingress will route to broken hosts."
-            ce_tailnet="<TAILNET>"
+            warn "Manifests that reference <TAILNET> will be skipped; untemplated manifests still apply."
         fi
-        note "Applying cluster-extras manifests from $CLUSTER_EXTRAS_DIR (tailnet: $ce_tailnet)"
+        note "Applying cluster-extras manifests from $CLUSTER_EXTRAS_DIR (tailnet: ${TAILNET_NAME:-<missing>})"
         for m in "$CLUSTER_EXTRAS_DIR"/*.yaml; do
             content=$(cat "$m")
-            printf '%s' "${content//<TAILNET>/$ce_tailnet}" | \
+            if [[ "$content" == *"<TAILNET>"* ]] && [ -z "$TAILNET_NAME" ]; then
+                warn "  skipping $(basename "$m") — unresolved <TAILNET> placeholder"
+                continue
+            fi
+            printf '%s' "${content//<TAILNET>/$TAILNET_NAME}" | \
                 ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
         done
     else
@@ -129,10 +135,9 @@ fi
 if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
     if [ -z "$TAILNET_NAME" ]; then
         warn "$ARGOCD_DIR present but tailscale.tailnet_name missing from sops bundle."
-        warn "Applying with literal <TAILNET> placeholder — Applications will Ingress to broken hosts."
-        TAILNET_NAME="<TAILNET>"
+        warn "Manifests that reference <TAILNET> will be skipped; untemplated manifests still apply."
     fi
-    note "Applying ArgoCD manifests from $ARGOCD_DIR (tailnet: $TAILNET_NAME)"
+    note "Applying ArgoCD manifests from $ARGOCD_DIR (tailnet: ${TAILNET_NAME:-<missing>})"
     # Three explicit globs in dependency order:
     #   - appproject*.yaml: AppProject must land BEFORE Application/
     #     ApplicationSet that reference it via .spec.project.
@@ -154,6 +159,10 @@ if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
         for m in "$ARGOCD_DIR"/$pattern; do
             [ -f "$m" ] || continue
             content=$(cat "$m")
+            if [[ "$content" == *"<TAILNET>"* ]] && [ -z "$TAILNET_NAME" ]; then
+                warn "  skipping $(basename "$m") — unresolved <TAILNET> placeholder"
+                continue
+            fi
             printf '%s' "${content//<TAILNET>/$TAILNET_NAME}" | \
                 ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
         done
@@ -189,7 +198,7 @@ TS_HOSTNAME_REMOTE=$(ssh "$VM" 'tailscale status --self=true --peers=false --jso
     | jq -r ".Self.HostName // \"\""' || true)
 TS_IP=$(ssh "$VM" 'tailscale ip -4 2>/dev/null | head -1' || true)
 
-if [ -n "$TS_HOSTNAME_REMOTE" ] && [ -n "$TAILNET_NAME" ] && [ "$TAILNET_NAME" != "<TAILNET>" ]; then
+if [ -n "$TS_HOSTNAME_REMOTE" ] && [ -n "$TAILNET_NAME" ]; then
     TS_FQDN="${TS_HOSTNAME_REMOTE}.${TAILNET_NAME}.ts.net"
     # macOS sed and GNU sed differ; perl is portable.
     perl -pi -e "s|https://127\.0\.0\.1:|https://${TS_FQDN}:|g; s|https://localhost:|https://${TS_FQDN}:|g" \
