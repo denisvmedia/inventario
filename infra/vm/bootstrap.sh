@@ -73,25 +73,51 @@ if [ -n "$SECRETS_JSON" ]; then
     fi
 fi
 
-# --- Apply cluster-extras manifests (#1858 — hourly TS device cleanup) ---
+# --- Resolve tailnet name from the sops bundle (shared by cluster-extras + ArgoCD) ---
+# `<TAILNET>` in committed manifests is substituted to the tailnet MagicDNS
+# suffix at apply time. Read once so both cluster-extras (TS Ingress for the
+# ArgoCD UI from #1892) and the ArgoCD manifests (per-PR Ingress hosts) see
+# the same value. Empty string is treated as "missing" downstream.
+TAILNET_NAME=""
+if [ -n "$SECRETS_JSON" ]; then
+    TAILNET_NAME=$(jq -r '.tailscale.tailnet_name // ""' <<<"$SECRETS_JSON")
+fi
+
+# --- Apply cluster-extras manifests (#1858 — hourly TS device cleanup; #1892 — ArgoCD TS Ingress) ---
 # In-cluster resources that aren't ArgoCD-managed but need to live in the
-# cluster for the long term. Currently: a CronJob in the `tailscale`
-# namespace that reuses the operator's OAuth credentials (`operator-oauth`
-# Secret applied above) to delete stale Tailscale device records for
-# closed PR previews. See the header comment in
-# infra/vm/cluster-extras/ts-orphan-cleanup.yaml for the full rationale.
+# cluster for the long term:
+#   - CronJob in the `tailscale` namespace reusing the operator's OAuth
+#     credentials to delete stale Tailscale device records (#1858);
+#   - Tailscale Ingress in the `argocd` namespace exposing the ArgoCD UI
+#     directly to the tailnet (#1892).
+# See the per-file header comments under infra/vm/cluster-extras/ for the
+# full rationale.
 #
 # Gated on the `tailscale` namespace existing: vm-install.sh creates it
 # only when tailscale.oauth_client_{id,secret} are present in the sops
 # bundle, so a bootstrap-without-secrets path leaves the namespace
-# absent and `kubectl apply` of a CronJob into it would hard-fail under
-# `set -e`. Skip with a warning in that case — preserves the
+# absent — without the TS Operator, neither cluster-extras manifest does
+# anything useful (the Ingress would Pending forever; the CronJob would
+# 401). Skip with a warning in that case — preserves the
 # "bootstrap can still run without secrets" property.
+#
+# `<TAILNET>` substitution mirrors the ArgoCD apply block below: pure-bash
+# literal substitution (no sed) so a tailnet name containing `&` or `\`
+# cannot corrupt the manifest. Existing cluster-extras files without the
+# placeholder are passed through unchanged by the same operator.
 if [ -d "$CLUSTER_EXTRAS_DIR" ] && compgen -G "$CLUSTER_EXTRAS_DIR/*.yaml" >/dev/null; then
     if ssh "$VM" 'sudo /usr/local/bin/kubectl get namespace tailscale' >/dev/null 2>&1; then
-        note "Applying cluster-extras manifests from $CLUSTER_EXTRAS_DIR"
+        ce_tailnet="$TAILNET_NAME"
+        if [ -z "$ce_tailnet" ]; then
+            warn "$CLUSTER_EXTRAS_DIR present but tailscale.tailnet_name missing from sops bundle."
+            warn "Applying with literal <TAILNET> placeholder — TS Ingress will route to broken hosts."
+            ce_tailnet="<TAILNET>"
+        fi
+        note "Applying cluster-extras manifests from $CLUSTER_EXTRAS_DIR (tailnet: $ce_tailnet)"
         for m in "$CLUSTER_EXTRAS_DIR"/*.yaml; do
-            ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -' < "$m"
+            content=$(cat "$m")
+            printf '%s' "${content//<TAILNET>/$ce_tailnet}" | \
+                ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
         done
     else
         warn "$CLUSTER_EXTRAS_DIR present but namespace 'tailscale' missing (TS Operator was skipped)."
@@ -100,14 +126,7 @@ if [ -d "$CLUSTER_EXTRAS_DIR" ] && compgen -G "$CLUSTER_EXTRAS_DIR/*.yaml" >/dev
 fi
 
 # --- Apply ArgoCD manifests (AppProject, ApplicationSet, master Application) (#1858) ---
-# `<TAILNET>` in the manifests is substituted to the tailnet MagicDNS suffix
-# from the sops bundle so the rendered Ingress hosts end up at the
-# tailnet-correct FQDN.
 if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
-    TAILNET_NAME=""
-    if [ -n "$SECRETS_JSON" ]; then
-        TAILNET_NAME=$(jq -r '.tailscale.tailnet_name // ""' <<<"$SECRETS_JSON")
-    fi
     if [ -z "$TAILNET_NAME" ]; then
         warn "$ARGOCD_DIR present but tailscale.tailnet_name missing from sops bundle."
         warn "Applying with literal <TAILNET> placeholder — Applications will Ingress to broken hosts."
@@ -147,32 +166,55 @@ else
     warn "ArgoCD is installed but no AppProject/ApplicationSet/Application is registered."
 fi
 
-# --- Copy kubeconfig back, rewrite server to tailnet IP ---
+# --- Copy kubeconfig back, rewrite server to tailnet FQDN (#1892) ---
+# Prefer the stable tailnet FQDN (`<host>.<tailnet>.ts.net`) over the host's
+# current tailnet IP: the FQDN survives VM redeploys (Tailscale preserves
+# the hostname via the reusable auth-key in the sops bundle), so the
+# kubeconfig keeps working without re-bootstrap. The FQDN path requires the
+# vcluster apiserver cert to include the FQDN in its SAN list — added via
+# `controlPlane.proxy.extraSANs` in /etc/vcluster/vcluster.yaml by
+# vm-install.sh. Without the SAN we fall back to the legacy IP-rewrite +
+# `tls-server-name: 127.0.0.1` override so the existing path still works
+# until cert regen (manual `make destroy` + `make bootstrap`).
 LAPTOP_KUBECONFIG="$HOME/.kube/inv-vcl01.config"
 note "Copying kubeconfig to $LAPTOP_KUBECONFIG"
 mkdir -p "$HOME/.kube"
 ssh "$VM" 'sudo cat /var/lib/vcluster/kubeconfig.yaml' >"$LAPTOP_KUBECONFIG"
 chmod 600 "$LAPTOP_KUBECONFIG"
 
+# Pull the actual TS hostname from the live tailscaled (not the default in
+# vm-install.sh) so the kubeconfig reflects whatever the VM is currently
+# registered as. `tailscale status --json` is stable across CLI versions.
+TS_HOSTNAME_REMOTE=$(ssh "$VM" 'tailscale status --self=true --peers=false --json 2>/dev/null \
+    | jq -r ".Self.HostName // \"\""' || true)
 TS_IP=$(ssh "$VM" 'tailscale ip -4 2>/dev/null | head -1' || true)
-if [ -n "$TS_IP" ]; then
+
+if [ -n "$TS_HOSTNAME_REMOTE" ] && [ -n "$TAILNET_NAME" ] && [ "$TAILNET_NAME" != "<TAILNET>" ]; then
+    TS_FQDN="${TS_HOSTNAME_REMOTE}.${TAILNET_NAME}.ts.net"
     # macOS sed and GNU sed differ; perl is portable.
+    perl -pi -e "s|https://127\.0\.0\.1:|https://${TS_FQDN}:|g; s|https://localhost:|https://${TS_FQDN}:|g" \
+        "$LAPTOP_KUBECONFIG"
+    # Strip any legacy `tls-server-name: 127.0.0.1` line left by a pre-#1892
+    # bootstrap run. The FQDN-based server matches the cert SAN directly
+    # (assuming extraSANs is in place — vm-install.sh writes it), so no
+    # server-name override is needed.
+    perl -i -ne 'print unless /^\s*tls-server-name:\s*127\.0\.0\.1\s*$/' \
+        "$LAPTOP_KUBECONFIG"
+    note "kubeconfig server rewritten to https://${TS_FQDN}:<port>"
+elif [ -n "$TS_IP" ]; then
+    # Fallback: tailnet_name missing from sops OR hostname unreadable — use
+    # the legacy IP rewrite + tls-server-name override. Same kludge as
+    # pre-#1892 bootstrap.sh; works against any vcluster cert.
+    warn "Falling back to legacy IP-based kubeconfig (no tailnet FQDN available)."
     perl -pi -e "s|https://127\.0\.0\.1:|https://${TS_IP}:|g; s|https://localhost:|https://${TS_IP}:|g" \
         "$LAPTOP_KUBECONFIG"
-
-    # The vcluster kube-apiserver TLS cert is signed for 127.0.0.1, 10.96.0.1,
-    # and the in-cluster API IP — NOT for the tailnet IP. Without tls-server-name,
-    # kubectl from the laptop would fail with "certificate is valid for 127.0.0.1
-    # ..., not <tailnet IP>". Tell kubectl to verify against 127.0.0.1 (a SAN
-    # that IS in the cert) while still dialling the tailnet IP. Idempotent.
     if ! grep -q '^    tls-server-name:' "$LAPTOP_KUBECONFIG"; then
         perl -i -pe '$_ .= "    tls-server-name: 127.0.0.1\n" if /^    server: https:/;' \
             "$LAPTOP_KUBECONFIG"
     fi
-
     note "kubeconfig server rewritten to https://${TS_IP}:<port> (tls-server-name: 127.0.0.1)"
 else
-    warn "Couldn't fetch tailnet IP. kubeconfig still points at 127.0.0.1 —"
+    warn "Couldn't fetch tailnet hostname OR IP. kubeconfig still points at 127.0.0.1 —"
     warn "either ssh-tunnel port 443/6443 or edit the server: field manually."
 fi
 

@@ -1,0 +1,57 @@
+# Tailscale Ingress that exposes the ArgoCD UI as a tailnet service (#1892).
+#
+# Why this exists:
+#   Before this, the only way to reach the ArgoCD UI from a tailnet member
+#   was `kubectl port-forward svc/argocd-server -n argocd 8080:80`, which
+#   requires the kubeconfig (and a chain of TLS overrides — see #1892's
+#   "vcluster kubeconfig" history). This Ingress hands the Tailscale Operator
+#   a hostname (`argocd-inv-vcl01`) to provision a tailnet device for, with a
+#   TS-issued Let's Encrypt cert; tailnet members can then bookmark
+#   `https://argocd-inv-vcl01.<tailnet>.ts.net/` without going through kubectl.
+#
+# Why an Ingress and not a Service-of-type-LoadBalancer:
+#   Same pattern as the per-PR preview Ingresses (helm/inventario chart).
+#   `argocd-server` runs as plain HTTP on :80 internally (we install with
+#   `configs.params.server.insecure=true` in vm-install.sh — ArgoCD's self-cert
+#   would be a second TLS hop the TS proxy would have to insecure-skip);
+#   plaintext-to-the-cluster + TLS-at-the-proxy is the cleanest split.
+#
+# `<TAILNET>` placeholder:
+#   Substituted by bootstrap.sh from tailscale.tailnet_name in the sops bundle
+#   before kubectl apply, identical to how infra/argocd/*.yaml are templated.
+#   The `tailscale.com/hostname` annotation does NOT need the suffix (the TS
+#   operator appends it from its own MagicDNS discovery), but the Ingress
+#   `host:` + `tls.hosts[]` MUST be the full FQDN for routing / cert SAN.
+#
+# Not ArgoCD-managed (intentional):
+#   Putting this Ingress in an Application would have ArgoCD potentially
+#   delete/recreate its own Ingress during a sync — recursive trouble. Static
+#   apply via bootstrap.sh keeps it stable across ArgoCD restarts.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    tailscale.com/hostname: argocd-inv-vcl01
+spec:
+  ingressClassName: tailscale
+  # `secretName: ""` is the documented pattern for TS Operator Ingresses —
+  # the operator issues + manages the cert internally rather than reading
+  # from a kube Secret. Matches the per-PR Ingress pattern in the chart.
+  tls:
+    - hosts:
+        - argocd-inv-vcl01.<TAILNET>.ts.net
+      secretName: ""
+  rules:
+    - host: argocd-inv-vcl01.<TAILNET>.ts.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80

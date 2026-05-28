@@ -154,16 +154,44 @@ else
 fi
 
 # --- vcluster standalone (single-VM = CP + worker, no taint; verified in #1867) ---
-if [ ! -f /etc/vcluster/vcluster.yaml ]; then
-    note "Writing /etc/vcluster/vcluster.yaml (k8s $K8S_VERSION)"
-    mkdir -p /etc/vcluster
-    cat >/etc/vcluster/vcluster.yaml <<EOF
+# Always write the canonical vcluster.yaml so config drift (e.g. adding the
+# tailnet FQDN extraSAN from #1892) lands on every bootstrap, not just the
+# first one. The file is small and deterministic; on re-runs against a
+# running vcluster.service, a content change is fine — the binary re-reads
+# the config on next restart. SANs are baked into the apiserver TLS cert on
+# first generation, so a fresh extraSAN added against an EXISTING cluster
+# does NOT propagate to the live cert until certs are regenerated (manual
+# `make destroy` + `make bootstrap`, or selective cert wipe in
+# /var/lib/vcluster/pki/). For first-time bootstraps (the common path) this
+# is a no-op — the config is written before vcluster ever starts, so the
+# initial cert includes the SAN.
+note "Writing /etc/vcluster/vcluster.yaml (k8s $K8S_VERSION)"
+mkdir -p /etc/vcluster
+
+# proxy.extraSANs adds the host's tailnet FQDN to the apiserver cert SAN
+# list so a kubeconfig with server=https://<host>.<tailnet>.ts.net:8443
+# verifies cleanly — no tls-server-name override, no insecure-skip-tls.
+# Schema: https://github.com/loft-sh/vcluster v0.34 controlPlane.proxy.extraSANs.
+# Without tailscale.tailnet_name in the sops bundle we skip the SAN and
+# fall back to the legacy IP-rewrite path in bootstrap.sh.
+EXTRA_SANS_BLOCK=""
+TAILNET_NAME=$(sops_get "tailscale.tailnet_name")
+if [ -n "${TAILNET_NAME:-}" ]; then
+    EXTRA_SANS_BLOCK="
+  proxy:
+    extraSANs:
+      - ${TS_HOSTNAME}.${TAILNET_NAME}.ts.net"
+else
+    warn "tailscale.tailnet_name missing from sops bundle — apiserver cert won't include tailnet FQDN SAN."
+    warn "bootstrap.sh will fall back to IP-based kubeconfig with tls-server-name override."
+fi
+
+cat >/etc/vcluster/vcluster.yaml <<EOF
 controlPlane:
   distro:
     k8s:
-      version: $K8S_VERSION
+      version: $K8S_VERSION${EXTRA_SANS_BLOCK}
 EOF
-fi
 
 if ! systemctl is-active --quiet vcluster.service; then
     note "Installing vcluster standalone $VCLUSTER_VERSION"
