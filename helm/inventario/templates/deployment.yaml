@@ -50,6 +50,17 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.setupJob.argocdMode }}
+      # Migrate init container — argocdMode only (#1884). Couples the schema
+      # upgrade to the same pod revision that runs the new image so an
+      # in-place ArgoCD sync doesn't leave old-image pods talking to a
+      # newer schema. The setup Job in argocdMode is bootstrap-only and
+      # runs at sync-wave -5, so the migrator DB user already exists when
+      # this container's `inventario db migrate up` runs. Idempotent — the
+      # advisory lock inside ptah serializes concurrent runs across pods.
+      initContainers:
+        {{- include "inventario.migrateInitContainer" . | nindent 8 }}
+      {{- end }}
       containers:
         - name: inventario
           image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}

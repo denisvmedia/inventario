@@ -279,3 +279,156 @@ jobs:
           --set run.all.autoscaling.metrics[0].external.target.type=AverageValue
           --set-string run.all.autoscaling.metrics[0].external.target.averageValue=5
           > /tmp/inventario-hpa-external-render.yaml
+
+      - name: Render chart with setupJob.argocdMode (combined + demo)
+        run: |
+          set -euo pipefail
+
+          # argocdMode rearranges the setup work into three coordinated
+          # resources (#1884 approach A): a bootstrap-only Job at sync-wave
+          # -5, app Deployment(s) with a `migrate` init container at wave 0,
+          # and a post-Deployment init-data Job at sync-wave +5. The render
+          # checks below pin every required annotation, init-container name,
+          # and Job-step move so a future refactor can't silently break the
+          # ordering that the in-place ArgoCD upgrade story depends on.
+          helm template inventario helm/inventario \
+            --set demo.postgresql.enabled=true \
+            --set demo.redis.enabled=true \
+            --set demo.minio.enabled=true \
+            --set setupJob.argocdMode=true \
+            --set setupJob.initData.seedDatabase=true \
+            --set setupJob.initData.adminPassword=demo-secret \
+            > /tmp/inventario-argocd-combined-render.yaml
+
+          # Setup Job:
+          # - declares sync-wave "-5" (runs before the app Deployment)
+          # - keeps the bootstrap init container
+          # - drops the migrate + init-data steps (they live elsewhere now)
+          setup_job_block="$(awk '
+            /^# Source: inventario\/templates\/job-setup.yaml/ { in_block=1 }
+            in_block { print }
+            in_block && /^# Source: / && !/job-setup\.yaml/ { exit }
+          ' /tmp/inventario-argocd-combined-render.yaml)"
+
+          echo "$setup_job_block" | grep -Eq '"argocd.argoproj.io/sync-wave": "-5"' \
+            || { echo "setup Job missing sync-wave -5" >&2; echo "$setup_job_block" >&2; exit 1; }
+          echo "$setup_job_block" | grep -Eq '"argocd.argoproj.io/sync-options": "Force=true,Replace=true"' \
+            || { echo "setup Job missing Force=true,Replace=true" >&2; exit 1; }
+          # `--` separates options from the pattern so the leading `-`
+          # in `- name: ...` isn't probed as a flag (matters for BSD grep
+          # / ugrep; GNU grep on ubuntu-latest tolerates it but the
+          # portability win is free).
+          echo "$setup_job_block" | grep -Eq -- '- name: bootstrap' \
+            || { echo "setup Job missing bootstrap init container" >&2; exit 1; }
+          if echo "$setup_job_block" | grep -Eq -- '- name: migrate'; then
+            echo "setup Job must not contain a migrate init container in argocdMode" >&2
+            exit 1
+          fi
+          if echo "$setup_job_block" | grep -Eq -- '- name: init-data'; then
+            echo "setup Job must not contain an init-data init container in argocdMode" >&2
+            exit 1
+          fi
+
+          # App Deployment: must carry the `migrate` init container.
+          deployment_block="$(awk '
+            /^# Source: inventario\/templates\/deployment.yaml/ { in_block=1 }
+            in_block { print }
+            in_block && /^# Source: / && !/templates\/deployment\.yaml/ { exit }
+          ' /tmp/inventario-argocd-combined-render.yaml)"
+
+          echo "$deployment_block" | grep -Eq '^      initContainers:' \
+            || { echo "combined Deployment missing initContainers block" >&2; exit 1; }
+          echo "$deployment_block" | grep -Eq -- '- name: migrate' \
+            || { echo "combined Deployment missing migrate init container" >&2; exit 1; }
+          echo "$deployment_block" | grep -Eq 'inventario db migrate up' \
+            || { echo "combined Deployment migrate container missing migrate-up command" >&2; exit 1; }
+
+          # init-data Job: separate template, sync-wave +5, hosts init-data.
+          init_data_block="$(awk '
+            /^# Source: inventario\/templates\/job-init-data.yaml/ { in_block=1 }
+            in_block { print }
+            in_block && /^# Source: / && !/job-init-data\.yaml/ { exit }
+          ' /tmp/inventario-argocd-combined-render.yaml)"
+
+          test -n "$init_data_block" \
+            || { echo "argocdMode render is missing the init-data Job" >&2; exit 1; }
+          echo "$init_data_block" | grep -Eq '"argocd.argoproj.io/sync-wave": "5"' \
+            || { echo "init-data Job missing sync-wave 5" >&2; exit 1; }
+          echo "$init_data_block" | grep -Eq -- '- name: init-data' \
+            || { echo "init-data Job missing init-data init container" >&2; exit 1; }
+
+      - name: Render chart with setupJob.argocdMode (split + external services)
+        run: |
+          set -euo pipefail
+
+          # Split-mode parity: every Deployment (apiserver + each worker
+          # group) must include the migrate init container in argocdMode,
+          # since they all go through verifySchemaMatchesBinary at startup.
+          helm template inventario helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.argocdMode=true \
+            --set setupJob.initData.adminPassword=test \
+            --set run.all.enabled=false \
+            --set run.apiserver.enabled=true \
+            --set run.workers.archive.enabled=true \
+            --set run.workers.emails.enabled=true \
+            --set run.workers.housekeeping.enabled=true \
+            --set run.workers.media.enabled=true \
+            > /tmp/inventario-argocd-split-render.yaml
+
+          # Every Deployment must contain a migrate init container.
+          deployment_count="$(grep -c '^kind: Deployment$' /tmp/inventario-argocd-split-render.yaml)"
+          migrate_count="$(grep -c '^        - name: migrate$' /tmp/inventario-argocd-split-render.yaml)"
+          if [ "$deployment_count" -ne "$migrate_count" ]; then
+            echo "Expected migrate init container in every Deployment: ${deployment_count} Deployments, ${migrate_count} migrate containers." >&2
+            grep -nE '^kind: Deployment|^        - name: migrate' /tmp/inventario-argocd-split-render.yaml >&2 || true
+            exit 1
+          fi
+
+      - name: Render chart with setupJob.argocdMode=false (regression check)
+        run: |
+          set -euo pipefail
+
+          # Non-argocdMode must keep the legacy behavior: single setup Job
+          # with bootstrap + migrate + init-data, no migrate init container
+          # on the Deployment, no separate init-data Job.
+          helm template inventario helm/inventario \
+            --set demo.postgresql.enabled=true \
+            --set demo.redis.enabled=true \
+            --set demo.minio.enabled=true \
+            --set setupJob.initData.adminPassword=demo-secret \
+            > /tmp/inventario-non-argocd-render.yaml
+
+          if grep -q 'templates/job-init-data.yaml' /tmp/inventario-non-argocd-render.yaml; then
+            echo "Non-argocdMode must not render the init-data Job." >&2
+            exit 1
+          fi
+
+          # The combined Deployment must NOT have a migrate init container
+          # outside argocdMode (it would re-run migrate on every pod restart
+          # for `helm install` consumers that already get it via the Helm
+          # hook).
+          deployment_block="$(awk '
+            /^# Source: inventario\/templates\/deployment.yaml/ { in_block=1 }
+            in_block { print }
+            in_block && /^# Source: / && !/templates\/deployment\.yaml/ { exit }
+          ' /tmp/inventario-non-argocd-render.yaml)"
+
+          if echo "$deployment_block" | grep -Eq -- '- name: migrate'; then
+            echo "Non-argocdMode Deployment must not carry a migrate init container." >&2
+            exit 1
+          fi
+
+          # The setup Job in non-argocdMode keeps the legacy three-step shape.
+          setup_job_block="$(awk '
+            /^# Source: inventario\/templates\/job-setup.yaml/ { in_block=1 }
+            in_block { print }
+            in_block && /^# Source: / && !/job-setup\.yaml/ { exit }
+          ' /tmp/inventario-non-argocd-render.yaml)"
+
+          for step in bootstrap migrate init-data; do
+            echo "$setup_job_block" | grep -Eq -- "- name: ${step}" \
+              || { echo "Non-argocdMode setup Job missing ${step} init container" >&2; exit 1; }
+          done

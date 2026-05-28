@@ -305,6 +305,74 @@ whichever Deployment (all or apiserver) is currently enabled.
 {{- end -}}
 {{- end -}}
 
+{{/*
+Migration init container, used by the app Deployment(s) in argocdMode so the
+schema is brought up to date by the same pod revision that runs the new image
+(approach A from #1884). Runs `inventario db migrate up` with MIGRATOR_DB_DSN
+(falling back to INVENTARIO_DB_DSN); identical retry-loop semantics to the
+setup Job's migrate step. Idempotent — re-runs on every pod start, no-ops
+when schema is already at the embedded max version.
+
+The container's name is hard-coded `migrate` so callers don't pick the wrong
+name; rolling-update / advisory-lock semantics make concurrent runs safe
+across replicas.
+
+Usage:
+  {{ include "inventario.migrateInitContainer" . | nindent 8 }}
+The caller is expected to render this list item under `initContainers:`.
+*/}}
+{{- define "inventario.migrateInitContainer" -}}
+{{- $secretName := include "inventario.secretName" . -}}
+{{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
+- name: migrate
+  image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
+  imagePullPolicy: {{ .Values.image.pullPolicy }}
+  command: ["sh", "-c"]
+  args:
+    - |
+      set -eu
+      export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
+      i=1
+      while [ "$i" -le 15 ]; do
+        if inventario db migrate up; then
+          echo "Schema migrations completed successfully"
+          exit 0
+        fi
+        echo "Migration attempt $i failed, retrying in 2 seconds..."
+        i=$((i + 1))
+        sleep 2
+      done
+      echo "Schema migrations failed after 15 attempts"
+      exit 1
+  env:
+    - name: APP_DB_DSN
+      {{- if .Values.demo.postgresql.enabled }}
+      value: {{ include "inventario.dbDsn" . | quote }}
+      {{- else }}
+      valueFrom:
+        secretKeyRef:
+          name: {{ $secretName }}
+          key: INVENTARIO_DB_DSN
+      {{- end }}
+    - name: MIGRATOR_DB_DSN
+      {{- if .Values.demo.postgresql.enabled }}
+      value: {{ include "inventario.migratorDsn" . | quote }}
+      {{- else }}
+      valueFrom:
+        secretKeyRef:
+          name: {{ $secretName }}
+          key: MIGRATOR_DB_DSN
+          optional: true
+      {{- end }}
+  {{- with .Values.containerSecurityContext }}
+  securityContext:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+{{- end -}}
+
 {{- define "inventario.uploadLocation" -}}
 {{- if .Values.demo.minio.enabled -}}
 {{- printf "s3://%s?prefix=%s&region=us-east-1&endpoint=%s&s3ForcePathStyle=true" .Values.demo.minio.bucket .Values.demo.minio.prefix (include "inventario.minioEndpointUrl" .) -}}

@@ -168,6 +168,47 @@ helm upgrade --install inventario ./helm/inventario \
   --set-string secrets.existingSecret='inventario-runtime'
 ```
 
+## ArgoCD-managed migrations
+
+When the chart is deployed via ArgoCD (rather than `helm install` directly), Helm hooks don't map cleanly to ArgoCD's PreSync / Sync / PostSync phases — a `pre-install` hook fires before the Postgres demo Deployment exists, and a `post-install` hook fires only after the main app Deployment is Healthy (which can't happen if the schema isn't migrated yet). Setting `setupJob.argocdMode=true` switches the chart to an ArgoCD-native layout that supports in-place upgrades across new migrations.
+
+### Sync-wave layout
+
+| Wave | Resource | Step |
+| --- | --- | --- |
+| `-5` | `<release>-setup` Job | Bootstrap only — creates the `inventario_migrator` DB role. Carries `argocd.argoproj.io/sync-options: Force=true,Replace=true` so each sync delete-then-creates the immutable Job pod. |
+| `0` (default) | App `Deployment` (combined and/or apiserver + workers) | Adds a `migrate` init container that runs `inventario db migrate up` against `MIGRATOR_DB_DSN`. Migrations are pinned to the same image revision that runs the new pod. |
+| `+5` | `<release>-init-data` Job | Runs `inventario db migrate data` (idempotent default-tenant + admin) and, when `setupJob.initData.seedDatabase=true`, seeds demo data via a temporary in-Job `inventario run` server. |
+
+This is approach **A** from #1884: schema upgrades are coupled to the Deployment revision, so an in-place ArgoCD sync never leaves old-image pods talking to a newer schema for longer than the rolling-update window.
+
+### What this fixes
+
+- **No standalone migration window.** In the previous argocdMode (single Job at wave 0 alongside everything else), a re-sync with new migrations would re-create the Job with the new image and apply the migration while old-image app pods were still serving. Now the migration runs as part of starting a new-image pod; the surge replica brings up the new schema, then the rolling-update terminates one old pod at a time.
+- **No `Replace=true` label collisions for the migrate step.** ArgoCD's `Replace=true` performs a `kubectl replace` on the Job, which delete-then-creates the resource. Moving migrations off the Job removes the label-collision flake observed during local testing — the bootstrap Job that remains at wave -5 only ever runs short, idempotent role-creation.
+- **Cleaner failure mode.** A bad migration now fails the new pod's init container, the surge replica never becomes Ready, the Deployment rollout stalls at `progressDeadlineSeconds`, and the old pods keep serving. ArgoCD reports `Degraded`; the operator can roll the image tag back without manual schema intervention.
+
+### Caveats
+
+- **Migrations must be backward-compatible.** During the rolling update there is a window where old-image pods serve traffic against the newly migrated schema. This is the same expand-contract rule every rolling-update operator follows; the chart cannot enforce it. Plan multi-step renames / column drops over multiple releases.
+- **Idempotent per-pod cost.** Every new app pod re-runs `inventario db migrate up`. The ptah migrator returns immediately when `schema_migrations.version` already equals the embedded max, so the steady-state cost is a single round-trip to Postgres per pod start.
+- **External Postgres still requires bootstrap.** With `demo.postgresql.enabled=false`, the bootstrap Job at wave -5 connects to the external Postgres using `setupJob.bootstrap.superuserDsn` (or the `SETUP_SUPERUSER_DSN` key in `secrets.existingSecret`). If your platform creates DB roles out-of-band, set `setupJob.bootstrap.enabled=false` — the chart will skip the bootstrap container; the operator is responsible for ensuring `inventario_migrator` exists before the Deployment starts.
+
+### Enabling
+
+```yaml
+setupJob:
+  argocdMode: true
+  initData:
+    adminPassword: "<set-via-overlay-or-existingSecret>"
+```
+
+The shared preview overlay `infra/helm-overlays/preview-base.values.yaml` already sets `setupJob.argocdMode=true` for both the per-PR preview Applications and the static master Application.
+
+### When to leave it off
+
+For direct `helm install` / `helm upgrade --install` workflows, keep `setupJob.argocdMode=false` (the default). The existing setup Job runs as a Helm hook in the usual way — bootstrap → migrate → init-data sequentially in a single pod — which is the simpler story when Helm is the deployment engine.
+
 ## Important values reference
 
 For the complete default surface, see `helm/inventario/values.yaml`.
@@ -200,6 +241,7 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `secrets.migratorDbDsn` | `""` | Set when schema migrations need a different DB user than the app runtime. |
 | `secrets.jwtSecret` | `""` | Required unless supplied through `secrets.existingSecret`. |
 | `secrets.fileSigningKey` | `""` | Required unless supplied through `secrets.existingSecret`. |
+| `setupJob.argocdMode` | `false` | Enable for ArgoCD-managed installs to use the sync-wave layout that supports in-place upgrades with new migrations. See [ArgoCD-managed migrations](#argocd-managed-migrations). |
 | `setupJob.bootstrap.enabled` | `true` | Disable if DB bootstrap/role management is handled outside Helm. |
 | `setupJob.bootstrap.superuserDsn` | `""` | Provide when bootstrap needs elevated DB privileges. |
 | `setupJob.initData.adminEmail` | `admin@example.com` | Set the initial admin login name. |

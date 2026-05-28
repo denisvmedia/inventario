@@ -523,20 +523,32 @@ setupJob:
   # require Healthy main resources, deadlocking with schema-dependent apps).
   hookOverride: ""
 
-  # ArgoCD-native mode for the setup Job. When true:
-  #   - the `helm.sh/hook` annotation is dropped entirely (Job is no longer
-  #     a Helm hook, just a regular Sync-phase resource);
-  #   - `argocd.argoproj.io/sync-options: Force=true,Replace=true` is added
-  #     so ArgoCD replaces (delete-then-create) the immutable Job on each
-  #     sync rather than failing the apply.
-  # The Job runs in the default sync-wave alongside ServiceAccount/Secret/
-  # ConfigMap/Postgres/Deployment. Its own pg_isready loop in the bootstrap
-  # init container handles waiting for Postgres; the main Deployment pod
-  # CrashLoops on the schema-version guard until the Job has migrated.
+  # ArgoCD-native mode (#1884 approach A — in-place upgrades safe across
+  # new migrations). When true:
+  #   - the `helm.sh/hook` annotation is dropped (Job is a regular
+  #     Sync-phase resource);
+  #   - the setup Job (templates/job-setup.yaml) becomes BOOTSTRAP-ONLY
+  #     and runs at sync-wave -5, before the app Deployment;
+  #   - schema migrations run from a `migrate` init container injected
+  #     into every app Deployment (combined / apiserver / workers) at
+  #     wave 0, coupling the schema upgrade to the same image revision
+  #     the new pods are running — no old-image-vs-new-schema window;
+  #   - data migrations + optional seed move to a separate init-data
+  #     Job (templates/job-init-data.yaml) at sync-wave +5, which only
+  #     runs after the Deployment is Healthy;
+  #   - all Jobs carry `argocd.argoproj.io/sync-options:
+  #     Force=true,Replace=true` so ArgoCD delete-then-creates the
+  #     immutable Job objects on each sync.
+  #
+  # Migrations must remain backward-compatible with the previously
+  # deployed image — during the rolling update there is a brief window
+  # where old pods serve traffic against the newly migrated schema
+  # (typical expand-contract requirement; not unique to this chart).
   #
   # This is the right setting for any ArgoCD-managed install; the only
   # reason it's not the default is to keep the chart drop-in compatible
   # with non-ArgoCD `helm install` flows that expect post-install hooks.
+  # See helm/inventario/README.md → "ArgoCD-managed migrations".
   argocdMode: false
 
   bootstrap:

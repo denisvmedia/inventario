@@ -1,0 +1,278 @@
+name: Helm Kind Smoke Test
+
+# Chart-level smoke for the argocdMode upgrade path (#1884). Helm-direct
+# install (no ArgoCD): the chart's sync-wave annotations are ignored, but
+# the retry logic in the bootstrap Job / migrate init container / init-data
+# Job tolerates the unordered apply. The smoke validates:
+#   - the bootstrap Job (wave -5 in argocdMode) successfully creates the
+#     migrator DB user against demo postgres,
+#   - the app Deployment's `migrate` init container (#1884) runs
+#     `inventario db migrate up` against the demo schema and the main
+#     container then comes Ready,
+#   - the init-data Job (wave +5 in argocdMode) creates the default tenant
+#     + admin and (with seedDatabase=true) seeds demo data,
+#   - a second `helm upgrade --install` (no-op re-sync) re-runs the Jobs
+#     idempotently and the Deployment stays Ready.
+#
+# A real ArgoCD-managed e2e (Application targeting the chart at HEAD,
+# verifying actual sync-wave ordering across an image bump) is a separate
+# follow-up — it needs a tailnet-resolved Application destination that CI
+# doesn't have.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'Dockerfile'
+      - 'go/**'
+      - 'helm/**'
+      - '.github/workflows/helm-kind-smoke-test.yml'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'go/**'
+      - 'helm/**'
+      - '.github/workflows/helm-kind-smoke-test.yml'
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  resolve-build:
+    name: Resolve build artifacts
+    uses: ./.github/workflows/_wait-for-docker-image.yml
+
+  helm-kind-smoke-test:
+    name: Helm chart kind smoke (argocdMode)
+    runs-on: ubuntu-latest
+    needs: resolve-build
+    timeout-minutes: 30
+
+    env:
+      KIND_CLUSTER_NAME: inventario-helm-ci
+      K8S_NAMESPACE: inventario-helm
+      RELEASE_NAME: inv
+      INVENTARIO_IMAGE: ${{ needs.resolve-build.outputs.image }}
+      ADMIN_PASSWORD: SmokeAdmin123
+      ARTIFACTS_DIR: artifacts
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v5
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+
+      - name: Install kind
+        run: |
+          set -euo pipefail
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          curl -fsSL -o "$tmpdir/kind-linux-amd64" https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
+          curl -fsSL -o "$tmpdir/kind.sha256sum" https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64.sha256sum
+          (cd "$tmpdir" && sha256sum --check kind.sha256sum)
+          sudo install -m 0755 "$tmpdir/kind-linux-amd64" /usr/local/bin/kind
+          kind version
+
+      - name: Prepare artifacts directory
+        run: mkdir -p "$ARTIFACTS_DIR"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull image
+        run: docker pull "$INVENTARIO_IMAGE"
+
+      - name: Create kind cluster
+        run: |
+          set -euo pipefail
+          kind create cluster --name "$KIND_CLUSTER_NAME" --wait 120s
+          kubectl cluster-info
+
+      - name: Load image into kind
+        run: kind load docker-image "$INVENTARIO_IMAGE" --name "$KIND_CLUSTER_NAME"
+
+      - name: Resolve image tag
+        id: image-tag
+        run: |
+          # The chart values take repo + tag separately. Split the fully
+          # qualified reference we just loaded so image.tag matches the
+          # sha-<7> that the loaded image actually carries.
+          tag="${INVENTARIO_IMAGE##*:}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Install chart (argocdMode + demo)
+        run: |
+          set -euo pipefail
+          helm upgrade --install "$RELEASE_NAME" helm/inventario \
+            --namespace "$K8S_NAMESPACE" \
+            --create-namespace \
+            --set-string image.tag="${{ steps.image-tag.outputs.tag }}" \
+            --set demo.postgresql.enabled=true \
+            --set demo.redis.enabled=true \
+            --set demo.minio.enabled=true \
+            --set setupJob.argocdMode=true \
+            --set setupJob.initData.seedDatabase=true \
+            --set-string setupJob.initData.adminPassword="$ADMIN_PASSWORD" \
+            --wait --wait-for-jobs --timeout 8m
+
+      - name: Verify resource shape (argocdMode)
+        run: |
+          set -euo pipefail
+
+          # Bootstrap-only setup Job — only the bootstrap init container.
+          setup_init="$(kubectl get job "${RELEASE_NAME}-inventario-setup" \
+            -n "$K8S_NAMESPACE" \
+            -o jsonpath='{range .spec.template.spec.initContainers[*]}{.name}{"\n"}{end}')"
+          echo "setup Job init containers:"
+          echo "$setup_init"
+          [ "$setup_init" = "bootstrap" ] || {
+            echo "Setup Job init containers must be exactly [bootstrap] in argocdMode" >&2
+            exit 1
+          }
+
+          # Init-data Job is a separate resource in argocdMode.
+          init_data_init="$(kubectl get job "${RELEASE_NAME}-inventario-init-data" \
+            -n "$K8S_NAMESPACE" \
+            -o jsonpath='{range .spec.template.spec.initContainers[*]}{.name}{"\n"}{end}')"
+          echo "init-data Job init containers:"
+          echo "$init_data_init"
+          [ "$init_data_init" = "init-data" ] || {
+            echo "init-data Job init containers must be exactly [init-data]" >&2
+            exit 1
+          }
+
+          # App Deployment must carry the migrate init container.
+          app_init="$(kubectl get deployment "${RELEASE_NAME}-inventario" \
+            -n "$K8S_NAMESPACE" \
+            -o jsonpath='{range .spec.template.spec.initContainers[*]}{.name}{"\n"}{end}')"
+          echo "app Deployment init containers:"
+          echo "$app_init"
+          [ "$app_init" = "migrate" ] || {
+            echo "App Deployment must have exactly the [migrate] init container in argocdMode" >&2
+            exit 1
+          }
+
+      - name: Verify migration applied
+        run: |
+          set -euo pipefail
+
+          # Confirm the demo schema was actually migrated by the
+          # Deployment's migrate init container. schema_migrations is
+          # ptah's bookkeeping table — its row count proves migrate-up ran.
+          pg_pod="$(kubectl get pod -n "$K8S_NAMESPACE" \
+            -l app.kubernetes.io/component=demo-postgresql \
+            -o jsonpath='{.items[0].metadata.name}')"
+
+          count="$(kubectl exec -n "$K8S_NAMESPACE" "$pg_pod" -- \
+            psql -U inventario -d inventario -At \
+            -c "SELECT count(*) FROM schema_migrations")"
+          echo "schema_migrations row count: $count"
+          [ "$count" -gt 0 ] || {
+            echo "schema_migrations is empty — migrate-up did not run" >&2
+            exit 1
+          }
+
+          # Confirm init-data ran (default tenant exists, admin user
+          # exists).
+          tenants="$(kubectl exec -n "$K8S_NAMESPACE" "$pg_pod" -- \
+            psql -U inventario -d inventario -At \
+            -c "SELECT count(*) FROM tenants")"
+          echo "tenants row count: $tenants"
+          [ "$tenants" -gt 0 ] || {
+            echo "tenants table is empty — init-data did not run" >&2
+            exit 1
+          }
+
+          users="$(kubectl exec -n "$K8S_NAMESPACE" "$pg_pod" -- \
+            psql -U inventario -d inventario -At \
+            -c "SELECT count(*) FROM users WHERE email = 'admin@example.com'")"
+          echo "admin user count: $users"
+          [ "$users" -eq 1 ] || {
+            echo "admin user not created by init-data" >&2
+            exit 1
+          }
+
+      - name: Smoke API
+        run: |
+          set -euo pipefail
+          # Port-forward in the background and curl /readyz.
+          kubectl port-forward -n "$K8S_NAMESPACE" \
+            "svc/${RELEASE_NAME}-inventario" 3333:3333 \
+            > "$ARTIFACTS_DIR/port-forward.log" 2>&1 &
+          PF_PID=$!
+          trap 'kill "$PF_PID" 2>/dev/null || true' EXIT
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3333/readyz > /dev/null; then
+              echo "Inventario is ready"
+              break
+            fi
+            if ! kill -0 "$PF_PID" 2>/dev/null; then
+              echo "port-forward exited unexpectedly" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+          curl -fsS http://127.0.0.1:3333/readyz | tee "$ARTIFACTS_DIR/readyz.json"
+          curl -fsS http://127.0.0.1:3333/healthz | tee "$ARTIFACTS_DIR/healthz.json"
+
+      - name: Re-sync (no-op helm upgrade)
+        run: |
+          set -euo pipefail
+          # Second `helm upgrade --install` with identical values simulates
+          # an ArgoCD re-sync against the same image. Helm's --wait makes
+          # the test fail if the new Job pods or the rolled Deployment
+          # don't reach Ready.
+          helm upgrade --install "$RELEASE_NAME" helm/inventario \
+            --namespace "$K8S_NAMESPACE" \
+            --set-string image.tag="${{ steps.image-tag.outputs.tag }}" \
+            --set demo.postgresql.enabled=true \
+            --set demo.redis.enabled=true \
+            --set demo.minio.enabled=true \
+            --set setupJob.argocdMode=true \
+            --set setupJob.initData.seedDatabase=true \
+            --set-string setupJob.initData.adminPassword="$ADMIN_PASSWORD" \
+            --wait --wait-for-jobs --timeout 8m
+
+      - name: Collect diagnostics on failure
+        if: failure()
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARTIFACTS_DIR"
+
+          kubectl get all,jobs,pvc,svc,endpoints -n "$K8S_NAMESPACE" -o wide > "$ARTIFACTS_DIR/kubectl-get.txt" 2>&1 || true
+          kubectl get events -n "$K8S_NAMESPACE" --sort-by=.metadata.creationTimestamp > "$ARTIFACTS_DIR/events.txt" 2>&1 || true
+          kubectl describe pods,jobs,deployments -n "$K8S_NAMESPACE" > "$ARTIFACTS_DIR/describe.txt" 2>&1 || true
+
+          for pod in $(kubectl get pods -n "$K8S_NAMESPACE" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
+            kubectl logs "$pod" -n "$K8S_NAMESPACE" --all-containers=true --prefix > "$ARTIFACTS_DIR/${pod}.log" 2>&1 || true
+          done
+
+          kind export logs --name "$KIND_CLUSTER_NAME" "$ARTIFACTS_DIR/kind-logs" > "$ARTIFACTS_DIR/kind-export.log" 2>&1 || true
+
+      - name: Upload diagnostics artifact
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: helm-kind-smoke-diagnostics
+          path: artifacts/
+          retention-days: 14
+
+      - name: Tear down
+        if: always()
+        run: kind delete cluster --name "$KIND_CLUSTER_NAME" || true
