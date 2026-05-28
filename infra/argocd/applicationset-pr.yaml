@@ -83,7 +83,6 @@ spec:
                 tls:
                   - hosts:
                       - 'inv-vcl01-pr{{.number}}.<TAILNET>.ts.net'
-                    secretName: ""
         - repoURL: https://github.com/denisvmedia/inventario
           targetRevision: '{{.head_sha}}'
           ref: values

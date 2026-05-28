@@ -32,11 +32,13 @@ spec:
   {{- with .Values.ingress.tls }}
   tls:
     {{- range . }}
-    - secretName: {{ .secretName }}
-      hosts:
+    - hosts:
         {{- range .hosts }}
         - {{ . | quote }}
         {{- end }}
+      {{- with .secretName }}
+      secretName: {{ . | quote }}
+      {{- end }}
     {{- end }}
   {{- end }}
 {{- end }}
