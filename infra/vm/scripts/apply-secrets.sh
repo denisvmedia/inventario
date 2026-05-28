@@ -54,12 +54,22 @@ remote_apply() {
 # (infra/argocd/applicationset-pr.yaml) sets a well-known dev password
 # inline. See infra/SECRETS.md §4 for the master/PR split.
 ADMIN_PASSWORD=$(lookup "admin.password")
-if [ -n "$ADMIN_PASSWORD" ]; then
-    note "Applying inv-vcl01-master/inventario-admin"
-    # Emit value as a YAML block scalar so passwords with special chars
-    # (':', '{', '#', newlines) don't break manifest parsing or open an
-    # injection path. Same pattern as the github private key block below.
-    cat <<EOF | remote_apply
+# Unlike the GH App / Tailscale sections below (which legitimately tolerate a
+# Phase-1 bundle without those credentials), admin.password is a hard
+# requirement: the master ApplicationSet hard-codes
+# `secrets.existingSecret: inventario-admin`, so a missing field here
+# silently breaks the master sync — the setup Job fails with
+# "secret not found" and master never reaches Healthy. Fail fast instead of
+# leaving the operator to debug it from kubectl logs.
+if [ -z "$ADMIN_PASSWORD" ]; then
+    warn "admin.password missing in secrets bundle; required by master ApplicationSet via secrets.existingSecret"
+    exit 1
+fi
+note "Applying inv-vcl01-master/inventario-admin"
+# Emit value as a YAML block scalar so passwords with special chars
+# (':', '{', '#', newlines) don't break manifest parsing or open an
+# injection path. Same pattern as the github private key block below.
+cat <<EOF | remote_apply
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -75,9 +85,6 @@ stringData:
   SETUP_ADMIN_PASSWORD: |-
 $(printf '%s' "$ADMIN_PASSWORD" | sed 's/^/    /')
 EOF
-else
-    warn "admin.password missing in secrets; skipping inv-vcl01-master/inventario-admin"
-fi
 
 # --- argocd / github-app-creds (repo-creds + ApplicationSet PR-generator) ---
 GH_APP_ID=$(lookup "github.app_id")
