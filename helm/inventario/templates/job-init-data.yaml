@@ -1,64 +1,48 @@
-{{- if .Values.setupJob.enabled }}
+{{- /*
+Separate init-data Job for argocdMode (#1884). Runs at sync-wave +5, i.e.
+AFTER the app Deployment is Healthy and the schema has been migrated by
+the Deployment's `migrate` init container. Creates the default tenant /
+admin user (idempotent) and optionally seeds demo data via a temporary
+`inventario run` server.
+
+This intentionally lives in a separate template from job-setup.yaml so the
+two argocdMode Jobs (bootstrap-only at wave -5, init-data at wave +5)
+stay readable. The non-argocdMode path keeps everything in the existing
+setup Job (templates/job-setup.yaml) — see that file for the Helm-hook
+ordering it relies on.
+*/}}
+{{- if and .Values.setupJob.enabled .Values.setupJob.argocdMode }}
 {{- $fullName := include "inventario.fullname" . -}}
 {{- $secretName := include "inventario.secretName" . -}}
 {{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
 {{- $redisUrl := include "inventario.redisUrl" . -}}
-{{- $setupHook := .Values.setupJob.hookOverride | default (ternary "post-install,pre-upgrade" "pre-install,pre-upgrade" .Values.demo.postgresql.enabled) -}}
 {{- $usePersistentUploads := and .Values.persistence.enabled (hasPrefix "file://" (include "inventario.uploadLocation" .)) -}}
+{{- $jobName := printf "%s-init-data" $fullName | trunc 63 | trimSuffix "-" -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ $fullName }}-setup
+  name: {{ $jobName }}
   labels:
     {{- include "inventario.labels" . | nindent 4 }}
-    app.kubernetes.io/component: setup
+    app.kubernetes.io/component: init-data
   annotations:
-    {{- if .Values.setupJob.argocdMode }}
-    # ArgoCD-native ordering for in-place upgrades (#1884). Approach A:
-    # this Job is now BOOTSTRAP-ONLY and runs at sync-wave -5 so the
-    # migrator DB user exists before the app Deployment's `migrate` init
-    # container needs it at wave 0. Schema migrations AND data migrations
-    # both moved out of this Job:
-    #   - schema migrations → app Deployment(s)' `migrate` init container
-    #     (templates/_helpers.tpl: inventario.migrateInitContainer). Pin
-    #     migrations to the same image revision that runs the new pod,
-    #     eliminating the old-image / new-schema window.
-    #   - data migrations + optional seed → separate init-data Job at
-    #     sync-wave +5 (templates/job-init-data.yaml), runs after the
-    #     Deployment is Healthy and the schema is up to date.
-    # Force=true,Replace=true is still required because Jobs are immutable
-    # in K8s and need delete-then-create on each sync (new image revision
-    # produces a new Job pod that re-runs idempotent bootstrap).
-    "argocd.argoproj.io/sync-wave": "-5"
+    # ArgoCD post-Deployment Job (#1884). Runs after the app Deployment is
+    # Healthy (which only happens once its `migrate` init container brings
+    # the schema up to date). This Job then calls `inventario db migrate
+    # data` to ensure the default tenant / admin row exists, and on a fresh
+    # install also seeds demo data via a temporary in-Job `inventario run`
+    # server. Idempotent — admin/tenant rows are created with IF NOT
+    # EXISTS semantics and the seed step honors SETUP_SKIP_SEED_ON_UPGRADE.
+    # Replace=true delete-then-creates the immutable Job on each sync.
+    "argocd.argoproj.io/sync-wave": "5"
     "argocd.argoproj.io/sync-options": "Force=true,Replace=true"
-    {{- else }}
-    # Default: helm install / upgrade hooks. Behaves as before for non-
-    # ArgoCD consumers (the operator runs `helm` directly).
-    "helm.sh/hook": {{ $setupHook | quote }}
-    "helm.sh/hook-weight": "0"
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-failed
-    {{- end }}
 spec:
   backoffLimit: 3
-  {{- if not .Values.setupJob.argocdMode }}
-  # Auto-delete the Job 24h after it completes — keeps `kubectl get jobs`
-  # clean for `helm install` consumers where the Job is a one-shot hook.
-  #
-  # Intentionally OMITTED in argocdMode: when ArgoCD's selfHeal=true sees
-  # the Job missing (after TTL GC) but present in git, it recreates the
-  # resource and migrations re-run every ~24h. Migrations are idempotent
-  # so this is harmless but noisy. Keeping the Completed Job in place
-  # means selfHeal sees no drift and only re-applies when an actual sync
-  # is triggered (new commit, manual sync). Old Jobs are pruned naturally
-  # whenever a new commit lands and ArgoCD's Replace=true delete-then-
-  # creates them.
-  ttlSecondsAfterFinished: 86400
-  {{- end }}
   template:
     metadata:
       labels:
         {{- include "inventario.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: setup
+        app.kubernetes.io/component: init-data
     spec:
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
@@ -70,118 +54,7 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- /* Don't emit `initContainers:` with no entries — happens when
-             argocdMode=true AND bootstrap.enabled=false. An empty key is
-             rejected by the k8s API. */}}
-      {{- if or .Values.setupJob.bootstrap.enabled (not .Values.setupJob.argocdMode) }}
       initContainers:
-        {{- if .Values.setupJob.bootstrap.enabled }}
-        - name: bootstrap
-          image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["sh", "-c"]
-          args:
-            - |
-              set -eu
-              if [ -n "${SETUP_SUPERUSER_DSN:-}" ]; then
-                export INVENTARIO_DB_DSN="$SETUP_SUPERUSER_DSN"
-              fi
-              i=1
-              while [ "$i" -le 30 ]; do
-                if inventario db bootstrap apply \
-                  --username="$INVENTARIO_BOOTSTRAP_USERNAME" \
-                  --username-for-migrations="$INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS"; then
-                  echo "Bootstrap migrations completed successfully"
-                  exit 0
-                fi
-                echo "Bootstrap attempt $i failed, retrying in 3 seconds..."
-                i=$((i + 1))
-                sleep 3
-              done
-              echo "Bootstrap failed after 30 attempts"
-              exit 1
-          env:
-            - name: INVENTARIO_DB_DSN
-              {{- if .Values.demo.postgresql.enabled }}
-              value: {{ include "inventario.dbDsn" . | quote }}
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $secretName }}
-                  key: INVENTARIO_DB_DSN
-              {{- end }}
-            - name: SETUP_SUPERUSER_DSN
-              {{- if .Values.demo.postgresql.enabled }}
-              value: {{ include "inventario.superuserDsn" . | quote }}
-              {{- else if .Values.setupJob.bootstrap.superuserDsn }}
-              value: {{ .Values.setupJob.bootstrap.superuserDsn | quote }}
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $secretName }}
-                  key: SETUP_SUPERUSER_DSN
-                  optional: true
-              {{- end }}
-            - name: INVENTARIO_BOOTSTRAP_USERNAME
-              value: {{ .Values.setupJob.bootstrap.username | quote }}
-            - name: INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS
-              value: {{ .Values.setupJob.bootstrap.usernameForMigrations | quote }}
-          {{- with .Values.containerSecurityContext }}
-          securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-        {{- end }}
-        {{- if not .Values.setupJob.argocdMode }}
-        - name: migrate
-          image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["sh", "-c"]
-          args:
-            - |
-              set -eu
-              export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
-              i=1
-              while [ "$i" -le 15 ]; do
-                if inventario db migrate up; then
-                  echo "Schema migrations completed successfully"
-                  exit 0
-                fi
-                echo "Migration attempt $i failed, retrying in 2 seconds..."
-                i=$((i + 1))
-                sleep 2
-              done
-              echo "Schema migrations failed after 15 attempts"
-              exit 1
-          env:
-            - name: APP_DB_DSN
-              {{- if .Values.demo.postgresql.enabled }}
-              value: {{ include "inventario.dbDsn" . | quote }}
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $secretName }}
-                  key: INVENTARIO_DB_DSN
-              {{- end }}
-            - name: MIGRATOR_DB_DSN
-              {{- if .Values.demo.postgresql.enabled }}
-              value: {{ include "inventario.migratorDsn" . | quote }}
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $secretName }}
-                  key: MIGRATOR_DB_DSN
-                  optional: true
-              {{- end }}
-          {{- with .Values.containerSecurityContext }}
-          securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
         - name: init-data
           image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -215,7 +88,7 @@ spec:
               fi
 
               if [ "${SETUP_SKIP_SEED_ON_UPGRADE:-false}" = "true" ]; then
-                echo "Skipping database seeding during Helm upgrade to avoid duplicate demo data"
+                echo "Skipping database seeding during upgrade to avoid duplicate demo data"
                 exit 0
               fi
 
@@ -307,8 +180,17 @@ spec:
               value: {{ .Values.setupJob.initData.adminName | quote }}
             - name: SEED_DATABASE
               value: {{ ternary "true" "false" .Values.setupJob.initData.seedDatabase | quote }}
+            # SETUP_SKIP_SEED_ON_UPGRADE: in non-argocdMode this was driven by
+            # .Release.IsUpgrade. ArgoCD doesn't expose Helm's upgrade flag in
+            # the same way — and the Job is delete-then-created on every sync
+            # under Replace=true regardless. The seed step here is gated by
+            # `seedDatabase` alone; operators who don't want re-seeding on
+            # subsequent syncs should leave seedDatabase=false in production
+            # overlays (the seed itself is also a one-shot via /api/v1/seed
+            # which the server only allows for the first install — see
+            # /api/v1/seed handler).
             - name: SETUP_SKIP_SEED_ON_UPGRADE
-              value: {{ ternary "true" "false" .Release.IsUpgrade | quote }}
+              value: "false"
             - name: INVENTARIO_SEED_DB_DSN
               {{- if .Values.demo.postgresql.enabled }}
               value: {{ include "inventario.dbDsn" . | quote }}
@@ -347,13 +229,11 @@ spec:
               mountPath: /app/uploads
             - name: tmp
               mountPath: /tmp
-        {{- end }}
-      {{- end }}
       containers:
         - name: complete
           image: "busybox:1.36"
           imagePullPolicy: IfNotPresent
-          command: ["sh", "-c", "echo \"Setup complete\" && exit 0"]
+          command: ["sh", "-c", "echo \"Init-data complete\" && exit 0"]
           {{- with .Values.containerSecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}

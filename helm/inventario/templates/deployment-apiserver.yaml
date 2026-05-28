@@ -50,6 +50,13 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.setupJob.argocdMode }}
+      # Migrate init container — argocdMode only (#1884). See deployment.yaml
+      # for the full rationale; same approach A semantics apply to the split
+      # apiserver Deployment.
+      initContainers:
+        {{- include "inventario.migrateInitContainer" . | nindent 8 }}
+      {{- end }}
       containers:
         - name: inventario
           image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
