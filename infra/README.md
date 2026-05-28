@@ -255,16 +255,26 @@ section — see [SECRETS.md §3 "Tailscale ACL — tagOwners"](./SECRETS.md#tail
 
 ### 3.4 Pick the admin email + password
 
-The `admin.email` / `admin.password` fields in the sops bundle are reserved
-for a future production overlay — they are NOT what PR-preview environments
-log in with today. The preview overlay
-[`infra/helm-overlays/preview-base.values.yaml`](./helm-overlays/preview-base.values.yaml)
-hard-codes `admin@example.com` / `PreviewAdmin123` for the seeded admin user,
-and that's what you use to sign into a preview URL. Reading the sops bundle
-for prod-style admin credentials is tracked under
-[#1883](https://github.com/denisvmedia/inventario/issues/1883); for Phase 1
-you can put any non-empty placeholder values in `admin.email` /
-`admin.password` and they'll simply be ignored by the chart.
+The `admin.password` field in the sops bundle becomes the **master**
+super-admin seed password (#1883). `apply-secrets.sh` materializes it
+as `inv-vcl01-master/inventario-admin` (key `SETUP_ADMIN_PASSWORD`),
+and the master ArgoCD Application points the chart at it via
+`secrets.existingSecret`. The chart's setup Job consumes the value on
+first install of the master deployment — after that, rotate the admin
+password from the app UI.
+
+`admin.email` is informational: the chart uses its own
+`setupJob.initData.adminEmail` value (default `admin@example.com`), not
+the bundle field. Fill it in anyway so the bundle stays the single
+source of truth for "who is the admin" in the docs.
+
+PR previews keep the well-known dev password `PreviewAdmin123` inlined
+in [`infra/argocd/applicationset-pr.yaml`](./argocd/applicationset-pr.yaml).
+Their namespaces (`inv-vcl01-pr{N}`) are created dynamically by the
+ApplicationSet, so there's nowhere for `apply-secrets.sh` to write a
+per-PR Secret pre-emptively — and the tailnet-gated URL doesn't need a
+real secret anyway. Sign in to any preview URL with
+`admin@example.com` / `PreviewAdmin123`.
 
 Walkthrough: [SECRETS.md §4 "Pick the admin email + password"](./SECRETS.md#4-pick-the-admin-email--password).
 

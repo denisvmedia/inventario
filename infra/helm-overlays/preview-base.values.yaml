@@ -1,6 +1,6 @@
 # Shared overlay used by BOTH:
 #   - infra/argocd/applicationset-pr.yaml (per-PR previews)
-#   - infra/argocd/application-master.yaml (static master)
+#   - infra/argocd/applicationset-master.yaml (master)
 #
 # Both Applications layer this file via ArgoCD's helm.valueFiles (referencing
 # a second `ref: values` source so the file is pulled from the repo alongside
@@ -58,15 +58,20 @@ demo:
 # `ttlSecondsAfterFinished` on the Job (template-level) so ArgoCD selfHeal
 # doesn't see drift and re-trigger migrations every 24h.
 #
-# initData.adminPassword: must be set explicitly — the chart's `env-default`
-# of "admin123" fails the binary's password complexity check
-# (≥8 chars + uppercase). For tailnet-gated previews this isn't a secret;
-# it's the well-known dev login. Real production overlays should source it
-# from a sops bundle via secrets.existingSecret.
+# initData.adminPassword: NOT set here. The chart's `env-default` of
+# "admin123" fails the binary's password complexity check (≥8 chars +
+# uppercase), so each consuming Application must wire a real password:
+#   - infra/argocd/applicationset-master.yaml sets
+#     `secrets.existingSecret: inventario-admin` so the chart reads
+#     SETUP_ADMIN_PASSWORD from the sops-sourced Secret materialized in
+#     inv-vcl01-master by infra/vm/scripts/apply-secrets.sh.
+#   - infra/argocd/applicationset-pr.yaml inlines the well-known dev
+#     password — tailnet-gated PR previews don't merit a per-PR Secret
+#     (their namespaces are dynamic; #1883 explicitly accepts a shared
+#     plaintext for tearable previews).
 setupJob:
   argocdMode: true
   initData:
-    adminPassword: "PreviewAdmin123"
     # Populate the demo with example locations, areas, commodities, etc. so
     # the preview is interesting to browse. The chart's setup Job (after
     # migrations + admin user) spins up a temporary `inventario run` server

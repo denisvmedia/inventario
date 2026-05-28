@@ -62,6 +62,16 @@ spec:
             values: |
               image:
                 tag: 'sha-{{ .head_short_sha_7 }}'
+              # Well-known dev login for tailnet-gated PR previews. Per-PR
+              # namespaces are created dynamically by this ApplicationSet,
+              # so we can't pre-materialize a per-namespace Secret from the
+              # sops bundle the way master does (see
+              # infra/argocd/applicationset-master.yaml). #1883 explicitly
+              # accepts a shared plaintext for tearable previews — rotation
+              # is rare and the URL sits behind a Tailscale ACL.
+              setupJob:
+                initData:
+                  adminPassword: "PreviewAdmin123"
               ingress:
                 annotations:
                   tailscale.com/hostname: 'inv-vcl01-pr{{.number}}'

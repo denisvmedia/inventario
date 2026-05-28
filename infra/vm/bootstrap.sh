@@ -66,7 +66,7 @@ ssh "$VM" "sudo bash $REMOTE_TMP/vm-install.sh $REMOTE_TMP"
 # --- Apply k8s Secrets generated from the sops bundle (#1854) ---
 if [ -n "$SECRETS_JSON" ]; then
     if [ -x "$APPLY_SECRETS" ]; then
-        note "Applying k8s Secrets to argocd/tailscale/inv-system namespaces"
+        note "Applying k8s Secrets to argocd/tailscale/inv-vcl01-master namespaces"
         SECRETS_JSON="$SECRETS_JSON" bash "$APPLY_SECRETS" "$VM"
     else
         warn "$APPLY_SECRETS not executable; skipping k8s Secret apply step."
