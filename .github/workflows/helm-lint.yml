@@ -314,13 +314,17 @@ jobs:
             || { echo "setup Job missing sync-wave -5" >&2; echo "$setup_job_block" >&2; exit 1; }
           echo "$setup_job_block" | grep -Eq '"argocd.argoproj.io/sync-options": "Force=true,Replace=true"' \
             || { echo "setup Job missing Force=true,Replace=true" >&2; exit 1; }
-          echo "$setup_job_block" | grep -Eq '- name: bootstrap' \
+          # `--` separates options from the pattern so the leading `-`
+          # in `- name: ...` isn't probed as a flag (matters for BSD grep
+          # / ugrep; GNU grep on ubuntu-latest tolerates it but the
+          # portability win is free).
+          echo "$setup_job_block" | grep -Eq -- '- name: bootstrap' \
             || { echo "setup Job missing bootstrap init container" >&2; exit 1; }
-          if echo "$setup_job_block" | grep -Eq '- name: migrate'; then
+          if echo "$setup_job_block" | grep -Eq -- '- name: migrate'; then
             echo "setup Job must not contain a migrate init container in argocdMode" >&2
             exit 1
           fi
-          if echo "$setup_job_block" | grep -Eq '- name: init-data'; then
+          if echo "$setup_job_block" | grep -Eq -- '- name: init-data'; then
             echo "setup Job must not contain an init-data init container in argocdMode" >&2
             exit 1
           fi
@@ -334,7 +338,7 @@ jobs:
 
           echo "$deployment_block" | grep -Eq '^      initContainers:' \
             || { echo "combined Deployment missing initContainers block" >&2; exit 1; }
-          echo "$deployment_block" | grep -Eq '- name: migrate' \
+          echo "$deployment_block" | grep -Eq -- '- name: migrate' \
             || { echo "combined Deployment missing migrate init container" >&2; exit 1; }
           echo "$deployment_block" | grep -Eq 'inventario db migrate up' \
             || { echo "combined Deployment migrate container missing migrate-up command" >&2; exit 1; }
@@ -350,7 +354,7 @@ jobs:
             || { echo "argocdMode render is missing the init-data Job" >&2; exit 1; }
           echo "$init_data_block" | grep -Eq '"argocd.argoproj.io/sync-wave": "5"' \
             || { echo "init-data Job missing sync-wave 5" >&2; exit 1; }
-          echo "$init_data_block" | grep -Eq '- name: init-data' \
+          echo "$init_data_block" | grep -Eq -- '- name: init-data' \
             || { echo "init-data Job missing init-data init container" >&2; exit 1; }
 
       - name: Render chart with setupJob.argocdMode (split + external services)
@@ -412,7 +416,7 @@ jobs:
             in_block && /^# Source: / && !/templates\/deployment\.yaml/ { exit }
           ' /tmp/inventario-non-argocd-render.yaml)"
 
-          if echo "$deployment_block" | grep -Eq '- name: migrate'; then
+          if echo "$deployment_block" | grep -Eq -- '- name: migrate'; then
             echo "Non-argocdMode Deployment must not carry a migrate init container." >&2
             exit 1
           fi
@@ -425,6 +429,6 @@ jobs:
           ' /tmp/inventario-non-argocd-render.yaml)"
 
           for step in bootstrap migrate init-data; do
-            echo "$setup_job_block" | grep -Eq "- name: ${step}" \
+            echo "$setup_job_block" | grep -Eq -- "- name: ${step}" \
               || { echo "Non-argocdMode setup Job missing ${step} init container" >&2; exit 1; }
           done
