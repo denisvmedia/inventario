@@ -477,7 +477,9 @@ To check which commit is currently deployed:
 ```bash
 KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd \
   get application inv-vcl01-master -o jsonpath='{.status.sync.revision}'
-# Compare to:
+# Compare to (the `fetch` keeps origin/master fresh — without it, a stale
+# local clone would report a false mismatch):
+git fetch origin master
 git rev-parse origin/master
 ```
 
