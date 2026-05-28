@@ -14,8 +14,9 @@ encrypted with **sops + age**. The only thing that must live **off-VM** is one
 age private key on the laptop (with a copy in your password manager). The
 encrypted bundle is committed to the repo. `bootstrap.sh` decrypts it locally
 on the laptop, ships the plaintext to the VM tmpfs, and `apply-secrets.sh`
-turns the JSON into three Kubernetes Secrets (`inv-system/inventario-admin`,
-`argocd/github-app-creds`, `tailscale/operator-oauth`).
+turns the JSON into three Kubernetes Secrets
+(`inv-vcl01-master/inventario-admin`, `argocd/github-app-creds`,
+`tailscale/operator-oauth`).
 
 ## Files in this layout
 
@@ -185,8 +186,26 @@ its next restart, or force it with
 
 ### 4. Pick the admin email + password
 
-The Inventario `inv-system/inventario-admin` Secret holds the super-admin
-login the app uses on first start.
+The Inventario `admin.password` field in the sops bundle becomes the
+**master** super-admin login the app seeds on first start (#1883).
+`apply-secrets.sh` materializes it as `inv-vcl01-master/inventario-admin`
+with key `SETUP_ADMIN_PASSWORD`; the master ArgoCD Application points
+`secrets.existingSecret` at this Secret and the chart's setup Job reads
+the password from it.
+
+The `admin.email` field is informational — the chart sources the admin
+email from its values (`setupJob.initData.adminEmail`, default
+`admin@example.com`), not from the sops bundle. Filling `admin.email`
+in the bundle keeps the docs honest about "who is the admin" but does
+not affect what gets seeded.
+
+PR previews are deliberately NOT covered by this Secret: their
+namespaces (`inv-vcl01-pr{N}`) are created dynamically by the
+ApplicationSet, so there's nowhere for `apply-secrets.sh` to write the
+Secret pre-emptively. Per-PR previews use the well-known dev password
+`PreviewAdmin123` inlined in `infra/argocd/applicationset-pr.yaml` —
+acceptable because the URL sits behind a Tailscale ACL and the
+environment is tearable.
 
 ```bash
 # Generate a strong random password (or use your own)
@@ -345,6 +364,32 @@ recipients; each can decrypt the bundle independently.
    BOTH rules, run `sops updatekeys` again, commit.
 7. (Rotation only) Securely shred `~/.config/sops/age/keys.txt.old` and the
    password-manager copy.
+
+### Rotating the master admin seed password
+
+`admin.password` is the **seed** value the chart's setup Job uses to create
+the super-admin on first install of the master Application. After first
+install the password lives in the app's own user table; rotating
+`admin.password` in the sops bundle does NOT change the running app's
+admin login — for that, sign in to the master deployment and rotate from
+the app UI.
+
+The bundle field still matters for two reasons:
+1. Fresh deploys / disaster recovery seed from this value (see "Disaster
+   recovery — the VM is gone" below).
+2. The `inv-vcl01-master/inventario-admin` Secret is created from this
+   field on every `bootstrap`/`upgrade`. If you ever delete the master
+   namespace and re-sync, the chart re-seeds from the current Secret —
+   so keep `admin.password` aligned with what's actually in the app's
+   user table, or document the divergence.
+
+To update the seed value:
+
+1. `sops infra/vm/secrets/secrets.enc.yaml` → replace `admin.password`.
+2. `make -C infra upgrade VM=...` → re-applies the Secret. The setup Job
+   reruns under `argocdMode: Force=true,Replace=true` but is idempotent
+   in `migrate-data`: it skips re-creating an existing admin user, so
+   the new value only takes effect on a clean re-install.
 
 ### Rotating the GitHub App private key (App-side compromise, or just hygiene)
 

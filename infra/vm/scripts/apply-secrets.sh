@@ -40,34 +40,43 @@ remote_apply() {
     ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
 }
 
-# --- inv-system / inventario-admin (chart consumes via existingSecret) ---
-ADMIN_EMAIL=$(lookup "admin.email")
+# --- inv-vcl01-master / inventario-admin (chart consumes via secrets.existingSecret) ---
+# Materialized in the static master namespace so the master ArgoCD
+# ApplicationSet (infra/argocd/applicationset-master.yaml; #1885 replaced the
+# previous static Application with a single-template ApplicationSet of the
+# same name) can reference it via
+# `secrets.existingSecret: inventario-admin`. The chart's setup Job reads
+# `SETUP_ADMIN_PASSWORD` from this Secret on first install (idempotent
+# thereafter — the password is the seed value, not a runtime credential).
+#
+# Per-PR preview namespaces (`inv-vcl01-pr{N}`) are created dynamically by
+# ArgoCD and so are NOT covered here; their ApplicationSet template
+# (infra/argocd/applicationset-pr.yaml) sets a well-known dev password
+# inline. See infra/SECRETS.md §4 for the master/PR split.
 ADMIN_PASSWORD=$(lookup "admin.password")
-if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
-    note "Applying inv-system/inventario-admin"
-    # Emit values as YAML block scalars so passwords with special chars (':', '{', '#', newlines)
-    # don't break manifest parsing or open an injection path. Same pattern as
-    # the github private key block below.
+if [ -n "$ADMIN_PASSWORD" ]; then
+    note "Applying inv-vcl01-master/inventario-admin"
+    # Emit value as a YAML block scalar so passwords with special chars
+    # (':', '{', '#', newlines) don't break manifest parsing or open an
+    # injection path. Same pattern as the github private key block below.
     cat <<EOF | remote_apply
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: inv-system
+  name: inv-vcl01-master
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: inventario-admin
-  namespace: inv-system
+  namespace: inv-vcl01-master
 type: Opaque
 stringData:
-  email: |-
-$(printf '%s' "$ADMIN_EMAIL" | sed 's/^/    /')
-  password: |-
+  SETUP_ADMIN_PASSWORD: |-
 $(printf '%s' "$ADMIN_PASSWORD" | sed 's/^/    /')
 EOF
 else
-    warn "admin.{email,password} missing in secrets; skipping inv-system/inventario-admin"
+    warn "admin.password missing in secrets; skipping inv-vcl01-master/inventario-admin"
 fi
 
 # --- argocd / github-app-creds (repo-creds + ApplicationSet PR-generator) ---
