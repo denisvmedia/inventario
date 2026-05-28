@@ -10,8 +10,16 @@
 # Schema lives in infra/vm/secrets/secrets.example.yaml; the real encrypted bundle
 # at infra/vm/secrets/secrets.enc.yaml is owned by #1854.
 #
-# This script is best-effort: if a section is missing from the bundle (e.g. GitHub
-# App not yet configured), the corresponding Secret apply is skipped with a warning.
+# Two posture bands:
+#   - inv-vcl01-master/inventario-admin (admin.password) — HARD REQUIREMENT,
+#     because the master ApplicationSet pins `secrets.existingSecret` to this
+#     name and a missing Secret silently breaks master. A missing
+#     admin.password makes the script exit non-zero (deferred to the end so
+#     the optional sections still get applied — supports iterative bootstrap
+#     with a partially-filled bundle).
+#   - argocd/github-app-creds and tailscale/operator-oauth — best-effort:
+#     a missing/empty section is skipped with a warning so a Phase-1 bundle
+#     without those credentials can still bootstrap.
 #
 # Usage: SECRETS_JSON='{...}' bash apply-secrets.sh user@host
 
@@ -53,23 +61,23 @@ remote_apply() {
 # ArgoCD and so are NOT covered here; their ApplicationSet template
 # (infra/argocd/applicationset-pr.yaml) sets a well-known dev password
 # inline. See infra/SECRETS.md §4 for the master/PR split.
+# admin.password is a hard requirement (see header) but we defer the exit so
+# the optional GH App / Tailscale sections below can still apply on a
+# partially-filled bundle; the final exit-non-zero at the bottom of the
+# script ensures the missing field is surfaced loudly to bootstrap.sh
+# (which runs under `set -e` and will halt the whole bootstrap).
 ADMIN_PASSWORD=$(lookup "admin.password")
-# Unlike the GH App / Tailscale sections below (which legitimately tolerate a
-# Phase-1 bundle without those credentials), admin.password is a hard
-# requirement: the master ApplicationSet hard-codes
-# `secrets.existingSecret: inventario-admin`, so a missing field here
-# silently breaks the master sync — the setup Job fails with
-# "secret not found" and master never reaches Healthy. Fail fast instead of
-# leaving the operator to debug it from kubectl logs.
+ADMIN_MISSING=0
 if [ -z "$ADMIN_PASSWORD" ]; then
     warn "admin.password missing in secrets bundle; required by master ApplicationSet via secrets.existingSecret"
-    exit 1
-fi
-note "Applying inv-vcl01-master/inventario-admin"
-# Emit value as a YAML block scalar so passwords with special chars
-# (':', '{', '#', newlines) don't break manifest parsing or open an
-# injection path. Same pattern as the github private key block below.
-cat <<EOF | remote_apply
+    warn "Continuing with optional sections; will exit non-zero at the end so the issue can't be missed."
+    ADMIN_MISSING=1
+else
+    note "Applying inv-vcl01-master/inventario-admin"
+    # Emit value as a YAML block scalar so passwords with special chars
+    # (':', '{', '#', newlines) don't break manifest parsing or open an
+    # injection path. Same pattern as the github private key block below.
+    cat <<EOF | remote_apply
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -85,6 +93,7 @@ stringData:
   SETUP_ADMIN_PASSWORD: |-
 $(printf '%s' "$ADMIN_PASSWORD" | sed 's/^/    /')
 EOF
+fi
 
 # --- argocd / github-app-creds (repo-creds + ApplicationSet PR-generator) ---
 GH_APP_ID=$(lookup "github.app_id")
@@ -125,7 +134,7 @@ TS_ID=$(lookup "tailscale.oauth_client_id")
 TS_SECRET=$(lookup "tailscale.oauth_client_secret")
 if [ -n "$TS_ID" ] && [ -n "$TS_SECRET" ]; then
     note "Applying tailscale/operator-oauth"
-    # Block scalars for the same reason as inv-system/inventario-admin above.
+    # Block scalars for the same reason as inv-vcl01-master/inventario-admin above.
     cat <<EOF | remote_apply
 apiVersion: v1
 kind: Secret
@@ -141,4 +150,15 @@ $(printf '%s' "$TS_SECRET" | sed 's/^/    /')
 EOF
 else
     warn "tailscale.oauth_client_{id,secret} missing; skipping tailscale/operator-oauth"
+fi
+
+# --- deferred fatal: admin.password ---
+# See the admin block above for rationale (master ApplicationSet pins
+# secrets.existingSecret = inventario-admin; a missing Secret silently breaks
+# master). Optional sections above ran first so iterative bootstrap with a
+# partially-filled bundle still applies what it can. bootstrap.sh runs under
+# `set -e`, so the non-zero exit halts the rest of the run.
+if [ "$ADMIN_MISSING" = 1 ]; then
+    warn "Bootstrap incomplete: admin.password is required (see warning above). Fill the field in the sops bundle and re-run."
+    exit 1
 fi
