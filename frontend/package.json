@@ -89,7 +89,7 @@
     "vitest": "4.1.7"
   },
   "overrides": {
-    "tmp": "0.2.5"
+    "tmp": "0.2.6"
   },
   "engines": {
     "node": "24.15.0"
