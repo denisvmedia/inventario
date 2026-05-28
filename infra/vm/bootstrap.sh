@@ -131,21 +131,24 @@ if [ -d "$CLUSTER_EXTRAS_DIR" ] && compgen -G "$CLUSTER_EXTRAS_DIR/*.yaml" >/dev
     fi
 fi
 
-# --- Apply ArgoCD manifests (AppProject, ApplicationSet, master Application) (#1858) ---
+# --- Apply ArgoCD manifests (AppProject + ApplicationSets) (#1858, #1885) ---
 if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
     if [ -z "$TAILNET_NAME" ]; then
         warn "$ARGOCD_DIR present but tailscale.tailnet_name missing from sops bundle."
         warn "Manifests that reference <TAILNET> will be skipped; untemplated manifests still apply."
     fi
     note "Applying ArgoCD manifests from $ARGOCD_DIR (tailnet: ${TAILNET_NAME:-<missing>})"
-    # Three explicit globs in dependency order:
-    #   - appproject*.yaml: AppProject must land BEFORE Application/
-    #     ApplicationSet that reference it via .spec.project.
-    #   - application-*.yaml: the static master Application.
-    #   - applicationset*.yaml: the PR-preview ApplicationSet.
-    # Explicit globs (vs one `application*.yaml`) avoid the literal-prefix
-    # collision where `application*.yaml` would also match
-    # `applicationset*.yaml` and apply it twice in the wrong order.
+    # Two explicit globs in dependency order:
+    #   - appproject*.yaml:    AppProject must land BEFORE any ApplicationSet
+    #                          that references it via .spec.template.spec.project.
+    #   - applicationset*.yaml: the master + PR ApplicationSets (#1885 replaced
+    #                          the pre-existing static master Application with
+    #                          an SCM-provider ApplicationSet of the same
+    #                          templated name).
+    # Explicit globs avoid having to anchor a literal prefix; if the future
+    # adds a static Application back (e.g. for prod under a different file
+    # name like `application-prod.yaml`), add a `apply_argocd_yaml
+    # 'application-*.yaml'` call between the two below.
     #
     # Use bash's `${var//search/replace}` (literal substitution) instead of
     # sed: sed treats `&` in the replacement as the matched text and `\` as
@@ -168,7 +171,6 @@ if [ -d "$ARGOCD_DIR" ] && compgen -G "$ARGOCD_DIR/*.yaml" >/dev/null; then
         done
     }
     apply_argocd_yaml 'appproject*.yaml'
-    apply_argocd_yaml 'application-*.yaml'
     apply_argocd_yaml 'applicationset*.yaml'
 else
     warn "$ARGOCD_DIR has no manifests yet (lands in #1858)."

@@ -1,0 +1,122 @@
+# ApplicationSet with SCM-provider generator pinned to master.
+#
+# Templates exactly one Application — `inv-vcl01-master` — but unlike the
+# pre-#1885 static Application it re-renders on every master push: the
+# generator polls GitHub, reads the current head SHA of `master`, and exposes
+# it as `{{.sha}}`. We thread `slice .sha 0 7` into `image.tag`, so each commit
+# produces a fresh `sha-<7>` tag. ArgoCD then sees a real manifest diff and
+# syncs — fixing the original failure mode where `image.tag: master` (a
+# constant string across commits) defeated manifest-equality and left pods
+# running stale digests. See #1885 / PR #1881 review thread for the trail.
+#
+# Same multi-source pattern as the per-PR Applications from
+# applicationset-pr.yaml so the shared preview-base.values.yaml overlay can
+# be referenced via $values.
+#
+# `<TAILNET>` is substituted by infra/vm/bootstrap.sh from the sops bundle's
+# tailscale.tailnet_name at kubectl apply time.
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: inventario-master-preview
+  namespace: argocd
+spec:
+  # Go templates so `{{ slice .sha 0 7 }}` works the same way
+  # `{{ .head_short_sha_7 }}` works in applicationset-pr.yaml — the
+  # SCM-provider generator only exposes the full `{{.sha}}`, no
+  # pre-shortened variant.
+  goTemplate: true
+  # Fail rendering loudly on any undefined key (typo / generator field rename
+  # in a future ArgoCD version) instead of silently emitting `<no value>`
+  # and producing broken Applications. Same posture as applicationset-pr.yaml.
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - scmProvider:
+        # Reuse the same GitHub App credentials Secret the PR generator uses
+        # (repo-creds format created by infra/vm/scripts/apply-secrets.sh).
+        # The App is installed only on denisvmedia/inventario, so the
+        # org-wide scan below sees exactly that repo.
+        github:
+          organization: denisvmedia
+          appSecretName: github-app-creds
+          # Required for branchMatch to apply — default (false) returns only
+          # each repo's default branch (which is master here), so the filter
+          # would be a no-op. Setting this true makes the branchMatch
+          # restrictive: without it, a future default-branch rename would
+          # silently change what gets templated.
+          allBranches: true
+        filters:
+          # Defence-in-depth — even though the App is scoped to a single repo,
+          # the filter keeps the manifest correct if the App is ever installed
+          # on additional repos in the org.
+          - repositoryMatch: ^inventario$
+            # Anchored: don't match `master-foo` or `release/master`.
+            branchMatch: ^master$
+        # Poll every 60s so master pushes show up in the preview at the same
+        # cadence the PR ApplicationSet uses. Default (3600s) would lag a
+        # master push by up to an hour.
+        requeueAfterSeconds: 60
+
+  template:
+    metadata:
+      # Keep the same Application name the static manifest used so existing
+      # tooling, dashboards, and links to /applications/inv-vcl01-master keep
+      # working. Migration story from the pre-#1885 static Application of the
+      # same name is documented in infra/README.md §"master deployment".
+      name: inv-vcl01-master
+      labels:
+        inventario-preview: "true"
+    spec:
+      project: previews
+
+      # Multi-source: source[0] is the chart pinned to the master head SHA;
+      # source[1] provides the repo at the same SHA for $values lookups so
+      # valueFiles can reference files outside the chart path. Pinning both
+      # to `{{.sha}}` (not `master`) keeps chart + values + image consistent
+      # at the exact commit the SCM-provider polled.
+      sources:
+        - repoURL: https://github.com/denisvmedia/inventario
+          targetRevision: '{{ .sha }}'
+          path: helm/inventario
+          helm:
+            valueFiles:
+              - $values/infra/helm-overlays/preview-base.values.yaml
+            # `slice .sha 0 7` mirrors the `sha-<7>` tag docker.yml publishes
+            # for every master push (see .github/workflows/docker.yml `meta`
+            # step). The tag is immutable per commit, so we inherit the
+            # chart's default `IfNotPresent` pullPolicy — same posture as
+            # the PR ApplicationSet, and unlike the pre-#1885 static
+            # manifest's `pullPolicy: Always` (which existed only to bust
+            # the cache behind the mutable `master` tag).
+            values: |
+              image:
+                tag: 'sha-{{ slice .sha 0 7 }}'
+              ingress:
+                annotations:
+                  tailscale.com/hostname: inv-vcl01-master
+                hosts:
+                  - host: 'inv-vcl01-master.<TAILNET>.ts.net'
+                    paths:
+                      - path: /
+                        pathType: Prefix
+                tls:
+                  - hosts:
+                      - 'inv-vcl01-master.<TAILNET>.ts.net'
+                    secretName: ""
+        - repoURL: https://github.com/denisvmedia/inventario
+          targetRevision: '{{ .sha }}'
+          ref: values
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: inv-vcl01-master
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
