@@ -5,6 +5,7 @@ import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { EditProfilePage } from "@/pages/EditProfilePage"
+import { pickRadixSelect } from "@/test/radix"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
@@ -101,6 +102,49 @@ describe("<EditProfilePage />", () => {
     // saved value — the seeded user has no default_group_id and the form's
     // select stays empty, so this submit only carries `name`.
     expect(captured).toEqual({ name: "Alex 2" })
+  })
+
+  it("default-group is a shadcn Select; picking a group submits default_group_id", async () => {
+    // Reference-screen check (#1264): the default-group control is the
+    // blessed Radix <Select>, not a native <select>. Drive it via the
+    // listbox and confirm the picked id round-trips on submit.
+    let captured: { name: string; default_group_id?: string } | null = null
+    server.use(
+      msw.get(api("/auth/me"), () =>
+        HttpResponse.json({
+          id: "u1",
+          email: "alex@example.com",
+          name: "Alex",
+          default_group_id: "g2",
+        })
+      ),
+      msw.get(api("/groups"), () =>
+        HttpResponse.json({
+          data: [
+            { id: "g1", type: "groups", attributes: { id: "g1", slug: "one", name: "Group One" } },
+            { id: "g2", type: "groups", attributes: { id: "g2", slug: "two", name: "Group Two" } },
+          ],
+        })
+      ),
+      msw.put(api("/auth/me"), async ({ request }) => {
+        captured = (await request.json()) as typeof captured
+        return HttpResponse.json({
+          id: "u1",
+          email: "alex@example.com",
+          name: captured?.name,
+          default_group_id: captured?.default_group_id,
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderEdit()
+    const trigger = await screen.findByTestId("profile-default-group-select")
+    // It's the blessed Radix combobox, not a native <select>.
+    expect(trigger).toHaveAttribute("role", "combobox")
+    await pickRadixSelect(user, /default group/i, { optionLabel: /^Group One$/i })
+    await user.click(screen.getByTestId("profile-save"))
+    await waitFor(() => expect(screen.getByTestId("profile-save-success")).toBeInTheDocument())
+    expect(captured).toEqual({ name: "Alex", default_group_id: "g1" })
   })
 
   it("password form rejects mismatched confirmation", async () => {

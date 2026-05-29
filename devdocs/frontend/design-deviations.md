@@ -248,7 +248,23 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Forms & Validation
 
-_None yet._
+#### 2026-05-29 — Design-system "start": blessed FieldError + dropdown policy with annotated native-`<select>` exceptions
+
+- **Issue/PR**: #1264 / PR (this branch)
+- **Mock**: The mock renders field errors as inline `<p className="text-xs text-destructive">` per field and uses the shadcn `<Select>` (`design-mocks/src/views/SettingsView.tsx`) — plus a vendored `components/ui/native-select.tsx` primitive — for dropdowns. It has no single shared field-error component.
+- **Reality**: A shared `<FieldError>` (`components/FieldError.tsx`) replaces the ad-hoc `<p>` across the migrated forms (EditProfile, CreateGroup, AreaForm, SetPassword), baking in the `field-error` class + i18n resolution. Form & settings dropdowns use the shadcn `<Select>`; an ESLint `no-restricted-syntax` guard bans raw native `<select>`. Six **utility** native `<select>`s (bulk-move bars on Files/Commodities lists, the mobile category-tile collapse in `CategoryTiles`, the Tags list sort, the file-edit + per-file-upload category pickers) are kept native — they have `selectOption`-based test coverage and native semantics are intentional there — each annotated with an inline `eslint-disable-next-line` + reason. We did **not** port the mock's `native-select.tsx` primitive (those raw selects stay ad-hoc pending a later pass).
+- **Why**: #1264 is largely satisfied by the React rewrite (#1397); this is the roadmap's "#1264 start" slice (per #1651). Extracting `<FieldError>` is invisible visually but removes n copies of the same markup. The dropdown guard makes every remaining native `<select>` a conscious, documented choice ("pick one and stick with it") without a risky sweep of tested utility selectors. Converting those six is a deferred follow-up.
+- **Approved by**: user (explicit) — chose scope "Roadmap «start»" + approach "primitives-direct + FieldError" when offered the options.
+- **Reversion plan**: Permanent for `<FieldError>` + the lint guard. The six annotated native selectors are the explicit backlog: migrate them to `<Select>` (or a ported `native-select` primitive) and drop the disable comments in the post-launch design-system "finish" pass.
+
+#### 2026-05-29 — Two intentional IconPicker components (popover vs. inline grid) kept separate
+
+- **Issue/PR**: #1264 / PR (this branch)
+- **Mock**: Location/area dialogs (`design-mocks/src/components/LocationDialog.tsx`, `AreaDialog.tsx`) render an inline emoji grid. The group surface is a different composition.
+- **Reality**: Two components share the name `IconPicker` — `components/groups/IconPicker.tsx` (Popover + category tabs, sourced from `features/group/icons.ts`) and `components/locations/IconPicker.tsx` (inline grid, palette via prop). They are **not** merged: the audit for #1264 flagged a "name collision", but the two are genuinely distinct UX with different data sources and a11y trade-offs. Resolved by documenting (cross-ref comments in both files + a forms.md table) which to use, rather than collapsing them into one `mode`-switching component.
+- **Why**: Merging would either bloat one component with a popover/inline `mode` switch (poor cohesion) or break mock fidelity (the dialogs want the inline grid; the group form wants the space-saving popover). The folder paths already disambiguate the imports.
+- **Approved by**: agent-suggested — judgment call within the #1264 "dedup IconPicker" scope item; surfaced to the user as "not duplicates → document, don't merge".
+- **Reversion plan**: Permanent unless the upstream mock unifies the two surfaces.
 
 ### Auth & Profile
 

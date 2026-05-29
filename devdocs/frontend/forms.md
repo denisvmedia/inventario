@@ -158,31 +158,51 @@ Backends emit three error envelopes:
 "Email already taken"
 ```
 
-`parseServerError(err, fallback)` collapses all three into a single string,
-falling back to the supplied default for 5xx HTML responses or unknown
-shapes:
+Two layered helpers in `@/lib/server-error` normalise these:
 
-```ts
-import { parseServerError } from "@/lib/server-error"
+- `parseServerError(err, fallback)` collapses all three envelopes into a
+  single string, falling back to the supplied default for 5xx HTML
+  responses or unknown shapes. The low-level primitive.
+- `classifyServerError(err, fallback)` returns `{ kind, message }` where
+  `kind` is `network | validation | conflict | unknown` — a hint that
+  drives the banner's headline + whether a Retry affordance shows.
+
+The **blessed form-level surface is `<ServerErrorBanner>`**
+(`@/components/ServerErrorBanner`): one visual contract (icon + typed
+title + message + conditional Retry) so users learn the affordances once.
+Feed it a `classifyServerError` result; it renders nothing for `null`:
+
+```tsx
+import { ServerErrorBanner } from "@/components/ServerErrorBanner"
+import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
+
+const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
 
 try {
   await mutation.mutateAsync(values)
 } catch (err) {
-  setServerError(parseServerError(err, t("auth:login.errorGeneric")))
+  setServerError(classifyServerError(err, t("auth:login.errorGeneric")))
 }
+
+// …in the form:
+<ServerErrorBanner error={serverError} testId="…-server-error" />
 ```
+
+For a bespoke message on a known status (e.g. a 422 "current password is
+incorrect"), construct the classified value directly:
+`setServerError({ kind: "validation", message: t("…") })` — see
+`EditProfilePage`.
 
 Rules:
 
-- **Always pass a fallback** — never `parseServerError(err, "")`. The
+- **Always pass a fallback** — never `classifyServerError(err, "")`. The
   fallback is what a 500 with an HTML body or a network error becomes.
   Use a translated string (`t("...")`).
-- **Don't assume the field map.** The current backend doesn't return
-  per-field errors for the auth surface, so we render server errors as
-  one banner above the form. If a future endpoint returns
-  `{ errors: [{ source: { pointer: "/data/attributes/email" }, … }] }`,
-  extend `parseServerError` first; don't sprinkle ad-hoc parsing in the
-  page.
+- **Prefer `<ServerErrorBanner>`** for form-level server errors. The bare
+  `<Alert variant="destructive">` + `parseServerError` string in some
+  older auth pages (LoginPage) predates the typed banner; new forms use
+  the banner. Field-level zod errors stay on `<FieldError>`, not the
+  banner.
 - **Reset on edit.** Watch the form via `form.watch()` and clear the
   banner when the user edits — see the LoginPage example.
 
@@ -208,15 +228,33 @@ fire and let the schema render the errors.
 ## Field components
 
 Use the shadcn primitives directly — `Input`, `Label`, `Checkbox`,
-`Select`, `Textarea`. The standard field shape is:
+`Select`, `Textarea`. One blessed piece is **not** a raw element: the
+field-level error. Render it with `<FieldError>` (`@/components/FieldError`),
+never an ad-hoc `<p className="text-xs text-destructive">`. The standard
+field shape is:
 
 ```tsx
+import { FieldError } from "@/components/FieldError"
+
+const err = form.formState.errors.fieldId
+
 <div className="space-y-1.5">
   <Label htmlFor="field-id">Label</Label>
-  <Input id="field-id" {...form.register("field-id")} aria-invalid={!!error} />
-  {error && <p className="text-xs text-destructive">{t(error.message ?? "")}</p>}
+  <Input
+    id="field-id"
+    aria-invalid={!!err}
+    aria-describedby={err ? "field-id-error" : undefined}
+    {...form.register("fieldId")}
+  />
+  <FieldError id="field-id-error" testId="field-id-error" message={err?.message} />
 </div>
 ```
+
+`<FieldError>` resolves the message through `t()` itself (the message is an
+i18n key from the zod schema — see [Schema](#schema)), renders nothing when
+the message is empty, and bakes in the `field-error` class the e2e suite
+selects on. Wire `aria-describedby` on the input to the `FieldError` `id`
+so screen readers announce the message when RHF focuses the invalid field.
 
 For complex controls (combobox, date picker), wrap with `Controller`:
 
@@ -229,12 +267,75 @@ import { Controller } from "react-hook-form"
   render={({ field, fieldState }) => (
     <CurrencyCombobox
       value={field.value}
-      onValueChange={field.onChange}
-      aria-invalid={fieldState.invalid}
+      onChange={field.onChange}
+      ariaInvalid={fieldState.invalid}
     />
   )}
 />
 ```
+
+### Dropdowns
+
+There is **one blessed dropdown for form & settings fields: the shadcn
+`<Select>`** (`@/components/ui/select`, Radix under the hood). Wrap it in a
+`Controller` for RHF forms; pass `field.ref` to the `SelectTrigger` so
+focus-on-error still lands on the control:
+
+```tsx
+<Controller
+  control={form.control}
+  name="locationId"
+  render={({ field }) => (
+    <Select value={field.value || undefined} onValueChange={field.onChange}>
+      <SelectTrigger id="location" ref={field.ref} className="w-full">
+        <SelectValue placeholder={t("…")} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )}
+/>
+```
+
+Gotcha: Radix forbids an **empty-string** `SelectItem` value. For an
+"auto / none" option use a sentinel (`"auto"`) and map it back to `""` in
+`value` / `onValueChange` (see `SettingsPage`'s Region & formatting field).
+
+A raw native `<select>` is banned by the ESLint rule `no-restricted-syntax`
+(see `eslint.config.js`). It stays permissible only for **utility /
+compact / mobile** selectors — bulk-move bars, the mobile category-tile
+collapse, list sort pickers — where native semantics are intentional and
+already covered by `selectOption`-based tests. Those few sites carry an
+explicit `// eslint-disable-next-line no-restricted-syntax -- <reason>`.
+Don't add a new bare `<select>` to a form; reach for `<Select>`.
+
+In tests, drive a `<Select>` with `pickRadixSelect(user, triggerLabel,
+{ optionLabel })` from `@/test/radix` — `user.selectOptions()` no-ops on
+the Radix trigger (it's a `role="combobox"` button, not an
+`HTMLSelectElement`).
+
+### Icon pickers
+
+There are **two intentional icon pickers** — keep them separate, they are
+not duplicates:
+
+| Component | Use for | Shape |
+| --- | --- | --- |
+| `components/groups/IconPicker` | Group create / settings | Popover + category tabs + grid (many curated glyphs, space-constrained form) |
+| `components/locations/IconPicker` | Location / area dialogs | Inline grid (small curated palette, mirrors the mock dialogs) |
+
+They differ in UX, data source (`features/group/icons.ts` vs. a palette
+prop), and a11y trade-offs by design. Pick by surface; don't merge them.
+
+### Reference screen
+
+`pages/EditProfilePage.tsx` is the canonical reference for these patterns
+(#1264): RHF + zod, `<FieldError>` on every field, `<Select>` for the
+default-group dropdown, and `<ServerErrorBanner>` for the profile +
+password server errors. Copy its shape when building a new form.
 
 ## Multi-step forms
 

@@ -69,12 +69,15 @@ authTest.describe('Settings — default group, authenticated user (#1592)', () =
     const select = page.locator('[data-testid="settings-default-group-select"]');
     await expect(select).toBeVisible({ timeout: 10000 });
 
-    // The selector must default to a real group (the user's preference under
-    // the #1592 invariant; backfill ensured admin has one). An empty value
-    // would mean the front-end is showing "no default" copy that no longer
-    // exists.
-    const value = await select.inputValue();
-    expect(value).not.toBe('');
+    // The default-group control is a shadcn/Radix <Select> (#1264), i.e. a
+    // role="combobox" button rather than a native <select>, so read the
+    // rendered label instead of inputValue(). The trigger must show a real
+    // group name (the user's preference under the #1592 invariant; backfill
+    // ensured admin has one) — an empty label would mean the front-end is
+    // showing "no default" copy that no longer exists.
+    await expect(select).toHaveAttribute('role', 'combobox');
+    const label = ((await select.textContent()) ?? '').trim();
+    expect(label.length).toBeGreaterThan(0);
 
     // The empty-state CTA must NOT be rendered when the user has memberships.
     await expect(page.locator('[data-testid="settings-no-groups-cta"]')).toHaveCount(0);

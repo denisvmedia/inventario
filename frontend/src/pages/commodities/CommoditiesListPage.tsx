@@ -625,6 +625,7 @@ export function CommoditiesListPage() {
           </DialogHeader>
           <div className="flex flex-col gap-2">
             <Label htmlFor="bulk-move-area">{t("commodities:bulk.moveTargetLabel")}</Label>
+            {/* eslint-disable-next-line no-restricted-syntax -- bulk move-to-area utility selector; native <select> retained, covered by native-select e2e (commodity-bulk-and-filter.spec.ts) */}
             <select
               id="bulk-move-area"
               value={moveTargetArea}

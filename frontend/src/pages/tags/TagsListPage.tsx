@@ -389,6 +389,7 @@ export function TagsListPage() {
           >
             {t("tags:sort.label")}
           </Label>
+          {/* eslint-disable-next-line no-restricted-syntax -- list sort utility selector; native <select> retained, covered by native-select unit (TagsListPage.test) */}
           <select
             id="tags-sort-select"
             data-testid="tags-sort"
