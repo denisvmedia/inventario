@@ -2,11 +2,14 @@ package seeddata_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	_ "gocloud.dev/blob/fileblob" // register the file:// blob driver for the upload-location tests
 
 	"github.com/denisvmedia/inventario/debug/seeddata"
 	"github.com/denisvmedia/inventario/models"
@@ -512,3 +515,97 @@ func TestSeedDataMissingTenantSlug_CreatesWhenOptIn(t *testing.T) {
 // commodity seeded with WarrantyDaysFromNow=5 lands in the "expiring"
 // bucket when computed at test time.
 func referenceNow() time.Time { return time.Now() }
+
+// TestSeedDataBlobUploads_OffByDefault pins the security default: even
+// with a real UploadLocation configured, a non-`test-org` tenant must
+// NOT get fixture bytes written when AllowBlobUploads is off. The seed
+// still creates the cover-photo file *rows* (so the UI surfaces them),
+// but the no-op uploader leaves SizeBytes at 0. This is the
+// public-/api/v1/seed cost-bound: an arbitrary tenant_slug can't be
+// coaxed into spamming the configured bucket.
+func TestSeedDataBlobUploads_OffByDefault(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	factorySet := memory.NewFactorySet()
+	_, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{
+		TenantSlug:            "acme",
+		CreateTenantIfMissing: true,
+		UploadLocation:        "file://" + t.TempDir() + "?create_dir=1",
+		// AllowBlobUploads left at zero (false).
+	})
+	c.Assert(err, qt.IsNil)
+
+	images, withBytes := seededImageStats(c, factorySet, ctx)
+	c.Assert(images > 0, qt.IsTrue, qt.Commentf("seed still creates cover-photo rows"))
+	c.Assert(withBytes, qt.Equals, 0,
+		qt.Commentf("no fixture bytes for a non-test-org tenant without the opt-in"))
+}
+
+// TestSeedDataBlobUploads_WhenOptIn covers the AllowBlobUploads path:
+// the seed handler binds it from INVENTARIO_SEED_ALLOW_BLOB_UPLOADS,
+// which the Helm chart sets for the demo overlay so the evaluation
+// deployment's `default` tenant gets real cover photos and documents.
+// With the opt-in on, every bundled cover photo is written to the
+// configured bucket and its row carries the real byte count.
+func TestSeedDataBlobUploads_WhenOptIn(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	tempDir := t.TempDir()
+
+	factorySet := memory.NewFactorySet()
+	_, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{
+		TenantSlug:            "acme",
+		CreateTenantIfMissing: true,
+		UploadLocation:        "file://" + tempDir + "?create_dir=1",
+		AllowBlobUploads:      true,
+	})
+	c.Assert(err, qt.IsNil)
+
+	images, withBytes := seededImageStats(c, factorySet, ctx)
+	c.Assert(images > 0, qt.IsTrue)
+	c.Assert(withBytes, qt.Equals, images,
+		qt.Commentf("every cover photo gets real bytes when the opt-in is on"))
+
+	// The fixture bytes physically landed in the bucket.
+	c.Assert(countRegularFiles(c, tempDir) > 0, qt.IsTrue,
+		qt.Commentf("seed fixtures written to the configured bucket"))
+}
+
+// seededImageStats returns (number of image-category file rows, number
+// of those carrying non-zero SizeBytes). Image-category rows only ever
+// come from the bundled fixture upload path, so they cleanly isolate the
+// blob-upload gate from unrelated file rows (e.g. export documents).
+func seededImageStats(c *qt.C, factorySet *registry.FactorySet, ctx context.Context) (images, withBytes int) {
+	files, err := factorySet.CreateServiceRegistrySet().FileRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	for _, f := range files {
+		if f.Category != models.FileCategoryImages {
+			continue
+		}
+		images++
+		if f.File != nil && f.File.SizeBytes > 0 {
+			withBytes++
+		}
+	}
+	return images, withBytes
+}
+
+// countRegularFiles walks dir and returns the number of regular files
+// found — used to assert whether the seed wrote fixture bytes to the
+// configured file:// bucket.
+func countRegularFiles(c *qt.C, dir string) int {
+	n := 0
+	err := filepath.WalkDir(dir, func(_ string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.Type().IsRegular() {
+			n++
+		}
+		return nil
+	})
+	c.Assert(err, qt.IsNil)
+	return n
+}

@@ -307,6 +307,11 @@ spec:
               value: {{ .Values.setupJob.initData.adminName | quote }}
             - name: SEED_DATABASE
               value: {{ ternary "true" "false" .Values.setupJob.initData.seedDatabase | quote }}
+            # See job-init-data.yaml — opt the seed into writing bundled
+            # fixture bytes for the seeded tenant. Default off; demo/eval
+            # overlays flip it on.
+            - name: INVENTARIO_SEED_ALLOW_BLOB_UPLOADS
+              value: {{ ternary "true" "false" .Values.setupJob.initData.seedBlobUploads | quote }}
             - name: SETUP_SKIP_SEED_ON_UPGRADE
               value: {{ ternary "true" "false" .Release.IsUpgrade | quote }}
             - name: INVENTARIO_SEED_DB_DSN
@@ -318,8 +323,10 @@ spec:
                   name: {{ $secretName }}
                   key: INVENTARIO_DB_DSN
               {{- end }}
+            # Match the app's bucket so seed blobs land where the app reads
+            # them (MinIO s3:// under the demo bundle, file:// PVC otherwise).
             - name: INVENTARIO_RUN_UPLOAD_LOCATION
-              value: file:///app/uploads?create_dir=1
+              value: {{ include "inventario.uploadLocation" . | quote }}
             {{- if .Values.demo.redis.enabled }}
             - name: INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL
               value: {{ $redisUrl | quote }}

@@ -29,6 +29,17 @@ const envSeedSystemAdminFixture = "INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE"
 // cross-tenant OAuth fixture.
 const envSeedAllowCreateTenant = "INVENTARIO_SEED_ALLOW_CREATE_TENANT"
 
+// envSeedAllowBlobUploads is the opt-in env var that lets the seed write
+// the bundled fixture *bytes* (photos, invoices, manuals) into the
+// configured blob bucket for a non-`test-org` tenant — not just the
+// metadata rows. It is OFF by default for the same reason
+// envSeedAllowCreateTenant is: /api/v1/seed is unauthenticated, so
+// writing real bytes for an arbitrary tenant_slug would let any caller
+// spam the configured bucket. The Helm chart sets it (only on the
+// init-data Job's temporary server) for the demo overlay so the
+// evaluation deployment looks lived-in.
+const envSeedAllowBlobUploads = "INVENTARIO_SEED_ALLOW_BLOB_UPLOADS"
+
 type seedAPI struct {
 	factorySet     *registry.FactorySet
 	uploadLocation string
@@ -95,6 +106,11 @@ func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 		// body so a misconfigured production deployment can't be
 		// coaxed into minting tenants from the public seed surface.
 		CreateTenantIfMissing: os.Getenv(envSeedAllowCreateTenant) == "true",
+		// Opt-in only — see envSeedAllowBlobUploads. Same env-gated
+		// pattern: lets the demo overlay publish bundled fixture bytes
+		// for its `default` tenant without opening the public seed
+		// surface to bucket-spam from arbitrary tenant_slug values.
+		AllowBlobUploads: os.Getenv(envSeedAllowBlobUploads) == "true",
 	}
 
 	alreadySeeded, err := seeddata.SeedData(api.factorySet, opts)

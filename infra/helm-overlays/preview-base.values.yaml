@@ -80,6 +80,13 @@ setupJob:
     # SETUP_SKIP_SEED_ON_UPGRADE, but each PR preview is a fresh install so
     # we always seed). Negligible extra Job time (~15s).
     seedDatabase: true
+    # Also publish the bundled fixture bytes (cover photos, invoices,
+    # manuals) into the in-cluster MinIO bucket so items and the Files page
+    # look lived-in instead of carrying empty file rows. Safe here: these
+    # are tailnet-gated demo/preview namespaces, the embed bundle is ~130 KB,
+    # and each install seeds exactly once. Maps to
+    # INVENTARIO_SEED_ALLOW_BLOB_UPLOADS on the Job's temporary seed server.
+    seedBlobUploads: true
 
 # Defensive guard-rails per #1866: cap aggregate compute/storage/pod-count
 # in every PR-preview namespace so one runaway pod can't starve other

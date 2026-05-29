@@ -88,6 +88,20 @@ type SeedOptions struct {
 	// — never sourced from the request body). Has effect only when
 	// TenantSlug is non-empty.
 	CreateTenantIfMissing bool
+
+	// AllowBlobUploads opts a non-`test-org` tenant into having the
+	// bundled fixture *bytes* (photos, invoices, manuals) written to the
+	// configured UploadLocation, not just the metadata rows. Without it,
+	// blob writes are restricted to the well-known `test-org` tenant
+	// because /api/v1/seed is unauthenticated and writing real bytes for
+	// an arbitrary tenant_slug is an abuse vector (see the gate in
+	// SeedData). OFF by default; the seed handler reads
+	// INVENTARIO_SEED_ALLOW_BLOB_UPLOADS to flip it on — same env-var-
+	// gated pattern as SeedSystemAdmin / CreateTenantIfMissing, never
+	// sourced from the request body. The Helm chart sets it for the demo
+	// overlay so the evaluation deployment looks lived-in. Has effect
+	// only when UploadLocation is non-empty.
+	AllowBlobUploads bool
 }
 
 // SeedData seeds the database with example data. Returns alreadySeeded=true
@@ -184,8 +198,14 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 	// well-known test tenant keeps the demo-fidelity story for
 	// test-org while making the public endpoint cost-bounded for
 	// every other tenant.
+	//
+	// AllowBlobUploads is the explicit, env-gated opt-out of that
+	// restriction (INVENTARIO_SEED_ALLOW_BLOB_UPLOADS, set server-side
+	// only — see the seed handler). The Helm chart flips it on for the
+	// demo overlay so the evaluation deployment's `default` tenant gets
+	// real cover photos and documents like test-org does.
 	uploadLocation := opts.UploadLocation
-	if tenant.Slug != "test-org" {
+	if tenant.Slug != "test-org" && !opts.AllowBlobUploads {
 		uploadLocation = ""
 	}
 	uploader, err := newBlobUploader(ctx, uploadLocation)
