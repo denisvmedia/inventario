@@ -22,7 +22,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/render v1.0.3
-	github.com/go-extras/errx v1.2.1
+	github.com/go-extras/errx v1.3.0
 	github.com/go-extras/go-kit v1.2.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/go-cmp v0.7.0
