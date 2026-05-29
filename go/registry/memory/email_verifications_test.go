@@ -3,6 +3,8 @@ package memory_test
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -228,4 +230,95 @@ func TestEmailVerificationRegistry_Count(t *testing.T) {
 	count, err = r.Count(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(count, qt.Equals, 2)
+}
+
+func TestEmailVerificationRegistry_MarkVerified_HappyPath(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewEmailVerificationRegistry()
+
+	created, err := r.Create(ctx, newTestEmailVerification("token-mark-happy"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(created.VerifiedAt, qt.IsNil)
+
+	claimed, err := r.MarkVerified(ctx, "token-mark-happy")
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue, qt.Commentf("first claim of an unverified token must win"))
+
+	reloaded, err := r.Get(ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(reloaded.IsVerified(), qt.IsTrue)
+}
+
+// TestEmailVerificationRegistry_MarkVerified_AlreadyVerified pins the
+// idempotency contract: a second claim of the same token returns
+// (false, nil) so the caller knows the side effects already ran.
+func TestEmailVerificationRegistry_MarkVerified_AlreadyVerified(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewEmailVerificationRegistry()
+
+	_, err := r.Create(ctx, newTestEmailVerification("token-mark-twice"))
+	c.Assert(err, qt.IsNil)
+
+	first, err := r.MarkVerified(ctx, "token-mark-twice")
+	c.Assert(err, qt.IsNil)
+	c.Assert(first, qt.IsTrue)
+
+	second, err := r.MarkVerified(ctx, "token-mark-twice")
+	c.Assert(err, qt.IsNil)
+	c.Assert(second, qt.IsFalse, qt.Commentf("re-claiming an already-verified token must not win"))
+}
+
+func TestEmailVerificationRegistry_MarkVerified_TokenNotFound(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewEmailVerificationRegistry()
+
+	claimed, err := r.MarkVerified(ctx, "no-such-token")
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsFalse)
+}
+
+func TestEmailVerificationRegistry_MarkVerified_EmptyToken(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewEmailVerificationRegistry()
+
+	claimed, err := r.MarkVerified(ctx, "")
+	c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+	c.Assert(claimed, qt.IsFalse)
+}
+
+// TestEmailVerificationRegistry_MarkVerified_ConcurrentExactlyOnce is the core
+// #1005 regression: many goroutines racing to verify the same token must
+// produce exactly one winner, so the one-time side effects run once.
+func TestEmailVerificationRegistry_MarkVerified_ConcurrentExactlyOnce(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewEmailVerificationRegistry()
+
+	_, err := r.Create(ctx, newTestEmailVerification("token-race"))
+	c.Assert(err, qt.IsNil)
+
+	const goroutines = 64
+	var winners atomic.Int32
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			<-start // line everyone up so the calls actually contend
+			claimed, markErr := r.MarkVerified(ctx, "token-race")
+			c.Check(markErr, qt.IsNil)
+			if claimed {
+				winners.Add(1)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	c.Assert(int(winners.Load()), qt.Equals, 1, qt.Commentf("exactly one concurrent claim may win"))
 }

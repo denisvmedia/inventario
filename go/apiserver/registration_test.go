@@ -404,6 +404,124 @@ func TestHandleVerifyEmail_HappyPathActivatesUserAndSendsWelcome(t *testing.T) {
 	}
 }
 
+// claimLosingVerificationRegistry simulates the #1005 race loser: GetByToken
+// (and everything else) behaves like the embedded real registry, but the
+// atomic MarkVerified claim always reports false — i.e. a concurrent request
+// already won the token. The handler must then take the idempotent
+// "already verified" path and skip the one-time side effects.
+type claimLosingVerificationRegistry struct {
+	registry.EmailVerificationRegistry
+}
+
+func (*claimLosingVerificationRegistry) MarkVerified(context.Context, string) (bool, error) {
+	return false, nil
+}
+
+// TestHandleVerifyEmail_ConcurrentLoserIsIdempotentAndSkipsWelcome pins the
+// #1005 fix at the handler level: a request that loses the atomic claim still
+// returns a 200 "already verified" but must NOT dispatch a second welcome
+// email or otherwise re-run first-verification side effects.
+func TestHandleVerifyEmail_ConcurrentLoserIsIdempotentAndSkipsWelcome(t *testing.T) {
+	c := qt.New(t)
+
+	user := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "race-loser"},
+			TenantID: testTenantID,
+		},
+		Email: "loser@example.com",
+		Name:  "Race Loser",
+	}
+	mem := memory.NewEmailVerificationRegistry()
+	ev, err := mem.Create(context.Background(), models.EmailVerification{
+		UserID:    user.ID,
+		TenantID:  testTenantID,
+		Email:     user.Email,
+		Token:     "loser-token",
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
+	c.Assert(err, qt.IsNil)
+
+	verReg := &claimLosingVerificationRegistry{EmailVerificationRegistry: mem}
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{user.ID: user}}
+	emailSvc := &blockingEmailService{welcome: make(chan struct{}, 1)}
+	r := newRegistrationRouter(apiserver.RegistrationParams{
+		UserRegistry:         userReg,
+		VerificationRegistry: verReg,
+		EmailService:         emailSvc,
+		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
+	}, models.RegistrationModeOpen)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, newVerifyRequest(ev.Token))
+	c.Assert(w.Code, qt.Equals, http.StatusOK)
+	c.Assert(w.Body.String(), qt.Contains, "already verified")
+
+	select {
+	case <-emailSvc.welcome:
+		t.Fatal("a request that lost the verification claim must not send a welcome email")
+	case <-time.After(500 * time.Millisecond):
+	}
+}
+
+// TestHandleVerifyEmail_SecondVerifyIsIdempotent drives the real memory
+// registry end-to-end: after a successful verify marks the token, a second
+// request with the same token takes the IsVerified() fast path, returns 200,
+// and dispatches no further welcome email.
+func TestHandleVerifyEmail_SecondVerifyIsIdempotent(t *testing.T) {
+	c := qt.New(t)
+
+	user := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "verify-twice"},
+			TenantID: testTenantID,
+		},
+		Email: "twice@example.com",
+		Name:  "Verify Twice",
+	}
+	verReg := memory.NewEmailVerificationRegistry()
+	ev, err := verReg.Create(context.Background(), models.EmailVerification{
+		UserID:    user.ID,
+		TenantID:  testTenantID,
+		Email:     user.Email,
+		Token:     "twice-token",
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
+	c.Assert(err, qt.IsNil)
+
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{user.ID: user}}
+	// Buffer 2 so a (buggy) second welcome would land instead of deadlocking.
+	emailSvc := &blockingEmailService{welcome: make(chan struct{}, 2)}
+	r := newRegistrationRouter(apiserver.RegistrationParams{
+		UserRegistry:         userReg,
+		VerificationRegistry: verReg,
+		EmailService:         emailSvc,
+		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
+	}, models.RegistrationModeOpen)
+
+	// First verify: succeeds and sends exactly one welcome.
+	w1 := httptest.NewRecorder()
+	r.ServeHTTP(w1, newVerifyRequest(ev.Token))
+	c.Assert(w1.Code, qt.Equals, http.StatusOK)
+	c.Assert(w1.Body.String(), qt.Contains, "Email verified")
+	select {
+	case <-emailSvc.welcome:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("first verification should dispatch a welcome email")
+	}
+
+	// Second verify with the same token: idempotent, no new welcome.
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, newVerifyRequest(ev.Token))
+	c.Assert(w2.Code, qt.Equals, http.StatusOK)
+	c.Assert(w2.Body.String(), qt.Contains, "already verified")
+	select {
+	case <-emailSvc.welcome:
+		t.Fatal("a repeat verification must not dispatch a second welcome email")
+	case <-time.After(500 * time.Millisecond):
+	}
+}
+
 // ---- handleResendVerification ---------------------------------------------
 
 func TestHandleResendVerification_InvalidJSONReturns400(t *testing.T) {

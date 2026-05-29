@@ -364,6 +364,12 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Activate the account before claiming the token. IsActive is a monotonic
+	// flip to true, so a concurrent verify applying it twice is harmless, and
+	// ordering it first means a crash between the two writes leaves the benign
+	// "active user, still-unverified token" (self-heals on retry) instead of
+	// the harmful inverse — a verified token guarding a user that can never be
+	// activated.
 	user.IsActive = true
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
 		slog.Error("Failed to activate user", "user_id", user.ID, "error", err)
@@ -371,10 +377,22 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	now := time.Now()
-	ev.VerifiedAt = &now
-	if _, err := api.verificationRegistry.Update(r.Context(), *ev); err != nil {
+	// Atomically claim the token. The IsVerified() check above is a non-locking
+	// fast path; this is the authoritative gate. Exactly one of N concurrent
+	// requests with the same token wins the claim (claimed == true) and runs
+	// the one-time first-verification side effects; the losers fall through to
+	// the idempotent "already verified" response without duplicating them
+	// (#1005). On a registry error we surface 500 so the client can retry — the
+	// account is already active, so the retry re-claims cleanly.
+	claimed, err := api.verificationRegistry.MarkVerified(r.Context(), token)
+	if err != nil {
 		slog.Error("Failed to mark verification as used", "id", ev.ID, "error", err)
+		http.Error(w, "Failed to verify email", http.StatusInternalServerError)
+		return
+	}
+	if !claimed {
+		writeJSON(w, http.StatusOK, map[string]string{"message": "Email already verified. You can log in now."})
+		return
 	}
 
 	api.logAuth(r, "email_verified", &user.ID, true, "")
