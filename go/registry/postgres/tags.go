@@ -94,13 +94,38 @@ func (r *TagRegistry) Get(ctx context.Context, id string) (*models.Tag, error) {
 	return &tag, nil
 }
 
-func (r *TagRegistry) GetBySlug(ctx context.Context, slug string) (*models.Tag, error) {
+func (r *TagRegistry) GetBySlug(ctx context.Context, kind models.TagKind, slug string) (*models.Tag, error) {
 	var tag models.Tag
-	err := r.newSQLRegistry().ScanOneByField(ctx, store.Pair("slug", slug), &tag)
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// RLS scopes the query to the current tenant+group; (kind, slug)
+		// disambiguates the per-(group, kind) unique tuple.
+		err := tx.QueryRowxContext(ctx,
+			fmt.Sprintf(`SELECT * FROM %s WHERE kind = $1 AND slug = $2 LIMIT 1`, r.tableNames.Tags()),
+			kind, slug).StructScan(&tag)
+		if errors.Is(err, sql.ErrNoRows) {
+			return registry.ErrNotFound
+		}
+		return err
+	})
 	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			return nil, err
+		}
 		return nil, errxtrace.Wrap("failed to get tag by slug", err)
 	}
 	return &tag, nil
+}
+
+// tableForKind returns the JSONB-bearing table whose `tags` column holds
+// references for the given tag kind: commodities for commodity tags, files
+// for file tags. Unknown/empty kind falls back to commodities (defence in
+// depth — the write paths always pass a concrete kind).
+func (r *TagRegistry) tableForKind(kind models.TagKind) store.TableName {
+	if kind == models.TagKindFile {
+		return r.tableNames.Files()
+	}
+	return r.tableNames.Commodities()
 }
 
 func (r *TagRegistry) List(ctx context.Context) ([]*models.Tag, error) {
@@ -142,28 +167,27 @@ func (r *TagRegistry) Delete(ctx context.Context, id string) error {
 	return r.newSQLRegistry().Delete(ctx, id, nil)
 }
 
-// scopedUsageExpr returns the per-tag reference-count SQL expression for
-// a single scope: commodity-only, file-only, or commodities + files
-// combined (TagScopeAny). The expression is evaluated against the outer
-// `t` alias (the tags row), so callers must reference the tags table as
-// `t`. The two `tags @>` operands use the JSONB containment operator
-// backed by the existing GIN indexes (commodities_tags_gin_idx,
-// files_tags_gin_idx).
+// kindUsageExpr returns the per-tag reference-count SQL expression for the
+// given kind: commodity tags count commodity rows, file tags count file
+// rows. The expression is evaluated against the outer `t` alias (the tags
+// row), so callers must reference the tags table as `t`. The `tags @>`
+// operand uses the JSONB containment operator backed by the existing GIN
+// indexes (commodities_tags_gin_idx, files_tags_gin_idx).
 //
-// Unknown scope values fall back to the combined (TagScopeAny) expression
-// — the handler validates the wire value before it reaches the registry,
-// so this is a defence-in-depth fallback rather than a routine code path.
-func (r *TagRegistry) scopedUsageExpr(scope registry.TagScope) string {
+// Empty/unknown kind falls back to the combined expression — only reached
+// when listing across all kinds (the public handlers always pass a concrete
+// kind).
+func (r *TagRegistry) kindUsageExpr(kind models.TagKind) string {
 	commodityExpr := fmt.Sprintf(
 		`(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(t.slug))`,
 		r.tableNames.Commodities())
 	fileExpr := fmt.Sprintf(
 		`(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(t.slug))`,
 		r.tableNames.Files())
-	switch scope {
-	case registry.TagScopeCommodity:
+	switch kind {
+	case models.TagKindCommodity:
 		return commodityExpr
-	case registry.TagScopeFile:
+	case models.TagKindFile:
 		return fileExpr
 	default:
 		return "(" + commodityExpr + " + " + fileExpr + ")"
@@ -178,17 +202,20 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		var conditions []string
 		var args []any
+		argIdx := 1
 		if opts.Search != "" {
-			conditions = append(conditions, "(t.label ILIKE $1 OR t.slug ILIKE $2)")
+			conditions = append(conditions, fmt.Sprintf("(t.label ILIKE $%d OR t.slug ILIKE $%d)", argIdx, argIdx+1))
 			pattern := "%" + opts.Search + "%"
 			args = append(args, pattern, pattern)
+			argIdx += 2
 		}
-		// Scope filter: usage-derived. A tag passes ?scope=commodity if it
-		// has at least one commodity referencing it; same for ?scope=file.
-		// TagScopeAny adds no condition.
-		scopeFilterExpr := r.scopedUsageExpr(opts.Scope)
-		if opts.Scope == registry.TagScopeCommodity || opts.Scope == registry.TagScopeFile {
-			conditions = append(conditions, scopeFilterExpr+" > 0")
+		// Kind filter: intrinsic. A tag passes ?kind=commodity iff its
+		// stored kind is "commodity"; same for file. Zero kind adds no
+		// condition (list across all kinds — internal callers only).
+		if opts.Kind == models.TagKindCommodity || opts.Kind == models.TagKindFile {
+			conditions = append(conditions, fmt.Sprintf("t.kind = $%d", argIdx))
+			args = append(args, opts.Kind)
+			argIdx++
 		}
 		whereClause := ""
 		if len(conditions) > 0 {
@@ -213,10 +240,10 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 		case registry.TagSortCreatedAt:
 			orderBy = fmt.Sprintf("ORDER BY t.created_at %s, t.label ASC", dir)
 		case registry.TagSortUsage:
-			// Usage sort uses the SAME scoped expression as the filter so
-			// the "Sort by usage" toggle on a scoped tab reflects per-scope
-			// usage rather than combined usage.
-			orderBy = fmt.Sprintf("ORDER BY %s %s, t.label ASC", scopeFilterExpr, dir)
+			// Usage sort counts only the kind's own table (commodity tags →
+			// commodities, file tags → files), so "Sort by usage" reflects
+			// the tag's relevant usage.
+			orderBy = fmt.Sprintf("ORDER BY %s %s, t.label ASC", r.kindUsageExpr(opts.Kind), dir)
 		default:
 			orderBy = fmt.Sprintf("ORDER BY LOWER(t.label) %s, t.id ASC", dir)
 		}
@@ -225,7 +252,7 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 		dataArgs = append(dataArgs, limit, offset)
 		dataQuery := fmt.Sprintf(
 			`SELECT t.* FROM %s t %s %s LIMIT $%d OFFSET $%d`,
-			r.tableNames.Tags(), whereClause, orderBy, len(args)+1, len(args)+2,
+			r.tableNames.Tags(), whereClause, orderBy, argIdx, argIdx+1,
 		)
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
@@ -248,7 +275,7 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 	return tags, total, nil
 }
 
-func (r *TagRegistry) Search(ctx context.Context, q string, limit int, scope registry.TagScope) ([]*models.Tag, error) {
+func (r *TagRegistry) Search(ctx context.Context, q string, limit int, kind models.TagKind) ([]*models.Tag, error) {
 	var tags []*models.Tag
 
 	reg := r.newSQLRegistry()
@@ -262,25 +289,26 @@ func (r *TagRegistry) Search(ctx context.Context, q string, limit int, scope reg
 			args = append(args, pattern, pattern)
 			argIdx += 2
 		}
-		// Scope filter mirrors ListPaginated: strict exclusion of tags
-		// with zero usage in the requested scope, so the autocomplete
-		// dropdown on a commodity input never offers a file-only tag.
-		scopeUsageExpr := r.scopedUsageExpr(scope)
-		if scope == registry.TagScopeCommodity || scope == registry.TagScopeFile {
-			conditions = append(conditions, scopeUsageExpr+" > 0")
+		// Kind filter (intrinsic): the autocomplete dropdown on a commodity
+		// input only ever offers commodity tags, and a file input only file
+		// tags — they are separate entities.
+		if kind == models.TagKindCommodity || kind == models.TagKindFile {
+			conditions = append(conditions, fmt.Sprintf("t.kind = $%d", argIdx))
+			args = append(args, kind)
+			argIdx++
 		}
 		whereClause := ""
 		if len(conditions) > 0 {
 			whereClause = "WHERE " + strings.Join(conditions, " AND ")
 		}
 
-		// Rank by per-scope usage desc, then created_at desc
-		// (recency tiebreaker). For TagScopeAny this is combined usage,
-		// matching the legacy pre-#1628 ranking.
+		// Rank by the kind's own usage desc, then created_at desc
+		// (recency tiebreaker).
+		kindUsageExpr := r.kindUsageExpr(kind)
 		args = append(args, limit)
 		query := fmt.Sprintf(
 			`SELECT t.* FROM %s t %s ORDER BY %s DESC, t.created_at DESC LIMIT $%d`,
-			r.tableNames.Tags(), whereClause, scopeUsageExpr, argIdx,
+			r.tableNames.Tags(), whereClause, kindUsageExpr, argIdx,
 		)
 
 		rows, err := tx.QueryxContext(ctx, query, args...)
@@ -304,7 +332,7 @@ func (r *TagRegistry) Search(ctx context.Context, q string, limit int, scope reg
 	return tags, nil
 }
 
-func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[string]registry.TagUsage, error) {
+func (r *TagRegistry) GetUsageBatch(ctx context.Context, kind models.TagKind, slugs []string) (map[string]registry.TagUsage, error) {
 	out := make(map[string]registry.TagUsage, len(slugs))
 	for _, s := range slugs {
 		out[s] = registry.TagUsage{}
@@ -315,39 +343,25 @@ func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[st
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Single-pass query: scan commodities + files at most once each
-		// (filtered by `tags ?| input` so the GIN index on the JSONB tags
-		// column drives the lookup), unnest the JSONB arrays once per row,
-		// COUNT(DISTINCT id) per slug to match the @> containment semantics
-		// (a row with duplicate slugs in its tags array still counts as 1),
-		// then LEFT JOIN back to the requested input list so missing slugs
-		// land as 0/0 instead of being dropped.
-		//
-		// Compared to the per-slug correlated-subquery approach, this is
-		// O(rows scanned once per table) vs O(slugs × rows) — important
-		// for the upcoming Tags page which fetches usage for the whole
-		// page (default per_page=50).
+		// Single-pass query over the kind's own table only (commodity tags
+		// count commodity rows, file tags count file rows): filtered by
+		// `tags ?| input` so the GIN index drives the lookup, unnest the
+		// JSONB arrays once per row, COUNT(DISTINCT id) per slug to match
+		// the @> containment semantics (a row with duplicate slugs still
+		// counts as 1), then LEFT JOIN back to the requested input list so
+		// missing slugs land as 0 instead of being dropped.
 		query := fmt.Sprintf(`
 			WITH input(slug) AS (SELECT unnest($1::text[])),
-			commodity_counts AS (
-				SELECT t.value AS slug, COUNT(DISTINCT id)::int AS cnt
-				FROM %s, jsonb_array_elements_text(tags) AS t(value)
-				WHERE tags ?| $1::text[]
-				GROUP BY t.value
-			),
-			file_counts AS (
+			counts AS (
 				SELECT t.value AS slug, COUNT(DISTINCT id)::int AS cnt
 				FROM %s, jsonb_array_elements_text(tags) AS t(value)
 				WHERE tags ?| $1::text[]
 				GROUP BY t.value
 			)
-			SELECT input.slug,
-				COALESCE(c.cnt, 0) AS commodities,
-				COALESCE(f.cnt, 0) AS files
+			SELECT input.slug, COALESCE(c.cnt, 0) AS cnt
 			FROM input
-			LEFT JOIN commodity_counts c ON c.slug = input.slug
-			LEFT JOIN file_counts f ON f.slug = input.slug
-		`, r.tableNames.Commodities(), r.tableNames.Files())
+			LEFT JOIN counts c ON c.slug = input.slug
+		`, r.tableForKind(kind))
 
 		rows, err := tx.QueryxContext(ctx, query, slugs)
 		if err != nil {
@@ -356,11 +370,11 @@ func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[st
 		defer rows.Close()
 		for rows.Next() {
 			var slug string
-			var u registry.TagUsage
-			if err := rows.Scan(&slug, &u.Commodities, &u.Files); err != nil {
+			var cnt int
+			if err := rows.Scan(&slug, &cnt); err != nil {
 				return errxtrace.Wrap("failed to scan tag usage", err)
 			}
-			out[slug] = u
+			out[slug] = usageForKind(kind, cnt)
 		}
 		return rows.Err()
 	})
@@ -368,6 +382,15 @@ func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[st
 		return nil, errxtrace.Wrap("failed to compute tag usage batch", err)
 	}
 	return out, nil
+}
+
+// usageForKind packs a single per-kind reference count into the relevant
+// side of TagUsage (the other side stays zero).
+func usageForKind(kind models.TagKind, cnt int) registry.TagUsage {
+	if kind == models.TagKindFile {
+		return registry.TagUsage{Files: cnt}
+	}
+	return registry.TagUsage{Commodities: cnt}
 }
 
 func (r *TagRegistry) GetStats(ctx context.Context) (registry.TagStats, error) {
@@ -381,17 +404,21 @@ func (r *TagRegistry) GetStats(ctx context.Context) (registry.TagStats, error) {
 		query := fmt.Sprintf(`
 			SELECT
 				(SELECT COUNT(*) FROM %s) AS tags_total,
+				(SELECT COUNT(*) FROM %s WHERE kind = 'commodity') AS commodity_tags_total,
+				(SELECT COUNT(*) FROM %s WHERE kind = 'file') AS file_tags_total,
 				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) > 0) AS items_tagged,
 				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) = 0) AS items_untagged,
 				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) > 0) AS files_tagged,
 				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) = 0) AS files_untagged
 		`,
 			r.tableNames.Tags(),
+			r.tableNames.Tags(), r.tableNames.Tags(),
 			r.tableNames.Commodities(), r.tableNames.Commodities(),
 			r.tableNames.Files(), r.tableNames.Files(),
 		)
 		return tx.QueryRowxContext(ctx, query).Scan(
 			&stats.TagsTotal,
+			&stats.CommodityTagsTotal, &stats.FileTagsTotal,
 			&stats.ItemsTagged, &stats.ItemsUntagged,
 			&stats.FilesTagged, &stats.FilesUntagged,
 		)
@@ -402,23 +429,21 @@ func (r *TagRegistry) GetStats(ctx context.Context) (registry.TagStats, error) {
 	return stats, nil
 }
 
-func (r *TagRegistry) GetUsage(ctx context.Context, slug string) (registry.TagUsage, error) {
-	var usage registry.TagUsage
+func (r *TagRegistry) GetUsage(ctx context.Context, kind models.TagKind, slug string) (registry.TagUsage, error) {
+	var cnt int
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
-			`SELECT
-				(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text)),
-				(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text))`,
-			r.tableNames.Commodities(), r.tableNames.Files(),
+			`SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text)`,
+			r.tableForKind(kind),
 		)
-		return tx.QueryRowxContext(ctx, query, slug).Scan(&usage.Commodities, &usage.Files)
+		return tx.QueryRowxContext(ctx, query, slug).Scan(&cnt)
 	})
 	if err != nil {
 		return registry.TagUsage{}, errxtrace.Wrap("failed to compute tag usage", err)
 	}
-	return usage, nil
+	return usageForKind(kind, cnt), nil
 }
 
 // jsonbReplaceSlugExpr emits the SQL expression that returns the rewritten
@@ -447,47 +472,42 @@ func jsonbStripSlugExpr(slugParam int) string {
 	)
 }
 
-func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, oldSlug, newSlug string) (commodityRows, fileRows int, err error) {
+func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, kind models.TagKind, oldSlug, newSlug string) (commodityRows, fileRows int, err error) {
 	if oldSlug == newSlug {
 		return 0, 0, nil
 	}
 
-	var commodityCount, fileCount int
+	var affected int
 	reg := r.newSQLRegistry()
 	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		commQuery := fmt.Sprintf(
+		query := fmt.Sprintf(
 			`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-			r.tableNames.Commodities(), jsonbReplaceSlugExpr(1, 2),
+			r.tableForKind(kind), jsonbReplaceSlugExpr(1, 2),
 		)
-		commRes, execErr := tx.ExecContext(ctx, commQuery, oldSlug, newSlug)
+		res, execErr := tx.ExecContext(ctx, query, oldSlug, newSlug)
 		if execErr != nil {
-			return errxtrace.Wrap("failed to rewrite commodity tags", execErr)
+			return errxtrace.Wrap("failed to rewrite tag references", execErr)
 		}
-		commAffected, raErr := commRes.RowsAffected()
+		n, raErr := res.RowsAffected()
 		if raErr != nil {
-			return errxtrace.Wrap("failed to read commodity rows affected", raErr)
+			return errxtrace.Wrap("failed to read rows affected", raErr)
 		}
-		commodityCount = int(commAffected)
-
-		fileQuery := fmt.Sprintf(
-			`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-			r.tableNames.Files(), jsonbReplaceSlugExpr(1, 2),
-		)
-		fileRes, execErr := tx.ExecContext(ctx, fileQuery, oldSlug, newSlug)
-		if execErr != nil {
-			return errxtrace.Wrap("failed to rewrite file tags", execErr)
-		}
-		fileAffected, raErr := fileRes.RowsAffected()
-		if raErr != nil {
-			return errxtrace.Wrap("failed to read file rows affected", raErr)
-		}
-		fileCount = int(fileAffected)
+		affected = int(n)
 		return nil
 	})
 	if err != nil {
 		return 0, 0, errxtrace.Wrap("failed to rewrite slug references", err)
 	}
-	return commodityCount, fileCount, nil
+	return rowsForKind(kind, affected)
+}
+
+// rowsForKind splits a single affected-row count into the
+// (commodityRows, fileRows) return tuple used by Rewrite/StripSlugReferences.
+func rowsForKind(kind models.TagKind, affected int) (commodityRows, fileRows int, err error) {
+	if kind == models.TagKindFile {
+		return 0, affected, nil
+	}
+	return affected, 0, nil
 }
 
 // acquireTagAdvisoryLock takes a transaction-scoped postgres advisory lock
@@ -536,7 +556,7 @@ func defaultTagLabelFromSlug(slug string) string {
 // Slugs are deduplicated and sorted before locking so the lock
 // acquisition order is deterministic across writers — eliminates
 // deadlock potential when two writers reference overlapping slug sets.
-func ensureTagRowsInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableNames, tenantID, groupID, userID string, slugs []string) error {
+func ensureTagRowsInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableNames, tenantID, groupID, userID string, kind models.TagKind, slugs []string) error {
 	if len(slugs) == 0 || groupID == "" {
 		return nil
 	}
@@ -558,14 +578,17 @@ func ensureTagRowsInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableN
 	sort.Strings(cleaned)
 
 	selectForUpdate := fmt.Sprintf(
-		`SELECT 1 FROM %s WHERE group_id = $1 AND slug = $2 FOR UPDATE`, tableNames.Tags())
+		`SELECT 1 FROM %s WHERE group_id = $1 AND kind = $2 AND slug = $3 FOR UPDATE`, tableNames.Tags())
 	insertQuery := fmt.Sprintf(`
-		INSERT INTO %s (id, tenant_id, group_id, slug, label, color, created_by_user_id)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
-		ON CONFLICT (group_id, slug) DO NOTHING`, tableNames.Tags())
+		INSERT INTO %s (id, tenant_id, group_id, kind, slug, label, color, created_by_user_id)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (group_id, kind, slug) DO NOTHING`, tableNames.Tags())
 
 	for _, slug := range cleaned {
-		if err := acquireTagAdvisoryLock(ctx, tx, groupID, "slug:"+slug); err != nil {
+		// Lock key is namespaced by kind so a commodity-tag insert and a
+		// file-tag insert of the same slug don't serialize against each
+		// other (they are separate rows).
+		if err := acquireTagAdvisoryLock(ctx, tx, groupID, tagSlugLockKey(kind, slug)); err != nil {
 			return err
 		}
 		// SELECT FOR UPDATE — if the row exists, take a row-level lock so
@@ -575,14 +598,14 @@ func ensureTagRowsInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableN
 		// the existing row, so a concurrent delete that committed
 		// before us would still leave us with an orphan reference.
 		var dummy int
-		err := tx.QueryRowContext(ctx, selectForUpdate, groupID, slug).Scan(&dummy)
+		err := tx.QueryRowContext(ctx, selectForUpdate, groupID, kind, slug).Scan(&dummy)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			// Row gone (or never existed) — INSERT a fresh one. ON
 			// CONFLICT DO NOTHING is the safety net for two concurrent
-			// inserters racing on the same brand-new slug.
+			// inserters racing on the same brand-new (kind, slug).
 			if _, err := tx.ExecContext(ctx, insertQuery,
-				tenantID, groupID, slug, defaultTagLabelFromSlug(slug), models.DefaultTagColor, userID); err != nil {
+				tenantID, groupID, kind, slug, defaultTagLabelFromSlug(slug), models.DefaultTagColor, userID); err != nil {
 				return errxtrace.Wrap("failed to insert tag row", err, errx.Attrs("slug", slug))
 			}
 		case err != nil:
@@ -590,6 +613,13 @@ func ensureTagRowsInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableN
 		}
 	}
 	return nil
+}
+
+// tagSlugLockKey builds the per-(kind, slug) advisory-lock key. The inserter
+// (ensureTagRowsInTx) and the rename/delete paths (acquireSlugLocks) must
+// agree on this key so they serialize on the same (kind, slug) tuple.
+func tagSlugLockKey(kind models.TagKind, slug string) string {
+	return "slug:" + string(kind) + ":" + slug
 }
 
 // peekTagSlug reads the tag's current slug WITHOUT taking a row lock.
@@ -604,18 +634,17 @@ func ensureTagRowsInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableN
 // lock, otherwise a concurrent inserter holding (slug-lock + waiting
 // for row-lock) deadlocks against a deleter holding (row-lock +
 // waiting for slug-lock).
-func (r *TagRegistry) peekTagSlug(ctx context.Context, tx *sqlx.Tx, id string) (string, error) {
-	var slug string
-	err := tx.QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT slug FROM %s WHERE id = $1`, r.tableNames.Tags()),
-		id).Scan(&slug)
+func (r *TagRegistry) peekTagSlug(ctx context.Context, tx *sqlx.Tx, id string) (slug string, kind models.TagKind, err error) {
+	err = tx.QueryRowContext(ctx,
+		fmt.Sprintf(`SELECT slug, kind FROM %s WHERE id = $1`, r.tableNames.Tags()),
+		id).Scan(&slug, &kind)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", errxtrace.Wrap("failed to look up tag", registry.ErrNotFound, errx.Attrs("id", id))
+		return "", "", errxtrace.Wrap("failed to look up tag", registry.ErrNotFound, errx.Attrs("id", id))
 	}
 	if err != nil {
-		return "", errxtrace.Wrap("failed to look up tag", err)
+		return "", "", errxtrace.Wrap("failed to look up tag", err)
 	}
-	return slug, nil
+	return slug, kind, nil
 }
 
 // renameRewriteSlug runs the JSONB-rewrite half of RenameAtomic — slug
@@ -624,15 +653,17 @@ func (r *TagRegistry) peekTagSlug(ctx context.Context, tx *sqlx.Tx, id string) (
 // before the tag-row FOR UPDATE so the lock acquisition order matches
 // ensureTagRowsInTx). Lifted out of RenameAtomic so the orchestrator
 // stays under gocognit's threshold without losing the rewrite step.
-func (r *TagRegistry) renameRewriteSlug(ctx context.Context, tx *sqlx.Tx, id, oldSlug, newSlug string) error {
-	// Pre-emptive slug-clash check, inside the lock — relying on
-	// the unique index alone would still work, but yields a worse
-	// error message (Postgres-level uniqueness violation vs. our
-	// domain ErrAlreadyExists).
+func (r *TagRegistry) renameRewriteSlug(ctx context.Context, tx *sqlx.Tx, id string, kind models.TagKind, oldSlug, newSlug string) error {
+	// Pre-emptive slug-clash check, inside the lock — scoped to the same
+	// kind, because (group, kind, slug) is the uniqueness tuple: the same
+	// slug may legitimately exist under the other kind. Relying on the
+	// unique index alone would still work, but yields a worse error
+	// message (Postgres-level uniqueness violation vs. our domain
+	// ErrAlreadyExists).
 	var clashID string
 	clashErr := tx.QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT id FROM %s WHERE slug = $1 AND id != $2 LIMIT 1`, r.tableNames.Tags()),
-		newSlug, id).Scan(&clashID)
+		fmt.Sprintf(`SELECT id FROM %s WHERE kind = $1 AND slug = $2 AND id != $3 LIMIT 1`, r.tableNames.Tags()),
+		kind, newSlug, id).Scan(&clashID)
 	switch {
 	case errors.Is(clashErr, sql.ErrNoRows):
 		// no clash — proceed
@@ -643,17 +674,13 @@ func (r *TagRegistry) renameRewriteSlug(ctx context.Context, tx *sqlx.Tx, id, ol
 			registry.ErrAlreadyExists, errx.Attrs("slug", newSlug))
 	}
 
-	rewriteCommQuery := fmt.Sprintf(
+	// Rewrite references only on the kind's own table — a commodity-tag
+	// rename must not touch files (those slugs belong to file tags).
+	rewriteQuery := fmt.Sprintf(
 		`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-		r.tableNames.Commodities(), jsonbReplaceSlugExpr(1, 2))
-	if _, err := tx.ExecContext(ctx, rewriteCommQuery, oldSlug, newSlug); err != nil {
-		return errxtrace.Wrap("failed to rewrite commodity tags", err)
-	}
-	rewriteFileQuery := fmt.Sprintf(
-		`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-		r.tableNames.Files(), jsonbReplaceSlugExpr(1, 2))
-	if _, err := tx.ExecContext(ctx, rewriteFileQuery, oldSlug, newSlug); err != nil {
-		return errxtrace.Wrap("failed to rewrite file tags", err)
+		r.tableForKind(kind), jsonbReplaceSlugExpr(1, 2))
+	if _, err := tx.ExecContext(ctx, rewriteQuery, oldSlug, newSlug); err != nil {
+		return errxtrace.Wrap("failed to rewrite tag references", err)
 	}
 	return nil
 }
@@ -665,7 +692,7 @@ func (r *TagRegistry) renameRewriteSlug(ctx context.Context, tx *sqlx.Tx, id, ol
 // reverse, because the reverse interleaves with the inserter's order
 // and deadlocks under concurrency (real failure mode seen in CI on
 // PR #1491; see follow-up #1492).
-func (r *TagRegistry) acquireSlugLocks(ctx context.Context, tx *sqlx.Tx, slugs ...string) error {
+func (r *TagRegistry) acquireSlugLocks(ctx context.Context, tx *sqlx.Tx, kind models.TagKind, slugs ...string) error {
 	keys := slices.Clone(slugs)
 	sort.Strings(keys)
 	keys = slices.Compact(keys)
@@ -673,7 +700,7 @@ func (r *TagRegistry) acquireSlugLocks(ctx context.Context, tx *sqlx.Tx, slugs .
 		if s == "" {
 			continue
 		}
-		if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, "slug:"+s); err != nil {
+		if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, tagSlugLockKey(kind, s)); err != nil {
 			return err
 		}
 	}
@@ -698,13 +725,14 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 			return err
 		}
 
-		// Peek the slug without locking the row, so we can take the
-		// slug-advisory lock(s) BEFORE the row lock.
-		oldSlug, err := r.peekTagSlug(ctx, tx, id)
+		// Peek the slug + kind without locking the row, so we can take the
+		// slug-advisory lock(s) BEFORE the row lock. Kind is needed both to
+		// namespace the locks and to scope the rewrite to the right table.
+		oldSlug, kind, err := r.peekTagSlug(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		if err := r.acquireSlugLocks(ctx, tx, oldSlug, newSlug); err != nil {
+		if err := r.acquireSlugLocks(ctx, tx, kind, oldSlug, newSlug); err != nil {
 			return err
 		}
 
@@ -731,7 +759,7 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 
 		if newSlug != "" && newSlug != current.Slug {
 			updated.Slug = newSlug
-			if err := r.renameRewriteSlug(ctx, tx, id, current.Slug, newSlug); err != nil {
+			if err := r.renameRewriteSlug(ctx, tx, id, kind, current.Slug, newSlug); err != nil {
 				return err
 			}
 		}
@@ -779,13 +807,13 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 			return err
 		}
 
-		// Peek the slug without locking the row, so we can take the
+		// Peek the slug + kind without locking the row, so we can take the
 		// slug-advisory lock BEFORE the row lock.
-		slug, err := r.peekTagSlug(ctx, tx, id)
+		slug, kind, err := r.peekTagSlug(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		if err := r.acquireSlugLocks(ctx, tx, slug); err != nil {
+		if err := r.acquireSlugLocks(ctx, tx, kind, slug); err != nil {
 			return err
 		}
 
@@ -800,29 +828,26 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 			return errxtrace.Wrap("failed to look up tag", err)
 		}
 
+		// Usage counts only the tag's own kind table — a commodity tag's
+		// usage is its commodities, never files that happen to share the slug.
+		var refCount int
 		usageQuery := fmt.Sprintf(
-			`SELECT (SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text)),
-			        (SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text))`,
-			r.tableNames.Commodities(), r.tableNames.Files())
-		if err := tx.QueryRowxContext(ctx, usageQuery, current.Slug).Scan(&usage.Commodities, &usage.Files); err != nil {
+			`SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text)`,
+			r.tableForKind(current.Kind))
+		if err := tx.QueryRowxContext(ctx, usageQuery, current.Slug).Scan(&refCount); err != nil {
 			return errxtrace.Wrap("failed to compute tag usage", err)
 		}
+		usage = usageForKind(current.Kind, refCount)
 
-		if usage.Commodities+usage.Files > 0 && !force {
+		if refCount > 0 && !force {
 			return registry.ErrTagInUse
 		}
-		if usage.Commodities+usage.Files > 0 {
-			stripCommQuery := fmt.Sprintf(
+		if refCount > 0 {
+			stripQuery := fmt.Sprintf(
 				`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-				r.tableNames.Commodities(), jsonbStripSlugExpr(1))
-			if _, err := tx.ExecContext(ctx, stripCommQuery, current.Slug); err != nil {
-				return errxtrace.Wrap("failed to strip commodity tags", err)
-			}
-			stripFileQuery := fmt.Sprintf(
-				`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-				r.tableNames.Files(), jsonbStripSlugExpr(1))
-			if _, err := tx.ExecContext(ctx, stripFileQuery, current.Slug); err != nil {
-				return errxtrace.Wrap("failed to strip file tags", err)
+				r.tableForKind(current.Kind), jsonbStripSlugExpr(1))
+			if _, err := tx.ExecContext(ctx, stripQuery, current.Slug); err != nil {
+				return errxtrace.Wrap("failed to strip tag references", err)
 			}
 		}
 
@@ -838,41 +863,27 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 	return usage, nil
 }
 
-func (r *TagRegistry) StripSlugReferences(ctx context.Context, slug string) (commodityRows, fileRows int, err error) {
-	var commodityCount, fileCount int
+func (r *TagRegistry) StripSlugReferences(ctx context.Context, kind models.TagKind, slug string) (commodityRows, fileRows int, err error) {
+	var affected int
 	reg := r.newSQLRegistry()
 	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		commQuery := fmt.Sprintf(
+		query := fmt.Sprintf(
 			`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-			r.tableNames.Commodities(), jsonbStripSlugExpr(1),
+			r.tableForKind(kind), jsonbStripSlugExpr(1),
 		)
-		commRes, execErr := tx.ExecContext(ctx, commQuery, slug)
+		res, execErr := tx.ExecContext(ctx, query, slug)
 		if execErr != nil {
-			return errxtrace.Wrap("failed to strip commodity tags", execErr)
+			return errxtrace.Wrap("failed to strip tag references", execErr)
 		}
-		commAffected, raErr := commRes.RowsAffected()
+		n, raErr := res.RowsAffected()
 		if raErr != nil {
-			return errxtrace.Wrap("failed to read commodity rows affected", raErr)
+			return errxtrace.Wrap("failed to read rows affected", raErr)
 		}
-		commodityCount = int(commAffected)
-
-		fileQuery := fmt.Sprintf(
-			`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-			r.tableNames.Files(), jsonbStripSlugExpr(1),
-		)
-		fileRes, execErr := tx.ExecContext(ctx, fileQuery, slug)
-		if execErr != nil {
-			return errxtrace.Wrap("failed to strip file tags", execErr)
-		}
-		fileAffected, raErr := fileRes.RowsAffected()
-		if raErr != nil {
-			return errxtrace.Wrap("failed to read file rows affected", raErr)
-		}
-		fileCount = int(fileAffected)
+		affected = int(n)
 		return nil
 	})
 	if err != nil {
 		return 0, 0, errxtrace.Wrap("failed to strip slug references", err)
 	}
-	return commodityCount, fileCount, nil
+	return rowsForKind(kind, affected)
 }

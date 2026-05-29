@@ -336,7 +336,7 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 	// Auto-create any tags the user typed but that don't yet exist as
 	// first-class rows; replace the JSONB list with the canonical slugs.
 	if len(commodity.Tags) > 0 {
-		slugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), []string(commodity.Tags))
+		slugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), models.TagKindCommodity, []string(commodity.Tags))
 		if terr != nil {
 			renderEntityError(w, r, terr)
 			return
@@ -489,7 +489,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 	}
 
 	if len(updateData.Tags) > 0 {
-		slugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), []string(updateData.Tags))
+		slugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), models.TagKindCommodity, []string(updateData.Tags))
 		if terr != nil {
 			renderEntityError(w, r, terr)
 			return

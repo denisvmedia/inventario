@@ -1428,7 +1428,7 @@ func (l *RestoreOperationProcessor) ensureCommodityTags(ctx context.Context, com
 	if len(commodity.Tags) == 0 {
 		return nil
 	}
-	slugs, err := l.tagService.NormalizeAndEnsureSlugs(ctx, []string(commodity.Tags))
+	slugs, err := l.tagService.NormalizeAndEnsureSlugs(ctx, models.TagKindCommodity, []string(commodity.Tags))
 	if err != nil {
 		return errxtrace.Wrap("failed to ensure tags for restored commodity", err, errx.Attrs("original_commodity_id", originalXMLID))
 	}

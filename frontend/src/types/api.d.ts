@@ -6958,11 +6958,13 @@ export type paths = {
         };
         /**
          * List tags
-         * @description get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block. Pass scope=commodity|file to restrict to tags actually used on that entity type.
+         * @description get tags of the given kind. Pass include=usage to attach a per-row meta.usage block. kind=commodity|file is required — item-tags and file-tags are separate entities.
          */
         get: {
             parameters: {
-                query?: {
+                query: {
+                    /** @description Tag kind (commodity = item-tags, file = file-tags) */
+                    kind: "commodity" | "file";
                     /** @description Search by label or slug */
                     q?: string;
                     /** @description Sort field (label, created_at, usage) */
@@ -6975,8 +6977,6 @@ export type paths = {
                     per_page?: number;
                     /** @description Comma-separated extras. 'usage' attaches per-row meta.usage. */
                     include?: "usage";
-                    /** @description Restrict to tags used on commodities or files. Empty = no filter. */
-                    scope?: "commodity" | "file";
                 };
                 header?: never;
                 path: {
@@ -6996,7 +6996,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.TagsResponse"];
                     };
                 };
-                /** @description Invalid scope value */
+                /** @description Missing or invalid kind value */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -7064,17 +7064,17 @@ export type paths = {
         };
         /**
          * Autocomplete tag suggestions
-         * @description Top-N tags matching the query, ranked by scope-aware usage desc + created_at desc.
+         * @description Top-N tags of the given kind matching the query, ranked by usage desc + created_at desc.
          */
         get: {
             parameters: {
-                query?: {
+                query: {
+                    /** @description Tag kind (commodity = item-tags, file = file-tags) */
+                    kind: "commodity" | "file";
                     /** @description Substring match against label and slug */
                     q?: string;
                     /** @description Maximum suggestions returned */
                     limit?: number;
-                    /** @description Restrict to tags used on commodities or files. Empty = no filter. */
-                    scope?: "commodity" | "file";
                 };
                 header?: never;
                 path: {
@@ -7094,7 +7094,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.TagAutocompleteResponse"];
                     };
                 };
-                /** @description Invalid scope value */
+                /** @description Missing or invalid kind value */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -10912,12 +10912,19 @@ export type components = {
             color?: components["schemas"]["models.TagColor"];
             created_at?: string;
             id?: string;
+            /**
+             * @description Kind separates item-tags (commodity) from file-tags (file). Two tags
+             *     with the same slug but different kind are distinct entities. Existing
+             *     rows default to "commodity" on migration; new rows always carry an
+             *     explicit kind from the write path.
+             */
+            kind?: components["schemas"]["models.TagKind"];
             /** @description Label is the human-readable display name. */
             label?: string;
             meta?: components["schemas"]["jsonapi.TagMeta"];
             /**
              * @description Slug is the kebab-cased identifier referenced from
-             *     commodities.tags / files.tags JSONB arrays. Unique per group.
+             *     commodities.tags / files.tags JSONB arrays. Unique per (group, kind).
              */
             slug?: string;
             updated_at?: string;
@@ -10935,6 +10942,11 @@ export type components = {
              * @enum {unknown}
              */
             color?: "amber" | "green" | "blue" | "orange" | "red" | "muted";
+            /**
+             * @example commodity
+             * @enum {unknown}
+             */
+            kind?: "commodity" | "file";
             label?: string;
             slug?: string;
         };
@@ -11778,11 +11790,18 @@ export type components = {
             color?: components["schemas"]["models.TagColor"];
             created_at?: string;
             id?: string;
+            /**
+             * @description Kind separates item-tags (commodity) from file-tags (file). Two tags
+             *     with the same slug but different kind are distinct entities. Existing
+             *     rows default to "commodity" on migration; new rows always carry an
+             *     explicit kind from the write path.
+             */
+            kind?: components["schemas"]["models.TagKind"];
             /** @description Label is the human-readable display name. */
             label?: string;
             /**
              * @description Slug is the kebab-cased identifier referenced from
-             *     commodities.tags / files.tags JSONB arrays. Unique per group.
+             *     commodities.tags / files.tags JSONB arrays. Unique per (group, kind).
              */
             slug?: string;
             updated_at?: string;
@@ -11790,6 +11809,8 @@ export type components = {
         };
         /** @enum {string} */
         "models.TagColor": "amber" | "green" | "blue" | "orange" | "red" | "muted";
+        /** @enum {string} */
+        "models.TagKind": "" | "commodity" | "file";
         /** @enum {string} */
         "models.TenantStatus": "active" | "suspended" | "inactive";
         "models.User": {
@@ -11844,6 +11865,8 @@ export type components = {
             other?: number;
         };
         "registry.TagStats": {
+            commodity_tags_total?: number;
+            file_tags_total?: number;
             files_tagged?: number;
             files_untagged?: number;
             items_tagged?: number;

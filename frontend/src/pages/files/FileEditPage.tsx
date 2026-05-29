@@ -176,6 +176,8 @@ export function FileEditPage() {
                     values={field.value ?? []}
                     onChange={field.onChange}
                     testId="file-edit-tags"
+                    autocomplete
+                    kind="file"
                   />
                 )}
               />

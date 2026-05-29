@@ -54,20 +54,20 @@ type tagsAPI struct {
 
 // listTags lists tags with pagination, optional q-search, and sort.
 // @Summary List tags
-// @Description get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block. Pass scope=commodity|file to restrict to tags actually used on that entity type.
+// @Description get tags of the given kind. Pass include=usage to attach a per-row meta.usage block. kind=commodity|file is required — item-tags and file-tags are separate entities.
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
+// @Param kind query string true "Tag kind (commodity = item-tags, file = file-tags)" Enums(commodity,file)
 // @Param q query string false "Search by label or slug"
 // @Param sort query string false "Sort field (label, created_at, usage)" Enums(label,created_at,usage)
 // @Param order query string false "Sort direction (asc, desc)" default(asc)
 // @Param page query int false "Page number (1-based)" default(1)
 // @Param per_page query int false "Items per page" default(50)
 // @Param include query string false "Comma-separated extras. 'usage' attaches per-row meta.usage." Enums(usage)
-// @Param scope query string false "Restrict to tags used on commodities or files. Empty = no filter." Enums(commodity,file)
 // @Success 200 {object} jsonapi.TagsResponse "OK"
-// @Failure 422 {object} jsonapi.Errors "Invalid scope value"
+// @Failure 422 {object} jsonapi.Errors "Missing or invalid kind value"
 // @Router /g/{groupSlug}/tags [get].
 func (api *tagsAPI) listTags(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())
@@ -80,9 +80,9 @@ func (api *tagsAPI) listTags(w http.ResponseWriter, r *http.Request) {
 	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
 	offset := (page - 1) * perPage
 
-	scope, ok := parseTagScope(q.Get("scope"))
+	kind, ok := parseTagKind(q.Get("kind"))
 	if !ok {
-		unprocessableEntityError(w, r, fmt.Errorf("invalid scope: %q (must be one of: commodity, file)", q.Get("scope")))
+		unprocessableEntityError(w, r, fmt.Errorf("invalid kind: %q (must be one of: commodity, file)", q.Get("kind")))
 		return
 	}
 
@@ -90,7 +90,7 @@ func (api *tagsAPI) listTags(w http.ResponseWriter, r *http.Request) {
 		Search:    q.Get("q"),
 		SortField: registry.TagSortField(q.Get("sort")),
 		SortDesc:  q.Get("order") == "desc",
-		Scope:     scope,
+		Kind:      kind,
 	}
 
 	tags, total, err := regSet.TagRegistry.ListPaginated(r.Context(), offset, perPage, opts)
@@ -105,7 +105,7 @@ func (api *tagsAPI) listTags(w http.ResponseWriter, r *http.Request) {
 		for _, t := range tags {
 			slugs = append(slugs, t.Slug)
 		}
-		usageBySlug, err = regSet.TagRegistry.GetUsageBatch(r.Context(), slugs)
+		usageBySlug, err = regSet.TagRegistry.GetUsageBatch(r.Context(), kind, slugs)
 		if err != nil {
 			renderEntityError(w, r, err)
 			return
@@ -165,16 +165,16 @@ func includeHasToken(raw, token string) bool {
 
 // autocompleteTags returns the top-N matching tags ranked by usage and recency.
 // @Summary Autocomplete tag suggestions
-// @Description Top-N tags matching the query, ranked by scope-aware usage desc + created_at desc.
+// @Description Top-N tags of the given kind matching the query, ranked by usage desc + created_at desc.
 // @Tags tags
 // @Accept json-api
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
+// @Param kind query string true "Tag kind (commodity = item-tags, file = file-tags)" Enums(commodity,file)
 // @Param q query string false "Substring match against label and slug"
 // @Param limit query int false "Maximum suggestions returned" default(10)
-// @Param scope query string false "Restrict to tags used on commodities or files. Empty = no filter." Enums(commodity,file)
 // @Success 200 {object} jsonapi.TagAutocompleteResponse "OK"
-// @Failure 422 {object} jsonapi.Errors "Invalid scope value"
+// @Failure 422 {object} jsonapi.Errors "Missing or invalid kind value"
 // @Router /g/{groupSlug}/tags/autocomplete [get].
 func (api *tagsAPI) autocompleteTags(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())
@@ -190,13 +190,13 @@ func (api *tagsAPI) autocompleteTags(w http.ResponseWriter, r *http.Request) {
 			limit = parsed
 		}
 	}
-	scope, ok := parseTagScope(r.URL.Query().Get("scope"))
+	kind, ok := parseTagKind(r.URL.Query().Get("kind"))
 	if !ok {
-		unprocessableEntityError(w, r, fmt.Errorf("invalid scope: %q (must be one of: commodity, file)", r.URL.Query().Get("scope")))
+		unprocessableEntityError(w, r, fmt.Errorf("invalid kind: %q (must be one of: commodity, file)", r.URL.Query().Get("kind")))
 		return
 	}
 
-	tags, err := regSet.TagRegistry.Search(r.Context(), q, limit, scope)
+	tags, err := regSet.TagRegistry.Search(r.Context(), q, limit, kind)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -206,14 +206,14 @@ func (api *tagsAPI) autocompleteTags(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// parseTagScope validates and returns the requested tag scope from the
-// raw ?scope= query value. Returns (TagScopeAny, true) for the empty
-// string (treated as no filter). Returns (_, false) for any other value
-// the registry doesn't understand — handler converts to 422.
-func parseTagScope(raw string) (registry.TagScope, bool) {
-	candidate := registry.TagScope(strings.TrimSpace(raw))
+// parseTagKind validates and returns the required tag kind from the raw
+// ?kind= query value. Item-tags and file-tags are separate entities, so
+// kind is mandatory — there is no "all". Returns (_, false) for an empty
+// or unknown value; the handler converts that to 422.
+func parseTagKind(raw string) (models.TagKind, bool) {
+	candidate := models.TagKind(strings.TrimSpace(raw))
 	if !candidate.IsValid() {
-		return registry.TagScopeAny, false
+		return models.TagKindAny, false
 	}
 	return candidate, true
 }
@@ -242,7 +242,7 @@ func (api *tagsAPI) getTag(w http.ResponseWriter, r *http.Request) { //revive:di
 		return
 	}
 
-	usage, err := regSet.TagRegistry.GetUsage(r.Context(), tag.Slug)
+	usage, err := regSet.TagRegistry.GetUsage(r.Context(), tag.Kind, tag.Slug)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -278,6 +278,7 @@ func (api *tagsAPI) createTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tag := models.Tag{
+		Kind:  input.Data.Attributes.Kind,
 		Slug:  input.Data.Attributes.Slug,
 		Label: input.Data.Attributes.Label,
 		Color: input.Data.Attributes.Color,

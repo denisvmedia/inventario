@@ -174,8 +174,11 @@ type TagRequestDataWrapper struct {
 	Attributes TagRequestData `json:"attributes"`
 }
 
-// TagRequestData carries the user-supplied fields on create.
+// TagRequestData carries the user-supplied fields on create. Kind is
+// required and immutable — item-tags and file-tags are separate entities,
+// so a tag's kind is fixed at creation (PATCH cannot change it).
 type TagRequestData struct {
+	Kind  models.TagKind  `json:"kind" example:"commodity" enums:"commodity,file"`
 	Slug  string          `json:"slug"`
 	Label string          `json:"label"`
 	Color models.TagColor `json:"color" example:"muted" enums:"amber,green,blue,orange,red,muted"`
@@ -188,6 +191,13 @@ func (trd *TagRequestData) Validate() error {
 func (trd *TagRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
+		validation.Field(&trd.Kind, validation.Required, validation.By(func(value any) error {
+			k, ok := value.(models.TagKind)
+			if !ok || !k.IsValid() {
+				return validation.NewError("invalid_tag_kind", "kind must be one of: commodity, file")
+			}
+			return nil
+		})),
 		validation.Field(&trd.Slug, validation.Required, validation.By(func(value any) error {
 			s, _ := value.(string)
 			if !models.IsValidTagSlug(s) {

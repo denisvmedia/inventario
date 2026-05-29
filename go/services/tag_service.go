@@ -51,7 +51,7 @@ func NewTagService(factorySet *registry.FactorySet) *TagService {
 // the error rather than retrying — the autocomplete UI prevents most
 // realistic races, and the issue body permits this (concurrency target is
 // rename, not auto-create).
-func (s *TagService) EnsureTagsExist(ctx context.Context, slugs []string) (map[string]*models.Tag, error) {
+func (s *TagService) EnsureTagsExist(ctx context.Context, kind models.TagKind, slugs []string) (map[string]*models.Tag, error) {
 	tagReg, err := s.factorySet.TagRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create tag registry", err)
@@ -70,7 +70,7 @@ func (s *TagService) EnsureTagsExist(ctx context.Context, slugs []string) (map[s
 		}
 		seen[slug] = struct{}{}
 
-		existing, err := tagReg.GetBySlug(ctx, slug)
+		existing, err := tagReg.GetBySlug(ctx, kind, slug)
 		if err == nil && existing != nil {
 			out[slug] = existing
 			continue
@@ -87,6 +87,7 @@ func (s *TagService) EnsureTagsExist(ctx context.Context, slugs []string) (map[s
 		// what the DEFAULT would have produced.
 		now := time.Now()
 		tag := models.Tag{
+			Kind:      kind,
 			Slug:      slug,
 			Label:     defaultLabelFromSlug(slug),
 			Color:     models.DefaultTagColor,
@@ -115,11 +116,11 @@ func (s *TagService) EnsureTagsExist(ctx context.Context, slugs []string) (map[s
 //
 // Returns an empty slice (never nil) when nothing usable remains, so
 // callers persist `[]` instead of `null` on the JSONB column.
-func (s *TagService) NormalizeAndEnsureSlugs(ctx context.Context, raw []string) ([]string, error) {
+func (s *TagService) NormalizeAndEnsureSlugs(ctx context.Context, kind models.TagKind, raw []string) ([]string, error) {
 	if len(raw) == 0 {
 		return []string{}, nil
 	}
-	tags, err := s.EnsureTagsExist(ctx, raw)
+	tags, err := s.EnsureTagsExist(ctx, kind, raw)
 	if err != nil {
 		return nil, err
 	}

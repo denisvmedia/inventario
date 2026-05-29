@@ -141,9 +141,12 @@ func TestRestore_AutoCreatesTagsForNewSlugs(t *testing.T) {
 	// (color or label) caused by the restore path mistakenly re-creating
 	// them via Update.
 	tagReg := must.Must(factorySet.TagRegistryFactory.CreateUserRegistry(ctx))
+	// Pre-seed as commodity-kind tags — that's the kind the commodity
+	// restore path looks up by, so these rows are reused rather than
+	// duplicated.
 	preExisting := []models.Tag{
-		{Slug: "electronics", Label: "Electronics (curated)", Color: models.TagColorBlue},
-		{Slug: "entertainment", Label: "Entertainment (curated)", Color: models.TagColorGreen},
+		{Kind: models.TagKindCommodity, Slug: "electronics", Label: "Electronics (curated)", Color: models.TagColorBlue},
+		{Kind: models.TagKindCommodity, Slug: "entertainment", Label: "Entertainment (curated)", Color: models.TagColorGreen},
 	}
 	for _, t := range preExisting {
 		must.Must(tagReg.Create(ctx, t))

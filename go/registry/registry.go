@@ -414,39 +414,6 @@ func (s TagSortField) IsValid() bool {
 	return false
 }
 
-// TagScope narrows tag listing / autocomplete to tags that are actually used
-// on a specific entity type. Scope is *usage-derived* — there is no scope
-// column on the tags row itself; a tag's scope is whichever entity types
-// have at least one row referencing the tag via their JSONB tags array.
-//
-// A tag used on both commodities and files is multi-scope and shows up
-// under both TagScopeCommodity and TagScopeFile filters. A brand-new tag
-// with zero usage shows up only under TagScopeAny.
-//
-// Names are part of the public API surface (FE sends them as ?scope=).
-type TagScope string
-
-const (
-	// TagScopeAny matches every tag regardless of where it is used.
-	// Default when ?scope= is missing.
-	TagScopeAny TagScope = ""
-	// TagScopeCommodity matches tags referenced by at least one commodity.
-	TagScopeCommodity TagScope = "commodity"
-	// TagScopeFile matches tags referenced by at least one file.
-	TagScopeFile TagScope = "file"
-)
-
-// IsValid reports whether s is a known tag scope. Empty string is treated
-// as TagScopeAny by callers; this returns true for the empty string so the
-// handler can validate the raw query value uniformly.
-func (s TagScope) IsValid() bool {
-	switch s {
-	case TagScopeAny, TagScopeCommodity, TagScopeFile:
-		return true
-	}
-	return false
-}
-
 // TagListOptions narrows the result of TagRegistry.ListPaginated.
 type TagListOptions struct {
 	// Search runs case-insensitive substring match on label and slug.
@@ -455,9 +422,10 @@ type TagListOptions struct {
 	SortField TagSortField
 	// SortDesc reverses the natural order of the chosen field.
 	SortDesc bool
-	// Scope filters to tags actually used on the named entity type.
-	// TagScopeAny (or zero value) returns every tag.
-	Scope TagScope
+	// Kind filters to tags of the given kind (item-tags vs file-tags).
+	// models.TagKindAny (the zero value) returns every tag regardless of
+	// kind; the public list/autocomplete handlers require a concrete kind.
+	Kind models.TagKind
 }
 
 // TagUsage is the per-tag breakdown of how many commodity / file rows
@@ -471,12 +439,16 @@ type TagUsage struct {
 // TagStats is the group-wide tag adoption summary that backs the Tags page
 // stats bar. Tagged/untagged counts are derived from the JSONB tags array
 // on commodities + files (presence vs. emptiness, not per-tag breakdown).
+// CommodityTagsTotal / FilesTagsTotal are the per-kind tag counts so each
+// scoped view can show its own total.
 type TagStats struct {
-	TagsTotal     int `json:"tags_total"`
-	ItemsTagged   int `json:"items_tagged"`
-	ItemsUntagged int `json:"items_untagged"`
-	FilesTagged   int `json:"files_tagged"`
-	FilesUntagged int `json:"files_untagged"`
+	TagsTotal          int `json:"tags_total"`
+	CommodityTagsTotal int `json:"commodity_tags_total"`
+	FileTagsTotal      int `json:"file_tags_total"`
+	ItemsTagged        int `json:"items_tagged"`
+	ItemsUntagged      int `json:"items_untagged"`
+	FilesTagged        int `json:"files_tagged"`
+	FilesUntagged      int `json:"files_untagged"`
 }
 
 // TagRegistry is the group-scoped catalogue of tags. The tag-string
@@ -485,53 +457,49 @@ type TagStats struct {
 type TagRegistry interface {
 	Registry[models.Tag]
 
-	// GetBySlug returns a tag by its slug within the current group.
-	// Returns ErrNotFound if no tag with that slug exists.
-	GetBySlug(ctx context.Context, slug string) (*models.Tag, error)
+	// GetBySlug returns a tag by its (kind, slug) within the current group.
+	// Returns ErrNotFound if no tag with that kind+slug exists. The same
+	// slug can exist under two kinds, so kind is required to disambiguate.
+	GetBySlug(ctx context.Context, kind models.TagKind, slug string) (*models.Tag, error)
 
 	// ListPaginated returns paginated tags with optional q-search and
-	// sorting. Pass a zero TagListOptions for "all rows, label asc".
+	// sorting. opts.Kind filters by kind (zero value = all kinds).
 	ListPaginated(ctx context.Context, offset, limit int, opts TagListOptions) ([]*models.Tag, int, error)
 
-	// Search returns tags whose label or slug matches q (case-insensitive
-	// substring), capped at limit. Used by the autocomplete endpoint and
-	// ranked by scope-aware usage desc + recency. Empty q returns the
-	// most-used tags within the requested scope, also capped at limit.
-	//
-	// When scope is TagScopeCommodity or TagScopeFile the result strictly
-	// excludes tags with zero usage in that scope (multi-scope tags that
-	// also have commodity OR file usage in the requested bucket are
-	// included). TagScopeAny ranks by combined commodity+file usage and
-	// includes every tag regardless of whether it has any usage yet.
-	Search(ctx context.Context, q string, limit int, scope TagScope) ([]*models.Tag, error)
+	// Search returns tags of the given kind whose label or slug matches q
+	// (case-insensitive substring), capped at limit. Used by the
+	// autocomplete endpoint and ranked by usage desc + recency. Empty q
+	// returns the most-used tags of that kind, also capped at limit.
+	Search(ctx context.Context, q string, limit int, kind models.TagKind) ([]*models.Tag, error)
 
-	// GetUsage returns the per-entity reference counts for a tag slug
-	// within the current group (commodities + files JSONB arrays
-	// containing this slug).
-	GetUsage(ctx context.Context, slug string) (TagUsage, error)
+	// GetUsage returns the reference count for a tag of the given kind
+	// within the current group (commodities for commodity tags, files for
+	// file tags). The irrelevant side of TagUsage is zero.
+	GetUsage(ctx context.Context, kind models.TagKind, slug string) (TagUsage, error)
 
-	// GetUsageBatch returns per-slug usage for the given slugs in a single
-	// round-trip. Used by the GET /tags?include=usage list endpoint to
-	// avoid N+1 queries when the FE wants per-row usage for the whole
-	// page. Returned map is keyed by slug; missing slugs map to a zero
-	// TagUsage so callers can read it unconditionally.
-	GetUsageBatch(ctx context.Context, slugs []string) (map[string]TagUsage, error)
+	// GetUsageBatch returns per-slug usage for the given slugs of the given
+	// kind in a single round-trip. Used by the GET /tags?include=usage list
+	// endpoint to avoid N+1 queries. Returned map is keyed by slug; missing
+	// slugs map to a zero TagUsage so callers can read it unconditionally.
+	GetUsageBatch(ctx context.Context, kind models.TagKind, slugs []string) (map[string]TagUsage, error)
 
 	// GetStats returns the group-wide adoption summary for the Tags page
-	// stats bar: total tags, plus tagged/untagged counts on commodities
-	// and files. "Tagged" = jsonb_array_length(tags) > 0.
+	// stats bar: total tags (overall + per kind), plus tagged/untagged
+	// counts on commodities and files. "Tagged" = jsonb_array_length(tags) > 0.
 	GetStats(ctx context.Context) (TagStats, error)
 
-	// RewriteSlugReferences atomically rewrites every commodities.tags +
-	// files.tags JSONB array entry from oldSlug to newSlug for the
-	// current group, in the same logical operation as the slug change on
-	// the tags row itself. Returns (commodityRows, fileRows) touched.
-	RewriteSlugReferences(ctx context.Context, oldSlug, newSlug string) (int, int, error)
+	// RewriteSlugReferences atomically rewrites the JSONB array entries from
+	// oldSlug to newSlug for the current group on the table matching kind
+	// (commodities for commodity tags, files for file tags), in the same
+	// logical operation as the slug change on the tags row itself. Returns
+	// (commodityRows, fileRows) touched — only the kind's side is non-zero.
+	RewriteSlugReferences(ctx context.Context, kind models.TagKind, oldSlug, newSlug string) (int, int, error)
 
-	// StripSlugReferences atomically removes every occurrence of slug
-	// from commodities.tags + files.tags JSONB arrays for the current
-	// group. Used by force-delete. Returns (commodityRows, fileRows).
-	StripSlugReferences(ctx context.Context, slug string) (int, int, error)
+	// StripSlugReferences atomically removes every occurrence of slug from
+	// the JSONB array on the table matching kind for the current group.
+	// Used by force-delete. Returns (commodityRows, fileRows) — only the
+	// kind's side is non-zero.
+	StripSlugReferences(ctx context.Context, kind models.TagKind, slug string) (int, int, error)
 
 	// RenameAtomic re-reads the tag, validates the new slug isn't already
 	// owned by another tag, rewrites every JSONB reference, and writes

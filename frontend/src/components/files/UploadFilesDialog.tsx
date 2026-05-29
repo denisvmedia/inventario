@@ -604,7 +604,7 @@ function MetadataStep({
               })}
               testId={`files-upload-meta-tags-${it.id}`}
               autocomplete
-              scope="file"
+              kind="file"
               compact
             />
           </li>
