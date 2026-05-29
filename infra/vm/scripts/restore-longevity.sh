@@ -77,6 +77,23 @@ if [ "$PHASE" != "Completed" ]; then
     [ "${GO:-}" = "yes" ] || { echo "Aborted." >&2; exit 1; }
 fi
 
+# Guard against restoring from a backup that doesn't actually cover this
+# namespace — otherwise the destructive delete below would wipe live data and
+# bring nothing back. An EMPTY includedNamespaces means "all namespaces" (so it
+# DOES cover us, e.g. an ad-hoc cluster-wide backup); only reject when the list
+# is non-empty and omits $NS, or when $NS is explicitly excluded.
+INCLUDED_NS=$(ssh "$VM" "$REMOTE_KUBECTL -n velero get backups.velero.io '$BACKUP' -o jsonpath='{.spec.includedNamespaces[*]}'" 2>/dev/null || true)
+EXCLUDED_NS=$(ssh "$VM" "$REMOTE_KUBECTL -n velero get backups.velero.io '$BACKUP' -o jsonpath='{.spec.excludedNamespaces[*]}'" 2>/dev/null || true)
+if [ -n "${INCLUDED_NS:-}" ] && ! grep -qw "$NS" <<<"$INCLUDED_NS"; then
+    echo "Backup '$BACKUP' does not include namespace '$NS' (includedNamespaces: $INCLUDED_NS)." >&2
+    echo "Restoring from it would delete '$NS' and bring nothing back; aborting before any change." >&2
+    exit 1
+fi
+if [ -n "${EXCLUDED_NS:-}" ] && grep -qw "$NS" <<<"$EXCLUDED_NS"; then
+    echo "Backup '$BACKUP' explicitly excludes namespace '$NS' (excludedNamespaces: $EXCLUDED_NS); aborting." >&2
+    exit 1
+fi
+
 # --- Danger confirmation ---
 warn "This will DELETE namespace '$NS' and restore it from backup '$BACKUP'."
 warn "ArgoCD reconciliation is paused CLUSTER-WIDE for ~2-3 minutes during the restore."
@@ -86,10 +103,19 @@ read -r CONFIRM
 
 # --- Freeze ArgoCD so it neither selfHeals an empty namespace nor re-templates
 #     the Application mid-restore. Trap guarantees both controllers come back. ---
+# Capture the controllers' current desired replicas BEFORE freezing so resume
+# restores prior state rather than blindly forcing 1 (they're 1 by default
+# here, but don't assume an operator hasn't scaled them). Fallback to 1 if the
+# lookup fails or the field is unset.
+APPSET_REPLICAS=$(ssh "$VM" "$REMOTE_KUBECTL -n argocd get deploy/argocd-applicationset-controller -o jsonpath='{.spec.replicas}'" 2>/dev/null || echo 1)
+APPCTRL_REPLICAS=$(ssh "$VM" "$REMOTE_KUBECTL -n argocd get statefulset/argocd-application-controller -o jsonpath='{.spec.replicas}'" 2>/dev/null || echo 1)
+[ -n "${APPSET_REPLICAS:-}" ] || APPSET_REPLICAS=1
+[ -n "${APPCTRL_REPLICAS:-}" ] || APPCTRL_REPLICAS=1
+
 resume_argocd() {
-    warn "Resuming ArgoCD controllers"
-    ssh "$VM" "$REMOTE_KUBECTL -n argocd scale statefulset/argocd-application-controller --replicas=1" || true
-    ssh "$VM" "$REMOTE_KUBECTL -n argocd scale deploy/argocd-applicationset-controller --replicas=1" || true
+    warn "Resuming ArgoCD controllers (application=$APPCTRL_REPLICAS, applicationset=$APPSET_REPLICAS)"
+    ssh "$VM" "$REMOTE_KUBECTL -n argocd scale statefulset/argocd-application-controller --replicas=$APPCTRL_REPLICAS" || true
+    ssh "$VM" "$REMOTE_KUBECTL -n argocd scale deploy/argocd-applicationset-controller --replicas=$APPSET_REPLICAS" || true
 }
 trap resume_argocd EXIT
 
@@ -126,6 +152,10 @@ if [ "$rc" -ne 0 ]; then
     warn "Restore did NOT complete cleanly (velero exit $rc). Inspect the describe output above"
     warn "before trusting the data in '$NS'. ArgoCD is being resumed regardless (leaving it"
     warn "paused is worse); re-run this restore once you've understood the failure."
+    # Propagate the failure so `make restore-longevity` (and any caller) sees a
+    # non-zero status instead of mistaking a failed DR for success. The EXIT
+    # trap still fires on this exit, so ArgoCD is resumed first.
+    exit "$rc"
 fi
 
 # resume_argocd fires here via the EXIT trap.

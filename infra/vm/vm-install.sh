@@ -329,9 +329,17 @@ EOF
     # Treat velero.encryption_key like the age key: back it up, never rotate it
     # after the first backup (rotation orphans every prior backup).
     if [ -n "${VELERO_ENCRYPTION_KEY:-}" ]; then
+        # Write the password to a temp file (umask 077) + `--from-file` rather
+        # than `--from-literal` so it never lands in process args (/proc/*/cmdline)
+        # — same hygiene as the cloud-credentials block above.
+        VELERO_REPO_PASS_FILE=$(umask 077 && mktemp "$REMOTE_TMP/velero-repo-pass.XXXXXX")
+        trap 'rm -f "$VELERO_REPO_PASS_FILE"' EXIT
+        printf '%s' "$VELERO_ENCRYPTION_KEY" >"$VELERO_REPO_PASS_FILE"
         "$KUBECTL" -n velero create secret generic velero-repo-credentials \
-            --from-literal=repository-password="$VELERO_ENCRYPTION_KEY" \
+            --from-file=repository-password="$VELERO_REPO_PASS_FILE" \
             --dry-run=client -o yaml | "$KUBECTL" apply -f -
+        rm -f "$VELERO_REPO_PASS_FILE"
+        trap - EXIT
     else
         warn "velero.encryption_key missing — Velero will auto-generate a random kopia repo password."
         warn "Cross-VM / fresh-VM restore will NOT work. Set velero.encryption_key and re-bootstrap BEFORE the first backup."

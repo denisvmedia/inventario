@@ -824,7 +824,8 @@ KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd get applications
 #         currently-labeled PRs
 
 # 6. (If Velero is configured) Bring the longevity DATA back from R2 — recover
-#    above re-seeds it from scratch; this restores the last backup on top.
+#    above re-seeds it from scratch; this interactively lists backups and
+#    restores the one you select on top.
 make -C infra restore-longevity VM=user@new-vm-ip
 ```
 

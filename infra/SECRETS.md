@@ -300,7 +300,11 @@ chmod 600 infra/vm/secrets/secrets.local.yaml
 #    Fill the velero.* block (step 6 above) ONLY if you want the daily R2
 #    backup of inv-vcl01-longevity; leave it empty to skip the Velero install.
 #    Don't leave half-filled velero.* keys — vm-install.sh treats the block as
-#    "configured" once bucket+endpoint+access+secret are all present.
+#    "configured" (and installs Velero) once bucket+endpoint+access+secret are
+#    all present. encryption_key is NOT part of that gate, but set it anyway:
+#    a backup taken without it gets a random, auto-generated kopia password and
+#    CANNOT be restored on a fresh VM (step 6a). Treat encryption_key as
+#    restore-critical, same as the age key.
 $EDITOR infra/vm/secrets/secrets.local.yaml
 
 # 3. Encrypt. The repo-root .sops.yaml picks the right age recipient
