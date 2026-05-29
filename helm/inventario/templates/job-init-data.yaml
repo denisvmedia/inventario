@@ -191,6 +191,13 @@ spec:
             # /api/v1/seed handler).
             - name: SETUP_SKIP_SEED_ON_UPGRADE
               value: "false"
+            # Opt the seed into writing the bundled fixture bytes (cover
+            # photos / invoices / manuals) for whatever tenant we seed —
+            # not just the well-known `test-org`. Set only here on the
+            # Job's temporary seed server, never on the main Deployment,
+            # so the public /api/v1/seed surface stays cost-bounded.
+            - name: INVENTARIO_SEED_ALLOW_BLOB_UPLOADS
+              value: {{ ternary "true" "false" .Values.setupJob.initData.seedBlobUploads | quote }}
             - name: INVENTARIO_SEED_DB_DSN
               {{- if .Values.demo.postgresql.enabled }}
               value: {{ include "inventario.dbDsn" . | quote }}
@@ -200,8 +207,13 @@ spec:
                   name: {{ $secretName }}
                   key: INVENTARIO_DB_DSN
               {{- end }}
+            # Point the temporary seed server at the SAME bucket the app
+            # reads from (MinIO s3:// when demo.minio.enabled, the file://
+            # uploads PVC otherwise). Hardcoding file:///app/uploads here
+            # would strand seed blobs in the Job pod's emptyDir under the
+            # MinIO demo, where the app can never read them.
             - name: INVENTARIO_RUN_UPLOAD_LOCATION
-              value: file:///app/uploads?create_dir=1
+              value: {{ include "inventario.uploadLocation" . | quote }}
             {{- if .Values.demo.redis.enabled }}
             - name: INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL
               value: {{ $redisUrl | quote }}
