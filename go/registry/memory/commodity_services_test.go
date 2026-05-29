@@ -2,7 +2,6 @@ package memory_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -80,7 +79,7 @@ func TestCommodityServiceRegistry_Memory_GetOpenForCommodity(t *testing.T) {
 	fx := newServiceFixture(c, "group-1")
 
 	_, err := fx.svcReg.GetOpenForCommodity(fx.ctx, "commodity-1")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	created, err := fx.svcReg.Create(fx.ctx, makeService("commodity-1", "2026-05-01", nil))
 	c.Assert(err, qt.IsNil)
@@ -94,7 +93,7 @@ func TestCommodityServiceRegistry_Memory_GetOpenForCommodity(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	_, err = fx.svcReg.GetOpenForCommodity(fx.ctx, "commodity-1")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestCommodityServiceRegistry_Memory_ListByCommodity_OrdersDesc(t *testing.T) {

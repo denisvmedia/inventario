@@ -100,7 +100,7 @@ func TestSystemAdminGrantRegistry_RevokeAtomic_LastAdminGuard(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	hadGrant, err := r.RevokeAtomic(ctx, "alice", false)
-	c.Assert(errors.Is(err, registry.ErrLastSystemAdmin), qt.IsTrue,
+	c.Assert(err, qt.ErrorIs, registry.ErrLastSystemAdmin,
 		qt.Commentf("expected ErrLastSystemAdmin, got %v", err))
 	c.Assert(hadGrant, qt.IsTrue)
 
@@ -237,6 +237,6 @@ func TestSystemAdminGrantRegistry_Exists_EmptyUserID(t *testing.T) {
 
 	r := memory.NewSystemAdminGrantRegistry()
 	_, err := r.Exists(ctx, "")
-	c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue,
+	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired,
 		qt.Commentf("expected ErrFieldRequired, got %v", err))
 }

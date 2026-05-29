@@ -2,7 +2,6 @@ package memory_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -76,7 +75,7 @@ func TestBackofficeUserRegistry_Create_MissingFields(t *testing.T) {
 			u := newTestBackofficeUser("user@example.com")
 			tc.mut(&u)
 			_, err := r.Create(ctx, u)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }
@@ -89,7 +88,7 @@ func TestBackofficeUserRegistry_Create_InvalidRole(t *testing.T) {
 	u := newTestBackofficeUser("user@example.com")
 	u.Role = "no-such-role"
 	_, err := r.Create(ctx, u)
-	c.Assert(errors.Is(err, registry.ErrInvalidBackofficeRole), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrInvalidBackofficeRole)
 }
 
 // TestBackofficeUserRegistry_Create_RejectsMalformedEmail proves the
@@ -125,7 +124,7 @@ func TestBackofficeUserRegistry_Create_DuplicateEmail(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	_, err = r.Create(ctx, newTestBackofficeUser("Ops@Example.com"))
-	c.Assert(errors.Is(err, registry.ErrBackofficeEmailAlreadyExists), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeEmailAlreadyExists)
 }
 
 func TestBackofficeUserRegistry_Get(t *testing.T) {
@@ -148,10 +147,10 @@ func TestBackofficeUserRegistry_Get_NotFound(t *testing.T) {
 	r := memory.NewBackofficeUserRegistry()
 
 	_, err := r.Get(ctx, "no-such-id")
-	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeUserNotFound)
 	// The sentinel wraps ErrNotFound, so generic callers branching on
 	// the umbrella sentinel still work.
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestBackofficeUserRegistry_GetByEmail_CaseInsensitive(t *testing.T) {
@@ -173,7 +172,7 @@ func TestBackofficeUserRegistry_GetByEmail_NotFound(t *testing.T) {
 	r := memory.NewBackofficeUserRegistry()
 
 	_, err := r.GetByEmail(ctx, "missing@example.com")
-	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeUserNotFound)
 }
 
 // TestBackofficeUserRegistry_GetByEmail_WhitespaceOnly pins the
@@ -185,7 +184,7 @@ func TestBackofficeUserRegistry_GetByEmail_WhitespaceOnly(t *testing.T) {
 	r := memory.NewBackofficeUserRegistry()
 
 	_, err := r.GetByEmail(ctx, "   ")
-	c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 }
 
 func TestBackofficeUserRegistry_Update_PreservesPasswordHash(t *testing.T) {
@@ -241,7 +240,7 @@ func TestBackofficeUserRegistry_Update_RejectsEmailCollision(t *testing.T) {
 
 	second.Email = "first@example.com"
 	_, err = r.Update(ctx, *second)
-	c.Assert(errors.Is(err, registry.ErrBackofficeEmailAlreadyExists), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeEmailAlreadyExists)
 }
 
 func TestBackofficeUserRegistry_Delete(t *testing.T) {
@@ -254,7 +253,7 @@ func TestBackofficeUserRegistry_Delete(t *testing.T) {
 
 	c.Assert(r.Delete(ctx, created.ID), qt.IsNil)
 	_, err = r.Get(ctx, created.ID)
-	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeUserNotFound)
 }
 
 // TestBackofficeUserRegistry_Delete_Idempotent pins the cross-backend
@@ -308,7 +307,7 @@ func TestBackofficeUserRegistry_SetPasswordHash_NotFound(t *testing.T) {
 	r := memory.NewBackofficeUserRegistry()
 
 	err := r.SetPasswordHash(ctx, "no-such-id", "$2a$10$x")
-	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeUserNotFound)
 }
 
 func TestBackofficeUserRegistry_UpdateLastLogin(t *testing.T) {

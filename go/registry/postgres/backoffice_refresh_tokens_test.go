@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -90,7 +89,7 @@ func TestBackofficeRefreshTokenRegistryPostgres_Create_MissingFields(t *testing.
 			tok := newTestBackofficeRefreshToken("placeholder", "hash")
 			tc.mut(&tok)
 			_, err := r.Create(ctx, tok)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }
@@ -122,8 +121,8 @@ func TestBackofficeRefreshTokenRegistryPostgres_GetByHash_NotFound(t *testing.T)
 	ctx := context.Background()
 
 	_, err := r.GetByHash(ctx, "no-such-hash")
-	c.Assert(errors.Is(err, registry.ErrBackofficeRefreshTokenNotFound), qt.IsTrue)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeRefreshTokenNotFound)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestBackofficeRefreshTokenRegistryPostgres_Revoke_HappyPath(t *testing.T) {
@@ -176,7 +175,7 @@ func TestBackofficeRefreshTokenRegistryPostgres_Revoke_WrongUser(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	err = r.Revoke(ctx, otherUserID, created.ID)
-	c.Assert(errors.Is(err, registry.ErrBackofficeRefreshTokenNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeRefreshTokenNotFound)
 
 	got, err := r.GetByHash(ctx, "hash-wrong")
 	c.Assert(err, qt.IsNil)
@@ -285,7 +284,7 @@ func TestBackofficeRefreshTokenRegistryPostgres_BumpLastUsedAt_WrongUser(t *test
 	c.Assert(created.LastUsedAt, qt.IsNil)
 
 	err = r.BumpLastUsedAt(ctx, attackerID, created.ID, time.Now())
-	c.Assert(errors.Is(err, registry.ErrBackofficeRefreshTokenNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeRefreshTokenNotFound)
 
 	got, err := r.GetByHash(ctx, "bump-wrong-user")
 	c.Assert(err, qt.IsNil)
@@ -311,7 +310,7 @@ func TestBackofficeRefreshTokenRegistryPostgres_DeleteExpired(t *testing.T) {
 	c.Assert(r.DeleteExpired(ctx), qt.IsNil)
 
 	_, err = r.GetByHash(ctx, "delete-expired")
-	c.Assert(errors.Is(err, registry.ErrBackofficeRefreshTokenNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeRefreshTokenNotFound)
 
 	got, err := r.GetByHash(ctx, "delete-live")
 	c.Assert(err, qt.IsNil)

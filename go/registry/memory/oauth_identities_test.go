@@ -2,7 +2,6 @@ package memory_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -65,7 +64,7 @@ func TestOAuthIdentityRegistry_Create_MissingFields(t *testing.T) {
 			tc.mut(&oi)
 			_, err := r.Create(ctx, oi)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }
@@ -87,7 +86,7 @@ func TestOAuthIdentityRegistry_Create_DuplicateProviderSubject(t *testing.T) {
 	dup := newTestOAuthIdentity(models.OAuthProviderGoogle, "duplicate-sub")
 	dup.UserID = "user-other"
 	_, err = r.Create(ctx, dup)
-	c.Assert(errors.Is(err, registry.ErrAlreadyExists), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrAlreadyExists)
 }
 
 func TestOAuthIdentityRegistry_GetByProviderSubject(t *testing.T) {
@@ -103,10 +102,10 @@ func TestOAuthIdentityRegistry_GetByProviderSubject(t *testing.T) {
 	c.Assert(fetched.ID, qt.Equals, created.ID)
 
 	_, err = r.GetByProviderSubject(ctx, models.OAuthProviderGoogle, "gh-42")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	_, err = r.GetByProviderSubject(ctx, models.OAuthProviderGitHub, "missing")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 // TestOAuthIdentityRegistry_ListByUser_TenantScoping pins the
@@ -167,15 +166,15 @@ func TestOAuthIdentityRegistry_GetByUserAndProvider(t *testing.T) {
 
 	// Wrong tenant — defense-in-depth tenant filter must hide the row.
 	_, err = r.GetByUserAndProvider(ctx, "tenant-other", "user-1", models.OAuthProviderGoogle)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// Wrong user.
 	_, err = r.GetByUserAndProvider(ctx, "tenant-1", "user-other", models.OAuthProviderGoogle)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// Wrong provider (user has no GitHub identity).
 	_, err = r.GetByUserAndProvider(ctx, "tenant-1", "user-1", models.OAuthProviderGitHub)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 // TestOAuthIdentityRegistry_DeleteByUserAndProvider_Idempotent pins the
@@ -195,7 +194,7 @@ func TestOAuthIdentityRegistry_DeleteByUserAndProvider_Idempotent(t *testing.T) 
 
 	// The row must be gone.
 	_, err = r.GetByUserAndProvider(ctx, "tenant-1", "user-1", models.OAuthProviderGoogle)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// Second delete is a no-op.
 	err = r.DeleteByUserAndProvider(ctx, "tenant-1", "user-1", models.OAuthProviderGoogle)
@@ -231,7 +230,7 @@ func TestOAuthIdentityRegistry_Delete(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	_, err = r.Get(ctx, created.ID)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestOAuthIdentityRegistry_List(t *testing.T) {

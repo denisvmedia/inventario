@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -81,7 +80,7 @@ func TestGroupInviteRegistry_Create_MissingFields(t *testing.T) {
 			tc.mut(&inv)
 			_, err := registrySet.GroupInviteRegistry.Create(ctx, inv)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }
@@ -114,7 +113,7 @@ func TestGroupInviteRegistry_GetByToken_And_ListActive(t *testing.T) {
 	c.Assert(list[0].ID, qt.Equals, active.ID)
 
 	_, err = registrySet.GroupInviteRegistry.GetByToken(ctx, "no-such-token")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// And the expired one still exists via Get by ID — ListActiveByGroup
 	// merely filters it out.

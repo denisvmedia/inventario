@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -70,7 +69,7 @@ func TestCommodityScanAuditRegistry_Record_MissingFields_Postgres(t *testing.T) 
 			tc.mut(&a)
 			_, err := registrySet.CommodityScanAuditRegistry.Record(ctx, a)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }

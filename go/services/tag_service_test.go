@@ -2,7 +2,6 @@ package services_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -118,7 +117,7 @@ func TestTagService_RenameTag_ConflictsWithExistingSlug(t *testing.T) {
 
 	_, err = svc.RenameTag(ctx, tags["kitchen"].ID, "", "bedroom", "")
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, registry.ErrAlreadyExists), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrAlreadyExists)
 }
 
 func TestTagService_DeleteTag_RefusesWhenInUse(t *testing.T) {
@@ -140,7 +139,7 @@ func TestTagService_DeleteTag_RefusesWhenInUse(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	usage, err := svc.DeleteTag(ctx, tags["kitchen"].ID, false)
-	c.Assert(errors.Is(err, services.ErrTagInUse), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrTagInUse)
 	c.Assert(usage.Commodities, qt.Equals, 1)
 	c.Assert(usage.Files, qt.Equals, 0)
 

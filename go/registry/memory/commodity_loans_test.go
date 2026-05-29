@@ -2,7 +2,6 @@ package memory_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -80,7 +79,7 @@ func TestCommodityLoanRegistry_Memory_GetOpenForCommodity(t *testing.T) {
 
 	// No loans yet → ErrNotFound
 	_, err := fx.loanReg.GetOpenForCommodity(fx.ctx, "commodity-1")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// Open loan → returned
 	created, err := fx.loanReg.Create(fx.ctx, makeLoan("commodity-1", "2026-05-01", nil))
@@ -96,7 +95,7 @@ func TestCommodityLoanRegistry_Memory_GetOpenForCommodity(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	_, err = fx.loanReg.GetOpenForCommodity(fx.ctx, "commodity-1")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestCommodityLoanRegistry_Memory_ListByCommodity_OrdersDesc(t *testing.T) {

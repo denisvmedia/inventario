@@ -56,7 +56,7 @@ func TestMockProvider_ErrorOverride(t *testing.T) {
 	_, err := provider.Scan(ctx, aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, wanted), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, wanted)
 }
 
 func TestMockProvider_WithDefaultError(t *testing.T) {
@@ -67,7 +67,7 @@ func TestMockProvider_WithDefaultError(t *testing.T) {
 	_, err := provider.Scan(context.Background(), aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, wanted), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, wanted)
 }
 
 func TestMockProvider_WithDefaultResult(t *testing.T) {

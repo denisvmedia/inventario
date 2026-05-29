@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	memreg "github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
@@ -404,7 +405,7 @@ func (f *oauthFixture) refreshCookieExpiring(user *models.User, expiresAt time.T
 		f.t.Fatalf("create refresh token: %v", err)
 	}
 	// #nosec G124 -- test-only cookie added to a httptest request; transport security is irrelevant here.
-	return &http.Cookie{Name: "refresh_token", Value: raw}
+	return &http.Cookie{Name: appctx.RefreshTokenCookieName, Value: raw}
 }
 
 // callUnlink issues DELETE /auth/oauth/{provider} as the supplied user.
@@ -781,7 +782,7 @@ func TestOAuthLinkStart_ImpersonationCookie_RefusesLink(t *testing.T) {
 	// impersonationRefreshCookieMarker, which the external test package can't
 	// reference directly.
 	// #nosec G124 -- test-only cookie; transport security is irrelevant here.
-	impCookie := &http.Cookie{Name: "refresh_token", Value: "imp:operator-marker"}
+	impCookie := &http.Cookie{Name: appctx.RefreshTokenCookieName, Value: "imp:operator-marker"}
 	rec := f.callLinkStart(models.OAuthProviderGoogle, "", impCookie)
 
 	c.Assert(rec.Code, qt.Equals, http.StatusFound)

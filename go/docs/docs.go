@@ -1599,6 +1599,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "Internal error generating the PKCE/state token",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }

@@ -2144,6 +2144,15 @@ export type paths = {
                         "*/*": string;
                     };
                 };
+                /** @description Internal error generating the PKCE/state token */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
             };
         };
         put?: never;

@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -139,7 +138,7 @@ func TestCommodityLoanRegistry_Postgres_StartLoan_RejectsSecondOpen(t *testing.T
 		BorrowerName: "Bob",
 		LentAt:       models.Date("2026-05-02"),
 	})
-	c.Assert(errors.Is(err, services.ErrLoanAlreadyOpen), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrLoanAlreadyOpen)
 	c.Assert(existing, qt.IsNotNil)
 	c.Assert(existing.ID, qt.Equals, first.ID)
 

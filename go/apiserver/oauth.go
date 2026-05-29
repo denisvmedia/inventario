@@ -214,6 +214,7 @@ func (api *OAuthAPI) handleStart(w http.ResponseWriter, r *http.Request) {
 // @Param redirect query string false "Relative FE path to land on after link"
 // @Success 302 "Redirect to provider (or to /login when no live session is present)"
 // @Failure 404 {string} string "Unknown provider"
+// @Failure 500 {string} string "Internal error generating the PKCE/state token"
 // @Router /auth/oauth/{provider}/link/start [get]
 func (api *OAuthAPI) handleLinkStart(w http.ResponseWriter, r *http.Request) {
 	user, err := api.auth.userFromBrowserSession(r)

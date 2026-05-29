@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
 	"runtime"
 	"testing"
 	"time"
@@ -135,9 +134,9 @@ func TestGroupPurgeService_Postgres_CrossTenantRLSBypass(t *testing.T) {
 	// location_groups, and was therefore able to DELETE rows belonging to
 	// foreign tenants in a single transaction sequence.
 	_, err = fs.LocationGroupRegistry.Get(ctx, groupA)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue, qt.Commentf("group A should be purged"))
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound, qt.Commentf("group A should be purged"))
 	_, err = fs.LocationGroupRegistry.Get(ctx, groupB)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue, qt.Commentf("group B should be purged"))
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound, qt.Commentf("group B should be purged"))
 
 	// Audit rows were INSERTed for both tenants — group_invites_audit's
 	// bypass policy on inventario_background_worker is what permits a
@@ -211,9 +210,9 @@ func TestGroupPurgeService_Postgres_CleanExpiredInvitesCrossTenant(t *testing.T)
 	c.Assert(deleted, qt.Equals, 2)
 
 	_, err = fs.GroupInviteRegistry.Get(ctx, expiredA)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue, qt.Commentf("tenant A expired unused invite should be gone"))
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound, qt.Commentf("tenant A expired unused invite should be gone"))
 	_, err = fs.GroupInviteRegistry.Get(ctx, expiredB)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue, qt.Commentf("tenant B expired unused invite should be gone"))
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound, qt.Commentf("tenant B expired unused invite should be gone"))
 
 	// Survivors.
 	_, err = fs.GroupInviteRegistry.Get(ctx, activeInvite)

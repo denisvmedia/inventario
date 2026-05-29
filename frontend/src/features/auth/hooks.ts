@@ -51,11 +51,13 @@ export function useCurrentUser() {
 // verify). The BE's /auth/change-password handler re-derives the branch
 // from the row's PasswordHash, so this is a UI-only hint.
 //
-// The /auth/me payload doesn't carry `has_password` on the wire today;
-// reading via a tolerant cast keeps the hook forward-compatible if the
-// BE ever adds the field. Default `true` so the regular flow renders for
-// every existing user and OAuth-only state is opt-in via the explicit
-// "Set a password" CTA (Settings → Connected Accounts).
+// /auth/me carries `has_password` on the wire (the handler stamps it from
+// User.HasPasswordSet() — #1394); the tolerant cast just tolerates the field
+// being absent while the boot probe is still in flight. Default `true` for
+// the no-user / not-yet-loaded case so the regular flow renders for every
+// existing user and OAuth-only state is opt-in via the explicit "Set a
+// password" CTA (Settings → Connected Accounts). The #1395 unlink guard
+// relies on this returning the real value once /auth/me has resolved.
 export function useHasPassword(): boolean {
   const { data: user } = useCurrentUser()
   if (!user) return true

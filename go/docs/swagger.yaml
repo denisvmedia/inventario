@@ -5466,6 +5466,10 @@ paths:
           description: Unknown provider
           schema:
             type: string
+        "500":
+          description: Internal error generating the PKCE/state token
+          schema:
+            type: string
       summary: Start link-an-additional-OAuth-provider flow
       tags:
       - oauth

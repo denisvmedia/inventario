@@ -1,7 +1,6 @@
 package aivision_test
 
 import (
-	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -16,21 +15,21 @@ func TestNewProvider_DisabledByEmptyName(t *testing.T) {
 	c := qt.New(t)
 
 	_, err := aivision.NewProvider(aivision.ProviderConfig{Name: ""})
-	c.Assert(errors.Is(err, aivision.ErrProviderDisabled), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderDisabled)
 }
 
 func TestNewProvider_DisabledByNoneName(t *testing.T) {
 	c := qt.New(t)
 
 	_, err := aivision.NewProvider(aivision.ProviderConfig{Name: "none"})
-	c.Assert(errors.Is(err, aivision.ErrProviderDisabled), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderDisabled)
 }
 
 func TestNewProvider_UnknownName(t *testing.T) {
 	c := qt.New(t)
 
 	_, err := aivision.NewProvider(aivision.ProviderConfig{Name: "definitely-not-a-provider"})
-	c.Assert(errors.Is(err, aivision.ErrProviderUnknown), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderUnknown)
 }
 
 func TestNewProvider_Mock(t *testing.T) {
@@ -46,14 +45,14 @@ func TestNewProvider_AnthropicMissingKey(t *testing.T) {
 	c := qt.New(t)
 
 	_, err := aivision.NewProvider(aivision.ProviderConfig{Name: "anthropic"})
-	c.Assert(errors.Is(err, aivision.ErrProviderAuth), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderAuth)
 }
 
 func TestNewProvider_OpenAIMissingKey(t *testing.T) {
 	c := qt.New(t)
 
 	_, err := aivision.NewProvider(aivision.ProviderConfig{Name: "openai"})
-	c.Assert(errors.Is(err, aivision.ErrProviderAuth), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderAuth)
 }
 
 func TestNewProvider_AnthropicWithKey(t *testing.T) {

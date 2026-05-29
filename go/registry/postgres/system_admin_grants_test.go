@@ -136,7 +136,7 @@ func TestSystemAdminGrantRegistry_Postgres_RevokeAtomic_LastAdminGuard(t *testin
 	c.Assert(err, qt.IsNil)
 
 	hadGrant, err := registrySet.SystemAdminGrantRegistry.RevokeAtomic(ctx, userID, false)
-	c.Assert(errors.Is(err, registry.ErrLastSystemAdmin), qt.IsTrue,
+	c.Assert(err, qt.ErrorIs, registry.ErrLastSystemAdmin,
 		qt.Commentf("expected ErrLastSystemAdmin, got %v", err))
 	c.Assert(hadGrant, qt.IsTrue)
 
@@ -251,7 +251,7 @@ func TestSystemAdminGrantRegistry_Postgres_Exists_EmptyUserID(t *testing.T) {
 	resetGrants(c, registrySet)
 
 	_, err := registrySet.SystemAdminGrantRegistry.Exists(ctx, "")
-	c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue,
+	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired,
 		qt.Commentf("expected ErrFieldRequired, got %v", err))
 }
 

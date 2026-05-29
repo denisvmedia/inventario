@@ -2,7 +2,6 @@ package memory_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -56,7 +55,7 @@ func TestCommodityScanAuditRegistry_Record_MissingFields(t *testing.T) {
 			tc.mut(&a)
 			_, err := r.Record(context.Background(), a)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }

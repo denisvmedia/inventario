@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -79,7 +78,7 @@ func TestBackofficeUserRegistryPostgres_Create_MissingFields(t *testing.T) {
 			u := newTestBackofficeUser("missing@example.com")
 			tc.mut(&u)
 			_, err := bo.Create(ctx, u)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }
@@ -95,7 +94,7 @@ func TestBackofficeUserRegistryPostgres_Create_InvalidRole(t *testing.T) {
 	u := newTestBackofficeUser("role@example.com")
 	u.Role = "no-such-role"
 	_, err := bo.Create(ctx, u)
-	c.Assert(errors.Is(err, registry.ErrInvalidBackofficeRole), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrInvalidBackofficeRole)
 }
 
 // TestBackofficeUserRegistryPostgres_Create_RejectsMalformedEmail proves
@@ -129,7 +128,7 @@ func TestBackofficeUserRegistryPostgres_Create_DuplicateEmail(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	_, err = bo.Create(ctx, newTestBackofficeUser("DUP@example.com"))
-	c.Assert(errors.Is(err, registry.ErrBackofficeEmailAlreadyExists), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeEmailAlreadyExists)
 }
 
 func TestBackofficeUserRegistryPostgres_Get(t *testing.T) {
@@ -157,8 +156,8 @@ func TestBackofficeUserRegistryPostgres_Get_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := bo.Get(ctx, "no-such-id")
-	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeUserNotFound)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestBackofficeUserRegistryPostgres_GetByEmail_CaseInsensitive(t *testing.T) {
@@ -186,7 +185,7 @@ func TestBackofficeUserRegistryPostgres_GetByEmail_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := bo.GetByEmail(ctx, "missing@example.com")
-	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeUserNotFound)
 }
 
 // TestBackofficeUserRegistryPostgres_GetByEmail_WhitespaceOnly pins the
@@ -201,7 +200,7 @@ func TestBackofficeUserRegistryPostgres_GetByEmail_WhitespaceOnly(t *testing.T) 
 	ctx := context.Background()
 
 	_, err := bo.GetByEmail(ctx, "   ")
-	c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 }
 
 func TestBackofficeUserRegistryPostgres_Update_PreservesPasswordHash(t *testing.T) {
@@ -246,7 +245,7 @@ func TestBackofficeUserRegistryPostgres_Update_RejectsEmailCollision(t *testing.
 
 	second.Email = "first@example.com"
 	_, err = bo.Update(ctx, *second)
-	c.Assert(errors.Is(err, registry.ErrBackofficeEmailAlreadyExists), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeEmailAlreadyExists)
 }
 
 // TestBackofficeUserRegistryPostgres_Update_NotFoundOnDeletedRow pins
@@ -275,7 +274,7 @@ func TestBackofficeUserRegistryPostgres_Update_NotFoundOnDeletedRow(t *testing.T
 	updated := *created
 	updated.Name = "After Delete"
 	_, err = bo.Update(ctx, updated)
-	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeUserNotFound)
 }
 
 func TestBackofficeUserRegistryPostgres_Delete(t *testing.T) {
@@ -291,7 +290,7 @@ func TestBackofficeUserRegistryPostgres_Delete(t *testing.T) {
 
 	c.Assert(bo.Delete(ctx, created.ID), qt.IsNil)
 	_, err = bo.Get(ctx, created.ID)
-	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeUserNotFound)
 }
 
 // TestBackofficeUserRegistryPostgres_Delete_Idempotent pins the cross-
@@ -405,7 +404,7 @@ func TestBackofficeUserRegistryPostgres_SetPasswordHash_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	err := bo.SetPasswordHash(ctx, "no-such-id", "$2a$10$x")
-	c.Assert(errors.Is(err, registry.ErrBackofficeUserNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeUserNotFound)
 }
 
 func TestBackofficeUserRegistryPostgres_UpdateLastLogin(t *testing.T) {
