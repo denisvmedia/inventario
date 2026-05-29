@@ -904,6 +904,13 @@ namespace with empty PVCs first, Velero would skip them and you'd restore
 nothing. After resume, ArgoCD re-adopts the restored resources and rolls the
 deployment to current master on top of the restored data.
 
+> It's normal, when you run this right after `make recover`, for
+> `inv-vcl01-longevity` to already exist with freshly *re-seeded* (i.e. wrong)
+> data — ArgoCD's `selfHeal` recreated it from the chart. The restore deletes
+> that namespace and replaces it with the backed-up data, so go ahead and
+> confirm past the danger prompt; that's the expected state, not a sign
+> something is off.
+
 > [!IMPORTANT]
 > The first scheduled backup must have run with `velero.encryption_key`
 > already set. If it was empty at first backup, Velero auto-generated a random

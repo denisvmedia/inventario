@@ -35,11 +35,13 @@ demo:
       size: 10Gi
 
 # preview-base sizes requests.storage at 20Gi for the *emptyDir* demo bundle;
-# the two PVCs above request 5Gi + 10Gi = 15Gi, which fits, but give the
-# nightly kopia maintenance + an operator debug PVC some headroom. The PVC
-# count rises from 0 → 2 (Postgres + MinIO), still well under the inherited
-# cap of 5. Only this one key is overridden; the rest of quota.hard
-# (cpu/memory/pods/persistentvolumeclaims) is deep-merged from preview-base.
+# the two PVCs above request 5Gi + 10Gi = 15Gi, which fits, but leave headroom
+# for dataset growth + an ad-hoc operator debug PVC. (Velero/kopia maintenance
+# does NOT add PVCs here — it streams to R2 from the node-agent, so it needs no
+# namespace storage quota.) The PVC count rises from 0 → 2 (Postgres + MinIO),
+# still well under the inherited cap of 5. Only this one key is overridden; the
+# rest of quota.hard (cpu/memory/pods/persistentvolumeclaims) deep-merges from
+# preview-base.
 quota:
   hard:
     requests.storage: "30Gi"

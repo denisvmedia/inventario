@@ -348,6 +348,7 @@ EOF
     # YAML-sensitive char in the bucket/endpoint, same pattern as the TS OAuth
     # overlay above and apply-secrets.sh.
     VELERO_BSL_VALUES=$(umask 077 && mktemp "$REMOTE_TMP/velero-bsl.XXXXXX.yaml")
+    trap 'rm -f "$VELERO_BSL_VALUES"' EXIT
     cat >"$VELERO_BSL_VALUES" <<EOF
 configuration:
   backupStorageLocation:
@@ -368,7 +369,10 @@ $(printf '%s' "$VELERO_S3_ENDPOINT" | sed 's/^/          /')
         checksumAlgorithm: ""
 EOF
     "$HELM" repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts >/dev/null 2>&1 || true
-    "$HELM" repo update >/dev/null
+    # Don't let a transient registry hiccup abort the whole bootstrap for an
+    # additive component — fall back to the cached index. (set -e would
+    # otherwise turn `helm repo update` failure into a hard exit here.)
+    "$HELM" repo update >/dev/null || warn "helm repo update failed; using cached chart index for Velero"
     if "$HELM" upgrade --install velero vmware-tanzu/velero \
         --namespace velero \
         --version "$VELERO_CHART_VERSION" \
@@ -382,16 +386,23 @@ EOF
         warn "Common cause: node-agent can't reach the kubelet pods dir on this distro."
     fi
     rm -f "$VELERO_BSL_VALUES"
+    trap - EXIT
 
     # Install the matching velero CLI on the VM so `make restore-longevity`
-    # can drive `velero backup get` / `velero restore create` over SSH.
+    # can drive `velero backup get` / `velero restore create` over SSH. Kept
+    # failure-isolated (warn, don't abort) so a flaky GitHub release download
+    # can't fail a bootstrap whose Velero server already came up.
     if ! command -v velero >/dev/null 2>&1 || \
        ! velero version --client-only 2>/dev/null | grep -q "$VELERO_CLI_VERSION"; then
         note "Installing velero CLI $VELERO_CLI_VERSION"
         VELERO_TGZ="$REMOTE_TMP/velero.tar.gz"
-        curl -sfL "https://github.com/vmware-tanzu/velero/releases/download/${VELERO_CLI_VERSION}/velero-${VELERO_CLI_VERSION}-linux-amd64.tar.gz" -o "$VELERO_TGZ"
-        tar -xzf "$VELERO_TGZ" -C "$REMOTE_TMP"
-        install -m 0755 "$REMOTE_TMP/velero-${VELERO_CLI_VERSION}-linux-amd64/velero" /usr/local/bin/velero
+        if curl -sfL "https://github.com/vmware-tanzu/velero/releases/download/${VELERO_CLI_VERSION}/velero-${VELERO_CLI_VERSION}-linux-amd64.tar.gz" -o "$VELERO_TGZ" \
+            && tar -xzf "$VELERO_TGZ" -C "$REMOTE_TMP" \
+            && install -m 0755 "$REMOTE_TMP/velero-${VELERO_CLI_VERSION}-linux-amd64/velero" /usr/local/bin/velero; then
+            note "velero CLI $VELERO_CLI_VERSION installed"
+        else
+            warn "velero CLI download/install failed — 'make restore-longevity' won't work until it's present on the VM."
+        fi
     fi
 else
     warn "velero.s3_{bucket,endpoint,access_key,secret_key} incomplete in secrets; skipping Velero install."

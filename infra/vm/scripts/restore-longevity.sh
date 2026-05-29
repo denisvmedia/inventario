@@ -33,7 +33,7 @@ NS=inv-vcl01-longevity
 # kubeconfig is passed explicitly regardless of root's default env — robust
 # against sudo's env_reset. velero defaults to the `velero` namespace.
 REMOTE_KUBECTL="sudo env KUBECONFIG=/var/lib/vcluster/kubeconfig.yaml /usr/local/bin/kubectl"
-REMOTE_VELERO="sudo env KUBECONFIG=/var/lib/vcluster/kubeconfig.yaml velero"
+REMOTE_VELERO="sudo env KUBECONFIG=/var/lib/vcluster/kubeconfig.yaml /usr/local/bin/velero"
 
 note() { printf '\n==> %s\n' "$*" >&2; }
 warn() { printf '\n[!] %s\n' "$*" >&2; }
@@ -96,6 +96,13 @@ trap resume_argocd EXIT
 note "Pausing ArgoCD controllers (applicationset + application)"
 ssh "$VM" "$REMOTE_KUBECTL -n argocd scale deploy/argocd-applicationset-controller --replicas=0"
 ssh "$VM" "$REMOTE_KUBECTL -n argocd scale statefulset/argocd-application-controller --replicas=0"
+# `scale` returns when the spec is patched, not when the pod is gone — wait for
+# the application-controller pod to actually terminate so it can't observe the
+# namespace deletion below and kick off one last selfHeal (which would recreate
+# empty PVCs and make the FSB restore a no-op). Best-effort: `|| true` so a
+# label/selector drift just falls back to the (usually-sufficient) timing.
+ssh "$VM" "$REMOTE_KUBECTL -n argocd wait --for=delete pod \
+    -l app.kubernetes.io/name=argocd-application-controller --timeout=90s" || true
 
 # --- Clean slate: delete the namespace so the restore recreates its PVCs.
 #     --wait blocks until the namespace (and its finalizers) are fully gone. ---
@@ -105,11 +112,21 @@ ssh "$VM" "$REMOTE_KUBECTL delete namespace '$NS' --ignore-not-found --wait=true
 # --- Restore ---
 RESTORE_NAME="${BACKUP}-restore-$(date +%Y%m%d%H%M%S)"
 note "Restoring '$NS' from backup '$BACKUP' as restore/'$RESTORE_NAME'"
-ssh "$VM" "$REMOTE_VELERO restore create '$RESTORE_NAME' --from-backup '$BACKUP' --wait"
+# Capture the exit status instead of letting `set -e` short-circuit, so the
+# describe below ALWAYS prints (it's where a partial-failure reason shows up)
+# before the EXIT trap resumes ArgoCD onto the restored namespace.
+rc=0
+ssh "$VM" "$REMOTE_VELERO restore create '$RESTORE_NAME' --from-backup '$BACKUP' --wait" || rc=$?
 
 note "Restore object status:"
 ssh "$VM" "$REMOTE_VELERO restore describe '$RESTORE_NAME' --details" || \
     ssh "$VM" "$REMOTE_VELERO restore get" || true
+
+if [ "$rc" -ne 0 ]; then
+    warn "Restore did NOT complete cleanly (velero exit $rc). Inspect the describe output above"
+    warn "before trusting the data in '$NS'. ArgoCD is being resumed regardless (leaving it"
+    warn "paused is worse); re-run this restore once you've understood the failure."
+fi
 
 # resume_argocd fires here via the EXIT trap.
 note "Done. ArgoCD will re-adopt the restored resources and roll '$NS' forward to current master."
