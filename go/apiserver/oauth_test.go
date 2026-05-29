@@ -357,17 +357,54 @@ func (f *oauthFixture) callCallback(provider models.OAuthProvider, state, code, 
 	return rec
 }
 
-// callLinkStart issues GET /auth/oauth/{provider}/link/start with the
-// caller's access token (or without, to exercise the 401 branch).
-func (f *oauthFixture) callLinkStart(provider models.OAuthProvider, bearer string) *httptest.ResponseRecorder {
+// callLinkStart issues GET /auth/oauth/{provider}/link/start. The caller may
+// authenticate via a Bearer header (pass a non-empty bearer) and/or via
+// cookies (pass refresh / impersonation cookies). Pass neither to exercise
+// the no-session branch. link/start is reached by a top-level browser
+// navigation in production, so the refresh-cookie path is the realistic one.
+func (f *oauthFixture) callLinkStart(provider models.OAuthProvider, bearer string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	f.t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/auth/oauth/"+string(provider)+"/link/start", nil)
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
 	rec := httptest.NewRecorder()
 	f.router.ServeHTTP(rec, req)
 	return rec
+}
+
+// refreshCookie persists a valid refresh-token row for user and returns the
+// matching cookie (raw token in the value, the way the browser sends it).
+// This is the credential link/start resolves a top-level navigation against.
+func (f *oauthFixture) refreshCookie(user *models.User) *http.Cookie {
+	f.t.Helper()
+	return f.refreshCookieExpiring(user, time.Now().Add(24*time.Hour))
+}
+
+// refreshCookieExpiring is refreshCookie with an explicit expiry so tests can
+// exercise the expired/invalid branch.
+func (f *oauthFixture) refreshCookieExpiring(user *models.User, expiresAt time.Time) *http.Cookie {
+	f.t.Helper()
+	raw, tokenHash, err := models.GenerateRefreshToken()
+	if err != nil {
+		f.t.Fatalf("generate refresh token: %v", err)
+	}
+	rt := models.RefreshToken{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+			TenantID: user.TenantID,
+			UserID:   user.ID,
+		},
+		TokenHash: tokenHash,
+		ExpiresAt: expiresAt,
+	}
+	if _, err := f.refreshTokenReg.Create(context.Background(), rt); err != nil {
+		f.t.Fatalf("create refresh token: %v", err)
+	}
+	// #nosec G124 -- test-only cookie added to a httptest request; transport security is irrelevant here.
+	return &http.Cookie{Name: "refresh_token", Value: raw}
 }
 
 // callUnlink issues DELETE /auth/oauth/{provider} as the supplied user.
@@ -672,12 +709,84 @@ func TestOAuthCallback_ProviderMismatchOnState_Rejects(t *testing.T) {
 // Link flow
 // =============================================================================
 
-func TestOAuthLinkStart_NoAuth_Rejects(t *testing.T) {
+func TestOAuthLinkStart_NoSession_RedirectsToLogin(t *testing.T) {
 	c := qt.New(t)
 	f := newOAuthFixture(t, oauthFixtureOpts{})
 
+	// A top-level browser navigation with no credential at all (neither the
+	// Authorization header — which such a navigation can't carry — nor a
+	// refresh cookie) bounces to /login rather than rendering a bare 401.
 	rec := f.callLinkStart(models.OAuthProviderGoogle, "")
-	c.Assert(rec.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	c.Assert(rec.Header().Get("Location"), qt.Contains, "/login")
+}
+
+func TestOAuthLinkStart_RefreshCookie_StartsFlow(t *testing.T) {
+	c := qt.New(t)
+	f := newOAuthFixture(t, oauthFixtureOpts{})
+
+	// The realistic production path: the FE does window.location.assign, so the
+	// only credential on the request is the SameSite=Strict refresh cookie. The
+	// handler must resolve the user from it and 302 to the provider.
+	user := f.seedUser("linker@example.com", true)
+	rec := f.callLinkStart(models.OAuthProviderGoogle, "", f.refreshCookie(user))
+
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	c.Assert(rec.Header().Get("Location"), qt.Contains, "example-provider.test/authorize")
+
+	// The signed-state cookie is written so the callback can bind state to this
+	// browser — proof the link flow actually started.
+	hasState := false
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "oauth_state" && cookie.Value != "" {
+			hasState = true
+		}
+	}
+	c.Assert(hasState, qt.IsTrue)
+}
+
+func TestOAuthLinkStart_BearerToken_StartsFlow(t *testing.T) {
+	c := qt.New(t)
+	f := newOAuthFixture(t, oauthFixtureOpts{})
+
+	// The Bearer fast path (API clients / tests) still works after the route
+	// stopped relying on the header-only RequireAuth middleware.
+	user := f.seedUser("bearer-linker@example.com", true)
+	rec := f.callLinkStart(models.OAuthProviderGoogle, f.bearerToken(user))
+
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	c.Assert(rec.Header().Get("Location"), qt.Contains, "example-provider.test/authorize")
+}
+
+func TestOAuthLinkStart_ExpiredRefreshCookie_RedirectsToLogin(t *testing.T) {
+	c := qt.New(t)
+	f := newOAuthFixture(t, oauthFixtureOpts{})
+
+	user := f.seedUser("stale@example.com", true)
+	expired := f.refreshCookieExpiring(user, time.Now().Add(-time.Hour))
+	rec := f.callLinkStart(models.OAuthProviderGoogle, "", expired)
+
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	c.Assert(rec.Header().Get("Location"), qt.Contains, "/login")
+}
+
+func TestOAuthLinkStart_ImpersonationCookie_RefusesLink(t *testing.T) {
+	c := qt.New(t)
+	f := newOAuthFixture(t, oauthFixtureOpts{})
+
+	// An impersonation session plants an "imp:" marker on the refresh cookie.
+	// The link handler must refuse it (an operator borrowing an identity may
+	// not bind providers to it, #1750) and bounce to /login — never to the
+	// provider. The literal mirrors apiserver's unexported
+	// impersonationRefreshCookieMarker, which the external test package can't
+	// reference directly.
+	// #nosec G124 -- test-only cookie; transport security is irrelevant here.
+	impCookie := &http.Cookie{Name: "refresh_token", Value: "imp:operator-marker"}
+	rec := f.callLinkStart(models.OAuthProviderGoogle, "", impCookie)
+
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	c.Assert(rec.Header().Get("Location"), qt.Contains, "/login")
+	c.Assert(rec.Header().Get("Location"), qt.Not(qt.Contains), "example-provider.test")
 }
 
 func TestOAuthLinkCallback_ProviderAccountOnDifferentUser_Conflicts(t *testing.T) {
@@ -712,6 +821,9 @@ func TestOAuthLinkCallback_Success_WritesAuditAndLoginEvent(t *testing.T) {
 	rec := f.callCallback(models.OAuthProviderGoogle, state, "code-link-ok", state)
 
 	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	// #1395: the success redirect carries oauth_linked=<provider> so the FE
+	// Connected Accounts card can fire its "Linked …" confirmation toast.
+	c.Assert(rec.Header().Get("Location"), qt.Contains, "oauth_linked=google")
 
 	rows := f.listIdentities(user)
 	c.Assert(rows, qt.HasLen, 1)

@@ -51,6 +51,7 @@
  */
 import { test, expect, APIRequestContext, Browser, BrowserContext, Page } from '@playwright/test';
 import { seedTenant } from '../setup/setup-stack.js';
+import { login, TEST_CREDENTIALS } from './includes/auth.js';
 
 // Toggle the provider exercised by the test. Today: "google". Adding
 // "github" needs a stub server expansion (it's currently Google-shaped)
@@ -609,4 +610,180 @@ async function fetchMe(
     `/auth/me on tenant '${tenantSlug}' failed: ${await meResp.text()}`
   ).toBe(200);
   return meResp.json();
+}
+
+// ============================================================================
+// #1395 — Connected accounts: link / unlink an OAuth provider from Settings
+// ----------------------------------------------------------------------------
+// Drives the Settings → Privacy & Security → Connected Accounts panel through
+// a real browser against the Google stub. This is the UI half of #1394's
+// link/unlink endpoints and exercises three things the API-level coverage
+// above does not:
+//
+//   1. The "Link" button performs a TOP-LEVEL navigation to
+//      /auth/oauth/google/link/start, which carries no Authorization header.
+//      The #1395 gap-C fix authenticates that GET from the SameSite=Strict
+//      refresh cookie; before the fix the click 401'd and the flow never
+//      reached the provider.
+//   2. The unlink confirmation enumerates the surviving sign-in methods
+//      ("…You currently have: password set."), the #1395 gap-A change.
+//   3. The password remains a valid sign-in method across link → unlink →
+//      re-link, proving the OAuth identity is additive, never a replacement.
+//
+// Lives in this file (not a sibling spec) on purpose: every @oauth test shares
+// the single in-process stub server's module-level activeProfile, so they must
+// run serially. test.describe.configure({ mode: 'serial' }) at the top of this
+// file is what guarantees that — a separate file would race the stub (the
+// exact flakiness #1851 hit).
+//
+// Uses the seeded password admin (TEST_CREDENTIALS) as the account to link to,
+// with a #1395-specific (sub, email) so it never collides with the OAuth-only
+// users the sign-in tests above provision. The test cleans up its Google link
+// on both entry and exit so re-runs and parallel admin-using specs see admin
+// in its baseline (password-only) state.
+// ============================================================================
+
+// Distinct from STUB_PROFILE / ALICE_PROFILE so the global (provider, sub)
+// uniqueness never collides with the sign-in or cross-tenant suites.
+const LINK_PROFILE = {
+  sub: 'stub-google-sub-1395-link',
+  email: 'connected-accounts-1395@example.test',
+  emailVerified: true,
+  name: 'Connected Accounts Linker',
+};
+
+test.describe('#1395 Connected accounts — link/unlink via Settings UI @oauth', () => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+
+  test.beforeAll(async () => {
+    test.skip(
+      process.env.OAUTH_STUB_ENABLED !== 'true',
+      'Connected-accounts e2e requires OAUTH_STUB_ENABLED=true and a running stub stack (see spec header).'
+    );
+    const probe = await fetch(`${STUB_BASE_URL}/userinfo`, {
+      headers: { Authorization: 'Bearer stub-access-token' },
+    });
+    if (!probe.ok) {
+      throw new Error(
+        `OAuth stub /userinfo not reachable at ${STUB_BASE_URL} (status ${probe.status}). Did setup-stack.ts start the stub?`
+      );
+    }
+  });
+
+  test.beforeEach(async () => {
+    await setStubProfile(LINK_PROFILE);
+  });
+
+  test('password admin links Google, unlinks (guard lists methods), re-links — password stays valid', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    // ---- sign in as the seeded password admin via the real login form ----
+    await page.goto('/login');
+    await login(page, undefined, TEST_CREDENTIALS);
+
+    // Start from a known baseline — an earlier aborted run may have left the
+    // Google identity attached to admin.
+    await ensureGoogleUnlinked(context.request);
+
+    // ---- Settings → Privacy & Security: Google starts unlinked ----
+    await openPrivacySection(page);
+    const googleRow = page.locator('[data-testid="connected-account-row-google"]');
+    await expect(googleRow).toHaveAttribute('data-linked', 'false', { timeout: 15_000 });
+
+    // ---- link Google ----
+    // The click does window.location.assign('/api/v1/auth/oauth/google/link/start'),
+    // a top-level navigation with no Authorization header. The gap-C fix
+    // authenticates it from the refresh cookie; the BE then 302s through the
+    // stub and lands back on /settings.
+    await linkGoogleAndReturn(page);
+    await openPrivacySection(page);
+    await expect(
+      page.locator('[data-testid="connected-account-row-google"]')
+    ).toHaveAttribute('data-linked', 'true', { timeout: 15_000 });
+
+    // ---- unlink: the confirmation must spell out the surviving methods ----
+    await page.locator('[data-testid="connected-account-unlink-google"]').click();
+    const dialog = page.getByTestId('confirm-dialog');
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    // admin keeps a password, so the guard names it rather than blocking.
+    await expect(dialog).toContainText('password set');
+    await page.getByTestId('confirm-accept').click();
+    await expect(
+      page.locator('[data-testid="connected-account-row-google"]')
+    ).toHaveAttribute('data-linked', 'false', { timeout: 15_000 });
+
+    // ---- re-link (the link flow works repeatedly, not just once) ----
+    await linkGoogleAndReturn(page);
+    await openPrivacySection(page);
+    await expect(
+      page.locator('[data-testid="connected-account-row-google"]')
+    ).toHaveAttribute('data-linked', 'true', { timeout: 15_000 });
+
+    // ---- password remains a valid sign-in method throughout ----
+    // A fresh password login must still succeed even after the account gained,
+    // lost, and regained an OAuth identity.
+    const pwLogin = await context.request.post('/api/v1/auth/login', {
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      data: { email: TEST_CREDENTIALS.email, password: TEST_CREDENTIALS.password },
+    });
+    expect(
+      pwLogin.status(),
+      `password must remain a valid sign-in method: login returned ${pwLogin.status()} ${await pwLogin.text()}`
+    ).toBe(200);
+
+    // ---- cleanup: leave admin in its baseline password-only state ----
+    await ensureGoogleUnlinked(context.request);
+    await context.close();
+  });
+});
+
+/**
+ * openPrivacySection navigates to /settings and selects the Privacy & Security
+ * section so the Connected Accounts card is mounted. The section is component
+ * state, so it resets to the default tab on every full-page (re)load — callers
+ * re-open it after each top-level OAuth navigation.
+ */
+async function openPrivacySection(page: Page): Promise<void> {
+  await page.goto('/settings');
+  await expect(page.getByTestId('settings-page')).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId('settings-nav-privacy').click();
+  await expect(page.getByTestId('section-privacy')).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * linkGoogleAndReturn clicks the Link button and waits for the BE redirect
+ * chain (link/start → stub → callback → /settings) to land back on the FE.
+ * Assumes the Privacy section is already open so the Link control is present.
+ */
+async function linkGoogleAndReturn(page: Page): Promise<void> {
+  await expect(page.locator('[data-testid="connected-account-link-google"]')).toBeVisible({
+    timeout: 10_000,
+  });
+  await Promise.all([
+    page.waitForURL((url) => url.pathname === '/settings', { timeout: 30_000 }),
+    page.locator('[data-testid="connected-account-link-google"]').click(),
+  ]);
+}
+
+/**
+ * ensureGoogleUnlinked removes any Google identity attached to the currently
+ * signed-in account, so the test starts and ends from a password-only
+ * baseline. Spends the refresh cookie for a bearer; treats a non-200 refresh
+ * (not signed in) as nothing-to-clean, and any DELETE status as success — the
+ * post-condition "Google is not linked" holds for 204 (removed) and 404
+ * (already absent) alike.
+ */
+async function ensureGoogleUnlinked(request: APIRequestContext): Promise<void> {
+  const refresh = await request.post('/api/v1/auth/refresh', {
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    data: {},
+  });
+  if (refresh.status() !== 200) return;
+  const { access_token: accessToken } = (await refresh.json()) as { access_token: string };
+  await request.delete('/api/v1/auth/oauth/google', {
+    headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` },
+  });
 }

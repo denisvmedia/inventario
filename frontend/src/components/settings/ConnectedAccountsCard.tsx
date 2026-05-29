@@ -7,6 +7,7 @@ import { GithubGlyph } from "@/components/auth/icons/GithubGlyph"
 import { GoogleGlyph } from "@/components/auth/icons/GoogleGlyph"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useHasPassword } from "@/features/auth/hooks"
 import {
   isLastMethodError,
   oauthLinkStartUrl,
@@ -31,6 +32,7 @@ export function ConnectedAccountsCard() {
   const { t } = useTranslation()
   const providersQuery = useOAuthProviders()
   const identitiesQuery = useOAuthIdentities()
+  const hasPassword = useHasPassword()
   const toast = useAppToast()
   const [params, setParams] = useSearchParams()
 
@@ -77,6 +79,24 @@ export function ConnectedAccountsCard() {
   // the settings UI doesn't surface them.
   const rowsByProvider = new Map(identities.map((i) => [i.provider, i]))
 
+  // authMethodsAfterUnlinking enumerates the sign-in methods the user would
+  // be left with if they unlinked `unlinking` — a password (when set) plus
+  // every *other* linked provider. The unlink confirmation lists these so the
+  // user can see they won't lock themselves out ("You currently have: password
+  // set, GitHub linked."), and an empty result drives the proactive
+  // last-method block (#1395). Returns localized, display-ready strings.
+  const authMethodsAfterUnlinking = (unlinking: OAuthProviderName): string[] => {
+    const methods: string[] = []
+    if (hasPassword) methods.push(t("auth:oauth.unlink.methodPassword"))
+    for (const identity of identities) {
+      if (identity.provider === unlinking) continue
+      const name =
+        providers.find((p) => p.name === identity.provider)?.displayName ?? identity.provider
+      methods.push(t("auth:oauth.unlink.methodProvider", { provider: name }))
+    }
+    return methods
+  }
+
   return (
     <section
       className="space-y-3"
@@ -102,7 +122,7 @@ export function ConnectedAccountsCard() {
               key={provider.name}
               provider={provider}
               identity={linked}
-              identityCount={identities.length}
+              remainingMethods={linked ? authMethodsAfterUnlinking(provider.name) : []}
             />
           )
         })}
@@ -114,10 +134,13 @@ export function ConnectedAccountsCard() {
 interface ConnectedAccountRowProps {
   provider: OAuthProviderEntry
   identity: OAuthIdentity | undefined
-  identityCount: number
+  // Sign-in methods that would survive unlinking this provider (password +
+  // other linked providers), already localized for display. Empty means this
+  // is the caller's last method — the unlink is blocked before it starts.
+  remainingMethods: string[]
 }
 
-function ConnectedAccountRow({ provider, identity, identityCount }: ConnectedAccountRowProps) {
+function ConnectedAccountRow({ provider, identity, remainingMethods }: ConnectedAccountRowProps) {
   const { t } = useTranslation()
   const confirm = useConfirm()
   const toast = useAppToast()
@@ -126,9 +149,22 @@ function ConnectedAccountRow({ provider, identity, identityCount }: ConnectedAcc
 
   async function handleUnlink() {
     if (!identity) return
+    // Proactive last-method guard (#1395): if unlinking would leave the user
+    // with no way to sign in, refuse before opening the destructive confirm.
+    // The BE enforces the same rule with a 409 (handled below) as the
+    // authoritative backstop; this is the friendlier UI-side block.
+    if (remainingMethods.length === 0) {
+      toast.error(t("auth:oauth.unlink.errorLastMethod"))
+      return
+    }
     const ok = await confirm({
       title: t("auth:oauth.unlink.confirmTitle", { provider: provider.displayName }),
-      description: t("auth:oauth.unlink.confirmBody"),
+      // Spell out the methods that remain so the user can see they won't lock
+      // themselves out, e.g. "…You currently have: password set, GitHub linked."
+      description: t("auth:oauth.unlink.confirmBodyWithMethods", {
+        provider: provider.displayName,
+        methods: remainingMethods.join(", "),
+      }),
       confirmLabel: t("auth:oauth.unlink.confirmCta"),
       destructive: true,
     })
@@ -196,7 +232,7 @@ function ConnectedAccountRow({ provider, identity, identityCount }: ConnectedAcc
               onClick={handleUnlink}
               disabled={unlinkMutation.isPending}
               data-testid={`connected-account-unlink-${provider.name}`}
-              data-identity-count={identityCount}
+              data-remaining-methods={remainingMethods.length}
             >
               {t("auth:oauth.unlink.confirmCta")}
             </Button>

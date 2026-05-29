@@ -1570,7 +1570,7 @@ const docTemplate = `{
         },
         "/auth/oauth/{provider}/link/start": {
             "get": {
-                "description": "Authenticated variant of /start: the resulting callback links the new identity to the caller's user rather than creating a fresh account.",
+                "description": "Authenticated variant of /start: the resulting callback links the new identity to the caller's user rather than creating a fresh account.\nThe caller is identified from the refresh-token cookie (or an Authorization Bearer header); an absent or expired session 302s to /login.",
                 "tags": [
                     "oauth"
                 ],
@@ -1592,13 +1592,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "302": {
-                        "description": "Redirect to provider"
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
+                        "description": "Redirect to provider (or to /login when no live session is present)"
                     },
                     "404": {
                         "description": "Unknown provider",
