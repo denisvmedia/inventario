@@ -22,6 +22,12 @@ fi
 # --- Pinned versions ---
 VCLUSTER_VERSION="v0.34.0"
 K8S_VERSION="v1.34.0"
+# Velero (#1865): chart + matching CLI. The velero-plugin-for-aws image is
+# pinned in infra/vm/helm-values/velero.yaml alongside the rest of the static
+# config. Keep the CLI version aligned with the chart's appVersion so
+# `make restore-longevity` speaks the same API as the in-cluster server.
+VELERO_CHART_VERSION="12.0.1"     # appVersion 1.18.0
+VELERO_CLI_VERSION="v1.18.0"
 TS_HOSTNAME="${TS_HOSTNAME:-inv-vcl01}"
 
 note() { printf '\n==> %s\n' "$*" >&2; }
@@ -274,6 +280,142 @@ note "Installing/upgrading ArgoCD"
     --set 'configs.params.applicationsetcontroller\.policy=sync' \
     --set 'applicationSet.enabled=true' \
     --wait --timeout 10m
+
+# --- Velero (#1865 — daily, encrypted, off-VM backup of inv-vcl01-longevity to R2) ---
+# Optional Phase-2 component. Gated on the velero.s3_* keys being present in
+# the sops bundle; a bundle without them simply skips Velero (preview-env core
+# is unaffected). The install is also wrapped so a Velero failure WARNS rather
+# than aborts the whole bootstrap — backups are additive to, not load-bearing
+# for, the preview environments.
+VELERO_S3_BUCKET=$(sops_get "velero.s3_bucket")
+VELERO_S3_ENDPOINT=$(sops_get "velero.s3_endpoint")
+VELERO_S3_REGION=$(sops_get "velero.s3_region")
+VELERO_S3_ACCESS_KEY=$(sops_get "velero.s3_access_key")
+VELERO_S3_SECRET_KEY=$(sops_get "velero.s3_secret_key")
+VELERO_ENCRYPTION_KEY=$(sops_get "velero.encryption_key")
+VELERO_STATIC_VALUES="$REMOTE_TMP/helm-values/velero.yaml"
+# R2 ignores the region but the AWS SDK the plugin/kopia use require a
+# non-empty value; "auto" is Cloudflare's documented placeholder.
+[ -n "${VELERO_S3_REGION:-}" ] || VELERO_S3_REGION="auto"
+
+if [ -n "${VELERO_S3_BUCKET:-}" ] && [ -n "${VELERO_S3_ENDPOINT:-}" ] && \
+   [ -n "${VELERO_S3_ACCESS_KEY:-}" ] && [ -n "${VELERO_S3_SECRET_KEY:-}" ]; then
+    [ -f "$VELERO_STATIC_VALUES" ] || { echo "missing $VELERO_STATIC_VALUES (bootstrap.sh upload)" >&2; exit 1; }
+    note "Installing/upgrading Velero (backup target: $VELERO_S3_BUCKET @ $VELERO_S3_ENDPOINT)"
+    "$KUBECTL" create namespace velero --dry-run=client -o yaml | "$KUBECTL" apply -f -
+
+    # cloud-credentials: AWS-style INI the velero-plugin-for-aws + the kopia
+    # node-agent both read. Written via a temp file (umask 077) + `kubectl
+    # create secret --from-file` so the keys never land in process args or
+    # shell history. `apply` (not plain `create`) makes rotation idempotent.
+    VELERO_CREDS_FILE=$(umask 077 && mktemp "$REMOTE_TMP/velero-creds.XXXXXX")
+    trap 'rm -f "$VELERO_CREDS_FILE"' EXIT
+    cat >"$VELERO_CREDS_FILE" <<EOF
+[default]
+aws_access_key_id=$VELERO_S3_ACCESS_KEY
+aws_secret_access_key=$VELERO_S3_SECRET_KEY
+EOF
+    "$KUBECTL" -n velero create secret generic cloud-credentials \
+        --from-file=cloud="$VELERO_CREDS_FILE" \
+        --dry-run=client -o yaml | "$KUBECTL" apply -f -
+    rm -f "$VELERO_CREDS_FILE"
+    trap - EXIT
+
+    # velero-repo-credentials: the kopia repository password. Pre-creating it
+    # from the sops-managed velero.encryption_key (instead of letting Velero
+    # auto-generate a random one on first backup) is what makes restore on a
+    # FRESH VM possible — a fresh Velero install would otherwise mint a NEW
+    # random password and be unable to decrypt the existing kopia repo in R2.
+    # Treat velero.encryption_key like the age key: back it up, never rotate it
+    # after the first backup (rotation orphans every prior backup).
+    if [ -n "${VELERO_ENCRYPTION_KEY:-}" ]; then
+        # Write the password to a temp file (umask 077) + `--from-file` rather
+        # than `--from-literal` so it never lands in process args (/proc/*/cmdline)
+        # — same hygiene as the cloud-credentials block above.
+        VELERO_REPO_PASS_FILE=$(umask 077 && mktemp "$REMOTE_TMP/velero-repo-pass.XXXXXX")
+        trap 'rm -f "$VELERO_REPO_PASS_FILE"' EXIT
+        printf '%s' "$VELERO_ENCRYPTION_KEY" >"$VELERO_REPO_PASS_FILE"
+        "$KUBECTL" -n velero create secret generic velero-repo-credentials \
+            --from-file=repository-password="$VELERO_REPO_PASS_FILE" \
+            --dry-run=client -o yaml | "$KUBECTL" apply -f -
+        rm -f "$VELERO_REPO_PASS_FILE"
+        trap - EXIT
+    else
+        warn "velero.encryption_key missing — Velero will auto-generate a random kopia repo password."
+        warn "Cross-VM / fresh-VM restore will NOT work. Set velero.encryption_key and re-bootstrap BEFORE the first backup."
+    fi
+
+    # The BackupStorageLocation is a LIST, and Helm REPLACES (not deep-merges)
+    # a list supplied by a later values file — so the whole BSL entry is
+    # generated here with the sops-sourced bucket/endpoint/region. The static
+    # slice (plugins, node-agent, schedule, snapshotsEnabled,
+    # credentials.existingSecret) comes from helm-values/velero.yaml.
+    # checksumAlgorithm:"" is the Cloudflare R2 workaround for the AWS SDK's
+    # default trailing-checksum, which R2 rejects with XAmzContentSHA256Mismatch.
+    # Values emitted as chomped block scalars (`|-`) — defensive against any
+    # YAML-sensitive char in the bucket/endpoint, same pattern as the TS OAuth
+    # overlay above and apply-secrets.sh.
+    VELERO_BSL_VALUES=$(umask 077 && mktemp "$REMOTE_TMP/velero-bsl.XXXXXX.yaml")
+    trap 'rm -f "$VELERO_BSL_VALUES"' EXIT
+    cat >"$VELERO_BSL_VALUES" <<EOF
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      default: true
+      bucket: |-
+$(printf '%s' "$VELERO_S3_BUCKET" | sed 's/^/        /')
+      credential:
+        name: cloud-credentials
+        key: cloud
+      config:
+        region: |-
+$(printf '%s' "$VELERO_S3_REGION" | sed 's/^/          /')
+        s3Url: |-
+$(printf '%s' "$VELERO_S3_ENDPOINT" | sed 's/^/          /')
+        s3ForcePathStyle: "true"
+        checksumAlgorithm: ""
+EOF
+    "$HELM" repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts >/dev/null 2>&1 || true
+    # Don't let a transient registry hiccup abort the whole bootstrap for an
+    # additive component — fall back to the cached index. (set -e would
+    # otherwise turn `helm repo update` failure into a hard exit here.)
+    "$HELM" repo update >/dev/null || warn "helm repo update failed; using cached chart index for Velero"
+    if "$HELM" upgrade --install velero vmware-tanzu/velero \
+        --namespace velero \
+        --version "$VELERO_CHART_VERSION" \
+        --values "$VELERO_STATIC_VALUES" \
+        --values "$VELERO_BSL_VALUES" \
+        --wait --timeout 10m; then
+        note "Velero installed. Verify the backend with: velero backup-location get"
+    else
+        warn "Velero helm install failed/timed out — preview-env core is UNAFFECTED."
+        warn "Investigate: kubectl -n velero get pods; kubectl -n velero logs deploy/velero"
+        warn "Common cause: node-agent can't reach the kubelet pods dir on this distro."
+    fi
+    rm -f "$VELERO_BSL_VALUES"
+    trap - EXIT
+
+    # Install the matching velero CLI on the VM so `make restore-longevity`
+    # can drive `velero backup get` / `velero restore create` over SSH. Kept
+    # failure-isolated (warn, don't abort) so a flaky GitHub release download
+    # can't fail a bootstrap whose Velero server already came up.
+    if ! command -v velero >/dev/null 2>&1 || \
+       ! velero version --client-only 2>/dev/null | grep -q "$VELERO_CLI_VERSION"; then
+        note "Installing velero CLI $VELERO_CLI_VERSION"
+        VELERO_TGZ="$REMOTE_TMP/velero.tar.gz"
+        if curl -sfL "https://github.com/vmware-tanzu/velero/releases/download/${VELERO_CLI_VERSION}/velero-${VELERO_CLI_VERSION}-linux-amd64.tar.gz" -o "$VELERO_TGZ" \
+            && tar -xzf "$VELERO_TGZ" -C "$REMOTE_TMP" \
+            && install -m 0755 "$REMOTE_TMP/velero-${VELERO_CLI_VERSION}-linux-amd64/velero" /usr/local/bin/velero; then
+            note "velero CLI $VELERO_CLI_VERSION installed"
+        else
+            warn "velero CLI download/install failed — 'make restore-longevity' won't work until it's present on the VM."
+        fi
+    fi
+else
+    warn "velero.s3_{bucket,endpoint,access_key,secret_key} incomplete in secrets; skipping Velero install."
+    warn "Fill the velero.* keys in the sops bundle and re-run bootstrap. See infra/SECRETS.md §\"Velero / Cloudflare R2\"."
+fi
 
 note "vm-install.sh finished"
 "$KUBECTL" get nodes -o wide

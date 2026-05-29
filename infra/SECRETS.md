@@ -14,9 +14,18 @@ encrypted with **sops + age**. The only thing that must live **off-VM** is one
 age private key on the laptop (with a copy in your password manager). The
 encrypted bundle is committed to the repo. `bootstrap.sh` decrypts it locally
 on the laptop, ships the plaintext to the VM tmpfs, and `apply-secrets.sh`
-turns the JSON into three Kubernetes Secrets
-(`inv-vcl01-master/inventario-admin`, `argocd/github-app-creds`,
-`tailscale/operator-oauth`).
+turns the JSON into the admin / repo-creds / OAuth Kubernetes Secrets
+(`inv-vcl01-master` + `inv-vcl01-longevity` `inventario-admin`,
+`argocd/github-app-creds`, `tailscale/operator-oauth`). When the `velero.*`
+keys are filled, `vm-install.sh` additionally materializes
+`velero/cloud-credentials` (R2 API token) and `velero/velero-repo-credentials`
+(the kopia repo password) at install time — see "Velero / Cloudflare R2" below.
+
+> **Note on the Velero repo password (`velero.encryption_key`).** Like the age
+> key, it is a *second* off-VM-critical secret: a restore on a fresh VM
+> re-derives the kopia repo from it, so losing it (or rotating it after the
+> first backup) orphans every backup in R2. Back it up in your password
+> manager next to the age key.
 
 ## Files in this layout
 
@@ -230,6 +239,48 @@ This one is optional for now — if missing, `vm-install.sh` falls back to
 warning "run `tailscale up` manually". For Phase 1 with just one VM it's
 acceptable to skip.
 
+### 6. Optional: Velero / Cloudflare R2 backup credentials (#1865)
+
+Velero takes a daily, encrypted, off-VM backup of the persistent
+`inv-vcl01-longevity` namespace (the demo Postgres + MinIO data) to a
+Cloudflare R2 bucket. Skip this whole section to skip the Velero install —
+`vm-install.sh` is gated on `velero.s3_*` being present and the preview-env
+core works without it.
+
+**6a. Generate the kopia repository password.** This is the encryption key for
+the backup repository — set it ONCE and never change it (see the warning in
+the architecture paragraph above):
+
+```bash
+openssl rand -base64 32     # → velero.encryption_key
+```
+
+**6b. Create the R2 bucket.**
+
+1. Cloudflare dashboard → **R2** → **Create bucket**. Name it e.g.
+   `inventario-longevity-backups` (→ `velero.s3_bucket`). Pick a location
+   close to the VM. Leave it private (R2 buckets are private by default).
+2. The bucket's S3 API endpoint is `https://<accountid>.r2.cloudflarestorage.com`
+   (R2 → **Overview** shows your account ID; or open the bucket →
+   **Settings** → **S3 API**). That whole URL → `velero.s3_endpoint`.
+3. Leave `velero.s3_region` empty — it defaults to `auto`, Cloudflare's
+   placeholder region.
+
+**6c. Create a scoped R2 API token.**
+
+1. R2 → **Manage R2 API Tokens** → **Create API token**.
+2. **Permissions**: **Object Read & Write**.
+3. **Specify bucket(s)**: scope it to just the bucket from 6b (least privilege).
+4. **Create**. Copy the **Access Key ID** (→ `velero.s3_access_key`) and the
+   **Secret Access Key** (→ `velero.s3_secret_key`) — the secret is shown
+   **once**.
+
+> R2 (like Backblaze B2 / Ceph) rejects the AWS SDK's default trailing
+> checksum; `vm-install.sh` already sets `checksumAlgorithm: ""` on the
+> BackupStorageLocation to work around it. Nothing to configure here.
+
+Stash all five values for "Filling the bundle".
+
 ---
 
 ## Filling the bundle
@@ -246,9 +297,14 @@ chmod 600 infra/vm/secrets/secrets.local.yaml
 # 2. Fill in real values — admin.{email,password},
 #    tailscale.{auth_key, oauth_client_id, oauth_client_secret, tailnet_name},
 #    github.{app_id, app_installation_id, app_private_key, url}.
-#    Leave the velero block out entirely until #1865 ships — Phase 1 doesn't
-#    need it, and committing empty placeholders into the encrypted bundle
-#    creates a footgun (someone later adds a real key in plaintext).
+#    Fill the velero.* block (step 6 above) ONLY if you want the daily R2
+#    backup of inv-vcl01-longevity; leave it empty to skip the Velero install.
+#    Don't leave half-filled velero.* keys — vm-install.sh treats the block as
+#    "configured" (and installs Velero) once bucket+endpoint+access+secret are
+#    all present. encryption_key is NOT part of that gate, but set it anyway:
+#    a backup taken without it gets a random, auto-generated kopia password and
+#    CANNOT be restored on a fresh VM (step 6a). Treat encryption_key as
+#    restore-critical, same as the age key.
 $EDITOR infra/vm/secrets/secrets.local.yaml
 
 # 3. Encrypt. The repo-root .sops.yaml picks the right age recipient
@@ -257,8 +313,7 @@ sops -e infra/vm/secrets/secrets.local.yaml > infra/vm/secrets/secrets.enc.yaml
 chmod 600 infra/vm/secrets/secrets.enc.yaml
 
 # 4. Verify round-trip BEFORE deleting plaintext. All expected keys should
-#    appear "filled"; velero.* should not appear at all if you followed the
-#    note in step 2.
+#    appear "filled" (velero.* only if you opted into backups in step 2).
 sops -d --output-type json infra/vm/secrets/secrets.enc.yaml | jq -r '
   paths(scalars) as $p |
   ($p|join(".")) + ": " +
@@ -409,6 +464,27 @@ GH Apps allow multiple active private keys. Painless flow:
    the sops bundle.
 3. `make -C infra upgrade VM=...` → rolls the tailscale-operator pod.
 
+### Rotating the R2 API token (`velero.s3_access_key` / `velero.s3_secret_key`)
+
+Safe to rotate any time — it's the access credential, NOT the repo encryption
+key:
+
+1. R2 → **Manage R2 API Tokens** → create a new token (Object Read & Write,
+   same bucket) → then revoke the old one.
+2. `sops infra/vm/secrets/secrets.enc.yaml` → replace `velero.s3_access_key`
+   + `velero.s3_secret_key`.
+3. `make -C infra upgrade VM=...` → re-applies `velero/cloud-credentials`.
+   Velero/kopia pick up the new credentials on the next backup/maintenance.
+
+### Never rotate `velero.encryption_key`
+
+⚠️ The kopia backup repository in R2 is encrypted with this password. Changing it
+means a fresh Velero install can no longer decrypt ANY existing backup — every
+prior restore point becomes unrecoverable. If it is ever genuinely compromised,
+the only safe path is: provision a brand-new R2 bucket, set a new
+`encryption_key` + `s3_bucket`, re-bootstrap, and accept that the old backup
+history is gone. Treat the value as write-once, like the age key.
+
 ---
 
 ## Troubleshooting
@@ -425,3 +501,15 @@ GH Apps allow multiple active private keys. Painless flow:
   3 fields, re-encrypt, re-bootstrap.
 - **TS operator pod crashloops**: same with `tailscale.oauth_client_{id,secret}`.
   Check Tailscale admin console hasn't revoked the client.
+- **`velero backup-location get` shows `PhaseUnavailable`**: the R2 backend
+  isn't reachable. Check `kubectl -n velero logs deploy/velero` — usual causes
+  are a wrong `velero.s3_endpoint` (must be the full
+  `https://<accountid>.r2.cloudflarestorage.com`, no bucket suffix), a revoked
+  R2 token, or — if you see `XAmzContentSHA256Mismatch` — a Velero install that
+  predates the `checksumAlgorithm: ""` fix (re-run `make upgrade`).
+- **Backups exist but a fresh-VM restore fails to decrypt**: the
+  `velero-repo-credentials` Secret on the new VM holds a different
+  `repository-password` than the one the kopia repo in R2 was created with.
+  This happens if `velero.encryption_key` was empty at first backup (Velero
+  auto-generated one) or was changed. There is no recovery — see "NEVER rotate
+  `velero.encryption_key`" above.
