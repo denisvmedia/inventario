@@ -1,0 +1,65 @@
+{{/*
+Namespace-scoped ResourceQuota + LimitRange (#1866). Renders only when
+quota.enabled=true. Defaults in values.yaml are sized for a single
+combined-mode install with external services; the shared preview overlay
+(infra/helm-overlays/preview-base.values.yaml) overrides quota.hard.* to
+fit the demo bundle.
+
+Apply ordering:
+  - helm install / upgrade: ResourceQuota / LimitRange share helm's built-
+    in apply order (kind-sorted; quotas land before workloads), so no
+    explicit hook annotation is needed.
+  - ArgoCD (argocdMode or otherwise): use sync-wave -10 so the quota is
+    in effect before the bootstrap Job at wave -5 ever schedules a pod.
+    Outside argocdMode the wave is harmless — ArgoCD treats unset waves
+    as 0, and setting -10 on a non-ArgoCD-managed cluster is a no-op
+    annotation.
+*/}}
+{{- if .Values.quota.enabled -}}
+{{- $fullName := include "inventario.fullname" . -}}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ $fullName }}-quota
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: quota
+  annotations:
+    "argocd.argoproj.io/sync-wave": "-10"
+spec:
+  hard:
+    {{- range $k, $v := .Values.quota.hard }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+{{- if .Values.quota.limitRange.enabled }}
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: {{ $fullName }}-limits
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: quota
+  annotations:
+    "argocd.argoproj.io/sync-wave": "-10"
+spec:
+  limits:
+    - type: Container
+      {{- with .Values.quota.limitRange.container.defaultRequest }}
+      defaultRequest:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.quota.limitRange.container.default }}
+      default:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.quota.limitRange.container.max }}
+      max:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.quota.limitRange.container.min }}
+      min:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

@@ -599,6 +599,79 @@ setupJob:
     seedDatabase: false
 
 # ============================================================
+# Namespace ResourceQuota + LimitRange (#1866)
+# ------------------------------------------------------------
+# Off by default. Turn on when the chart is installed into a
+# namespace that needs defensive guard-rails against a single
+# runaway pod / PVC starving other workloads — the canonical
+# case is PR-preview namespaces sharing one VM (the shared
+# overlay infra/helm-overlays/preview-base.values.yaml turns
+# this on and sizes the caps for the demo-bundle pod-set).
+#
+# When enabled, the chart renders:
+#   - a ResourceQuota covering compute (requests + limits),
+#     storage (requests + PVC count), and a pod-count ceiling;
+#   - an optional LimitRange that supplies per-container
+#     defaults + a per-container max so an ad-hoc pod
+#     (kubectl debug, an operator-applied tool) can't bypass
+#     the quota by omitting resources entirely.
+#
+# Chart-owned pods (apiserver / workers / demo / setup Jobs)
+# all set explicit requests + limits; the LimitRange defaults
+# only kick in for pods that don't, but having both pieces in
+# the same template keeps the safety contract complete.
+# ============================================================
+quota:
+  enabled: false
+
+  # ResourceQuota.spec.hard — every key here passes straight
+  # into spec.hard. Values use the standard k8s resource format
+  # (CPU as cores or m, memory/storage with Ki/Mi/Gi/Ti).
+  # Sized for a single combined-mode Deployment with external
+  # Postgres/Redis/S3 (no demo sidecars). Override per overlay
+  # for installs that enable demo.* or split mode.
+  #
+  # Operator note: keys here use dotted names (`requests.cpu`)
+  # to match k8s ResourceQuota.spec.hard verbatim. Overriding
+  # via `--set` requires escaping the dot, or Helm will create
+  # a nested map and emit an unrecognized quota resource:
+  #   --set 'quota.hard.requests\.cpu=2'      ✓ correct
+  #   --set quota.hard.requests.cpu=2          ✗ silent footgun
+  # Prefer `--values` (or a values file) for any non-trivial
+  # override.
+  hard:
+    requests.cpu: "1500m"
+    requests.memory: "2Gi"
+    limits.cpu: "3"
+    limits.memory: "3Gi"
+    requests.storage: "10Gi"
+    persistentvolumeclaims: "5"
+    pods: "20"
+
+  limitRange:
+    # Set to false to skip the LimitRange while keeping the
+    # ResourceQuota. Practical only when the operator has a
+    # cluster-level LimitRange already in place.
+    enabled: true
+
+    # Per-container defaults applied to any container missing
+    # requests/limits. Kept generous so chart-owned containers
+    # are never reshaped — only ad-hoc pods get filled in.
+    container:
+      defaultRequest:
+        cpu: "50m"
+        memory: "64Mi"
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+      # Hard per-container ceiling. Keep at least as large as
+      # the biggest run.workers.<group>.resources.limits in
+      # the install (run.workers.media defaults to 1000m/1Gi).
+      max:
+        cpu: "2"
+        memory: "2Gi"
+
+# ============================================================
 # Persistent Volume for /app/uploads (local file storage)
 # Only relevant when app.uploadLocation starts with "file://"
 # and demo.minio.enabled=false.

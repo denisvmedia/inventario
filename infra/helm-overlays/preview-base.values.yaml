@@ -81,6 +81,41 @@ setupJob:
     # we always seed). Negligible extra Job time (~15s).
     seedDatabase: true
 
+# Defensive guard-rails per #1866: cap aggregate compute/storage/pod-count
+# in every PR-preview namespace so one runaway pod can't starve other
+# previews sharing the same 16 GiB VM. Sized for the demo bundle below
+# (run all + postgres + redis + minio + transient setup / init-data /
+# mc-bucket Jobs):
+#   - Sum of always-on `limits.cpu` = 500m (inventario run all) + 500m
+#     (demo.postgres) + 200m (demo.redis) + 500m (demo.minio) = 1700m;
+#     `limits.cpu: "4"` leaves ~2300m headroom, enough for one rolling-
+#     update surge replica (+500m) and up to three transient Job pods
+#     defaulted by the chart's LimitRange (~500m each).
+#   - Sum of always-on `limits.memory` = 512+512+128+512 = 1664Mi;
+#     `limits.memory: "4Gi"` leaves ~2.4Gi headroom. WARNING: the
+#     worst-case overlap (steady + surge + three Job pods getting the
+#     LimitRange-default 512Mi each) lands around 3712Mi, ~384Mi shy of
+#     the cap. Bump `limits.memory` (and `requests.memory`) here in
+#     lockstep with any new chart-owned container that doesn't override
+#     the LimitRange default.
+#   - `requests.storage` covers the chart's single 10Gi uploads PVC with
+#     room for an operator-applied debug PVC. demo.* PVCs are disabled in
+#     this overlay (Postgres/MinIO use emptyDir), so 20Gi is generous.
+# The LimitRange defaults from the chart (50m / 64Mi request, 500m /
+# 512Mi limit, max 2 CPU / 2Gi) stay intact — they only kick in for ad-
+# hoc kubectl-debug pods and the un-resourced init / sidecar containers
+# in the chart's argocdMode Jobs.
+quota:
+  enabled: true
+  hard:
+    requests.cpu: "2"
+    requests.memory: "2Gi"
+    limits.cpu: "4"
+    limits.memory: "4Gi"
+    requests.storage: "20Gi"
+    persistentvolumeclaims: "5"
+    pods: "30"
+
 # Expose via Tailscale Ingress, NOT LoadBalancer. The TS operator (#1855)
 # provisions a tailnet proxy node from the Ingress + `className: tailscale`
 # and handles cert termination outside the chart.

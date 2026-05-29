@@ -387,6 +387,105 @@ jobs:
             exit 1
           fi
 
+      - name: Render chart with quota.enabled=false (default — no quota emitted)
+        run: |
+          set -euo pipefail
+
+          # #1866: quota.yaml is opt-in. Default render must not emit
+          # ResourceQuota or LimitRange (operators using `helm install`
+          # against a production namespace don't expect chart-managed
+          # quotas to land silently).
+          helm template inventario helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.initData.adminPassword=test \
+            > /tmp/inventario-quota-off-render.yaml
+
+          if grep -Eq '^kind: (ResourceQuota|LimitRange)$' /tmp/inventario-quota-off-render.yaml; then
+            echo "Default render must not include ResourceQuota or LimitRange (quota.enabled=false)." >&2
+            exit 1
+          fi
+          if grep -Eq '^# Source: inventario/templates/quota\.yaml' /tmp/inventario-quota-off-render.yaml; then
+            echo "Default render must not include templates/quota.yaml output." >&2
+            exit 1
+          fi
+
+      - name: Render chart with quota.enabled=true (ResourceQuota + LimitRange)
+        run: |
+          set -euo pipefail
+
+          # #1866: opt-in render emits both a ResourceQuota carrying the
+          # full hard-cap surface and a LimitRange with container defaults
+          # so ad-hoc pods inherit limits and don't get rejected by the
+          # ResourceQuota's `limits.*` admission check.
+          helm template inventario helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.initData.adminPassword=test \
+            --set quota.enabled=true \
+            > /tmp/inventario-quota-on-render.yaml
+
+          quota_block="$(awk '
+            /^# Source: inventario\/templates\/quota.yaml/ { in_block=1 }
+            in_block { print }
+            in_block && /^# Source: / && !/quota\.yaml/ { exit }
+          ' /tmp/inventario-quota-on-render.yaml)"
+
+          test -n "$quota_block" \
+            || { echo "quota.enabled=true render is missing templates/quota.yaml output" >&2; exit 1; }
+
+          echo "$quota_block" | grep -Eq '^kind: ResourceQuota$' \
+            || { echo "quota render missing ResourceQuota" >&2; echo "$quota_block" >&2; exit 1; }
+          echo "$quota_block" | grep -Eq '^kind: LimitRange$' \
+            || { echo "quota render missing LimitRange" >&2; echo "$quota_block" >&2; exit 1; }
+
+          # Sync-wave -10 (before bootstrap Job at -5) so the quota is in
+          # effect before any chart-rendered pod schedules.
+          wave_count="$(echo "$quota_block" | grep -c '"argocd.argoproj.io/sync-wave": "-10"')"
+          [ "$wave_count" -eq 2 ] \
+            || { echo "Expected sync-wave -10 on both quota resources, got ${wave_count}" >&2; exit 1; }
+
+          # Every default hard-cap key from values.yaml must round-trip.
+          for key in requests.cpu requests.memory limits.cpu limits.memory requests.storage persistentvolumeclaims pods; do
+            echo "$quota_block" | grep -Eq "^[[:space:]]+${key}: " \
+              || { echo "quota.hard.${key} missing from ResourceQuota render" >&2; echo "$quota_block" >&2; exit 1; }
+          done
+
+          # LimitRange must declare per-Container defaults so unconfigured
+          # ad-hoc pods inherit cpu/memory and aren't rejected by quota.
+          echo "$quota_block" | grep -Eq '^[[:space:]]+- type: Container$' \
+            || { echo "LimitRange missing Container type" >&2; exit 1; }
+          echo "$quota_block" | grep -Eq '^[[:space:]]+defaultRequest:$' \
+            || { echo "LimitRange missing defaultRequest" >&2; exit 1; }
+          echo "$quota_block" | grep -Eq '^[[:space:]]+default:$' \
+            || { echo "LimitRange missing default" >&2; exit 1; }
+          echo "$quota_block" | grep -Eq '^[[:space:]]+max:$' \
+            || { echo "LimitRange missing max" >&2; exit 1; }
+
+      - name: Render chart with quota.enabled=true but limitRange.enabled=false
+        run: |
+          set -euo pipefail
+
+          # Operators with a cluster-level LimitRange already in place can
+          # turn off the chart's LimitRange while keeping the ResourceQuota.
+          helm template inventario helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.initData.adminPassword=test \
+            --set quota.enabled=true \
+            --set quota.limitRange.enabled=false \
+            > /tmp/inventario-quota-no-limitrange-render.yaml
+
+          grep -Eq '^kind: ResourceQuota$' /tmp/inventario-quota-no-limitrange-render.yaml \
+            || { echo "ResourceQuota must still render when limitRange.enabled=false" >&2; exit 1; }
+          if grep -Eq '^kind: LimitRange$' /tmp/inventario-quota-no-limitrange-render.yaml; then
+            echo "LimitRange must NOT render when quota.limitRange.enabled=false" >&2
+            exit 1
+          fi
+
       - name: Render chart with setupJob.argocdMode=false (regression check)
         run: |
           set -euo pipefail

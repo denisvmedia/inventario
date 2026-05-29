@@ -209,6 +209,27 @@ The shared preview overlay `infra/helm-overlays/preview-base.values.yaml` alread
 
 For direct `helm install` / `helm upgrade --install` workflows, keep `setupJob.argocdMode=false` (the default). The existing setup Job runs as a Helm hook in the usual way — bootstrap → migrate → init-data sequentially in a single pod — which is the simpler story when Helm is the deployment engine.
 
+## Namespace quotas (opt-in)
+
+Set `quota.enabled=true` to render a namespace-scoped `ResourceQuota` plus an opt-out `LimitRange` (#1866). The pair is off by default because direct `helm install` against a production namespace usually shouldn't drop chart-managed quotas in silently; turn it on for installs that share a namespace boundary with other tenants — the canonical case is the per-PR preview namespaces driven by `infra/argocd/applicationset-pr.yaml`.
+
+When enabled, the chart emits:
+
+- a `ResourceQuota` covering `requests.cpu`, `requests.memory`, `limits.cpu`, `limits.memory`, `requests.storage`, `persistentvolumeclaims`, and a hard `pods` ceiling, with values straight from `quota.hard.*`;
+- a `LimitRange` of type `Container` carrying `defaultRequest` / `default` / `max`, so an ad-hoc pod (`kubectl debug`, an operator-applied tool) that omits resources still inherits a request/limit pair and isn't rejected by the `ResourceQuota`'s `limits.*` admission check. Disable with `quota.limitRange.enabled=false` if your cluster already has an equivalent LimitRange in place.
+
+Both resources land at ArgoCD `sync-wave: "-10"`, before the bootstrap Job at wave `-5`, so the quota is enforced from the first scheduled pod. Helm's built-in kind-sort apply order places `ResourceQuota` / `LimitRange` before workloads, so the same template works for `helm install` without an explicit hook.
+
+Chart defaults are sized for a single combined-mode install (apiserver pod only) with external Postgres/Redis/object-storage — `1500m / 2Gi` requests, `3 / 3Gi` limits, `10Gi` storage. Installs that enable `demo.*` sidecars or split mode should raise the caps. The shared overlay `infra/helm-overlays/preview-base.values.yaml` already overrides `quota.hard.*` to fit the preview demo bundle (postgres + redis + minio + apiserver + transient setup / init-data Jobs).
+
+Operational notes:
+
+- A pod that would push the namespace over a hard cap fails admission with a `Forbidden: exceeded quota` event — the failure is fast and the message names the offending dimension, satisfying the "fails fast with a clear message" acceptance criterion from #1866.
+- The `pods` ceiling counts only pods in a non-terminal state (Pending / Running). Succeeded and Failed Job pods do not consume the quota — they are pruned in the background by `kube-controller-manager`'s PodGC once `terminated-pod-gc-threshold` is exceeded. The ceiling therefore caps *in-flight* pods (active workloads + transient Job pods overlapping a sync), not the historical record. See [kubernetes/kubernetes#51150](https://github.com/kubernetes/kubernetes/issues/51150) for the upstream design discussion. To defensively cap accumulated Job objects too, add an explicit `count/jobs.batch` line to `quota.hard`.
+- When `persistence.enabled=true` and `persistence.size` ≥ `quota.hard.requests.storage`, the single uploads PVC consumes the entire storage quota and any additional PVC will be rejected. Raise `quota.hard.requests.storage` (or trim `persistence.size`) for installs that need both.
+- Overriding `quota.hard.*` via `--set` requires escaping the dots: `--set 'quota.hard.requests\.cpu=2'`. Without the escape, Helm parses the path as a nested map (`{requests: {cpu: 2}}`) and the ResourceQuota renders an unrecognized resource that kubectl rejects. Prefer `--values` (or a values file) for non-trivial overrides.
+- The pivot away from a queue bot (per the [2026-05-24 issue update](https://github.com/denisvmedia/inventario/issues/1866#issuecomment-4528708945)) makes the per-namespace quota itself the concurrency cap for PR previews: when the cluster runs out of capacity, the next ArgoCD `Application` stays `Pending` until an older preview is `/destroy`-ed.
+
 ## Important values reference
 
 For the complete default surface, see `helm/inventario/values.yaml`.
@@ -250,6 +271,9 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `demo.postgresql.enabled` | `false` | Turn on in-cluster demo PostgreSQL. |
 | `demo.redis.enabled` | `false` | Turn on in-cluster demo Redis. |
 | `demo.minio.enabled` | `false` | Turn on in-cluster demo MinIO and S3-style uploads. |
+| `quota.enabled` | `false` | Render a namespace-scoped `ResourceQuota` + `LimitRange` (#1866). Enable on multi-tenant namespaces such as PR previews; raise `quota.hard.*` when enabling `demo.*` or split mode. See [Namespace quotas](#namespace-quotas-opt-in). |
+| `quota.hard` | see `values.yaml` | Map passed straight into `ResourceQuota.spec.hard`. |
+| `quota.limitRange.enabled` | `true` | Set to `false` to skip the chart's `LimitRange` (e.g. when a cluster-wide LimitRange is already in place). |
 
 ## Upgrade notes
 
