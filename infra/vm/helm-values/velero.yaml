@@ -1,0 +1,99 @@
+# Velero static helm values (#1865).
+#
+# Installs Velero with daily, encrypted, off-VM backups of the persistent
+# longevity namespace (inv-vcl01-longevity) to Cloudflare R2 (S3-compatible).
+#
+# This file holds the STATIC slice. The dynamic R2 backend (bucket + endpoint
+# URL + region) is layered on top by infra/vm/vm-install.sh from the sops
+# bundle's velero.* keys via a second `--values` overlay — same pattern as the
+# Tailscale Operator OAuth overlay in vm-install.sh. The BackupStorageLocation
+# is a LIST, and Helm REPLACES (not deep-merges) a list when a later values
+# file provides it, so the whole `configuration.backupStorageLocation` entry is
+# generated in vm-install.sh rather than split across two files.
+#
+# Credentials never live here: the R2 access/secret key land in the
+# `cloud-credentials` Secret and the kopia repo password in
+# `velero-repo-credentials`, both materialized by vm-install.sh from the sops
+# bundle. See infra/SECRETS.md §"Velero / Cloudflare R2" and infra/README.md
+# §"Disaster recovery".
+
+# velero-plugin-for-aws provides the S3-compatible object store used for BOTH
+# the BackupStorageLocation and the kopia File System Backup repository.
+# Cloudflare R2 speaks the S3 API; vm-install.sh points the plugin at the R2
+# endpoint via the BSL config it layers on top. Pinned to match appVersion
+# (Velero 1.18.x ⇄ plugin v1.13.x).
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.13.1
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+# File System Backup (kopia) is the ONLY viable data-backup path on this
+# single-node vcluster: its local-path PVCs have no CSI VolumeSnapshotClass, so
+# block/volume *snapshots* are impossible. The node-agent DaemonSet walks each
+# pod's volumes on the node and streams their contents into the kopia repo in
+# R2 instead. Required for the demo Postgres data dir + demo MinIO object store
+# in inv-vcl01-longevity to actually be captured.
+deployNodeAgent: true
+
+# No CSI / cloud snapshotter is wired, so disable snapshot machinery entirely.
+# Prevents Velero from provisioning an unused VolumeSnapshotLocation and from
+# attempting (then failing) PV snapshots during each backup. Durability comes
+# from FSB above + the daily schedule below. (Mirrors the upstream
+# `--use-volume-snapshots=false` guidance for FSB-only installs.)
+snapshotsEnabled: false
+
+# credentials.existingSecret references the `cloud-credentials` Secret
+# vm-install.sh creates from velero.s3_access_key / velero.s3_secret_key. The
+# name is static (not a secret), so it lives here; the contents do not.
+credentials:
+  useSecret: true
+  existingSecret: cloud-credentials
+
+# Daily snapshot of the persistent longevity namespace, retained 30 days.
+# `defaultVolumesToFsBackup: true` routes every PVC-backed volume in the
+# namespace (demo Postgres + demo MinIO) through kopia FSB without needing
+# per-pod `backup.velero.io/backup-volumes` annotations. `snapshotVolumes:
+# false` matches `snapshotsEnabled: false` above. The schedule is created as a
+# Velero Schedule CR by the chart, so it survives reinstalls.
+schedules:
+  longevity-daily:
+    disabled: false
+    # 02:00 every day. The Schedule cron has no timezone field; Velero
+    # evaluates it in UTC, which is what the issue specifies (02:00 UTC).
+    schedule: "0 2 * * *"
+    useOwnerReferencesInBackup: false
+    template:
+      ttl: 720h0m0s            # 30 days → backups auto-expire and GC.
+      storageLocation: default
+      includedNamespaces:
+        - inv-vcl01-longevity
+      # Cluster-scoped resources tied to the namespace (the PersistentVolumes
+      # backing the PVCs, their StorageClass) are auto-included by Velero when
+      # their namespaced owners are captured. There are no custom CRDs in the
+      # inventario workload, so no explicit includedClusterScopedResources list
+      # is needed — the chart + setup Job emit only core/apps/batch objects.
+      defaultVolumesToFsBackup: true
+      snapshotVolumes: false
+
+# Modest footprint — the VM is shared with ArgoCD, the Tailscale Operator, the
+# master preview, and per-PR previews. The kopia node-agent does the heavy
+# lifting during the nightly window only.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+nodeAgent:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

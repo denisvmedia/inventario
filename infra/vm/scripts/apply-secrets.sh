@@ -48,14 +48,16 @@ remote_apply() {
     ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
 }
 
-# --- inv-vcl01-master / inventario-admin (chart consumes via secrets.existingSecret) ---
-# Materialized in the static master namespace so the master ArgoCD
-# ApplicationSet (infra/argocd/applicationset-master.yaml; #1885 replaced the
-# previous static Application with a single-template ApplicationSet of the
-# same name) can reference it via
-# `secrets.existingSecret: inventario-admin`. The chart's setup Job reads
-# `SETUP_ADMIN_PASSWORD` from this Secret on first install (idempotent
-# thereafter — the password is the seed value, not a runtime credential).
+# --- inventario-admin (chart consumes via secrets.existingSecret) ---
+# Materialized in BOTH persistent-namespace Applications that pin
+# `secrets.existingSecret: inventario-admin`:
+#   - inv-vcl01-master    — master ApplicationSet (#1883/#1885; #1885 replaced
+#                           the previous static Application with a
+#                           single-template ApplicationSet of the same name).
+#   - inv-vcl01-longevity — the persistent, Velero-backed env (#1865).
+# The chart's setup Job reads `SETUP_ADMIN_PASSWORD` from this Secret on first
+# install (idempotent thereafter — the password is the seed value, not a
+# runtime credential).
 #
 # Per-PR preview namespaces (`inv-vcl01-pr{N}`) are created dynamically by
 # ArgoCD and so are NOT covered here; their ApplicationSet template
@@ -69,30 +71,32 @@ remote_apply() {
 ADMIN_PASSWORD=$(lookup "admin.password")
 ADMIN_MISSING=0
 if [ -z "$ADMIN_PASSWORD" ]; then
-    warn "admin.password missing in secrets bundle; required by master ApplicationSet via secrets.existingSecret"
+    warn "admin.password missing in secrets bundle; required by master + longevity ApplicationSets via secrets.existingSecret"
     warn "Continuing with optional sections; will exit non-zero at the end so the issue can't be missed."
     ADMIN_MISSING=1
 else
-    note "Applying inv-vcl01-master/inventario-admin"
-    # Emit value as a YAML block scalar so passwords with special chars
-    # (':', '{', '#', newlines) don't break manifest parsing or open an
-    # injection path. Same pattern as the github private key block below.
-    cat <<EOF | remote_apply
+    for ns in inv-vcl01-master inv-vcl01-longevity; do
+        note "Applying $ns/inventario-admin"
+        # Emit value as a YAML block scalar so passwords with special chars
+        # (':', '{', '#', newlines) don't break manifest parsing or open an
+        # injection path. Same pattern as the github private key block below.
+        cat <<EOF | remote_apply
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: inv-vcl01-master
+  name: $ns
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: inventario-admin
-  namespace: inv-vcl01-master
+  namespace: $ns
 type: Opaque
 stringData:
   SETUP_ADMIN_PASSWORD: |-
 $(printf '%s' "$ADMIN_PASSWORD" | sed 's/^/    /')
 EOF
+    done
 fi
 
 # --- argocd / github-app-creds (repo-creds + ApplicationSet PR-generator) ---

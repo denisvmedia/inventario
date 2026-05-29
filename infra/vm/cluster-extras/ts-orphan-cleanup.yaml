@@ -28,7 +28,7 @@
 #   - Device has `tag:k8s` (TS Operator-provisioned proxies inherit this
 #     tag from the operator's defaultProxyTags configuration).
 #   - Device hostname matches our naming convention
-#     (`inv-vcl01-(pr<N>|master)(-<N>)?` — base name, plus any `-N`
+#     (`inv-vcl01-(pr<N>|master|longevity)(-<N>)?` — base name, plus any `-N`
 #     suffix the operator may have appended on a hostname collision so
 #     prior-deploy orphans get cleaned up alongside fresh ones).
 #   - Device has been offline for > 1 hour. The threshold guards against
@@ -92,7 +92,7 @@ data:
             (.tags // []) | any(. == "tag:k8s")
         )
         | select(
-            .hostname | test("^inv-vcl01-(pr[0-9]+|master)(-[0-9]+)?$")
+            .hostname | test("^inv-vcl01-(pr[0-9]+|master|longevity)(-[0-9]+)?$")
         )
         | select(
             (.lastSeen | fromdateiso8601) < (now - 3600)

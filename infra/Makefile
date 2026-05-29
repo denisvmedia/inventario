@@ -23,7 +23,7 @@ SVC ?= vcluster.service
 
 REQUIRE_VM = @[ -n "$(VM)" ] || { echo "ERROR: VM is required, e.g. make $@ VM=user@host" >&2; exit 1; }
 
-.PHONY: help preflight bootstrap upgrade recover destroy status logs shell
+.PHONY: help preflight bootstrap upgrade recover destroy status logs shell restore-longevity
 
 help:
 	@echo "Inventario preview-env infra targets (VM=user@host required except preflight)"
@@ -32,6 +32,7 @@ help:
 	@echo "  upgrade      Re-run bootstrap; idempotent. Use for vcluster/argocd version bumps."
 	@echo "  recover      Alias for bootstrap; intended after total VM loss + 'ssh-copy-id'."
 	@echo "  destroy      Stop services and remove vcluster data dir. Tailnet membership preserved."
+	@echo "  restore-longevity  Interactive Velero restore of inv-vcl01-longevity from an R2 backup (#1865)."
 	@echo "  status       Show vcluster+tailscaled state and kubectl get nodes,pods -A."
 	@echo "  logs         Tail journalctl for SVC (default: vcluster.service)."
 	@echo "               Example: make logs VM=... SVC=tailscaled.service"
@@ -63,6 +64,13 @@ recover: bootstrap
 destroy:
 	$(REQUIRE_VM)
 	bash "$(THIS_DIR)vm/destroy.sh" "$(VM)"
+
+# Interactive: lists Velero backups, prompts for one, freezes ArgoCD, deletes +
+# restores the inv-vcl01-longevity namespace from R2 (#1865). See the script
+# header for why ArgoCD is paused during the restore.
+restore-longevity:
+	$(REQUIRE_VM)
+	bash "$(THIS_DIR)vm/scripts/restore-longevity.sh" "$(VM)"
 
 status:
 	$(REQUIRE_VM)
