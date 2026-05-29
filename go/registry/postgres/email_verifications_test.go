@@ -247,6 +247,49 @@ func TestEmailVerificationRegistry_DeleteExpired(t *testing.T) {
 	c.Assert(all[0].ID, qt.Equals, futureCreated.ID)
 }
 
+// TestEmailVerificationRegistry_MarkVerified pins the atomic claim: the first
+// call flips verified_at and reports true; a second call on the same token
+// reports false (idempotent), and the row stays verified. See #1005.
+func TestEmailVerificationRegistry_MarkVerified(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := context.Background()
+	user := getTestUser(c, registrySet)
+
+	created, err := registrySet.EmailVerificationRegistry.Create(ctx, newTestEmailVerification(user, "token-mark"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(created.VerifiedAt, qt.IsNil)
+
+	claimed, err := registrySet.EmailVerificationRegistry.MarkVerified(ctx, "token-mark")
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue, qt.Commentf("first claim of an unverified token must win"))
+
+	reloaded, err := registrySet.EmailVerificationRegistry.Get(ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(reloaded.IsVerified(), qt.IsTrue)
+
+	again, err := registrySet.EmailVerificationRegistry.MarkVerified(ctx, "token-mark")
+	c.Assert(err, qt.IsNil)
+	c.Assert(again, qt.IsFalse, qt.Commentf("re-claiming an already-verified token must not win"))
+}
+
+// TestEmailVerificationRegistry_MarkVerified_TokenNotFound pins that an unknown
+// token yields (false, nil) rather than an error — the zero-row UPDATE is a
+// non-event for the claim primitive.
+func TestEmailVerificationRegistry_MarkVerified_TokenNotFound(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := context.Background()
+
+	claimed, err := registrySet.EmailVerificationRegistry.MarkVerified(ctx, "no-such-token")
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsFalse)
+}
+
 func TestEmailVerificationRegistry_Count(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()
