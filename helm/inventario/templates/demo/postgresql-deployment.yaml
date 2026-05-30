@@ -6,6 +6,18 @@ metadata:
   labels:
     {{- include "inventario.labels" . | nindent 4 }}
     app.kubernetes.io/component: demo-postgresql
+  annotations:
+    # Bring the demo Postgres up BEFORE the wave--5 bootstrap setup Job,
+    # which connects to it on a fresh argocdMode install. Without this the
+    # Job's bootstrap can't resolve the demo-postgres service ("no such
+    # host"), never goes healthy, and ArgoCD never reaches wave 0 to create
+    # Postgres — a deadlock that only bites FRESH installs (existing envs
+    # keep a running Postgres across re-syncs). Same #1884 ordering gap as
+    # the ServiceAccount (see templates/serviceaccount.yaml). -7 is before
+    # the SA (-6) and the Job (-5); every demo-postgres resource shares it
+    # so the Secret/ConfigMap/PVC exist when the Deployment starts. Inert
+    # under plain `helm install`.
+    argocd.argoproj.io/sync-wave: "-7"
 spec:
   replicas: 1
   strategy:

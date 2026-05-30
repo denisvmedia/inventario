@@ -6,6 +6,10 @@ metadata:
   labels:
     {{- include "inventario.labels" . | nindent 4 }}
     app.kubernetes.io/component: demo-postgresql
+  annotations:
+    # Same early wave as the demo-postgres Deployment so the bootstrap can
+    # resolve this service — see postgresql-deployment.yaml (#1884).
+    argocd.argoproj.io/sync-wave: "-7"
 spec:
   selector:
     {{- include "inventario.selectorLabels" . | nindent 4 }}
