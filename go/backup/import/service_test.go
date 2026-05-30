@@ -1,3 +1,5 @@
+//go:build legacy_xml_backup
+
 package importpkg_test
 
 import (
@@ -5,55 +7,29 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/go-extras/go-kit/must"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/memblob"
 
 	importpkg "github.com/denisvmedia/inventario/backup/import"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
 )
-
-func newTestFactorySet() (*registry.FactorySet, string) {
-	// Use the proper NewFactorySet function to ensure all dependencies are set up correctly
-	factorySet := memory.NewFactorySet()
-
-	// Create user with server-generated ID and capture it
-	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			// ID will be generated server-side for security
-			TenantID: "test-tenant",
-		},
-		Email:    "test@example.com",
-		Name:     "Test User",
-		IsActive: true,
-	}))
-
-	must.Must(factorySet.TenantRegistry.Create(context.Background(), models.Tenant{
-		EntityID: models.EntityID{ID: "test-tenant"},
-		Name:     "Test Tenant",
-	}))
-
-	return factorySet, createdUser.ID
-}
 
 func TestNewImportService(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	uploadLocation := "memory://test-bucket"
 
-	service := importpkg.NewImportService(factorySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
 
 	c.Assert(service, qt.IsNotNil)
 }
 
 func TestImportService_ProcessImport_ExportNotFound(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	uploadLocation := "mem://test-bucket"
-	service := importpkg.NewImportService(factorySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	ctx := context.Background()
 
 	err := service.ProcessImport(ctx, "non-existent-id", "test-file.xml")
@@ -63,11 +39,11 @@ func TestImportService_ProcessImport_ExportNotFound(t *testing.T) {
 
 func TestImportService_ProcessImport_BlobBucketError(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 	// Use invalid upload location to trigger blob bucket error
 	uploadLocation := "invalid://invalid-location"
-	service := importpkg.NewImportService(factorySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	ctx := context.Background()
 
 	// Create a test export
@@ -92,10 +68,10 @@ func TestImportService_ProcessImport_BlobBucketError(t *testing.T) {
 
 func TestImportService_ProcessImport_FileNotFound(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 	uploadLocation := "mem://test-bucket"
-	service := importpkg.NewImportService(factorySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	ctx := context.Background()
 
 	// Create a test export
@@ -109,25 +85,25 @@ func TestImportService_ProcessImport_FileNotFound(t *testing.T) {
 
 	err = service.ProcessImport(ctx, createdExport.ID, "non-existent-file.xml")
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "failed to open uploaded XML file")
+	c.Assert(err.Error(), qt.Contains, "failed to open uploaded backup file")
 
 	// Verify export status was updated to failed
 	updatedExport, err := registrySet.ExportRegistry.Get(ctx, createdExport.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(updatedExport.Status, qt.Equals, models.ExportStatusFailed)
-	c.Assert(updatedExport.ErrorMessage, qt.Contains, "failed to open uploaded XML file")
+	c.Assert(updatedExport.ErrorMessage, qt.Contains, "failed to open uploaded backup file")
 }
 
 func TestImportService_ProcessImport_InvalidXML(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	service := importpkg.NewImportService(factorySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	ctx := context.Background()
 
 	// Create blob bucket and upload invalid XML
@@ -162,14 +138,14 @@ func TestImportService_ProcessImport_InvalidXML(t *testing.T) {
 
 func TestImportService_ProcessImport_Success(t *testing.T) {
 	c := qt.New(t)
-	factorySet, testUserID := newTestFactorySet()
+	factorySet, testUserID, testGroupID := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	service := importpkg.NewImportService(factorySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	ctx := context.Background()
 
 	// Create blob bucket and upload valid XML
@@ -197,7 +173,7 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 		Type:                     models.ExportTypeImported,
 		Status:                   models.ExportStatusPending,
 		Description:              "Test import",
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", testGroupID, testUserID),
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
@@ -232,14 +208,14 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 
 func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 	c := qt.New(t)
-	factorySet, testUserID := newTestFactorySet()
+	factorySet, testUserID, testGroupID := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	service := importpkg.NewImportService(factorySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	ctx := context.Background()
 
 	// Create blob bucket and upload XML with file data
@@ -276,7 +252,7 @@ func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 		Type:                     models.ExportTypeImported,
 		Status:                   models.ExportStatusPending,
 		Description:              "Test import with files",
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", testGroupID, testUserID),
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
@@ -296,14 +272,14 @@ func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 
 func TestImportService_ProcessImport_ExportRecordDeleted(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	service := importpkg.NewImportService(factorySet, uploadLocation)
+	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	ctx := context.Background()
 
 	// Create a test export

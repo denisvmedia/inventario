@@ -94,12 +94,20 @@ func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodi
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
 
-	// Acquisition columns are server-managed (issue #1550 / #202): drop
-	// any value the API caller smuggled in. The migration worker is the
-	// only legitimate writer (via go/registry/internal/migrationops),
-	// and it only writes when the row's columns are still NULL.
-	commodity.AcquisitionPrice = nil
-	commodity.AcquisitionCurrency = nil
+	// Acquisition columns are server-managed (issue #1550 / #202): drop any
+	// value the API caller smuggled in. The only legitimate writers are the
+	// migration worker (via go/registry/internal/migrationops, NULL→value once)
+	// and the signature-verified #534 backup restore, which reconstructs the
+	// archived pair on a fresh row by signalling it through the trusted
+	// WithRestoreAcquisition context seam. Absent that signal the pair is cleared
+	// so it stays immutable for every user write.
+	if price, currency, ok := registry.RestoreAcquisitionFromContext(ctx); ok {
+		commodity.AcquisitionPrice = &price
+		commodity.AcquisitionCurrency = &currency
+	} else {
+		commodity.AcquisitionPrice = nil
+		commodity.AcquisitionCurrency = nil
+	}
 
 	reg := r.newSQLRegistry()
 

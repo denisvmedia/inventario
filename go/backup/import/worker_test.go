@@ -16,13 +16,13 @@ import (
 
 func TestNewImportWorker(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	importService := importpkg.NewImportService(factorySet, uploadLocation)
+	importService := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	worker := importpkg.NewImportWorker(importService, factorySet, 3)
 
 	c.Assert(worker, qt.IsNotNil)
@@ -31,13 +31,13 @@ func TestNewImportWorker(t *testing.T) {
 
 func TestImportWorkerStartStop(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	// Create a temporary directory for imports
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	importService := importpkg.NewImportService(factorySet, uploadLocation)
+	importService := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	worker := importpkg.NewImportWorker(importService, factorySet, 3)
 
 	ctx := t.Context()
@@ -72,13 +72,13 @@ func TestImportWorkerStartStop(t *testing.T) {
 
 func TestImportWorkerIsRunning(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	// Create a temporary directory for imports
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	importService := importpkg.NewImportService(factorySet, uploadLocation)
+	importService := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	worker := importpkg.NewImportWorker(importService, factorySet, 3)
 
 	// Test initial state
@@ -88,12 +88,12 @@ func TestImportWorkerIsRunning(t *testing.T) {
 func TestImportWorkerConcurrentAccess(t *testing.T) {
 	c := qt.New(t)
 	// Test concurrent access to worker methods
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	importService := importpkg.NewImportService(factorySet, uploadLocation)
+	importService := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	worker := importpkg.NewImportWorker(importService, factorySet, 3)
 
 	ctx := t.Context()
@@ -129,12 +129,12 @@ func TestImportWorkerConcurrentAccess(t *testing.T) {
 func TestImportWorkerContextCancellation(t *testing.T) {
 	c := qt.New(t)
 	// Test that worker respects context cancellation
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	importService := importpkg.NewImportService(factorySet, uploadLocation)
+	importService := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	worker := importpkg.NewImportWorker(importService, factorySet, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -156,13 +156,13 @@ func TestImportWorkerContextCancellation(t *testing.T) {
 
 func TestImportWorkerConfigurableConcurrentLimit(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	// Create a temporary directory for imports
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	importService := importpkg.NewImportService(factorySet, uploadLocation)
+	importService := importpkg.NewImportService(factorySet, uploadLocation, nil)
 
 	// Test with different concurrent limits
 	worker1 := importpkg.NewImportWorker(importService, factorySet, 1)
@@ -175,13 +175,13 @@ func TestImportWorkerConfigurableConcurrentLimit(t *testing.T) {
 
 func TestImportWorkerIgnoresNonImportExports(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	importService := importpkg.NewImportService(factorySet, uploadLocation)
+	importService := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	worker := importpkg.NewImportWorker(importService, factorySet, 3)
 
 	ctx := context.Background()
@@ -232,12 +232,12 @@ func TestImportWorkerIgnoresNonImportExports(t *testing.T) {
 
 func TestImportWorkerStopIdempotent(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 
-	importService := importpkg.NewImportService(factorySet, uploadLocation)
+	importService := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	worker := importpkg.NewImportWorker(importService, factorySet, 3)
 
 	ctx := t.Context()

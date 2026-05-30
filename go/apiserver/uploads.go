@@ -198,14 +198,14 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// handleRestoreUpload handles XML backup file upload for restore operations.
+// handleRestoreUpload handles signed .inb backup file upload for restore operations.
 // @Summary Upload restore file
-// @Description Upload an XML backup file to be used for a restore operation.
+// @Description Upload a signed `.inb` backup file to be used for a restore operation.
 // @Tags uploads
 // @Accept multipart/form-data
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
-// @Param file formData file true "XML backup file to upload"
+// @Param file formData file true "Signed .inb backup file to upload"
 // @Success 200 {object} jsonapi.UploadResponse "OK"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
 // @Failure 500 {object} jsonapi.Errors "Internal Server Error"
@@ -423,8 +423,9 @@ func Uploads(params Params) func(r chi.Router) {
 		}
 		r.With(fileMiddlewares...).Post("/file", api.handleFileUpload)
 
-		// Restore uploads - only allow XML files (no upload limiting for system operations)
-		r.With(api.uploadFiles(uploadKindRestore, mimekit.XMLContentTypes()...)).Post("/restores", api.handleRestoreUpload)
+		// Restore uploads - only allow signed .inb backup archives (#534); no
+		// upload limiting for system operations.
+		r.With(api.uploadFiles(uploadKindRestore, mimekit.INBContentTypes()...)).Post("/restores", api.handleRestoreUpload)
 	}
 }
 

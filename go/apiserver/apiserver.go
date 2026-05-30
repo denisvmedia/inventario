@@ -28,7 +28,8 @@ import (
 	"github.com/denisvmedia/inventario/csrf"
 	"github.com/denisvmedia/inventario/debug"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
-	_ "github.com/denisvmedia/inventario/internal/fileblob"
+	"github.com/denisvmedia/inventario/internal/backupsign"
+	_ "github.com/denisvmedia/inventario/internal/fileblob" // register the in-memory + file blob drivers
 	"github.com/denisvmedia/inventario/internal/metrics"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -166,6 +167,7 @@ type Params struct {
 	StartTime                  time.Time
 	JWTSecret                  []byte                             // JWT secret for user authentication
 	FileSigningKey             []byte                             // File signing key for secure file URLs
+	BackupSigner               *backupsign.Signer                 // Ed25519 signer for .inb backup archives (#534)
 	FileURLExpiration          time.Duration                      // File URL expiration duration
 	ThumbnailConfig            services.ThumbnailGenerationConfig // Thumbnail generation configuration
 	TokenBlacklister           services.TokenBlacklister          // Token blacklist service (Redis or in-memory)
@@ -261,6 +263,7 @@ func (p *Params) Validate() error {
 		})),
 		validation.Field(&p.JWTSecret, validation.Required, validation.Length(32, 0)),            // Require at least 32 bytes for security
 		validation.Field(&p.FileSigningKey, validation.Required, validation.Length(32, 0)),       // Require at least 32 bytes for security
+		validation.Field(&p.BackupSigner, validation.Required),                                   // Ed25519 signer for .inb backups (#534)
 		validation.Field(&p.FileURLExpiration, validation.Required, validation.Min(time.Minute)), // Require at least 1 minute expiration
 		// ImpersonationTTL (#1750): zero is allowed (falls back to the
 		// 30-min default), but a negative duration would mint already-expired
@@ -521,6 +524,9 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// Non-group-scoped routes (system, debug, users, groups management)
 		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
 		r.With(userMiddlewares...).Route("/debug", Debug(params))
+		// Backup-signing public key (#534): server-global, any authenticated
+		// user may read the public half so the FE / CLI can verify .inb archives.
+		r.With(userMiddlewares...).Route("/backup", BackupSigning(params))
 		// Platform-administrative subtree (#1745 foundation; #1744 umbrella).
 		// Every admin route — including the cross-plane impersonation
 		// start/end/current trio added by #1785 Phase 5 — is gated by the

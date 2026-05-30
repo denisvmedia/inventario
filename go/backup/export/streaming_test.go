@@ -1,3 +1,5 @@
+//go:build legacy_xml_backup
+
 package export
 
 import (
@@ -15,7 +17,7 @@ func TestStreamCommodityDirectly(t *testing.T) {
 	c := qt.New(t)
 
 	factorySet := newTestFactorySet()
-	service := NewExportService(factorySet, "")
+	service := NewExportService(factorySet, "", nil)
 	ctx := context.Background()
 
 	// Create a test commodity
@@ -101,7 +103,7 @@ func TestEncodeCommodityMetadata(t *testing.T) {
 	c := qt.New(t)
 
 	factorySet := newTestFactorySet()
-	service := NewExportService(factorySet, "")
+	service := NewExportService(factorySet, "", nil)
 	ctx := context.Background()
 
 	commodity := &models.Commodity{

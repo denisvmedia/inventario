@@ -43,6 +43,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.DetachedThumbnailJobTimeout, "detached-thumbnail-job-timeout", cfg.DetachedThumbnailJobTimeout, "Per-job timeout for detached thumbnail generation (e.g., 2m)")
 	flags.StringVar(&cfg.JWTSecret, "jwt-secret", cfg.JWTSecret, "JWT secret for authentication (minimum 32 characters, auto-generated if not provided)")
 	flags.StringVar(&cfg.FileSigningKey, "file-signing-key", cfg.FileSigningKey, "File signing key for secure file URLs (minimum 32 characters, auto-generated if not provided)")
+	flags.StringVar(&cfg.BackupSigningKey, "backup-signing-key", cfg.BackupSigningKey, "Ed25519 seed for signing .inb backup archives (64 hex chars or 32 raw bytes, auto-generated if not provided)")
 	flags.StringVar(&cfg.FileURLExpiration, "file-url-expiration", cfg.FileURLExpiration, "File URL expiration duration (e.g., 15m, 1h, 30s)")
 	flags.StringVar(&cfg.ImpersonationTTL, "impersonation-ttl", cfg.ImpersonationTTL, "Admin impersonation session lifetime (e.g., 30m, 15m); values above 30m are clamped down")
 	flags.StringVar(&cfg.TokenBlacklistRedisURL, "token-blacklist-redis-url", cfg.TokenBlacklistRedisURL, "Redis URL for token blacklist (e.g., redis://localhost:6379/0); omit to use in-memory blacklist")

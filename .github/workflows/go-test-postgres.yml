@@ -180,3 +180,18 @@ jobs:
           POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
         run: go test -v -race -tags integration ./debug/seeddata/...
         working-directory: go
+
+      - name: Run backup .inb integration tests
+        # #534: the signed .inb round trips on a REAL database — the only
+        # Go-level coverage of two postgres-only behaviours the in-memory
+        # registry cannot exercise: (1) the group-scoped FileEntity create on
+        # re-import (RoundTrip), and (2) full commodity field fidelity incl. the
+        # write-once acquisition pair restored via the trusted context seam and
+        # the cover-file cross-reference (FieldFidelity). Run these two by name
+        # rather than the whole ./integration package — its other tests share a
+        # DB and are not isolation-safe when run together (see #1953); these two
+        # are mutually isolation-safe (idempotent setup, unique-tenant data).
+        env:
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
+        run: go test -v -race -run 'TestINBBackupRoundTripPostgres|TestINBFieldFidelityRoundTripPostgres' ./integration/...
+        working-directory: go

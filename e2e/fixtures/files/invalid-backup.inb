@@ -1,0 +1,1 @@
+not-a-valid-inb-archive: this is deliberate garbage with the right extension to exercise server-side rejection (issue #534).

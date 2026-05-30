@@ -1,3 +1,5 @@
+//go:build legacy_xml_backup
+
 package export
 
 import (
@@ -26,7 +28,7 @@ func TestNewExportWorker(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	exportService := NewExportService(factorySet, uploadLocation)
+	exportService := NewExportService(factorySet, uploadLocation, nil)
 	worker := NewExportWorker(exportService, factorySet, 3)
 
 	c.Assert(worker, qt.IsNotNil)
@@ -48,7 +50,7 @@ func TestExportWorkerStartStop(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	exportService := NewExportService(factorySet, uploadLocation)
+	exportService := NewExportService(factorySet, uploadLocation, nil)
 	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx := t.Context()
@@ -88,7 +90,7 @@ func TestExportWorkerIsRunning(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	exportService := NewExportService(factorySet, uploadLocation)
+	exportService := NewExportService(factorySet, uploadLocation, nil)
 	worker := NewExportWorker(exportService, factorySet, 3)
 
 	// Test initial state
@@ -122,7 +124,7 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	exportService := NewExportService(factorySet, uploadLocation)
+	exportService := NewExportService(factorySet, uploadLocation, nil)
 	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx := newTestContext()
@@ -187,7 +189,7 @@ func TestExportWorkerProcessExport(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	exportService := NewExportService(factorySet, uploadLocation)
+	exportService := NewExportService(factorySet, uploadLocation, nil)
 	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx := newTestContext()
@@ -234,7 +236,7 @@ func TestExportWorkerConcurrentAccess(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	exportService := NewExportService(factorySet, uploadLocation)
+	exportService := NewExportService(factorySet, uploadLocation, nil)
 	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx := t.Context()
@@ -280,7 +282,7 @@ func TestExportWorkerContextCancellation(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	exportService := NewExportService(factorySet, uploadLocation)
+	exportService := NewExportService(factorySet, uploadLocation, nil)
 	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -311,7 +313,7 @@ func TestExportWorkerConfigurableConcurrentLimit(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	exportService := NewExportService(factorySet, uploadLocation)
+	exportService := NewExportService(factorySet, uploadLocation, nil)
 
 	// Test with different concurrent limits
 	worker1 := NewExportWorker(exportService, factorySet, 1)
@@ -345,7 +347,7 @@ func TestExportWorkerCleanupDeletedExports(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	exportService := NewExportService(factorySet, uploadLocation)
+	exportService := NewExportService(factorySet, uploadLocation, nil)
 	worker := NewExportWorker(exportService, factorySet, 3)
 
 	ctx := newTestContext()

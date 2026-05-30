@@ -9,6 +9,7 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/admin"
 	"github.com/denisvmedia/inventario/cmd/inventario/backfill"
 	"github.com/denisvmedia/inventario/cmd/inventario/backoffice"
+	"github.com/denisvmedia/inventario/cmd/inventario/backup"
 	"github.com/denisvmedia/inventario/cmd/inventario/db"
 	"github.com/denisvmedia/inventario/cmd/inventario/features"
 	"github.com/denisvmedia/inventario/cmd/inventario/initconfig"
@@ -68,6 +69,7 @@ Use "inventario [command] --help" for detailed information about each command.`,
 	// already-running deployment.
 	rootCmd.AddCommand(workers.New(&dbConfig))
 	rootCmd.AddCommand(backfill.New(&dbConfig))
+	rootCmd.AddCommand(backup.New())
 	rootCmd.AddCommand(backoffice.New(&dbConfig))
 	rootCmd.AddCommand(version.New())
 	err := rootCmd.Execute()

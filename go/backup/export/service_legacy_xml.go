@@ -1,3 +1,11 @@
+//go:build legacy_xml_backup
+
+// DEPRECATED — LEGACY XML BACKUP CODE.
+// Compiled ONLY under the `legacy_xml_backup` build tag; NOT in the default build.
+// Implements the obsolete XML backup format that #534 replaced with the signed
+// JSON `.inb` archive. Retained solely to be extracted into a separate repo as an
+// XML-streaming proof-of-concept. Do not extend; do not couple new code to it.
+
 package export
 
 import (
@@ -7,9 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -20,36 +26,17 @@ import (
 	"github.com/denisvmedia/inventario/backup/export/types"
 	"github.com/denisvmedia/inventario/internal/blobkeys"
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
 )
 
-// ExtractTenantUserFromContext extracts tenant and user IDs from context
-// Returns an error if context is missing required tenant/user information
-func ExtractTenantUserFromContext(ctx context.Context) (tenantID, userID string, err error) {
-	// Try to extract user from context using proper typed keys
-	user := appctx.UserFromContext(ctx)
-	if user == nil {
-		return "", "", errors.New("user context is required but not found")
+// exportFileMeta returns the FileEntity stamping for a legacy XML export
+// artifact: `.xml` / application/xml / "xml-1.0".
+func exportFileMeta() exportFileMetaFields {
+	return exportFileMetaFields{
+		Ext:              ".xml",
+		MIMEType:         "application/xml",
+		LinkedEntityMeta: "xml-1.0",
+		Tags:             models.StringSlice{"export", "xml"},
 	}
-
-	// Extract user ID
-	userID = user.ID
-	if userID == "" {
-		return "", "", errors.New("user ID is empty in context")
-	}
-
-	// Extract tenant ID from user
-	tenantID = user.TenantID
-	if tenantID == "" {
-		return "", "", errors.New("tenant ID is empty in user context")
-	}
-
-	return tenantID, userID, nil
-}
-
-// ExportArgs contains arguments for export operations
-type ExportArgs struct {
-	IncludeFileData bool
 }
 
 // InventoryData represents the root XML structure for exports
@@ -112,210 +99,6 @@ type URL struct {
 	Value   string   `xml:",chardata"`
 }
 
-// ExportService handles the background processing of export requests
-type ExportService struct {
-	factorySet     *registry.FactorySet
-	uploadLocation string
-}
-
-// NewExportService creates a new export service
-func NewExportService(factorySet *registry.FactorySet, uploadLocation string) *ExportService {
-	return &ExportService{
-		factorySet:     factorySet,
-		uploadLocation: uploadLocation,
-	}
-}
-
-// ProcessExport processes an export request in the background
-func (s *ExportService) ProcessExport(ctx context.Context, exportID string) error {
-	// Get the export request
-	export, err := s.factorySet.ExportRegistryFactory.CreateServiceRegistry().Get(ctx, exportID)
-	if err != nil {
-		return errxtrace.Wrap("failed to get export", err)
-	}
-
-	// Skip processing for imported exports - they are already completed
-	if export.Type == models.ExportTypeImported {
-		return nil
-	}
-
-	user, err := s.factorySet.UserRegistry.Get(ctx, export.CreatedByUserID)
-	if err != nil {
-		return errxtrace.Wrap("failed to get user", err)
-	}
-
-	// The export worker drives ProcessExport from a background context, so
-	// no request-time middleware has populated user/group context. Resolve
-	// the export's group now and inject both into ctx — the downstream
-	// registry factories and createExportFileEntity read them from there.
-	group, err := s.factorySet.LocationGroupRegistry.Get(ctx, export.GroupID)
-	if err != nil {
-		return errxtrace.Wrap("failed to get export group", err)
-	}
-
-	ctx = appctx.WithUser(ctx, user)
-	ctx = appctx.WithGroup(ctx, group)
-
-	// Update status to in_progress
-	export.Status = models.ExportStatusInProgress
-	expReg, err := s.factorySet.ExportRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to get export registry", err)
-	}
-	_, err = expReg.Update(ctx, *export)
-	if err != nil {
-		return errxtrace.Wrap("failed to update export status", err)
-	}
-
-	// Generate the export and collect statistics using user context
-	filePath, stats, err := s.generateExport(ctx, *export)
-	if err != nil {
-		// Update status to failed
-		export.Status = models.ExportStatusFailed
-		export.ErrorMessage = err.Error()
-		_, expErr := s.factorySet.ExportRegistryFactory.CreateServiceRegistry().Update(ctx, *export)
-		return errxtrace.Wrap("failed to generate export", errors.Join(err, expErr))
-	}
-
-	// Probe size before creating the FileEntity — both rows need it: the
-	// export keeps a denormalized FileSize and the file row needs SizeBytes
-	// for the per-group storage-usage aggregation (#1388).
-	var artifactSize int64
-	if size, sizeErr := s.getFileSize(ctx, filePath); sizeErr == nil {
-		artifactSize = size
-	}
-
-	// Create file entity for the export using user context
-	fileEntity, err := s.createExportFileEntity(ctx, export.ID, export.Description, filePath, artifactSize)
-	if err != nil {
-		// Update status to failed
-		export.Status = models.ExportStatusFailed
-		export.ErrorMessage = err.Error()
-		_, updateErr := s.factorySet.ExportRegistryFactory.CreateServiceRegistry().Update(ctx, *export)
-		return errxtrace.Wrap("failed to create export file entity", errors.Join(err, updateErr))
-	}
-
-	// Store statistics in export record
-	export.LocationCount = stats.LocationCount
-	export.AreaCount = stats.AreaCount
-	export.CommodityCount = stats.CommodityCount
-	export.ImageCount = stats.ImageCount
-	export.InvoiceCount = stats.InvoiceCount
-	export.ManualCount = stats.ManualCount
-	export.FileCount = stats.FileCount
-	export.BinaryDataSize = stats.BinaryDataSize
-	export.FileSize = artifactSize
-
-	// Update status to completed using user context
-	export.Status = models.ExportStatusCompleted
-	export.FileID = &fileEntity.ID
-	export.FilePath = filePath // Keep for backward compatibility during migration
-	export.CompletedDate = models.PNow()
-	export.ErrorMessage = ""
-
-	userReg, err := s.factorySet.ExportRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to get export registry", err)
-	}
-
-	_, err = userReg.Update(ctx, *export)
-	if err != nil {
-		return errxtrace.Wrap("failed to update export completion", err)
-	}
-
-	return nil
-}
-
-// createExportFileEntity creates a file entity for an export file
-func (s *ExportService) createExportFileEntity(ctx context.Context, exportID, description, filePath string, sizeBytes int64) (*models.FileEntity, error) {
-	// Extract filename from path for title
-	filename := filepath.Base(filePath)
-	if ext := filepath.Ext(filename); ext != "" {
-		filename = strings.TrimSuffix(filename, ext)
-	}
-
-	// Extract tenant and user from context
-	tenantID, userID, err := ExtractTenantUserFromContext(ctx)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to extract tenant/user context", err)
-	}
-
-	// FileEntity is group-scoped (group_id NOT NULL + FK on PostgreSQL),
-	// so the export's group must be on the context — exports themselves
-	// are always created inside a group-scoped request.
-	groupID := appctx.GroupIDFromContext(ctx)
-	if groupID == "" {
-		return nil, errors.New("group context is required but not found")
-	}
-
-	// Create file entity
-	now := time.Now()
-	fileEntity := models.FileEntity{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        tenantID,
-			GroupID:         groupID,
-			CreatedByUserID: userID,
-		},
-		Title:            fmt.Sprintf("Export: %s", description),
-		Description:      fmt.Sprintf("Export file generated on %s", now.Format("2006-01-02 15:04:05")),
-		Type:             models.FileTypeDocument,  // XML files are documents
-		Category:         models.FileCategoryOther, // Export bundles aren't user-facing files; they live outside the four UI tiles
-		Tags:             []string{"export", "xml"},
-		LinkedEntityType: "export",
-		LinkedEntityID:   exportID,
-		LinkedEntityMeta: "xml-1.0", // Mark as export file with version
-		CreatedAt:        now,
-		UpdatedAt:        now,
-		File: &models.File{
-			Path:         filename,
-			OriginalPath: filePath,
-			Ext:          ".xml",
-			MIMEType:     "application/xml",
-			SizeBytes:    sizeBytes,
-		},
-	}
-
-	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to get file registry", err)
-	}
-
-	// Create the file entity
-	created, err := fileReg.Create(ctx, fileEntity)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to create file entity", err)
-	}
-
-	return created, nil
-}
-
-// DeleteExportFile is deprecated - export files are now managed through the file entity system
-// This method is kept for backward compatibility but should not be used for new exports
-func (s *ExportService) DeleteExportFile(ctx context.Context, filePath string) error {
-	if filePath == "" {
-		return nil // Nothing to delete
-	}
-
-	// Open blob bucket
-	b, err := blob.OpenBucket(ctx, s.uploadLocation)
-	if err != nil {
-		return errxtrace.Wrap("failed to open blob bucket", err)
-	}
-	defer func() {
-		if closeErr := b.Close(); closeErr != nil {
-			err = errxtrace.Wrap("failed to close blob bucket", closeErr)
-		}
-	}()
-
-	// Delete the file
-	err = b.Delete(ctx, filePath)
-	if err != nil {
-		return errxtrace.Wrap("failed to delete export file", err)
-	}
-
-	return nil
-}
-
 // generateExport generates the XML export file using blob storage and returns statistics
 func (s *ExportService) generateExport(ctx context.Context, export models.Export) (string, *types.ExportStats, error) {
 	// Open blob bucket
@@ -366,22 +149,6 @@ func (s *ExportService) generateExport(ctx context.Context, export models.Export
 	}
 
 	return blobKey, stats, nil
-}
-
-// getFileSize gets the size of a file in blob storage
-func (s *ExportService) getFileSize(ctx context.Context, filePath string) (int64, error) {
-	b, err := blob.OpenBucket(ctx, s.uploadLocation)
-	if err != nil {
-		return 0, errxtrace.Wrap("failed to open bucket", err)
-	}
-	defer b.Close()
-
-	attrs, err := b.Attributes(ctx, filePath)
-	if err != nil {
-		return 0, errxtrace.Wrap("failed to get file attributes", err)
-	}
-
-	return attrs.Size, nil
 }
 
 // ExportXML streams a single export to the provided writer and returns

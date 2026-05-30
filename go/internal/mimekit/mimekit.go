@@ -19,6 +19,23 @@ var xmlContentTypes = []string{
 	"text/xml",
 }
 
+// INBMIMEType is the canonical media type for a signed `.inb` backup
+// archive (issue #534). The archive is an uncompressed outer tar, so a
+// content sniffer rarely identifies it as anything more specific than
+// application/octet-stream — hence INBContentTypes also accepts that.
+const INBMIMEType = "application/x-inventario-backup"
+
+var inbContentTypes = []string{
+	INBMIMEType,
+	// `.inb` is an uncompressed outer tar, which content sniffers identify as
+	// application/x-tar. Accept that as the primary detected type.
+	"application/x-tar",
+	// Some sniffers/edge cases fall back to a generic binary stream, so accept
+	// octet-stream too. The restore path still hard-verifies the signature, so a
+	// mislabelled upload cannot bypass any security check.
+	"application/octet-stream",
+}
+
 var docContentTypes = append(append(
 	[]string(nil),
 	imageContentTypes...,
@@ -73,6 +90,15 @@ func DocContentTypes() []string {
 func XMLContentTypes() []string {
 	result := make([]string, len(xmlContentTypes))
 	copy(result, xmlContentTypes)
+	return result
+}
+
+// INBContentTypes returns the content types accepted for a `.inb` backup
+// upload (issue #534): the custom INBMIMEType plus application/octet-stream
+// for the common case where the sniffer can't identify the bare tar.
+func INBContentTypes() []string {
+	result := make([]string, len(inbContentTypes))
+	copy(result, inbContentTypes)
 	return result
 }
 

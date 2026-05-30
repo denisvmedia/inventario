@@ -15,8 +15,30 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/internal/backupsign"
 	"github.com/denisvmedia/inventario/internal/blobkeys"
+	"github.com/denisvmedia/inventario/internal/inb"
 )
+
+// buildMinimalINB builds a tiny, validly-framed `.inb` container for upload
+// tests. The bytes are binary (sniffed as octet-stream, which the restore-upload
+// guard accepts); the upload path never verifies the signature, so the payload
+// content is irrelevant here.
+func buildMinimalINB() []byte {
+	seed := make([]byte, backupsign.SeedSize)
+	for i := range seed {
+		seed[i] = byte(i + 1)
+	}
+	signer, _ := backupsign.NewSigner(seed)
+	payload := []byte("\x1f\x8b\x08minimal-gzip-like-bytes")
+	digest := backupsign.NewDigest()
+	_, _ = digest.Write(payload)
+	sig := signer.SignDigest(digest.Sum(nil))
+
+	var buf bytes.Buffer
+	_ = inb.WriteContainer(&buf, sig, bytes.NewReader(payload), int64(len(payload)))
+	return buf.Bytes()
+}
 
 // Legacy `/uploads/{commodities,locations}/{id}/*` tests
 // (`TestUploads`, `TestUploads_invalid_upload`) were removed under
@@ -35,21 +57,18 @@ func TestUploads_restores(t *testing.T) {
 	bodyBuf := &bytes.Buffer{}
 	bodyWriter := multipart.NewWriter(bodyBuf)
 
-	// Create a file field in the form
-	h := CreateFormFileMIME("files", "test.xml", "application/xml")
+	// Create a file field in the form. Restore uploads now accept signed `.inb`
+	// archives (#534); the upload guard validates against INBContentTypes
+	// (custom type + octet-stream), so we send a binary `.inb` body.
+	h := CreateFormFileMIME("files", "backup.inb", "application/x-inventario-backup")
 	fileWriter, err := bodyWriter.CreatePart(h)
 	c.Assert(err, qt.IsNil)
 
-	// Write XML content to the file field
-	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
-<inventory xmlns="http://inventario.example.com/schema" exportDate="2023-01-01T00:00:00Z" exportType="full">
-  <locations>
-    <location id="test-location">
-      <name>Test Location</name>
-    </location>
-  </locations>
-</inventory>`
-	_, err = fileWriter.Write([]byte(xmlContent))
+	// Write a minimal binary `.inb` container body. The upload guard only sniffs
+	// the content type (binary → octet-stream, accepted); signature verification
+	// happens later at restore time, not at upload.
+	inbContent := buildMinimalINB()
+	_, err = fileWriter.Write(inbContent)
 	c.Assert(err, qt.IsNil)
 
 	// Close the form writer
@@ -87,9 +106,9 @@ func TestUploads_restores(t *testing.T) {
 	c.Assert(response.Attributes.Type, qt.Equals, "restores")
 	c.Assert(response.Attributes.FileNames, qt.HasLen, 1)
 	// Restore uploads land under the per-tenant `restores/` namespace
-	// (#1793). The trailing segment is still the filekit-sanitized
-	// basename.
-	c.Assert(response.Attributes.FileNames[0], qt.Matches, `t/[^/]+/restores/test-\d+\.xml`)
+	// (#1793). The trailing segment is the filekit-sanitized basename of the
+	// uploaded `.inb` archive (#534).
+	c.Assert(response.Attributes.FileNames[0], qt.Matches, `t/[^/]+/restores/backup-\d+\.inb`)
 }
 
 func TestUploads_restores_invalid(t *testing.T) {

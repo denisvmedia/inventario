@@ -622,6 +622,15 @@ _None yet._
 - **Approved by**: user (explicit) — issue #1661 acceptance criterion 5 ("PRESERVE — no Dialog (intentional)").
 - **Reversion plan**: Permanent unless the upstream mock adopts a wizard-shaped Dialog. The component is the only consumer of `/exports/new`; ripping it out requires a Dialog scaffold plus moving `SelectedItemsPicker` into the dialog body.
 
+#### 2026-05-30 — Import file input accepts `.inb` (signed archive), not the mock's `.xml`
+
+- **Issue/PR**: #534 / PR (this branch)
+- **Mock**: [`design-mocks/src/views/BackupView.tsx`](../../design-mocks/src/views/BackupView.tsx) L488 wires the restore/import file `<input>` with `accept=".xml"` — the mock predates the backup-format migration and still assumes an XML envelope.
+- **Reality**: `frontend/src/pages/exports/ExportImportPage.tsx` sets `accept=".inb,application/x-inventario-backup,application/octet-stream"` and adds a pre-upload client-side guard that rejects any chosen file whose name does not end (case-insensitive) in `.inb`, surfacing the new `exports:errors.invalidFileType` copy ("Choose a backup (.inb) file."). The import copy (`importView.dropHint` / `importView.intro`) and the export-wizard summary (`wizard.summary.includeFileDataYes` → "Included in archive") were rewritten from XML / "Inline base64" wording to the `.inb` signed-archive model. The download path needs no FE change — the browser uses the BE's `Content-Disposition` filename, which the format-agnostic backend now emits as `.inb`.
+- **Why**: Backend migration (#534) — backups moved from a hand-rolled XML envelope to a signed `.inb` archive (a tar of `payload.tar.gz` + `payload.tar.gz.sig`, MIME `application/x-inventario-backup`). The extension is the real gate because browsers rarely set the custom MIME on a picked file. The signature-verification badge + public-key UI are **deferred** as a follow-up — the `Export` model carries no signature/verification fields yet, so there is nothing to surface; this entry covers only the upload/accept + copy slice.
+- **Approved by**: user (explicit) — issue #534 scope brief instructs the `.inb` accept change, the guard, and the copy rewrite, and to log this deviation.
+- **Reversion plan**: Permanent — the XML format is gone. If `inventario-design` re-syncs `BackupView.tsx` to `accept=".inb"`, drop this entry. When the signature/verification badge + public-key surface lands (follow-up), add its own entry rather than amending this one.
+
 ### Other
 
 #### 2026-05-17 — Maintenance reminders surface (#1368) has no design mock

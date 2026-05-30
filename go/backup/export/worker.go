@@ -201,10 +201,3 @@ func (w *ExportWorker) processExport(ctx context.Context, exportID string) {
 	}
 	slog.Info("Successfully processed export", "export_id", exportID)
 }
-
-// cleanupDeletedExports is deprecated - exports now use immediate hard delete with file entities
-// This method is kept for backward compatibility but is no longer used
-func (w *ExportWorker) cleanupDeletedExports(ctx context.Context) {
-	// No-op: cleanup is now handled immediately during export deletion
-	slog.Info("Export cleanup called but is no longer needed - exports use immediate deletion")
-}

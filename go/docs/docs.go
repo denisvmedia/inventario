@@ -2025,6 +2025,32 @@ const docTemplate = `{
                 }
             }
         },
+        "/backup/public-key": {
+            "get": {
+                "description": "Returns the server's backup-signing public key (PEM), its fingerprint, and the signing algorithm.\nThe private key is never exposed — only the public half, so external tooling can verify a ` + "`" + `.inb` + "`" + `\narchive's signature without being able to forge one (#534).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get backup signing public key",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.BackupPublicKeyResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/currencies": {
             "get": {
                 "description": "get list of supported currencies",
@@ -4370,7 +4396,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/exports/import": {
             "post": {
-                "description": "Import an uploaded XML export file and create an export record",
+                "description": "Import an uploaded signed ` + "`" + `.inb` + "`" + ` backup file and create an export record",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -4380,7 +4406,7 @@ const docTemplate = `{
                 "tags": [
                     "exports"
                 ],
-                "summary": "Import XML export",
+                "summary": "Import backup archive",
                 "parameters": [
                     {
                         "type": "string",
@@ -6827,7 +6853,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/uploads/restores": {
             "post": {
-                "description": "Upload an XML backup file to be used for a restore operation.",
+                "description": "Upload a signed ` + "`" + `.inb` + "`" + ` backup file to be used for a restore operation.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -6848,7 +6874,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "file",
-                        "description": "XML backup file to upload",
+                        "description": "Signed .inb backup file to upload",
                         "name": "file",
                         "in": "formData",
                         "required": true
@@ -8218,6 +8244,23 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "role": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.BackupPublicKeyResponse": {
+            "type": "object",
+            "properties": {
+                "algorithm": {
+                    "description": "Algorithm names the hash-then-sign construction (\"ed25519-sha256\").",
+                    "type": "string"
+                },
+                "fingerprint": {
+                    "description": "Fingerprint is the lowercase hex SHA-256 of the raw public key, a stable\nshort identifier for the signing key (useful around key rotation).",
+                    "type": "string"
+                },
+                "public_key": {
+                    "description": "PublicKey is the PKIX-encoded PEM public key (\"PUBLIC KEY\" block) — the\nform openssl and Go's x509.ParsePKIXPublicKey expect.",
                     "type": "string"
                 }
             }
