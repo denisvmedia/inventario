@@ -1465,6 +1465,101 @@ func refreshCookieIsImpersonation(r *http.Request) bool {
 	return strings.HasPrefix(cookie.Value, impersonationRefreshCookieMarker)
 }
 
+// userFromBearerHeader validates an Authorization: Bearer access token and
+// returns the live user it identifies. Returns (nil, false) when the header
+// is absent, malformed, expired, blacklisted, or names an unknown/inactive
+// user — mirroring the JWTMiddleware acceptance criteria so the Bearer fast
+// path in userFromBrowserSession behaves identically to RequireAuth.
+func (api *AuthAPI) userFromBearerHeader(r *http.Request) (*models.User, bool) {
+	tokenString, ok := parseBearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		return nil, false
+	}
+	claims, err := validateJWTToken(r.Context(), tokenString, api.jwtSecret, api.blacklistService)
+	if err != nil {
+		return nil, false
+	}
+	userID, err := extractUserIDFromClaims(claims)
+	if err != nil {
+		return nil, false
+	}
+	user, err := validateUser(r, userID, api.userRegistry)
+	if err != nil {
+		return nil, false
+	}
+	return user, true
+}
+
+// userFromBrowserSession resolves the authenticated user for a GET endpoint
+// reached by a *top-level browser navigation* — one that cannot carry an
+// Authorization header. Its only caller today is the OAuth link-start handler,
+// invoked via window.location.assign from Settings → Connected Accounts.
+//
+// Resolution order:
+//
+//  1. Authorization: Bearer — kept as a fast path for API clients and handler
+//     tests, which still send one. Any failure falls through to the cookie so a
+//     stale access token does not shadow a still-valid refresh cookie.
+//  2. The refresh-token cookie — the credential a browser navigation actually
+//     carries. It is HttpOnly + SameSite=Strict + Path=/api/v1, so a cross-site
+//     page cannot cause it to ride along on a forged navigation; that
+//     SameSite=Strict scoping is what keeps the link-start GET CSRF-safe now
+//     that the (inherently CSRF-immune) Authorization header is no longer the
+//     only accepted credential.
+//
+// Impersonation sessions are refused outright: an operator borrowing an
+// identity must not be able to bind or unbind that identity's sign-in methods
+// (#1750). Returns (nil, error) when no live, non-impersonation session is
+// present — the caller decides how to surface that (link-start 302s to /login).
+func (api *AuthAPI) userFromBrowserSession(r *http.Request) (*models.User, error) {
+	// Impersonation can present as the imp access token on the Authorization
+	// header or as the imp marker planted on the refresh cookie. Reject both
+	// before doing any lookups.
+	if api.accessTokenIsImpersonation(r.Header.Get("Authorization")) || refreshCookieIsImpersonation(r) {
+		return nil, errors.New("impersonation session may not start an OAuth link")
+	}
+
+	// 1) Authorization: Bearer fast path.
+	if user, ok := api.userFromBearerHeader(r); ok {
+		return user, nil
+	}
+
+	// 2) Refresh-cookie path — the real browser navigation.
+	if api.refreshTokenRegistry == nil {
+		return nil, errors.New("refresh tokens not supported")
+	}
+	cookie, err := r.Cookie(refreshTokenCookieName)
+	if err != nil {
+		return nil, errors.New("no session credential present")
+	}
+	refreshToken, err := api.refreshTokenRegistry.GetByTokenHash(r.Context(), models.HashRefreshToken(cookie.Value))
+	if err != nil {
+		return nil, errors.New("invalid refresh token")
+	}
+	if !refreshToken.IsValid() {
+		return nil, errors.New("refresh token expired or revoked")
+	}
+	user, err := api.userRegistry.Get(r.Context(), refreshToken.UserID)
+	if err != nil || user == nil || !user.IsActive {
+		return nil, errors.New("user not found or inactive")
+	}
+	// Honour a user-level token blacklist (e.g. after a password change) exactly
+	// as refresh() does: a refresh token minted at or before the blacklist
+	// cutoff is no longer a valid credential. Fail-open on a backend error,
+	// matching refresh() and checkTokenBlacklist, so an outage can't wedge the
+	// link flow.
+	if api.blacklistService != nil {
+		since, blacklisted, blErr := api.blacklistService.UserBlacklistedSince(r.Context(), user.ID)
+		switch {
+		case blErr != nil:
+			slog.Error("link-start: user blacklist check failed", "user_id", user.ID, "error", blErr)
+		case blacklisted && refreshToken.CreatedAt.Unix() <= since.Unix():
+			return nil, errors.New("refresh token predates user blacklist cutoff")
+		}
+	}
+	return user, nil
+}
+
 // rollbackRefreshToken revokes a refresh-token row that was persisted
 // in preparation for a login response that will not be sent — e.g. the
 // access token mint failed between persistRefreshToken and the response

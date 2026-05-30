@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -31,5 +30,5 @@ func TestPasswordResetRegistry_Update_NotFound(t *testing.T) {
 	}
 	pr.ID = "no-such-id"
 	_, err := registrySet.PasswordResetRegistry.Update(ctx, pr)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }

@@ -2,7 +2,6 @@ package memory_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -61,7 +60,7 @@ func TestBackofficeRefreshTokenRegistry_Create_MissingFields(t *testing.T) {
 			tok := newTestBackofficeRefreshToken("user-1", "hash-1")
 			tc.mut(&tok)
 			_, err := r.Create(ctx, tok)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }
@@ -86,8 +85,8 @@ func TestBackofficeRefreshTokenRegistry_GetByHash_NotFound(t *testing.T) {
 	r := memory.NewBackofficeRefreshTokenRegistry()
 
 	_, err := r.GetByHash(ctx, "nope")
-	c.Assert(errors.Is(err, registry.ErrBackofficeRefreshTokenNotFound), qt.IsTrue)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeRefreshTokenNotFound)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestBackofficeRefreshTokenRegistry_Revoke_HappyPath(t *testing.T) {
@@ -133,7 +132,7 @@ func TestBackofficeRefreshTokenRegistry_Revoke_WrongUser(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	err = r.Revoke(ctx, "other-user", created.ID)
-	c.Assert(errors.Is(err, registry.ErrBackofficeRefreshTokenNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeRefreshTokenNotFound)
 
 	got, err := r.GetByHash(ctx, "hash-1")
 	c.Assert(err, qt.IsNil)
@@ -229,7 +228,7 @@ func TestBackofficeRefreshTokenRegistry_BumpLastUsedAt_WrongUser(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	err = r.BumpLastUsedAt(ctx, "other-user", created.ID, time.Now())
-	c.Assert(errors.Is(err, registry.ErrBackofficeRefreshTokenNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeRefreshTokenNotFound)
 
 	got, err := r.GetByHash(ctx, "hash-1")
 	c.Assert(err, qt.IsNil)
@@ -252,7 +251,7 @@ func TestBackofficeRefreshTokenRegistry_BumpLastUsedAt_MissingFields(t *testing.
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			err := r.BumpLastUsedAt(ctx, tc.backofficeUserID, tc.id, now)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }
@@ -272,7 +271,7 @@ func TestBackofficeRefreshTokenRegistry_DeleteExpired(t *testing.T) {
 	c.Assert(r.DeleteExpired(ctx), qt.IsNil)
 
 	_, err = r.GetByHash(ctx, "expired")
-	c.Assert(errors.Is(err, registry.ErrBackofficeRefreshTokenNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeRefreshTokenNotFound)
 
 	got, err := r.GetByHash(ctx, "live")
 	c.Assert(err, qt.IsNil)

@@ -118,6 +118,6 @@ func TestStorageUsageService_RegistryError(t *testing.T) {
 	svc := services.NewStorageUsageService(&stubFileRegistry{err: want})
 	_, err := svc.GetUsage(context.Background())
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, want), qt.IsTrue,
+	c.Assert(err, qt.ErrorIs, want,
 		qt.Commentf("expected wrap of %v, got %v", want, err))
 }

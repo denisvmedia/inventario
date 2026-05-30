@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 
@@ -376,7 +375,7 @@ func TestTagService_Postgres_RenameTag_RefusesPreemptivelyOnSlugClash(t *testing
 	svc := services.NewTagService(fx.factorySet)
 	_, err := svc.RenameTag(fx.ctxA, srcTag.ID, "Kitchen Area", "kitchen-area", "")
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, registry.ErrAlreadyExists), qt.IsTrue,
+	c.Assert(err, qt.ErrorIs, registry.ErrAlreadyExists,
 		qt.Commentf("expected ErrAlreadyExists, got %v", err))
 
 	cmd, err := fx.groupASet.CommodityRegistry.Get(fx.ctxA, cmdID)

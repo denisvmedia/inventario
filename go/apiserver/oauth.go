@@ -106,20 +106,23 @@ type OAuthParams struct {
 // OAuth returns a chi route builder mounting the OAuth endpoints under
 // the parent /auth router. The public endpoints (`/providers`, `/{p}/start`,
 // `/{p}/callback`) run without RequireAuth — by definition the caller has
-// no session yet. The link/unlink endpoints are wrapped with requireAuth
-// at registration time.
+// no session yet. `/identities` and the unlink DELETE are wrapped with
+// requireAuth (the FE reaches them via fetch, so a Bearer header is always
+// present). `/{p}/link/start` is deliberately NOT wrapped — see below.
 //
-// CSRF design note (SEC-L2): the link-start endpoint is a GET that 302s
-// to the provider's authorization endpoint. A CSRF token requirement here
-// would break the redirect flow — browsers don't carry a custom CSRF
-// header through a top-level navigation, and signed-state + cookie-bound
-// nonce already protect the inbound /callback. The window an attacker has
-// to forge "click this link to start an OAuth link to MY provider account"
-// is narrowed by (a) the access token still being required to start the
-// link flow, (b) the cookie-bound state check on the callback rejecting
-// any state not minted in the same browser, and (c) the operator-side
-// allow-list of redirect prefixes preventing the attacker from
-// exfiltrating the resulting session.
+// Why link-start cannot use the header-only RequireAuth (SEC-L2): the
+// link-start endpoint is a GET reached by a top-level browser navigation
+// (window.location.assign from Settings → Connected Accounts) that 302s to
+// the provider. A top-level navigation cannot carry an Authorization header,
+// so a header-only middleware would reject every real click with 401. The
+// handler instead resolves the caller from the SameSite=Strict refresh-token
+// cookie (api.auth.userFromBrowserSession). That SameSite=Strict scoping is
+// what preserves CSRF safety: a cross-site page cannot cause the cookie to
+// ride along on a forged navigation, so an attacker cannot start "link MY
+// provider account to the victim's session" from another origin. Layered on
+// top: (a) the cookie-bound signed-state check on the callback rejects any
+// state not minted in the same browser, and (b) the operator-side allow-list
+// of redirect prefixes prevents exfiltrating the resulting session.
 func OAuth(params OAuthParams, requireAuth func(http.Handler) http.Handler) func(r chi.Router) {
 	api := &OAuthAPI{
 		auth:          params.Auth,
@@ -132,9 +135,11 @@ func OAuth(params OAuthParams, requireAuth func(http.Handler) http.Handler) func
 		r.Get("/providers", api.handleListProviders)
 		r.Get("/{provider}/start", api.handleStart)
 		r.Get("/{provider}/callback", api.handleCallback)
+		// link/start authenticates via the refresh cookie inside the handler
+		// (top-level navigation has no Authorization header); see handleLinkStart.
+		r.Get("/{provider}/link/start", api.handleLinkStart)
 
 		r.With(requireAuth).Get("/identities", api.handleListIdentities)
-		r.With(requireAuth).Get("/{provider}/link/start", api.handleLinkStart)
 		r.With(requireAuth).Delete("/{provider}", api.handleUnlink)
 	}
 }
@@ -191,19 +196,31 @@ func (api *OAuthAPI) handleStart(w http.ResponseWriter, r *http.Request) {
 // handleLinkStart is the link-an-additional-provider variant. The signed
 // state carries LinkUserID so the callback attaches the resulting
 // identity to the caller's user rather than running find-or-create.
+//
+// Unlike the other authenticated OAuth endpoints, this handler is reached by
+// a top-level browser navigation (window.location.assign from Settings →
+// Connected Accounts) and therefore receives no Authorization header. It
+// resolves the caller from the SameSite=Strict refresh cookie instead (with a
+// Bearer-header fast path for API clients / tests) via userFromBrowserSession.
+// A missing or expired session 302s to /login rather than rendering a bare
+// 401 in the browser tab — in practice the FE route guard has already bounced
+// a fully-logged-out user, so this is the rare access-token-expired race.
+// Impersonation sessions are refused inside userFromBrowserSession (#1750).
 // @Summary Start link-an-additional-OAuth-provider flow
 // @Description Authenticated variant of /start: the resulting callback links the new identity to the caller's user rather than creating a fresh account.
+// @Description The caller is identified from the refresh-token cookie (or an Authorization Bearer header); an absent or expired session 302s to /login.
 // @Tags oauth
 // @Param provider path string true "Provider name (google|github)"
 // @Param redirect query string false "Relative FE path to land on after link"
-// @Success 302 "Redirect to provider"
-// @Failure 401 {string} string "Unauthorized"
+// @Success 302 "Redirect to provider (or to /login when no live session is present)"
 // @Failure 404 {string} string "Unknown provider"
+// @Failure 500 {string} string "Internal error generating the PKCE/state token"
 // @Router /auth/oauth/{provider}/link/start [get]
 func (api *OAuthAPI) handleLinkStart(w http.ResponseWriter, r *http.Request) {
-	user := appctx.UserFromContext(r.Context())
-	if user == nil {
-		http.Error(w, "Authentication required", http.StatusUnauthorized)
+	user, err := api.auth.userFromBrowserSession(r)
+	if err != nil || user == nil {
+		slog.Info("OAuth link-start: no resolvable session; redirecting to login", "error", err)
+		http.Redirect(w, r, "/login?reason=session_expired", http.StatusFound)
 		return
 	}
 	api.startAuthorizationCode(w, r, user.ID)
@@ -540,7 +557,12 @@ func (api *OAuthAPI) completeLinkFlow(
 		// write a security-audit row (SEC-3) just like the create path.
 		api.auth.recordLoginEventWithMethod(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeIdentityLinked, method, r)
 		api.auth.logAuth(r.Context(), "oauth_link_added", &user.ID, &user.TenantID, true, r, nil)
-		http.Redirect(w, r, redirectOrDefault(st.RedirectAfter, "/settings"), http.StatusFound)
+		// #nosec G710 -- the redirect target is a server-built relative path:
+		// st.RedirectAfter was passed through sanitizeAllowedRedirect (allow-list)
+		// in handleLinkStart before being signed into the state, and oauthLinkedURL
+		// only appends the server-controlled oauth_linked=<provider> query param.
+		// No untrusted host/scheme component is present.
+		http.Redirect(w, r, oauthLinkedURL(st.RedirectAfter, providerName), http.StatusFound)
 		return
 	}
 
@@ -558,7 +580,10 @@ func (api *OAuthAPI) completeLinkFlow(
 	api.auth.logAuth(r.Context(), "oauth_link_added", &user.ID, &user.TenantID, true, r, nil)
 	slog.Info("OAuth identity linked", "user_id", user.ID, "provider", providerName)
 	_ = method // method is informational here; the link path does not mint tokens.
-	http.Redirect(w, r, redirectOrDefault(st.RedirectAfter, "/settings"), http.StatusFound)
+	// #nosec G710 -- see the idempotent-relink branch above: the target is a
+	// server-built relative path (allow-list-sanitized RedirectAfter + a
+	// server-controlled oauth_linked query param), not attacker-controlled.
+	http.Redirect(w, r, oauthLinkedURL(st.RedirectAfter, providerName), http.StatusFound)
 }
 
 // completeOAuthLogin runs the same token-issue + cookie-write sequence as
@@ -918,6 +943,27 @@ func redirectOrDefault(cleaned, defaultPath string) string {
 		return cleaned
 	}
 	return defaultPath
+}
+
+// oauthLinkedURL builds the post-link success redirect, appending the
+// `oauth_linked=<provider>` marker the FE Connected Accounts card reads to
+// fire a one-time "Linked your <provider> account" toast (#1395). Without the
+// marker the card's success useEffect never runs, so the user gets no
+// confirmation that the link took. redirectAfter has already been sanitized
+// against allowedRedirectPrefixes by handleLinkStart; it is "/settings" for
+// the Settings → Connected Accounts entry point.
+func oauthLinkedURL(redirectAfter string, provider models.OAuthProvider) string {
+	target := redirectOrDefault(redirectAfter, "/settings")
+	u, err := url.Parse(target)
+	if err != nil {
+		// redirectOrDefault only ever returns server-built relative paths, so
+		// a parse error is not expected; fall back to a clean default.
+		return "/settings?oauth_linked=" + url.QueryEscape(string(provider))
+	}
+	q := u.Query()
+	q.Set("oauth_linked", string(provider))
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // oauthLinkRequiredURL builds the FE-facing redirect that prompts the

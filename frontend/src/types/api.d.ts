@@ -2111,6 +2111,7 @@ export type paths = {
         /**
          * Start link-an-additional-OAuth-provider flow
          * @description Authenticated variant of /start: the resulting callback links the new identity to the caller's user rather than creating a fresh account.
+         *     The caller is identified from the refresh-token cookie (or an Authorization Bearer header); an absent or expired session 302s to /login.
          */
         get: {
             parameters: {
@@ -2127,15 +2128,15 @@ export type paths = {
             };
             requestBody?: never;
             responses: {
-                /** @description Redirect to provider */
+                /** @description Redirect to provider (or to /login when no live session is present) */
                 302: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
-                /** @description Unauthorized */
-                401: {
+                /** @description Unknown provider */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2143,8 +2144,8 @@ export type paths = {
                         "*/*": string;
                     };
                 };
-                /** @description Unknown provider */
-                404: {
+                /** @description Internal error generating the PKCE/state token */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };

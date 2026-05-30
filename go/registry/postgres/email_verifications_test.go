@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -69,7 +68,7 @@ func TestEmailVerificationRegistry_Create_MissingFields(t *testing.T) {
 			tc.mut(&ev)
 			_, err := registrySet.EmailVerificationRegistry.Create(ctx, ev)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }
@@ -99,7 +98,7 @@ func TestEmailVerificationRegistry_Get_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := registrySet.EmailVerificationRegistry.Get(ctx, "no-such-id")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestEmailVerificationRegistry_List(t *testing.T) {
@@ -136,7 +135,7 @@ func TestEmailVerificationRegistry_GetByToken(t *testing.T) {
 	c.Assert(fetched.ID, qt.Equals, created.ID)
 
 	_, err = registrySet.EmailVerificationRegistry.GetByToken(ctx, "missing-token")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestEmailVerificationRegistry_GetByUserID(t *testing.T) {
@@ -197,7 +196,7 @@ func TestEmailVerificationRegistry_Update_NotFound(t *testing.T) {
 	ev := newTestEmailVerification(user, "token-update-missing")
 	ev.ID = "no-such-id"
 	_, err := registrySet.EmailVerificationRegistry.Update(ctx, ev)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestEmailVerificationRegistry_Delete(t *testing.T) {
@@ -215,7 +214,7 @@ func TestEmailVerificationRegistry_Delete(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	_, err = registrySet.EmailVerificationRegistry.Get(ctx, created.ID)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 // TestEmailVerificationRegistry_DeleteExpired pins that DeleteExpired removes

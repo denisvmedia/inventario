@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -118,7 +117,7 @@ func TestAnthropicProvider_AuthFailure(t *testing.T) {
 	_, err = provider.Scan(context.Background(), aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, aivision.ErrProviderAuth), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderAuth)
 }
 
 func TestAnthropicProvider_RateLimited(t *testing.T) {
@@ -132,7 +131,7 @@ func TestAnthropicProvider_RateLimited(t *testing.T) {
 	_, err := provider.Scan(context.Background(), aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, aivision.ErrProviderUnavailable), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderUnavailable)
 }
 
 func TestAnthropicProvider_ServerError(t *testing.T) {
@@ -146,7 +145,7 @@ func TestAnthropicProvider_ServerError(t *testing.T) {
 	_, err := provider.Scan(context.Background(), aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, aivision.ErrProviderUnavailable), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderUnavailable)
 }
 
 func TestAnthropicProvider_Timeout(t *testing.T) {
@@ -160,7 +159,7 @@ func TestAnthropicProvider_Timeout(t *testing.T) {
 	_, err := provider.Scan(context.Background(), aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, aivision.ErrProviderTimeout), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderTimeout)
 }
 
 func TestAnthropicProvider_BadResponseShape(t *testing.T) {
@@ -174,14 +173,14 @@ func TestAnthropicProvider_BadResponseShape(t *testing.T) {
 	_, err := provider.Scan(context.Background(), aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, aivision.ErrProviderBadResponse), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderBadResponse)
 }
 
 func TestAnthropicProvider_EmptyAPIKey(t *testing.T) {
 	c := qt.New(t)
 
 	_, err := anthropic.New(anthropic.Config{})
-	c.Assert(errors.Is(err, aivision.ErrProviderAuth), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderAuth)
 }
 
 func TestAnthropicProvider_MarshalTestPayload(t *testing.T) {

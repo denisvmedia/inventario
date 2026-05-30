@@ -2,7 +2,6 @@ package services_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -38,7 +37,7 @@ func TestInMemoryImpersonationStore_PutGetDelete(t *testing.T) {
 	c.Assert(store.Delete(ctx, "jti-1"), qt.IsNil)
 
 	_, err = store.Get(ctx, "jti-1")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestInMemoryImpersonationStore_GetMissingReturnsNotFound(t *testing.T) {
@@ -46,7 +45,7 @@ func TestInMemoryImpersonationStore_GetMissingReturnsNotFound(t *testing.T) {
 	store := services.NewInMemoryImpersonationStore()
 
 	_, err := store.Get(context.Background(), "never-recorded")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestInMemoryImpersonationStore_DeleteIsIdempotent(t *testing.T) {
@@ -72,7 +71,7 @@ func TestInMemoryImpersonationStore_ExpiredSlotIsPruned(t *testing.T) {
 	// An expired slot is pruned lazily on the next access — Get reports
 	// it as not found rather than returning a stale session.
 	_, err := store.Get(ctx, "expired-jti")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestInMemoryAuthRateLimiter_CheckImpersonationAttempt(t *testing.T) {

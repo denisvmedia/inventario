@@ -1,7 +1,6 @@
 package currency_test
 
 import (
-	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -127,7 +126,7 @@ func TestValidateRate(t *testing.T) {
 	c.Assert(currency.ValidateRate(decimal.RequireFromString("10000000000")), qt.IsNil)
 
 	// Reject zero, negative, and >1e10.
-	c.Assert(errors.Is(currency.ValidateRate(decimal.Zero), currency.ErrInvalidExchangeRate), qt.IsTrue)
-	c.Assert(errors.Is(currency.ValidateRate(decimal.RequireFromString("-1")), currency.ErrInvalidExchangeRate), qt.IsTrue)
-	c.Assert(errors.Is(currency.ValidateRate(decimal.RequireFromString("10000000001")), currency.ErrInvalidExchangeRate), qt.IsTrue)
+	c.Assert(currency.ValidateRate(decimal.Zero), qt.ErrorIs, currency.ErrInvalidExchangeRate)
+	c.Assert(currency.ValidateRate(decimal.RequireFromString("-1")), qt.ErrorIs, currency.ErrInvalidExchangeRate)
+	c.Assert(currency.ValidateRate(decimal.RequireFromString("10000000001")), qt.ErrorIs, currency.ErrInvalidExchangeRate)
 }

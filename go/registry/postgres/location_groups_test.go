@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -72,7 +71,7 @@ func TestLocationGroupRegistry_Create_MissingFields(t *testing.T) {
 			tc.mut(&g)
 			_, err := registrySet.LocationGroupRegistry.Create(ctx, g)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }
@@ -95,7 +94,7 @@ func TestLocationGroupRegistry_Create_DuplicateSlug(t *testing.T) {
 	second.Name = "Second"
 	_, err = registrySet.LocationGroupRegistry.Create(ctx, second)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, registry.ErrSlugAlreadyExists), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrSlugAlreadyExists)
 }
 
 // -- Get / GetBySlug -------------------------------------------------------
@@ -120,10 +119,10 @@ func TestLocationGroupRegistry_Get_And_GetBySlug(t *testing.T) {
 	c.Assert(bySlug.ID, qt.Equals, created.ID)
 
 	_, err = registrySet.LocationGroupRegistry.Get(ctx, "no-such-id")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	_, err = registrySet.LocationGroupRegistry.GetBySlug(ctx, user.TenantID, "no-such-slug")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 // -- ListByTenant ----------------------------------------------------------
@@ -174,5 +173,5 @@ func TestLocationGroupRegistry_Update_And_Delete(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	_, err = registrySet.LocationGroupRegistry.Get(ctx, created.ID)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }

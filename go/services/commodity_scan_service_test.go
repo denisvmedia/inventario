@@ -57,7 +57,7 @@ func TestCommodityScanService_ProviderDisabled(t *testing.T) {
 	svc := services.NewCommodityScanService(nil, audit, services.CommodityScanConfig{})
 
 	_, err := svc.Scan(context.Background(), "tenant-1", "user-1", newScanInput(jpegPhoto("a.jpg", 64)))
-	c.Assert(errors.Is(err, services.ErrScanProviderDisabled), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrScanProviderDisabled)
 
 	// Audit row is written (provider="none", status="disabled") so
 	// dashboards see the attempt, but CountRecentForUser excludes
@@ -74,7 +74,7 @@ func TestCommodityScanService_NoPhotos(t *testing.T) {
 	svc := services.NewCommodityScanService(mock.New(), memory.NewCommodityScanAuditRegistry(), services.CommodityScanConfig{})
 
 	_, err := svc.Scan(context.Background(), "tenant-1", "user-1", services.ScanInput{})
-	c.Assert(errors.Is(err, services.ErrScanNoPhotos), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrScanNoPhotos)
 }
 
 func TestCommodityScanService_TooManyPhotos(t *testing.T) {
@@ -85,7 +85,7 @@ func TestCommodityScanService_TooManyPhotos(t *testing.T) {
 
 	in := newScanInput(jpegPhoto("a.jpg", 64), jpegPhoto("b.jpg", 64), jpegPhoto("c.jpg", 64))
 	_, err := svc.Scan(context.Background(), "tenant-1", "user-1", in)
-	c.Assert(errors.Is(err, services.ErrScanTooManyPhotos), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrScanTooManyPhotos)
 }
 
 func TestCommodityScanService_PhotoTooLarge(t *testing.T) {
@@ -96,7 +96,7 @@ func TestCommodityScanService_PhotoTooLarge(t *testing.T) {
 	})
 
 	_, err := svc.Scan(context.Background(), "tenant-1", "user-1", newScanInput(jpegPhoto("a.jpg", 1024)))
-	c.Assert(errors.Is(err, services.ErrScanPhotoTooLarge), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrScanPhotoTooLarge)
 }
 
 func TestCommodityScanService_UnsupportedMIME(t *testing.T) {
@@ -111,7 +111,7 @@ func TestCommodityScanService_UnsupportedMIME(t *testing.T) {
 		},
 	}
 	_, err := svc.Scan(context.Background(), "tenant-1", "user-1", in)
-	c.Assert(errors.Is(err, services.ErrScanUnsupportedMIME), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrScanUnsupportedMIME)
 }
 
 func TestCommodityScanService_RateLimited(t *testing.T) {
@@ -129,7 +129,7 @@ func TestCommodityScanService_RateLimited(t *testing.T) {
 
 	// Second call hits the cap.
 	_, err = svc.Scan(context.Background(), "tenant-1", "user-1", newScanInput(jpegPhoto("b.jpg", 64)))
-	c.Assert(errors.Is(err, services.ErrScanRateLimited), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrScanRateLimited)
 
 	// CountRecentForUser counts provider attempts only — the first
 	// call (status=ok) counts, the second (status=rate_limited) does
@@ -149,7 +149,7 @@ func TestCommodityScanService_ProviderTimeout(t *testing.T) {
 	})
 
 	_, err := svc.Scan(context.Background(), "tenant-1", "user-1", newScanInput(jpegPhoto("a.jpg", 64)))
-	c.Assert(errors.Is(err, services.ErrScanProviderTimeout), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrScanProviderTimeout)
 }
 
 func TestCommodityScanService_ProviderUnavailable(t *testing.T) {
@@ -161,7 +161,7 @@ func TestCommodityScanService_ProviderUnavailable(t *testing.T) {
 	})
 
 	_, err := svc.Scan(context.Background(), "tenant-1", "user-1", newScanInput(jpegPhoto("a.jpg", 64)))
-	c.Assert(errors.Is(err, services.ErrScanProviderUnavailable), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrScanProviderUnavailable)
 }
 
 func TestCommodityScanService_ProviderError(t *testing.T) {
@@ -173,7 +173,7 @@ func TestCommodityScanService_ProviderError(t *testing.T) {
 	})
 
 	_, err := svc.Scan(context.Background(), "tenant-1", "user-1", newScanInput(jpegPhoto("a.jpg", 64)))
-	c.Assert(errors.Is(err, services.ErrScanProviderError), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrScanProviderError)
 }
 
 func TestCommodityScanService_MissingIdentity(t *testing.T) {
@@ -185,8 +185,8 @@ func TestCommodityScanService_MissingIdentity(t *testing.T) {
 	// (the previous ErrScanProviderError mapping leaked a misleading
 	// 502 "bad gateway" upstream).
 	_, err := svc.Scan(context.Background(), "", "user-1", newScanInput(jpegPhoto("a.jpg", 64)))
-	c.Assert(errors.Is(err, services.ErrScanIdentityMissing), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrScanIdentityMissing)
 
 	_, err = svc.Scan(context.Background(), "tenant-1", "", newScanInput(jpegPhoto("a.jpg", 64)))
-	c.Assert(errors.Is(err, services.ErrScanIdentityMissing), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrScanIdentityMissing)
 }

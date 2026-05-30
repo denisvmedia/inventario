@@ -464,11 +464,11 @@ func TestGroupService_UpdateMemberRole_RacesLeaveOnSameLock(t *testing.T) {
 	// The loser must surface ErrLastOwner (not a generic error) so
 	// the FE renders the actionable "transfer ownership first" copy.
 	if leaveErr != nil {
-		c.Assert(errors.Is(leaveErr, services.ErrLastOwner), qt.IsTrue,
+		c.Assert(leaveErr, qt.ErrorIs, services.ErrLastOwner,
 			qt.Commentf("leave lost the race; expected ErrLastOwner, got %v", leaveErr))
 	}
 	if demoteErr != nil {
-		c.Assert(errors.Is(demoteErr, services.ErrLastOwner), qt.IsTrue,
+		c.Assert(demoteErr, qt.ErrorIs, services.ErrLastOwner,
 			qt.Commentf("demote lost the race; expected ErrLastOwner, got %v", demoteErr))
 	}
 }

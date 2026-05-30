@@ -2,7 +2,6 @@ package memory_test
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -62,7 +61,7 @@ func TestEmailVerificationRegistry_Create_MissingFields(t *testing.T) {
 			tc.mut(&ev)
 			_, err := r.Create(ctx, ev)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }
@@ -87,7 +86,7 @@ func TestEmailVerificationRegistry_Get_NotFound(t *testing.T) {
 	r := memory.NewEmailVerificationRegistry()
 
 	_, err := r.Get(ctx, "no-such-id")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestEmailVerificationRegistry_List(t *testing.T) {
@@ -118,7 +117,7 @@ func TestEmailVerificationRegistry_GetByToken(t *testing.T) {
 	c.Assert(fetched.ID, qt.Equals, created.ID)
 
 	_, err = r.GetByToken(ctx, "missing-token")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestEmailVerificationRegistry_GetByUserID(t *testing.T) {
@@ -169,7 +168,7 @@ func TestEmailVerificationRegistry_Update_NotFound(t *testing.T) {
 	ev := newTestEmailVerification("token-update-missing")
 	ev.ID = "no-such-id"
 	_, err := r.Update(ctx, ev)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestEmailVerificationRegistry_Delete(t *testing.T) {
@@ -184,7 +183,7 @@ func TestEmailVerificationRegistry_Delete(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	_, err = r.Get(ctx, created.ID)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 // TestEmailVerificationRegistry_DeleteExpired pins that DeleteExpired removes
@@ -286,7 +285,7 @@ func TestEmailVerificationRegistry_MarkVerified_EmptyToken(t *testing.T) {
 	r := memory.NewEmailVerificationRegistry()
 
 	claimed, err := r.MarkVerified(ctx, "")
-	c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 	c.Assert(claimed, qt.IsFalse)
 }
 

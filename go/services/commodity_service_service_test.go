@@ -2,7 +2,6 @@ package services_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -115,7 +114,7 @@ func TestCommodityServiceService_StartService_RejectsBundle(t *testing.T) {
 	}
 	created, existing, crossHolding, err := fx.serviceSvc.StartService(fx.ctx, svc)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, services.ErrCommodityNotTrackable), qt.IsTrue,
+	c.Assert(err, qt.ErrorIs, services.ErrCommodityNotTrackable,
 		qt.Commentf("StartService must reject a Count>1 commodity with the shared sentinel"))
 	c.Assert(created, qt.IsNil)
 	c.Assert(existing, qt.IsNil)
@@ -232,7 +231,7 @@ func TestCommodityServiceService_StartService_RejectsSecondOpen(t *testing.T) {
 		SentAt:       models.Date("2026-05-05"),
 	}
 	created, existing, crossHolding, err := fx.serviceSvc.StartService(fx.ctx, second)
-	c.Assert(errors.Is(err, services.ErrServiceAlreadyOpen), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrServiceAlreadyOpen)
 	c.Assert(created, qt.IsNil)
 	c.Assert(crossHolding, qt.IsNil)
 	c.Assert(existing, qt.IsNotNil)
@@ -269,7 +268,7 @@ func TestCrossKindInvariant_LendBlocksService(t *testing.T) {
 		SentAt:       models.Date("2026-05-02"),
 	}
 	created, existing, crossHolding, err := fx.serviceSvc.StartService(fx.ctx, svc)
-	c.Assert(errors.Is(err, services.ErrCommodityAlreadyOut), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrCommodityAlreadyOut)
 	c.Assert(created, qt.IsNil)
 	c.Assert(existing, qt.IsNil)
 	c.Assert(crossHolding, qt.IsNotNil)
@@ -297,7 +296,7 @@ func TestCrossKindInvariant_ServiceBlocksLend(t *testing.T) {
 		LentAt:       models.Date("2026-05-02"),
 	}
 	created, existing, crossHolding, err := fx.loanSvc.StartLoan(fx.ctx, loan)
-	c.Assert(errors.Is(err, services.ErrCommodityAlreadyOut), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrCommodityAlreadyOut)
 	c.Assert(created, qt.IsNil)
 	c.Assert(existing, qt.IsNil)
 	c.Assert(crossHolding, qt.IsNotNil)

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -95,7 +94,7 @@ func TestOpenAIProvider_AuthFailure(t *testing.T) {
 	_, err := provider.Scan(context.Background(), aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, aivision.ErrProviderAuth), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderAuth)
 }
 
 func TestOpenAIProvider_Throttled(t *testing.T) {
@@ -109,7 +108,7 @@ func TestOpenAIProvider_Throttled(t *testing.T) {
 	_, err := provider.Scan(context.Background(), aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, aivision.ErrProviderUnavailable), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderUnavailable)
 }
 
 func TestOpenAIProvider_ServerError(t *testing.T) {
@@ -123,7 +122,7 @@ func TestOpenAIProvider_ServerError(t *testing.T) {
 	_, err := provider.Scan(context.Background(), aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, aivision.ErrProviderUnavailable), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderUnavailable)
 }
 
 func TestOpenAIProvider_Timeout(t *testing.T) {
@@ -137,7 +136,7 @@ func TestOpenAIProvider_Timeout(t *testing.T) {
 	_, err := provider.Scan(context.Background(), aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, aivision.ErrProviderTimeout), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderTimeout)
 }
 
 func TestOpenAIProvider_BadResponseShape(t *testing.T) {
@@ -151,14 +150,14 @@ func TestOpenAIProvider_BadResponseShape(t *testing.T) {
 	_, err := provider.Scan(context.Background(), aivision.ScanRequest{
 		Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte("x")}},
 	})
-	c.Assert(errors.Is(err, aivision.ErrProviderBadResponse), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderBadResponse)
 }
 
 func TestOpenAIProvider_EmptyAPIKey(t *testing.T) {
 	c := qt.New(t)
 
 	_, err := openai.New(openai.Config{})
-	c.Assert(errors.Is(err, aivision.ErrProviderAuth), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, aivision.ErrProviderAuth)
 }
 
 func TestOpenAIProvider_MarshalTestPayload(t *testing.T) {

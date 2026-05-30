@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -31,7 +30,7 @@ func TestService_RevokeSystemAdmin_MissingGrantRegistryAuditsResolvedSubject(t *
 	resultUser, hadFlag, err := svc.RevokeSystemAdmin(ctx, user.ID, false)
 	c.Assert(resultUser, qt.IsNil)
 	c.Assert(hadFlag, qt.IsFalse)
-	c.Assert(errors.Is(err, registry.ErrInvalidConfig), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrInvalidConfig)
 
 	entries, err := factorySet.AuditLogRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)

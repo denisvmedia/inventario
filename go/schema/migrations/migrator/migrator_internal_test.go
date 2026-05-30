@@ -1,7 +1,6 @@
 package migrator
 
 import (
-	"errors"
 	"io"
 	"log/slog"
 	"net/url"
@@ -82,7 +81,7 @@ func TestCompareSchemaVersion(t *testing.T) {
 				return
 			}
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, tt.wantErr), qt.IsTrue, qt.Commentf("expected %v, got %v", tt.wantErr, err))
+			c.Assert(err, qt.ErrorIs, tt.wantErr, qt.Commentf("expected %v, got %v", tt.wantErr, err))
 		})
 	}
 }

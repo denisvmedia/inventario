@@ -2,7 +2,6 @@ package memory_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -29,5 +28,5 @@ func TestPasswordResetRegistry_Update_NotFound(t *testing.T) {
 	}
 	pr.ID = "no-such-id"
 	_, err := r.Update(ctx, pr)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }

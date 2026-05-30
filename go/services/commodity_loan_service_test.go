@@ -2,7 +2,6 @@ package services_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -120,7 +119,7 @@ func TestCommodityLoanService_StartLoan_RejectsBundle(t *testing.T) {
 	}
 	created, existing, crossHolding, err := fx.loanSvc.StartLoan(fx.ctx, loan)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, services.ErrCommodityNotTrackable), qt.IsTrue,
+	c.Assert(err, qt.ErrorIs, services.ErrCommodityNotTrackable,
 		qt.Commentf("StartLoan must reject a Count>1 commodity with the shared sentinel"))
 	c.Assert(created, qt.IsNil)
 	c.Assert(existing, qt.IsNil)
@@ -344,14 +343,14 @@ func TestCommodityLoanService_UpdateLoan_ClosedLoan_RejectsDueBackEdit(t *testin
 		DueBackAt: &newDue,
 	})
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, services.ErrClosedLoanFieldImmutable), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrClosedLoanFieldImmutable)
 
 	// Attempt #2: clear the due date.
 	_, err = fx.loanSvc.UpdateLoan(fx.ctx, created.ID, services.LoanUpdate{
 		ClearDueBackAt: true,
 	})
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, services.ErrClosedLoanFieldImmutable), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, services.ErrClosedLoanFieldImmutable)
 
 	// Stored row stays untouched — the original due date persists.
 	loanReg := fx.factory.CommodityLoanRegistryFactory.MustCreateUserRegistry(fx.ctx)

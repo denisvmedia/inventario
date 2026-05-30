@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -68,7 +67,7 @@ func TestGroupMembershipRegistry_Create_MissingFields(t *testing.T) {
 			tc.mut(&m)
 			_, err := registrySet.GroupMembershipRegistry.Create(ctx, m)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, registry.ErrFieldRequired), qt.IsTrue)
+			c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 		})
 	}
 }
@@ -91,7 +90,7 @@ func TestGroupMembershipRegistry_Create_Duplicate(t *testing.T) {
 	// Same (group_id, member_user_id) is rejected (unique index).
 	_, err = registrySet.GroupMembershipRegistry.Create(ctx, first)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, registry.ErrAlreadyExists), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrAlreadyExists)
 }
 
 func TestGroupMembershipRegistry_GetByGroupAndUser(t *testing.T) {
@@ -113,7 +112,7 @@ func TestGroupMembershipRegistry_GetByGroupAndUser(t *testing.T) {
 	c.Assert(fetched.ID, qt.Equals, created.ID)
 
 	_, err = registrySet.GroupMembershipRegistry.GetByGroupAndUser(ctx, group.ID, "no-such-user")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 // #1652: postgres-side coverage for the new invariant-checked delete
@@ -137,7 +136,7 @@ func TestGroupMembershipRegistry_DeleteWithMemberInvariants(t *testing.T) {
 	sole, err := registrySet.GroupMembershipRegistry.Create(ctx, membershipFor(user.TenantID, group.ID, user.ID, models.GroupRoleOwner))
 	c.Assert(err, qt.IsNil)
 	err = registrySet.GroupMembershipRegistry.DeleteWithMemberInvariants(ctx, sole.ID)
-	c.Assert(errors.Is(err, registry.ErrLastOwner), qt.IsTrue, qt.Commentf("expected ErrLastOwner, got %v", err))
+	c.Assert(err, qt.ErrorIs, registry.ErrLastOwner, qt.Commentf("expected ErrLastOwner, got %v", err))
 
 	// Add a non-owner second member. The sole-owner block above
 	// still holds; removing the user-role row now drops memberCount
@@ -155,12 +154,12 @@ func TestGroupMembershipRegistry_DeleteWithMemberInvariants(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	// Verify the row is actually gone.
 	_, err = registrySet.GroupMembershipRegistry.Get(ctx, m2.ID)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// ErrNotFound on an unknown id (the initial group_id lookup
 	// fails fast — no group lock needed beyond that).
 	err = registrySet.GroupMembershipRegistry.DeleteWithMemberInvariants(ctx, "00000000-0000-0000-0000-000000000000")
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// ErrLastMember: construct a one-member group whose sole row is
 	// NOT an owner (simulates the role-drift case the defense-in-depth
@@ -178,7 +177,7 @@ func TestGroupMembershipRegistry_DeleteWithMemberInvariants(t *testing.T) {
 	soleUser, err := registrySet.GroupMembershipRegistry.Create(ctx, membershipFor(user.TenantID, driftGroup.ID, driftUser.ID, models.GroupRoleUser))
 	c.Assert(err, qt.IsNil)
 	err = registrySet.GroupMembershipRegistry.DeleteWithMemberInvariants(ctx, soleUser.ID)
-	c.Assert(errors.Is(err, registry.ErrLastMember), qt.IsTrue, qt.Commentf("expected ErrLastMember, got %v", err))
+	c.Assert(err, qt.ErrorIs, registry.ErrLastMember, qt.Commentf("expected ErrLastMember, got %v", err))
 }
 
 // #1652: postgres-side coverage for the new invariant-checked role
@@ -200,7 +199,7 @@ func TestGroupMembershipRegistry_UpdateRoleWithMemberInvariants(t *testing.T) {
 	sole, err := registrySet.GroupMembershipRegistry.Create(ctx, membershipFor(user.TenantID, group.ID, user.ID, models.GroupRoleOwner))
 	c.Assert(err, qt.IsNil)
 	_, err = registrySet.GroupMembershipRegistry.UpdateRoleWithMemberInvariants(ctx, sole.ID, models.GroupRoleAdmin)
-	c.Assert(errors.Is(err, registry.ErrLastOwner), qt.IsTrue, qt.Commentf("expected ErrLastOwner, got %v", err))
+	c.Assert(err, qt.ErrorIs, registry.ErrLastOwner, qt.Commentf("expected ErrLastOwner, got %v", err))
 
 	// Add a second owner; now the original can be demoted. The
 	// returned row must reflect the new role (verifies the RETURNING
@@ -232,7 +231,7 @@ func TestGroupMembershipRegistry_UpdateRoleWithMemberInvariants(t *testing.T) {
 
 	// ErrNotFound on an unknown id.
 	_, err = registrySet.GroupMembershipRegistry.UpdateRoleWithMemberInvariants(ctx, "00000000-0000-0000-0000-000000000000", models.GroupRoleAdmin)
-	c.Assert(errors.Is(err, registry.ErrNotFound), qt.IsTrue)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestGroupMembershipRegistry_ListByGroup_ByUser_CountAdmins(t *testing.T) {
