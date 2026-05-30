@@ -107,7 +107,7 @@ describe("<LoginPage />", () => {
   // Unhappy paths beyond 401 (#1038). Every login failure funnels through
   // parseServerError into the same destructive banner and the page stays on
   // /login — none of these trigger a refresh-and-retry (/auth/login is a
-  // NON_REFRESHABLE_AUTH_PATH) or a navigation.
+  // NON_REFRESHABLE_AUTH_PATHS entry) or a navigation.
   it("surfaces a 422 validation error from the JSON:API envelope", async () => {
     server.use(
       msw.post(api("/auth/login"), () =>
