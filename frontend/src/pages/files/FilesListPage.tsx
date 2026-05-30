@@ -439,6 +439,7 @@ export function FilesListPage() {
             <Label htmlFor="files-bulk-move" className="sr-only">
               {t("files:bulk.move")}
             </Label>
+            {/* eslint-disable-next-line no-restricted-syntax -- bulk "move to category" utility selector (context-mode bulk bar); native <select> retained, covered by native-select unit/e2e */}
             <select
               id="files-bulk-move"
               data-testid="files-bulk-move"

@@ -1,0 +1,116 @@
+# ApplicationSet with SCM-provider generator pinned to master — the PERSISTENT
+# longevity environment (#1865).
+#
+# Templates exactly one Application — `inv-vcl01-longevity`. Structurally it is
+# a clone of applicationset-master.yaml (same SCM-provider-tracks-master,
+# same `slice .sha 0 7` → image.tag pattern, so every master push rolls the
+# deployment forward at the immutable per-commit image), with ONE difference:
+# it layers infra/helm-overlays/longevity-base.values.yaml on top of the shared
+# preview-base overlay to enable demo Postgres + MinIO PVC persistence. Its
+# data therefore SURVIVES rolling deploys and pod restarts, and is captured by
+# the Velero daily backup to Cloudflare R2 (the Velero Schedule in
+# infra/vm/helm-values/velero.yaml targets exactly this namespace).
+#
+# Why a SECOND master-tracking environment instead of flipping master itself:
+# master stays ephemeral/disposable by design (#1852 pivot); longevity is the
+# dedicated durable env whose continuous redeploy + accumulating data is what
+# the Velero backup/restore flow is built and verified against. See #1865.
+#
+# `<TAILNET>` is substituted by infra/vm/bootstrap.sh from the sops bundle's
+# tailscale.tailnet_name at kubectl apply time. bootstrap.sh applies every
+# applicationset*.yaml in this dir, so no bootstrap change is needed to pick
+# this file up.
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: inventario-longevity-preview
+  namespace: argocd
+spec:
+  # Go templates so `{{ slice .sha 0 7 }}` works the same way it does in
+  # applicationset-master.yaml — the SCM-provider generator only exposes the
+  # full `{{.sha}}`, no pre-shortened variant.
+  goTemplate: true
+  # Fail rendering loudly on any undefined key instead of silently emitting
+  # `<no value>` and producing broken Applications. Same posture as the
+  # master + PR ApplicationSets.
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - scmProvider:
+        # Reuse the same GitHub App credentials Secret the PR + master
+        # generators use (repo-creds format created by
+        # infra/vm/scripts/apply-secrets.sh).
+        github:
+          organization: denisvmedia
+          appSecretName: github-app-creds
+          # Required for branchMatch to apply — default (false) returns only
+          # each repo's default branch, making the filter a no-op.
+          allBranches: true
+        filters:
+          - repositoryMatch: ^inventario$
+            # Anchored: don't match `master-foo` or `release/master`.
+            branchMatch: ^master$
+        # Poll every 60s — same cadence as master so the longevity env tracks
+        # master pushes without a multi-minute lag.
+        requeueAfterSeconds: 60
+
+  template:
+    metadata:
+      name: inv-vcl01-longevity
+      labels:
+        inventario-preview: "true"
+    spec:
+      project: previews
+
+      # Multi-source: source[0] is the chart pinned to the master head SHA;
+      # source[1] provides the repo at the same SHA for $values lookups so
+      # valueFiles can reference overlays outside the chart path. Pinning both
+      # to `{{.sha}}` keeps chart + values + image consistent at the exact
+      # commit the SCM-provider polled.
+      sources:
+        - repoURL: https://github.com/denisvmedia/inventario
+          targetRevision: '{{ .sha }}'
+          path: helm/inventario
+          helm:
+            # Two overlays, applied in order — preview-base first (the shared
+            # static slice), then longevity-base (flips demo persistence on +
+            # bumps the storage quota). Helm deep-merges, later file wins.
+            valueFiles:
+              - $values/infra/helm-overlays/preview-base.values.yaml
+              - $values/infra/helm-overlays/longevity-base.values.yaml
+            values: |
+              image:
+                tag: 'sha-{{ slice .sha 0 7 }}'
+              # Source the admin seed password from the sops bundle (#1883).
+              # `inventario-admin` is materialized in THIS namespace by
+              # infra/vm/scripts/apply-secrets.sh from admin.password in the
+              # encrypted bundle (the longevity block mirrors the master one).
+              secrets:
+                existingSecret: inventario-admin
+              ingress:
+                annotations:
+                  tailscale.com/hostname: inv-vcl01-longevity
+                hosts:
+                  - host: 'inv-vcl01-longevity.<TAILNET>.ts.net'
+                    paths:
+                      - path: /
+                        pathType: Prefix
+                tls:
+                  - hosts:
+                      - 'inv-vcl01-longevity.<TAILNET>.ts.net'
+        - repoURL: https://github.com/denisvmedia/inventario
+          targetRevision: '{{ .sha }}'
+          ref: values
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: inv-vcl01-longevity
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true

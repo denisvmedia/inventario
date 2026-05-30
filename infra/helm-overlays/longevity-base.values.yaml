@@ -1,0 +1,47 @@
+# Longevity-environment overlay (#1865), layered ON TOP of
+# preview-base.values.yaml by infra/argocd/applicationset-longevity.yaml.
+#
+# The ONE thing that makes inv-vcl01-longevity different from the ephemeral
+# master / PR previews: its demo Postgres + MinIO keep their data in
+# PersistentVolumeClaims instead of emptyDir, so the data survives pod
+# restarts and rolling master deploys — and, crucially, is captured by the
+# Velero daily backup to Cloudflare R2 (kopia File System Backup of every PVC
+# in the namespace; see infra/vm/helm-values/velero.yaml). This is the
+# workload the issue's "delete the ns → restore brings it back identically,
+# seeded data intact" acceptance test exercises.
+#
+# Everything else (image repo, run.all single replica, setup Job + seed,
+# Tailscale Ingress, ResourceQuota/LimitRange) is inherited unchanged from
+# preview-base.values.yaml — ArgoCD layers this file second in the same
+# multi-source $values lookup, and Helm deep-merges these maps over it.
+
+# In demo mode the chart auto-overrides app.uploadLocation to the in-cluster
+# MinIO (s3://), so uploaded files live in the MinIO bucket — NOT in the
+# chart's `persistence.*` uploads PVC (that one only materializes for file://
+# uploads with demo.minio disabled). The two stateful stores to persist are
+# therefore Postgres and MinIO.
+demo:
+  postgresql:
+    persistence:
+      # false (chart default) = emptyDir, data lost on pod restart.
+      enabled: true
+      size: 5Gi
+  minio:
+    persistence:
+      # 10Gi (chart default is 20Gi) — conservative for a single-node VM that
+      # also hosts the master + per-PR previews. Bump alongside
+      # requests.storage in the quota below if the seeded dataset grows.
+      enabled: true
+      size: 10Gi
+
+# preview-base sizes requests.storage at 20Gi for the *emptyDir* demo bundle;
+# the two PVCs above request 5Gi + 10Gi = 15Gi, which fits, but leave headroom
+# for dataset growth + an ad-hoc operator debug PVC. (Velero/kopia maintenance
+# does NOT add PVCs here — it streams to R2 from the node-agent, so it needs no
+# namespace storage quota.) The PVC count rises from 0 → 2 (Postgres + MinIO),
+# still well under the inherited cap of 5. Only this one key is overridden; the
+# rest of quota.hard (cpu/memory/pods/persistentvolumeclaims) deep-merges from
+# preview-base.
+quota:
+  hard:
+    requests.storage: "30Gi"

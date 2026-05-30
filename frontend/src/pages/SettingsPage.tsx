@@ -27,6 +27,13 @@ import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Page, PageHeader } from "@/components/ui/page"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/features/auth/AuthContext"
@@ -337,8 +344,7 @@ function DefaultGroupSelectorRow() {
       ? currentDefault
       : (groups?.[0]?.id ?? "")
 
-  async function handleChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    const next = event.target.value
+  async function handleValueChange(next: string) {
     if (!next || next === currentDefault || !userId) return
     setError(null)
     try {
@@ -358,20 +364,27 @@ function DefaultGroupSelectorRow() {
       description={t("settings:profile.defaultGroupHelp")}
     >
       <div className="flex flex-col items-end gap-1">
-        <select
-          value={value}
-          onChange={handleChange}
+        <Select
+          value={value || undefined}
+          onValueChange={handleValueChange}
           disabled={updateMutation.isPending}
-          aria-label={t("settings:profile.defaultGroup")}
-          data-testid="settings-default-group-select"
-          className="h-8 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {groups?.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            size="sm"
+            className="w-44"
+            aria-label={t("settings:profile.defaultGroup")}
+            data-testid="settings-default-group-select"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {groups?.map((g) => (
+              <SelectItem key={g.id} value={g.id ?? ""}>
+                {g.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {error ? (
           <p className="text-[11px] text-destructive" data-testid="settings-default-group-error">
             {error}
@@ -501,61 +514,82 @@ function AppearanceSection() {
           label={t("settings:appearance.densityLabel")}
           description={t("settings:appearance.densityHelp")}
         >
-          <select
-            value={density}
-            onChange={(e) => setDensity(e.target.value as Density)}
-            data-testid="density-select"
-            aria-label={t("settings:appearance.densityLabel")}
-            className="h-8 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          >
-            {DENSITIES.map((d) => (
-              <option key={d} value={d}>
-                {t(`common:shell.density${d.charAt(0).toUpperCase()}${d.slice(1)}`)}
-              </option>
-            ))}
-          </select>
+          <Select value={density} onValueChange={(v) => setDensity(v as Density)}>
+            <SelectTrigger
+              size="sm"
+              className="w-44"
+              data-testid="density-select"
+              aria-label={t("settings:appearance.densityLabel")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DENSITIES.map((d) => (
+                <SelectItem key={d} value={d}>
+                  {t(`common:shell.density${d.charAt(0).toUpperCase()}${d.slice(1)}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </SettingRow>
 
         <SettingRow
           label={t("settings:appearance.localeLabel")}
           description={t("settings:appearance.localeHelp")}
         >
-          <select
+          <Select
             value={currentLanguage}
-            onChange={(e) => {
-              const next = e.target.value as SupportedLanguage
+            onValueChange={(next) => {
               // i18next-browser-languagedetector caches to localStorage at
               // key "inventario-language" — calling changeLanguage triggers
               // that cache write, so reload picks the new locale up.
-              void i18next.changeLanguage(next)
+              void i18next.changeLanguage(next as SupportedLanguage)
             }}
-            data-testid="locale-select"
-            aria-label={t("settings:appearance.localeLabel")}
-            className="h-8 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            {SUPPORTED_LANGUAGES.map((lng) => (
-              <option key={lng} value={lng}>
-                {t(`settings:appearance.localeOptions.${lng}`)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              size="sm"
+              className="w-44"
+              data-testid="locale-select"
+              aria-label={t("settings:appearance.localeLabel")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SUPPORTED_LANGUAGES.map((lng) => (
+                <SelectItem key={lng} value={lng}>
+                  {t(`settings:appearance.localeOptions.${lng}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </SettingRow>
 
         <SettingRow
           label={t("settings:appearance.defaultViewLabel")}
           description={t("settings:appearance.defaultViewHelp")}
         >
-          <select
+          <Select
             value={defaultItemsView}
-            onChange={(e) => onChangeRemote(SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW, e.target.value)}
+            onValueChange={(v) => onChangeRemote(SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW, v)}
             disabled={!settings}
-            data-testid="default-view-select"
-            aria-label={t("settings:appearance.defaultViewLabel")}
-            className="h-8 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            <option value="grid">{t("settings:appearance.defaultViewOptions.grid")}</option>
-            <option value="list">{t("settings:appearance.defaultViewOptions.list")}</option>
-          </select>
+            <SelectTrigger
+              size="sm"
+              className="w-44"
+              data-testid="default-view-select"
+              aria-label={t("settings:appearance.defaultViewLabel")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="grid">
+                {t("settings:appearance.defaultViewOptions.grid")}
+              </SelectItem>
+              <SelectItem value="list">
+                {t("settings:appearance.defaultViewOptions.list")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </SettingRow>
 
         <SettingRow
@@ -578,23 +612,35 @@ function AppearanceSection() {
           label={t("settings:appearance.numberFormatLocaleLabel")}
           description={t("settings:appearance.numberFormatLocaleHelp")}
         >
-          <select
-            value={numberFormatLocale}
-            onChange={(e) =>
-              onChangeRemote(SETTING_APPEARANCE_NUMBER_FORMAT_LOCALE, e.target.value)
+          {/* Radix Select forbids an empty-string item value, so the
+              auto-detect option uses an "auto" sentinel mapped back to ""
+              (the persisted empty value) on change and from "" on read. */}
+          <Select
+            value={numberFormatLocale || "auto"}
+            onValueChange={(v) =>
+              onChangeRemote(SETTING_APPEARANCE_NUMBER_FORMAT_LOCALE, v === "auto" ? "" : v)
             }
             disabled={!settings}
-            data-testid="number-format-locale-select"
-            aria-label={t("settings:appearance.numberFormatLocaleLabel")}
-            className="h-8 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            <option value="">{t("settings:appearance.numberFormatLocaleOptions.auto")}</option>
-            {NUMBER_FORMAT_LOCALE_OPTIONS.map((tag) => (
-              <option key={tag} value={tag}>
-                {t(`settings:appearance.numberFormatLocaleOptions.${tag}`)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              size="sm"
+              className="w-52"
+              data-testid="number-format-locale-select"
+              aria-label={t("settings:appearance.numberFormatLocaleLabel")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">
+                {t("settings:appearance.numberFormatLocaleOptions.auto")}
+              </SelectItem>
+              {NUMBER_FORMAT_LOCALE_OPTIONS.map((tag) => (
+                <SelectItem key={tag} value={tag}>
+                  {t(`settings:appearance.numberFormatLocaleOptions.${tag}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </SettingRow>
       </div>
     </div>

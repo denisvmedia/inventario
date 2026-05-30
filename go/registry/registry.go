@@ -1291,6 +1291,19 @@ type EmailVerificationRegistry interface {
 	// GetByUserID returns all email verification records for a user.
 	GetByUserID(ctx context.Context, userID string) ([]*models.EmailVerification, error)
 
+	// MarkVerified atomically claims the verification token by setting
+	// verified_at from NULL to the current time. The UPDATE filter includes
+	// `verified_at IS NULL`, so exactly one of N concurrent requests carrying
+	// the same token wins the row: it returns (true, nil) and is the caller
+	// responsible for the one-time first-verification side effects (welcome
+	// email, audit log, ...). Every other caller — whether it lost the race
+	// or the token was already verified earlier — gets (false, nil) and must
+	// treat the verification as already done. A token that does not exist
+	// also yields (false, nil). This closes the check-then-act race between
+	// the IsVerified() read and the write that previously let two requests
+	// both run the first-verification side effects (#1005).
+	MarkVerified(ctx context.Context, token string) (bool, error)
+
 	// DeleteExpired removes all records whose expiry time has passed.
 	DeleteExpired(ctx context.Context) error
 }

@@ -598,6 +598,17 @@ setupJob:
     # Env: SEED_DATABASE
     seedDatabase: false
 
+    # Write the bundled fixture *bytes* (cover photos, invoices, manuals) into
+    # the upload bucket during seeding, so items and the Files page look
+    # lived-in instead of carrying empty/broken file rows. Only has effect
+    # when seedDatabase=true.
+    # Keep false in production: /api/v1/seed is unauthenticated, so enabling
+    # blob writes for the default tenant widens the surface for bucket-spam.
+    # Enable only for demo / evaluation installs (the in-cluster MinIO/file
+    # bucket is the seed target). Maps to the server-side opt-in env var.
+    # Env: INVENTARIO_SEED_ALLOW_BLOB_UPLOADS
+    seedBlobUploads: false
+
 # ============================================================
 # Namespace ResourceQuota + LimitRange (#1866)
 # ------------------------------------------------------------

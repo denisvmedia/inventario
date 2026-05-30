@@ -88,6 +88,37 @@ func (r *EmailVerificationRegistry) GetByUserID(ctx context.Context, userID stri
 	return result, nil
 }
 
+// MarkVerified atomically claims the verification token: under the registry's
+// write lock it sets VerifiedAt only if it is still nil, returning whether this
+// call performed the flip. The lock is the in-process equivalent of the
+// postgres `verified_at IS NULL` filter — two goroutines verifying the same
+// token serialize, so exactly one observes the nil and returns true while the
+// loser (and an already-verified or unknown token) returns false. See #1005.
+func (r *EmailVerificationRegistry) MarkVerified(_ context.Context, token string) (bool, error) {
+	if token == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Token"))
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		ev := pair.Value
+		if ev.Token != token {
+			continue
+		}
+		if ev.VerifiedAt != nil {
+			// Already verified — another caller won, or it was verified earlier.
+			return false, nil
+		}
+		now := time.Now()
+		ev.VerifiedAt = &now
+		return true, nil
+	}
+	// Token not found.
+	return false, nil
+}
+
 // DeleteExpired removes all records whose ExpiresAt timestamp is in the past.
 func (r *EmailVerificationRegistry) DeleteExpired(ctx context.Context) error {
 	all, err := r.List(ctx)

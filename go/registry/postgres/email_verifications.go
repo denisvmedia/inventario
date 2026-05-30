@@ -143,6 +143,39 @@ func (r *EmailVerificationRegistry) GetByUserID(ctx context.Context, userID stri
 	return result, nil
 }
 
+// MarkVerified atomically flips verified_at from NULL to the current time for
+// the row matching token, returning whether this call won the claim. The
+// `verified_at IS NULL` filter makes the write idempotent across concurrent
+// requests: exactly one of them changes a row (rows-affected == 1 → true) and
+// the rest — plus a non-existent or already-verified token — observe zero
+// rows-affected → false. See the interface doc and #1005.
+func (r *EmailVerificationRegistry) MarkVerified(ctx context.Context, token string) (bool, error) {
+	if token == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Token"))
+	}
+	var claimed bool
+	err := r.newRepo().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET verified_at = $1 WHERE token = $2 AND verified_at IS NULL`,
+			r.tableNames.EmailVerifications(),
+		)
+		res, err := tx.ExecContext(ctx, query, time.Now(), token)
+		if err != nil {
+			return errxtrace.Wrap("failed to mark email verification as verified", err)
+		}
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return errxtrace.Wrap("failed to read rows affected", err)
+		}
+		claimed = rows > 0
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return claimed, nil
+}
+
 // DeleteExpired removes all records whose ExpiresAt timestamp is in the past.
 func (r *EmailVerificationRegistry) DeleteExpired(ctx context.Context) error {
 	return r.newRepo().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {

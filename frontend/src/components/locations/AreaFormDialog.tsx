@@ -3,7 +3,6 @@ import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -15,11 +14,20 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { FieldError } from "@/components/FieldError"
+import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { AREA_ICONS, IconPicker } from "@/components/locations/IconPicker"
 import type { Area } from "@/features/areas/api"
 import { areaSchema, type AreaFormInput } from "@/features/areas/schemas"
 import type { Location } from "@/features/locations/api"
-import { parseServerError } from "@/lib/server-error"
+import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 
 interface AreaFormDialogProps {
   open: boolean
@@ -48,7 +56,7 @@ export function AreaFormDialog({
   isPending = false,
 }: AreaFormDialogProps) {
   const { t } = useTranslation()
-  const [serverError, setServerError] = useState<string | null>(null)
+  const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
   const isEdit = !!area
 
   const form = useForm<AreaFormInput>({
@@ -105,7 +113,7 @@ export function AreaFormDialog({
       await onSubmit(values)
       onOpenChange(false)
     } catch (err) {
-      setServerError(parseServerError(err, t("locations:areaDialog.errorGeneric")))
+      setServerError(classifyServerError(err, t("locations:areaDialog.errorGeneric")))
     }
   }
 
@@ -149,11 +157,7 @@ export function AreaFormDialog({
                 />
               )}
             />
-            {form.formState.errors.icon ? (
-              <p className="text-xs text-destructive" data-testid="area-icon-error">
-                {t(form.formState.errors.icon.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError testId="area-icon-error" message={form.formState.errors.icon?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -168,14 +172,15 @@ export function AreaFormDialog({
               maxLength={200}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.name}
+              aria-describedby={form.formState.errors.name ? "area-name-error" : undefined}
               data-testid="area-name-input"
               {...form.register("name")}
             />
-            {form.formState.errors.name ? (
-              <p className="text-xs text-destructive" data-testid="area-name-error">
-                {t(form.formState.errors.name.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="area-name-error"
+              testId="area-name-error"
+              message={form.formState.errors.name?.message}
+            />
           </div>
 
           {showLocationPicker ? (
@@ -185,39 +190,45 @@ export function AreaFormDialog({
                 control={form.control}
                 name="location_id"
                 render={({ field }) => (
-                  // Spread `field` so name / ref / onBlur land on the
-                  // <select> too — without ref the form's focus-on-error
-                  // logic targets nothing, and without onBlur RHF's
-                  // touched/dirty tracking goes stale on this control.
-                  <select
-                    {...field}
-                    id="area-location"
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  // Radix Select is the blessed form dropdown. `field.ref`
+                  // lands on the trigger so RHF's focus-on-error still
+                  // targets this control; onValueChange feeds the form.
+                  <Select
+                    value={field.value || undefined}
+                    onValueChange={field.onChange}
                     disabled={isPending}
-                    aria-invalid={!!form.formState.errors.location_id}
-                    data-testid="area-location-select"
                   >
-                    {locations.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger
+                      id="area-location"
+                      ref={field.ref}
+                      className="w-full"
+                      aria-invalid={!!form.formState.errors.location_id}
+                      aria-describedby={
+                        form.formState.errors.location_id ? "area-location-error" : undefined
+                      }
+                      data-testid="area-location-select"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations.map((l) => (
+                        <SelectItem key={l.id} value={l.id ?? ""}>
+                          {l.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               />
-              {form.formState.errors.location_id ? (
-                <p className="text-xs text-destructive" data-testid="area-location-error">
-                  {t(form.formState.errors.location_id.message ?? "")}
-                </p>
-              ) : null}
+              <FieldError
+                id="area-location-error"
+                testId="area-location-error"
+                message={form.formState.errors.location_id?.message}
+              />
             </div>
           ) : null}
 
-          {serverError ? (
-            <Alert variant="destructive" data-testid="area-form-server-error">
-              <AlertDescription>{serverError}</AlertDescription>
-            </Alert>
-          ) : null}
+          <ServerErrorBanner error={serverError} testId="area-form-server-error" />
 
           {/* DialogFooter must stay INSIDE the form. See the matching note in
               LocationFormDialog: webkit-macos drops the form-submission event

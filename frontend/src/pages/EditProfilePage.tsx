@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, useNavigate } from "react-router-dom"
@@ -9,11 +9,20 @@ import { ComingSoonBanner } from "@/components/coming-soon"
 import { PasswordInput } from "@/components/auth/PasswordInput"
 import { PasswordStrengthMeter } from "@/components/auth/PasswordStrengthMeter"
 import { SetPasswordForm } from "@/components/auth/SetPasswordForm"
+import { FieldError } from "@/components/FieldError"
+import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Page, PageHeader } from "@/components/ui/page"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useAuth } from "@/features/auth/AuthContext"
 import {
   useChangePassword,
@@ -32,7 +41,7 @@ import {
 } from "@/features/auth/schemas"
 import { useAppToast } from "@/hooks/useAppToast"
 import { HttpError } from "@/lib/http"
-import { parseServerError } from "@/lib/server-error"
+import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
 // /profile/edit — two side-by-side forms in one page: profile fields
@@ -54,9 +63,9 @@ export function EditProfilePage() {
   // never see the wrong shape.
   const hasPassword = useHasPassword()
 
-  const [profileError, setProfileError] = useState<string | null>(null)
+  const [profileError, setProfileError] = useState<ClassifiedServerError | null>(null)
   const [profileSaved, setProfileSaved] = useState(false)
-  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [passwordError, setPasswordError] = useState<ClassifiedServerError | null>(null)
   const [passwordSuccess, setPasswordSuccess] = useState(false)
   // Password change form is collapsed by default — most page visits are for
   // the name/group fields above. The toggle expands it; e2e specs use the
@@ -137,7 +146,7 @@ export function EditProfilePage() {
       // save and see a "Profile updated" banner.
       setProfileSaved(true)
     } catch (err) {
-      setProfileError(parseServerError(err, t("settings:profile.edit.errorGeneric")))
+      setProfileError(classifyServerError(err, t("settings:profile.edit.errorGeneric")))
     }
   }
 
@@ -170,12 +179,16 @@ export function EditProfilePage() {
     } catch (err) {
       // 422 from the BE means "current password incorrect" — surface a
       // dedicated message for that path; everything else falls back to
-      // the parsed server message.
+      // the classified server error. The 422 is a user-fix case, so it's
+      // a `validation` kind (no Retry affordance).
       if (err instanceof HttpError && err.status === 422) {
-        setPasswordError(t("settings:profile.password.incorrectCurrent"))
+        setPasswordError({
+          kind: "validation",
+          message: t("settings:profile.password.incorrectCurrent"),
+        })
         return
       }
-      setPasswordError(parseServerError(err, t("settings:profile.password.errorGeneric")))
+      setPasswordError(classifyServerError(err, t("settings:profile.password.errorGeneric")))
     }
   }
 
@@ -219,15 +232,18 @@ export function EditProfilePage() {
                 className="pl-9"
                 disabled={updateMutation.isPending}
                 aria-invalid={!!profileForm.formState.errors.name}
+                aria-describedby={
+                  profileForm.formState.errors.name ? "profile-name-error" : undefined
+                }
                 data-testid="profile-name-input"
                 {...profileForm.register("name")}
               />
             </div>
-            {profileForm.formState.errors.name ? (
-              <p className="field-error text-xs text-destructive" data-testid="profile-name-error">
-                {t(profileForm.formState.errors.name.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="profile-name-error"
+              testId="profile-name-error"
+              message={profileForm.formState.errors.name?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -254,34 +270,47 @@ export function EditProfilePage() {
           {(groups?.length ?? 0) > 0 ? (
             <div className="space-y-1.5">
               <Label htmlFor="profile-default-group">{t("settings:profile.defaultGroup")}</Label>
-              <select
-                id="profile-default-group"
-                disabled={updateMutation.isPending}
-                data-testid="profile-default-group-select"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                {...profileForm.register("defaultGroupId")}
-              >
-                {groups?.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
+              <Controller
+                control={profileForm.control}
+                name="defaultGroupId"
+                render={({ field }) => (
+                  // Radix Select is the blessed form dropdown (mirrors the
+                  // mock's SettingsView). Empty value → placeholder; the
+                  // submit handler still treats "" as "no change".
+                  <Select
+                    value={field.value || undefined}
+                    onValueChange={field.onChange}
+                    disabled={updateMutation.isPending}
+                  >
+                    <SelectTrigger
+                      id="profile-default-group"
+                      ref={field.ref}
+                      className="w-full"
+                      data-testid="profile-default-group-select"
+                    >
+                      <SelectValue placeholder={t("settings:profile.defaultGroup")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {groups?.map((g) => (
+                        <SelectItem key={g.id} value={g.id ?? ""}>
+                          {g.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
               <p className="text-[11px] text-muted-foreground">
                 {t("settings:profile.defaultGroupHelp")}
               </p>
             </div>
           ) : null}
 
-          {profileError ? (
-            <Alert
-              variant="destructive"
-              className="error-banner"
-              data-testid="profile-server-error"
-            >
-              <AlertDescription>{profileError}</AlertDescription>
-            </Alert>
-          ) : null}
+          <ServerErrorBanner
+            error={profileError}
+            className="error-banner"
+            testId="profile-server-error"
+          />
 
           {profileSaved ? (
             <Alert className="success-banner" data-testid="profile-save-success">
@@ -370,17 +399,19 @@ export function EditProfilePage() {
                     hideLockIcon
                     disabled={changePasswordMutation.isPending}
                     aria-invalid={!!passwordForm.formState.errors.currentPassword}
+                    aria-describedby={
+                      passwordForm.formState.errors.currentPassword
+                        ? "current-password-error"
+                        : undefined
+                    }
                     data-testid="current-password"
                     {...passwordForm.register("currentPassword")}
                   />
-                  {passwordForm.formState.errors.currentPassword ? (
-                    <p
-                      className="field-error text-xs text-destructive"
-                      data-testid="current-password-error"
-                    >
-                      {t(passwordForm.formState.errors.currentPassword.message ?? "")}
-                    </p>
-                  ) : null}
+                  <FieldError
+                    id="current-password-error"
+                    testId="current-password-error"
+                    message={passwordForm.formState.errors.currentPassword?.message}
+                  />
                 </div>
 
                 <div className="space-y-1.5">
@@ -391,6 +422,9 @@ export function EditProfilePage() {
                     hideLockIcon
                     disabled={changePasswordMutation.isPending}
                     aria-invalid={!!passwordForm.formState.errors.newPassword}
+                    aria-describedby={
+                      passwordForm.formState.errors.newPassword ? "new-password-error" : undefined
+                    }
                     data-testid="new-password"
                     {...passwordForm.register("newPassword")}
                   />
@@ -399,14 +433,11 @@ export function EditProfilePage() {
                     userInputs={strengthInputs}
                     testId="change-password-strength"
                   />
-                  {passwordForm.formState.errors.newPassword ? (
-                    <p
-                      className="field-error text-xs text-destructive"
-                      data-testid="new-password-error"
-                    >
-                      {t(passwordForm.formState.errors.newPassword.message ?? "")}
-                    </p>
-                  ) : null}
+                  <FieldError
+                    id="new-password-error"
+                    testId="new-password-error"
+                    message={passwordForm.formState.errors.newPassword?.message}
+                  />
                 </div>
 
                 <div className="space-y-1.5">
@@ -419,28 +450,26 @@ export function EditProfilePage() {
                     hideLockIcon
                     disabled={changePasswordMutation.isPending}
                     aria-invalid={!!passwordForm.formState.errors.confirmPassword}
+                    aria-describedby={
+                      passwordForm.formState.errors.confirmPassword
+                        ? "confirm-password-error"
+                        : undefined
+                    }
                     data-testid="confirm-password"
                     {...passwordForm.register("confirmPassword")}
                   />
-                  {passwordForm.formState.errors.confirmPassword ? (
-                    <p
-                      className="field-error text-xs text-destructive"
-                      data-testid="confirm-password-error"
-                    >
-                      {t(passwordForm.formState.errors.confirmPassword.message ?? "")}
-                    </p>
-                  ) : null}
+                  <FieldError
+                    id="confirm-password-error"
+                    testId="confirm-password-error"
+                    message={passwordForm.formState.errors.confirmPassword?.message}
+                  />
                 </div>
 
-                {passwordError ? (
-                  <Alert
-                    variant="destructive"
-                    className="error-banner"
-                    data-testid="password-server-error"
-                  >
-                    <AlertDescription>{passwordError}</AlertDescription>
-                  </Alert>
-                ) : null}
+                <ServerErrorBanner
+                  error={passwordError}
+                  className="error-banner"
+                  testId="password-server-error"
+                />
 
                 <div className="flex justify-end pt-2">
                   <Button

@@ -145,6 +145,7 @@ export function FileEditPage() {
                   control={form.control}
                   name="category"
                   render={({ field }) => (
+                    // eslint-disable-next-line no-restricted-syntax -- file-edit category field; native <select> retained (has native-select coverage). shadcn migration tracked as a forms follow-up — see devdocs/frontend/forms.md
                     <select
                       id="file-category"
                       data-testid="file-edit-category"

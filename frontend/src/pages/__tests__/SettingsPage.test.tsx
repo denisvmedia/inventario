@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route, useLocation } from "react-router-dom"
-import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
 import { SettingsPage } from "@/pages/SettingsPage"
+import { pickRadixSelect } from "@/test/radix"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { KeyboardShortcutsProvider } from "@/features/shortcuts"
@@ -164,8 +165,10 @@ describe("<SettingsPage />", () => {
     const user = userEvent.setup()
     renderSettings()
     await user.click(await screen.findByTestId("settings-nav-appearance"))
-    const select = await screen.findByTestId("density-select")
-    await user.selectOptions(select, "compact")
+    await screen.findByTestId("density-select")
+    // Density is now a shadcn/Radix Select (blessed form dropdown), so drive
+    // it via the listbox rather than the native-select-only selectOptions.
+    await pickRadixSelect(user, /^Density$/i, { optionLabel: /^Compact$/i })
     await waitFor(() => expect(localStorage.getItem("density-test-1414")).toBe("compact"))
   })
 
@@ -257,13 +260,17 @@ describe("<SettingsPage />", () => {
     renderSettings("/settings?g=household")
     await user.click(await screen.findByTestId("settings-nav-appearance"))
     expect(await screen.findByTestId("section-appearance")).toBeInTheDocument()
-    const select = await screen.findByTestId("number-format-locale-select")
-    expect(select).toBeInTheDocument()
-    // The first option is the auto-detect fallback (empty string value).
-    const auto = select.querySelector("option[value='']")
-    expect(auto).not.toBeNull()
-    // Spot-check one explicit BCP-47 locale shipping in the option list.
-    expect(select.querySelector("option[value='cs-CZ']")).not.toBeNull()
+    const trigger = await screen.findByTestId("number-format-locale-select")
+    expect(trigger).toBeInTheDocument()
+    // The Region & formatting control is now a shadcn/Radix Select; its
+    // options live in a portalled listbox that only mounts on open.
+    await waitFor(() => expect(trigger).not.toBeDisabled())
+    await user.click(trigger)
+    const listbox = await screen.findByRole("listbox")
+    // Auto-detect (the "" sentinel, surfaced as "auto") + one explicit
+    // BCP-47 locale both render.
+    expect(within(listbox).getByRole("option", { name: /auto-detect/i })).toBeInTheDocument()
+    expect(within(listbox).getByRole("option", { name: /czech \(czechia\)/i })).toBeInTheDocument()
   })
 
   it("changing Region & formatting fires PATCH /settings/{field} (#1683)", async () => {
@@ -280,23 +287,16 @@ describe("<SettingsPage />", () => {
     renderSettings("/settings?g=household")
     await screen.findByTestId("settings-page")
     await user.click(await screen.findByTestId("settings-nav-appearance"))
-    const select = (await screen.findByTestId("number-format-locale-select", undefined, {
+    const trigger = await screen.findByTestId("number-format-locale-select", undefined, {
       timeout: 4000,
-    })) as HTMLSelectElement
-    // The select is disabled while the GET /settings response is in
-    // flight (settings === undefined). Wait until it's interactive so
-    // the change event isn't dropped — same pattern as the notification
-    // row toggle test above.
-    await waitFor(() => expect(select.disabled).toBe(false), { timeout: 4000 })
-    // Drive the change at the option level so jsdom flips the selected
-    // option *and* React's onChange sees the new value before reconciling
-    // the controlled `value` prop back. selectOptions / fireEvent.change
-    // race the controlled-select snap-back when settings haven't fully
-    // populated yet, so we replicate the DOM flow explicitly.
-    const target = select.querySelector("option[value='cs-CZ']") as HTMLOptionElement | null
-    expect(target).not.toBeNull()
-    target!.selected = true
-    fireEvent.change(select, { target: { value: "cs-CZ" } })
+    })
+    // The trigger is disabled while the GET /settings response is in
+    // flight (settings === undefined). Wait until it's interactive so the
+    // pick isn't a no-op — same pattern as the notification row toggle.
+    await waitFor(() => expect(trigger).not.toBeDisabled(), { timeout: 4000 })
+    await pickRadixSelect(user, /^Region & formatting$/i, {
+      optionLabel: /czech \(czechia\)/i,
+    })
     await waitFor(
       () => {
         expect(lastPatch).not.toBeNull()

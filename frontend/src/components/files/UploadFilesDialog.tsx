@@ -561,6 +561,7 @@ function MetadataStep({
                 <Label htmlFor={`meta-category-${it.id}`} className="text-xs text-muted-foreground">
                   {t("files:edit.fields.category")}
                 </Label>
+                {/* eslint-disable-next-line no-restricted-syntax -- compact per-file category picker; native <select> retained (covered by upload e2e + unit). shadcn migration tracked as a forms follow-up — see devdocs/frontend/forms.md */}
                 <select
                   id={`meta-category-${it.id}`}
                   value={it.category}

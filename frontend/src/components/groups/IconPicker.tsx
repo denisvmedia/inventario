@@ -23,6 +23,15 @@ interface IconPickerProps {
 // emoji (or a placeholder); clicking opens a panel with category tabs + an
 // emoji grid + a close button. The picker mirrors the curated list from
 // features/group/icons.ts.
+//
+// NOTE — there are two intentional icon pickers (see
+// devdocs/frontend/forms.md → "Icon pickers"): this Popover variant for
+// groups (many categorised glyphs, space-constrained create/settings
+// form) and the inline-grid `IconPicker` in
+// `components/locations/IconPicker.tsx` for location/area dialogs (small
+// curated palette, mock renders it inline). They are NOT duplicates —
+// different UX + data source — so they are kept separate rather than
+// merged. Use this one for the group surface.
 export function IconPicker({ value, onChange, testId = "icon-picker", disabled }: IconPickerProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
