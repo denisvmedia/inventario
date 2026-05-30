@@ -73,14 +73,17 @@ func (c *Command) registerFlags() {
 func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 	out := c.Cmd().OutOrStdout()
 
-	if err := dbConfig.Validate(); err != nil {
-		return errxtrace.Wrap("database configuration error", err)
-	}
+	// Reject memory:// BEFORE the generic Validate(): Validate() already
+	// rejects non-postgres DSNs, so the worker-specific message would be
+	// unreachable for the default memory DSN if checked afterwards.
 	if strings.HasPrefix(dbConfig.DBDSN, "memory://") {
 		// The pause state must live in a persistent database shared with
 		// the worker process; an in-memory store is per-process and would
 		// never be seen by the workers.
 		return errors.New("worker pause commands are not supported for memory databases: the pause state must persist in a database shared with the worker process; use PostgreSQL")
+	}
+	if err := dbConfig.Validate(); err != nil {
+		return errxtrace.Wrap("database configuration error", err)
 	}
 	workerType := strings.TrimSpace(cfg.Type)
 	if workerType == "" {

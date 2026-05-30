@@ -603,6 +603,7 @@ definitions:
         description: |-
           Reason is the optional operator-supplied note for the pause (max 500
           chars). Persisted into worker_control.reason and the audit breadcrumb.
+        maxLength: 500
         type: string
     type: object
   apiserver.linkedIdentitiesResponse:

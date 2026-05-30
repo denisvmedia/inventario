@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -84,6 +85,12 @@ func (r *WorkerControlRegistry) Pause(ctx context.Context, workerType, pausedBy,
 	if workerType == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired)
 	}
+	// Defence-in-depth: the handler/CLI already reject unknown types, but
+	// the registry is the storage authority — never write a control row
+	// for a worker that doesn't exist.
+	if !models.WorkerType(workerType).IsValid() {
+		return nil, errxtrace.Classify(registry.ErrInvalidInput, errx.Attrs("worker_type", workerType))
+	}
 
 	// Empty strings map to NULL columns so a paused-without-reason row
 	// reads as reason IS NULL rather than an empty-string sentinel.
@@ -126,6 +133,9 @@ func (r *WorkerControlRegistry) Pause(ctx context.Context, workerType, pausedBy,
 func (r *WorkerControlRegistry) Resume(ctx context.Context, workerType string) (*models.WorkerControl, error) {
 	if workerType == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired)
+	}
+	if !models.WorkerType(workerType).IsValid() {
+		return nil, errxtrace.Classify(registry.ErrInvalidInput, errx.Attrs("worker_type", workerType))
 	}
 
 	query := fmt.Sprintf(

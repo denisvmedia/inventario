@@ -62,13 +62,6 @@ func TestExportWorkerSoftPause(t *testing.T) {
 		return created.ID
 	}
 
-	statusOf := func(id string) models.ExportStatus {
-		c.Helper()
-		got, err := registrySet.ExportRegistry.Get(ctx, id)
-		c.Assert(err, qt.IsNil)
-		return got.Status
-	}
-
 	// (1) BASELINE — no pause row. RefreshOnce sees nothing paused, the
 	// worker claims the pending export, and its status leaves pending.
 	c.Assert(ctrl.RefreshOnce(ctx), qt.IsNil)
@@ -88,10 +81,11 @@ func TestExportWorkerSoftPause(t *testing.T) {
 
 	pausedID := newPendingExport()
 	worker.processPendingExports(ctx)
-	// Give any (erroneously spawned) async processing a chance to run so
-	// the assertion is not racing a goroutine that should never exist.
-	time.Sleep(100 * time.Millisecond)
-	c.Assert(statusOf(pausedID), qt.Equals, models.ExportStatusPending,
+	// A single sleep+check could let a late async claim slip through after
+	// the assertion ran. Instead, poll over a window and require the export
+	// to stay pending for the whole interval — any non-pending observation
+	// means the paused worker wrongly claimed it.
+	c.Assert(staysPending(ctx, registrySet, pausedID), qt.IsTrue,
 		qt.Commentf("paused worker must NOT claim the pending export"))
 
 	// (3) RESUMED — clear the pause, refresh, and confirm the once-blocked
@@ -122,4 +116,21 @@ func waitForStatusLeavesPending(ctx context.Context, registrySet *registry.Set, 
 		time.Sleep(20 * time.Millisecond)
 	}
 	return false
+}
+
+// staysPending polls the export status every ~20ms over a ~400ms window
+// and returns true only if the status remains ExportStatusPending for the
+// whole window. It returns false on the first non-pending observation, so
+// a late async claim by a worker that should be paused cannot slip past a
+// single point-in-time check.
+func staysPending(ctx context.Context, registrySet *registry.Set, exportID string) bool {
+	deadline := time.Now().Add(400 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		got, err := registrySet.ExportRegistry.Get(ctx, exportID)
+		if err == nil && got.Status != models.ExportStatusPending {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return true
 }

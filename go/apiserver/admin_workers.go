@@ -54,7 +54,7 @@ const adminWorkerReasonMaxLen = 500
 type WorkerPauseRequest struct {
 	// Reason is the optional operator-supplied note for the pause (max 500
 	// chars). Persisted into worker_control.reason and the audit breadcrumb.
-	Reason string `json:"reason,omitempty"`
+	Reason string `json:"reason,omitempty" maxLength:"500"`
 }
 
 // WorkerControlView is the JSON:API attributes block returned by the
@@ -329,8 +329,13 @@ func workerControlResource(wt models.WorkerType, control *models.WorkerControl) 
 		view.PausedBy = control.PausedBy
 		view.PausedAt = control.PausedAt
 		view.Reason = control.Reason
-		updatedAt := control.UpdatedAt
-		view.UpdatedAt = &updatedAt
+		// The synthetic not-paused row Resume returns for an absent worker
+		// carries a zero UpdatedAt; only surface a real timestamp so the
+		// response matches the list endpoint (which omits it too).
+		if !control.UpdatedAt.IsZero() {
+			updatedAt := control.UpdatedAt
+			view.UpdatedAt = &updatedAt
+		}
 	}
 	return WorkerControlResource{
 		Type:       "worker_control",

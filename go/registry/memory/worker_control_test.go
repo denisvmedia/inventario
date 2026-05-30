@@ -9,6 +9,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
@@ -154,6 +155,26 @@ func TestWorkerControlRegistry_Resume_Absent(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(resumed.WorkerType, qt.Equals, models.WorkerTypeLoanReminder)
 	c.Assert(resumed.Paused, qt.IsFalse)
+
+	controls, err := r.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(controls, qt.HasLen, 0)
+}
+
+// TestWorkerControlRegistry_RejectsUnknownType verifies the registry-level
+// defence-in-depth validation (#1308 review fix): Pause and Resume reject
+// a worker type that is not in the canonical set, mirroring postgres.
+func TestWorkerControlRegistry_RejectsUnknownType(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	r := memory.NewWorkerControlRegistry()
+
+	_, err := r.Pause(ctx, "not-a-worker", "alice", "x")
+	c.Assert(err, qt.ErrorIs, registry.ErrInvalidInput)
+
+	_, err = r.Resume(ctx, "not-a-worker")
+	c.Assert(err, qt.ErrorIs, registry.ErrInvalidInput)
 
 	controls, err := r.List(ctx)
 	c.Assert(err, qt.IsNil)

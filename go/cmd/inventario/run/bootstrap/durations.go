@@ -102,6 +102,13 @@ const defaultWorkerControlRefreshInterval = 10 * time.Second
 func parseWorkerDurationOrDefault(value string, fallback time.Duration) time.Duration {
 	d, err := time.ParseDuration(value)
 	if err != nil || d <= 0 {
+		// An unset value is a silent, always-safe default; but a non-empty
+		// value that we couldn't honour is operator intent we're ignoring,
+		// so surface it before falling back.
+		if value != "" {
+			slog.Warn("Ignoring invalid worker-control refresh interval; using default",
+				"value", value, "default", fallback)
+		}
 		return fallback
 	}
 	return d

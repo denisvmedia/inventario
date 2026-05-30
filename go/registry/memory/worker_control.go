@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/google/uuid"
 
@@ -77,6 +78,12 @@ func (r *WorkerControlRegistry) Pause(_ context.Context, workerType, pausedBy, r
 	if workerType == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired)
 	}
+	// Defence-in-depth: the handler/CLI already reject unknown types, but
+	// the registry is the storage authority — never write a control row
+	// for a worker that doesn't exist.
+	if !models.WorkerType(workerType).IsValid() {
+		return nil, errxtrace.Classify(registry.ErrInvalidInput, errx.Attrs("worker_type", workerType))
+	}
 
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -122,6 +129,9 @@ func (r *WorkerControlRegistry) Pause(_ context.Context, workerType, pausedBy, r
 func (r *WorkerControlRegistry) Resume(_ context.Context, workerType string) (*models.WorkerControl, error) {
 	if workerType == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired)
+	}
+	if !models.WorkerType(workerType).IsValid() {
+		return nil, errxtrace.Classify(registry.ErrInvalidInput, errx.Attrs("worker_type", workerType))
 	}
 
 	r.lock.Lock()

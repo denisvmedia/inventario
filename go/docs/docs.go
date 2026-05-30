@@ -8796,7 +8796,8 @@ const docTemplate = `{
             "properties": {
                 "reason": {
                     "description": "Reason is the optional operator-supplied note for the pause (max 500\nchars). Persisted into worker_control.reason and the audit breadcrumb.",
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 500
                 }
             }
         },

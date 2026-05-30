@@ -144,6 +144,8 @@ Admin actions use the `admin.` action prefix:
 | `admin.list_groups` / `…get_group` / `…delete_group` | group endpoints |
 | `admin.group_member_add` / `…remove` / `…role_change` | membership endpoints |
 | `admin.impersonate_start` / `admin.impersonate_end` | impersonation endpoints |
+| `admin.worker_pause` | `POST /api/v1/admin/workers/{type}/pause` (actor = back-office operator) or `inventario workers pause` (`paused_by="cli"`); subject = worker type (#1308) |
+| `admin.worker_resume` | `POST /api/v1/admin/workers/{type}/resume` (actor = back-office operator) or `inventario workers resume`; subject = worker type (#1308) |
 
 Useful queries:
 
