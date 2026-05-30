@@ -1,3 +1,6 @@
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+
 import { expect, type Page } from '@playwright/test'
 
 import { test } from '../fixtures/app-fixture.js'
@@ -13,10 +16,13 @@ import {
  * E2E coverage for the React Exports/Imports/Restores surface (#1415).
  *
  * Covers the issue's E2E acceptance line: create an export, then run a
- * (dry-run) restore from it. Import-cycle coverage (download → re-upload
- * via /exports/import → restore) is intentionally deferred to a follow-up
- * — the file-staging + multipart upload roundtrip is sensitive to the
- * docker volume layout under the e2e stack and bumps runtime by ~10s.
+ * (dry-run) restore from it. As of #534 the full import cycle is no
+ * longer deferred — backups are a signed `.inb` archive (MIME
+ * `application/x-inventario-backup`), and the round-trip test below
+ * creates → downloads (asserting the `.inb` suffix) → re-uploads via
+ * /exports/import → runs a dry-run restore. A negative test asserts a
+ * wrong-extension file is blocked client-side and that a tampered
+ * `.inb` is rejected server-side.
  *
  * The legacy `exports-crud.spec.ts` is left skipped (it mounts on
  * PrimeVue selectors that no longer exist after the React cutover); this
@@ -28,6 +34,28 @@ import {
 async function gotoExports(page: Page): Promise<void> {
   await navigateWithAuth(page, '/exports')
   await expect(page.getByTestId('page-exports')).toBeVisible()
+}
+
+/**
+ * Drive the two-step wizard to create a `full_database` export and land
+ * on the detail page once it reaches a terminal status. Returns nothing
+ * — the caller asserts against the now-visible detail surface.
+ */
+async function createFullDatabaseExport(page: Page, description: string): Promise<void> {
+  await gotoExports(page)
+  await page.getByTestId('exports-create-button').click()
+  await expect(page).toHaveURL(/\/exports\/new/)
+  await expect(page.getByTestId('wizard-step-1-content')).toBeVisible()
+  await page.getByTestId('wizard-next').click()
+
+  await expect(page.getByTestId('wizard-step-2-content')).toBeVisible()
+  await page.getByTestId('wizard-description').fill(description)
+  await page.getByTestId('wizard-submit').click()
+
+  await expect(page.getByTestId('page-export-detail')).toBeVisible({ timeout: 30_000 })
+  // Wait for the export to reach a terminal state so download + restore
+  // CTAs unlock — otherwise the next click races the polling loop.
+  await expect(page.getByTestId('export-detail-restore')).toBeEnabled({ timeout: 60_000 })
 }
 
 test.describe('Exports / Restores (React)', () => {
@@ -138,5 +166,124 @@ test.describe('Exports / Restores (React)', () => {
     // "No description.", and not a local-time-looking string.
     await expect(page.getByTestId('page-export-detail')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText(/Backup · Full database · .+ UTC$/)).toBeVisible()
+  })
+
+  // #534 — Full import cycle on the signed `.inb` archive format.
+  // create → download (assert `.inb` suffix) → re-upload via
+  // /exports/import → dry-run restore → terminal status. This replaces
+  // the import-cycle coverage that was deferred before the format
+  // migration.
+  test('round-trips a backup: create → download .inb → re-import → dry-run restore', async ({
+    page,
+    request,
+  }) => {
+    // --- Seed minimal data so the export captures something. ---
+    const auth = await extractApiAuth(page)
+    const group = await resolveActiveGroup(request, auth)
+    const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
+    await createCommodityViaAPI(
+      request,
+      auth,
+      group.slug,
+      { name: `exports-inb-${Date.now()}`, areaId },
+      group.groupCurrency,
+    )
+
+    // --- Create the full_database export and wait for it to finish. ---
+    await createFullDatabaseExport(page, `E2E inb round-trip ${Date.now()}`)
+
+    // --- Download it; the BE drives the filename via Content-Disposition,
+    // which the format-agnostic FE honours. The suggested filename must
+    // end in `.inb` (the new signed-archive extension). ---
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('export-detail-download').click(),
+    ])
+    expect(download.suggestedFilename()).toMatch(/\.inb$/i)
+    // Persist the downloaded bytes so we can re-feed them to the import
+    // input via setInputFiles (Playwright needs an on-disk path).
+    const downloadedPath = await download.path()
+    const downloadedBuffer = fs.readFileSync(downloadedPath)
+
+    // --- Re-import the downloaded archive through the import surface. ---
+    await navigateWithAuth(page, '/exports/import')
+    await expect(page.getByTestId('page-export-import')).toBeVisible()
+    await page.getByTestId('import-file-input').setInputFiles({
+      name: download.suggestedFilename(),
+      mimeType: 'application/x-inventario-backup',
+      buffer: downloadedBuffer,
+    })
+    // The chosen-file chip confirms the client-side extension guard
+    // accepted the `.inb` file (no error surfaced).
+    await expect(page.getByTestId('import-file-chosen')).toBeVisible()
+    await expect(page.getByTestId('import-file-error')).toHaveCount(0)
+    await page.getByTestId('import-description').fill(`E2E re-import ${Date.now()}`)
+    await page.getByTestId('import-submit').click()
+
+    // --- Import success navigates straight to the restore form for the
+    // freshly-created "imported" export. ---
+    await expect(page.getByTestId('page-export-restore')).toBeVisible({ timeout: 30_000 })
+    // Defaults are merge_add + dry_run + include_file_data; description
+    // is required on both sides.
+    await page.getByTestId('restore-description').fill(`E2E imported dry-run ${Date.now()}`)
+    await page.getByTestId('restore-submit').click()
+
+    // --- The dry-run restore lands in history and reaches a terminal
+    // status (completed or failed — surface either to stay stable
+    // across worker timing). ---
+    await expect(page.getByTestId('page-export-detail')).toBeVisible({ timeout: 30_000 })
+    const restoresList = page.getByTestId('restores-list')
+    await expect(restoresList).toBeVisible({ timeout: 30_000 })
+    const firstRestore = restoresList.locator('[data-testid^="restore-row-"]').first()
+    await expect(firstRestore).toBeVisible()
+    await expect(
+      firstRestore.locator('[data-testid="status-completed"], [data-testid="status-failed"]'),
+    ).toBeVisible({ timeout: 30_000 })
+  })
+
+  // #534 — Negative path. (1) A wrong-extension file is blocked
+  // client-side before any upload fires. (2) A garbage file with the
+  // right `.inb` extension passes the client gate but is rejected
+  // server-side because it isn't a valid signed archive — the
+  // import/restore flow surfaces a failure.
+  test('rejects a wrong-extension file client-side and a tampered .inb server-side', async ({
+    page,
+  }) => {
+    await navigateWithAuth(page, '/exports/import')
+    await expect(page.getByTestId('page-export-import')).toBeVisible()
+
+    // --- (1) Client-side guard: a `.xml` file never stages, surfaces the
+    // invalidFileType error, and keeps submit disabled (no upload). ---
+    await page.getByTestId('import-file-input').setInputFiles({
+      name: 'legacy-backup.xml',
+      mimeType: 'application/xml',
+      buffer: Buffer.from('<export>legacy XML is no longer accepted</export>'),
+    })
+    await expect(page.getByTestId('import-file-error')).toBeVisible()
+    await expect(page.getByTestId('import-file-chosen')).toHaveCount(0)
+    await expect(page.getByTestId('import-submit')).toBeDisabled()
+
+    // --- (2) Server-side rejection: a garbage file with the right `.inb`
+    // extension clears the client gate (chip shows, no error) but the
+    // backend rejects it as not a valid signed archive. The failure
+    // surfaces on either the upload or the import step. ---
+    const tamperedBuffer = fs.readFileSync(
+      path.join('fixtures', 'files', 'invalid-backup.inb'),
+    )
+    await page.getByTestId('import-file-input').setInputFiles({
+      name: 'invalid-backup.inb',
+      mimeType: 'application/x-inventario-backup',
+      buffer: tamperedBuffer,
+    })
+    await expect(page.getByTestId('import-file-chosen')).toBeVisible()
+    await expect(page.getByTestId('import-file-error')).toHaveCount(0)
+    await page.getByTestId('import-description').fill(`E2E tampered ${Date.now()}`)
+    await page.getByTestId('import-submit').click()
+
+    // The BE may reject at upload (sandbox validation) or at the import
+    // parse step; either way the page surfaces the destructive error
+    // banner and never navigates the user into a usable restore form.
+    await expect(page.getByTestId('import-error')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByTestId('page-export-restore')).toHaveCount(0)
   })
 })

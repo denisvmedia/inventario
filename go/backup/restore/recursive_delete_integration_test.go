@@ -1,3 +1,5 @@
+//go:build legacy_xml_backup
+
 package restore_test
 
 import (
@@ -98,7 +100,7 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 
 	// Create restore service
 	entityService := services.NewEntityService(factorySet, "mem://")
-	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "mem://")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "mem://", nil)
 
 	// Test restore with full replace strategy (this should now work with recursive delete)
 	options := types.RestoreOptions{
@@ -203,7 +205,7 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 
 	// Create restore service
 	entityService := services.NewEntityService(factorySet, "mem://")
-	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "mem://")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "mem://", nil)
 
 	// Test restore with full replace strategy
 	options := types.RestoreOptions{

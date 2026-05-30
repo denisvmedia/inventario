@@ -131,17 +131,17 @@ describe("features/export/api", () => {
         return HttpResponse.json({
           id: "uploads",
           type: "uploads",
-          attributes: { fileNames: ["restores/2026/05/abc.xml"], type: "restores" },
+          attributes: { fileNames: ["restores/2026/05/abc.inb"], type: "restores" },
         })
       })
     )
-    const f = new File(["<export/>"], "backup.xml", { type: "application/xml" })
+    const f = new File(["INB1"], "backup.inb", { type: "application/x-inventario-backup" })
     const result = await uploadRestoreFile(f)
     // FormData triggers the browser-built `multipart/form-data; boundary=...`
     // header (the http wrapper deliberately doesn't override it). Asserting
     // that prefix is enough to prove the request went out as multipart.
     expect(receivedContentType).toMatch(/^multipart\/form-data/)
-    expect(result.sourceFilePath).toBe("restores/2026/05/abc.xml")
+    expect(result.sourceFilePath).toBe("restores/2026/05/abc.inb")
   })
 
   it("uploadRestoreFile throws when the BE returns no fileNames", async () => {
@@ -150,7 +150,7 @@ describe("features/export/api", () => {
         HttpResponse.json({ id: "u", type: "uploads", attributes: { fileNames: [] } })
       )
     )
-    const f = new File(["x"], "x.xml")
+    const f = new File(["x"], "x.inb")
     await expect(uploadRestoreFile(f)).rejects.toThrow(/fileNames/)
   })
 

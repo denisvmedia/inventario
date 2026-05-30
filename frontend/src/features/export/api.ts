@@ -198,7 +198,7 @@ export interface UploadRestoreFileResult {
   sourceFilePath: string
 }
 
-// Two-step "import a backup": first upload the XML, then create an
+// Two-step "import a backup": first upload the `.inb` archive, then create an
 // "imported" export record from it. The first step intentionally lives
 // under /uploads/restores (not /exports/import) — the BE writes the
 // blob to a sandboxed bucket and only acknowledges the path; nothing

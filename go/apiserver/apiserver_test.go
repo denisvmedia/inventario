@@ -14,6 +14,7 @@ import (
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/internal/backupsign"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -31,6 +32,17 @@ var testJWTSecret = []byte("test-jwt-secret-32-bytes-minimum-length")
 // (see services/file_signing_service.go), so the key has to be at least
 // that long; the value itself isn't sensitive.
 var testFileSigningKey = []byte("test-file-signing-key-32-bytes!!")
+
+// testBackupSigner is the Ed25519 backup signer used in apiserver tests (#534).
+// Params.Validate requires a non-nil BackupSigner, so every test that builds a
+// Params and runs it through APIServer must set this.
+var testBackupSigner = func() *backupsign.Signer {
+	seed := make([]byte, backupsign.SeedSize)
+	for i := range seed {
+		seed[i] = byte(i + 1)
+	}
+	return must.Must(backupsign.NewSigner(seed))
+}()
 
 // createTestUserContext creates a user context for testing with the given user ID and tenant ID.
 func createTestUserContext(userID, tenantID string) context.Context {
@@ -337,6 +349,7 @@ func newParams() (apiserver.Params, *models.User, *models.LocationGroup) {
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
 	params.FileSigningKey = testFileSigningKey
+	params.BackupSigner = testBackupSigner
 	params.FileURLExpiration = time.Hour
 
 	// Create EntityService
@@ -384,6 +397,7 @@ func newParamsAreaRegistryOnly() (apiserver.Params, *models.User, *models.Locati
 
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
+	params.BackupSigner = testBackupSigner
 	return params, testUser, testGroup
 }
 

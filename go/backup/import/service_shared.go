@@ -2,7 +2,6 @@ package importpkg
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -12,81 +11,94 @@ import (
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/backup/export/parser"
+	"github.com/denisvmedia/inventario/internal/backupsign"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
-// ImportService handles XML import operations for creating export records from external files
+// ImportService handles import operations for creating export records from
+// uploaded backup files.
+//
+// The signer is consumed by the default `.inb` import path (which verifies the
+// archive signature and reads its manifest); the legacy XML path ignores it.
+// The constructor signature is identical across both builds.
 type ImportService struct {
 	factorySet     *registry.FactorySet
 	uploadLocation string
+	signer         *backupsign.Signer
 }
 
-// NewImportService creates a new import service
-func NewImportService(factorySet *registry.FactorySet, uploadLocation string) *ImportService {
+// NewImportService creates a new import service.
+func NewImportService(factorySet *registry.FactorySet, uploadLocation string, signer *backupsign.Signer) *ImportService {
 	return &ImportService{
 		factorySet:     factorySet,
 		uploadLocation: uploadLocation,
+		signer:         signer,
 	}
 }
 
-// ProcessImport processes an XML import file and updates the export record with metadata.
-// It does not restore the data to the database, only extracts and sets metadata for the export record,
-// and then saves it in the database.
-// The export record can be later used for restore operations.
+// importStats is the format-agnostic statistics summary the per-build metadata
+// parser returns. It is a subset of the export-side stats sufficient to stamp
+// the import's export record.
+type importStats struct {
+	LocationCount  int
+	AreaCount      int
+	CommodityCount int
+	ImageCount     int
+	InvoiceCount   int
+	ManualCount    int
+	FileCount      int
+	BinaryDataSize int64
+}
+
+// ProcessImport processes an uploaded backup file and updates the export record
+// with metadata. It does not restore data — only extracts metadata so the
+// record can later drive a restore. The per-build parseImportMetadata reads
+// either a signed `.inb` manifest (default) or legacy XML.
 func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFilePath string) error {
 	expReg := s.factorySet.ExportRegistryFactory.CreateServiceRegistry()
-	// Get the export record
 	exportRecord, err := expReg.Get(ctx, exportID)
 	if err != nil {
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to get export record: %v", err))
 	}
 
-	// Update status to in progress
 	exportRecord.Status = models.ExportStatusInProgress
-	_, err = expReg.Update(ctx, *exportRecord)
-	if err != nil {
+	if _, err = expReg.Update(ctx, *exportRecord); err != nil {
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to update export status: %v", err))
 	}
 
-	// Open blob bucket to read the XML file
 	b, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to open blob bucket: %v", err))
 	}
 	defer b.Close()
 
-	// Open the uploaded XML file
 	reader, err := b.NewReader(ctx, sourceFilePath, nil)
 	if err != nil {
-		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to open uploaded XML file: %v", err))
+		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to open uploaded backup file: %v", err))
 	}
-	defer reader.Close()
 
-	// Get file size
 	attrs, err := b.Attributes(ctx, sourceFilePath)
 	if err != nil {
+		_ = reader.Close()
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to get file attributes: %v", err))
 	}
 
-	// Parse XML to extract metadata and statistics (without creating a new record)
-	stats, _, err := parser.ParseXMLMetadata(ctx, reader)
-	if err != nil {
-		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to parse XML metadata: %v", err))
+	stats, parseErr := s.parseImportMetadata(ctx, reader)
+	_ = reader.Close()
+	if parseErr != nil {
+		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to parse backup metadata: %v", parseErr))
 	}
 
-	// Create file entity for the imported export
 	fileEntity, err := s.createImportFileEntity(ctx, exportRecord, sourceFilePath, attrs.Size)
 	if err != nil {
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to create file entity: %v", err))
 	}
 
-	// Update the original export record with the parsed data
 	exportRecord.Status = models.ExportStatusCompleted
 	exportRecord.CompletedDate = models.PNow()
 	exportRecord.FileID = &fileEntity.ID
-	exportRecord.FilePath = sourceFilePath // Keep for backward compatibility
+	exportRecord.FilePath = sourceFilePath
 	exportRecord.FileSize = attrs.Size
 	exportRecord.LocationCount = stats.LocationCount
 	exportRecord.AreaCount = stats.AreaCount
@@ -98,48 +110,48 @@ func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFileP
 	exportRecord.BinaryDataSize = stats.BinaryDataSize
 	exportRecord.IncludeFileData = stats.BinaryDataSize > 0
 
-	_, err = expReg.Update(ctx, *exportRecord)
-	if err != nil {
-		return errors.New("import was successful, but failed to update export record")
+	if _, err = expReg.Update(ctx, *exportRecord); err != nil {
+		return fmt.Errorf("import was successful, but failed to update export record")
 	}
 
 	return nil
 }
 
-// createImportFileEntity creates a file entity for an imported export file
+// createImportFileEntity creates the FileEntity backing an imported backup. The
+// format-specific stamping (Ext / MIME / LinkedEntityMeta / Tags) comes from
+// the per-build importFileMeta.
 func (s *ImportService) createImportFileEntity(ctx context.Context, export *models.Export, filePath string, fileSize int64) (*models.FileEntity, error) {
 	description := export.Description
 	exportID := export.ID
 
-	// Extract filename from path for title
 	filename := filepath.Base(filePath)
 	if ext := filepath.Ext(filename); ext != "" {
 		filename = strings.TrimSuffix(filename, ext)
 	}
 
-	// Create file entity
+	meta := importFileMeta()
+
 	now := time.Now()
 	fileEntity := models.FileEntity{
 		Title:            fmt.Sprintf("Import: %s", description),
-		Description:      fmt.Sprintf("Imported export file uploaded on %s", now.Format("2006-01-02 15:04:05")),
-		Type:             models.FileTypeDocument,  // XML files are documents
-		Category:         models.FileCategoryOther, // Export bundles aren't user-facing files; they live outside the four UI tiles
-		Tags:             []string{"export", "xml", "imported"},
+		Description:      fmt.Sprintf("Imported backup file uploaded on %s", now.Format("2006-01-02 15:04:05")),
+		Type:             models.FileTypeDocument,
+		Category:         models.FileCategoryOther,
+		Tags:             meta.Tags,
 		LinkedEntityType: "export",
 		LinkedEntityID:   exportID,
-		LinkedEntityMeta: "xml-1.0", // Mark as export file with version
+		LinkedEntityMeta: meta.LinkedEntityMeta,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		File: &models.File{
 			Path:         filename,
 			OriginalPath: filePath,
-			Ext:          ".xml",
-			MIMEType:     "application/xml",
+			Ext:          meta.Ext,
+			MIMEType:     meta.MIMEType,
 			SizeBytes:    fileSize,
 		},
 	}
 
-	// Create the file entity
 	user, err := s.factorySet.UserRegistry.Get(ctx, export.CreatedByUserID)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get user", err)
@@ -156,7 +168,16 @@ func (s *ImportService) createImportFileEntity(ctx context.Context, export *mode
 	return created, nil
 }
 
-// markImportFailed marks an import operation as failed with an error message
+// importFileMetaFields carries the format-specific FileEntity stamping for an
+// imported backup artifact.
+type importFileMetaFields struct {
+	Ext              string
+	MIMEType         string
+	LinkedEntityMeta string
+	Tags             models.StringSlice
+}
+
+// markImportFailed marks an import operation as failed.
 func (s *ImportService) markImportFailed(ctx context.Context, exportID, errorMessage string) error {
 	expReg := s.factorySet.ExportRegistryFactory.CreateServiceRegistry()
 
@@ -169,8 +190,7 @@ func (s *ImportService) markImportFailed(ctx context.Context, exportID, errorMes
 	exportRecord.CompletedDate = models.PNow()
 	exportRecord.ErrorMessage = errorMessage
 
-	_, err = expReg.Update(ctx, *exportRecord)
-	if err != nil {
+	if _, err = expReg.Update(ctx, *exportRecord); err != nil {
 		return err
 	}
 

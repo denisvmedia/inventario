@@ -107,7 +107,7 @@ The product positioning lists *data ownership* as a primary value
 | Settings | "Delete account" is one click + confirm. The user can leave at any time. |
 | Profile | "Last sign-in 2h ago, from <region>" surfaces session metadata. |
 | File upload | Shows the upload progress + size budget. No "trust me, it's working". |
-| Backup / restore | The full export ZIP is downloadable raw — the user can read what it contains. |
+| Backup / restore | The full signed `.inb` archive (tar of payload.tar.gz + payload.tar.gz.sig) is downloadable raw — the user can read what it contains. |
 
 What we *don't* do:
 

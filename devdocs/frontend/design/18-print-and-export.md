@@ -137,8 +137,9 @@ What it doesn't include:
 
 "Export" in the UI means **backup the inventory to a file**:
 
-- A ZIP / XML envelope containing every commodity, location, area,
-  file (binary or reference), tag.
+- A signed `.inb` archive (tar of payload.tar.gz + payload.tar.gz.sig)
+  containing every commodity, location, area, file (binary or
+  reference), tag.
 - Created via `/g/:slug/exports`.
 - Surfaces a server-side polling status — pending → running → ready
   → expired (or failed).

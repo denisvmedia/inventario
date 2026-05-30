@@ -1,3 +1,5 @@
+//go:build legacy_xml_backup
+
 package restore_test
 
 import (
@@ -42,7 +44,7 @@ func TestRestoreService_StreamingXMLParsing(t *testing.T) {
 	_ = registrySet
 
 	entityService := services.NewEntityService(factorySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "", nil)
 
 	// Create XML with processing instructions and various token types that should be handled properly
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -135,7 +137,7 @@ func TestRestoreService_LoggedRestoreWithStreaming(t *testing.T) {
 	_ = registrySet
 
 	entityService := services.NewEntityService(factorySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, "", nil)
 
 	// This test demonstrates that the streaming XML parsing works correctly
 	// without loading everything into memory

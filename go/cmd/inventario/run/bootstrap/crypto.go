@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+
+	"github.com/denisvmedia/inventario/internal/backupsign"
 )
 
 // getJWTSecret retrieves the JWT secret from config/environment or generates a
@@ -84,6 +86,67 @@ func getFileSigningKey(configKey string) ([]byte, error) {
 	fmt.Fprintf(os.Stderr, "INVENTARIO_RUN_FILE_SIGNING_KEY=%s\n", hex.EncodeToString(key))
 
 	return key, nil
+}
+
+// getBackupSigningKey resolves the Ed25519 seed used to sign `.inb` backup
+// archives (issue #534) and builds a *backupsign.Signer from it. Unlike the
+// HMAC secrets above, the decoded seed must be EXACTLY 32 bytes (the Ed25519
+// seed size) — a longer/shorter value is rejected, never truncated or padded,
+// because the key pair is derived deterministically from the seed and a
+// silently-resized seed would produce a different, unrecoverable key.
+//
+// Accepted input forms:
+//   - 64 hex characters → decoded to 32 raw bytes,
+//   - a 32-byte raw string → used directly.
+//
+// On empty/invalid input a random 32-byte seed is generated and its hex is
+// printed once to stderr (outside the structured logger, mirroring the JWT /
+// file-signing flows) so operators can persist it via
+// INVENTARIO_RUN_BACKUP_SIGNING_KEY and keep their archives verifiable across
+// restarts.
+func getBackupSigningKey(configKey string) (*backupsign.Signer, error) {
+	seed, err := resolveBackupSeed(configKey)
+	if err != nil {
+		return nil, err
+	}
+	return backupsign.NewSigner(seed)
+}
+
+// resolveBackupSeed returns the 32-byte Ed25519 seed for the backup signer,
+// generating + announcing a random one when the configured value is absent or
+// not exactly 32 bytes.
+func resolveBackupSeed(configKey string) ([]byte, error) {
+	if configKey != "" {
+		// Hex form: must decode to exactly the Ed25519 seed size.
+		if decoded, decErr := hex.DecodeString(configKey); decErr == nil && len(decoded) == backupsign.SeedSize {
+			slog.Info("Using backup signing key from configuration (hex decoded)")
+			return decoded, nil
+		}
+		// Raw form: must already be exactly the Ed25519 seed size. We do
+		// NOT accept "at least 32" here (unlike the HMAC keys) because the
+		// seed length is fixed — a 40-byte string is a misconfiguration,
+		// not a longer-is-fine secret.
+		if len(configKey) == backupsign.SeedSize {
+			slog.Info("Using backup signing key from configuration")
+			return []byte(configKey), nil
+		}
+		slog.Warn("Configured backup signing key is not exactly 32 bytes (or 64 hex chars); generating a random seed")
+	}
+
+	slog.Warn("No backup signing key configured, generating random seed")
+	slog.Warn("For production use, set INVENTARIO_RUN_BACKUP_SIGNING_KEY environment variable or backup-signing-key in config file with a 32-byte (64 hex char) Ed25519 seed")
+
+	seed := make([]byte, backupsign.SeedSize)
+	if _, err := rand.Read(seed); err != nil {
+		return nil, err
+	}
+
+	slog.Warn("Generated random backup signing key; persist it via INVENTARIO_RUN_BACKUP_SIGNING_KEY to keep .inb archives verifiable across restarts")
+	// Print to stderr (not the structured log) so operators can capture the
+	// seed on first boot without leaking it into a log aggregator.
+	fmt.Fprintf(os.Stderr, "INVENTARIO_RUN_BACKUP_SIGNING_KEY=%s\n", hex.EncodeToString(seed))
+
+	return seed, nil
 }
 
 // getOAuthStateKey retrieves the OAuth state-signing key from

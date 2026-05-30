@@ -138,6 +138,69 @@ func BuildExportBlobKey(tenantID, exportType, timestamp string) string {
 	)
 }
 
+// BuildBackupBlobKey produces the canonical blob key for a generated
+// signed `.inb` backup archive:
+// `t/<tenant>/exports/backup_<type>_<timestamp>.inb` (issue #534).
+//
+// It mirrors BuildExportBlobKey's layout (same `exports/` subfolder,
+// same lowercase-type + timestamp shape) but uses the `backup_` prefix
+// and `.inb` extension so the new signed archives sit alongside — and
+// are distinguishable from — the legacy XML bundles.
+func BuildBackupBlobKey(tenantID, exportType, timestamp string) string {
+	return fmt.Sprintf("%s%s/%s/backup_%s_%s.inb",
+		Prefix, tenantID, ExportsSegment,
+		sanitizeSegment(strings.ToLower(exportType)),
+		sanitizeSegment(timestamp),
+	)
+}
+
+// SanitizeArchivePath neutralises a tar member name read out of an `.inb`
+// inner archive so it cannot escape its intended namespace on any backend
+// (issue #534). The `.inb` inner tar carries metadata members
+// (`manifest.json`, `location-<slug>-<uuid>.json`) and file members
+// (`files/<loc>/<commodity>/<bucket>/<name>`); a hostile archive could
+// instead carry `../../etc/passwd`, an absolute `/etc/passwd`, a
+// backslash-segmented Windows path, or an embedded NUL.
+//
+// This function is the structural safety net the restore path validates
+// every member name through BEFORE it is used for any blob key or
+// lookup. It:
+//
+//   - strips a leading `/` (absolute path),
+//   - replaces backslashes with `/` (Windows separators),
+//   - drops embedded NUL bytes,
+//   - replaces every `..` path segment with `_` so traversal is
+//     impossible, while
+//   - preserving the forward slashes that legitimately segment
+//     `files/<...>` member names.
+//
+// Note that the restore path never uses the returned value as a blob key
+// directly — file bytes are always re-keyed under the importing tenant's
+// namespace via BuildFileBlobKey. SanitizeArchivePath is defence-in-depth
+// for the lookup/identity side (matching a file member to its expected
+// metadata) and a loud signal: a member whose sanitised form differs from
+// its raw form is rejected by the caller rather than silently rewritten.
+func SanitizeArchivePath(p string) string {
+	if p == "" {
+		return p
+	}
+	// Drop NUL bytes outright.
+	p = strings.ReplaceAll(p, "\x00", "")
+	// Normalise Windows separators to forward slashes.
+	p = strings.ReplaceAll(p, "\\", "/")
+	// Strip any leading slashes (absolute path → relative).
+	p = strings.TrimLeft(p, "/")
+	// Neutralise `..` traversal in every segment while keeping the
+	// segmenting slashes intact.
+	segments := strings.Split(p, "/")
+	for i, seg := range segments {
+		if seg == ".." {
+			segments[i] = "_"
+		}
+	}
+	return strings.Join(segments, "/")
+}
+
 // BuildRestoreUploadKey produces the canonical blob key for an XML
 // backup file uploaded as part of a restore operation:
 // `t/<tenant>/restores/<filename>`. `filename` is expected to already

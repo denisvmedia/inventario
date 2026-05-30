@@ -27,11 +27,22 @@ export function ExportImportPage() {
   const [description, setDescription] = useState("")
   const [file, setFile] = useState<File | null>(null)
 
+  const [fileError, setFileError] = useState<string | null>(null)
+
   const uploadMutation = useUploadRestoreFile()
   const importMutation = useImportBackup()
   const submitting = uploadMutation.isPending || importMutation.isPending
 
   function onFileChange(picked: File | null) {
+    // The `.inb` extension is the real gate: browsers rarely set the
+    // custom `application/x-inventario-backup` MIME, so we validate the
+    // filename suffix (case-insensitive) before staging the upload.
+    if (picked && !picked.name.toLowerCase().endsWith(".inb")) {
+      setFile(null)
+      setFileError(t("exports:errors.invalidFileType"))
+      return
+    }
+    setFileError(null)
     setFile(picked)
   }
 
@@ -140,11 +151,16 @@ export function ExportImportPage() {
             ref={fileInputRef}
             id="import-file"
             type="file"
-            accept=".xml,application/xml,text/xml"
+            accept=".inb,application/x-inventario-backup,application/octet-stream"
             className="sr-only"
             onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
             data-testid="import-file-input"
           />
+          {fileError && (
+            <p className="text-xs text-destructive" data-testid="import-file-error" role="alert">
+              {fileError}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">

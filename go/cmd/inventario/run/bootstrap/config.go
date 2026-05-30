@@ -37,28 +37,36 @@ type Config struct {
 	WorkerControlRefreshInterval     string `yaml:"worker_control_refresh_interval" env:"WORKER_CONTROL_REFRESH_INTERVAL" env-default:""`
 	JWTSecret                        string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
 	FileSigningKey                   string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
-	FileURLExpiration                string `yaml:"file_url_expiration" env:"FILE_URL_EXPIRATION" env-default:"15m"`
-	ImpersonationTTL                 string `yaml:"impersonation_ttl" env:"IMPERSONATION_TTL" env-default:"30m"`
-	ThumbnailMaxConcurrentPerUser    int    `yaml:"thumbnail_max_concurrent_per_user" env:"THUMBNAIL_MAX_CONCURRENT_PER_USER" env-default:"0"`
-	ThumbnailRateLimitPerMinute      int    `yaml:"thumbnail_rate_limit_per_minute" env:"THUMBNAIL_RATE_LIMIT_PER_MINUTE" env-default:"0"`
-	ThumbnailSlotDuration            string `yaml:"thumbnail_slot_duration" env:"THUMBNAIL_SLOT_DURATION" env-default:"30m"`
-	ThumbnailBatchSize               int    `yaml:"thumbnail_batch_size" env:"THUMBNAIL_BATCH_SIZE" env-default:"0"`
-	ThumbnailPollInterval            string `yaml:"thumbnail_poll_interval" env:"THUMBNAIL_POLL_INTERVAL" env-default:""`
-	ThumbnailCleanupInterval         string `yaml:"thumbnail_cleanup_interval" env:"THUMBNAIL_CLEANUP_INTERVAL" env-default:""`
-	ThumbnailJobRetentionPeriod      string `yaml:"thumbnail_job_retention_period" env:"THUMBNAIL_JOB_RETENTION_PERIOD" env-default:""`
-	ThumbnailJobBatchTimeout         string `yaml:"thumbnail_job_batch_timeout" env:"THUMBNAIL_JOB_BATCH_TIMEOUT" env-default:""`
-	DetachedThumbnailJobTimeout      string `yaml:"detached_thumbnail_job_timeout" env:"DETACHED_THUMBNAIL_JOB_TIMEOUT" env-default:""`
-	TokenBlacklistRedisURL           string `yaml:"token_blacklist_redis_url" env:"TOKEN_BLACKLIST_REDIS_URL" env-default:""`
-	AuthRateLimitRedisURL            string `yaml:"auth_rate_limit_redis_url" env:"AUTH_RATE_LIMIT_REDIS_URL" env-default:""`
-	AuthRateLimitDisabled            bool   `yaml:"auth_rate_limit_disabled" env:"AUTH_RATE_LIMIT_DISABLED" env-default:"false"`
-	GlobalRateLimitRedisURL          string `yaml:"global_rate_limit_redis_url" env:"GLOBAL_RATE_LIMIT_REDIS_URL" env-default:""`
-	GlobalRateLimit                  int    `yaml:"global_rate_limit" env:"GLOBAL_RATE_LIMIT" env-default:"1000"`
-	GlobalRateWindow                 string `yaml:"global_rate_window" env:"GLOBAL_RATE_WINDOW" env-default:"1h"`
-	GlobalRateLimitDisabled          bool   `yaml:"global_rate_limit_disabled" env:"GLOBAL_RATE_LIMIT_DISABLED" env-default:"false"`
-	GlobalRateTrustedProxies         string `yaml:"global_rate_trusted_proxies" env:"GLOBAL_RATE_TRUSTED_PROXIES" env-default:""`
-	CSRFRedisURL                     string `yaml:"csrf_redis_url" env:"CSRF_REDIS_URL" env-default:""`
-	AllowedOrigins                   string `yaml:"allowed_origins" env:"ALLOWED_ORIGINS" env-default:""`
-	PublicURL                        string `yaml:"public_url" env:"PUBLIC_URL" env-default:""`
+	// BackupSigningKey is the Ed25519 seed used to sign `.inb` backup
+	// archives (issue #534). Unlike the HMAC keys above it must decode to
+	// EXACTLY 32 bytes (the Ed25519 seed size): supply 64 hex characters
+	// or a 32-byte raw string. Empty → a random seed is generated at boot
+	// and its hex printed once to stderr so operators can persist it; a
+	// random seed makes every backup re-signable but means archives signed
+	// before a restart verify only with the public key printed at that boot.
+	BackupSigningKey              string `yaml:"backup_signing_key" env:"BACKUP_SIGNING_KEY" env-default:""`
+	FileURLExpiration             string `yaml:"file_url_expiration" env:"FILE_URL_EXPIRATION" env-default:"15m"`
+	ImpersonationTTL              string `yaml:"impersonation_ttl" env:"IMPERSONATION_TTL" env-default:"30m"`
+	ThumbnailMaxConcurrentPerUser int    `yaml:"thumbnail_max_concurrent_per_user" env:"THUMBNAIL_MAX_CONCURRENT_PER_USER" env-default:"0"`
+	ThumbnailRateLimitPerMinute   int    `yaml:"thumbnail_rate_limit_per_minute" env:"THUMBNAIL_RATE_LIMIT_PER_MINUTE" env-default:"0"`
+	ThumbnailSlotDuration         string `yaml:"thumbnail_slot_duration" env:"THUMBNAIL_SLOT_DURATION" env-default:"30m"`
+	ThumbnailBatchSize            int    `yaml:"thumbnail_batch_size" env:"THUMBNAIL_BATCH_SIZE" env-default:"0"`
+	ThumbnailPollInterval         string `yaml:"thumbnail_poll_interval" env:"THUMBNAIL_POLL_INTERVAL" env-default:""`
+	ThumbnailCleanupInterval      string `yaml:"thumbnail_cleanup_interval" env:"THUMBNAIL_CLEANUP_INTERVAL" env-default:""`
+	ThumbnailJobRetentionPeriod   string `yaml:"thumbnail_job_retention_period" env:"THUMBNAIL_JOB_RETENTION_PERIOD" env-default:""`
+	ThumbnailJobBatchTimeout      string `yaml:"thumbnail_job_batch_timeout" env:"THUMBNAIL_JOB_BATCH_TIMEOUT" env-default:""`
+	DetachedThumbnailJobTimeout   string `yaml:"detached_thumbnail_job_timeout" env:"DETACHED_THUMBNAIL_JOB_TIMEOUT" env-default:""`
+	TokenBlacklistRedisURL        string `yaml:"token_blacklist_redis_url" env:"TOKEN_BLACKLIST_REDIS_URL" env-default:""`
+	AuthRateLimitRedisURL         string `yaml:"auth_rate_limit_redis_url" env:"AUTH_RATE_LIMIT_REDIS_URL" env-default:""`
+	AuthRateLimitDisabled         bool   `yaml:"auth_rate_limit_disabled" env:"AUTH_RATE_LIMIT_DISABLED" env-default:"false"`
+	GlobalRateLimitRedisURL       string `yaml:"global_rate_limit_redis_url" env:"GLOBAL_RATE_LIMIT_REDIS_URL" env-default:""`
+	GlobalRateLimit               int    `yaml:"global_rate_limit" env:"GLOBAL_RATE_LIMIT" env-default:"1000"`
+	GlobalRateWindow              string `yaml:"global_rate_window" env:"GLOBAL_RATE_WINDOW" env-default:"1h"`
+	GlobalRateLimitDisabled       bool   `yaml:"global_rate_limit_disabled" env:"GLOBAL_RATE_LIMIT_DISABLED" env-default:"false"`
+	GlobalRateTrustedProxies      string `yaml:"global_rate_trusted_proxies" env:"GLOBAL_RATE_TRUSTED_PROXIES" env-default:""`
+	CSRFRedisURL                  string `yaml:"csrf_redis_url" env:"CSRF_REDIS_URL" env-default:""`
+	AllowedOrigins                string `yaml:"allowed_origins" env:"ALLOWED_ORIGINS" env-default:""`
+	PublicURL                     string `yaml:"public_url" env:"PUBLIC_URL" env-default:""`
 
 	LogEmailURLs bool `yaml:"log_email_urls" env:"LOG_EMAIL_URLS" env-default:"false"`
 

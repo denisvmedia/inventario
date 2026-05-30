@@ -16,6 +16,7 @@ import (
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/export"
+	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/services"
@@ -260,10 +261,10 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 
 		filename := path.Base(exp.FilePath)
 		if filename == "" {
-			filename = "export.xml"
+			filename = "backup.inb"
 		}
 
-		downloadutils.SetStreamingHeaders(w, "application/xml", attrs.Size, filename)
+		downloadutils.SetStreamingHeaders(w, mimekit.INBMIMEType, attrs.Size, filename)
 		if err := downloadutils.CopyFileInChunks(w, file); err != nil {
 			internalServerError(w, r, err)
 			return
@@ -385,15 +386,15 @@ func (api *exportsAPI) generateExportSignedURL(w http.ResponseWriter, r *http.Re
 
 	// GenerateSignedURL requires a non-empty extension purely as a sanity
 	// check — it never appears in the signed path, which keys on the file
-	// ID. Fall back to the original path's extension, then to "xml" (export
-	// artifacts are XML), so minting never 500s on a FileEntity whose Ext
-	// happens to be empty.
+	// ID. Fall back to the original path's extension, then to "inb" (export
+	// artifacts are signed .inb archives), so minting never 500s on a
+	// FileEntity whose Ext happens to be empty.
 	fileExt := strings.TrimPrefix(file.Ext, ".")
 	if fileExt == "" {
 		fileExt = strings.TrimPrefix(path.Ext(file.OriginalPath), ".")
 	}
 	if fileExt == "" {
-		fileExt = "xml"
+		fileExt = "inb"
 	}
 
 	signedURL, err := api.fileSigningService.GenerateSignedURL(file.ID, fileExt, user.ID, services.ExtractSessionBinding(r))
@@ -408,9 +409,9 @@ func (api *exportsAPI) generateExportSignedURL(w http.ResponseWriter, r *http.Re
 	}
 }
 
-// importExport imports an XML export file and creates an export record
-// @Summary Import XML export
-// @Description Import an uploaded XML export file and create an export record
+// importExport imports an uploaded signed .inb backup file and creates an export record
+// @Summary Import backup archive
+// @Description Import an uploaded signed `.inb` backup file and create an export record
 // @Tags exports
 // @Accept json-api
 // @Produce json-api

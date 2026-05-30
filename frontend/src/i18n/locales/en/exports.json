@@ -39,6 +39,7 @@
     "deleteFailed": "Could not delete export: {{error}}",
     "downloadFailed": "Could not download export: {{error}}",
     "importFailed": "Could not import backup: {{error}}",
+    "invalidFileType": "Choose a backup (.inb) file.",
     "loadFailed": "Could not load exports: {{error}}",
     "restoreCreateFailed": "Could not start restore: {{error}}",
     "uploadFailed": "Could not upload file: {{error}}"
@@ -47,10 +48,10 @@
     "description": "Description",
     "descriptionHint": "Optional. Helps you find the import in the list later.",
     "descriptionPlaceholder": "Backup imported from disk",
-    "dropHint": "Drop the backup XML here or click to choose a file.",
+    "dropHint": "Drop the backup (.inb) file here or click to choose one.",
     "fileChosen": "Ready to upload {{name}} ({{size}}).",
     "fileLabel": "Backup file",
-    "intro": "Upload an existing Inventario backup XML to restore it. The file is staged on the server first and only inspected when you start the restore.",
+    "intro": "Upload an existing Inventario backup (.inb) to restore it. The file is staged on the server first and only inspected when you start the restore.",
     "submit": "Upload and continue",
     "submitting": "Uploading…",
     "success": "Backup uploaded — configure the restore.",
@@ -176,7 +177,7 @@
     "summary": {
       "includeFileData": "Attachments",
       "includeFileDataNo": "Metadata only",
-      "includeFileDataYes": "Inline base64",
+      "includeFileDataYes": "Included in archive",
       "items": "Picked items",
       "noDescription": "—",
       "type": "Scope"

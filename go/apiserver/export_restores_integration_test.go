@@ -240,7 +240,7 @@ func TestRestoreConcurrencyControl_PendingRestoreBlocks(t *testing.T) {
 
 	// Use real restore worker
 	entityService := services.NewEntityService(factorySet, "memory://")
-	restoreService := restore.NewRestoreService(factorySet, entityService, "memory://")
+	restoreService := restore.NewRestoreService(factorySet, entityService, "memory://", testBackupSigner)
 	// Create user registry set for RestoreWorker
 	userRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 	restoreWorker := restore.NewRestoreWorker(restoreService, userRegistrySet, "memory://")

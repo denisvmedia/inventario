@@ -44,7 +44,7 @@ func StartEmailLifecycle(ctx context.Context, rs *RuntimeSetup, _ *Config) func(
 // StartExportWorker wires and starts the export worker and returns its stop
 // function.
 func StartExportWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
-	service := export.NewExportService(rs.FactorySet, rs.Params.UploadLocation)
+	service := export.NewExportService(rs.FactorySet, rs.Params.UploadLocation, rs.Params.BackupSigner)
 	opts := []export.WorkerOption{
 		export.WithPollInterval(rs.WorkerDurations.ExportPollInterval),
 	}
@@ -59,7 +59,7 @@ func StartExportWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func(
 // StartImportWorker wires and starts the import worker and returns its stop
 // function.
 func StartImportWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
-	service := importpkg.NewImportService(rs.FactorySet, rs.Params.UploadLocation)
+	service := importpkg.NewImportService(rs.FactorySet, rs.Params.UploadLocation, rs.Params.BackupSigner)
 	opts := []importpkg.WorkerOption{
 		importpkg.WithPollInterval(rs.WorkerDurations.ImportPollInterval),
 	}
@@ -75,7 +75,7 @@ func StartImportWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func(
 // worker (needed by the API server to satisfy the RestoreStatusQuerier
 // interface) and its stop function.
 func StartRestoreWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) (*restore.RestoreWorker, func()) {
-	service := restore.NewRestoreService(rs.FactorySet, rs.Params.EntityService, rs.Params.UploadLocation)
+	service := restore.NewRestoreService(rs.FactorySet, rs.Params.EntityService, rs.Params.UploadLocation, rs.Params.BackupSigner)
 	opts := []restore.WorkerOption{
 		restore.WithPollInterval(rs.WorkerDurations.RestorePollInterval),
 		restore.WithMaxConcurrent(cfg.MaxConcurrentRestores),

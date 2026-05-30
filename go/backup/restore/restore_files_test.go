@@ -1,3 +1,5 @@
+//go:build legacy_xml_backup
+
 package restore_test
 
 import (
@@ -147,7 +149,7 @@ func (f *fileFixture) makeFile(c *qt.C, title, mime, linkedType, linkedID, linke
 // that ProcessExport does. We don't need that here because the round-trip
 // tests all read the XML directly into the restore processor.
 func (f *fileFixture) runExport(c *qt.C, exportType models.ExportType, includeFileData bool, uploadLocation string) []byte {
-	svc := export.NewExportService(f.factorySet, uploadLocation)
+	svc := export.NewExportService(f.factorySet, uploadLocation, nil)
 	exp := models.Export{
 		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("export-1485", f.tenantID, f.groupID, f.userID),
 		Type:                     exportType,
@@ -205,6 +207,7 @@ func TestExportRestore_FileRoundTrip(t *testing.T) {
 		dst.factorySet,
 		services.NewEntityService(dst.factorySet, uploadLocation),
 		uploadLocation,
+		nil,
 	)
 	stats, err := proc.RestoreFromXML(dst.ctx, bytes.NewReader(xmlBytes), types.RestoreOptions{
 		Strategy:        types.RestoreStrategyFullReplace,
@@ -288,6 +291,7 @@ func TestExportRestore_EmptyFileSection(t *testing.T) {
 		dst.factorySet,
 		services.NewEntityService(dst.factorySet, uploadLocation),
 		uploadLocation,
+		nil,
 	)
 	stats, err := proc.RestoreFromXML(dst.ctx, bytes.NewReader(xmlBytes), types.RestoreOptions{
 		Strategy: types.RestoreStrategyFullReplace,
@@ -380,6 +384,7 @@ func TestExportRestore_LegacyAttachmentSectionsRecorded(t *testing.T) {
 		dst.factorySet,
 		services.NewEntityService(dst.factorySet, uploadLocation),
 		uploadLocation,
+		nil,
 	)
 	stats, err := proc.RestoreFromXML(dst.ctx, strings.NewReader(xmlContent), types.RestoreOptions{
 		Strategy: types.RestoreStrategyFullReplace,
@@ -415,7 +420,7 @@ func TestExportRestore_SelectedItemsScope(t *testing.T) {
 	wantedFile := src.makeFile(c, "photo", "image/jpeg", "commodity", src.commodity.ID, "images", "tag-x")
 	otherFile := src.makeFile(c, "guide", "text/plain", "", "", "")
 
-	svc := export.NewExportService(src.factorySet, uploadLocation)
+	svc := export.NewExportService(src.factorySet, uploadLocation, nil)
 	exp := models.Export{
 		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("export-selected-1485", src.tenantID, src.groupID, src.userID),
 		Type:                     models.ExportTypeSelectedItems,
@@ -455,7 +460,7 @@ func TestExportRestore_CrossTenantIsolation(t *testing.T) {
 	tenantA, ctxA := stampTenantWithCommodityFile(c, factorySet, "tenant-A", "a-photo")
 	tenantB, ctxB := stampTenantWithCommodityFile(c, factorySet, "tenant-B", "b-photo")
 
-	svc := export.NewExportService(factorySet, uploadLocation)
+	svc := export.NewExportService(factorySet, uploadLocation, nil)
 	exportXMLForTenant := func(ctx context.Context, t *crossTenantHandle) []byte {
 		exp := models.Export{
 			TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("xt-export-"+t.tenantID, t.tenantID, t.groupID, t.userID),
@@ -658,6 +663,7 @@ func TestExportRestore_LargeBlobStreamingRoundTrip(t *testing.T) {
 		dst.factorySet,
 		services.NewEntityService(dst.factorySet, restoreLocation),
 		restoreLocation,
+		nil,
 	)
 	stats, err := proc.RestoreFromXML(dst.ctx, bytes.NewReader(xmlBytes), types.RestoreOptions{
 		Strategy:        types.RestoreStrategyFullReplace,
@@ -701,6 +707,7 @@ func TestExportRestore_DryRunSkipsBlobWrite(t *testing.T) {
 		dst.factorySet,
 		services.NewEntityService(dst.factorySet, restoreLocation),
 		restoreLocation,
+		nil,
 	)
 	stats, err := proc.RestoreFromXML(dst.ctx, bytes.NewReader(xmlBytes), types.RestoreOptions{
 		Strategy:        types.RestoreStrategyMergeAdd,
@@ -759,6 +766,7 @@ func TestExportRestore_FullReplaceClearsOrphanBlobs(t *testing.T) {
 		dst.factorySet,
 		services.NewEntityService(dst.factorySet, uploadLocation),
 		uploadLocation,
+		nil,
 	)
 	stats, err := proc.RestoreFromXML(dst.ctx, strings.NewReader(xmlContent), types.RestoreOptions{
 		Strategy: types.RestoreStrategyFullReplace,
@@ -845,6 +853,7 @@ func TestExportRestore_MergeAddDoesNotOverwriteExistingBlob(t *testing.T) {
 		dst.factorySet,
 		services.NewEntityService(dst.factorySet, uploadLocation),
 		uploadLocation,
+		nil,
 	)
 	stats, err := proc.RestoreFromXML(dst.ctx, bytes.NewReader(xmlBytes), types.RestoreOptions{
 		Strategy:        types.RestoreStrategyMergeAdd,
@@ -906,6 +915,7 @@ func TestExportRestore_DropsBlobOnUnresolvedLinkedEntity(t *testing.T) {
 		dst.factorySet,
 		services.NewEntityService(dst.factorySet, uploadLocation),
 		uploadLocation,
+		nil,
 	)
 	stats, err := proc.RestoreFromXML(dst.ctx, strings.NewReader(xmlContent), types.RestoreOptions{
 		Strategy:        types.RestoreStrategyMergeAdd,

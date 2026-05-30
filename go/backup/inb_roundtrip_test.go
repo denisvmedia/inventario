@@ -1,0 +1,507 @@
+//go:build !legacy_xml_backup
+
+package backup_test
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"encoding/json"
+	"io"
+	"testing"
+
+	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
+	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/memblob"
+
+	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/backup/export"
+	"github.com/denisvmedia/inventario/backup/restore"
+	"github.com/denisvmedia/inventario/backup/restore/types"
+	"github.com/denisvmedia/inventario/internal/backupsign"
+	_ "github.com/denisvmedia/inventario/internal/fileblob"
+	"github.com/denisvmedia/inventario/internal/inb"
+	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/registry/memory"
+	"github.com/denisvmedia/inventario/services"
+)
+
+// inbUploadLocation uses the in-memory fileblob backend (memfs), which — unlike
+// memblob — shares state across blob.OpenBucket calls keyed by the same path, so
+// the export writer and the restore/test readers all see the same bucket.
+const inbUploadLocation = "file://inb-test?memfs=1&create_dir=1"
+
+func testSigner(c *qt.C) *backupsign.Signer {
+	seed := make([]byte, backupsign.SeedSize)
+	for i := range seed {
+		seed[i] = byte(i + 7)
+	}
+	s, err := backupsign.NewSigner(seed)
+	c.Assert(err, qt.IsNil)
+	return s
+}
+
+// inbFixture builds an in-memory factory seeded with a tenant/user/group and a
+// location → area → commodity, returning the factory plus a user/group context.
+type inbFixture struct {
+	fs    *registry.FactorySet
+	ctx   context.Context
+	user  *models.User
+	group *models.LocationGroup
+	locID string
+}
+
+func newInbFixture(c *qt.C) *inbFixture {
+	fs := memory.NewFactorySet()
+	ctx := context.Background()
+
+	user := must.Must(fs.UserRegistry.Create(ctx, models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		Email:               "a@example.com",
+		Name:                "User A",
+		IsActive:            true,
+	}))
+	must.Must(fs.TenantRegistry.Create(ctx, models.Tenant{
+		EntityID: models.EntityID{ID: "tenant-a"},
+		Name:     "Tenant A",
+	}))
+	group := must.Must(fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Name:                "Group A",
+		Status:              models.LocationGroupStatusActive,
+		GroupCurrency:       "USD",
+		CreatedBy:           user.ID,
+	}))
+
+	uctx := appctx.WithGroup(appctx.WithUser(ctx, user), group)
+
+	locReg := must.Must(fs.LocationRegistryFactory.CreateUserRegistry(uctx))
+	loc := must.Must(locReg.Create(uctx, models.Location{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: group.ID, CreatedByUserID: user.ID},
+		Name:                     "Home",
+		Address:                  "1 Main St",
+	}))
+	areaReg := must.Must(fs.AreaRegistryFactory.CreateUserRegistry(uctx))
+	area := must.Must(areaReg.Create(uctx, models.Area{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: group.ID, CreatedByUserID: user.ID},
+		Name:                     "Living Room",
+		LocationID:               loc.ID,
+	}))
+	comReg := must.Must(fs.CommodityRegistryFactory.CreateUserRegistry(uctx))
+	must.Must(comReg.Create(uctx, models.Commodity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: group.ID, CreatedByUserID: user.ID},
+		Name:                     "TV",
+		ShortName:                "tv",
+		Type:                     models.CommodityTypeElectronics,
+		AreaID:                   area.ID,
+		Count:                    1,
+		Status:                   models.CommodityStatusInUse,
+		OriginalPriceCurrency:    "USD",
+		// Draft commodities skip the purchase-date / converted-price
+		// conditional validations, keeping the fixture minimal while still
+		// exercising the full export → restore round-trip.
+		Draft: true,
+	}))
+
+	return &inbFixture{fs: fs, ctx: uctx, user: user, group: group, locID: loc.ID}
+}
+
+// attachCommodityFile creates an image FileEntity linked to the fixture's first
+// commodity (in the given bucket: images/invoices/manuals) and writes a blob of
+// the given size to its tenant-namespaced key. Returns the file's UUID.
+func (f *inbFixture) attachCommodityFile(c *qt.C, bucketMeta string, size int) string {
+	return f.attachCommodityFileFull(c, bucketMeta, "photo", "photo", ".jpg", "image/jpeg", size)
+}
+
+// attachCommodityFileFull is the parameterized variant: it lets a test set the
+// file's user-facing basename (path) distinct from its display title, plus the
+// extension/MIME, so a round-trip can prove the filename and size survive.
+func (f *inbFixture) attachCommodityFileFull(c *qt.C, bucketMeta, filePath, title, ext, mime string, size int) string {
+	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	commodities := must.Must(comReg.List(f.ctx))
+	c.Assert(len(commodities) >= 1, qt.IsTrue)
+	com := commodities[0]
+
+	fileReg := must.Must(f.fs.FileRegistryFactory.CreateUserRegistry(f.ctx))
+	fileRow := models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
+		Title:                    title,
+		Type:                     models.FileTypeFromMIME(mime),
+		Category:                 models.FileCategoryFromContext("commodity", bucketMeta, mime),
+		Tags:                     models.StringSlice{},
+		LinkedEntityType:         "commodity",
+		LinkedEntityID:           com.ID,
+		LinkedEntityMeta:         bucketMeta,
+		File: &models.File{
+			Path:      filePath,
+			Ext:       ext,
+			MIMEType:  mime,
+			SizeBytes: int64(size),
+		},
+	}
+	created := must.Must(fileReg.Create(f.ctx, fileRow))
+
+	// Write the blob under the source tenant's namespace so the exporter can
+	// stream it. The OriginalPath must match the key we write.
+	blobKey := "t/tenant-a/files/" + created.UUID + ext
+	created.OriginalPath = blobKey
+	must.Must(fileReg.Update(f.ctx, *created))
+
+	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
+	defer bucket.Close()
+	body := bytes.Repeat([]byte("inventario-blob-chunk"), size/21+1)[:size]
+	c.Assert(bucket.WriteAll(f.ctx, blobKey, body, nil), qt.IsNil)
+
+	return created.UUID
+}
+
+// fileByUUID returns the (restored) FileEntity with the given immutable UUID, or
+// fails the test if it is absent.
+func (f *inbFixture) fileByUUID(c *qt.C, uuid string) *models.FileEntity {
+	fileReg := must.Must(f.fs.FileRegistryFactory.CreateUserRegistry(f.ctx))
+	files := must.Must(fileReg.List(f.ctx))
+	for _, file := range files {
+		if file != nil && file.UUID == uuid {
+			return file
+		}
+	}
+	c.Fatalf("file with UUID %s not found after restore", uuid)
+	return nil
+}
+
+// runExport drives the .inb export and returns the blob key + raw archive bytes.
+func (f *inbFixture) runExport(c *qt.C, signer *backupsign.Signer) (string, []byte) {
+	svc := export.NewExportService(f.fs, inbUploadLocation, signer)
+
+	expReg := must.Must(f.fs.ExportRegistryFactory.CreateUserRegistry(f.ctx))
+	exportRow := models.Export{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
+		Type:                     models.ExportTypeFullDatabase,
+		Status:                   models.ExportStatusPending,
+		Description:              "test backup",
+	}
+	created := must.Must(expReg.Create(f.ctx, exportRow))
+
+	err := svc.ProcessExport(f.ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+
+	updated := must.Must(expReg.Get(f.ctx, created.ID))
+	c.Assert(updated.Status, qt.Equals, models.ExportStatusCompleted)
+	c.Assert(updated.FilePath, qt.Not(qt.Equals), "")
+
+	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
+	defer bucket.Close()
+	data := must.Must(bucket.ReadAll(f.ctx, updated.FilePath))
+	return updated.FilePath, data
+}
+
+func TestINBExport_ContainerStructure(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	_, archive := f.runExport(c, signer)
+
+	// Outer tar: signature member first, then payload.
+	tr := tar.NewReader(bytes.NewReader(archive))
+	h1 := must.Must(tr.Next())
+	c.Assert(h1.Name, qt.Equals, inb.SignatureName)
+	sig := must.Must(io.ReadAll(tr))
+
+	h2 := must.Must(tr.Next())
+	c.Assert(h2.Name, qt.Equals, inb.PayloadName)
+	payload := must.Must(io.ReadAll(tr))
+
+	// Verify the signature over the streaming digest of the payload.
+	digest := backupsign.NewDigest()
+	_, _ = digest.Write(payload)
+	c.Assert(signer.VerifyDigest(digest.Sum(nil), sig), qt.IsNil)
+
+	// Inner gzip(tar) must contain manifest.json + a per-location JSON member.
+	gzr := must.Must(gzip.NewReader(bytes.NewReader(payload)))
+	itr := tar.NewReader(gzr)
+	members := map[string]bool{}
+	var manifestData []byte
+	for {
+		h, err := itr.Next()
+		if err == io.EOF {
+			break
+		}
+		c.Assert(err, qt.IsNil)
+		members[h.Name] = true
+		if h.Name == "manifest.json" {
+			manifestData = must.Must(io.ReadAll(itr))
+		}
+	}
+	c.Assert(members["manifest.json"], qt.IsTrue)
+
+	hasLocationDoc := false
+	for name := range members {
+		if name != "manifest.json" {
+			hasLocationDoc = true
+		}
+	}
+	c.Assert(hasLocationDoc, qt.IsTrue, qt.Commentf("expected a per-location JSON member"))
+
+	// Manifest records the format, signature info, and stats.
+	var manifest map[string]any
+	c.Assert(json.Unmarshal(manifestData, &manifest), qt.IsNil)
+	c.Assert(manifest["version"], qt.Equals, "2.0")
+	c.Assert(manifest["format"], qt.Equals, "json")
+	sigBlock := manifest["signature"].(map[string]any)
+	c.Assert(sigBlock["algorithm"], qt.Equals, backupsign.Algorithm)
+	c.Assert(sigBlock["fingerprint"], qt.Equals, signer.Fingerprint())
+}
+
+func TestINBExport_GzipLevel3(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+	_, archive := f.runExport(c, signer)
+
+	// The payload member must be a valid gzip stream (level is internal but the
+	// stream must inflate). We assert it inflates without error.
+	tr := tar.NewReader(bytes.NewReader(archive))
+	_ = must.Must(tr.Next()) // sig
+	_ = must.Must(io.ReadAll(tr))
+	_ = must.Must(tr.Next()) // payload
+	payload := must.Must(io.ReadAll(tr))
+	gzr, err := gzip.NewReader(bytes.NewReader(payload))
+	c.Assert(err, qt.IsNil)
+	// Bound the inflate so the decompression-bomb linter is satisfied; the test
+	// fixture is tiny so 64 MiB is plenty.
+	_, err = io.Copy(io.Discard, io.LimitReader(gzr, 64<<20))
+	c.Assert(err, qt.IsNil)
+}
+
+func TestINBRestore_RejectsBadSignature(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+	blobKey, archive := f.runExport(c, signer)
+
+	// Flip a payload byte to invalidate the signature.
+	tampered := tamperPayload(c, archive)
+
+	// Write the tampered archive back to the bucket and run a restore.
+	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
+	c.Assert(bucket.WriteAll(f.ctx, blobKey, tampered, nil), qt.IsNil)
+	bucket.Close()
+
+	final, err := restoreInb(c, f, signer, blobKey)
+	c.Assert(err, qt.IsNotNil)
+	// markRestoreFailed flattens the error to a string, but the signature
+	// failure text (and the inb sentinel's message) survives in the chain and
+	// the restore operation is marked failed.
+	c.Assert(err.Error(), qt.Contains, "signature verification failed")
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusFailed)
+}
+
+func TestINBRestore_RejectsLegacyXML(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	// Feed a legacy XML blob (not a .inb container) to the restore.
+	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
+	xmlKey := "t/tenant-a/restores/legacy.xml"
+	c.Assert(bucket.WriteAll(f.ctx, xmlKey, []byte(`<?xml version="1.0"?><inventory></inventory>`), nil), qt.IsNil)
+	bucket.Close()
+
+	final, err := restoreInb(c, f, signer, xmlKey)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusFailed)
+}
+
+func TestINBRoundTrip_MultiMBFileReKeyed(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	// Attach a multi-MB image file to the fixture's commodity and write its
+	// blob into the bucket so the exporter streams it into the archive.
+	const blobSize = 3 << 20 // 3 MiB — large enough that buffering it whole would be obvious
+	fileID := f.attachCommodityFile(c, "images", blobSize)
+
+	blobKey, _ := f.runExport(c, signer)
+
+	final, err := restoreInb(c, f, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted)
+	c.Assert(final.ImageCount >= 1, qt.IsTrue)
+
+	// The restored file blob must live under the importing tenant's namespace,
+	// re-keyed to the importer's BuildFileBlobKey — NOT the archive path or the
+	// source key.
+	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
+	defer bucket.Close()
+	expectedKey := "t/tenant-a/files/" + fileID + ".jpg"
+	exists := must.Must(bucket.Exists(f.ctx, expectedKey))
+	c.Assert(exists, qt.IsTrue, qt.Commentf("restored blob must be re-keyed to %s", expectedKey))
+}
+
+func TestINBRoundTrip_FullReplace(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	src := newInbFixture(c)
+	blobKey, _ := src.runExport(c, signer)
+
+	// Restore into the SAME factory using full_replace (idempotent re-create).
+	final, err := restoreInb(c, src, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted)
+	c.Assert(final.LocationCount >= 1, qt.IsTrue)
+	c.Assert(final.AreaCount >= 1, qt.IsTrue)
+	c.Assert(final.CommodityCount >= 1, qt.IsTrue, qt.Commentf("errors: %v", final.ErrorMessage))
+}
+
+// TestINBRoundTrip_FilePathAndSizePreserved guards the #534 review fixes: a
+// restored commodity file must keep its original user-facing filename (not the
+// display Title or the UUID) and its byte size (so per-group storage accounting
+// isn't under-counted). The fixture deliberately uses a Path that differs from
+// the Title so a regression collapsing one onto the other is caught.
+func TestINBRoundTrip_FilePathAndSizePreserved(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	const size = 4096
+	fileUUID := f.attachCommodityFileFull(c, "invoices", "invoice-2024-01", "January invoice", ".pdf", "application/pdf", size)
+
+	blobKey, _ := f.runExport(c, signer)
+	final, err := restoreInb(c, f, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted)
+
+	restored := f.fileByUUID(c, fileUUID)
+	c.Assert(restored.File, qt.IsNotNil)
+	c.Assert(restored.File.Path, qt.Equals, "invoice-2024-01") // original filename, not Title/UUID
+	c.Assert(restored.Title, qt.Equals, "January invoice")
+	c.Assert(restored.File.SizeBytes, qt.Equals, int64(size))
+}
+
+// restoreInb writes a RestoreOperation + export row pointing at blobKey and runs
+// the restore service against it, returning the restore operation's final state.
+func restoreInb(c *qt.C, f *inbFixture, signer *backupsign.Signer, blobKey string) (*models.RestoreOperation, error) {
+	entityService := services.NewEntityService(f.fs, inbUploadLocation)
+	svc := restore.NewRestoreService(f.fs, entityService, inbUploadLocation, signer)
+
+	expReg := must.Must(f.fs.ExportRegistryFactory.CreateUserRegistry(f.ctx))
+	exportRow := must.Must(expReg.Create(f.ctx, models.Export{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
+		Type:                     models.ExportTypeFullDatabase,
+		Status:                   models.ExportStatusCompleted,
+		Description:              "restore source",
+		FilePath:                 blobKey,
+	}))
+
+	roReg := f.fs.RestoreOperationRegistryFactory.CreateServiceRegistry()
+	restoreOp := must.Must(roReg.Create(f.ctx, models.RestoreOperation{
+		ExportID: exportRow.ID,
+		Status:   models.RestoreStatusPending,
+		Options: models.RestoreOptions{
+			Strategy: string(types.RestoreStrategyFullReplace),
+		},
+	}))
+
+	err := svc.ProcessRestoreOperation(f.ctx, restoreOp.ID, inbUploadLocation)
+	final := must.Must(roReg.Get(f.ctx, restoreOp.ID))
+	return final, err
+}
+
+// signedArchiveFromInnerTar builds a fully-signed .inb archive whose inner tar
+// is produced by buildInner. Used to craft hostile-but-correctly-signed
+// archives so the restore guards (not the signature check) are what reject them.
+func signedArchiveFromInnerTar(c *qt.C, signer *backupsign.Signer, buildInner func(tw *tar.Writer)) []byte {
+	var payloadBuf bytes.Buffer
+	gzw := gzip.NewWriter(&payloadBuf)
+	tw := tar.NewWriter(gzw)
+	buildInner(tw)
+	c.Assert(tw.Close(), qt.IsNil)
+	c.Assert(gzw.Close(), qt.IsNil)
+	payload := payloadBuf.Bytes()
+
+	digest := backupsign.NewDigest()
+	_, _ = digest.Write(payload)
+	sig := signer.SignDigest(digest.Sum(nil))
+
+	var buf bytes.Buffer
+	c.Assert(inb.WriteContainer(&buf, sig, bytes.NewReader(payload), int64(len(payload))), qt.IsNil)
+	return buf.Bytes()
+}
+
+func writeMember(c *qt.C, tw *tar.Writer, hdr *tar.Header, body []byte) {
+	hdr.Size = int64(len(body))
+	c.Assert(tw.WriteHeader(hdr), qt.IsNil)
+	if len(body) > 0 {
+		_, err := tw.Write(body)
+		c.Assert(err, qt.IsNil)
+	}
+}
+
+func TestINBRestore_RejectsTraversalMember(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	archive := signedArchiveFromInnerTar(c, signer, func(tw *tar.Writer) {
+		writeMember(c, tw, &tar.Header{Name: "manifest.json", Mode: 0o600, Typeflag: tar.TypeReg}, []byte(`{"version":"2.0"}`))
+		// Hostile member name with a parent-traversal segment.
+		writeMember(c, tw, &tar.Header{Name: "files/../../escape", Mode: 0o600, Typeflag: tar.TypeReg}, []byte("x"))
+	})
+
+	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
+	key := "t/tenant-a/restores/evil-traversal.inb"
+	c.Assert(bucket.WriteAll(f.ctx, key, archive, nil), qt.IsNil)
+	bucket.Close()
+
+	final, err := restoreInb(c, f, signer, key)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusFailed)
+}
+
+func TestINBRestore_RejectsSymlinkMember(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	archive := signedArchiveFromInnerTar(c, signer, func(tw *tar.Writer) {
+		writeMember(c, tw, &tar.Header{Name: "manifest.json", Mode: 0o600, Typeflag: tar.TypeReg}, []byte(`{"version":"2.0"}`))
+		// A symlink member must be rejected (non-regular file).
+		c.Assert(tw.WriteHeader(&tar.Header{Name: "files/link", Mode: 0o777, Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd"}), qt.IsNil)
+	})
+
+	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
+	key := "t/tenant-a/restores/evil-symlink.inb"
+	c.Assert(bucket.WriteAll(f.ctx, key, archive, nil), qt.IsNil)
+	bucket.Close()
+
+	final, err := restoreInb(c, f, signer, key)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusFailed)
+}
+
+// tamperPayload returns a copy of an .inb archive with one byte of the payload
+// member flipped so its signature no longer verifies.
+func tamperPayload(c *qt.C, archive []byte) []byte {
+	tr := tar.NewReader(bytes.NewReader(archive))
+	h1 := must.Must(tr.Next())
+	sig := must.Must(io.ReadAll(tr))
+	_ = must.Must(tr.Next())
+	payload := must.Must(io.ReadAll(tr))
+	c.Assert(len(payload) > 32, qt.IsTrue)
+	payload[len(payload)/2] ^= 0xFF
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	c.Assert(tw.WriteHeader(&tar.Header{Name: h1.Name, Mode: 0o600, Size: int64(len(sig)), Typeflag: tar.TypeReg}), qt.IsNil)
+	must.Must(tw.Write(sig))
+	c.Assert(tw.WriteHeader(&tar.Header{Name: inb.PayloadName, Mode: 0o600, Size: int64(len(payload)), Typeflag: tar.TypeReg}), qt.IsNil)
+	must.Must(tw.Write(payload))
+	c.Assert(tw.Close(), qt.IsNil)
+	return buf.Bytes()
+}

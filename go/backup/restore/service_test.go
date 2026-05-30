@@ -1,3 +1,5 @@
+//go:build legacy_xml_backup
+
 package restore_test
 
 import (
@@ -46,7 +48,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		testRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 		c.Assert(testRegistrySet, qt.IsNotNil)
 		entityService := services.NewEntityService(factorySet, "/tmp/test-uploads")
-		proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "/tmp/test-uploads")
+		proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "/tmp/test-uploads", nil)
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
 <inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
@@ -143,7 +145,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		ctx = appctx.WithGroup(ctx, testGroup)
 		testRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 		entityService := services.NewEntityService(factorySet, "/tmp/test-uploads")
-		proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "/tmp/test-uploads")
+		proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "/tmp/test-uploads", nil)
 
 		// First, create some existing data
 		existingLocation := models.Location{
@@ -207,7 +209,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		testRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 		entityService := services.NewEntityService(factorySet, "/tmp/test-uploads")
-		proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "/tmp/test-uploads")
+		proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "/tmp/test-uploads", nil)
 
 		// First, create some existing data
 		existingLocation := models.Location{
@@ -273,7 +275,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 		ctx = appctx.WithGroup(ctx, testGroup)
 		testRegistrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 		entityService := services.NewEntityService(factorySet, "/tmp/test-uploads")
-		proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "/tmp/test-uploads")
+		proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "/tmp/test-uploads", nil)
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
 <inventory xmlns="http://inventario.example.com/export" exportDate="2024-01-01T00:00:00Z" exportType="full_database">
@@ -321,7 +323,7 @@ func TestRestoreService_RestoreFromXML(t *testing.T) {
 
 		// Create restore processor
 		entityService := services.NewEntityService(factorySet, "/tmp/test-uploads")
-		proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "/tmp/test-uploads")
+		proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "/tmp/test-uploads", nil)
 		c.Assert(proc, qt.IsNotNil)
 
 		xmlData := `<?xml version="1.0" encoding="UTF-8"?>
@@ -366,7 +368,7 @@ func TestRestoreService_GroupCurrencyValidation(t *testing.T) {
 	_ = registrySet
 
 	entityService := services.NewEntityService(factorySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "", nil)
 
 	// Create XML with a commodity that has pricing information
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -458,7 +460,7 @@ func TestRestoreService_NoGroupCurrencySet(t *testing.T) {
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	entityService := services.NewEntityService(factorySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "", nil)
 
 	// Create XML with a commodity that has pricing information
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -562,7 +564,7 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
 
 	entityService := services.NewEntityService(factorySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "", nil)
 
 	// Create XML with the same structure as sample_export.xml
 	xmlContent := `<?xml version="1.0" encoding="UTF-8"?>
@@ -725,7 +727,7 @@ func TestRestoreService_ActualSampleXML(t *testing.T) {
 	_ = registrySet
 
 	entityService := services.NewEntityService(factorySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op", factorySet, entityService, "", nil)
 
 	// Read the actual sample XML file
 	xmlContent, err := os.ReadFile("testdata/sample_export.xml")

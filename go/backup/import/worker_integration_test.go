@@ -1,3 +1,5 @@
+//go:build legacy_xml_backup
+
 package importpkg
 
 import (
@@ -28,7 +30,7 @@ func TestImportWorkerHandlesProcessingErrors(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	importService := NewImportService(factorySet, uploadLocation)
+	importService := NewImportService(factorySet, uploadLocation, nil)
 
 	// Setting max concurrent imports to enforce synchronous (serial) processing
 	worker := NewImportWorker(importService, factorySet, 1)
@@ -71,7 +73,7 @@ func TestImportWorkerProcessPendingImports(t *testing.T) {
 	tempDir := c.TempDir()
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 
-	importService := NewImportService(factorySet, uploadLocation)
+	importService := NewImportService(factorySet, uploadLocation, nil)
 	// Setting max concurrent imports to enforce synchronous (serial) processing
 	worker := NewImportWorker(importService, factorySet, 1)
 

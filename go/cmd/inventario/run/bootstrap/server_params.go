@@ -80,6 +80,14 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		return serverSetup{}, err
 	}
 
+	// Configure the .inb backup signing key (#534) from config/environment
+	// or generate a secure random Ed25519 seed.
+	backupSigner, err := getBackupSigningKey(cfg.BackupSigningKey)
+	if err != nil {
+		slog.Error("Failed to configure backup signing key", "error", err)
+		return serverSetup{}, err
+	}
+
 	// Parse file URL expiration duration.
 	fileURLExpiration, err := time.ParseDuration(cfg.FileURLExpiration)
 	if err != nil {
@@ -105,6 +113,7 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 
 	params.JWTSecret = jwtSecret
 	params.FileSigningKey = fileSigningKey
+	params.BackupSigner = backupSigner
 	params.FileURLExpiration = fileURLExpiration
 	params.ImpersonationTTL = impersonationTTL
 	params.ThumbnailConfig = services.ThumbnailGenerationConfig{

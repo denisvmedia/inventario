@@ -2805,6 +2805,56 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/backup/public-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get backup signing public key
+         * @description Returns the server's backup-signing public key (PEM), its fingerprint, and the signing algorithm.
+         *     The private key is never exposed — only the public half, so external tooling can verify a `.inb`
+         *     archive's signature without being able to forge one (#534).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.BackupPublicKeyResponse"];
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/currencies": {
         parameters: {
             query?: never;
@@ -5270,8 +5320,8 @@ export type paths = {
         get?: never;
         put?: never;
         /**
-         * Import XML export
-         * @description Import an uploaded XML export file and create an export record
+         * Import backup archive
+         * @description Import an uploaded signed `.inb` backup file and create an export record
          */
         post: {
             parameters: {
@@ -7757,7 +7807,7 @@ export type paths = {
         put?: never;
         /**
          * Upload restore file
-         * @description Upload an XML backup file to be used for a restore operation.
+         * @description Upload a signed `.inb` backup file to be used for a restore operation.
          */
         post: {
             parameters: {
@@ -7774,7 +7824,7 @@ export type paths = {
                     "multipart/form-data": {
                         /**
                          * Format: binary
-                         * @description XML backup file to upload
+                         * @description Signed .inb backup file to upload
                          */
                         file: string;
                     };
@@ -9310,6 +9360,20 @@ export type components = {
             mfa_enforced?: boolean;
             name?: string;
             role?: string;
+        };
+        "apiserver.BackupPublicKeyResponse": {
+            /** @description Algorithm names the hash-then-sign construction ("ed25519-sha256"). */
+            algorithm?: string;
+            /**
+             * @description Fingerprint is the lowercase hex SHA-256 of the raw public key, a stable
+             *     short identifier for the signing key (useful around key rotation).
+             */
+            fingerprint?: string;
+            /**
+             * @description PublicKey is the PKIX-encoded PEM public key ("PUBLIC KEY" block) — the
+             *     form openssl and Go's x509.ParsePKIXPublicKey expect.
+             */
+            public_key?: string;
         };
         "apiserver.ChangePasswordRequest": {
             current_password?: string;

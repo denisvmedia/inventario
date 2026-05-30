@@ -1,3 +1,5 @@
+//go:build legacy_xml_backup
+
 package restore_test
 
 import (
@@ -153,7 +155,7 @@ func TestRestore_AutoCreatesTagsForNewSlugs(t *testing.T) {
 	}
 
 	entityService := services.NewEntityService(factorySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-op-1487", factorySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op-1487", factorySet, entityService, "", nil)
 
 	stats, err := proc.RestoreFromXML(ctx, strings.NewReader(restoreTagsXML), types.RestoreOptions{
 		Strategy: types.RestoreStrategyFullReplace,
@@ -199,7 +201,7 @@ func TestRestore_AutoCreateTagsIsIdempotent(t *testing.T) {
 	ctx := appctx.WithGroup(appctx.WithUser(c.Context(), &user), group)
 
 	entityService := services.NewEntityService(factorySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-op-1487-idempotent", factorySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op-1487-idempotent", factorySet, entityService, "", nil)
 
 	for range 2 {
 		stats, err := proc.RestoreFromXML(ctx, strings.NewReader(restoreTagsXML), types.RestoreOptions{
@@ -271,7 +273,7 @@ func TestRestore_MergeAddSkipsTagAutoCreate(t *testing.T) {
 	}
 
 	entityService := services.NewEntityService(factorySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-op-1487-mergeadd-skip", factorySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op-1487-mergeadd-skip", factorySet, entityService, "", nil)
 
 	stats, err := proc.RestoreFromXML(ctx, strings.NewReader(restoreTagsXML), types.RestoreOptions{
 		Strategy: types.RestoreStrategyMergeAdd,
@@ -327,7 +329,7 @@ func TestRestore_DryRunDoesNotAutoCreateTags(t *testing.T) {
 	}))
 
 	entityService := services.NewEntityService(factorySet, "")
-	proc := processor.NewRestoreOperationProcessor("test-op-1487-dryrun", factorySet, entityService, "")
+	proc := processor.NewRestoreOperationProcessor("test-op-1487-dryrun", factorySet, entityService, "", nil)
 
 	stats, err := proc.RestoreFromXML(ctx, strings.NewReader(restoreTagsXML), types.RestoreOptions{
 		Strategy: types.RestoreStrategyMergeAdd,

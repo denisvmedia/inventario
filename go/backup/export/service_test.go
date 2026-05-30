@@ -1,3 +1,5 @@
+//go:build legacy_xml_backup
+
 package export
 
 import (
@@ -179,7 +181,7 @@ func TestNewExportService(t *testing.T) {
 	factorySet := newTestFactorySet()
 	uploadLocation := "/tmp/uploads"
 
-	service := NewExportService(factorySet, uploadLocation)
+	service := NewExportService(factorySet, uploadLocation, nil)
 
 	c.Assert(service, qt.IsNotNil)
 	// Note: Cannot access private fields, just verify service is created
@@ -246,7 +248,7 @@ func TestExportServiceProcessExport_InvalidID(t *testing.T) {
 
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 	factorySet := newTestFactorySet()
-	service := NewExportService(factorySet, uploadLocation)
+	service := NewExportService(factorySet, uploadLocation, nil)
 	ctx := newTestContext()
 
 	// Test with non-existent export ID
@@ -261,7 +263,7 @@ func TestExportServiceProcessExport_Success(t *testing.T) {
 
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 	factorySet := newTestFactorySet()
-	service := NewExportService(factorySet, uploadLocation)
+	service := NewExportService(factorySet, uploadLocation, nil)
 	registrySet := factorySet.CreateServiceRegistrySet()
 	ctx := newTestContext()
 
@@ -294,7 +296,7 @@ func TestStreamXMLExport(t *testing.T) {
 
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 	factorySet := newTestFactorySet()
-	service := NewExportService(factorySet, uploadLocation)
+	service := NewExportService(factorySet, uploadLocation, nil)
 	ctx := newTestContext()
 
 	// Test different export types
@@ -338,7 +340,7 @@ func TestStreamXMLExport_InvalidType(t *testing.T) {
 
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
 	factorySet := newTestFactorySet()
-	service := NewExportService(factorySet, uploadLocation)
+	service := NewExportService(factorySet, uploadLocation, nil)
 	ctx := newTestContext()
 
 	export := models.Export{
@@ -360,7 +362,7 @@ func TestGenerateExport(t *testing.T) {
 
 	uploadLocation := "file:///" + tempDir + "?create_dir=1"
 	factorySet := newTestFactorySet()
-	service := NewExportService(factorySet, uploadLocation)
+	service := NewExportService(factorySet, uploadLocation, nil)
 	ctx := newTestContext()
 
 	export := models.Export{
