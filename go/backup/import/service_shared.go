@@ -156,7 +156,20 @@ func (s *ImportService) createImportFileEntity(ctx context.Context, export *mode
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get user", err)
 	}
-	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(appctx.WithUser(ctx, user))
+
+	// The import worker runs from a background context with no request-time
+	// middleware, so user/group are unset. FileEntity is group-scoped — the
+	// postgres registry rejects a create without a group_id in context
+	// ("group ID is required"). Resolve the export's group and inject both
+	// user + group, mirroring the export worker (createExportFileEntity).
+	group, err := s.factorySet.LocationGroupRegistry.Get(ctx, export.GroupID)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to get import group", err)
+	}
+	ctx = appctx.WithUser(ctx, user)
+	ctx = appctx.WithGroup(ctx, group)
+
+	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create file registry", err)
 	}
