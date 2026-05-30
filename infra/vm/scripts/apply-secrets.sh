@@ -59,6 +59,15 @@ remote_apply() {
 # install (idempotent thereafter — the password is the seed value, not a
 # runtime credential).
 #
+# When the bundle also provides `jwt.secret`, this same Secret additionally
+# carries `INVENTARIO_RUN_JWT_SECRET`, pinning the apiserver's token-signing
+# key so sessions and back-office MFA enrollments survive restarts (#1943).
+# The chart loads the whole Secret via `envFrom`, so the key reaches the
+# apiserver as-is — no chart change needed. It is OPTIONAL: an absent
+# jwt.secret leaves the apiserver on its random per-restart fallback (every
+# redeploy logs users out and any back-office MFA enrollment becomes
+# undecryptable).
+#
 # Per-PR preview namespaces (`inv-vcl01-pr{N}`) are created dynamically by
 # ArgoCD and so are NOT covered here; their ApplicationSet template
 # (infra/argocd/applicationset-pr.yaml) sets a well-known dev password
@@ -69,6 +78,15 @@ remote_apply() {
 # script ensures the missing field is surfaced loudly to bootstrap.sh
 # (which runs under `set -e` and will halt the whole bootstrap).
 ADMIN_PASSWORD=$(lookup "admin.password")
+# Optional runtime JWT signing key for the persistent envs (master + longevity).
+# When present it is injected into the inventario-admin Secret below as
+# INVENTARIO_RUN_JWT_SECRET so the apiserver stops minting a fresh random secret
+# on every restart. Absent it, warn (don't fail) — master ran disposably without
+# a stable secret for a long time, so this stays best-effort.
+JWT_SECRET=$(lookup "jwt.secret")
+if [ -z "$JWT_SECRET" ]; then
+    warn "jwt.secret missing in secrets bundle; inv-vcl01-master/longevity will use an EPHEMERAL per-restart JWT secret (every redeploy logs users out and back-office MFA enrollment won't survive a restart). Set jwt.secret to make it stable."
+fi
 ADMIN_MISSING=0
 if [ -z "$ADMIN_PASSWORD" ]; then
     warn "admin.password missing in secrets bundle; required by master + longevity ApplicationSets via secrets.existingSecret"
@@ -77,10 +95,13 @@ if [ -z "$ADMIN_PASSWORD" ]; then
 else
     for ns in inv-vcl01-master inv-vcl01-longevity; do
         note "Applying $ns/inventario-admin"
-        # Emit value as a YAML block scalar so passwords with special chars
+        # Emit values as YAML block scalars so secrets with special chars
         # (':', '{', '#', newlines) don't break manifest parsing or open an
         # injection path. Same pattern as the github private key block below.
-        cat <<EOF | remote_apply
+        # Grouped so the optional INVENTARIO_RUN_JWT_SECRET key can be appended
+        # to the same stringData map before a single apply.
+        {
+            cat <<EOF
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -96,6 +117,13 @@ stringData:
   SETUP_ADMIN_PASSWORD: |-
 $(printf '%s' "$ADMIN_PASSWORD" | sed 's/^/    /')
 EOF
+            if [ -n "$JWT_SECRET" ]; then
+                cat <<EOF
+  INVENTARIO_RUN_JWT_SECRET: |-
+$(printf '%s' "$JWT_SECRET" | sed 's/^/    /')
+EOF
+            fi
+        } | remote_apply
     done
 fi
 
