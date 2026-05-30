@@ -269,24 +269,18 @@ test.describe('Exports / Restores (React)', () => {
     await page.getByTestId('restore-description').fill(`E2E imported dry-run ${Date.now()}`)
     await page.getByTestId('restore-submit').click()
 
-    // --- The dry-run restore lands in history and reaches a TERMINAL state.
-    // We assert terminal (completed OR failed), not strictly `completed`: this
-    // is a full_database dry-run over the SHARED e2e database, so it runs across
-    // whatever every prior spec left behind, and the merge_add validation can
-    // legitimately end `failed` on unrelated accumulated data. The meaningful
-    // #534 assertion — that the signed `.inb` round-trips and its signature
-    // verifies — is the import-completion poll above (a tampered/invalid `.inb`
-    // never reaches `completed` there; see the negative test). Restore
-    // correctness itself is covered by the Go round-trip unit tests. The
-    // restore worker is async (poll-driven), so use a generous CI-load window. ---
+    // --- The dry-run restore lands in history and must reach `completed`.
+    // This is the end-to-end proof for #534: the signed `.inb` we downloaded is
+    // re-imported, its signature verifies, and a dry-run restore validates the
+    // decoded payload without error. The restore worker is async (poll-driven),
+    // so allow a generous CI-load window — but the pass condition stays strict:
+    // a `failed` restore is a real regression we want surfaced, not hidden. ---
     await expect(page.getByTestId('page-export-detail')).toBeVisible({ timeout: 30_000 })
     const restoresList = page.getByTestId('restores-list')
     await expect(restoresList).toBeVisible({ timeout: 30_000 })
     const firstRestore = restoresList.locator('[data-testid^="restore-row-"]').first()
     await expect(firstRestore).toBeVisible()
-    await expect(
-      firstRestore.locator('[data-testid="status-completed"], [data-testid="status-failed"]'),
-    ).toBeVisible({ timeout: 60_000 })
+    await expect(firstRestore.getByTestId('status-completed')).toBeVisible({ timeout: 60_000 })
   })
 
   // #534 — Negative path. (1) A wrong-extension file is blocked
