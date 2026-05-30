@@ -371,7 +371,7 @@ function DefaultGroupSelectorRow() {
         >
           <SelectTrigger
             size="sm"
-            className="w-44"
+            className="w-52"
             aria-label={t("settings:profile.defaultGroup")}
             data-testid="settings-default-group-select"
           >
@@ -517,7 +517,7 @@ function AppearanceSection() {
           <Select value={density} onValueChange={(v) => setDensity(v as Density)}>
             <SelectTrigger
               size="sm"
-              className="w-44"
+              className="w-52"
               data-testid="density-select"
               aria-label={t("settings:appearance.densityLabel")}
             >
@@ -548,7 +548,7 @@ function AppearanceSection() {
           >
             <SelectTrigger
               size="sm"
-              className="w-44"
+              className="w-52"
               data-testid="locale-select"
               aria-label={t("settings:appearance.localeLabel")}
             >
@@ -575,7 +575,7 @@ function AppearanceSection() {
           >
             <SelectTrigger
               size="sm"
-              className="w-44"
+              className="w-52"
               data-testid="default-view-select"
               aria-label={t("settings:appearance.defaultViewLabel")}
             >
