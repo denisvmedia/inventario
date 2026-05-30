@@ -99,10 +99,14 @@ spec:
               # the encrypted bundle. The chart's setup Job reads
               # SETUP_ADMIN_PASSWORD from it; runtime workloads slurp the
               # rest of envFrom unchanged (the demo.* stack provides DSNs
-              # inline via the deployment's env: block, and JWT/file-signing
-              # keys are intentionally ephemeral on master — same behavior
-              # as the pre-#1883 chart-generated Secret, where these values
-              # were empty strings).
+              # inline via the deployment's env: block). When the bundle
+              # provides jwt.secret / file_signing.key / oauth_state.key, the
+              # same Secret also carries the matching INVENTARIO_RUN_JWT_SECRET /
+              # INVENTARIO_RUN_FILE_SIGNING_KEY / INVENTARIO_RUN_OAUTH_STATE_KEY
+              # so the apiserver's signing material (durable sessions +
+              # back-office MFA, signed file URLs, in-flight OAuth state) is
+              # stable across restarts (#1943); absent any, the apiserver falls
+              # back to a random per-restart value for that key.
               secrets:
                 existingSecret: inventario-admin
               ingress:

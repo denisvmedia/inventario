@@ -59,6 +59,17 @@ remote_apply() {
 # install (idempotent thereafter — the password is the seed value, not a
 # runtime credential).
 #
+# When the bundle provides any of `jwt.secret`, `file_signing.key`, or
+# `oauth_state.key`, this same Secret additionally carries the matching
+# `INVENTARIO_RUN_JWT_SECRET` / `INVENTARIO_RUN_FILE_SIGNING_KEY` /
+# `INVENTARIO_RUN_OAUTH_STATE_KEY`, pinning the apiserver's signing material
+# across restarts (#1943). The chart loads the whole Secret via `envFrom`, so
+# the keys reach the apiserver as-is — no chart change needed. All are OPTIONAL;
+# an absent value leaves that key on the apiserver's random per-restart fallback
+# (JWT: every redeploy logs users out and back-office MFA enrollment becomes
+# undecryptable; file-signing: previously-issued signed file-download URLs stop
+# validating; oauth-state: an in-flight OAuth sign-in fails state validation).
+#
 # Per-PR preview namespaces (`inv-vcl01-pr{N}`) are created dynamically by
 # ArgoCD and so are NOT covered here; their ApplicationSet template
 # (infra/argocd/applicationset-pr.yaml) sets a well-known dev password
@@ -69,6 +80,42 @@ remote_apply() {
 # script ensures the missing field is surfaced loudly to bootstrap.sh
 # (which runs under `set -e` and will halt the whole bootstrap).
 ADMIN_PASSWORD=$(lookup "admin.password")
+# Optional runtime JWT signing key for the persistent envs (master + longevity).
+# When present it is injected into the inventario-admin Secret below as
+# INVENTARIO_RUN_JWT_SECRET so the apiserver stops minting a fresh random secret
+# on every restart. Absent it, warn (don't fail) — master ran disposably without
+# a stable secret for a long time, so this stays best-effort.
+JWT_SECRET=$(lookup "jwt.secret")
+if [ -z "$JWT_SECRET" ]; then
+    warn "jwt.secret missing in secrets bundle; inv-vcl01-master/longevity will use an EPHEMERAL per-restart JWT secret (every redeploy logs users out and back-office MFA enrollment won't survive a restart). Set jwt.secret to make it stable."
+elif [ "${#JWT_SECRET}" -lt 32 ]; then
+    # getJWTSecret() only accepts >=32 chars (plaintext) or >=64 hex chars;
+    # anything shorter is silently ignored and a random per-restart secret is
+    # generated. Drop it so we fall through to the ephemeral fallback loudly
+    # rather than injecting a value the apiserver will discard.
+    warn "jwt.secret is shorter than 32 chars; the apiserver ignores it and generates a random per-restart secret. Treating it as unset — use 'openssl rand -hex 32'."
+    JWT_SECRET=""
+fi
+# Optional file-URL signing key for the persistent envs, same scheme as
+# jwt.secret above. Absent it, signed file-download URLs break after a restart
+# (the SPA re-fetches them, so it mostly self-heals); warn, don't fail.
+FILE_SIGNING_KEY=$(lookup "file_signing.key")
+if [ -z "$FILE_SIGNING_KEY" ]; then
+    warn "file_signing.key missing in secrets bundle; inv-vcl01-master/longevity will use an EPHEMERAL per-restart file-signing key (previously-issued signed file-download URLs stop validating after a redeploy). Set file_signing.key to make it stable."
+elif [ "${#FILE_SIGNING_KEY}" -lt 32 ]; then
+    warn "file_signing.key is shorter than 32 chars; the apiserver ignores it and generates a random per-restart key. Treating it as unset — use 'openssl rand -hex 32'."
+    FILE_SIGNING_KEY=""
+fi
+# Optional OAuth state-signing key for the persistent envs, same scheme. Only
+# matters when OAuth sign-in is enabled; absent it, an in-flight OAuth flow that
+# crosses a restart/replica fails state validation. Warn, don't fail.
+OAUTH_STATE_KEY=$(lookup "oauth_state.key")
+if [ -z "$OAUTH_STATE_KEY" ]; then
+    warn "oauth_state.key missing in secrets bundle; inv-vcl01-master/longevity will use an EPHEMERAL per-restart OAuth state key (an OAuth sign-in spanning a redeploy/replica fails state validation). Set oauth_state.key to make it stable."
+elif [ "${#OAUTH_STATE_KEY}" -lt 32 ]; then
+    warn "oauth_state.key is shorter than 32 chars; the apiserver ignores it and generates a random per-restart key. Treating it as unset — use 'openssl rand -hex 32'."
+    OAUTH_STATE_KEY=""
+fi
 ADMIN_MISSING=0
 if [ -z "$ADMIN_PASSWORD" ]; then
     warn "admin.password missing in secrets bundle; required by master + longevity ApplicationSets via secrets.existingSecret"
@@ -77,10 +124,13 @@ if [ -z "$ADMIN_PASSWORD" ]; then
 else
     for ns in inv-vcl01-master inv-vcl01-longevity; do
         note "Applying $ns/inventario-admin"
-        # Emit value as a YAML block scalar so passwords with special chars
+        # Emit values as YAML block scalars so secrets with special chars
         # (':', '{', '#', newlines) don't break manifest parsing or open an
         # injection path. Same pattern as the github private key block below.
-        cat <<EOF | remote_apply
+        # Grouped so the optional INVENTARIO_RUN_JWT_SECRET key can be appended
+        # to the same stringData map before a single apply.
+        {
+            cat <<EOF
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -96,6 +146,25 @@ stringData:
   SETUP_ADMIN_PASSWORD: |-
 $(printf '%s' "$ADMIN_PASSWORD" | sed 's/^/    /')
 EOF
+            if [ -n "$JWT_SECRET" ]; then
+                cat <<EOF
+  INVENTARIO_RUN_JWT_SECRET: |-
+$(printf '%s' "$JWT_SECRET" | sed 's/^/    /')
+EOF
+            fi
+            if [ -n "$FILE_SIGNING_KEY" ]; then
+                cat <<EOF
+  INVENTARIO_RUN_FILE_SIGNING_KEY: |-
+$(printf '%s' "$FILE_SIGNING_KEY" | sed 's/^/    /')
+EOF
+            fi
+            if [ -n "$OAUTH_STATE_KEY" ]; then
+                cat <<EOF
+  INVENTARIO_RUN_OAUTH_STATE_KEY: |-
+$(printf '%s' "$OAUTH_STATE_KEY" | sed 's/^/    /')
+EOF
+            fi
+        } | remote_apply
     done
 fi
 
