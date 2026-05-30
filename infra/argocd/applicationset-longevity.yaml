@@ -1,10 +1,10 @@
-# ApplicationSet with SCM-provider generator pinned to master — the PERSISTENT
-# longevity environment (#1865).
+# ApplicationSet for the PERSISTENT longevity environment (#1865).
 #
 # Templates exactly one Application — `inv-vcl01-longevity`. Structurally it is
-# a clone of applicationset-master.yaml (same SCM-provider-tracks-master,
-# same `slice .sha 0 7` → image.tag pattern, so every master push rolls the
-# deployment forward at the immutable per-commit image), with ONE difference:
+# a clone of applicationset-master.yaml (same git-`files` pin → image.tag
+# pattern, reading the SAME `argocd/master-pin` file so every master push
+# rolls the deployment forward at the immutable per-commit image), with ONE
+# difference:
 # it layers infra/helm-overlays/longevity-base.values.yaml on top of the shared
 # preview-base overlay to enable demo Postgres + MinIO PVC persistence. Its
 # data therefore SURVIVES rolling deploys and pod restarts, and is captured by
@@ -27,9 +27,8 @@ metadata:
   name: inventario-longevity-preview
   namespace: argocd
 spec:
-  # Go templates so `{{ slice .sha 0 7 }}` works the same way it does in
-  # applicationset-master.yaml — the SCM-provider generator only exposes the
-  # full `{{.sha}}`, no pre-shortened variant.
+  # Go templates so `{{ .imageTag }}` / `{{ .sha }}` from the pin file
+  # resolve in the template below (same as applicationset-master.yaml).
   goTemplate: true
   # Fail rendering loudly on any undefined key instead of silently emitting
   # `<no value>` and producing broken Applications. Same posture as the
@@ -37,20 +36,16 @@ spec:
   goTemplateOptions:
     - missingkey=error
   generators:
-    - scmProvider:
-        # Reuse the same GitHub App credentials Secret the PR + master
-        # generators use (repo-creds format created by
-        # infra/vm/scripts/apply-secrets.sh).
-        github:
-          organization: denisvmedia
-          appSecretName: github-app-creds
-          # Required for branchMatch to apply — default (false) returns only
-          # each repo's default branch, making the filter a no-op.
-          allBranches: true
-        filters:
-          - repositoryMatch: ^inventario$
-            # Anchored: don't match `master-foo` or `release/master`.
-            branchMatch: ^master$
+    # Same git-`files` generator as applicationset-master.yaml, reading the
+    # SAME CI-maintained pin file: longevity tracks master, so it wants the
+    # identical head SHA + image tag. See applicationset-master.yaml's header
+    # for why scmProvider can't work on a GitHub *user* account (org-only
+    # repo listing → 404) and how docker.yml force-pushes the pin branch.
+    - git:
+        repoURL: https://github.com/denisvmedia/inventario
+        revision: argocd/master-pin
+        files:
+          - path: infra/argocd/master-image.json
         # Poll every 60s — same cadence as master so the longevity env tracks
         # master pushes without a multi-minute lag.
         requeueAfterSeconds: 60
@@ -67,7 +62,7 @@ spec:
       # source[1] provides the repo at the same SHA for $values lookups so
       # valueFiles can reference overlays outside the chart path. Pinning both
       # to `{{.sha}}` keeps chart + values + image consistent at the exact
-      # commit the SCM-provider polled.
+      # commit the image was built from.
       sources:
         - repoURL: https://github.com/denisvmedia/inventario
           targetRevision: '{{ .sha }}'
@@ -81,7 +76,7 @@ spec:
               - $values/infra/helm-overlays/longevity-base.values.yaml
             values: |
               image:
-                tag: 'sha-{{ slice .sha 0 7 }}'
+                tag: '{{ .imageTag }}'
               # Source the admin seed password from the sops bundle (#1883).
               # `inventario-admin` is materialized in THIS namespace by
               # infra/vm/scripts/apply-secrets.sh from admin.password in the

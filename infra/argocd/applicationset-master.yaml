@@ -1,20 +1,48 @@
-# ApplicationSet with SCM-provider generator pinned to master.
+# ApplicationSet for the single long-lived `master` preview
+# (`inv-vcl01-master`).
 #
-# Templates exactly one Application — `inv-vcl01-master` — but unlike the
-# pre-#1885 static Application it re-renders on every master push: the
-# generator polls GitHub, reads the current head SHA of `master`, and exposes
-# it as `{{.sha}}`. We thread `slice .sha 0 7` into `image.tag`, so each commit
-# produces a fresh `sha-<7>` tag. ArgoCD then sees a real manifest diff and
-# syncs — fixing the original failure mode where `image.tag: master` (a
-# constant string across commits) defeated manifest-equality and left pods
-# running stale digests. See #1885 / PR #1881 review thread for the trail.
+# Why a git-`files` generator and NOT `scmProvider` (the #1885 original):
+# the repo owner `denisvmedia` is a GitHub *user*, not an org, and
+# ArgoCD's `scmProvider.github` generator only lists *organization* repos
+# (`GET /orgs/<name>/repos` → 404 for a user account). So the pre-existing
+# scmProvider config never generated the Application on this account — the
+# master preview silently disappeared from ArgoCD. The PR ApplicationSet
+# sidesteps this by using the `pullRequest` generator (user-compatible),
+# but there is no built-in "branch head SHA" generator, so for master we
+# thread the head SHA through git instead.
 #
-# Same multi-source pattern as the per-PR Applications from
-# applicationset-pr.yaml so the shared preview-base.values.yaml overlay can
-# be referenced via $values.
+# Mechanism (replaces scmProvider's `{{.sha}}`):
+#   1. .github/workflows/docker.yml, after publishing the master image,
+#      force-pushes a one-file orphan branch `argocd/master-pin` holding
+#      `infra/argocd/master-image.json`:
+#          { "sha": "<full-master-sha>", "imageTag": "sha-<7>" }
+#   2. The git generator below reads that file off `argocd/master-pin` and
+#      exposes `{{ .sha }}` / `{{ .imageTag }}`. A master push rewrites the
+#      file, so the generated Application's image tag + chart revision
+#      change → ArgoCD sees a real manifest diff → auto-syncs. Same
+#      "real diff per commit" property #1885 wanted, without the org-only
+#      scmProvider.
+#   3. The pin branch never re-triggers CI (the docker workflow only fires
+#      on push to `master`/tags), so there is no commit loop, and master
+#      history stays clean (the SHA lives on a throwaway orphan branch).
 #
-# `<TAILNET>` is substituted by infra/vm/bootstrap.sh from the sops bundle's
-# tailscale.tailnet_name at kubectl apply time.
+# Auth: the git generator only needs read access to this one repo, which
+# the existing `github-app-creds` repo-creds Secret already grants (the PR
+# ApplicationSet relies on the same Secret). No org-scoped permission is
+# required, unlike scmProvider.
+#
+# Consistency: chart + $values are both pinned to `{{ .sha }}` (a real
+# master commit), so the chart, its values, and the image tag are all the
+# exact commit the image was built from.
+#
+# Bootstrapping (one-time, post-merge): until the first master build
+# creates `argocd/master-pin`, the generator has nothing to read and
+# produces no Application. After that branch exists, (re-)run
+# infra/vm/bootstrap.sh (or `kubectl apply -f`) so this ApplicationSet is
+# registered. See infra/README.md §"master deployment".
+#
+# `<TAILNET>` is substituted by infra/vm/bootstrap.sh from the sops
+# bundle's tailscale.tailnet_name at kubectl apply time.
 
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -22,41 +50,24 @@ metadata:
   name: inventario-master-preview
   namespace: argocd
 spec:
-  # Go templates so `{{ slice .sha 0 7 }}` works the same way
-  # `{{ .head_short_sha_7 }}` works in applicationset-pr.yaml — the
-  # SCM-provider generator only exposes the full `{{.sha}}`, no
-  # pre-shortened variant.
+  # Go templates so `{{ .imageTag }}` / `{{ .sha }}` from the pin file
+  # resolve in the template below.
   goTemplate: true
-  # Fail rendering loudly on any undefined key (typo / generator field rename
-  # in a future ArgoCD version) instead of silently emitting `<no value>`
-  # and producing broken Applications. Same posture as applicationset-pr.yaml.
+  # Fail rendering loudly on any undefined key (e.g. a malformed pin file
+  # missing `sha`/`imageTag`) instead of silently emitting `<no value>`
+  # and producing a broken Application. Same posture as applicationset-pr.yaml.
   goTemplateOptions:
     - missingkey=error
   generators:
-    - scmProvider:
-        # Reuse the same GitHub App credentials Secret the PR generator uses
-        # (repo-creds format created by infra/vm/scripts/apply-secrets.sh).
-        # The App is installed only on denisvmedia/inventario, so the
-        # org-wide scan below sees exactly that repo.
-        github:
-          organization: denisvmedia
-          appSecretName: github-app-creds
-          # Required for branchMatch to apply — default (false) returns only
-          # each repo's default branch (which is master here), so the filter
-          # would be a no-op. Setting this true makes the branchMatch
-          # restrictive: without it, a future default-branch rename would
-          # silently change what gets templated.
-          allBranches: true
-        filters:
-          # Defence-in-depth — even though the App is scoped to a single repo,
-          # the filter keeps the manifest correct if the App is ever installed
-          # on additional repos in the org.
-          - repositoryMatch: ^inventario$
-            # Anchored: don't match `master-foo` or `release/master`.
-            branchMatch: ^master$
-        # Poll every 60s so master pushes show up in the preview at the same
-        # cadence the PR ApplicationSet uses. Default (3600s) would lag a
-        # master push by up to an hour.
+    - git:
+        repoURL: https://github.com/denisvmedia/inventario
+        # CI-maintained pin branch (see header). Carries exactly one file,
+        # rewritten on every master image publish.
+        revision: argocd/master-pin
+        files:
+          - path: infra/argocd/master-image.json
+        # Match the PR generator's cadence so a master push shows up in the
+        # preview within ~a minute rather than the 3-minute default.
         requeueAfterSeconds: 60
 
   template:
@@ -71,11 +82,12 @@ spec:
     spec:
       project: previews
 
-      # Multi-source: source[0] is the chart pinned to the master head SHA;
-      # source[1] provides the repo at the same SHA for $values lookups so
+      # Multi-source: source[0] is the chart pinned to the master commit
+      # the image was built from (`{{ .sha }}` from the pin file); source[1]
+      # provides the repo at that same commit for $values lookups so
       # valueFiles can reference files outside the chart path. Pinning both
-      # to `{{.sha}}` (not `master`) keeps chart + values + image consistent
-      # at the exact commit the SCM-provider polled.
+      # to `{{ .sha }}` keeps chart + values + image consistent at the exact
+      # commit the image was built from.
       sources:
         - repoURL: https://github.com/denisvmedia/inventario
           targetRevision: '{{ .sha }}'
@@ -83,16 +95,16 @@ spec:
           helm:
             valueFiles:
               - $values/infra/helm-overlays/preview-base.values.yaml
-            # `slice .sha 0 7` mirrors the `sha-<7>` tag docker.yml publishes
-            # for every master push (see .github/workflows/docker.yml `meta`
-            # step). The tag is immutable per commit, so we inherit the
-            # chart's default `IfNotPresent` pullPolicy — same posture as
-            # the PR ApplicationSet, and unlike the pre-#1885 static
-            # manifest's `pullPolicy: Always` (which existed only to bust
-            # the cache behind the mutable `master` tag).
+            # `{{ .imageTag }}` is the immutable `sha-<7>` tag docker.yml
+            # published for this commit (see the pin file). The tag is
+            # immutable per commit, so we inherit the chart's default
+            # `IfNotPresent` pullPolicy — same posture as the PR
+            # ApplicationSet, and unlike the pre-#1885 static manifest's
+            # `pullPolicy: Always` (which existed only to bust the cache
+            # behind the mutable `master` tag).
             values: |
               image:
-                tag: 'sha-{{ slice .sha 0 7 }}'
+                tag: '{{ .imageTag }}'
               # Source the admin seed password from the sops bundle (#1883).
               # `inventario-admin` is materialized in this namespace by
               # infra/vm/scripts/apply-secrets.sh from admin.password in
