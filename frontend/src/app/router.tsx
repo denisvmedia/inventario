@@ -161,6 +161,15 @@ const ExportImportPage = lazy(() =>
 const ExportRestorePage = lazy(() =>
   import("@/pages/exports/ExportRestorePage").then((m) => ({ default: m.ExportRestorePage }))
 )
+// Reports subtree (#1370). Landing is a normal Shell page; the insurance
+// report is a print-capable page (toolbar hidden under @media print)
+// mounted inside the Shell like CommodityPrintPage.
+const ReportsLandingPage = lazy(() =>
+  import("@/pages/reports/ReportsLandingPage").then((m) => ({ default: m.ReportsLandingPage }))
+)
+const InsuranceReportPage = lazy(() =>
+  import("@/pages/reports/InsuranceReportPage").then((m) => ({ default: m.InsuranceReportPage }))
+)
 // Admin subtree (#1752). The layout shell + the section/detail pages are
 // each their own chunk so the admin code never weighs on a non-admin's
 // entry bundle.
@@ -357,10 +366,11 @@ export function AppRoutes() {
               {/* Maintenance reminders (#1368) — group-wide upcoming
                   maintenance, sorted by next_due_at. */}
               <Route path="maintenance" element={<MaintenanceListPage />} />
-              <Route
-                path="insurance/:itemId"
-                element={<ComingSoonPage surface="insuranceReport" />}
-              />
+              {/* Reports (#1370). Landing + the print-capable insurance
+                  report. The report reads its selection (mode / item /
+                  location) from the query string. */}
+              <Route path="reports" element={<ReportsLandingPage />} />
+              <Route path="reports/insurance" element={<InsuranceReportPage />} />
               {/* /backup is a soft alias for /exports — the design mock's
                   "BackupView" landing page. Sidebar still labels the entry
                   "Backup" but the user lands on the unified Backup &

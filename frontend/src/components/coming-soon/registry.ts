@@ -14,7 +14,6 @@ import {
   CreditCard,
   Database,
   FileEdit,
-  FileText,
   Files,
   HelpCircle,
   Link2,
@@ -47,7 +46,6 @@ export const SURFACES = {
   plans: { icon: CreditCard, tracker: 1389, kind: "page" },
   helpCenter: { icon: HelpCircle, tracker: 1384, kind: "page" },
   whatsNew: { icon: Sparkles, tracker: 1386, kind: "page" },
-  insuranceReport: { icon: FileText, tracker: 1370, kind: "page" },
 
   // Inline-only stubs (used inside other pages once those pages land).
   twoFactor: { icon: Shield, tracker: 1380, kind: "inline" },

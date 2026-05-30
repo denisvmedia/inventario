@@ -71,6 +71,10 @@ const SPECIAL_PURPOSE_PAGES = new Set<string>([
   // Modal / print / sub-panel / layout shells.
   "commodities/CommodityCreateModal.tsx",
   "commodities/CommodityPrintPage.tsx",
+  // Print-capable insurance report (#1370) — bespoke print sheet layout,
+  // same precedent as CommodityPrintPage (toolbar + .print-sheet, no
+  // <Page> wrapper). The report sheet provides its own max-width frame.
+  "reports/InsuranceReportPage.tsx",
   "areas/AreaItemsPanel.tsx",
   "admin/AdminLayout.tsx",
   "admin/AdminPagination.tsx",

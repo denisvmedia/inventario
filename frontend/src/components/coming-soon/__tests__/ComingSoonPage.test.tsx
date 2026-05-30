@@ -27,7 +27,7 @@ describe("<ComingSoonPage />", () => {
   })
 
   it("renders no enabled controls", () => {
-    render(<ComingSoonPage surface="insuranceReport" />)
+    render(<ComingSoonPage surface="plans" />)
     expect(screen.queryByRole("button")).not.toBeInTheDocument()
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
   })

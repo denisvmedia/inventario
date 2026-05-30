@@ -1,0 +1,63 @@
+{
+  "insurance": {
+    "back": "Назад к отчётам",
+    "cards": {
+      "estimatedValue": "Оценочная стоимость",
+      "estimatedValueHint": "Текущая оценка замены",
+      "purchasePrice": "Цена покупки",
+      "totalItems": "Всего предметов",
+      "totalPurchase": "Итого покупка",
+      "totalValue": "Оценочная общая стоимость"
+    },
+    "documentTitle": "Страховой отчёт — {{name}}",
+    "empty": {
+      "noItem": "Выберите предмет для создания страхового отчёта.",
+      "noItems": "Для этого местоположения предметы не найдены.",
+      "noLocation": "Выберите местоположение для создания страхового отчёта."
+    },
+    "fields": {
+      "location": "Местоположение",
+      "purchaseDate": "Дата покупки",
+      "serialNumber": "Серийный номер",
+      "type": "Тип"
+    },
+    "footer": "{{group}} — Страховой отчёт",
+    "footerGenerated": "Создано {{date}}",
+    "generated": "Создано",
+    "itemReportTitle": "Страховой отчёт по предмету",
+    "locationReportTitle": "Страховой отчёт по местоположению",
+    "modes": {
+      "item": "Предмет",
+      "location": "Местоположение"
+    },
+    "noValue": "—",
+    "photos": {
+      "full": "Полный размер",
+      "heading_few": "Фотографии ({{count}})",
+      "heading_many": "Фотографий ({{count}})",
+      "heading_one": "Фотография ({{count}})",
+      "heading_other": "Фотографий ({{count}})",
+      "label": "Фотографии:",
+      "thumbnails": "Миниатюры"
+    },
+    "print": "Печать / Сохранить PDF",
+    "sections": {
+      "itemDetails": "Сведения о предмете",
+      "notes": "Примечания",
+      "warranty": "Статус гарантии"
+    },
+    "selectItem": "Выберите предмет…",
+    "selectLocation": "Выберите местоположение…",
+    "title": "Страховой отчёт",
+    "warranty": {
+      "expires": "истекает {{date}}",
+      "label": "Гарантия:"
+    }
+  },
+  "landing": {
+    "description": "Создавайте печатные отчёты из вашего инвентаря.",
+    "insuranceCardDescription": "Печатный инвентарный отчёт для одного предмета или целого местоположения — стоимость, гарантия и фотографии.",
+    "insuranceCardTitle": "Страховой отчёт",
+    "title": "Отчёты"
+  }
+}

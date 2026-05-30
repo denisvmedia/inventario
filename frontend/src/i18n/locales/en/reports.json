@@ -1,0 +1,61 @@
+{
+  "insurance": {
+    "back": "Back to reports",
+    "cards": {
+      "estimatedValue": "Estimated Value",
+      "estimatedValueHint": "Current replacement estimate",
+      "purchasePrice": "Purchase Price",
+      "totalItems": "Total Items",
+      "totalPurchase": "Total Purchase",
+      "totalValue": "Est. Total Value"
+    },
+    "documentTitle": "Insurance Report — {{name}}",
+    "empty": {
+      "noItem": "Select an item to generate its insurance report.",
+      "noItems": "No items found for this location.",
+      "noLocation": "Select a location to generate its insurance report."
+    },
+    "fields": {
+      "location": "Location",
+      "purchaseDate": "Purchase Date",
+      "serialNumber": "Serial Number",
+      "type": "Type"
+    },
+    "footer": "{{group}} — Insurance Report",
+    "footerGenerated": "Generated {{date}}",
+    "generated": "Generated",
+    "itemReportTitle": "Item Insurance Report",
+    "locationReportTitle": "Location Insurance Report",
+    "modes": {
+      "item": "Item",
+      "location": "Location"
+    },
+    "noValue": "—",
+    "photos": {
+      "full": "Full size",
+      "heading_one": "Photograph ({{count}})",
+      "heading_other": "Photographs ({{count}})",
+      "label": "Photos:",
+      "thumbnails": "Thumbnails"
+    },
+    "print": "Print / Save PDF",
+    "sections": {
+      "itemDetails": "Item Details",
+      "notes": "Notes",
+      "warranty": "Warranty Status"
+    },
+    "selectItem": "Select item…",
+    "selectLocation": "Select location…",
+    "title": "Insurance Report",
+    "warranty": {
+      "expires": "expires {{date}}",
+      "label": "Warranty:"
+    }
+  },
+  "landing": {
+    "description": "Generate printable reports from your inventory.",
+    "insuranceCardDescription": "A printable inventory report for a single item or a whole location — values, warranty, and photos.",
+    "insuranceCardTitle": "Insurance Report",
+    "title": "Reports"
+  }
+}

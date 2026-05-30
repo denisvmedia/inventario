@@ -203,3 +203,47 @@
     @apply bg-background text-foreground;
   }
 }
+
+/*
+  Global print rules — hide the app shell chrome so the print-capable routes
+  (`/g/:slug/commodities/:id/print`, `/g/:slug/reports/insurance`) put only
+  their report sheet on paper. The routes render INSIDE the protected
+  <Shell> (sidebar + TopBar + banners), so without this the printed output
+  would include the sidebar, top bar, and any active banners. Page-local
+  toolbars still hide themselves via `print:hidden` / `.print-hide`.
+
+  Selectors target stable shadcn `data-slot` hooks + the Shell's structural
+  elements (see frontend/src/app/Shell.tsx and components/ui/sidebar.tsx):
+  - `[data-slot="sidebar"]` — the desktop sidebar wrapper (its gap + fixed
+    container live inside) and the mobile sidebar sheet.
+  - the SidebarInset's direct <header> (TopBar) and `[role="status"]`
+    banners (ImpersonationBanner / CurrencyMigrationBanner / InviteBanner),
+    which mount as direct children of the inset.
+  - the inset's <main> + its `.container` — drop the inset margins/rounding
+    and the page padding so the sheet isn't inset on the page.
+*/
+@media print {
+  [data-slot="sidebar"] {
+    display: none !important;
+  }
+  [data-slot="sidebar-inset"] > header,
+  [data-slot="sidebar-inset"] > [role="status"] {
+    display: none !important;
+  }
+  [data-slot="sidebar-inset"] {
+    margin: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  [data-slot="sidebar-inset"] > main {
+    overflow: visible !important;
+  }
+  [data-slot="sidebar-inset"] > main > .container {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body {
+    background: white !important;
+  }
+}

@@ -43,6 +43,8 @@ export function useNavLabel(labelKey: string): string {
       return t("common:nav.profile")
     case "common:nav.preferences":
       return t("common:nav.preferences")
+    case "common:nav.reports":
+      return t("common:nav.reports")
     case "common:nav.search":
       return t("common:nav.search")
     case "admin:nav.tenants":

@@ -54,7 +54,8 @@
     "edit": "Edit",
     "errorDescription": "We couldn't load this location. Refresh the page to retry, or head back to the list.",
     "errorTitle": "Unable to load location",
-    "fallbackTitle": "Location"
+    "fallbackTitle": "Location",
+    "insuranceReport": "Insurance report"
   },
   "dialog": {
     "addressHelp": "Optional. A street address, room location, or any free-text note.",

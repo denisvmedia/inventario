@@ -15,6 +15,7 @@ import {
   updateCommodity,
   type CommoditiesValue,
   type Commodity,
+  type CommodityCover,
   type CommodityEvent,
   type CommodityEventKind,
   type CommodityMeta,
@@ -40,9 +41,72 @@ export function useCommodities(opts: ListCommoditiesOptions = {}, query: QueryOp
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const enabled = query.enabled ?? true
-  return useQuery<{ commodities: Commodity[]; total: number }>({
+  // `covers` is additive (#1370): existing consumers destructure only
+  // `commodities` / `total`, so surfacing the per-id cover map alongside
+  // them is non-breaking. The insurance report's Location mode reads it
+  // to render each item's cover thumbnail.
+  return useQuery<{
+    commodities: Commodity[]
+    total: number
+    covers: Record<string, CommodityCover>
+  }>({
     queryKey: commodityKeys.list(slug, opts),
     queryFn: ({ signal }) => listCommodities({ ...opts, signal }),
+    enabled,
+    placeholderData: (prev) => prev,
+  })
+}
+
+// Page size to request per loop iteration. The list endpoint caps
+// `per_page` at 100 (apiserver `parsePagination`: values >100 fall back to
+// the default 50), so 100 is the largest honored page and the minimum
+// number of round-trips.
+const ALL_COMMODITIES_PAGE_SIZE = 100
+// Defensive ceiling so a misbehaving endpoint (e.g. one that never returns
+// a short page) can't spin forever — 100 pages × 100 rows = 10k items.
+const ALL_COMMODITIES_MAX_PAGES = 100
+
+// Fetches EVERY commodity for the active group by paging the list endpoint
+// in 100-row batches and accumulating the rows + merging the per-id cover
+// map. `useCommodities({ perPage: 1000 })` silently truncates at the BE's
+// 100-cap, which would give an insurance report incomplete location lists
+// and wrong per-location totals (#1370 review). This hook loops until a
+// page returns fewer than a full batch OR the accumulated count reaches the
+// reported `total`. Returns the same `{ commodities, total, covers }` shape
+// as a single `listCommodities` call so consumers don't special-case it.
+export function useAllCommodities(opts: ListCommoditiesOptions = {}, query: QueryOptions = {}) {
+  const { currentGroup } = useCurrentGroup()
+  const slug = currentGroup?.slug ?? ""
+  const enabled = query.enabled ?? true
+  return useQuery<{
+    commodities: Commodity[]
+    total: number
+    covers: Record<string, CommodityCover>
+  }>({
+    queryKey: commodityKeys.allList(slug, opts),
+    queryFn: async ({ signal }) => {
+      const commodities: Commodity[] = []
+      const covers: Record<string, CommodityCover> = {}
+      let total = 0
+      for (let page = 1; page <= ALL_COMMODITIES_MAX_PAGES; page++) {
+        const res = await listCommodities({
+          ...opts,
+          page,
+          perPage: ALL_COMMODITIES_PAGE_SIZE,
+          signal,
+        })
+        commodities.push(...res.commodities)
+        Object.assign(covers, res.covers)
+        total = res.total
+        // Stop on a short (final) page or once we've collected everything
+        // the server says exists. The length guard alone would loop one
+        // extra empty page when total is an exact multiple of the batch.
+        if (res.commodities.length < ALL_COMMODITIES_PAGE_SIZE || commodities.length >= total) {
+          break
+        }
+      }
+      return { commodities, total, covers }
+    },
     enabled,
     placeholderData: (prev) => prev,
   })
