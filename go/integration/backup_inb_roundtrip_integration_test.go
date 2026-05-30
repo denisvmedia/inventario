@@ -49,7 +49,7 @@ func TestINBBackupRoundTripPostgres(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	uniq := fmt.Sprintf("%d", time.Now().UnixNano()%1000000)
+	uniq := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	// --- Tenant + user + group (the FileEntity the import creates is
 	// group-scoped, so a real group must exist for the import to succeed). ---

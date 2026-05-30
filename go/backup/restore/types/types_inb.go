@@ -269,9 +269,19 @@ func (c *INBCommodity) RestoredAcquisition() (*decimal.Decimal, *models.Currency
 	if err != nil {
 		return nil, nil, errxtrace.Wrap("invalid acquisitionPrice", err, errx.Attrs("commodity_id", c.ID))
 	}
-	if price == nil || c.AcquisitionCurrency == "" {
-		// Both-or-neither: a half-present pair is treated as absent.
+	hasPrice := price != nil
+	hasCurrency := c.AcquisitionCurrency != ""
+	switch {
+	case !hasPrice && !hasCurrency:
+		// No acquisition provenance in the archive.
 		return nil, nil, nil
+	case hasPrice != hasCurrency:
+		// The DB CHECK enforces both-or-neither, so a one-sided pair is a corrupt
+		// archive — fail the restore rather than silently dropping the provenance.
+		return nil, nil, errxtrace.ClassifyNew(
+			"acquisition provenance is half-present (need both acquisitionPrice and acquisitionCurrency)",
+			errx.Attrs("commodity_id", c.ID),
+		)
 	}
 	currency := models.Currency(c.AcquisitionCurrency)
 	return price, &currency, nil

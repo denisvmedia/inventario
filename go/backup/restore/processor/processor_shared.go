@@ -67,18 +67,18 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 	restoreOperationRegistry := l.factorySet.RestoreOperationRegistryFactory.CreateServiceRegistry()
 	restoreOperation, err := restoreOperationRegistry.Get(ctx, l.restoreOperationID)
 	if err != nil {
-		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get restore operation: %v", err))
+		return l.markRestoreFailed(ctx, err, "failed to get restore operation")
 	}
 
 	exportReg := l.factorySet.ExportRegistryFactory.CreateServiceRegistry()
 	export, err := exportReg.Get(ctx, restoreOperation.ExportID)
 	if err != nil {
-		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get export: %v", err))
+		return l.markRestoreFailed(ctx, err, "failed to get export")
 	}
 
 	user, err := l.factorySet.UserRegistry.Get(ctx, export.CreatedByUserID)
 	if err != nil {
-		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get user: %v", err))
+		return l.markRestoreFailed(ctx, err, "failed to get user")
 	}
 	ctx = appctx.WithUser(ctx, user)
 
@@ -91,7 +91,7 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 	if export.GroupID != "" {
 		group, gerr := l.factorySet.LocationGroupRegistry.Get(ctx, export.GroupID)
 		if gerr != nil {
-			return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get restore group: %v", gerr))
+			return l.markRestoreFailed(ctx, gerr, "failed to get restore group")
 		}
 		ctx = appctx.WithGroup(ctx, group)
 	}
@@ -99,20 +99,20 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 	restoreOperation.Status = models.RestoreStatusRunning
 	restoreOperation.StartedDate = models.PNow()
 	if _, err = restoreOperationRegistry.Update(ctx, *restoreOperation); err != nil {
-		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to update restore status: %v", err))
+		return l.markRestoreFailed(ctx, err, "failed to update restore status")
 	}
 
 	l.createRestoreStep(ctx, "Initializing restore", models.RestoreStepResultInProgress, "")
 
 	b, err := blob.OpenBucket(ctx, l.uploadLocation)
 	if err != nil {
-		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to open blob bucket: %v", err))
+		return l.markRestoreFailed(ctx, err, "failed to open blob bucket")
 	}
 	defer b.Close()
 
 	reader, err := b.NewReader(ctx, export.FilePath, nil)
 	if err != nil {
-		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to open export file: %v", err))
+		return l.markRestoreFailed(ctx, err, "failed to open export file")
 	}
 	defer reader.Close()
 
@@ -129,7 +129,7 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 
 	stats, err := l.decodeAndRestore(ctx, reader, restoreOptions)
 	if err != nil {
-		return l.markRestoreFailed(ctx, fmt.Sprintf("restore failed: %v", err))
+		return l.markRestoreFailed(ctx, err, "restore failed")
 	}
 
 	restoreOperation.Status = models.RestoreStatusCompleted
@@ -145,7 +145,7 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 	restoreOperation.ErrorCount = stats.ErrorCount
 
 	if _, err = restoreOperationRegistry.Update(ctx, *restoreOperation); err != nil {
-		return l.markRestoreFailed(ctx, fmt.Sprintf("failed to update restore completion status: %v", err))
+		return l.markRestoreFailed(ctx, err, "failed to update restore completion status")
 	}
 
 	l.createRestoreStep(ctx, "Restore completed successfully", models.RestoreStepResultSuccess,
@@ -447,7 +447,13 @@ func (l *RestoreOperationProcessor) updateRestoreStep(ctx context.Context, name 
 	l.createRestoreStep(ctx, name, result, reason)
 }
 
-func (l *RestoreOperationProcessor) markRestoreFailed(ctx context.Context, errorMessage string) error {
+// markRestoreFailed flips the operation to Failed, records a flattened message
+// on the row + a failure step, and returns the wrapped cause so callers retain
+// the original error chain (errors.Is/As still work on classified failures such
+// as bad signatures or ownership violations).
+func (l *RestoreOperationProcessor) markRestoreFailed(ctx context.Context, cause error, errorMessage string) error {
+	failure := errxtrace.Wrap(errorMessage, cause)
+
 	restoreOperationRegistry := l.factorySet.RestoreOperationRegistryFactory.CreateServiceRegistry()
 
 	restoreOperation, err := restoreOperationRegistry.Get(ctx, l.restoreOperationID)
@@ -457,14 +463,14 @@ func (l *RestoreOperationProcessor) markRestoreFailed(ctx context.Context, error
 
 	restoreOperation.Status = models.RestoreStatusFailed
 	restoreOperation.CompletedDate = models.PNow()
-	restoreOperation.ErrorMessage = errorMessage
+	restoreOperation.ErrorMessage = failure.Error()
 
 	if _, err = restoreOperationRegistry.Update(ctx, *restoreOperation); err != nil {
 		return err
 	}
 
-	l.createRestoreStep(ctx, "Restore failed", models.RestoreStepResultError, errorMessage)
-	return fmt.Errorf("%s", errorMessage)
+	l.createRestoreStep(ctx, "Restore failed", models.RestoreStepResultError, failure.Error())
+	return failure
 }
 
 // --- model-level strategy handlers (format-agnostic) ---

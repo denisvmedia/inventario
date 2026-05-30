@@ -33,7 +33,7 @@ import (
 // export → restore cycle byte-for-byte.
 //
 // It runs against a REAL PostgreSQL instance because the acquisition columns are
-// only reachable through the restore-only SetAcquisitionForRestore registry
+// only writable through the restore-only registry.WithRestoreAcquisition context
 // seam (and guarded by a both-or-neither CHECK), and the cover_file_id FK only
 // exists in the SQL schema — the memory backend can't exercise either faithfully.
 //
@@ -59,7 +59,7 @@ func TestINBFieldFidelityRoundTripPostgres(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	uniq := fmt.Sprintf("%d", time.Now().UnixNano()%1000000)
+	uniq := fmt.Sprintf("%d", time.Now().UnixNano())
 	uploadLocation := "file://" + c.TempDir() + "?create_dir=1"
 
 	tenant, user, group := seedFidelityTenant(c, factorySet, ctx, uniq)
@@ -73,7 +73,7 @@ func TestINBFieldFidelityRoundTripPostgres(t *testing.T) {
 	// against a snapshot independent of DB ids / regenerated UUIDs.
 	comReg := must.Must(factorySet.CommodityRegistryFactory.CreateUserRegistry(uctx))
 	srcReloaded := must.Must(comReg.Get(uctx, src.ID))
-	c.Assert(srcReloaded.AcquisitionPrice, qt.IsNotNil, qt.Commentf("seed must set acquisition via the restore-only seam"))
+	c.Assert(srcReloaded.AcquisitionPrice, qt.IsNotNil, qt.Commentf("seed must set acquisition via the restore context seam"))
 	c.Assert(srcReloaded.CoverFileID, qt.IsNotNil, qt.Commentf("seed must set the cover photo"))
 
 	// --- Export (full_database) the signed .inb. ---
