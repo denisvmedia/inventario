@@ -16,7 +16,7 @@ import (
 
 func TestNewImportWorker(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	// Create a temporary directory for uploads
 	tempDir := c.TempDir()
@@ -31,7 +31,7 @@ func TestNewImportWorker(t *testing.T) {
 
 func TestImportWorkerStartStop(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	// Create a temporary directory for imports
 	tempDir := c.TempDir()
@@ -72,7 +72,7 @@ func TestImportWorkerStartStop(t *testing.T) {
 
 func TestImportWorkerIsRunning(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	// Create a temporary directory for imports
 	tempDir := c.TempDir()
@@ -88,7 +88,7 @@ func TestImportWorkerIsRunning(t *testing.T) {
 func TestImportWorkerConcurrentAccess(t *testing.T) {
 	c := qt.New(t)
 	// Test concurrent access to worker methods
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
@@ -129,7 +129,7 @@ func TestImportWorkerConcurrentAccess(t *testing.T) {
 func TestImportWorkerContextCancellation(t *testing.T) {
 	c := qt.New(t)
 	// Test that worker respects context cancellation
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"
@@ -156,7 +156,7 @@ func TestImportWorkerContextCancellation(t *testing.T) {
 
 func TestImportWorkerConfigurableConcurrentLimit(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	// Create a temporary directory for imports
 	tempDir := c.TempDir()
@@ -175,7 +175,7 @@ func TestImportWorkerConfigurableConcurrentLimit(t *testing.T) {
 
 func TestImportWorkerIgnoresNonImportExports(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	tempDir := c.TempDir()
@@ -232,7 +232,7 @@ func TestImportWorkerIgnoresNonImportExports(t *testing.T) {
 
 func TestImportWorkerStopIdempotent(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 
 	tempDir := c.TempDir()
 	uploadLocation := "file://" + tempDir + "?create_dir=1"

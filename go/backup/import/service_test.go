@@ -17,7 +17,7 @@ import (
 
 func TestNewImportService(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	uploadLocation := "memory://test-bucket"
 
 	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
@@ -27,7 +27,7 @@ func TestNewImportService(t *testing.T) {
 
 func TestImportService_ProcessImport_ExportNotFound(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	uploadLocation := "mem://test-bucket"
 	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	ctx := context.Background()
@@ -39,7 +39,7 @@ func TestImportService_ProcessImport_ExportNotFound(t *testing.T) {
 
 func TestImportService_ProcessImport_BlobBucketError(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 	// Use invalid upload location to trigger blob bucket error
 	uploadLocation := "invalid://invalid-location"
@@ -68,7 +68,7 @@ func TestImportService_ProcessImport_BlobBucketError(t *testing.T) {
 
 func TestImportService_ProcessImport_FileNotFound(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 	uploadLocation := "mem://test-bucket"
 	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
@@ -96,7 +96,7 @@ func TestImportService_ProcessImport_FileNotFound(t *testing.T) {
 
 func TestImportService_ProcessImport_InvalidXML(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
@@ -138,7 +138,7 @@ func TestImportService_ProcessImport_InvalidXML(t *testing.T) {
 
 func TestImportService_ProcessImport_Success(t *testing.T) {
 	c := qt.New(t)
-	factorySet, testUserID := newTestFactorySet()
+	factorySet, testUserID, testGroupID := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
@@ -173,7 +173,7 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 		Type:                     models.ExportTypeImported,
 		Status:                   models.ExportStatusPending,
 		Description:              "Test import",
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", testGroupID, testUserID),
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
@@ -208,7 +208,7 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 
 func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 	c := qt.New(t)
-	factorySet, testUserID := newTestFactorySet()
+	factorySet, testUserID, testGroupID := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads
@@ -252,7 +252,7 @@ func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 		Type:                     models.ExportTypeImported,
 		Status:                   models.ExportStatusPending,
 		Description:              "Test import with files",
-		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", "", testUserID),
+		TenantGroupAwareEntityID: models.WithTenantGroupAwareEntityID("test-export-1", "test-tenant", testGroupID, testUserID),
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
@@ -272,7 +272,7 @@ func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 
 func TestImportService_ProcessImport_ExportRecordDeleted(t *testing.T) {
 	c := qt.New(t)
-	factorySet, _ := newTestFactorySet()
+	factorySet, _, _ := newTestFactorySet()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
 	// Create a temporary directory for uploads

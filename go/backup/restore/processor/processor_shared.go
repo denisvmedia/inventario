@@ -85,11 +85,15 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 	// Resolve the export's group and inject it into ctx. The restore runs from
 	// a background worker with no request middleware, so the group (and its
 	// currency, needed by commodity validation) must be resolved here — mirrors
-	// ProcessExport's group wiring.
+	// ProcessExport's group wiring. A non-empty GroupID that fails to resolve is
+	// a hard failure: silently dropping it leaves group_currency unset, so every
+	// commodity fails validation while the restore still reports Completed.
 	if export.GroupID != "" {
-		if group, gerr := l.factorySet.LocationGroupRegistry.Get(ctx, export.GroupID); gerr == nil {
-			ctx = appctx.WithGroup(ctx, group)
+		group, gerr := l.factorySet.LocationGroupRegistry.Get(ctx, export.GroupID)
+		if gerr != nil {
+			return l.markRestoreFailed(ctx, fmt.Sprintf("failed to get restore group: %v", gerr))
 		}
+		ctx = appctx.WithGroup(ctx, group)
 	}
 
 	restoreOperation.Status = models.RestoreStatusRunning

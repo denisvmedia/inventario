@@ -465,8 +465,14 @@ func (b *inbBuilder) planCommodityFiles(loc *models.Location, com *models.Commod
 func (b *inbBuilder) buildFileRef(locSlug string, com *models.Commodity, bucket string, cand *candidateFile) (INBFileRef, pendingFile) {
 	file := cand.file
 	name := blobkeys.SanitizeArchivePath(fileMemberName(file))
+	// Disambiguate by the file's immutable UUID: two files attached to the same
+	// commodity bucket can share a user-facing basename (e.g. two "invoice.pdf").
+	// Without the UUID segment they would collide on one archive member name and
+	// restore would silently drop one file's bytes (and mis-assign the survivor's
+	// metadata) while still reporting Completed. The UUID guarantees uniqueness;
+	// the original filename is preserved in the ref's Name/OriginalPath.
 	archivePath := blobkeys.SanitizeArchivePath(
-		fmt.Sprintf("%s%s/%s/%s/%s", INBFilesPrefix, locSlug, com.UUID, bucket, name),
+		fmt.Sprintf("%s%s/%s/%s/%s/%s", INBFilesPrefix, locSlug, com.UUID, bucket, file.UUID, name),
 	)
 
 	ref := INBFileRef{

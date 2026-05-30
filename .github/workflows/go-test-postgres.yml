@@ -180,3 +180,15 @@ jobs:
           POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
         run: go test -v -race -tags integration ./debug/seeddata/...
         working-directory: go
+
+      - name: Run backup .inb round-trip integration test
+        # #534: the signed .inb export -> re-import round trip on a real
+        # database. This is the only Go-level coverage that catches the
+        # postgres-only group-scoped FileEntity bug (the in-memory registry
+        # does not enforce group_id, so unit tests cannot see it). Run targeted
+        # rather than the whole ./integration package (its other tests share a
+        # DB and are not isolation-safe when run together — see #1953).
+        env:
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
+        run: go test -v -race -run TestINBBackupRoundTripPostgres ./integration/...
+        working-directory: go
