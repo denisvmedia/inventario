@@ -814,8 +814,17 @@ func (api *filesAPI) servePlaceholderThumbnail(w http.ResponseWriter, r *http.Re
 	// Check if there's a thumbnail generation job for this file
 	thumbnailService := services.NewThumbnailGenerationService(api.factorySet, api.uploadLocation, api.thumbnailConfig)
 
+	// "No job yet" is the common first-view case — match the registry's
+	// own sentinel, not apiserver.ErrNotFound. The registry wraps
+	// registry.ErrNotFound (see ThumbnailGenerationJobRegistry.GetJobByFileID),
+	// and apiserver.ErrNotFound is a *separate* sentinel that wraps
+	// registry.ErrNotFound rather than being wrapped by it — so
+	// errors.Is(err, ErrNotFound) is false here and the handler used to
+	// 500 instead of falling through to enqueue generation. That meant
+	// on-demand thumbnails never generated for any file without a
+	// pre-existing job (e.g. every seeded fixture image).
 	job, err := thumbnailService.GetJobByFileID(r.Context(), fileID)
-	if err != nil && !errors.Is(err, ErrNotFound) {
+	if err != nil && !errors.Is(err, registry.ErrNotFound) {
 		internalServerError(w, r, errxtrace.Wrap("failed to check thumbnail generation status", err))
 		return
 	}
