@@ -5,17 +5,18 @@ import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { ArrowLeft, ArrowRight, Building2 } from "lucide-react"
 
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Page, PageHeader } from "@/components/ui/page"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
+import { FieldError } from "@/components/FieldError"
+import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { IconPicker } from "@/components/groups/IconPicker"
 import { useCreateGroup } from "@/features/group/hooks"
 import { createGroupSchema, type CreateGroupInput } from "@/features/group/schemas"
 import { useAppToast } from "@/hooks/useAppToast"
-import { parseServerError } from "@/lib/server-error"
+import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
 // /groups/new — create-group form. Renders a single panel (name + icon
@@ -27,7 +28,7 @@ export function CreateGroupPage() {
   const navigate = useNavigate()
   const mutation = useCreateGroup()
   const toast = useAppToast()
-  const [serverError, setServerError] = useState<string | null>(null)
+  const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
 
   const form = useForm<CreateGroupInput>({
     resolver: zodResolver(createGroupSchema),
@@ -61,13 +62,13 @@ export function CreateGroupPage() {
         // exists; a retry would duplicate it) — they need to reload so
         // RootRedirect can resolve the freshly-created group via the
         // invalidated /groups cache.
-        setServerError(t("groups:create.errorMissingSlug"))
+        setServerError({ kind: "unknown", message: t("groups:create.errorMissingSlug") })
         return
       }
       toast.success(t("groups:create.successToast"))
       navigate(`/g/${encodeURIComponent(created.slug)}`)
     } catch (err) {
-      setServerError(parseServerError(err, t("groups:create.errorGeneric")))
+      setServerError(classifyServerError(err, t("groups:create.errorGeneric")))
     }
   }
 
@@ -118,14 +119,15 @@ export function CreateGroupPage() {
               maxLength={100}
               disabled={mutation.isPending}
               aria-invalid={!!form.formState.errors.name}
+              aria-describedby={form.formState.errors.name ? "group-name-error" : undefined}
               data-testid="group-name-input"
               {...form.register("name")}
             />
-            {form.formState.errors.name ? (
-              <p className="text-xs text-destructive" data-testid="group-name-error">
-                {t(form.formState.errors.name.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="group-name-error"
+              testId="group-name-error"
+              message={form.formState.errors.name?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -143,11 +145,7 @@ export function CreateGroupPage() {
                 />
               )}
             />
-            {form.formState.errors.icon ? (
-              <p className="text-xs text-destructive" data-testid="group-icon-error">
-                {t(form.formState.errors.icon.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError testId="group-icon-error" message={form.formState.errors.icon?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -166,18 +164,13 @@ export function CreateGroupPage() {
               )}
             />
             <p className="text-[11px] text-muted-foreground">{t("groups:create.currencyHelp")}</p>
-            {form.formState.errors.group_currency ? (
-              <p className="text-xs text-destructive" data-testid="group-currency-error">
-                {t(form.formState.errors.group_currency.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              testId="group-currency-error"
+              message={form.formState.errors.group_currency?.message}
+            />
           </div>
 
-          {serverError ? (
-            <Alert variant="destructive" data-testid="create-group-server-error">
-              <AlertDescription>{serverError}</AlertDescription>
-            </Alert>
-          ) : null}
+          <ServerErrorBanner error={serverError} testId="create-group-server-error" />
 
           <div className="flex justify-end gap-2 pt-2">
             <Button

@@ -21,6 +21,15 @@ interface IconPickerProps {
   disabled?: boolean
 }
 
+// NOTE — there are two intentional icon pickers (see
+// devdocs/frontend/forms.md → "Icon pickers"): this inline-grid variant
+// for location/area dialogs (small curated palette, the mock renders it
+// inline) and the Popover variant in `components/groups/IconPicker.tsx`
+// for the group create/settings surface (many categorised glyphs in a
+// space-constrained form). They are NOT duplicates — different UX + data
+// source — so they are kept separate rather than merged. Use this one for
+// the location/area dialogs.
+//
 // IconPicker mirrors the mock dialogs' inline icon grid (see
 // `design-mocks/src/components/LocationDialog.tsx` L102-L122 and
 // `AreaDialog.tsx` L62-L82): a `flex-wrap` row of `size-9` `rounded-lg`

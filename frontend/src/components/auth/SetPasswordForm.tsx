@@ -7,13 +7,15 @@ import { CheckCircle2, KeyRound } from "lucide-react"
 
 import { PasswordInput } from "@/components/auth/PasswordInput"
 import { PasswordStrengthMeter } from "@/components/auth/PasswordStrengthMeter"
+import { FieldError } from "@/components/FieldError"
+import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useChangePassword, useLogout } from "@/features/auth/hooks"
 import { setPasswordSchema, type SetPasswordInput } from "@/features/auth/schemas"
-import { parseServerError } from "@/lib/server-error"
+import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 
 // SetPasswordForm — surface for OAuth-only users to set their first
 // password (#1394). Same look as the password card on EditProfilePage,
@@ -30,7 +32,7 @@ export function SetPasswordForm() {
   const changePasswordMutation = useChangePassword()
   const logoutMutation = useLogout()
 
-  const [serverError, setServerError] = useState<string | null>(null)
+  const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
   const [success, setSuccess] = useState(false)
 
   const form = useForm<SetPasswordInput>({
@@ -75,7 +77,7 @@ export function SetPasswordForm() {
         })()
       }, 1500)
     } catch (err) {
-      setServerError(parseServerError(err, t("auth:setPassword.errorGeneric")))
+      setServerError(classifyServerError(err, t("auth:setPassword.errorGeneric")))
     }
   }
 
@@ -115,6 +117,9 @@ export function SetPasswordForm() {
               hideLockIcon
               disabled={changePasswordMutation.isPending}
               aria-invalid={!!form.formState.errors.newPassword}
+              aria-describedby={
+                form.formState.errors.newPassword ? "set-new-password-error" : undefined
+              }
               data-testid="set-new-password"
               {...form.register("newPassword")}
             />
@@ -123,14 +128,11 @@ export function SetPasswordForm() {
               userInputs={strengthInputs}
               testId="set-password-strength"
             />
-            {form.formState.errors.newPassword ? (
-              <p
-                className="field-error text-xs text-destructive"
-                data-testid="set-new-password-error"
-              >
-                {t(form.formState.errors.newPassword.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="set-new-password-error"
+              testId="set-new-password-error"
+              message={form.formState.errors.newPassword?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -141,28 +143,24 @@ export function SetPasswordForm() {
               hideLockIcon
               disabled={changePasswordMutation.isPending}
               aria-invalid={!!form.formState.errors.confirmPassword}
+              aria-describedby={
+                form.formState.errors.confirmPassword ? "set-confirm-password-error" : undefined
+              }
               data-testid="set-confirm-password"
               {...form.register("confirmPassword")}
             />
-            {form.formState.errors.confirmPassword ? (
-              <p
-                className="field-error text-xs text-destructive"
-                data-testid="set-confirm-password-error"
-              >
-                {t(form.formState.errors.confirmPassword.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="set-confirm-password-error"
+              testId="set-confirm-password-error"
+              message={form.formState.errors.confirmPassword?.message}
+            />
           </div>
 
-          {serverError ? (
-            <Alert
-              variant="destructive"
-              className="error-banner"
-              data-testid="set-password-server-error"
-            >
-              <AlertDescription>{serverError}</AlertDescription>
-            </Alert>
-          ) : null}
+          <ServerErrorBanner
+            error={serverError}
+            className="error-banner"
+            testId="set-password-server-error"
+          />
 
           <div className="flex justify-end pt-2">
             <Button

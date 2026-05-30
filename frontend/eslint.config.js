@@ -44,6 +44,22 @@ export default [
       "react/prop-types": "off",
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       "@typescript-eslint/no-explicit-any": "warn",
+      // Design-system guard (#1264): the blessed dropdown for form &
+      // settings fields is the shadcn <Select> primitive
+      // (@/components/ui/select). A raw native <select> drifts from the
+      // single visual contract. It stays permissible for utility / compact
+      // / mobile selectors (bulk-move bars, mobile category collapse, list
+      // sort) — annotate those deliberately with
+      // `eslint-disable-next-line no-restricted-syntax -- <reason>`. See
+      // devdocs/frontend/forms.md → "Dropdowns".
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "JSXOpeningElement[name.name='select']",
+          message:
+            "Use the shadcn <Select> primitive (@/components/ui/select) for form & settings dropdowns. Native <select> is allowed only for utility/compact/mobile selectors — annotate with `// eslint-disable-next-line no-restricted-syntax -- <reason>`. See devdocs/frontend/forms.md.",
+        },
+      ],
       // eslint-plugin-react-hooks 5.x added a React-Compiler ruleset that
       // flags `form.watch(cb)` from React Hook Form because the callback
       // form returns a non-memoizable subscription. RHF's watch() is the

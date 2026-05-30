@@ -3,7 +3,6 @@ import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -16,10 +15,12 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { FieldError } from "@/components/FieldError"
+import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { IconPicker, LOCATION_ICONS } from "@/components/locations/IconPicker"
 import type { Location } from "@/features/locations/api"
 import { locationSchema, type LocationFormInput } from "@/features/locations/schemas"
-import { parseServerError } from "@/lib/server-error"
+import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 
 interface LocationFormDialogProps {
   // True opens the dialog. Closing fires `onOpenChange(false)`.
@@ -50,7 +51,7 @@ export function LocationFormDialog({
   isPending = false,
 }: LocationFormDialogProps) {
   const { t } = useTranslation()
-  const [serverError, setServerError] = useState<string | null>(null)
+  const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
   const isEdit = !!location
 
   const form = useForm<LocationFormInput>({
@@ -100,7 +101,7 @@ export function LocationFormDialog({
       await onSubmit(values)
       onOpenChange(false)
     } catch (err) {
-      setServerError(parseServerError(err, t("locations:dialog.errorGeneric")))
+      setServerError(classifyServerError(err, t("locations:dialog.errorGeneric")))
     }
   }
 
@@ -139,11 +140,10 @@ export function LocationFormDialog({
                 />
               )}
             />
-            {form.formState.errors.icon ? (
-              <p className="text-xs text-destructive" data-testid="location-icon-error">
-                {t(form.formState.errors.icon.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              testId="location-icon-error"
+              message={form.formState.errors.icon?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -158,14 +158,15 @@ export function LocationFormDialog({
               maxLength={200}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.name}
+              aria-describedby={form.formState.errors.name ? "location-name-error" : undefined}
               data-testid="location-name-input"
               {...form.register("name")}
             />
-            {form.formState.errors.name ? (
-              <p className="text-xs text-destructive" data-testid="location-name-error">
-                {t(form.formState.errors.name.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="location-name-error"
+              testId="location-name-error"
+              message={form.formState.errors.name?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -178,15 +179,18 @@ export function LocationFormDialog({
               rows={2}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.description}
+              aria-describedby={
+                form.formState.errors.description ? "location-description-error" : undefined
+              }
               data-testid="location-description-input"
               className="resize-none"
               {...form.register("description")}
             />
-            {form.formState.errors.description ? (
-              <p className="text-xs text-destructive" data-testid="location-description-error">
-                {t(form.formState.errors.description.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="location-description-error"
+              testId="location-description-error"
+              message={form.formState.errors.description?.message}
+            />
             <p className="text-[11px] text-muted-foreground">
               {t("locations:dialog.descriptionHelp")}
             </p>
@@ -201,22 +205,21 @@ export function LocationFormDialog({
               maxLength={2000}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.address}
+              aria-describedby={
+                form.formState.errors.address ? "location-address-error" : undefined
+              }
               data-testid="location-address-input"
               {...form.register("address")}
             />
-            {form.formState.errors.address ? (
-              <p className="text-xs text-destructive" data-testid="location-address-error">
-                {t(form.formState.errors.address.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="location-address-error"
+              testId="location-address-error"
+              message={form.formState.errors.address?.message}
+            />
             <p className="text-[11px] text-muted-foreground">{t("locations:dialog.addressHelp")}</p>
           </div>
 
-          {serverError ? (
-            <Alert variant="destructive" data-testid="location-form-server-error">
-              <AlertDescription>{serverError}</AlertDescription>
-            </Alert>
-          ) : null}
+          <ServerErrorBanner error={serverError} testId="location-form-server-error" />
 
           {/* DialogFooter is rendered INSIDE the form. The submit button used
               to live outside the form and bind via `form="location-form"`, but

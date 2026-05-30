@@ -31,6 +31,7 @@ export function CategoryTiles({ active, counts, loading, onSelect }: CategoryTil
         <span className="sr-only">
           {t("files:categoryMobileLabel", { defaultValue: "Category" })}
         </span>
+        {/* eslint-disable-next-line no-restricted-syntax -- mobile-only: the category tiles collapse to a compact native <select> to save screen real-estate (mock-driven). Not a form field */}
         <select
           data-testid="files-category-select"
           value={active}
