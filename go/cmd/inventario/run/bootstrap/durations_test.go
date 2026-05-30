@@ -33,6 +33,9 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 
 	got, err := bootstrap.ParseWorkerDurations(cfg)
 	c.Assert(err, qt.IsNil)
+	// Unset soft-pause refresh interval (#1308) falls back to 10s rather
+	// than failing the parse, unlike the fail-fast worker intervals above.
+	c.Assert(got.WorkerControlRefreshInterval, qt.Equals, 10*time.Second)
 	c.Assert(got.ExportPollInterval, qt.Equals, 11*time.Second)
 	c.Assert(got.ImportPollInterval, qt.Equals, 12*time.Second)
 	c.Assert(got.RestorePollInterval, qt.Equals, 13*time.Second)
@@ -49,6 +52,32 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 	c.Assert(got.ThumbnailJobRetentionPeriod, qt.Equals, 48*time.Hour)
 	c.Assert(got.ThumbnailJobBatchTimeout, qt.Equals, 45*time.Second)
 	c.Assert(got.DetachedThumbnailJobTimeout, qt.Equals, 3*time.Minute)
+}
+
+func TestParseWorkerDurations_WorkerControlRefreshOverride(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := &bootstrap.Config{}
+	cfg.SetDefaults()
+	cfg.WorkerControlRefreshInterval = "3s"
+
+	got, err := bootstrap.ParseWorkerDurations(cfg)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.WorkerControlRefreshInterval, qt.Equals, 3*time.Second)
+}
+
+func TestParseWorkerDurations_WorkerControlRefreshInvalidFallsBack(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := &bootstrap.Config{}
+	cfg.SetDefaults()
+	// A malformed / non-positive value falls back to 10s rather than
+	// aborting startup — unlike the fail-fast worker intervals.
+	cfg.WorkerControlRefreshInterval = "-5s"
+
+	got, err := bootstrap.ParseWorkerDurations(cfg)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.WorkerControlRefreshInterval, qt.Equals, 10*time.Second)
 }
 
 func TestParseWorkerDurations_FailsOnInvalidFlag(t *testing.T) {

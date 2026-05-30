@@ -561,6 +561,50 @@ definitions:
         description: Version information
         type: string
     type: object
+  apiserver.WorkerControlEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/apiserver.WorkerControlResource'
+    type: object
+  apiserver.WorkerControlListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/apiserver.WorkerControlResource'
+        type: array
+    type: object
+  apiserver.WorkerControlResource:
+    properties:
+      attributes:
+        $ref: '#/definitions/apiserver.WorkerControlView'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  apiserver.WorkerControlView:
+    properties:
+      paused:
+        type: boolean
+      paused_at:
+        type: string
+      paused_by:
+        type: string
+      reason:
+        type: string
+      updated_at:
+        type: string
+      worker_type:
+        type: string
+    type: object
+  apiserver.WorkerPauseRequest:
+    properties:
+      reason:
+        description: |-
+          Reason is the optional operator-supplied note for the pause (max 500
+          chars). Persisted into worker_control.reason and the audit breadcrumb.
+        type: string
+    type: object
   apiserver.linkedIdentitiesResponse:
     properties:
       identities:
@@ -5116,6 +5160,111 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Unblock (reactivate) a user account
+      tags:
+      - admin
+  /admin/workers:
+    get:
+      description: Returns one resource per canonical worker type with its soft-pause
+        state (#1308). A worker with no control row renders as paused=false. Resource
+        `type` is "worker_control"; `id` is the worker-type string.
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.WorkerControlListEnvelope'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Account disabled
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List background workers and their pause state (admin)
+      tags:
+      - admin
+  /admin/workers/{workerType}/pause:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Soft-pauses the worker named by {workerType} (#1308): its run loop keeps ticking but skips claiming new work until resumed; in-flight jobs finish. Idempotent.
+        The optional `reason` body field is recorded on the control row and the audit breadcrumb. An empty body is accepted.
+        Unknown worker types return 404 with `admin.worker.unknown_type`; a reason over 500 characters returns 422 with `admin.worker.reason_too_long`.
+      parameters:
+      - description: Worker type (e.g. export, import, thumbnail)
+        in: path
+        name: workerType
+        required: true
+        type: string
+      - description: Optional pause request (reason)
+        in: body
+        name: data
+        schema:
+          $ref: '#/definitions/apiserver.WorkerPauseRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.WorkerControlEnvelope'
+        "400":
+          description: Bad Request - invalid body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Account disabled
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found - unknown worker type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - reason too long
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Soft-pause a background worker (admin)
+      tags:
+      - admin
+  /admin/workers/{workerType}/resume:
+    post:
+      description: Clears the soft-pause on the worker named by {workerType} (#1308)
+        so it resumes claiming work on its next tick. Idempotent. Unknown worker types
+        return 404 with `admin.worker.unknown_type`.
+      parameters:
+      - description: Worker type (e.g. export, import, thumbnail)
+        in: path
+        name: workerType
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.WorkerControlEnvelope'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Account disabled
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found - unknown worker type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Resume a soft-paused background worker (admin)
       tags:
       - admin
   /auth/change-password:

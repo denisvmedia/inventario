@@ -240,6 +240,12 @@ type FactorySet struct {
 	// zeros). Nil-able: a nil func means "no business gauges", and the
 	// collector no-ops on a nil source.
 	SystemStats SystemStatsFunc
+
+	// WorkerControlRegistry holds the global background-worker soft-pause
+	// control rows (issue #1308). Lives on FactorySet only — not
+	// tenant-scoped, not user-aware, no RLS (same posture as
+	// SystemAdminGrantRegistry / AuditLogRegistry).
+	WorkerControlRegistry WorkerControlRegistry
 }
 
 // Ping checks readiness of the backing registry dependency (e.g. database).
@@ -382,6 +388,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
 		SystemAdminGrantRegistry:       fs.SystemAdminGrantRegistry,
 		OAuthIdentityRegistry:          fs.OAuthIdentityRegistry,
+		WorkerControlRegistry:          fs.WorkerControlRegistry,
 	}, nil
 }
 
@@ -426,5 +433,6 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
 		SystemAdminGrantRegistry:       fs.SystemAdminGrantRegistry,
 		OAuthIdentityRegistry:          fs.OAuthIdentityRegistry,
+		WorkerControlRegistry:          fs.WorkerControlRegistry,
 	}
 }

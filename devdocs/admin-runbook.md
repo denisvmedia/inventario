@@ -295,6 +295,113 @@ schema migrations.
 
 ---
 
+## 7. Pausing / resuming background workers (#1308)
+
+Inventario's polling background workers can be **soft-paused** by a
+platform operator
+([#1308](https://github.com/denisvmedia/inventario/issues/1308)).
+Soft-pause keeps each worker's run loop ticking but makes it **skip its
+claim phase** while paused:
+
+- **In-flight jobs finish** — a pause does not interrupt work already
+  running; it only stops *new* work from being claimed.
+- **No new jobs are claimed** while paused.
+- **Resuming is immediate** — it takes effect on the worker's next tick
+  (≤ ~10s, the controller poll interval) with **no process restart**.
+- **State persists across restarts** and is stored in the
+  `worker_control` table (one row per paused worker; an absent row means
+  the worker runs normally).
+- **The whole fleet is coordinated via the shared database** — every
+  replica's pause controller polls the same table, so a single
+  pause/resume applies everywhere.
+
+The `worker_control` table is **not tenant-scoped and has no RLS** —
+worker pause is a platform-operator control orthogonal to tenants (same
+posture as `system_admin_grants` and `audit_logs`).
+
+> **Split deployments (`run workers --workers-only=<group>`):** pause
+> state is fleet-wide, but a paused row only has an effect on replicas
+> that actually run that worker. The pause controller still polls and
+> exposes all canonical types regardless of `--workers-only`, so in a
+> process that doesn't schedule a given worker the
+> `inventario_worker_paused{type=...}` gauge and `workers status` line
+> for it are informational — the worker is paused wherever it *is*
+> scheduled (e.g. another group's Deployment).
+
+### Canonical worker types
+
+The pausable worker types (stable identifiers used by the CLI, the API,
+and the `worker_control.worker_type` column):
+
+`export`, `import`, `restore`, `thumbnail`, `refresh-token-cleanup`,
+`login-event-retention`, `group-purge`, `warranty-reminder`,
+`storage-quota-reminder`, `loan-reminder`, `maintenance-reminder`,
+`currency-migration`.
+
+> Email delivery is intentionally **not** in this set — it is a Redis
+> subscriber rather than a polling worker, with a separate pause story.
+
+### CLI
+
+The `inventario workers` command group mutates pause state directly in
+the database (PostgreSQL only — `memory://` is rejected, since the state
+must persist in a database shared with the worker process):
+
+```bash
+# Pause a worker (optionally with a reason)
+inventario workers pause --type export --reason "maintenance window" \
+  --db-dsn postgres://user:pass@localhost:5432/inventario
+
+# Resume it
+inventario workers resume --type export --db-dsn postgres://...
+
+# Show the pause state of every worker (no row => running)
+inventario workers status --db-dsn postgres://...
+```
+
+> This is **not** the same as `inventario run workers`, which *starts*
+> the worker process. The `workers` group mutates the pause state of an
+> already-running deployment.
+
+A CLI pause records `paused_by = "cli"` (the CLI has no authenticated
+operator session). Each operation writes an audit row
+(`admin.worker_pause` / `admin.worker_resume`, see §4) with the worker
+type as the subject.
+
+### Admin REST API
+
+The same control is exposed under the back-office-gated admin subtree
+(requires a back-office session, `RequireBackofficeAuth`):
+
+| Method & path | Effect |
+| ------------- | ------ |
+| `GET /api/v1/admin/workers` | List every canonical worker type with its pause state (`type: "worker_control"`, `id`: the worker type). |
+| `POST /api/v1/admin/workers/{workerType}/pause` | Soft-pause the worker. Optional `{"reason": "..."}` body (≤ 500 chars; empty body allowed). |
+| `POST /api/v1/admin/workers/{workerType}/resume` | Resume the worker (no body). |
+
+- An unknown `{workerType}` returns **404** with code
+  `admin.worker.unknown_type`; a reason over 500 characters returns
+  **422** with `admin.worker.reason_too_long`.
+- A pause via the API records `paused_by = <backoffice_users.id>` (the
+  operator of record) rather than the CLI's `"cli"` marker.
+
+### Observability
+
+- **Metric:** `inventario_worker_paused{type="<worker>"}` is a gauge —
+  `1` while the named worker is soft-paused, `0` otherwise. The series
+  exists for every canonical type (initialised to `0` at startup) so
+  dashboards and alerts always have the full label set.
+- **Log lines (once per transition):** `worker paused`
+  (`type`, and `reason` / `paused_by` when present) and
+  `worker resumed` (`type`). These are emitted by the pause controller
+  on the paused↔running flip, not on every poll.
+- **Fail-safe:** if the controller's poll of `worker_control` fails, the
+  last-known state is **retained** (a DB blip cannot silently un-pause a
+  worker an operator deliberately stopped); the failure is logged once
+  on the error transition.
+
+---
+
 ## See also
 
 - [`devdocs/security/admin-threat-model.md`](security/admin-threat-model.md)

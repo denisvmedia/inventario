@@ -22,6 +22,7 @@ type WorkerDurations struct {
 	MaintenanceReminderInterval  time.Duration
 	CurrencyMigrationInterval    time.Duration
 	BusinessMetricsInterval      time.Duration
+	WorkerControlRefreshInterval time.Duration
 	ThumbnailPollInterval        time.Duration
 	ThumbnailCleanupInterval     time.Duration
 	ThumbnailJobRetentionPeriod  time.Duration
@@ -78,5 +79,30 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		}
 		*spec.dst = d
 	}
+
+	// The soft-pause refresh interval (#1308) is parsed tolerantly rather
+	// than fail-fast: an unset or non-positive value falls back to the 10s
+	// default instead of aborting startup. The controller would clamp it
+	// anyway, and this keeps callers that build a bare Config (tests) from
+	// having to populate a knob whose default is always safe.
+	out.WorkerControlRefreshInterval = parseWorkerDurationOrDefault(cfg.WorkerControlRefreshInterval, defaultWorkerControlRefreshInterval)
+
 	return out, nil
+}
+
+// defaultWorkerControlRefreshInterval mirrors the controller's own
+// fallback and the defaults package value so a missing/invalid config
+// resolves to the same 10s cadence everywhere.
+const defaultWorkerControlRefreshInterval = 10 * time.Second
+
+// parseWorkerDurationOrDefault parses value, returning fallback when value
+// is empty, malformed, or non-positive. Used for the soft-pause refresh
+// interval where an always-safe default is preferable to a hard startup
+// failure.
+func parseWorkerDurationOrDefault(value string, fallback time.Duration) time.Duration {
+	d, err := time.ParseDuration(value)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+	return d
 }

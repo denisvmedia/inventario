@@ -50,6 +50,9 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.UserMFASecretRegistry = NewUserMFASecretRegistry(dbx)
 	fs.AuditLogRegistry = NewAuditLogRegistry(dbx)
 	fs.SystemAdminGrantRegistry = NewSystemAdminGrantRegistry(dbx)
+	// Background-worker soft-pause control (issue #1308). Global control
+	// plane — not tenant-scoped, no RLS (same posture as system_admin_grants).
+	fs.WorkerControlRegistry = NewWorkerControlRegistry(dbx)
 	fs.EmailVerificationRegistry = NewEmailVerificationRegistry(dbx)
 	fs.PasswordResetRegistry = NewPasswordResetRegistry(dbx)
 	// OAuth identities (#1394) — service-mode lookup keyed by

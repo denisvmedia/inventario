@@ -17,6 +17,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/denisvmedia/inventario/models"
 )
 
 const defaultWarrantyReminderInterval = 1 * time.Hour
@@ -48,6 +50,7 @@ type WarrantyReminderWorker struct {
 	service  *WarrantyReminderService
 	interval time.Duration
 	clock    func() time.Time
+	pause    PauseChecker
 	stopCh   chan struct{}
 	stopOnce sync.Once
 	wg       sync.WaitGroup
@@ -59,6 +62,7 @@ type WarrantyReminderOption func(*warrantyReminderOptions)
 type warrantyReminderOptions struct {
 	interval time.Duration
 	clock    func() time.Time
+	pause    PauseChecker
 }
 
 // WithWarrantyReminderInterval overrides the default tick cadence.
@@ -82,6 +86,17 @@ func WithWarrantyReminderClock(now func() time.Time) WarrantyReminderOption {
 	}
 }
 
+// WithWarrantyReminderPauseController wires the soft-pause controller so
+// the worker skips its sweep while the warranty-reminder worker type is
+// paused (#1308). A nil checker leaves the worker unpaused.
+func WithWarrantyReminderPauseController(pc PauseChecker) WarrantyReminderOption {
+	return func(o *warrantyReminderOptions) {
+		if pc != nil {
+			o.pause = pc
+		}
+	}
+}
+
 // NewWarrantyReminderWorker constructs the worker. The default cadence
 // is one hour — the threshold windows are days, not minutes, so a
 // longer cadence wastes ticks; a shorter one risks flapping at
@@ -98,6 +113,7 @@ func NewWarrantyReminderWorker(service *WarrantyReminderService, opts ...Warrant
 		service:  service,
 		interval: options.interval,
 		clock:    options.clock,
+		pause:    options.pause,
 		stopCh:   make(chan struct{}),
 	}
 }
@@ -148,6 +164,12 @@ func (w *WarrantyReminderWorker) run(ctx context.Context) {
 // worker can emit one Prometheus series per threshold value
 // (matching the documented label set: 60 / 30 / 7).
 func (w *WarrantyReminderWorker) tick(ctx context.Context) {
+	// Soft-pause (#1308): skip the sweep while paused. The ticker keeps
+	// running so resuming takes effect on the next tick without a restart.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeWarrantyReminder) {
+		return
+	}
+
 	stats, err := w.service.RemindOnce(ctx, w.clock())
 	if err != nil {
 		slog.Error("Warranty reminder sweep failed", "error", err)

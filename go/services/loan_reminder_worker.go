@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -38,6 +39,7 @@ type LoanReminderWorker struct {
 	service  *LoanReminderService
 	interval time.Duration
 	clock    func() time.Time
+	pause    PauseChecker
 	stopCh   chan struct{}
 	stopOnce sync.Once
 	wg       sync.WaitGroup
@@ -49,6 +51,7 @@ type LoanReminderOption func(*loanReminderOptions)
 type loanReminderOptions struct {
 	interval time.Duration
 	clock    func() time.Time
+	pause    PauseChecker
 }
 
 // WithLoanReminderInterval overrides the default tick cadence. Non-
@@ -72,6 +75,17 @@ func WithLoanReminderClock(now func() time.Time) LoanReminderOption {
 	}
 }
 
+// WithLoanReminderPauseController wires the soft-pause controller so the
+// worker skips its sweep while the loan-reminder worker type is paused
+// (#1308). A nil checker leaves the worker unpaused.
+func WithLoanReminderPauseController(pc PauseChecker) LoanReminderOption {
+	return func(o *loanReminderOptions) {
+		if pc != nil {
+			o.pause = pc
+		}
+	}
+}
+
 // NewLoanReminderWorker constructs the worker. Default cadence: one
 // hour — same reasoning as warranty / storage-quota workers: cadence
 // is hours-scale, not minutes, so a longer interval wastes ticks and a
@@ -88,6 +102,7 @@ func NewLoanReminderWorker(service *LoanReminderService, opts ...LoanReminderOpt
 		service:  service,
 		interval: options.interval,
 		clock:    options.clock,
+		pause:    options.pause,
 		stopCh:   make(chan struct{}),
 	}
 }
@@ -135,6 +150,12 @@ func (w *LoanReminderWorker) run(ctx context.Context) {
 // a per-kind breakdown so the worker emits one Prometheus series per
 // kind label.
 func (w *LoanReminderWorker) tick(ctx context.Context) {
+	// Soft-pause (#1308): skip the sweep while paused. The ticker keeps
+	// running so resuming takes effect on the next tick without a restart.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeLoanReminder) {
+		return
+	}
+
 	stats, err := w.service.RemindOnce(ctx, w.clock())
 	if err != nil {
 		slog.Error("Loan reminder sweep failed", "error", err)

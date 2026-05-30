@@ -33,6 +33,7 @@ type Config struct {
 	MaintenanceReminderInterval   string `yaml:"maintenance_reminder_interval" env:"MAINTENANCE_REMINDER_INTERVAL" env-default:""`
 	CurrencyMigrationInterval     string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
 	BusinessMetricsInterval       string `yaml:"business_metrics_interval" env:"BUSINESS_METRICS_INTERVAL" env-default:""`
+	WorkerControlRefreshInterval  string `yaml:"worker_control_refresh_interval" env:"WORKER_CONTROL_REFRESH_INTERVAL" env-default:""`
 	JWTSecret                     string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
 	FileSigningKey                string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
 	FileURLExpiration             string `yaml:"file_url_expiration" env:"FILE_URL_EXPIRATION" env-default:"15m"`
@@ -266,6 +267,9 @@ func (c *Config) setWorkerDefaults() {
 	}
 	if c.BusinessMetricsInterval == "" {
 		c.BusinessMetricsInterval = defaults.GetBusinessMetricsInterval()
+	}
+	if c.WorkerControlRefreshInterval == "" {
+		c.WorkerControlRefreshInterval = defaults.GetWorkerControlRefreshInterval()
 	}
 }
 

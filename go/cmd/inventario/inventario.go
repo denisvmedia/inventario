@@ -16,6 +16,7 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/cmd/inventario/tenants"
 	"github.com/denisvmedia/inventario/cmd/inventario/users"
+	"github.com/denisvmedia/inventario/cmd/inventario/workers"
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -61,6 +62,11 @@ Use "inventario [command] --help" for detailed information about each command.`,
 	rootCmd.AddCommand(tenants.New(&dbConfig))
 	rootCmd.AddCommand(users.New(&dbConfig))
 	rootCmd.AddCommand(admin.New(&dbConfig))
+	// Top-level `workers` group (#1308) — soft-pause/resume/status of the
+	// background workers. Distinct from `run workers` (which starts the
+	// worker process): this group MUTATES the shared pause state of an
+	// already-running deployment.
+	rootCmd.AddCommand(workers.New(&dbConfig))
 	rootCmd.AddCommand(backfill.New(&dbConfig))
 	rootCmd.AddCommand(backoffice.New(&dbConfig))
 	rootCmd.AddCommand(version.New())

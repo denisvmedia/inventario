@@ -37,6 +37,7 @@ type Workers struct {
 	MaintenanceReminderInterval  string // Maintenance reminder worker interval (e.g., "1h")
 	CurrencyMigrationInterval    string // Currency migration worker active-poll interval (e.g., "5s")
 	BusinessMetricsInterval      string // Business-metrics collector interval (e.g., "60s")
+	WorkerControlRefreshInterval string // Worker soft-pause control poll interval (e.g., "10s")
 }
 
 // ThumbnailGeneration contains default values for thumbnail generation configuration
@@ -104,6 +105,7 @@ func New() Config {
 			MaintenanceReminderInterval:  "1h",
 			CurrencyMigrationInterval:    "5s",
 			BusinessMetricsInterval:      "60s",
+			WorkerControlRefreshInterval: "10s",
 		},
 		ThumbnailGeneration: ThumbnailGeneration{
 			MaxConcurrentPerUser: 5,     // Maximum 5 simultaneous thumbnail generation jobs per user
@@ -243,6 +245,14 @@ func GetCurrencyMigrationInterval() string {
 // adding meaningful aggregate-query load.
 func GetBusinessMetricsInterval() string {
 	return defaultConfig.Workers.BusinessMetricsInterval
+}
+
+// GetWorkerControlRefreshInterval returns the default poll interval for
+// the background-worker soft-pause controller (#1308). 10s keeps a
+// pause/resume flip visible within a few seconds while adding negligible
+// DB load (one indexed List per interval).
+func GetWorkerControlRefreshInterval() string {
+	return defaultConfig.Workers.WorkerControlRefreshInterval
 }
 
 // GetThumbnailBatchSize returns the default thumbnail worker batch size

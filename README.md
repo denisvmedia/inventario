@@ -223,6 +223,31 @@ See the [System Admin Operations Runbook](devdocs/admin-runbook.md) for
 bootstrapping the first admin, audit-log inspection, lockout recovery, and
 the [admin threat model](devdocs/security/admin-threat-model.md).
 
+#### Background Worker Control (#1308)
+
+Soft-pause / resume Inventario's polling background workers without a
+restart. Pausing keeps a worker's run loop ticking but stops it claiming
+new work; in-flight jobs finish, the state persists in the database, and
+every replica is coordinated via the shared `worker_control` table.
+
+```bash
+# Pause a worker (optionally record a reason)
+./inventario workers pause --type export --reason "maintenance window"
+
+# Resume it
+./inventario workers resume --type export
+
+# Show the pause state of every worker
+./inventario workers status
+```
+
+These commands require a PostgreSQL DSN (the pause state must persist in
+a database shared with the worker process; `memory://` is rejected). This
+is distinct from `run workers`, which *starts* the worker process. See the
+[System Admin Operations Runbook §7](devdocs/admin-runbook.md) for the
+canonical worker types, the equivalent admin REST API, and the
+`inventario_worker_paused` metric.
+
 #### Command Options
 
 **Tenant Commands:**

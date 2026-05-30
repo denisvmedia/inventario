@@ -17,6 +17,7 @@ import (
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/schema/migrations/migrator"
+	"github.com/denisvmedia/inventario/services/workerpause"
 )
 
 // Mode identifies which `run` subcommand is driving the bootstrap. It selects
@@ -46,6 +47,12 @@ type RuntimeSetup struct {
 	EmailLifecycle            EmailServiceLifecycle
 	WorkerDurations           WorkerDurations
 	CloseReadinessRedisPinger func()
+
+	// PauseController polls the worker_control rows and exposes the
+	// soft-pause check the workers consult each tick (#1308). It is built
+	// only in worker-bearing modes (ModeAll / ModeWorkers); it stays nil in
+	// ModeAPIServer, where no worker run loop exists to gate.
+	PauseController *workerpause.Controller
 }
 
 // Build performs the non-goroutine preamble of `inventario run`: it logs the
@@ -102,14 +109,26 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 		return nil, err
 	}
 
-	return &RuntimeSetup{
+	rs := &RuntimeSetup{
 		DSN:                       dsn,
 		FactorySet:                factorySet,
 		Params:                    serverSetup.params,
 		EmailLifecycle:            serverSetup.emailLifecycle,
 		WorkerDurations:           durations,
 		CloseReadinessRedisPinger: serverSetup.closeReadinessRedisPinger,
-	}, nil
+	}
+
+	// Build the soft-pause controller only in worker-bearing modes (#1308).
+	// ModeAPIServer has no worker run loops to gate, so it stays nil there
+	// and the workers' nil-safe pause field keeps them running.
+	if mode == ModeAll || mode == ModeWorkers {
+		rs.PauseController = workerpause.NewController(
+			factorySet.WorkerControlRegistry,
+			workerpause.WithRefreshInterval(durations.WorkerControlRefreshInterval),
+		)
+	}
+
+	return rs, nil
 }
 
 // logInventarioEnv emits every INVENTARIO_-prefixed environment variable name

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -29,6 +30,7 @@ type LoginEventRetentionWorker struct {
 	registry      registry.LoginEventRegistry
 	retention     time.Duration
 	sweepInterval time.Duration
+	pause         PauseChecker
 	stopCh        chan struct{}
 	stopOnce      sync.Once
 	wg            sync.WaitGroup
@@ -42,6 +44,7 @@ type loginEventRetentionOptions struct {
 	retention     time.Duration
 	sweepInterval time.Duration
 	clock         func() time.Time
+	pause         PauseChecker
 }
 
 // WithLoginEventRetention overrides the retention window. Non-positive
@@ -76,6 +79,17 @@ func WithLoginEventRetentionClock(fn func() time.Time) LoginEventRetentionOption
 	}
 }
 
+// WithLoginEventRetentionPauseController wires the soft-pause controller
+// so the worker skips its sweep while the login-event-retention worker
+// type is paused (#1308). A nil checker leaves the worker unpaused.
+func WithLoginEventRetentionPauseController(pc PauseChecker) LoginEventRetentionOption {
+	return func(o *loginEventRetentionOptions) {
+		if pc != nil {
+			o.pause = pc
+		}
+	}
+}
+
 // NewLoginEventRetentionWorker constructs the worker. A nil registry
 // produces an instance whose Start is a no-op; callers can wire the
 // worker unconditionally and let the registry presence decide whether
@@ -92,6 +106,7 @@ func NewLoginEventRetentionWorker(r registry.LoginEventRegistry, opts ...LoginEv
 		registry:      r,
 		retention:     options.retention,
 		sweepInterval: options.sweepInterval,
+		pause:         options.pause,
 		stopCh:        make(chan struct{}),
 		clock:         options.clock,
 	}
@@ -138,6 +153,12 @@ func (w *LoginEventRetentionWorker) run(ctx context.Context) {
 }
 
 func (w *LoginEventRetentionWorker) sweep(ctx context.Context) {
+	// Soft-pause (#1308): skip the sweep while paused. The ticker keeps
+	// running so resuming takes effect on the next tick without a restart.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeLoginEventRetention) {
+		return
+	}
+
 	now := time.Now
 	if w.clock != nil {
 		now = w.clock

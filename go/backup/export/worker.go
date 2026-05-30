@@ -17,11 +17,20 @@ const (
 	// Note: Cleanup interval removed - exports now use immediate hard delete with file entities
 )
 
+// PauseChecker reports whether a worker type is currently soft-paused
+// (#1308). Declared locally so this package depends only on models, not
+// on the workerpause controller — avoiding an import cycle while still
+// being satisfied by *workerpause.Controller.
+type PauseChecker interface {
+	IsPaused(models.WorkerType) bool
+}
+
 // ExportWorker processes export requests in the background
 type ExportWorker struct {
 	exportService *ExportService
 	factorySet    *registry.FactorySet
 	pollInterval  time.Duration
+	pause         PauseChecker
 	stopCh        chan struct{}
 	wg            sync.WaitGroup
 	isRunning     bool
@@ -35,6 +44,7 @@ type WorkerOption func(*exportWorkerOptions)
 
 type exportWorkerOptions struct {
 	pollInterval time.Duration
+	pause        PauseChecker
 }
 
 // WithPollInterval overrides the default interval between export queue polls.
@@ -43,6 +53,17 @@ func WithPollInterval(d time.Duration) WorkerOption {
 	return func(o *exportWorkerOptions) {
 		if d > 0 {
 			o.pollInterval = d
+		}
+	}
+}
+
+// WithPauseController wires the soft-pause controller so the worker skips
+// its claim phase while the export worker type is paused (#1308). A nil
+// checker leaves the worker unpaused.
+func WithPauseController(pc PauseChecker) WorkerOption {
+	return func(o *exportWorkerOptions) {
+		if pc != nil {
+			o.pause = pc
 		}
 	}
 }
@@ -59,6 +80,7 @@ func NewExportWorker(exportService *ExportService, factorySet *registry.FactoryS
 		exportService: exportService,
 		factorySet:    factorySet,
 		pollInterval:  options.pollInterval,
+		pause:         options.pause,
 		stopCh:        make(chan struct{}),
 		semaphore:     semaphore.NewWeighted(int64(maxConcurrentExports)),
 	}
@@ -132,6 +154,13 @@ func (w *ExportWorker) run(ctx context.Context) {
 
 // processPendingExports finds and processes pending export requests
 func (w *ExportWorker) processPendingExports(ctx context.Context) {
+	// Soft-pause (#1308): skip the claim phase while paused. The ticker
+	// keeps running so resuming takes effect on the next tick without a
+	// restart.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeExport) {
+		return
+	}
+
 	reg := w.factorySet.ExportRegistryFactory.CreateServiceRegistry()
 	exports, err := reg.List(ctx)
 	if err != nil {

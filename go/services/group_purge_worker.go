@@ -8,6 +8,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/denisvmedia/inventario/models"
 )
 
 const defaultGroupPurgeInterval = 5 * time.Minute
@@ -37,6 +39,7 @@ var (
 type GroupPurgeWorker struct {
 	service       *GroupPurgeService
 	purgeInterval time.Duration
+	pause         PauseChecker
 	stopCh        chan struct{}
 	stopOnce      sync.Once
 	wg            sync.WaitGroup
@@ -48,6 +51,7 @@ type GroupPurgeOption func(*groupPurgeOptions)
 
 type groupPurgeOptions struct {
 	purgeInterval time.Duration
+	pause         PauseChecker
 }
 
 // WithGroupPurgeInterval overrides the default purge interval. Non-positive
@@ -56,6 +60,17 @@ func WithGroupPurgeInterval(d time.Duration) GroupPurgeOption {
 	return func(o *groupPurgeOptions) {
 		if d > 0 {
 			o.purgeInterval = d
+		}
+	}
+}
+
+// WithGroupPurgePauseController wires the soft-pause controller so the
+// worker skips its sweep while the group-purge worker type is paused
+// (#1308). A nil checker leaves the worker unpaused.
+func WithGroupPurgePauseController(pc PauseChecker) GroupPurgeOption {
+	return func(o *groupPurgeOptions) {
+		if pc != nil {
+			o.pause = pc
 		}
 	}
 }
@@ -72,6 +87,7 @@ func NewGroupPurgeWorker(service *GroupPurgeService, opts ...GroupPurgeOption) *
 	return &GroupPurgeWorker{
 		service:       service,
 		purgeInterval: options.purgeInterval,
+		pause:         options.pause,
 		stopCh:        make(chan struct{}),
 	}
 }
@@ -118,6 +134,12 @@ func (w *GroupPurgeWorker) run(ctx context.Context) {
 // the worker — a transient failure is expected to be retried on the next
 // tick.
 func (w *GroupPurgeWorker) tick(ctx context.Context) {
+	// Soft-pause (#1308): skip the sweep while paused. The ticker keeps
+	// running so resuming takes effect on the next tick without a restart.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeGroupPurge) {
+		return
+	}
+
 	if purged, failed, err := w.service.PurgeOnce(ctx); err != nil {
 		slog.Error("Group purge sweep failed", "error", err)
 	} else {

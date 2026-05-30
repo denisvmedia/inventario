@@ -9,6 +9,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/denisvmedia/inventario/models"
 )
 
 const defaultStorageQuotaReminderInterval = 1 * time.Hour
@@ -46,6 +48,7 @@ type StorageQuotaReminderWorker struct {
 	service  *StorageQuotaReminderService
 	interval time.Duration
 	clock    func() time.Time
+	pause    PauseChecker
 	stopCh   chan struct{}
 	stopOnce sync.Once
 	wg       sync.WaitGroup
@@ -57,6 +60,7 @@ type StorageQuotaReminderOption func(*storageQuotaReminderOptions)
 type storageQuotaReminderOptions struct {
 	interval time.Duration
 	clock    func() time.Time
+	pause    PauseChecker
 }
 
 // WithStorageQuotaReminderInterval overrides the default tick
@@ -81,6 +85,17 @@ func WithStorageQuotaReminderClock(now func() time.Time) StorageQuotaReminderOpt
 	}
 }
 
+// WithStorageQuotaReminderPauseController wires the soft-pause controller
+// so the worker skips its sweep while the storage-quota-reminder worker
+// type is paused (#1308). A nil checker leaves the worker unpaused.
+func WithStorageQuotaReminderPauseController(pc PauseChecker) StorageQuotaReminderOption {
+	return func(o *storageQuotaReminderOptions) {
+		if pc != nil {
+			o.pause = pc
+		}
+	}
+}
+
 // NewStorageQuotaReminderWorker constructs the worker. The default
 // cadence is one hour — quota usage rarely changes faster than that
 // and a shorter cadence risks repeated SUM(size_bytes) queries
@@ -97,6 +112,7 @@ func NewStorageQuotaReminderWorker(service *StorageQuotaReminderService, opts ..
 		service:  service,
 		interval: options.interval,
 		clock:    options.clock,
+		pause:    options.pause,
 		stopCh:   make(chan struct{}),
 	}
 }
@@ -145,6 +161,12 @@ func (w *StorageQuotaReminderWorker) run(ctx context.Context) {
 // tick runs a single sweep. The service returns per-threshold stats
 // so the worker can emit one Prometheus series per threshold value.
 func (w *StorageQuotaReminderWorker) tick(ctx context.Context) {
+	// Soft-pause (#1308): skip the sweep while paused. The ticker keeps
+	// running so resuming takes effect on the next tick without a restart.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeStorageQuotaReminder) {
+		return
+	}
+
 	stats, err := w.service.RemindOnce(ctx, w.clock())
 	if err != nil {
 		slog.Error("Storage quota reminder sweep failed", "error", err)

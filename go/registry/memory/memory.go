@@ -81,6 +81,9 @@ func NewFactorySet() *registry.FactorySet {
 	// tenant users* hold platform-wide admin privilege; it has no
 	// tenant scope (mirrors AuditLogRegistry).
 	fs.SystemAdminGrantRegistry = NewSystemAdminGrantRegistry()
+	// Background-worker soft-pause control (issue #1308). Global control
+	// plane — no tenant scope, no RLS (mirrors SystemAdminGrantRegistry).
+	fs.WorkerControlRegistry = NewWorkerControlRegistry()
 	// Back-office MFA secrets (issue #1785, Phase 4). One row per
 	// back-office user; the operator CLI mints, regenerates, and wipes
 	// rows. No RLS / tenant scoping — same reasoning as the rest of the
