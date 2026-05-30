@@ -60,14 +60,17 @@ export function InsuranceReportPage() {
 
   const areas = useAreas({ enabled })
   const locations = useLocations({ enabled })
-  // Location mode loads the whole group's items (capped) and filters by
-  // the selected location's areas. Item mode doesn't need the list, but
-  // the hook is cheap and shares cache with other pages; gate it on mode
-  // so item-only landings don't pay for it.
-  const commoditiesQuery = useCommodities(
-    { perPage: 1000, includeInactive: false },
-    { enabled: enabled && mode === "location" }
+  // Both modes read the group's commodity list — item mode to populate the
+  // selector + resolve the chosen item, location mode to render and total
+  // the location's items. A single query serves both: the options are
+  // identical, so the query key is too, and `covers` is read once here
+  // rather than in the location branch (Copilot review).
+  const commoditiesQuery = useCommodities({ perPage: 1000, includeInactive: false }, { enabled })
+  const allCommodities = useMemo(
+    () => commoditiesQuery.data?.commodities ?? [],
+    [commoditiesQuery.data]
   )
+  const covers = commoditiesQuery.data?.covers ?? {}
 
   // Resolve the effective selection: fall back to the first option when
   // the URL carries no (or a stale) id. Drives both the Select value and
@@ -78,13 +81,8 @@ export function InsuranceReportPage() {
     return locationList[0]?.id ?? ""
   }, [locationParam, locationList])
 
-  // Item-mode list of items to populate the Select. Reuse the same
-  // group-items query (shared cache) but only when in item mode.
-  const itemListQuery = useCommodities(
-    { perPage: 1000, includeInactive: false },
-    { enabled: enabled && mode === "item" }
-  )
-  const itemList = useMemo(() => itemListQuery.data?.commodities ?? [], [itemListQuery.data])
+  // Item-mode selector is populated from the same group commodity list.
+  const itemList = allCommodities
   const selectedItemId = useMemo(() => {
     if (itemParam && itemList.some((c) => c.id === itemParam)) return itemParam
     return itemList[0]?.id ?? ""
@@ -133,13 +131,9 @@ export function InsuranceReportPage() {
     return ids
   }, [areas.data, selectedLocationId])
   const locationCommodities = useMemo(
-    () =>
-      (commoditiesQuery.data?.commodities ?? []).filter(
-        (c) => c.area_id && locationAreaIds.has(c.area_id)
-      ),
-    [commoditiesQuery.data, locationAreaIds]
+    () => allCommodities.filter((c) => c.area_id && locationAreaIds.has(c.area_id)),
+    [allCommodities, locationAreaIds]
   )
-  const covers = commoditiesQuery.data?.covers ?? {}
 
   const selectedLocation = locationList.find((l) => l.id === selectedLocationId)
   const commodity = detail.data?.commodity
@@ -176,11 +170,11 @@ export function InsuranceReportPage() {
 
   const isLoading =
     mode === "item"
-      ? detail.isLoading || itemListQuery.isLoading
+      ? detail.isLoading || commoditiesQuery.isLoading
       : commoditiesQuery.isLoading || locations.isLoading
   const isError =
     mode === "item"
-      ? detail.isError || itemListQuery.isError
+      ? detail.isError || commoditiesQuery.isError
       : commoditiesQuery.isError || locations.isError
 
   return (

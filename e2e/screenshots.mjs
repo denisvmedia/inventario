@@ -492,6 +492,45 @@ try {
     }
   }
 
+  // Reports (#1370) — landing + the insurance report (item + location
+  // modes, light + dark). The report defaults its selection to the first
+  // item / first location when the query carries no id, so plain mode
+  // URLs are enough to surface a populated report.
+  const slugForReports = slugFromUrl() ?? slug
+  if (slugForReports) {
+    console.log(`-> /g/${slugForReports}/reports`)
+    await page.goto(`${BASE_URL}/g/${slugForReports}/reports`, {
+      waitUntil: "domcontentloaded",
+    })
+    await settle()
+    await shoot("60-reports-landing")
+
+    const itemReportUrl = `${BASE_URL}/g/${slugForReports}/reports/insurance?mode=item`
+    const locationReportUrl = `${BASE_URL}/g/${slugForReports}/reports/insurance?mode=location`
+
+    console.log("-> insurance report (item)")
+    await page.goto(itemReportUrl, { waitUntil: "domcontentloaded" })
+    await settle()
+    await shoot("61-insurance-item")
+
+    console.log("-> insurance report (location)")
+    await page.goto(locationReportUrl, { waitUntil: "domcontentloaded" })
+    await settle()
+    await shoot("62-insurance-location")
+
+    // Dark mode. ThemeProvider defaults to "system", so emulating the
+    // dark color scheme flips the `.dark` class; revert to light after so
+    // the Profile/Settings shots below stay light.
+    await page.emulateMedia({ colorScheme: "dark" })
+    await page.goto(locationReportUrl, { waitUntil: "domcontentloaded" })
+    await settle()
+    await shoot("63-insurance-location-dark")
+    await page.goto(itemReportUrl, { waitUntil: "domcontentloaded" })
+    await settle()
+    await shoot("64-insurance-item-dark")
+    await page.emulateMedia({ colorScheme: "light" })
+  }
+
   // Profile + settings — independent of /g/:slug/, captured regardless of
   // whether a group slug was found.
   console.log("-> /profile")
