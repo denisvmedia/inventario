@@ -100,6 +100,18 @@ func (s *ImportService) parseImportMetadata(_ context.Context, reader io.Reader)
 	}, nil
 }
 
+// maxManifestBytes caps the inflated size of manifest.json. The manifest is a
+// small statistics document; a hostile archive declaring a multi-GiB manifest
+// would otherwise let io.ReadAll exhaust memory even though the signature
+// verified (the attacker controls the payload after re-signing with a leaked
+// key, or simply by being a legitimate-but-malicious tenant).
+const maxManifestBytes int64 = 4 << 20 // 4 MiB
+
+// ErrManifestTooLarge is returned when manifest.json's declared size exceeds
+// maxManifestBytes (or is negative). Capping before io.ReadAll prevents an
+// out-of-memory DoS from an oversized manifest member.
+var ErrManifestTooLarge = errx.NewSentinel("backup manifest.json exceeds the maximum allowed size")
+
 // readManifest inflates the verified payload and reads manifest.json. It only
 // reads the manifest member — file bytes are never inflated during import.
 func readManifest(payload io.Reader) (*manifestDoc, error) {
@@ -126,6 +138,9 @@ func readManifest(payload io.Reader) (*manifestDoc, error) {
 			// the next tr.Next() advances past the unread bytes, so file bytes
 			// are never inflated during import.
 			continue
+		}
+		if hdr.Size < 0 || hdr.Size > maxManifestBytes {
+			return nil, errx.Classify(ErrManifestTooLarge, errx.Attrs("size", hdr.Size, "max", maxManifestBytes))
 		}
 		var manifest manifestDoc
 		data, err := io.ReadAll(io.LimitReader(tr, hdr.Size))

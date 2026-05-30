@@ -7,8 +7,18 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/go-extras/errx"
+
 	"github.com/denisvmedia/inventario/internal/backupsign"
 )
+
+// ErrInvalidBackupSigningKey is returned when INVENTARIO_RUN_BACKUP_SIGNING_KEY
+// (or the config value) is set but is not a valid 32-byte Ed25519 seed (64 hex
+// chars or exactly 32 raw bytes). Unlike the HMAC secrets, a malformed backup
+// signing key is a hard error rather than a fall-back-to-random, because
+// silently rotating the long-lived key would break verification of every
+// existing `.inb` archive.
+var ErrInvalidBackupSigningKey = errx.NewSentinel("configured backup signing key must be exactly 32 bytes (or 64 hex characters)")
 
 // getJWTSecret retrieves the JWT secret from config/environment or generates a
 // secure random one. Accepts both hex-encoded and plain-string secrets of at
@@ -99,11 +109,18 @@ func getFileSigningKey(configKey string) ([]byte, error) {
 //   - 64 hex characters → decoded to 32 raw bytes,
 //   - a 32-byte raw string → used directly.
 //
-// On empty/invalid input a random 32-byte seed is generated and its hex is
-// printed once to stderr (outside the structured logger, mirroring the JWT /
-// file-signing flows) so operators can persist it via
-// INVENTARIO_RUN_BACKUP_SIGNING_KEY and keep their archives verifiable across
-// restarts.
+// Key-resolution policy DIVERGES from getJWTSecret / getFileSigningKey on
+// purpose: those HMAC secrets sign short-lived tokens / URLs, so silently
+// rotating to a fresh random secret on a too-short value only invalidates
+// in-flight requests. Backup signing keys are LONG-LIVED — `.inb` archives
+// produced today must still verify months later — so silently rotating the key
+// on a typo would permanently break verification of every existing archive
+// with no warning. Therefore:
+//   - empty/unset value  → generate a random seed (first-boot convenience),
+//     print it to stderr to persist.
+//   - non-empty but not a valid 32-byte seed → HARD ERROR (a malformed value
+//     is a misconfiguration; failing loudly beats silently
+//     rotating the signing key).
 func getBackupSigningKey(configKey string) (*backupsign.Signer, error) {
 	seed, err := resolveBackupSeed(configKey)
 	if err != nil {
@@ -112,9 +129,10 @@ func getBackupSigningKey(configKey string) (*backupsign.Signer, error) {
 	return backupsign.NewSigner(seed)
 }
 
-// resolveBackupSeed returns the 32-byte Ed25519 seed for the backup signer,
-// generating + announcing a random one when the configured value is absent or
-// not exactly 32 bytes.
+// resolveBackupSeed returns the 32-byte Ed25519 seed for the backup signer. It
+// generates + announces a random seed ONLY when the configured value is empty;
+// a non-empty but malformed value is rejected rather than silently rotating the
+// long-lived signing key (see getBackupSigningKey for the rationale).
 func resolveBackupSeed(configKey string) ([]byte, error) {
 	if configKey != "" {
 		// Hex form: must decode to exactly the Ed25519 seed size.
@@ -130,7 +148,13 @@ func resolveBackupSeed(configKey string) ([]byte, error) {
 			slog.Info("Using backup signing key from configuration")
 			return []byte(configKey), nil
 		}
-		slog.Warn("Configured backup signing key is not exactly 32 bytes (or 64 hex chars); generating a random seed")
+		// A non-empty but invalid value is a misconfiguration. Refuse rather
+		// than generate: silently rotating a long-lived backup signing key on
+		// a typo would break verification of every existing `.inb` archive.
+		return nil, errx.Classify(
+			ErrInvalidBackupSigningKey,
+			errx.Attrs("len", len(configKey), "want", backupsign.SeedSize),
+		)
 	}
 
 	slog.Warn("No backup signing key configured, generating random seed")

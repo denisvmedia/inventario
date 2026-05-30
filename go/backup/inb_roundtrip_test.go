@@ -359,6 +359,68 @@ func TestINBRoundTrip_FullReplace(t *testing.T) {
 	c.Assert(final.CommodityCount >= 1, qt.IsTrue, qt.Commentf("errors: %v", final.ErrorMessage))
 }
 
+// seedSecondTenant creates a second tenant (tenant-b) with its own user, group,
+// and location in the SAME factory set as f, and returns tenant-b's RLS-scoped
+// context plus the location ID. Used to prove a full_replace restore run as
+// tenant A never touches another tenant's rows.
+func seedSecondTenant(c *qt.C, f *inbFixture) (context.Context, string) {
+	ctx := context.Background()
+	user := must.Must(f.fs.UserRegistry.Create(ctx, models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-b"},
+		Email:               "b@example.com",
+		Name:                "User B",
+		IsActive:            true,
+	}))
+	must.Must(f.fs.TenantRegistry.Create(ctx, models.Tenant{
+		EntityID: models.EntityID{ID: "tenant-b"},
+		Name:     "Tenant B",
+	}))
+	group := must.Must(f.fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-b"},
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Name:                "Group B",
+		Status:              models.LocationGroupStatusActive,
+		GroupCurrency:       "USD",
+		CreatedBy:           user.ID,
+	}))
+
+	bctx := appctx.WithGroup(appctx.WithUser(ctx, user), group)
+	locReg := must.Must(f.fs.LocationRegistryFactory.CreateUserRegistry(bctx))
+	loc := must.Must(locReg.Create(bctx, models.Location{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-b", GroupID: group.ID, CreatedByUserID: user.ID},
+		Name:                     "Tenant B Home",
+		Address:                  "2 Other St",
+	}))
+	return bctx, loc.ID
+}
+
+// TestINBRestore_FullReplaceDoesNotWipeOtherTenant is the regression guard for
+// the cross-tenant data-wipe bug (#534 review): clearExistingData under a
+// full_replace restore MUST be RLS-scoped to the restoring user's tenant. A
+// service registry would enumerate and recursively delete EVERY tenant's
+// locations. Here tenant A runs a full_replace restore; tenant B's location
+// must survive untouched.
+func TestINBRestore_FullReplaceDoesNotWipeOtherTenant(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+
+	src := newInbFixture(c)
+	bctx, tenantBLocID := seedSecondTenant(c, src)
+
+	blobKey, _ := src.runExport(c, signer)
+
+	// Run the full_replace restore as tenant A (restoreInb uses src.ctx).
+	final, err := restoreInb(c, src, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted)
+
+	// Tenant B's location must still exist — it was never in tenant A's scope.
+	bLocReg := must.Must(src.fs.LocationRegistryFactory.CreateUserRegistry(bctx))
+	bLoc, getErr := bLocReg.Get(bctx, tenantBLocID)
+	c.Assert(getErr, qt.IsNil, qt.Commentf("tenant B location must survive a tenant A full_replace restore"))
+	c.Assert(bLoc.Name, qt.Equals, "Tenant B Home")
+}
+
 // TestINBRoundTrip_FilePathAndSizePreserved guards the #534 review fixes: a
 // restored commodity file must keep its original user-facing filename (not the
 // display Title or the UUID) and its byte size (so per-group storage accounting
@@ -387,6 +449,14 @@ func TestINBRoundTrip_FilePathAndSizePreserved(t *testing.T) {
 // restoreInb writes a RestoreOperation + export row pointing at blobKey and runs
 // the restore service against it, returning the restore operation's final state.
 func restoreInb(c *qt.C, f *inbFixture, signer *backupsign.Signer, blobKey string) (*models.RestoreOperation, error) {
+	return restoreInbWithOptions(c, f, signer, blobKey, models.RestoreOptions{
+		Strategy: string(types.RestoreStrategyFullReplace),
+	})
+}
+
+// restoreInbWithOptions is restoreInb with caller-supplied RestoreOptions, so a
+// test can drive a dry-run (or other strategy) restore.
+func restoreInbWithOptions(c *qt.C, f *inbFixture, signer *backupsign.Signer, blobKey string, opts models.RestoreOptions) (*models.RestoreOperation, error) {
 	entityService := services.NewEntityService(f.fs, inbUploadLocation)
 	svc := restore.NewRestoreService(f.fs, entityService, inbUploadLocation, signer)
 
@@ -403,14 +473,90 @@ func restoreInb(c *qt.C, f *inbFixture, signer *backupsign.Signer, blobKey strin
 	restoreOp := must.Must(roReg.Create(f.ctx, models.RestoreOperation{
 		ExportID: exportRow.ID,
 		Status:   models.RestoreStatusPending,
-		Options: models.RestoreOptions{
-			Strategy: string(types.RestoreStrategyFullReplace),
-		},
+		Options:  opts,
 	}))
 
 	err := svc.ProcessRestoreOperation(f.ctx, restoreOp.ID, inbUploadLocation)
 	final := must.Must(roReg.Get(f.ctx, restoreOp.ID))
 	return final, err
+}
+
+// TestINBRestore_DryRunWithFilesDoesNotErrorOnMembers guards the #534 review fix
+// for missing-file-member detection: a dry-run restore never persists
+// commodities, so file members can't link — but they ARE still delivered and
+// consumed. The missing-member check must only flag refs whose member never
+// appeared, so a dry-run of an archive that DOES carry every file member must
+// still complete (not fail with ErrMissingFileMembers).
+func TestINBRestore_DryRunWithFilesDoesNotErrorOnMembers(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	f.attachCommodityFile(c, "images", 2048)
+	blobKey, _ := f.runExport(c, signer)
+
+	final, err := restoreInbWithOptions(c, f, signer, blobKey, models.RestoreOptions{
+		Strategy: string(types.RestoreStrategyFullReplace),
+		DryRun:   true,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted)
+}
+
+// TestINBRestore_MissingFileMemberFails proves the positive case: an archive
+// that DECLARES a commodity file reference in its location document but never
+// carries the corresponding file member must fail the restore rather than
+// silently lose the file. The inner tar is hand-built to omit the file body.
+func TestINBRestore_MissingFileMemberFails(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	com := must.Must(comReg.List(f.ctx))[0]
+	areaReg := must.Must(f.fs.AreaRegistryFactory.CreateUserRegistry(f.ctx))
+	area := must.Must(areaReg.List(f.ctx))[0]
+	locReg := must.Must(f.fs.LocationRegistryFactory.CreateUserRegistry(f.ctx))
+	loc := must.Must(locReg.Get(f.ctx, f.locID))
+
+	// A location doc that references an image file member which we deliberately
+	// do NOT write into the tar.
+	doc := types.INBLocationDoc{
+		Location: types.INBLocation{ID: loc.UUID, Name: loc.Name, Address: loc.Address},
+		Areas:    []types.INBArea{{ID: area.UUID, Name: area.Name, LocationID: loc.UUID}},
+		Commodities: []types.INBCommodity{{
+			ID:                    com.UUID,
+			Name:                  com.Name,
+			ShortName:             com.ShortName,
+			Type:                  string(com.Type),
+			AreaID:                area.UUID,
+			Count:                 com.Count,
+			Status:                string(com.Status),
+			OriginalPriceCurrency: string(com.OriginalPriceCurrency),
+			Draft:                 com.Draft,
+			Images: []types.INBFileRef{{
+				ID:   "missing-file-uuid",
+				Path: "files/home/" + com.UUID + "/images/ghost.jpg",
+				Name: "ghost",
+			}},
+		}},
+	}
+	docJSON := must.Must(json.Marshal(doc))
+
+	archive := signedArchiveFromInnerTar(c, signer, func(tw *tar.Writer) {
+		writeMember(c, tw, &tar.Header{Name: "manifest.json", Mode: 0o600, Typeflag: tar.TypeReg}, []byte(`{"version":"2.0"}`))
+		writeMember(c, tw, &tar.Header{Name: "location-home.json", Mode: 0o600, Typeflag: tar.TypeReg}, docJSON)
+		// NOTE: the declared image member is intentionally absent.
+	})
+
+	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
+	key := "t/tenant-a/restores/missing-member.inb"
+	c.Assert(bucket.WriteAll(f.ctx, key, archive, nil), qt.IsNil)
+	bucket.Close()
+
+	final, err := restoreInb(c, f, signer, key)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusFailed)
 }
 
 // signedArchiveFromInnerTar builds a fully-signed .inb archive whose inner tar

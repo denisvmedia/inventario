@@ -294,7 +294,15 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 // commodity-linked files; a second sweep removes location-/area-/standalone
 // files (rows + blobs) so nothing orphans or collides on restore.
 func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error {
-	locReg := l.factorySet.LocationRegistryFactory.CreateServiceRegistry()
+	// RLS-scoped registry: a full_replace restore must only wipe the restoring
+	// user's own locations. CreateServiceRegistry bypasses RLS and would
+	// enumerate (and recursively delete) EVERY tenant's locations — a
+	// cross-tenant data wipe. Mirror the file sweep below, which already uses
+	// the user registry.
+	locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user location registry for clear", err)
+	}
 	locations, err := locReg.List(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to list locations for deletion", err)

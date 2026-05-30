@@ -1,8 +1,9 @@
-package backup
+package backup_test
 
 import (
 	"archive/tar"
 	"bytes"
+	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,7 +11,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"github.com/spf13/cobra"
 
+	"github.com/denisvmedia/inventario/cmd/inventario/backup"
 	"github.com/denisvmedia/inventario/internal/backupsign"
 	"github.com/denisvmedia/inventario/internal/inb"
 )
@@ -21,6 +24,15 @@ func seed(b byte) []byte {
 		s[i] = b
 	}
 	return s
+}
+
+// resignCmd builds the public `backup` command tree and pre-positions args at
+// the `resign` subcommand, so tests drive the CLI exactly as an operator would
+// (`inventario backup resign ...`) through the exported surface only.
+func resignCmd(args ...string) *cobra.Command {
+	cmd := backup.New()
+	cmd.SetArgs(append([]string{"resign"}, args...))
+	return cmd
 }
 
 // writeArchive builds a minimal .inb archive on disk signed by signer and
@@ -58,8 +70,7 @@ func TestResign_ChangesSigKeepsPayload(t *testing.T) {
 	path, _ := writeArchive(c, dir, oldSigner, payload)
 	_, beforePayload := readArchive(c, path)
 
-	cmd := newResignCmd()
-	cmd.SetArgs([]string{path, "--backup-signing-key", hexSeed(0x02), "--no-verify"})
+	cmd := resignCmd(path, "--backup-signing-key", hexSeed(0x02), "--no-verify")
 	cmd.SetOut(io.Discard)
 	c.Assert(cmd.Execute(), qt.IsNil)
 
@@ -81,9 +92,8 @@ func TestResign_NoOpWhenCurrentKeyVerifies(t *testing.T) {
 	path, _ := writeArchive(c, dir, signer, payload)
 	beforeSig, _ := readArchive(c, path)
 
-	cmd := newResignCmd()
+	cmd := resignCmd(path, "--backup-signing-key", hexSeed(0x03))
 	var out bytes.Buffer
-	cmd.SetArgs([]string{path, "--backup-signing-key", hexSeed(0x03)})
 	cmd.SetOut(&out)
 	c.Assert(cmd.Execute(), qt.IsNil)
 
@@ -101,8 +111,7 @@ func TestResign_VerifyKeyMismatchAborts(t *testing.T) {
 	payload := []byte("verify-key-mismatch")
 	path, _ := writeArchive(c, dir, oldSigner, payload)
 
-	cmd := newResignCmd()
-	cmd.SetArgs([]string{path, "--backup-signing-key", hexSeed(0x06), "--verify-key", wrongSigner.PublicKeyBase64()})
+	cmd := resignCmd(path, "--backup-signing-key", hexSeed(0x06), "--verify-key", wrongSigner.PublicKeyBase64())
 	cmd.SetOut(io.Discard)
 	err := cmd.Execute()
 	c.Assert(err, qt.IsNotNil)
@@ -118,8 +127,7 @@ func TestResign_OutputFlagLeavesInputUntouched(t *testing.T) {
 	inSigBefore, _ := readArchive(c, inPath)
 
 	outPath := filepath.Join(dir, "resigned.inb")
-	cmd := newResignCmd()
-	cmd.SetArgs([]string{inPath, "-o", outPath, "--backup-signing-key", hexSeed(0x08), "--no-verify"})
+	cmd := resignCmd(inPath, "-o", outPath, "--backup-signing-key", hexSeed(0x08), "--no-verify")
 	cmd.SetOut(io.Discard)
 	c.Assert(cmd.Execute(), qt.IsNil)
 
@@ -134,15 +142,31 @@ func TestResign_OutputFlagLeavesInputUntouched(t *testing.T) {
 	c.Assert(newSigner.VerifyDigest(digest.Sum(nil), outSig), qt.IsNil)
 }
 
+// TestResign_InPlaceOverwrite drives the default (no -o) in-place re-sign, which
+// closes the input before renaming the temp output over it. On Windows the
+// rename would fail if the input were still open, so this exercises that path
+// end to end through the public command.
+func TestResign_InPlaceOverwrite(t *testing.T) {
+	c := qt.New(t)
+	dir := c.TempDir()
+	oldSigner := must.Must(backupsign.NewSigner(seed(0x09)))
+	payload := []byte("in-place-overwrite-test")
+	path, _ := writeArchive(c, dir, oldSigner, payload)
+
+	cmd := resignCmd(path, "--backup-signing-key", hexSeed(0x0a), "--no-verify")
+	cmd.SetOut(io.Discard)
+	c.Assert(cmd.Execute(), qt.IsNil)
+
+	newSigner := must.Must(backupsign.NewSigner(seed(0x0a)))
+	afterSig, afterPayload := readArchive(c, path)
+	c.Assert(afterPayload, qt.DeepEquals, payload)
+	digest := backupsign.NewDigest()
+	_, _ = digest.Write(afterPayload)
+	c.Assert(newSigner.VerifyDigest(digest.Sum(nil), afterSig), qt.IsNil)
+}
+
 // hexSeed returns the hex encoding of a uniform seed byte, for the
 // --backup-signing-key flag (64 hex chars → 32 bytes).
 func hexSeed(b byte) string {
-	s := seed(b)
-	const hexdigits = "0123456789abcdef"
-	out := make([]byte, len(s)*2)
-	for i, v := range s {
-		out[i*2] = hexdigits[v>>4]
-		out[i*2+1] = hexdigits[v&0x0f]
-	}
-	return string(out)
+	return hex.EncodeToString(seed(b))
 }

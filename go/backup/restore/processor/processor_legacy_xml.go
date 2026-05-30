@@ -12,7 +12,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -28,6 +27,22 @@ import (
 	"github.com/denisvmedia/inventario/internal/blobkeys"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
+)
+
+var (
+	// ErrDataBeforeOriginalPath is returned when a legacy XML export's <data>
+	// element is encountered before its <originalPath> — the blob key isn't
+	// known yet, so the stream can't be written.
+	ErrDataBeforeOriginalPath = errx.NewSentinel("malformed export: <data> element preceded <originalPath>")
+
+	// ErrTenantContextRequired is returned when the legacy XML restore tries to
+	// write file data without a tenant in context (the blob key is
+	// tenant-namespaced).
+	ErrTenantContextRequired = errx.NewSentinel("tenant context is required to restore file data")
+
+	// ErrDataStreamTruncated is returned when a legacy XML <data> stream ends
+	// before its closing </data> tag, i.e. the export was truncated.
+	ErrDataStreamTruncated = errx.NewSentinel("malformed export: <data> stream ended before </data>")
 )
 
 // decodeAndRestore is the legacy XML decode entry point. It streams the XML
@@ -593,11 +608,11 @@ func (l *RestoreOperationProcessor) handleDataStart(
 	options types.RestoreOptions,
 ) (int64, error) {
 	if xmlFile.OriginalPath == "" {
-		return 0, errors.New("malformed export: <data> element preceded <originalPath>")
+		return 0, errxtrace.Classify(ErrDataBeforeOriginalPath)
 	}
 	user := appctx.UserFromContext(ctx)
 	if user == nil || user.TenantID == "" {
-		return 0, errors.New("tenant context is required to restore file data")
+		return 0, errxtrace.Classify(ErrTenantContextRequired)
 	}
 	xmlFile.OriginalPath = rewriteImportKey(xmlFile.OriginalPath, user.TenantID)
 	size, err := l.handleFileDataElement(ctx, decoder, xmlFile, existing, idMapping, options)
@@ -669,7 +684,7 @@ func drainFileDataElement(decoder *xml.Decoder) (int64, error) {
 		return 0, errxtrace.Wrap("failed to drain base64 stream", err)
 	}
 	if !chardataReader.done {
-		return 0, errors.New("malformed export: <data> stream ended before </data>")
+		return 0, errxtrace.Classify(ErrDataStreamTruncated)
 	}
 	return n, nil
 }
@@ -742,7 +757,7 @@ func (l *RestoreOperationProcessor) streamDecodeFileData(
 		return 0, errxtrace.Wrap("failed to close blob writer", closeErr, errx.Attrs("blob_key", blobKey))
 	}
 	if !chardataReader.done {
-		return 0, errors.New("malformed export: <data> stream ended before </data>")
+		return 0, errxtrace.Classify(ErrDataStreamTruncated)
 	}
 	return n, nil
 }

@@ -269,7 +269,11 @@ func (b *inbBuilder) areasForLocation(loc *models.Location, scope *inbScope) ([]
 		if area.LocationID != loc.ID {
 			continue
 		}
-		if scope.allAreas || scope.areaIDs[area.ID] || b.areaHasSelectedCommodity(area, scope) {
+		hasSelected, hErr := b.areaHasSelectedCommodity(area, scope)
+		if hErr != nil {
+			return nil, hErr
+		}
+		if scope.allAreas || scope.areaIDs[area.ID] || hasSelected {
 			result = append(result, area)
 		}
 	}
@@ -278,21 +282,27 @@ func (b *inbBuilder) areasForLocation(loc *models.Location, scope *inbScope) ([]
 
 // areaHasSelectedCommodity reports whether a selected_items export picked a
 // commodity that lives in this area (so the area must be emitted to host it).
-func (b *inbBuilder) areaHasSelectedCommodity(area *models.Area, scope *inbScope) bool {
+// It uses the RLS-scoped user registry so only the exporting user's commodities
+// are considered, and surfaces the List error rather than silently dropping
+// selected commodities by treating a failure as "no match".
+func (b *inbBuilder) areaHasSelectedCommodity(area *models.Area, scope *inbScope) (bool, error) {
 	if len(scope.commodityIDs) == 0 {
-		return false
+		return false, nil
 	}
-	comReg := b.svc.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
+	comReg, err := b.svc.factorySet.CommodityRegistryFactory.CreateUserRegistry(b.ctx)
+	if err != nil {
+		return false, errxtrace.Wrap("failed to create commodity registry", err)
+	}
 	commodities, err := comReg.List(b.ctx)
 	if err != nil {
-		return false
+		return false, errxtrace.Wrap("failed to list commodities", err)
 	}
 	for _, com := range commodities {
 		if com.AreaID == area.ID && scope.commodityIDs[com.ID] {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // commoditiesForAreas returns the in-scope commodities for the given areas,

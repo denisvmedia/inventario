@@ -228,17 +228,15 @@ test.describe('Exports / Restores (React)', () => {
     await page.getByTestId('restore-description').fill(`E2E imported dry-run ${Date.now()}`)
     await page.getByTestId('restore-submit').click()
 
-    // --- The dry-run restore lands in history and reaches a terminal
-    // status (completed or failed — surface either to stay stable
-    // across worker timing). ---
+    // --- The dry-run restore of a valid, freshly-exported `.inb` must
+    // COMPLETE — a `failed` status here means the import→restore cycle is
+    // broken, which is exactly what this round-trip is meant to catch. ---
     await expect(page.getByTestId('page-export-detail')).toBeVisible({ timeout: 30_000 })
     const restoresList = page.getByTestId('restores-list')
     await expect(restoresList).toBeVisible({ timeout: 30_000 })
     const firstRestore = restoresList.locator('[data-testid^="restore-row-"]').first()
     await expect(firstRestore).toBeVisible()
-    await expect(
-      firstRestore.locator('[data-testid="status-completed"], [data-testid="status-failed"]'),
-    ).toBeVisible({ timeout: 30_000 })
+    await expect(firstRestore.getByTestId('status-completed')).toBeVisible({ timeout: 30_000 })
   })
 
   // #534 — Negative path. (1) A wrong-extension file is blocked

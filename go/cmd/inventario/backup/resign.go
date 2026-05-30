@@ -72,7 +72,14 @@ func runResign(cmd *cobra.Command, inputPath string, opts *resignOptions) error 
 	if err != nil {
 		return fmt.Errorf("failed to open input archive: %w", err)
 	}
-	defer in.Close()
+	// inClosed guards against a double Close from the defer once we have closed
+	// the input explicitly before the rename (see below).
+	inClosed := false
+	defer func() {
+		if !inClosed {
+			_ = in.Close()
+		}
+	}()
 
 	oldSig, payload, err := inb.ReadContainer(in, inb.DefaultLimits())
 	if err != nil {
@@ -96,6 +103,14 @@ func runResign(cmd *cobra.Command, inputPath string, opts *resignOptions) error 
 		return fmt.Errorf("failed to spool payload: %w", err)
 	}
 	sum := digest.Sum(nil)
+
+	// Close the input now that its bytes are fully spooled+digested: when
+	// --output is empty the rename below overwrites inputPath in place, and
+	// renaming over a still-open file fails on Windows.
+	if cerr := in.Close(); cerr != nil {
+		return fmt.Errorf("failed to close input archive: %w", cerr)
+	}
+	inClosed = true
 
 	skip, err := verifyForResign(cmd, signer, sum, oldSig, opts)
 	if err != nil {

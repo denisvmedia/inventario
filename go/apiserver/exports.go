@@ -264,7 +264,15 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 			filename = "backup.inb"
 		}
 
-		downloadutils.SetStreamingHeaders(w, mimekit.INBMIMEType, attrs.Size, filename)
+		// This legacy FilePath fallback can serve either a `.inb` archive or a
+		// pre-cutover `.xml` export, so derive the content type from the actual
+		// filename extension rather than hardcoding the `.inb` MIME type.
+		contentType := mimekit.INBMIMEType
+		if strings.EqualFold(path.Ext(filename), ".xml") {
+			contentType = "application/xml"
+		}
+
+		downloadutils.SetStreamingHeaders(w, contentType, attrs.Size, filename)
 		if err := downloadutils.CopyFileInChunks(w, file); err != nil {
 			internalServerError(w, r, err)
 			return

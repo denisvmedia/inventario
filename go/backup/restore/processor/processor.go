@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/go-extras/errx"
@@ -34,7 +35,21 @@ import (
 // the per-member and total-member caps applied while inflating.
 const (
 	maxInbMembers         = 1_000_000
-	maxInbTotalUncompress = 8 << 30 // 8 GiB of inflated bytes
+	maxInbTotalUncompress = 8 << 30  // 8 GiB of inflated bytes
+	maxLocationDocBytes   = 32 << 20 // 32 MiB per location JSON member
+)
+
+var (
+	// ErrLocationDocTooLarge is returned when a single location JSON member
+	// declares a size above maxLocationDocBytes. Without a per-member cap one
+	// location document could claim up to the 8 GiB total and OOM the worker via
+	// io.ReadAll.
+	ErrLocationDocTooLarge = errx.NewSentinel("backup location document exceeds the maximum allowed size")
+
+	// ErrMissingFileMembers is returned when one or more declared commodity file
+	// references were never delivered as file members in the archive. Succeeding
+	// silently would drop file data with no signal to the operator.
+	ErrMissingFileMembers = errx.NewSentinel("backup archive is missing declared file members")
 )
 
 // decodeAndRestore is the default `.inb` decode entry point (#534). It verifies
@@ -168,6 +183,19 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		}
 	}
 
+	// Every declared commodity file reference must have been delivered as a file
+	// member (handleFileMember deletes its key on success). Any left over means
+	// the archive promised file bytes it never carried — fail rather than report
+	// a successful restore that silently lost data.
+	if len(walker.fileRefs) > 0 {
+		missing := make([]string, 0, len(walker.fileRefs))
+		for name := range walker.fileRefs {
+			missing = append(missing, name)
+		}
+		sort.Strings(missing)
+		return errx.Classify(ErrMissingFileMembers, errx.Attrs("count", len(missing), "members", missing))
+	}
+
 	return nil
 }
 
@@ -221,6 +249,12 @@ func (w *inbWalker) handleMember(hdr *tar.Header, r io.Reader) error {
 // location → areas → commodities via the shared strategy handlers, and
 // registers each commodity file reference by its archive path.
 func (w *inbWalker) handleLocationMember(hdr *tar.Header, r io.Reader) error {
+	// Per-member cap: a location JSON is parsed whole via io.ReadAll, so without
+	// this a single member could declare up to the 8 GiB total and OOM the
+	// worker. 32 MiB is far above any realistic location document.
+	if hdr.Size < 0 || hdr.Size > maxLocationDocBytes {
+		return errx.Classify(ErrLocationDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxLocationDocBytes))
+	}
 	data, err := io.ReadAll(io.LimitReader(r, hdr.Size))
 	if err != nil {
 		return errxtrace.Wrap("failed to read location member", err, errx.Attrs("member", hdr.Name))
@@ -345,6 +379,12 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 		w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("file member %s has no matching reference", hdr.Name))
 		return nil
 	}
+	// The declared reference WAS delivered as a member, so it must not later be
+	// reported as missing — drop it from the pending set regardless of whether
+	// it ultimately links/streams below. The missing-member check only flags
+	// refs whose member never appeared in the archive (e.g. dry-run, where the
+	// commodity isn't persisted, still delivers and consumes the member here).
+	delete(w.fileRefs, hdr.Name)
 
 	linkedDBID, resolved := w.idMapping.Commodities[pending.commodityUUID]
 	if !resolved || linkedDBID == "" {

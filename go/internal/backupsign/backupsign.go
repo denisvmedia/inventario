@@ -134,10 +134,11 @@ func (s *Signer) digestOf(message []byte) []byte {
 	return h.Sum(nil)
 }
 
-// PublicKey returns a reference to the raw Ed25519 public key. The underlying
-// bytes are immutable for the lifetime of the Signer.
+// PublicKey returns a defensive copy of the raw Ed25519 public key. A copy is
+// returned (not the internal slice) so a caller can never mutate the Signer's
+// key material; the key is meant to be immutable for the Signer's lifetime.
 func (s *Signer) PublicKey() ed25519.PublicKey {
-	return s.pub
+	return append(ed25519.PublicKey(nil), s.pub...)
 }
 
 // PublicKeyBase64 returns the raw 32-byte public key, base64 (std) encoded.
