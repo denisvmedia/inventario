@@ -83,7 +83,9 @@ async function attachTagToCommodity(
 test.describe('Tags page', () => {
   test('renders the page shell with stats + create CTA', async ({ page }) => {
     await gotoTags(page)
-    await expect(page.getByTestId('tags-stats-tags-total')).toBeVisible()
+    // Default view is the commodity (item-tags) view, so the stats bar
+    // shows the per-kind item tiles (no combined "all tags" total).
+    await expect(page.getByTestId('tags-stats-commodity-tags-total')).toBeVisible()
     await expect(page.getByTestId('tags-stats-items-tagged')).toBeVisible()
     await expect(page.getByTestId('tags-stats-items-untagged')).toBeVisible()
     await expect(page.getByTestId('tags-create-button')).toBeVisible()

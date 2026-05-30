@@ -40,7 +40,6 @@
   "list": {
     "delete": "Delete tag",
     "edit": "Edit tag",
-    "empty": "No tags yet — create your first one below.",
     "emptyFiltered": "No tags match \"{{query}}\".",
     "emptyScopeCommodity": "No tags used on items yet — apply one from the Add Item dialog's Extras step to seed this list.",
     "emptyScopeFile": "No tags used on files yet — apply one from a file's tag input to seed this list.",
@@ -54,9 +53,6 @@
     "usageItems_one": "{{count}} item",
     "usageItems_other": "{{count}} items",
     "usageNone": "Not used yet"
-  },
-  "preview": {
-    "heading": "Preview"
   },
   "removal": {
     "confirmAction": "Delete",
@@ -82,16 +78,13 @@
     "newest": "Newest"
   },
   "stats": {
+    "commodityTagsTotal": "Item tags",
     "filesTagged": "Tagged files",
     "filesUntagged": "Untagged files",
+    "fileTagsTotal": "File tags",
     "itemsTagged": "Tagged items",
     "itemsUntagged": "Untagged items",
     "tagsTotal": "Tags"
-  },
-  "tabs": {
-    "all": "All",
-    "commodity": "Item tags",
-    "file": "File tags"
   },
   "title": "Tags",
   "usage": {
@@ -108,5 +101,10 @@
     "slugInvalid": "Slug must be lowercase, kebab-cased.",
     "slugRequired": "Slug is required.",
     "slugTooLong": "Slug must be 64 characters or fewer."
+  },
+  "views": {
+    "commodity": "Item tags",
+    "file": "File tags",
+    "label": "Tag type"
   }
 }

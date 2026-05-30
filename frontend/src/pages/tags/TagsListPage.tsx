@@ -1,9 +1,8 @@
-import { Plus, Search, Tag as TagIcon, X } from "lucide-react"
+import { Boxes, FileText, Plus, Search, Tag as TagIcon, X } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useSearchParams } from "react-router-dom"
 
-import { TagBadge } from "@/components/tags/TagBadge"
 import { TagFormDialog } from "@/components/tags/TagFormDialog"
 import { TagInlineCreate } from "@/components/tags/TagInlineCreate"
 import { TagRow, type TagRowPreviewItem } from "@/components/tags/TagRow"
@@ -14,13 +13,12 @@ import { Label } from "@/components/ui/label"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useCommodities } from "@/features/commodities/hooks"
 import {
   type CreateTagRequest,
   type TagColor,
   type TagEntity,
-  type TagScope,
+  type TagKind,
   type TagSortField,
   type TagSortOrder,
   type UpdateTagRequest,
@@ -66,12 +64,14 @@ const VALID_SORT_ORDERS = ["asc", "desc"] as const satisfies readonly TagSortOrd
 const PREVIEW_COMMODITIES_LIMIT = 100
 const PREVIEW_ITEMS_PER_TAG = 2
 
-// Cap on the unfiltered-tag companion query. 100 matches the BE's
-// per_page ceiling; realistic per-group tag counts (typically < 30)
-// sit comfortably below this. Groups with more than 100 tags will see
-// the Preview footer / inline duplicate-slug check truncate at the
-// hundredth — acceptable for v1; revisit if real groups exceed this.
+// Cap on the same-kind companion query that backs the inline-create
+// duplicate-slug check. 100 matches the BE's per_page ceiling; realistic
+// per-group/per-kind tag counts (typically < 30) sit comfortably below it.
 const ALL_TAGS_FETCH_LIMIT = 100
+
+// localStorage key for the last-used view kind, mirroring Files'
+// `files:viewMode`. Lets the page reopen on the kind the user left on.
+const VIEW_KIND_KEY = "tags:viewKind"
 
 function parseSort(raw: string | null): TagSortField {
   return (VALID_SORT_FIELDS as readonly string[]).includes(raw ?? "")
@@ -85,18 +85,13 @@ function parseOrder(raw: string | null): TagSortOrder {
     : "asc"
 }
 
-// Local tab id — "all" stays in the URL as the explicit no-filter
-// sentinel; the data layer turns it into "no scope param" before the
-// request. "commodity" / "file" mirror the BE's wire contract.
-type TabId = "all" | TagScope
-const VALID_TABS = ["all", "commodity", "file"] as const satisfies readonly TabId[]
+// The view kind drives the whole page: item-tags and file-tags are
+// separate entities switched via the Files-style toggle, never merged.
+// "commodity" is the default landing view.
+const VALID_KINDS = ["commodity", "file"] as const satisfies readonly TagKind[]
 
-function parseTab(raw: string | null): TabId {
-  return (VALID_TABS as readonly string[]).includes(raw ?? "") ? (raw as TabId) : "all"
-}
-
-function scopeForTab(tab: TabId): TagScope | undefined {
-  return tab === "all" ? undefined : tab
+function parseKind(raw: string | null): TagKind | null {
+  return (VALID_KINDS as readonly string[]).includes(raw ?? "") ? (raw as TagKind) : null
 }
 
 interface DialogState {
@@ -114,7 +109,17 @@ export function TagsListPage() {
   const urlQuery = searchParams.get("q") ?? ""
   const urlSort = parseSort(searchParams.get("sort"))
   const urlOrder = parseOrder(searchParams.get("order"))
-  const urlTab = parseTab(searchParams.get("tab"))
+
+  // View kind: URL (?kind=) wins so refreshes / shared links survive,
+  // then localStorage (per-device), then the "commodity" default —
+  // exactly the resolution order FilesListPage uses for its view mode.
+  const urlKind = parseKind(searchParams.get("kind"))
+  const [storedKind, setStoredKind] = useState<TagKind>(() => {
+    if (typeof window === "undefined") return "commodity"
+    const raw = window.localStorage.getItem(VIEW_KIND_KEY)
+    return raw === "commodity" || raw === "file" ? raw : "commodity"
+  })
+  const viewKind: TagKind = urlKind ?? storedKind
 
   const [pendingSearch, setPendingSearch] = useState(urlQuery)
   // Re-seed the input when the URL query changes via back/forward — this
@@ -151,25 +156,24 @@ export function TagsListPage() {
       // small/medium groups render in one page. Paging arrives in a
       // follow-up if real groups exceed 100 tags.
       perPage: 100,
-      scope: scopeForTab(urlTab),
+      kind: viewKind,
     }),
-    [urlQuery, urlSort, urlOrder, urlTab]
+    [urlQuery, urlSort, urlOrder, viewKind]
   )
   const tagsQuery = useTags(listOpts)
-  // Unfiltered companion query — backs the duplicate-slug check inside
-  // the inline-create row and the Preview footer pill grid. Without it,
-  // both consumers see only the search-filtered (and paginated) slice
-  // and would (a) miss collisions for tags outside the current view
-  // and (b) shrink the pill grid down to the search results, which
-  // defeats the whole "all-tags palette" purpose of the footer.
+  // Same-kind companion query — backs the duplicate-slug check inside the
+  // inline-create row. Scoped to the current kind because uniqueness is
+  // per (group, kind, slug): a slug that exists as a file tag must not
+  // block creating the same slug as an item tag.
   const allTagsQuery = useTags(
     useMemo(
       () => ({
         sort: "label" as TagSortField,
         order: "asc" as TagSortOrder,
         perPage: ALL_TAGS_FETCH_LIMIT,
+        kind: viewKind,
       }),
-      []
+      [viewKind]
     )
   )
   const statsQuery = useTagStats()
@@ -233,20 +237,19 @@ export function TagsListPage() {
     setSearchParams(next, { replace: true })
   }
 
-  function patchTab(next: string) {
-    const tab = parseTab(next)
-    const params = new URLSearchParams(searchParams)
-    if (tab === "all") {
-      params.delete("tab")
-    } else {
-      params.set("tab", tab)
+  function setViewKind(kind: TagKind) {
+    setStoredKind(kind)
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(VIEW_KIND_KEY, kind)
     }
+    const params = new URLSearchParams(searchParams)
+    params.set("kind", kind)
     setSearchParams(params, { replace: true })
   }
 
   async function onInlineCreate(values: { label: string; slug: string; color: TagColor }) {
     try {
-      await createMutation.mutateAsync(values)
+      await createMutation.mutateAsync({ ...values, kind: viewKind })
       toast.success(t("tags:form.createSuccess"))
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -255,9 +258,9 @@ export function TagsListPage() {
     }
   }
 
-  async function onCreateSubmit(values: CreateTagRequest) {
+  async function onCreateSubmit(values: Omit<CreateTagRequest, "kind">) {
     try {
-      await createMutation.mutateAsync(values)
+      await createMutation.mutateAsync({ ...values, kind: viewKind })
       toast.success(t("tags:form.createSuccess"))
       setDialog({ open: false, mode: "create" })
     } catch (err) {
@@ -325,12 +328,9 @@ export function TagsListPage() {
     }
   }
 
-  // Both the count line and the Preview footer must reflect the
-  // server-reported total (not `items.length`, which is capped by
-  // perPage) and the unfiltered tag set (not the search/scope-filtered
-  // view).
+  // The count line reflects the server-reported total (not `items.length`,
+  // which is capped by perPage).
   const filteredCount = totalMatches
-  const allTagsForPreview = allTags
 
   // emptyMessage picks the right key for the empty list — scope-aware
   // when no search query is set so users on the commodity/file tab see
@@ -338,15 +338,12 @@ export function TagsListPage() {
   // generic empty state.
   function emptyMessage(): string {
     if (urlQuery) return t("tags:list.emptyFiltered", { query: urlQuery })
-    if (urlTab === "commodity") return t("tags:list.emptyScopeCommodity")
-    if (urlTab === "file") return t("tags:list.emptyScopeFile")
-    return t("tags:list.empty")
+    return viewKind === "file" ? t("tags:list.emptyScopeFile") : t("tags:list.emptyScopeCommodity")
   }
 
-  // tabBody is the toolbar + list payload mounted inside the active
-  // TabsContent. Defined once and referenced from all three tab panels
-  // so each TabsTrigger has a real aria-controls target (Radix mounts
-  // only the active panel's children, so there is no triple-render).
+  // tabBody is the toolbar + list payload rendered under the kind
+  // switcher. The list query is keyed by viewKind, so switching kinds
+  // re-fetches the right slice.
   const tabBody = (
     <div className="flex flex-col gap-4 pt-3">
       <div className="flex flex-wrap items-end gap-3">
@@ -452,7 +449,9 @@ export function TagsListPage() {
                   <TagRow
                     tag={tag}
                     usage={usage}
-                    previewItems={previewByTag.get(tag.slug ?? "") ?? []}
+                    previewItems={
+                      viewKind === "commodity" ? (previewByTag.get(tag.slug ?? "") ?? []) : []
+                    }
                     onEdit={() =>
                       setDialog({
                         open: true,
@@ -497,61 +496,42 @@ export function TagsListPage() {
         }
       />
 
-      <TagsStatsBar stats={statsQuery.data} loading={statsQuery.isLoading} />
+      <TagsStatsBar stats={statsQuery.data} kind={viewKind} loading={statsQuery.isLoading} />
 
-      <Tabs value={urlTab} onValueChange={patchTab} className="gap-3">
-        <TabsList data-testid="tags-tabs">
-          <TabsTrigger value="all" data-testid="tags-tab-all">
-            {t("tags:tabs.all")}
-          </TabsTrigger>
-          <TabsTrigger value="commodity" data-testid="tags-tab-commodity">
-            {t("tags:tabs.commodity")}
-          </TabsTrigger>
-          <TabsTrigger value="file" data-testid="tags-tab-file">
-            {t("tags:tabs.file")}
-          </TabsTrigger>
-        </TabsList>
-        {/* One TabsContent per trigger value so each TabsTrigger's
-            aria-controls resolves to a real tabpanel element (Radix
-            otherwise skips inactive panels entirely, leaving the
-            triggers' aria-controls dangling and tripping axe). Only
-            the active panel mounts its children — `tabBody` is the
-            same JSX in each slot but React + Radix mount it exactly
-            once per active value, so there is no triple-render cost.
-            Scoping happens via `urlTab → listOpts.scope`, which is
-            evaluated outside the Tabs subtree, so the actual data
-            query also runs only once per tab. */}
-        <TabsContent value="all" className="m-0" data-testid="tags-tab-all-content">
-          {tabBody}
-        </TabsContent>
-        <TabsContent value="commodity" className="m-0" data-testid="tags-tab-commodity-content">
-          {tabBody}
-        </TabsContent>
-        <TabsContent value="file" className="m-0" data-testid="tags-tab-file-content">
-          {tabBody}
-        </TabsContent>
-      </Tabs>
-
-      {allTagsForPreview.length > 0 ? (
-        <div
-          className="rounded-xl border border-border bg-card px-4 py-4 space-y-3"
-          data-testid="tags-preview"
+      {/* Item-tags and file-tags are separate entities, switched with a
+          Files-style icon+label toggle (active = secondary, inactive =
+          ghost). There is no combined "All" view. */}
+      <div
+        className="flex items-center gap-1"
+        role="group"
+        aria-label={t("tags:views.label")}
+        data-testid="tags-view-switcher"
+      >
+        <Button
+          type="button"
+          variant={viewKind === "commodity" ? "secondary" : "ghost"}
+          size="sm"
+          onClick={() => setViewKind("commodity")}
+          aria-pressed={viewKind === "commodity"}
+          data-testid="tags-view-commodity"
         >
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            {t("tags:preview.heading")}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {allTagsForPreview.map((tag) => (
-              <TagBadge
-                key={tag.id}
-                label={tag.label ?? tag.slug ?? ""}
-                color={(tag.color ?? "muted") as TagColor}
-                testId={`tags-preview-${tag.slug}`}
-              />
-            ))}
-          </div>
-        </div>
-      ) : null}
+          <Boxes className="mr-1.5 size-4" aria-hidden="true" />
+          {t("tags:views.commodity")}
+        </Button>
+        <Button
+          type="button"
+          variant={viewKind === "file" ? "secondary" : "ghost"}
+          size="sm"
+          onClick={() => setViewKind("file")}
+          aria-pressed={viewKind === "file"}
+          data-testid="tags-view-file"
+        >
+          <FileText className="mr-1.5 size-4" aria-hidden="true" />
+          {t("tags:views.file")}
+        </Button>
+      </div>
+
+      {tabBody}
 
       <TagFormDialog
         open={dialog.open}

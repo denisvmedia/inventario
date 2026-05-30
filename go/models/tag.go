@@ -81,6 +81,53 @@ func (c TagColor) Validate() error {
 	return nil
 }
 
+// TagKind is the entity type a tag belongs to. Item-tags (commodity) and
+// file-tags (file) are *separate* entities that merely share the tags table:
+// the same slug can exist once as a commodity tag and once as a file tag
+// (uniqueness is per (group, kind, slug)). The kind is stored on the row —
+// it is no longer derived from usage.
+//
+// Names are part of the public API surface (FE sends them as ?kind=).
+type TagKind string
+
+const (
+	// TagKindCommodity is the kind for tags attached to commodities (items).
+	TagKindCommodity TagKind = "commodity"
+	// TagKindFile is the kind for tags attached to files.
+	TagKindFile TagKind = "file"
+)
+
+// TagKindAny is the empty-string filter sentinel meaning "no kind filter".
+// Declared as a `var` (not a `const` in the enum block) so swag does NOT
+// fold "" into the public models.TagKind OpenAPI enum — the exported
+// contract / generated client types are commodity|file only. Same technique
+// as DefaultTagColor above. Never a valid *stored* value: IsValid rejects it
+// and the model validator requires a concrete kind; it exists purely as an
+// internal "no filter" sentinel.
+//
+//nolint:gochecknoglobals // intentional: keep "" out of the swag enum; see comment above.
+var TagKindAny TagKind = ""
+
+// IsValid reports whether k is a valid *stored* kind (commodity or file).
+// The empty string (TagKindAny) is a filter-only sentinel and is NOT valid
+// here — mirrors TagColor.IsValid rejecting "".
+func (k TagKind) IsValid() bool {
+	switch k {
+	case TagKindCommodity, TagKindFile:
+		return true
+	}
+	return false
+}
+
+// Validate makes TagKind a validation.Validatable so it can be referenced
+// directly by validation.Field rules (mirrors TagColor.Validate).
+func (k TagKind) Validate() error {
+	if !k.IsValid() {
+		return validation.NewError("invalid_tag_kind", "invalid tag kind")
+	}
+	return nil
+}
+
 // NormalizeTagSlug coerces a free-form user-typed string into the canonical
 // slug shape accepted by IsValidTagSlug:
 //
@@ -145,8 +192,15 @@ type Tag struct {
 	//migrator:embedded mode="inline"
 	TenantGroupAwareEntityID
 
+	// Kind separates item-tags (commodity) from file-tags (file). Two tags
+	// with the same slug but different kind are distinct entities. Existing
+	// rows default to "commodity" on migration; new rows always carry an
+	// explicit kind from the write path.
+	//migrator:schema:field name="kind" type="TEXT" not_null="true" default="commodity"
+	Kind TagKind `json:"kind" db:"kind"`
+
 	// Slug is the kebab-cased identifier referenced from
-	// commodities.tags / files.tags JSONB arrays. Unique per group.
+	// commodities.tags / files.tags JSONB arrays. Unique per (group, kind).
 	//migrator:schema:field name="slug" type="TEXT" not_null="true"
 	Slug string `json:"slug" db:"slug"`
 
@@ -179,9 +233,11 @@ type TagIndexes struct {
 	//migrator:schema:index name="idx_tags_tenant_group" fields="tenant_id,group_id" table="tags"
 	_ int
 
-	// Per-group slug uniqueness — backs the autocomplete lookup and
-	// prevents duplicate "kitchen" / "Kitchen" tags within the same group.
-	//migrator:schema:index name="idx_tags_group_slug" fields="group_id,slug" unique="true" table="tags"
+	// Per-group, per-kind slug uniqueness — backs the autocomplete lookup
+	// and prevents duplicate "kitchen" / "Kitchen" tags within the same
+	// group AND kind, while allowing the same slug to exist once as a
+	// commodity tag and once as a file tag.
+	//migrator:schema:index name="idx_tags_group_kind_slug" fields="group_id,kind,slug" unique="true" table="tags"
 	_ int
 
 	// Trigram similarity for label search (autocomplete / ?q=).
@@ -195,6 +251,7 @@ func (*Tag) Validate() error {
 
 func (t *Tag) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, t,
+		validation.Field(&t.Kind, validation.Required),
 		validation.Field(&t.Slug, rules.NotEmpty, validation.By(func(value any) error {
 			s, _ := value.(string)
 			if !IsValidTagSlug(s) {

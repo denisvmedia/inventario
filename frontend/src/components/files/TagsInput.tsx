@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import type { TagScope } from "@/features/tags/api"
+import type { TagKind } from "@/features/tags/api"
 import { useTagAutocomplete } from "@/features/tags/hooks"
 
 // Lightweight tag chip input — type, hit Enter / comma to commit;
@@ -33,12 +33,11 @@ export interface TagsInputProps {
   // row of CommodityFormDialog where the input sits below filename
   // metadata and the default size feels too tall.
   compact?: boolean
-  // Restrict autocomplete suggestions to tags actually used on the
-  // given entity type (#1628). The commodity-tags input on the Extras
-  // step passes "commodity"; the per-file row inside the Files step
-  // passes "file". Standalone callers that pre-date scope awareness
-  // can omit it for the legacy combined ranking.
-  scope?: TagScope
+  // Which entity's tags to suggest. Item-tags and file-tags are separate
+  // entities: the commodity-tags input passes "commodity"; file inputs
+  // pass "file". Required when `autocomplete` is set — without it the
+  // suggestion query stays disabled.
+  kind?: TagKind
 }
 
 export function TagsInput({
@@ -50,7 +49,7 @@ export function TagsInput({
   suggestions,
   autocomplete,
   compact,
-  scope,
+  kind,
 }: TagsInputProps) {
   const [draft, setDraft] = useState("")
   // Remote suggestions live in local state and are populated via the
@@ -276,7 +275,7 @@ export function TagsInput({
         inputAndChips
       )}
       {autocomplete ? (
-        <AutocompleteSink draft={draft} scope={scope} onChange={setRemoteSuggestions} />
+        <AutocompleteSink draft={draft} kind={kind} onChange={setRemoteSuggestions} />
       ) : null}
     </div>
   )
@@ -294,14 +293,14 @@ export function TagsInput({
 // usage-ranked default list when `q` is empty.
 function AutocompleteSink({
   draft,
-  scope,
+  kind,
   onChange,
 }: {
   draft: string
-  scope?: TagScope
+  kind?: TagKind
   onChange: (slugs: string[]) => void
 }) {
-  const remote = useTagAutocomplete(draft, 8, { enabled: true, scope })
+  const remote = useTagAutocomplete(draft, 8, { enabled: true, kind })
   const data = remote.data
   useEffect(() => {
     onChange(data ? data.map((t) => t.slug) : [])

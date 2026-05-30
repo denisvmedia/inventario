@@ -15,7 +15,7 @@ import {
   type ListedTag,
   type TagAutocompleteEntry,
   type TagEntity,
-  type TagScope,
+  type TagKind,
   type TagStats,
   type TagUsage,
   type UpdateTagRequest,
@@ -26,7 +26,7 @@ interface QueryOptions {
   enabled?: boolean
 }
 
-export function useTags(opts: ListTagsOptions = {}, query: QueryOptions = {}) {
+export function useTags(opts: ListTagsOptions, query: QueryOptions = {}) {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const enabled = query.enabled ?? true
@@ -117,22 +117,27 @@ export function useDeleteTag() {
 // When the slug is unknown we just don't enable the query — there's
 // no group to scope autocomplete results to anyway.
 //
-// scope (#1628) narrows results to tags actually used on the named
-// entity type. Omit (or pass undefined) for the legacy combined ranking
-// — the standalone files-edit-page input that pre-dates per-scope
-// awareness still calls it that way during the rollout.
+// kind selects which entity's tags to suggest (item-tags vs file-tags) —
+// required, since the two are separate entities and the BE 422s without it.
+// When kind is absent the query stays disabled (no request fired).
 interface AutocompleteOptions extends QueryOptions {
-  scope?: TagScope
+  kind?: TagKind
 }
 
 export function useTagAutocomplete(q: string, limit = 10, opts: AutocompleteOptions = {}) {
   const ctx = useOptionalCurrentGroup()
   const slug = ctx?.currentGroup?.slug ?? ""
   const enabled = opts.enabled ?? true
+  const kind = opts.kind
   return useQuery<TagAutocompleteEntry[]>({
-    queryKey: tagKeys.autocomplete(slug, q, limit, opts.scope),
-    queryFn: ({ signal }) => autocompleteTags(q, limit, { scope: opts.scope, signal }),
-    enabled: enabled && slug.length > 0,
+    queryKey: tagKeys.autocomplete(slug, q, limit, kind),
+    queryFn: ({ signal }) => {
+      // Defensive: `enabled` already gates on kind, but a manual refetch()
+      // bypasses it — never issue a malformed `kind=undefined` request.
+      if (!kind) return Promise.resolve([])
+      return autocompleteTags(q, limit, { kind, signal })
+    },
+    enabled: enabled && slug.length > 0 && kind !== undefined,
     // Keep the previous result visible while the next query (next
     // keystroke / different prefix) is in flight. Without this, `data`
     // briefly returns `undefined` between queries, the consumer's

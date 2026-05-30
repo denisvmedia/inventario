@@ -38,7 +38,7 @@ func TestTagService_EnsureTagsExist_AutoCreates(t *testing.T) {
 	ctx, fs := newTagServiceFixture(c)
 	svc := services.NewTagService(fs)
 
-	tags, err := svc.EnsureTagsExist(ctx, []string{"Kitchen", "front office", "kitchen"})
+	tags, err := svc.EnsureTagsExist(ctx, models.TagKindCommodity, []string{"Kitchen", "front office", "kitchen"})
 	c.Assert(err, qt.IsNil)
 	c.Assert(tags, qt.HasLen, 2) // duplicate Kitchen / kitchen folds in
 	c.Assert(tags["kitchen"].Color, qt.Equals, models.DefaultTagColor)
@@ -47,7 +47,7 @@ func TestTagService_EnsureTagsExist_AutoCreates(t *testing.T) {
 	c.Assert(tags["front-office"].Label, qt.Equals, "Front Office")
 
 	// Idempotent — second call returns the same rows.
-	tags2, err := svc.EnsureTagsExist(ctx, []string{"kitchen", "front-office"})
+	tags2, err := svc.EnsureTagsExist(ctx, models.TagKindCommodity, []string{"kitchen", "front-office"})
 	c.Assert(err, qt.IsNil)
 	c.Assert(tags2["kitchen"].ID, qt.Equals, tags["kitchen"].ID)
 	c.Assert(tags2["front-office"].ID, qt.Equals, tags["front-office"].ID)
@@ -58,7 +58,7 @@ func TestTagService_EnsureTagsExist_FiltersEmpty(t *testing.T) {
 	ctx, fs := newTagServiceFixture(c)
 	svc := services.NewTagService(fs)
 
-	tags, err := svc.EnsureTagsExist(ctx, []string{"   ", "###", ""})
+	tags, err := svc.EnsureTagsExist(ctx, models.TagKindCommodity, []string{"   ", "###", ""})
 	c.Assert(err, qt.IsNil)
 	c.Assert(tags, qt.HasLen, 0)
 }
@@ -68,7 +68,7 @@ func TestTagService_NormalizeAndEnsureSlugs(t *testing.T) {
 	ctx, fs := newTagServiceFixture(c)
 	svc := services.NewTagService(fs)
 
-	slugs, err := svc.NormalizeAndEnsureSlugs(ctx, []string{"Kitchen", "Kitchen", "front office"})
+	slugs, err := svc.NormalizeAndEnsureSlugs(ctx, models.TagKindCommodity, []string{"Kitchen", "Kitchen", "front office"})
 	c.Assert(err, qt.IsNil)
 	c.Assert(slugs, qt.HasLen, 2)
 	c.Assert(slugs, qt.Contains, "kitchen")
@@ -80,7 +80,7 @@ func TestTagService_RenameTag_RewritesReferences(t *testing.T) {
 	ctx, fs := newTagServiceFixture(c)
 	svc := services.NewTagService(fs)
 
-	tags, err := svc.EnsureTagsExist(ctx, []string{"kitchen"})
+	tags, err := svc.EnsureTagsExist(ctx, models.TagKindCommodity, []string{"kitchen"})
 	c.Assert(err, qt.IsNil)
 
 	// Seed a commodity referencing the slug.
@@ -112,7 +112,7 @@ func TestTagService_RenameTag_ConflictsWithExistingSlug(t *testing.T) {
 	ctx, fs := newTagServiceFixture(c)
 	svc := services.NewTagService(fs)
 
-	tags, err := svc.EnsureTagsExist(ctx, []string{"kitchen", "bedroom"})
+	tags, err := svc.EnsureTagsExist(ctx, models.TagKindCommodity, []string{"kitchen", "bedroom"})
 	c.Assert(err, qt.IsNil)
 
 	_, err = svc.RenameTag(ctx, tags["kitchen"].ID, "", "bedroom", "")
@@ -125,7 +125,7 @@ func TestTagService_DeleteTag_RefusesWhenInUse(t *testing.T) {
 	ctx, fs := newTagServiceFixture(c)
 	svc := services.NewTagService(fs)
 
-	tags, err := svc.EnsureTagsExist(ctx, []string{"kitchen"})
+	tags, err := svc.EnsureTagsExist(ctx, models.TagKindCommodity, []string{"kitchen"})
 	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := fs.CommodityRegistryFactory.CreateUserRegistry(ctx)
@@ -144,7 +144,7 @@ func TestTagService_DeleteTag_RefusesWhenInUse(t *testing.T) {
 	c.Assert(usage.Files, qt.Equals, 0)
 
 	// Tag still exists.
-	_, err = fs.TagRegistryFactory.MustCreateUserRegistry(ctx).GetBySlug(ctx, "kitchen")
+	_, err = fs.TagRegistryFactory.MustCreateUserRegistry(ctx).GetBySlug(ctx, models.TagKindCommodity, "kitchen")
 	c.Assert(err, qt.IsNil)
 }
 
@@ -153,7 +153,7 @@ func TestTagService_DeleteTag_ForceStripsAndDeletes(t *testing.T) {
 	ctx, fs := newTagServiceFixture(c)
 	svc := services.NewTagService(fs)
 
-	tags, err := svc.EnsureTagsExist(ctx, []string{"kitchen"})
+	tags, err := svc.EnsureTagsExist(ctx, models.TagKindCommodity, []string{"kitchen"})
 	c.Assert(err, qt.IsNil)
 
 	commodityReg, err := fs.CommodityRegistryFactory.CreateUserRegistry(ctx)
@@ -171,7 +171,7 @@ func TestTagService_DeleteTag_ForceStripsAndDeletes(t *testing.T) {
 	c.Assert(usage.Commodities, qt.Equals, 1)
 
 	// Tag is gone.
-	_, err = fs.TagRegistryFactory.MustCreateUserRegistry(ctx).GetBySlug(ctx, "kitchen")
+	_, err = fs.TagRegistryFactory.MustCreateUserRegistry(ctx).GetBySlug(ctx, models.TagKindCommodity, "kitchen")
 	c.Assert(err, qt.IsNotNil)
 
 	// Commodity reference is stripped, other tags preserved.
@@ -185,7 +185,7 @@ func TestTagService_DeleteTag_NoUsage(t *testing.T) {
 	ctx, fs := newTagServiceFixture(c)
 	svc := services.NewTagService(fs)
 
-	tags, err := svc.EnsureTagsExist(ctx, []string{"kitchen"})
+	tags, err := svc.EnsureTagsExist(ctx, models.TagKindCommodity, []string{"kitchen"})
 	c.Assert(err, qt.IsNil)
 
 	usage, err := svc.DeleteTag(ctx, tags["kitchen"].ID, false)

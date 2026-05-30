@@ -6121,7 +6121,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/tags": {
             "get": {
-                "description": "get tags with optional filtering. Pass include=usage to attach a per-row meta.usage block. Pass scope=commodity|file to restrict to tags actually used on that entity type.",
+                "description": "get tags of the given kind. Pass include=usage to attach a per-row meta.usage block. kind=commodity|file is required — item-tags and file-tags are separate entities.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6138,6 +6138,17 @@ const docTemplate = `{
                         "description": "Group slug",
                         "name": "groupSlug",
                         "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "commodity",
+                            "file"
+                        ],
+                        "type": "string",
+                        "description": "Tag kind (commodity = item-tags, file = file-tags)",
+                        "name": "kind",
+                        "in": "query",
                         "required": true
                     },
                     {
@@ -6186,16 +6197,6 @@ const docTemplate = `{
                         "description": "Comma-separated extras. 'usage' attaches per-row meta.usage.",
                         "name": "include",
                         "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "commodity",
-                            "file"
-                        ],
-                        "type": "string",
-                        "description": "Restrict to tags used on commodities or files. Empty = no filter.",
-                        "name": "scope",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -6206,7 +6207,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Invalid scope value",
+                        "description": "Missing or invalid kind value",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -6261,7 +6262,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/tags/autocomplete": {
             "get": {
-                "description": "Top-N tags matching the query, ranked by scope-aware usage desc + created_at desc.",
+                "description": "Top-N tags of the given kind matching the query, ranked by usage desc + created_at desc.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6281,6 +6282,17 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "enum": [
+                            "commodity",
+                            "file"
+                        ],
+                        "type": "string",
+                        "description": "Tag kind (commodity = item-tags, file = file-tags)",
+                        "name": "kind",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
                         "type": "string",
                         "description": "Substring match against label and slug",
                         "name": "q",
@@ -6292,16 +6304,6 @@ const docTemplate = `{
                         "description": "Maximum suggestions returned",
                         "name": "limit",
                         "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "commodity",
-                            "file"
-                        ],
-                        "type": "string",
-                        "description": "Restrict to tags used on commodities or files. Empty = no filter.",
-                        "name": "scope",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -6312,7 +6314,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Invalid scope value",
+                        "description": "Missing or invalid kind value",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -11848,6 +11850,14 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "kind": {
+                    "description": "Kind separates item-tags (commodity) from file-tags (file). Two tags\nwith the same slug but different kind are distinct entities. Existing\nrows default to \"commodity\" on migration; new rows always carry an\nexplicit kind from the write path.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TagKind"
+                        }
+                    ]
+                },
                 "label": {
                     "description": "Label is the human-readable display name.",
                     "type": "string"
@@ -11856,7 +11866,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/jsonapi.TagMeta"
                 },
                 "slug": {
-                    "description": "Slug is the kebab-cased identifier referenced from\ncommodities.tags / files.tags JSONB arrays. Unique per group.",
+                    "description": "Slug is the kebab-cased identifier referenced from\ncommodities.tags / files.tags JSONB arrays. Unique per (group, kind).",
                     "type": "string"
                 },
                 "updated_at": {
@@ -11901,6 +11911,18 @@ const docTemplate = `{
                         }
                     ],
                     "example": "muted"
+                },
+                "kind": {
+                    "enum": [
+                        "commodity",
+                        "file"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TagKind"
+                        }
+                    ],
+                    "example": "commodity"
                 },
                 "label": {
                     "type": "string"
@@ -13448,12 +13470,20 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "kind": {
+                    "description": "Kind separates item-tags (commodity) from file-tags (file). Two tags\nwith the same slug but different kind are distinct entities. Existing\nrows default to \"commodity\" on migration; new rows always carry an\nexplicit kind from the write path.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TagKind"
+                        }
+                    ]
+                },
                 "label": {
                     "description": "Label is the human-readable display name.",
                     "type": "string"
                 },
                 "slug": {
-                    "description": "Slug is the kebab-cased identifier referenced from\ncommodities.tags / files.tags JSONB arrays. Unique per group.",
+                    "description": "Slug is the kebab-cased identifier referenced from\ncommodities.tags / files.tags JSONB arrays. Unique per (group, kind).",
                     "type": "string"
                 },
                 "updated_at": {
@@ -13481,6 +13511,17 @@ const docTemplate = `{
                 "TagColorOrange",
                 "TagColorRed",
                 "TagColorMuted"
+            ]
+        },
+        "models.TagKind": {
+            "type": "string",
+            "enum": [
+                "commodity",
+                "file"
+            ],
+            "x-enum-varnames": [
+                "TagKindCommodity",
+                "TagKindFile"
             ]
         },
         "models.TenantStatus": {
@@ -13557,6 +13598,12 @@ const docTemplate = `{
         "registry.TagStats": {
             "type": "object",
             "properties": {
+                "commodity_tags_total": {
+                    "type": "integer"
+                },
+                "file_tags_total": {
+                    "type": "integer"
+                },
                 "files_tagged": {
                     "type": "integer"
                 },

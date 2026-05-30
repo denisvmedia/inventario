@@ -167,9 +167,10 @@ func seedTagFile(c *qt.C, set *registry.Set, ctx context.Context, name string, t
 	return file.GetID()
 }
 
-func mustCreateTag(c *qt.C, reg registry.TagRegistry, ctx context.Context, slug string) *models.Tag {
+func mustCreateTag(c *qt.C, reg registry.TagRegistry, ctx context.Context, kind models.TagKind, slug string) *models.Tag {
 	c.Helper()
 	tag, err := reg.Create(ctx, models.Tag{
+		Kind:  kind,
 		Slug:  slug,
 		Label: slug,
 		Color: models.DefaultTagColor,
@@ -193,6 +194,25 @@ func rawCommodityTagsText(c *qt.C, dbx *sqlx.DB, id string) string {
 	return *raw
 }
 
+// TestTagRegistry_Postgres_SameSlugDifferentKinds pins the core split
+// invariant at the DB level: the (group_id, kind, slug) unique index lets
+// the same slug exist once per kind as two distinct rows.
+func TestTagRegistry_Postgres_SameSlugDifferentKinds(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagPGFixture(t)
+
+	commTag := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "warranty")
+	fileTag := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindFile, "warranty")
+	c.Assert(commTag.ID, qt.Not(qt.Equals), fileTag.ID)
+
+	gotComm, err := fx.groupASet.TagRegistry.GetBySlug(fx.ctxA, models.TagKindCommodity, "warranty")
+	c.Assert(err, qt.IsNil)
+	c.Assert(gotComm.ID, qt.Equals, commTag.ID)
+	gotFile, err := fx.groupASet.TagRegistry.GetBySlug(fx.ctxA, models.TagKindFile, "warranty")
+	c.Assert(err, qt.IsNil)
+	c.Assert(gotFile.ID, qt.Equals, fileTag.ID)
+}
+
 func TestTagRegistry_Postgres_RewriteSlugReferences(t *testing.T) {
 	c := qt.New(t)
 	fx := newTagPGFixture(t)
@@ -200,10 +220,12 @@ func TestTagRegistry_Postgres_RewriteSlugReferences(t *testing.T) {
 	cmdID := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen", "appliance")
 	fileID := seedTagFile(c, fx.groupASet, fx.ctxA, "fridge-photo", "kitchen")
 
-	commCount, fileCount, err := fx.groupASet.TagRegistry.RewriteSlugReferences(fx.ctxA, "kitchen", "kitchen-area")
+	// Commodity-kind rewrite touches ONLY commodities — the file's "kitchen"
+	// belongs to a separate file tag and must be left alone.
+	commCount, fileCount, err := fx.groupASet.TagRegistry.RewriteSlugReferences(fx.ctxA, models.TagKindCommodity, "kitchen", "kitchen-area")
 	c.Assert(err, qt.IsNil)
 	c.Assert(commCount, qt.Equals, 1)
-	c.Assert(fileCount, qt.Equals, 1)
+	c.Assert(fileCount, qt.Equals, 0)
 
 	cmd, err := fx.groupASet.CommodityRegistry.Get(fx.ctxA, cmdID)
 	c.Assert(err, qt.IsNil)
@@ -213,6 +235,15 @@ func TestTagRegistry_Postgres_RewriteSlugReferences(t *testing.T) {
 	c.Assert([]string(cmd.Tags), qt.Not(qt.Contains), "kitchen")
 
 	file, err := fx.groupASet.FileRegistry.Get(fx.ctxA, fileID)
+	c.Assert(err, qt.IsNil)
+	c.Assert([]string(file.Tags), qt.DeepEquals, []string{"kitchen"})
+
+	// File-kind rewrite touches ONLY files.
+	commCount, fileCount, err = fx.groupASet.TagRegistry.RewriteSlugReferences(fx.ctxA, models.TagKindFile, "kitchen", "kitchen-area")
+	c.Assert(err, qt.IsNil)
+	c.Assert(commCount, qt.Equals, 0)
+	c.Assert(fileCount, qt.Equals, 1)
+	file, err = fx.groupASet.FileRegistry.Get(fx.ctxA, fileID)
 	c.Assert(err, qt.IsNil)
 	c.Assert([]string(file.Tags), qt.DeepEquals, []string{"kitchen-area"})
 }
@@ -225,7 +256,7 @@ func TestTagRegistry_Postgres_RewriteSlugReferences_DedupOnRenameOntoExisting(t 
 	// must collapse them to a single occurrence post-rewrite.
 	cmdID := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen", "kitchen-area", "appliance")
 
-	commCount, _, err := fx.groupASet.TagRegistry.RewriteSlugReferences(fx.ctxA, "kitchen", "kitchen-area")
+	commCount, _, err := fx.groupASet.TagRegistry.RewriteSlugReferences(fx.ctxA, models.TagKindCommodity, "kitchen", "kitchen-area")
 	c.Assert(err, qt.IsNil)
 	c.Assert(commCount, qt.Equals, 1)
 
@@ -245,7 +276,7 @@ func TestTagRegistry_Postgres_RewriteSlugReferences_CrossGroupIsolation(t *testi
 	fileB := seedTagFile(c, fx.groupBSet, fx.ctxB, "in-B-photo", "kitchen")
 
 	// Rewrite scoped to group A only.
-	commCount, fileCount, err := fx.groupASet.TagRegistry.RewriteSlugReferences(fx.ctxA, "kitchen", "kitchen-area")
+	commCount, fileCount, err := fx.groupASet.TagRegistry.RewriteSlugReferences(fx.ctxA, models.TagKindCommodity, "kitchen", "kitchen-area")
 	c.Assert(err, qt.IsNil)
 	c.Assert(commCount, qt.Equals, 1)
 	c.Assert(fileCount, qt.Equals, 0)
@@ -272,7 +303,7 @@ func TestTagRegistry_Postgres_RewriteSlugReferences_LeavesUnrelatedRowsAlone(t *
 	otherID := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "other", "appliance")
 	taggedID := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen")
 
-	commCount, _, err := fx.groupASet.TagRegistry.RewriteSlugReferences(fx.ctxA, "kitchen", "kitchen-area")
+	commCount, _, err := fx.groupASet.TagRegistry.RewriteSlugReferences(fx.ctxA, models.TagKindCommodity, "kitchen", "kitchen-area")
 	c.Assert(err, qt.IsNil)
 	c.Assert(commCount, qt.Equals, 1, qt.Commentf("only the row containing the old slug is touched"))
 
@@ -295,7 +326,7 @@ func TestTagRegistry_Postgres_RewriteSlugReferences_NoOpWhenSlugUnchanged(t *tes
 
 	cmdID := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen")
 
-	commCount, fileCount, err := fx.groupASet.TagRegistry.RewriteSlugReferences(fx.ctxA, "kitchen", "kitchen")
+	commCount, fileCount, err := fx.groupASet.TagRegistry.RewriteSlugReferences(fx.ctxA, models.TagKindCommodity, "kitchen", "kitchen")
 	c.Assert(err, qt.IsNil)
 	c.Assert(commCount, qt.Equals, 0)
 	c.Assert(fileCount, qt.Equals, 0)
@@ -312,10 +343,12 @@ func TestTagRegistry_Postgres_StripSlugReferences(t *testing.T) {
 	cmdID := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen", "appliance")
 	fileID := seedTagFile(c, fx.groupASet, fx.ctxA, "fridge-photo", "kitchen")
 
-	commCount, fileCount, err := fx.groupASet.TagRegistry.StripSlugReferences(fx.ctxA, "kitchen")
+	// Commodity-kind strip touches ONLY commodities; the file's "kitchen"
+	// (a file tag) is left intact.
+	commCount, fileCount, err := fx.groupASet.TagRegistry.StripSlugReferences(fx.ctxA, models.TagKindCommodity, "kitchen")
 	c.Assert(err, qt.IsNil)
 	c.Assert(commCount, qt.Equals, 1)
-	c.Assert(fileCount, qt.Equals, 1)
+	c.Assert(fileCount, qt.Equals, 0)
 
 	cmd, err := fx.groupASet.CommodityRegistry.Get(fx.ctxA, cmdID)
 	c.Assert(err, qt.IsNil)
@@ -323,7 +356,7 @@ func TestTagRegistry_Postgres_StripSlugReferences(t *testing.T) {
 
 	file, err := fx.groupASet.FileRegistry.Get(fx.ctxA, fileID)
 	c.Assert(err, qt.IsNil)
-	c.Assert([]string(file.Tags), qt.HasLen, 0)
+	c.Assert([]string(file.Tags), qt.DeepEquals, []string{"kitchen"})
 }
 
 func TestTagRegistry_Postgres_StripSlugReferences_EmptyArrayNotNull(t *testing.T) {
@@ -335,7 +368,7 @@ func TestTagRegistry_Postgres_StripSlugReferences_EmptyArrayNotNull(t *testing.T
 	// jsonb_array_length on the column.
 	cmdID := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen")
 
-	_, _, err := fx.groupASet.TagRegistry.StripSlugReferences(fx.ctxA, "kitchen")
+	_, _, err := fx.groupASet.TagRegistry.StripSlugReferences(fx.ctxA, models.TagKindCommodity, "kitchen")
 	c.Assert(err, qt.IsNil)
 
 	c.Assert(rawCommodityTagsText(c, fx.dbx, cmdID), qt.Equals, "[]")
@@ -348,7 +381,7 @@ func TestTagRegistry_Postgres_StripSlugReferences_CrossGroupIsolation(t *testing
 	cmdA := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "in-A", "kitchen", "appliance")
 	cmdB := seedTagCommodity(c, fx.groupBSet, fx.ctxB, fx.areaBID, "in-B", "kitchen")
 
-	commCount, _, err := fx.groupASet.TagRegistry.StripSlugReferences(fx.ctxA, "kitchen")
+	commCount, _, err := fx.groupASet.TagRegistry.StripSlugReferences(fx.ctxA, models.TagKindCommodity, "kitchen")
 	c.Assert(err, qt.IsNil)
 	c.Assert(commCount, qt.Equals, 1)
 
@@ -368,8 +401,8 @@ func TestTagService_Postgres_RenameTag_RefusesPreemptivelyOnSlugClash(t *testing
 	c := qt.New(t)
 	fx := newTagPGFixture(t)
 
-	srcTag := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "kitchen")
-	_ = mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "kitchen-area")
+	srcTag := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "kitchen")
+	_ = mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "kitchen-area")
 	cmdID := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen")
 
 	svc := services.NewTagService(fx.factorySet)
@@ -384,6 +417,23 @@ func TestTagService_Postgres_RenameTag_RefusesPreemptivelyOnSlugClash(t *testing
 		qt.Commentf("JSONB must be untouched when rename is refused — no partial rewrite"))
 }
 
+// TestTagService_Postgres_RenameTag_SameSlugDifferentKindNoClash asserts a
+// commodity-tag rename onto a slug that exists only as a *file* tag succeeds
+// — uniqueness is per (group, kind, slug), so the kinds don't collide.
+func TestTagService_Postgres_RenameTag_SameSlugDifferentKindNoClash(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagPGFixture(t)
+
+	srcTag := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "kitchen")
+	_ = mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindFile, "kitchen-area")
+
+	svc := services.NewTagService(fx.factorySet)
+	updated, err := svc.RenameTag(fx.ctxA, srcTag.ID, "", "kitchen-area", "")
+	c.Assert(err, qt.IsNil)
+	c.Assert(updated.Slug, qt.Equals, "kitchen-area")
+	c.Assert(updated.Kind, qt.Equals, models.TagKindCommodity)
+}
+
 // TestTagService_Postgres_RenameTag_ParallelDifferentSourceSlugs covers two
 // renames operating on distinct tags in the same group: they share no
 // row-level state, so both must succeed and both rewrites must land.
@@ -391,8 +441,8 @@ func TestTagService_Postgres_RenameTag_ParallelDifferentSourceSlugs(t *testing.T
 	c := qt.New(t)
 	fx := newTagPGFixture(t)
 
-	tagA := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "alpha")
-	tagB := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "beta")
+	tagA := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "alpha")
+	tagB := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "beta")
 	cmdA := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "with-alpha", "alpha")
 	cmdB := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "with-beta", "beta")
 
@@ -444,7 +494,7 @@ func TestTagService_Postgres_RenameTag_ParallelSameSourceSlug(t *testing.T) {
 	c := qt.New(t)
 	fx := newTagPGFixture(t)
 
-	srcTag := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "kitchen")
+	srcTag := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "kitchen")
 	cmdID := seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen")
 
 	svc := services.NewTagService(fx.factorySet)
@@ -494,7 +544,7 @@ func TestTagService_Postgres_DeleteTag_ForceUnderConcurrentInsert(t *testing.T) 
 	c := qt.New(t)
 	fx := newTagPGFixture(t)
 
-	srcTag := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "kitchen")
+	srcTag := mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "kitchen")
 	_ = seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "existing", "kitchen")
 
 	svc := services.NewTagService(fx.factorySet)
@@ -514,7 +564,7 @@ func TestTagService_Postgres_DeleteTag_ForceUnderConcurrentInsert(t *testing.T) 
 		// Mirrors the apiserver write path: normalize-and-ensure runs first
 		// (will auto-recreate if the tag was already deleted), then the
 		// commodity row is persisted with the resolved slug list.
-		slugs, ensErr := svc.NormalizeAndEnsureSlugs(fx.ctxA, []string{"kitchen"})
+		slugs, ensErr := svc.NormalizeAndEnsureSlugs(fx.ctxA, models.TagKindCommodity, []string{"kitchen"})
 		if ensErr != nil {
 			errIns = ensErr
 			return
@@ -529,7 +579,7 @@ func TestTagService_Postgres_DeleteTag_ForceUnderConcurrentInsert(t *testing.T) 
 	c.Assert(err, qt.IsNil)
 	for _, cmd := range allCmds {
 		for _, slug := range cmd.Tags {
-			_, lookupErr := fx.groupASet.TagRegistry.GetBySlug(fx.ctxA, slug)
+			_, lookupErr := fx.groupASet.TagRegistry.GetBySlug(fx.ctxA, models.TagKindCommodity, slug)
 			c.Assert(lookupErr, qt.IsNil,
 				qt.Commentf("orphan reference: commodity %s -> tag slug %q with no matching row (errDel=%v errIns=%v)",
 					cmd.ID, slug, errDel, errIns))
@@ -537,90 +587,104 @@ func TestTagService_Postgres_DeleteTag_ForceUnderConcurrentInsert(t *testing.T) 
 	}
 }
 
-// TestTagRegistry_Postgres_SearchScoped verifies the per-scope strict
-// filter on the autocomplete (Search) endpoint added for #1628. The
-// scoped expression must match what GetUsage returns for the same slug.
-func TestTagRegistry_Postgres_SearchScoped(t *testing.T) {
+// TestTagRegistry_Postgres_SearchByKind verifies the intrinsic kind filter on
+// the autocomplete (Search) endpoint: a commodity input only ever sees
+// commodity tags (including zero-usage ones), a file input only file tags,
+// and the same slug appears under both kinds as two distinct rows.
+func TestTagRegistry_Postgres_SearchByKind(t *testing.T) {
 	c := qt.New(t)
 	fx := newTagPGFixture(t)
 
-	// Seed four tags, vary usage by scope.
-	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "kitchen")
-	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "invoice")
-	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "warranty")
-	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "unused")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "kitchen")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "warranty")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "unused")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindFile, "invoice")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindFile, "warranty")
 
 	seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen", "warranty")
 	seedTagFile(c, fx.groupASet, fx.ctxA, "fridge-receipt", "invoice", "warranty")
 
-	gotCommodity, err := fx.groupASet.TagRegistry.Search(fx.ctxA, "", 10, registry.TagScopeCommodity)
-	c.Assert(err, qt.IsNil)
-	gotCommoditySlugs := make([]string, 0, len(gotCommodity))
-	for _, t := range gotCommodity {
-		gotCommoditySlugs = append(gotCommoditySlugs, t.Slug)
-	}
+	gotCommoditySlugs := searchSlugs(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity)
 	c.Assert(gotCommoditySlugs, qt.Contains, "kitchen")
 	c.Assert(gotCommoditySlugs, qt.Contains, "warranty")
+	c.Assert(gotCommoditySlugs, qt.Contains, "unused") // kind filter includes unused
 	c.Assert(gotCommoditySlugs, qt.Not(qt.Contains), "invoice")
-	c.Assert(gotCommoditySlugs, qt.Not(qt.Contains), "unused")
 
-	gotFile, err := fx.groupASet.TagRegistry.Search(fx.ctxA, "", 10, registry.TagScopeFile)
-	c.Assert(err, qt.IsNil)
-	gotFileSlugs := make([]string, 0, len(gotFile))
-	for _, t := range gotFile {
-		gotFileSlugs = append(gotFileSlugs, t.Slug)
-	}
+	gotFileSlugs := searchSlugs(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindFile)
 	c.Assert(gotFileSlugs, qt.Contains, "invoice")
 	c.Assert(gotFileSlugs, qt.Contains, "warranty")
 	c.Assert(gotFileSlugs, qt.Not(qt.Contains), "kitchen")
 	c.Assert(gotFileSlugs, qt.Not(qt.Contains), "unused")
-
-	// TagScopeAny includes every tag, including the unused one.
-	gotAny, err := fx.groupASet.TagRegistry.Search(fx.ctxA, "", 10, registry.TagScopeAny)
-	c.Assert(err, qt.IsNil)
-	c.Assert(gotAny, qt.HasLen, 4)
 }
 
-// TestTagRegistry_Postgres_ListPaginatedScoped mirrors SearchScoped for
-// the paginated listing endpoint. Asserts both filter + total count.
-func TestTagRegistry_Postgres_ListPaginatedScoped(t *testing.T) {
+func searchSlugs(c *qt.C, reg registry.TagRegistry, ctx context.Context, kind models.TagKind) []string {
+	c.Helper()
+	tags, err := reg.Search(ctx, "", 50, kind)
+	c.Assert(err, qt.IsNil)
+	out := make([]string, 0, len(tags))
+	for _, t := range tags {
+		out = append(out, t.Slug)
+	}
+	return out
+}
+
+// TestTagRegistry_Postgres_ListPaginatedByKind mirrors SearchByKind for the
+// paginated listing endpoint. Asserts both filter + total count.
+func TestTagRegistry_Postgres_ListPaginatedByKind(t *testing.T) {
 	c := qt.New(t)
 	fx := newTagPGFixture(t)
 
-	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "kitchen")
-	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "invoice")
-	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "warranty")
-	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, "unused")
-
-	seedTagCommodity(c, fx.groupASet, fx.ctxA, fx.areaAID, "fridge", "kitchen", "warranty")
-	seedTagFile(c, fx.groupASet, fx.ctxA, "fridge-receipt", "invoice", "warranty")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "kitchen")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "warranty")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindFile, "invoice")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindFile, "warranty")
 
 	got, total, err := fx.groupASet.TagRegistry.ListPaginated(fx.ctxA, 0, 50, registry.TagListOptions{
-		Scope: registry.TagScopeCommodity,
+		Kind: models.TagKindCommodity,
 	})
 	c.Assert(err, qt.IsNil)
 	c.Assert(total, qt.Equals, 2)
 	slugs := make([]string, 0, len(got))
 	for _, t := range got {
+		c.Assert(t.Kind, qt.Equals, models.TagKindCommodity)
 		slugs = append(slugs, t.Slug)
 	}
 	c.Assert(slugs, qt.Contains, "kitchen")
 	c.Assert(slugs, qt.Contains, "warranty")
 
 	got, total, err = fx.groupASet.TagRegistry.ListPaginated(fx.ctxA, 0, 50, registry.TagListOptions{
-		Scope: registry.TagScopeFile,
+		Kind: models.TagKindFile,
 	})
 	c.Assert(err, qt.IsNil)
 	c.Assert(total, qt.Equals, 2)
 	slugs = slugs[:0]
 	for _, t := range got {
+		c.Assert(t.Kind, qt.Equals, models.TagKindFile)
 		slugs = append(slugs, t.Slug)
 	}
 	c.Assert(slugs, qt.Contains, "invoice")
 	c.Assert(slugs, qt.Contains, "warranty")
 
+	// Zero-value kind returns every tag regardless of kind (internal only).
 	got, total, err = fx.groupASet.TagRegistry.ListPaginated(fx.ctxA, 0, 50, registry.TagListOptions{})
 	c.Assert(err, qt.IsNil)
 	c.Assert(total, qt.Equals, 4)
 	c.Assert(got, qt.HasLen, 4)
+}
+
+// TestTagRegistry_Postgres_GetStats_PerKindTotals asserts the per-kind tag
+// totals added for the split-view stats bar.
+func TestTagRegistry_Postgres_GetStats_PerKindTotals(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagPGFixture(t)
+
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "kitchen")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindCommodity, "warranty")
+	mustCreateTag(c, fx.groupASet.TagRegistry, fx.ctxA, models.TagKindFile, "invoice")
+
+	stats, err := fx.groupASet.TagRegistry.GetStats(fx.ctxA)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.TagsTotal, qt.Equals, 3)
+	c.Assert(stats.CommodityTagsTotal, qt.Equals, 2)
+	c.Assert(stats.FileTagsTotal, qt.Equals, 1)
 }

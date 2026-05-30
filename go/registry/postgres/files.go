@@ -116,7 +116,7 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 	createdFile, err := reg.Create(ctx, file, func(ctx context.Context, tx *sqlx.Tx) error {
 		// Same orphan-prevention as in CommodityRegistry.Create — see
 		// ensureTagRowsInTx in tags.go for the cross-tx invariant.
-		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, []string(file.Tags))
+		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindFile, []string(file.Tags))
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create file", err)
@@ -129,7 +129,7 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 	reg := r.newSQLRegistry()
 
 	err := reg.Update(ctx, file, func(ctx context.Context, tx *sqlx.Tx, dbFile models.FileEntity) error {
-		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, []string(file.Tags))
+		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindFile, []string(file.Tags))
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to update file", err)

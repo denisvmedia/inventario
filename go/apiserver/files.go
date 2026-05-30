@@ -303,7 +303,7 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 		input.Data.Attributes.LinkedEntityType,
 		input.Data.Attributes.LinkedEntityMeta,
 	)
-	tagSlugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), mergedTags)
+	tagSlugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), models.TagKindFile, mergedTags)
 	if terr != nil {
 		renderEntityError(w, r, terr)
 		return
@@ -461,7 +461,7 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 		input.Data.Attributes.LinkedEntityType,
 		input.Data.Attributes.LinkedEntityMeta,
 	)
-	tagSlugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), mergedTags)
+	tagSlugs, terr := api.tagService.NormalizeAndEnsureSlugs(r.Context(), models.TagKindFile, mergedTags)
 	if terr != nil {
 		renderEntityError(w, r, terr)
 		return

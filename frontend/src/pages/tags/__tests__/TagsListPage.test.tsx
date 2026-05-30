@@ -74,7 +74,9 @@ function seed() {
     ...groupHandlers.list(groupFixture),
     ...commodityHandlers.list(SLUG, commodityFixture),
     ...tagHandlers.stats(SLUG, {
-      tags_total: 2,
+      tags_total: 3,
+      commodity_tags_total: 2,
+      file_tags_total: 1,
       items_tagged: 5,
       items_untagged: 1,
       files_tagged: 3,
@@ -100,12 +102,16 @@ function seed() {
 }
 
 describe("<TagsListPage />", () => {
-  it("renders the stats bar with values from /tags/stats", async () => {
+  it("renders the commodity stats bar (default view) with values from /tags/stats", async () => {
     seed()
     renderPage()
-    await waitFor(() => expect(screen.getByTestId("tags-stats-tags-total")).toHaveTextContent("2"))
+    await waitFor(() =>
+      expect(screen.getByTestId("tags-stats-commodity-tags-total")).toHaveTextContent("2")
+    )
     expect(screen.getByTestId("tags-stats-items-tagged")).toHaveTextContent("5")
-    expect(screen.getByTestId("tags-stats-files-untagged")).toHaveTextContent("2")
+    expect(screen.getByTestId("tags-stats-items-untagged")).toHaveTextContent("1")
+    // File tiles belong to the file-tags view only.
+    expect(screen.queryByTestId("tags-stats-files-tagged")).not.toBeInTheDocument()
   })
 
   it("renders one row per tag with the inline usage block", async () => {
@@ -116,12 +122,18 @@ describe("<TagsListPage />", () => {
     expect(screen.getByTestId("tag-row-garden-usage")).toHaveTextContent(/Not used yet/i)
   })
 
-  it("renders a tag preview footer card with all tag pills", async () => {
+  it("switches to the file-tags view via the kind toggle", async () => {
     seed()
+    const user = userEvent.setup()
     renderPage()
-    expect(await screen.findByTestId("tags-preview")).toBeVisible()
-    expect(screen.getByTestId("tags-preview-kitchen")).toBeInTheDocument()
-    expect(screen.getByTestId("tags-preview-garden")).toBeInTheDocument()
+    await screen.findByTestId("tag-row-kitchen")
+    // Default view is the commodity (item-tags) view.
+    expect(screen.getByTestId("tags-view-commodity")).toHaveAttribute("aria-pressed", "true")
+    await user.click(screen.getByTestId("tags-view-file"))
+    // File view swaps the stats tiles to the file-tag set.
+    expect(await screen.findByTestId("tags-stats-file-tags-total")).toBeVisible()
+    expect(screen.queryByTestId("tags-stats-items-tagged")).not.toBeInTheDocument()
+    expect(screen.getByTestId("tags-view-file")).toHaveAttribute("aria-pressed", "true")
   })
 
   it("renders item-preview chips for tags with usage", async () => {
@@ -165,9 +177,8 @@ describe("<TagsListPage />", () => {
     const clear = await screen.findByTestId("tags-search-clear")
     await user.click(clear)
     // Re-query the input after the click — the URL-debounce effect can
-    // cause the Tabs subtree to re-render, which can detach the
-    // pre-click element reference even though the visible DOM still
-    // shows the new state.
+    // re-render the page subtree, which can detach the pre-click element
+    // reference even though the visible DOM still shows the new state.
     await waitFor(() => {
       const fresh = screen.getByTestId("tags-search-input") as HTMLInputElement
       expect(fresh.value).toBe("")

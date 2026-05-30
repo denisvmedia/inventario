@@ -57,7 +57,9 @@ var seedTagCatalogue = []seedTagSpec{
 func seedTags(ctx context.Context, set *registry.Set, user *models.User, group *models.LocationGroup) error {
 	now := time.Now()
 	for _, spec := range seedTagCatalogue {
-		existing, err := set.TagRegistry.GetBySlug(ctx, spec.Slug)
+		// The curated catalogue is item-oriented; file tags auto-provision
+		// on file write. Seed everything as commodity-kind.
+		existing, err := set.TagRegistry.GetBySlug(ctx, models.TagKindCommodity, spec.Slug)
 		switch {
 		case err == nil && existing != nil:
 			// Tag row already exists in this group; leave the
@@ -76,6 +78,7 @@ func seedTags(ctx context.Context, set *registry.Set, user *models.User, group *
 				GroupID:         group.ID,
 				CreatedByUserID: user.ID,
 			},
+			Kind:      models.TagKindCommodity,
 			Slug:      spec.Slug,
 			Label:     spec.Label,
 			Color:     spec.Color,

@@ -90,6 +90,7 @@ func TestTag_ValidateWithContext(t *testing.T) {
 		{
 			name: "valid tag",
 			tag: models.Tag{
+				Kind:  models.TagKindCommodity,
 				Slug:  "kitchen",
 				Label: "Kitchen",
 				Color: models.TagColorAmber,
@@ -97,8 +98,38 @@ func TestTag_ValidateWithContext(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "valid file tag",
+			tag: models.Tag{
+				Kind:  models.TagKindFile,
+				Slug:  "invoice",
+				Label: "Invoice",
+				Color: models.TagColorBlue,
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing kind",
+			tag: models.Tag{
+				Slug:  "kitchen",
+				Label: "Kitchen",
+				Color: models.TagColorAmber,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid kind",
+			tag: models.Tag{
+				Kind:  models.TagKind("widget"),
+				Slug:  "kitchen",
+				Label: "Kitchen",
+				Color: models.TagColorAmber,
+			},
+			wantErr: true,
+		},
+		{
 			name: "missing slug",
 			tag: models.Tag{
+				Kind:  models.TagKindCommodity,
 				Label: "Kitchen",
 				Color: models.TagColorAmber,
 			},
@@ -107,6 +138,7 @@ func TestTag_ValidateWithContext(t *testing.T) {
 		{
 			name: "invalid slug shape",
 			tag: models.Tag{
+				Kind:  models.TagKindCommodity,
 				Slug:  "Kitchen Office",
 				Label: "Kitchen Office",
 				Color: models.TagColorAmber,
@@ -116,6 +148,7 @@ func TestTag_ValidateWithContext(t *testing.T) {
 		{
 			name: "missing label",
 			tag: models.Tag{
+				Kind:  models.TagKindCommodity,
 				Slug:  "kitchen",
 				Color: models.TagColorAmber,
 			},
@@ -124,6 +157,7 @@ func TestTag_ValidateWithContext(t *testing.T) {
 		{
 			name: "label too long",
 			tag: models.Tag{
+				Kind:  models.TagKindCommodity,
 				Slug:  "kitchen",
 				Label: stringOfLen(65),
 				Color: models.TagColorAmber,
@@ -133,6 +167,7 @@ func TestTag_ValidateWithContext(t *testing.T) {
 		{
 			name: "missing color",
 			tag: models.Tag{
+				Kind:  models.TagKindCommodity,
 				Slug:  "kitchen",
 				Label: "Kitchen",
 			},
@@ -141,6 +176,7 @@ func TestTag_ValidateWithContext(t *testing.T) {
 		{
 			name: "invalid color",
 			tag: models.Tag{
+				Kind:  models.TagKindCommodity,
 				Slug:  "kitchen",
 				Label: "Kitchen",
 				Color: models.TagColor("rainbow"),

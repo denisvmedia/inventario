@@ -143,13 +143,13 @@ func (r *TagRegistry) Update(ctx context.Context, tag models.Tag) (*models.Tag, 
 	return updated, nil
 }
 
-func (r *TagRegistry) GetBySlug(ctx context.Context, slug string) (*models.Tag, error) {
+func (r *TagRegistry) GetBySlug(ctx context.Context, kind models.TagKind, slug string) (*models.Tag, error) {
 	tags, err := r.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, t := range tags {
-		if t.Slug == slug {
+		if t.Kind == kind && t.Slug == slug {
 			return t, nil
 		}
 	}
@@ -163,21 +163,17 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 	}
 
 	all = filterTagsBySearch(all, opts.Search)
+	all = filterTagsByKind(all, opts.Kind)
 
-	// usagePerScope is computed when either (a) usage sort is selected or
-	// (b) a scope filter is in effect — both need per-tag-per-scope counts.
-	needUsage := opts.SortField == registry.TagSortUsage ||
-		opts.Scope == registry.TagScopeCommodity ||
-		opts.Scope == registry.TagScopeFile
+	// usagePerScope is computed only when usage sort is selected — the kind
+	// filter is now intrinsic (the Kind field), not usage-derived.
 	var usagePerScope map[string]registry.TagUsage
-	if needUsage {
+	if opts.SortField == registry.TagSortUsage {
 		usagePerScope, err = r.computePerScopeUsageMap(ctx)
 		if err != nil {
 			return nil, 0, err
 		}
 	}
-
-	all = filterTagsByScope(all, opts.Scope, usagePerScope)
 
 	sortField := opts.SortField
 	if !sortField.IsValid() {
@@ -189,8 +185,8 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 		case registry.TagSortCreatedAt:
 			less = all[i].CreatedAt.Before(all[j].CreatedAt)
 		case registry.TagSortUsage:
-			ui := scopedUsage(usagePerScope[all[i].Slug], opts.Scope)
-			uj := scopedUsage(usagePerScope[all[j].Slug], opts.Scope)
+			ui := scopedUsage(usagePerScope[all[i].Slug], opts.Kind)
+			uj := scopedUsage(usagePerScope[all[j].Slug], opts.Kind)
 			if ui == uj {
 				less = strings.ToLower(all[i].Label) < strings.ToLower(all[j].Label)
 			} else {
@@ -217,7 +213,7 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 	return all[start:end], total, nil
 }
 
-func (r *TagRegistry) Search(ctx context.Context, q string, limit int, scope registry.TagScope) ([]*models.Tag, error) {
+func (r *TagRegistry) Search(ctx context.Context, q string, limit int, kind models.TagKind) ([]*models.Tag, error) {
 	all, err := r.List(ctx)
 	if err != nil {
 		return nil, err
@@ -227,19 +223,19 @@ func (r *TagRegistry) Search(ctx context.Context, q string, limit int, scope reg
 	// no-op pass-through, so the "match everything" case stays cheap.
 	matched := filterTagsBySearch(all, q)
 
+	// Intrinsic kind filter — a commodity input only ever sees commodity
+	// tags, a file input only file tags.
+	matched = filterTagsByKind(matched, kind)
+
 	usagePerScope, err := r.computePerScopeUsageMap(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Strict scope filter — drop tags with zero usage in the requested
-	// bucket. Mirrors the postgres `>0` predicate.
-	matched = filterTagsByScope(matched, scope, usagePerScope)
-
-	// Rank: per-scope usage desc, then created_at desc (recent wins ties).
+	// Rank: kind usage desc, then created_at desc (recent wins ties).
 	sort.SliceStable(matched, func(i, j int) bool {
-		ui := scopedUsage(usagePerScope[matched[i].Slug], scope)
-		uj := scopedUsage(usagePerScope[matched[j].Slug], scope)
+		ui := scopedUsage(usagePerScope[matched[i].Slug], kind)
+		uj := scopedUsage(usagePerScope[matched[j].Slug], kind)
 		if ui != uj {
 			return ui > uj
 		}
@@ -252,14 +248,14 @@ func (r *TagRegistry) Search(ctx context.Context, q string, limit int, scope reg
 	return matched, nil
 }
 
-// scopedUsage returns the slice of TagUsage relevant to the requested
-// scope. TagScopeAny sums commodities + files; explicit scopes return
-// just that bucket.
-func scopedUsage(u registry.TagUsage, scope registry.TagScope) int {
-	switch scope {
-	case registry.TagScopeCommodity:
+// scopedUsage returns the part of TagUsage relevant to the given kind.
+// Empty kind sums commodities + files; explicit kinds return just that
+// bucket.
+func scopedUsage(u registry.TagUsage, kind models.TagKind) int {
+	switch kind {
+	case models.TagKindCommodity:
 		return u.Commodities
-	case registry.TagScopeFile:
+	case models.TagKindFile:
 		return u.Files
 	default:
 		return u.Commodities + u.Files
@@ -283,25 +279,22 @@ func filterTagsBySearch(in []*models.Tag, search string) []*models.Tag {
 	return filtered
 }
 
-// filterTagsByScope drops tags with zero usage in the requested scope.
-// TagScopeAny is a no-op pass-through. Mirrors the postgres `>0`
-// predicate on scopedUsageExpr.
-func filterTagsByScope(in []*models.Tag, scope registry.TagScope, usagePerScope map[string]registry.TagUsage) []*models.Tag {
-	if scope != registry.TagScopeCommodity && scope != registry.TagScopeFile {
+// filterTagsByKind keeps only tags whose stored Kind matches. Empty kind
+// (TagKindAny) is a no-op pass-through (list across all kinds).
+func filterTagsByKind(in []*models.Tag, kind models.TagKind) []*models.Tag {
+	if kind != models.TagKindCommodity && kind != models.TagKindFile {
 		return in
 	}
 	filtered := in[:0:0]
 	for _, t := range in {
-		u := usagePerScope[t.Slug]
-		if (scope == registry.TagScopeCommodity && u.Commodities > 0) ||
-			(scope == registry.TagScopeFile && u.Files > 0) {
+		if t.Kind == kind {
 			filtered = append(filtered, t)
 		}
 	}
 	return filtered
 }
 
-func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[string]registry.TagUsage, error) {
+func (r *TagRegistry) GetUsageBatch(ctx context.Context, kind models.TagKind, slugs []string) (map[string]registry.TagUsage, error) {
 	out := make(map[string]registry.TagUsage, len(slugs))
 	for _, s := range slugs {
 		out[s] = registry.TagUsage{}
@@ -310,9 +303,30 @@ func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[st
 		return out, nil
 	}
 
-	// Per-row seen-set so a commodity / file with a duplicated slug in
-	// its JSONB tags array is counted at most once — matches the
-	// postgres @> containment semantics and GetUsage's per-entity count.
+	// Count only the kind's own table — commodity tags count commodity
+	// rows, file tags count file rows. Per-row seen-set so a row with a
+	// duplicated slug in its JSONB tags array is counted at most once.
+	if kind == models.TagKindFile {
+		files, err := r.fileRegistry.List(ctx)
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to list files", err)
+		}
+		for _, f := range files {
+			seen := map[string]struct{}{}
+			for _, slug := range f.Tags {
+				if _, dup := seen[slug]; dup {
+					continue
+				}
+				seen[slug] = struct{}{}
+				if u, ok := out[slug]; ok {
+					u.Files++
+					out[slug] = u
+				}
+			}
+		}
+		return out, nil
+	}
+
 	commodities, err := r.commodityRegistry.List(ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list commodities", err)
@@ -330,24 +344,6 @@ func (r *TagRegistry) GetUsageBatch(ctx context.Context, slugs []string) (map[st
 			}
 		}
 	}
-
-	files, err := r.fileRegistry.List(ctx)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to list files", err)
-	}
-	for _, f := range files {
-		seen := map[string]struct{}{}
-		for _, slug := range f.Tags {
-			if _, dup := seen[slug]; dup {
-				continue
-			}
-			seen[slug] = struct{}{}
-			if u, ok := out[slug]; ok {
-				u.Files++
-				out[slug] = u
-			}
-		}
-	}
 	return out, nil
 }
 
@@ -355,6 +351,15 @@ func (r *TagRegistry) GetStats(ctx context.Context) (registry.TagStats, error) {
 	tags, err := r.List(ctx)
 	if err != nil {
 		return registry.TagStats{}, errxtrace.Wrap("failed to list tags", err)
+	}
+	commodityTagsTotal, fileTagsTotal := 0, 0
+	for _, t := range tags {
+		switch t.Kind {
+		case models.TagKindCommodity:
+			commodityTagsTotal++
+		case models.TagKindFile:
+			fileTagsTotal++
+		}
 	}
 
 	commodities, err := r.commodityRegistry.List(ctx)
@@ -380,15 +385,31 @@ func (r *TagRegistry) GetStats(ctx context.Context) (registry.TagStats, error) {
 	}
 
 	return registry.TagStats{
-		TagsTotal:     len(tags),
-		ItemsTagged:   itemsTagged,
-		ItemsUntagged: len(commodities) - itemsTagged,
-		FilesTagged:   filesTagged,
-		FilesUntagged: len(files) - filesTagged,
+		TagsTotal:          len(tags),
+		CommodityTagsTotal: commodityTagsTotal,
+		FileTagsTotal:      fileTagsTotal,
+		ItemsTagged:        itemsTagged,
+		ItemsUntagged:      len(commodities) - itemsTagged,
+		FilesTagged:        filesTagged,
+		FilesUntagged:      len(files) - filesTagged,
 	}, nil
 }
 
-func (r *TagRegistry) GetUsage(ctx context.Context, slug string) (registry.TagUsage, error) {
+func (r *TagRegistry) GetUsage(ctx context.Context, kind models.TagKind, slug string) (registry.TagUsage, error) {
+	if kind == models.TagKindFile {
+		files, err := r.fileRegistry.List(ctx)
+		if err != nil {
+			return registry.TagUsage{}, errxtrace.Wrap("failed to list files", err)
+		}
+		fileCount := 0
+		for _, f := range files {
+			if slices.Contains([]string(f.Tags), slug) {
+				fileCount++
+			}
+		}
+		return registry.TagUsage{Files: fileCount}, nil
+	}
+
 	commodities, err := r.commodityRegistry.List(ctx)
 	if err != nil {
 		return registry.TagUsage{}, errxtrace.Wrap("failed to list commodities", err)
@@ -399,19 +420,7 @@ func (r *TagRegistry) GetUsage(ctx context.Context, slug string) (registry.TagUs
 			commodityCount++
 		}
 	}
-
-	files, err := r.fileRegistry.List(ctx)
-	if err != nil {
-		return registry.TagUsage{}, errxtrace.Wrap("failed to list files", err)
-	}
-	fileCount := 0
-	for _, f := range files {
-		if slices.Contains([]string(f.Tags), slug) {
-			fileCount++
-		}
-	}
-
-	return registry.TagUsage{Commodities: commodityCount, Files: fileCount}, nil
+	return registry.TagUsage{Commodities: commodityCount}, nil
 }
 
 // computePerScopeUsageMap walks commodities + files once each and returns
@@ -458,9 +467,29 @@ func (r *TagRegistry) computePerScopeUsageMap(ctx context.Context) (map[string]r
 	return usage, nil
 }
 
-func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, oldSlug, newSlug string) (commodityRows, fileRows int, err error) {
+func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, kind models.TagKind, oldSlug, newSlug string) (commodityRows, fileRows int, err error) {
 	if oldSlug == newSlug {
 		return 0, 0, nil
+	}
+
+	if kind == models.TagKindFile {
+		files, err := r.fileRegistry.List(ctx)
+		if err != nil {
+			return 0, 0, errxtrace.Wrap("failed to list files", err)
+		}
+		fileCount := 0
+		for _, f := range files {
+			changed, newTags := replaceTagSlugString(f.Tags, oldSlug, newSlug)
+			if !changed {
+				continue
+			}
+			f.Tags = newTags
+			if _, err := r.fileRegistry.Update(ctx, *f); err != nil {
+				return 0, fileCount, errxtrace.Wrap("failed to rewrite file tag", err)
+			}
+			fileCount++
+		}
+		return 0, fileCount, nil
 	}
 
 	commodities, err := r.commodityRegistry.List(ctx)
@@ -479,28 +508,30 @@ func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, oldSlug, newSlu
 		}
 		commodityCount++
 	}
-
-	files, err := r.fileRegistry.List(ctx)
-	if err != nil {
-		return commodityCount, 0, errxtrace.Wrap("failed to list files", err)
-	}
-	fileCount := 0
-	for _, f := range files {
-		changed, newTags := replaceTagSlugString(f.Tags, oldSlug, newSlug)
-		if !changed {
-			continue
-		}
-		f.Tags = newTags
-		if _, err := r.fileRegistry.Update(ctx, *f); err != nil {
-			return commodityCount, fileCount, errxtrace.Wrap("failed to rewrite file tag", err)
-		}
-		fileCount++
-	}
-
-	return commodityCount, fileCount, nil
+	return commodityCount, 0, nil
 }
 
-func (r *TagRegistry) StripSlugReferences(ctx context.Context, slug string) (commodityRows, fileRows int, err error) {
+func (r *TagRegistry) StripSlugReferences(ctx context.Context, kind models.TagKind, slug string) (commodityRows, fileRows int, err error) {
+	if kind == models.TagKindFile {
+		files, err := r.fileRegistry.List(ctx)
+		if err != nil {
+			return 0, 0, errxtrace.Wrap("failed to list files", err)
+		}
+		fileCount := 0
+		for _, f := range files {
+			changed, newTags := stripTagSlugString(f.Tags, slug)
+			if !changed {
+				continue
+			}
+			f.Tags = newTags
+			if _, err := r.fileRegistry.Update(ctx, *f); err != nil {
+				return 0, fileCount, errxtrace.Wrap("failed to strip file tag", err)
+			}
+			fileCount++
+		}
+		return 0, fileCount, nil
+	}
+
 	commodities, err := r.commodityRegistry.List(ctx)
 	if err != nil {
 		return 0, 0, errxtrace.Wrap("failed to list commodities", err)
@@ -517,24 +548,7 @@ func (r *TagRegistry) StripSlugReferences(ctx context.Context, slug string) (com
 		}
 		commodityCount++
 	}
-
-	files, err := r.fileRegistry.List(ctx)
-	if err != nil {
-		return commodityCount, 0, errxtrace.Wrap("failed to list files", err)
-	}
-	fileCount := 0
-	for _, f := range files {
-		changed, newTags := stripTagSlugString(f.Tags, slug)
-		if !changed {
-			continue
-		}
-		f.Tags = newTags
-		if _, err := r.fileRegistry.Update(ctx, *f); err != nil {
-			return commodityCount, fileCount, errxtrace.Wrap("failed to strip file tag", err)
-		}
-		fileCount++
-	}
-	return commodityCount, fileCount, nil
+	return commodityCount, 0, nil
 }
 
 // RenameAtomic mirrors the postgres semantics: re-read the tag, run the
@@ -562,7 +576,9 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 	slugChanged := newSlug != "" && newSlug != current.Slug
 	if slugChanged {
 		updated.Slug = newSlug
-		clash, clashErr := r.GetBySlug(ctx, newSlug)
+		// Clash + rewrite are scoped to the tag's own kind: the same slug
+		// may legitimately exist under the other kind.
+		clash, clashErr := r.GetBySlug(ctx, current.Kind, newSlug)
 		if clashErr != nil && !errors.Is(clashErr, registry.ErrNotFound) {
 			return nil, errxtrace.Wrap("failed to check slug availability", clashErr)
 		}
@@ -570,7 +586,7 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 			return nil, errxtrace.Wrap("target slug is already used by another tag",
 				registry.ErrAlreadyExists, errx.Attrs("slug", newSlug))
 		}
-		if _, _, err := r.RewriteSlugReferences(ctx, current.Slug, newSlug); err != nil {
+		if _, _, err := r.RewriteSlugReferences(ctx, current.Kind, current.Slug, newSlug); err != nil {
 			return nil, errxtrace.Wrap("failed to rewrite slug references", err)
 		}
 	}
@@ -595,7 +611,7 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 		return registry.TagUsage{}, errxtrace.Wrap("failed to look up tag", err)
 	}
 
-	usage, err := r.GetUsage(ctx, current.Slug)
+	usage, err := r.GetUsage(ctx, current.Kind, current.Slug)
 	if err != nil {
 		return registry.TagUsage{}, errxtrace.Wrap("failed to compute tag usage", err)
 	}
@@ -604,7 +620,7 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 		return usage, registry.ErrTagInUse
 	}
 	if usage.Commodities+usage.Files > 0 {
-		if _, _, err := r.StripSlugReferences(ctx, current.Slug); err != nil {
+		if _, _, err := r.StripSlugReferences(ctx, current.Kind, current.Slug); err != nil {
 			return usage, errxtrace.Wrap("failed to strip slug references", err)
 		}
 	}

@@ -74,14 +74,16 @@ describe("features/tags/hooks", () => {
       ])
     )
     const client = newClient()
-    const { result } = renderHook(() => useTags({ includeUsage: true }), {
+    const { result } = renderHook(() => useTags({ kind: "commodity", includeUsage: true }), {
       wrapper: makeWrapper(client),
     })
     await waitFor(() => expect(result.current.data?.tags.length).toBe(1))
     expect(result.current.data?.tags[0].usage?.commodities).toBe(2)
     // Cache is keyed under `tagKeys.list(slug, opts)`. Reading directly
     // proves the slug propagated through GroupProvider into the hook.
-    const cached = client.getQueryData(tagKeys.list(SLUG, { includeUsage: true }))
+    const cached = client.getQueryData(
+      tagKeys.list(SLUG, { kind: "commodity", includeUsage: true })
+    )
     expect(cached).toBeDefined()
   })
 
@@ -127,12 +129,16 @@ describe("features/tags/hooks", () => {
       })
     )
     const client = newClient()
-    const { result } = renderHook(() => ({ list: useTags(), create: useCreateTag() }), {
-      wrapper: makeWrapper(client),
-    })
+    const { result } = renderHook(
+      () => ({ list: useTags({ kind: "commodity" }), create: useCreateTag() }),
+      {
+        wrapper: makeWrapper(client),
+      }
+    )
     await waitFor(() => expect(result.current.list.data).toBeDefined())
     const initialCalls = listCalls
     const created = await result.current.create.mutateAsync({
+      kind: "commodity",
       slug: "kitchen",
       label: "Kitchen",
       color: "amber",
@@ -188,7 +194,7 @@ describe("features/tags/hooks", () => {
       )
     )
     const client = newClient()
-    const { result } = renderHook(() => useTagAutocomplete("ki"), {
+    const { result } = renderHook(() => useTagAutocomplete("ki", 10, { kind: "commodity" }), {
       wrapper: makeWrapper(client),
     })
     await waitFor(() => expect(result.current.data?.length).toBe(1))

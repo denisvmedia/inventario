@@ -52,7 +52,7 @@ describe("features/tags/api", () => {
       )
     )
 
-    const result = await listTags({ includeUsage: true })
+    const result = await listTags({ kind: "commodity", includeUsage: true })
     expect(result.total).toBe(2)
     expect(result.tags).toHaveLength(2)
     expect(result.tags[0].tag.slug).toBe("kitchen")
@@ -69,8 +69,9 @@ describe("features/tags/api", () => {
         return HttpResponse.json({ data: [], meta: { tags: 0, total: 0 } })
       })
     )
-    await listTags({ search: "k", sort: "usage", order: "desc", includeUsage: true })
+    await listTags({ kind: "file", search: "k", sort: "usage", order: "desc", includeUsage: true })
     expect(captured).not.toBeNull()
+    expect(captured!.searchParams.get("kind")).toBe("file")
     expect(captured!.searchParams.get("q")).toBe("k")
     expect(captured!.searchParams.get("sort")).toBe("usage")
     expect(captured!.searchParams.get("order")).toBe("desc")
@@ -127,7 +128,12 @@ describe("features/tags/api", () => {
         )
       )
     )
-    const created = await createTag({ slug: "kitchen", label: "Kitchen", color: "amber" })
+    const created = await createTag({
+      kind: "commodity",
+      slug: "kitchen",
+      label: "Kitchen",
+      color: "amber",
+    })
     expect(created.id).toBe("new")
     expect(created.slug).toBe("kitchen")
   })
@@ -182,7 +188,7 @@ describe("features/tags/api", () => {
         })
       )
     )
-    const result = await autocompleteTags("ki")
+    const result = await autocompleteTags("ki", 10, { kind: "commodity" })
     expect(result).toHaveLength(2)
     expect(result[0].slug).toBe("kitchen")
   })
