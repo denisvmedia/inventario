@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -18,6 +19,15 @@ const (
 	defaultDetachedThumbnailTimeout = 2 * time.Minute  // Bound each detached thumbnail job
 )
 
+// PauseChecker reports whether a worker type is currently soft-paused
+// (#1308). Declared locally in the services package so the workers depend
+// only on models, not on the workerpause controller — avoiding an import
+// cycle while still being satisfied by *workerpause.Controller. Shared by
+// every go/services background worker.
+type PauseChecker interface {
+	IsPaused(models.WorkerType) bool
+}
+
 // ThumbnailGenerationWorker processes thumbnail generation requests in the background
 type ThumbnailGenerationWorker struct {
 	thumbnailService   *ThumbnailGenerationService
@@ -28,6 +38,7 @@ type ThumbnailGenerationWorker struct {
 	retentionPeriod    time.Duration
 	jobBatchTimeout    time.Duration
 	detachedJobTimeout time.Duration
+	pause              PauseChecker
 	stopCh             chan struct{}
 	wg                 sync.WaitGroup
 	isRunning          bool
@@ -45,6 +56,7 @@ type thumbnailWorkerOptions struct {
 	retentionPeriod    time.Duration
 	jobBatchTimeout    time.Duration
 	detachedJobTimeout time.Duration
+	pause              PauseChecker
 }
 
 // WithThumbnailPollInterval overrides the default interval between job queue polls.
@@ -107,6 +119,17 @@ func WithDetachedThumbnailJobTimeout(d time.Duration) ThumbnailWorkerOption {
 	}
 }
 
+// WithThumbnailPauseController wires the soft-pause controller so the
+// worker skips its claim phase while the thumbnail worker type is paused
+// (#1308). A nil checker leaves the worker unpaused.
+func WithThumbnailPauseController(pc PauseChecker) ThumbnailWorkerOption {
+	return func(o *thumbnailWorkerOptions) {
+		if pc != nil {
+			o.pause = pc
+		}
+	}
+}
+
 // NewThumbnailGenerationWorker creates a new thumbnail generation worker
 func NewThumbnailGenerationWorker(factorySet *registry.FactorySet, uploadLocation string, config ThumbnailGenerationConfig, opts ...ThumbnailWorkerOption) *ThumbnailGenerationWorker {
 	thumbnailService := NewThumbnailGenerationService(factorySet, uploadLocation, config)
@@ -132,6 +155,7 @@ func NewThumbnailGenerationWorker(factorySet *registry.FactorySet, uploadLocatio
 		retentionPeriod:    options.retentionPeriod,
 		jobBatchTimeout:    options.jobBatchTimeout,
 		detachedJobTimeout: options.detachedJobTimeout,
+		pause:              options.pause,
 		stopCh:             make(chan struct{}),
 	}
 }
@@ -230,6 +254,13 @@ func (w *ThumbnailGenerationWorker) runCleanup(ctx context.Context) {
 
 // processPendingJobs finds and processes pending thumbnail generation jobs
 func (w *ThumbnailGenerationWorker) processPendingJobs(ctx context.Context) {
+	// Soft-pause (#1308): skip the claim phase while paused. The ticker
+	// keeps running so resuming takes effect on the next tick without a
+	// restart.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeThumbnail) {
+		return
+	}
+
 	jobs, err := w.thumbnailService.GetPendingJobs(ctx, w.jobBatchSize)
 	if err != nil {
 		slog.Error("Failed to get pending thumbnail jobs", "error", err)

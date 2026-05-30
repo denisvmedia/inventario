@@ -630,6 +630,156 @@ func (s *Service) ListSystemAdmins(ctx context.Context) ([]*SystemAdminListing, 
 	return out, nil
 }
 
+// Worker soft-pause action names (#1308). Kept as constants so the CLI
+// audit rows use the same literals as the admin REST surface
+// (admin.worker_pause / admin.worker_resume), mirroring the
+// "admin.<noun>_<verb>" pattern set by #1745.
+const (
+	// auditActionWorkerPause is the audit-row Action emitted when an
+	// operator soft-pauses a background worker via the CLI.
+	auditActionWorkerPause = "admin.worker_pause"
+	// auditActionWorkerResume is the audit-row Action emitted when an
+	// operator resumes a soft-paused background worker via the CLI.
+	auditActionWorkerResume = "admin.worker_resume"
+	// auditActionListWorkerControls is the audit-row Action emitted on a
+	// read of the worker-control listing, so operator-side reads land in
+	// the trail alongside the writes (mirrors admin.list_system_admins).
+	auditActionListWorkerControls = "admin.list_worker_controls"
+)
+
+// ErrUnknownWorkerType is returned by PauseWorker/ResumeWorker when the
+// supplied worker type is not one of models.AllWorkerTypes(). Surfaced
+// to the CLI so a typo (`--type expot`) fails with a clear message
+// rather than silently creating a control row for a non-existent worker.
+var ErrUnknownWorkerType = errx.NewSentinel("unknown worker type")
+
+// PauseWorker soft-pauses the named background worker (#1308). The
+// workerType is validated against models.AllWorkerTypes() up front so a
+// typo fails clearly rather than writing a control row for a worker that
+// doesn't exist. Idempotent at the registry layer: re-pausing an
+// already-paused worker updates by/reason but preserves the original
+// paused_at. Writes an `admin.worker_pause` audit row regardless of
+// outcome so the trail records the attempt.
+//
+// The CLI runs out-of-band with no authenticated operator session, so
+// the control row's paused_by is recorded as "cli" — a coarse marker
+// distinguishing CLI pauses from the admin-REST pauses (which record the
+// back-office operator's id/email). The audit row's actor (UserID) stays
+// nil for the same reason GrantSystemAdmin's does: CLI "operator"
+// identity is the OS/host boundary, not a row in this database.
+func (s *Service) PauseWorker(ctx context.Context, workerType, reason string) (*models.WorkerControl, error) {
+	wt, ok := models.ParseWorkerType(workerType)
+	if !ok {
+		err := errxtrace.Classify(ErrUnknownWorkerType, errx.Attrs("worker_type", workerType))
+		s.logWorkerAction(ctx, auditActionWorkerPause, workerType, err)
+		return nil, err
+	}
+
+	if s.factorySet.WorkerControlRegistry == nil {
+		configErr := errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "WorkerControlRegistry"))
+		s.logWorkerAction(ctx, auditActionWorkerPause, string(wt), configErr)
+		return nil, configErr
+	}
+
+	control, err := s.factorySet.WorkerControlRegistry.Pause(ctx, string(wt), workerPausedByCLI, reason)
+	if err != nil {
+		s.logWorkerAction(ctx, auditActionWorkerPause, string(wt), err)
+		return nil, errxtrace.Wrap("failed to pause worker", err)
+	}
+
+	s.logWorkerAction(ctx, auditActionWorkerPause, string(wt), nil)
+	return control, nil
+}
+
+// ResumeWorker clears the soft-pause on the named worker (#1308).
+// Idempotent: resuming a worker that is not paused (no control row) is a
+// no-op that returns a synthetic not-paused row. Validates workerType up
+// front and writes an `admin.worker_resume` audit row.
+func (s *Service) ResumeWorker(ctx context.Context, workerType string) (*models.WorkerControl, error) {
+	wt, ok := models.ParseWorkerType(workerType)
+	if !ok {
+		err := errxtrace.Classify(ErrUnknownWorkerType, errx.Attrs("worker_type", workerType))
+		s.logWorkerAction(ctx, auditActionWorkerResume, workerType, err)
+		return nil, err
+	}
+
+	if s.factorySet.WorkerControlRegistry == nil {
+		configErr := errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "WorkerControlRegistry"))
+		s.logWorkerAction(ctx, auditActionWorkerResume, string(wt), configErr)
+		return nil, configErr
+	}
+
+	control, err := s.factorySet.WorkerControlRegistry.Resume(ctx, string(wt))
+	if err != nil {
+		s.logWorkerAction(ctx, auditActionWorkerResume, string(wt), err)
+		return nil, errxtrace.Wrap("failed to resume worker", err)
+	}
+
+	s.logWorkerAction(ctx, auditActionWorkerResume, string(wt), nil)
+	return control, nil
+}
+
+// ListWorkerControls returns every worker_control row (#1308). The CLI
+// `workers status` command merges these against models.AllWorkerTypes()
+// so a worker with no row renders as "running". Logs an
+// `admin.list_worker_controls` audit row regardless of result count so
+// operator-side reads are visible in the trail too.
+func (s *Service) ListWorkerControls(ctx context.Context) ([]*models.WorkerControl, error) {
+	if s.factorySet.WorkerControlRegistry == nil {
+		err := errxtrace.Classify(registry.ErrInvalidConfig, errx.Attrs("missing", "WorkerControlRegistry"))
+		s.logWorkerAction(ctx, auditActionListWorkerControls, "", err)
+		return nil, err
+	}
+
+	controls, err := s.factorySet.WorkerControlRegistry.List(ctx)
+	if err != nil {
+		s.logWorkerAction(ctx, auditActionListWorkerControls, "", err)
+		return nil, errxtrace.Wrap("failed to list worker controls", err)
+	}
+
+	s.logWorkerAction(ctx, auditActionListWorkerControls, "", nil)
+	return controls, nil
+}
+
+// workerPausedByCLI is the paused_by marker recorded for CLI-driven
+// pauses (#1308). The CLI has no authenticated operator session, so a
+// coarse "cli" marker distinguishes a CLI pause from an admin-REST pause
+// (which records the back-office operator's id/email) without pretending
+// a specific person did it.
+const workerPausedByCLI = "cli"
+
+// logWorkerAction writes a worker-control admin audit row. Mirrors
+// logAdminAction but stores the worker type as the subject (EntityType
+// "worker" / EntityID the worker-type string) rather than a user id.
+// Best-effort: a missing audit row is recoverable and surfaced via slog.
+// Actor (UserID) is nil for the same reason logAdminAction's is — CLI
+// invocations have no authenticated operator row in this database.
+func (s *Service) logWorkerAction(ctx context.Context, action, workerType string, opErr error) {
+	if s.factorySet == nil || s.factorySet.AuditLogRegistry == nil {
+		return
+	}
+
+	entry := models.AuditLog{
+		Action:  action,
+		UserID:  nil, // CLI invocations have no authenticated actor — see logAdminAction doc.
+		Success: opErr == nil,
+	}
+	if workerType != "" {
+		subjectType := "worker"
+		entry.EntityType = &subjectType
+		entry.EntityID = &workerType
+	}
+	if opErr != nil {
+		msg := opErr.Error()
+		entry.ErrorMessage = &msg
+	}
+
+	if _, createErr := s.factorySet.AuditLogRegistry.Create(ctx, entry); createErr != nil {
+		slog.Error("Failed to write worker-control audit log entry",
+			"action", action, "worker_type", workerType, "error", createErr)
+	}
+}
+
 // logAdminAction writes an admin audit row via the AuditLogRegistry on
 // the factory set. Best-effort: write failures are tolerated because the
 // CLI surfaces them via slog; the operator-visible result is still the

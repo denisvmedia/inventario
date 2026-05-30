@@ -44,6 +44,7 @@ type TableNames struct {
 	SystemAdminGrants        func() TableName
 	BackofficeUserMFASecrets func() TableName
 	UserOAuthIdentities      func() TableName
+	WorkerControl            func() TableName
 }
 
 var DefaultTableNames = TableNames{
@@ -88,6 +89,7 @@ var DefaultTableNames = TableNames{
 	SystemAdminGrants:        func() TableName { return "system_admin_grants" },
 	BackofficeUserMFASecrets: func() TableName { return "backoffice_user_mfa_secrets" },
 	UserOAuthIdentities:      func() TableName { return "user_oauth_identities" },
+	WorkerControl:            func() TableName { return "worker_control" },
 }
 
 // NewTableNames returns the default table names

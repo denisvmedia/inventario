@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
 
@@ -17,6 +18,7 @@ const defaultRefreshTokenCleanupInterval = 1 * time.Hour
 type RefreshTokenCleanupWorker struct {
 	registry        registry.RefreshTokenRegistry
 	cleanupInterval time.Duration
+	pause           PauseChecker
 	stopCh          chan struct{}
 	stopOnce        sync.Once
 	wg              sync.WaitGroup
@@ -27,6 +29,7 @@ type RefreshTokenCleanupOption func(*refreshTokenCleanupOptions)
 
 type refreshTokenCleanupOptions struct {
 	cleanupInterval time.Duration
+	pause           PauseChecker
 }
 
 // WithRefreshTokenCleanupInterval overrides the default cleanup interval.
@@ -35,6 +38,17 @@ func WithRefreshTokenCleanupInterval(d time.Duration) RefreshTokenCleanupOption 
 	return func(o *refreshTokenCleanupOptions) {
 		if d > 0 {
 			o.cleanupInterval = d
+		}
+	}
+}
+
+// WithRefreshTokenCleanupPauseController wires the soft-pause controller
+// so the worker skips its cleanup while the refresh-token-cleanup worker
+// type is paused (#1308). A nil checker leaves the worker unpaused.
+func WithRefreshTokenCleanupPauseController(pc PauseChecker) RefreshTokenCleanupOption {
+	return func(o *refreshTokenCleanupOptions) {
+		if pc != nil {
+			o.pause = pc
 		}
 	}
 }
@@ -51,6 +65,7 @@ func NewRefreshTokenCleanupWorker(r registry.RefreshTokenRegistry, opts ...Refre
 	return &RefreshTokenCleanupWorker{
 		registry:        r,
 		cleanupInterval: options.cleanupInterval,
+		pause:           options.pause,
 		stopCh:          make(chan struct{}),
 	}
 }
@@ -87,11 +102,22 @@ func (w *RefreshTokenCleanupWorker) runCleanup(ctx context.Context) {
 		case <-w.stopCh:
 			return
 		case <-ticker.C:
-			if err := w.registry.DeleteExpired(ctx); err != nil {
-				slog.Error("Failed to delete expired refresh tokens", "error", err)
-			} else {
-				slog.Debug("Expired refresh tokens cleaned up")
-			}
+			w.cleanupOnce(ctx)
 		}
+	}
+}
+
+// cleanupOnce runs a single expired-token sweep.
+func (w *RefreshTokenCleanupWorker) cleanupOnce(ctx context.Context) {
+	// Soft-pause (#1308): skip the cleanup while paused. The ticker keeps
+	// running so resuming takes effect on the next tick without a restart.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeRefreshTokenCleanup) {
+		return
+	}
+
+	if err := w.registry.DeleteExpired(ctx); err != nil {
+		slog.Error("Failed to delete expired refresh tokens", "error", err)
+	} else {
+		slog.Debug("Expired refresh tokens cleaned up")
 	}
 }

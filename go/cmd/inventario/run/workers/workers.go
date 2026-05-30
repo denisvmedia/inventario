@@ -128,6 +128,13 @@ func (c *Command) run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Start the soft-pause controller (#1308) before any worker group so
+	// the first worker tick observes the correct pause state. It is not
+	// part of any --workers-only/--workers-exclude group — pause state is
+	// orthogonal to worker selection, so it always runs. Its stop is the
+	// first entry pushed onto the LIFO stack below, so it shuts down last.
+	stopPause := bootstrap.StartPauseController(ctx, rs)
+
 	// Group and starter order matches the historical `run all` / `run workers`
 	// sequence so LIFO shutdown is unchanged for the default (all-groups) case.
 	groups := []group{
@@ -155,6 +162,9 @@ func (c *Command) run() error {
 	}
 
 	stops := make([]func(), 0, 8)
+	// Pushed first so the LIFO unwind below stops it last — after every
+	// worker group — mirroring the defer ordering in `run all`.
+	stops = append(stops, stopPause)
 	defer func() {
 		// LIFO shutdown to mirror the deferred-stop ordering of `run all`.
 		for _, stop := range slices.Backward(stops) {

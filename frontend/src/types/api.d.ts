@@ -1264,6 +1264,226 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/admin/workers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List background workers and their pause state (admin)
+         * @description Returns one resource per canonical worker type with its soft-pause state (#1308). A worker with no control row renders as paused=false. Resource `type` is "worker_control"; `id` is the worker-type string.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.WorkerControlListEnvelope"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Account disabled */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/workers/{workerType}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Soft-pause a background worker (admin)
+         * @description Soft-pauses the worker named by {workerType} (#1308): its run loop keeps ticking but skips claiming new work until resumed; in-flight jobs finish. Idempotent.
+         *     The optional `reason` body field is recorded on the control row and the audit breadcrumb. An empty body is accepted.
+         *     Unknown worker types return 404 with `admin.worker.unknown_type`; a reason over 500 characters returns 422 with `admin.worker.reason_too_long`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Worker type (e.g. export, import, thumbnail) */
+                    workerType: string;
+                };
+                cookie?: never;
+            };
+            /** @description Optional pause request (reason) */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.WorkerPauseRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.WorkerControlEnvelope"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Account disabled */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown worker type */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - reason too long */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/workers/{workerType}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume a soft-paused background worker (admin)
+         * @description Clears the soft-pause on the worker named by {workerType} (#1308) so it resumes claiming work on its next tick. Idempotent. Unknown worker types return 404 with `admin.worker.unknown_type`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Worker type (e.g. export, import, thumbnail) */
+                    workerType: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.WorkerControlEnvelope"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Account disabled */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown worker type */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/change-password": {
         parameters: {
             query?: never;
@@ -9320,6 +9540,32 @@ export type components = {
             uptime?: string;
             /** @description Version information */
             version?: string;
+        };
+        "apiserver.WorkerControlEnvelope": {
+            data?: components["schemas"]["apiserver.WorkerControlResource"];
+        };
+        "apiserver.WorkerControlListEnvelope": {
+            data?: components["schemas"]["apiserver.WorkerControlResource"][];
+        };
+        "apiserver.WorkerControlResource": {
+            attributes?: components["schemas"]["apiserver.WorkerControlView"];
+            id?: string;
+            type?: string;
+        };
+        "apiserver.WorkerControlView": {
+            paused?: boolean;
+            paused_at?: string;
+            paused_by?: string;
+            reason?: string;
+            updated_at?: string;
+            worker_type?: string;
+        };
+        "apiserver.WorkerPauseRequest": {
+            /**
+             * @description Reason is the optional operator-supplied note for the pause (max 500
+             *     chars). Persisted into worker_control.reason and the audit breadcrumb.
+             */
+            reason?: string;
         };
         "apiserver.linkedIdentitiesResponse": {
             identities?: components["schemas"]["apiserver.linkedIdentityEntry"][];

@@ -16,11 +16,20 @@ const (
 	defaultPollInterval = 10 * time.Second
 )
 
+// PauseChecker reports whether a worker type is currently soft-paused
+// (#1308). Declared locally so this package depends only on models, not
+// on the workerpause controller — avoiding an import cycle while still
+// being satisfied by *workerpause.Controller.
+type PauseChecker interface {
+	IsPaused(models.WorkerType) bool
+}
+
 // ImportWorker processes import requests in the background
 type ImportWorker struct {
 	importService *ImportService
 	factorySet    *registry.FactorySet
 	pollInterval  time.Duration
+	pause         PauseChecker
 	stopCh        chan struct{}
 	wg            sync.WaitGroup
 	isRunning     bool
@@ -34,6 +43,7 @@ type WorkerOption func(*importWorkerOptions)
 
 type importWorkerOptions struct {
 	pollInterval time.Duration
+	pause        PauseChecker
 }
 
 // WithPollInterval overrides the default interval between import queue polls.
@@ -42,6 +52,17 @@ func WithPollInterval(d time.Duration) WorkerOption {
 	return func(o *importWorkerOptions) {
 		if d > 0 {
 			o.pollInterval = d
+		}
+	}
+}
+
+// WithPauseController wires the soft-pause controller so the worker skips
+// its claim phase while the import worker type is paused (#1308). A nil
+// checker leaves the worker unpaused.
+func WithPauseController(pc PauseChecker) WorkerOption {
+	return func(o *importWorkerOptions) {
+		if pc != nil {
+			o.pause = pc
 		}
 	}
 }
@@ -58,6 +79,7 @@ func NewImportWorker(importService *ImportService, factorySet *registry.FactoryS
 		importService: importService,
 		factorySet:    factorySet,
 		pollInterval:  options.pollInterval,
+		pause:         options.pause,
 		stopCh:        make(chan struct{}),
 		semaphore:     semaphore.NewWeighted(int64(maxConcurrentImports)),
 	}
@@ -131,6 +153,13 @@ func (w *ImportWorker) run(ctx context.Context) {
 
 // processPendingImports finds and processes pending import requests
 func (w *ImportWorker) processPendingImports(ctx context.Context) {
+	// Soft-pause (#1308): skip the claim phase while paused. The ticker
+	// keeps running so resuming takes effect on the next tick without a
+	// restart.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeImport) {
+		return
+	}
+
 	expReg := w.factorySet.ExportRegistryFactory.CreateServiceRegistry()
 	exports, err := expReg.List(ctx)
 	if err != nil {

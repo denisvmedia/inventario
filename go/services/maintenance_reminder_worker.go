@@ -17,6 +17,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/denisvmedia/inventario/models"
 )
 
 const defaultMaintenanceReminderInterval = 1 * time.Hour
@@ -43,6 +45,7 @@ type MaintenanceReminderWorker struct {
 	service  *MaintenanceReminderService
 	interval time.Duration
 	clock    func() time.Time
+	pause    PauseChecker
 	stopCh   chan struct{}
 	stopOnce sync.Once
 	wg       sync.WaitGroup
@@ -54,6 +57,7 @@ type MaintenanceReminderOption func(*maintenanceReminderOptions)
 type maintenanceReminderOptions struct {
 	interval time.Duration
 	clock    func() time.Time
+	pause    PauseChecker
 }
 
 // WithMaintenanceReminderInterval overrides the default tick cadence.
@@ -75,6 +79,17 @@ func WithMaintenanceReminderClock(now func() time.Time) MaintenanceReminderOptio
 	}
 }
 
+// WithMaintenanceReminderPauseController wires the soft-pause controller
+// so the worker skips its sweep while the maintenance-reminder worker
+// type is paused (#1308). A nil checker leaves the worker unpaused.
+func WithMaintenanceReminderPauseController(pc PauseChecker) MaintenanceReminderOption {
+	return func(o *maintenanceReminderOptions) {
+		if pc != nil {
+			o.pause = pc
+		}
+	}
+}
+
 func NewMaintenanceReminderWorker(service *MaintenanceReminderService, opts ...MaintenanceReminderOption) *MaintenanceReminderWorker {
 	options := maintenanceReminderOptions{
 		interval: defaultMaintenanceReminderInterval,
@@ -87,6 +102,7 @@ func NewMaintenanceReminderWorker(service *MaintenanceReminderService, opts ...M
 		service:  service,
 		interval: options.interval,
 		clock:    options.clock,
+		pause:    options.pause,
 		stopCh:   make(chan struct{}),
 	}
 }
@@ -130,6 +146,12 @@ func (w *MaintenanceReminderWorker) run(ctx context.Context) {
 }
 
 func (w *MaintenanceReminderWorker) tick(ctx context.Context) {
+	// Soft-pause (#1308): skip the sweep while paused. The ticker keeps
+	// running so resuming takes effect on the next tick without a restart.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeMaintenanceReminder) {
+		return
+	}
+
 	stats, err := w.service.RemindOnce(ctx, w.clock())
 	if err != nil {
 		slog.Error("Maintenance reminder sweep failed", "error", err)

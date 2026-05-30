@@ -1002,6 +1002,155 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/workers": {
+            "get": {
+                "description": "Returns one resource per canonical worker type with its soft-pause state (#1308). A worker with no control row renders as paused=false. Resource ` + "`" + `type` + "`" + ` is \"worker_control\"; ` + "`" + `id` + "`" + ` is the worker-type string.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List background workers and their pause state (admin)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.WorkerControlListEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Account disabled",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/workers/{workerType}/pause": {
+            "post": {
+                "description": "Soft-pauses the worker named by {workerType} (#1308): its run loop keeps ticking but skips claiming new work until resumed; in-flight jobs finish. Idempotent.\nThe optional ` + "`" + `reason` + "`" + ` body field is recorded on the control row and the audit breadcrumb. An empty body is accepted.\nUnknown worker types return 404 with ` + "`" + `admin.worker.unknown_type` + "`" + `; a reason over 500 characters returns 422 with ` + "`" + `admin.worker.reason_too_long` + "`" + `.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Soft-pause a background worker (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Worker type (e.g. export, import, thumbnail)",
+                        "name": "workerType",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional pause request (reason)",
+                        "name": "data",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.WorkerPauseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.WorkerControlEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Account disabled",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown worker type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - reason too long",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/workers/{workerType}/resume": {
+            "post": {
+                "description": "Clears the soft-pause on the worker named by {workerType} (#1308) so it resumes claiming work on its next tick. Idempotent. Unknown worker types return 404 with ` + "`" + `admin.worker.unknown_type` + "`" + `.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Resume a soft-paused background worker (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Worker type (e.g. export, import, thumbnail)",
+                        "name": "workerType",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.WorkerControlEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Account disabled",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown worker type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/change-password": {
             "post": {
                 "description": "Change the authenticated user's password. All existing sessions are invalidated on success.",
@@ -8583,6 +8732,72 @@ const docTemplate = `{
                 "version": {
                     "description": "Version information",
                     "type": "string"
+                }
+            }
+        },
+        "apiserver.WorkerControlEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/apiserver.WorkerControlResource"
+                }
+            }
+        },
+        "apiserver.WorkerControlListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.WorkerControlResource"
+                    }
+                }
+            }
+        },
+        "apiserver.WorkerControlResource": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/apiserver.WorkerControlView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.WorkerControlView": {
+            "type": "object",
+            "properties": {
+                "paused": {
+                    "type": "boolean"
+                },
+                "paused_at": {
+                    "type": "string"
+                },
+                "paused_by": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "worker_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.WorkerPauseRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "description": "Reason is the optional operator-supplied note for the pause (max 500\nchars). Persisted into worker_control.reason and the audit breadcrumb.",
+                    "type": "string",
+                    "maxLength": 500
                 }
             }
         },

@@ -62,6 +62,12 @@ func (c *Command) run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Start the soft-pause controller (#1308) before any worker so the
+	// first worker tick observes the correct pause state, and defer its
+	// stop FIRST so it shuts down LAST (after every worker has stopped).
+	stopPause := bootstrap.StartPauseController(ctx, rs)
+	defer stopPause()
+
 	stopEmail := bootstrap.StartEmailLifecycle(ctx, rs, c.cfg)
 	defer stopEmail()
 

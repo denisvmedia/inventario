@@ -137,6 +137,7 @@ type currencyMigrationWorkerOptions struct {
 	activeInterval time.Duration
 	idleInterval   time.Duration
 	clock          func() time.Time
+	pause          PauseChecker
 }
 
 // WithCurrencyMigrationActiveInterval overrides the cadence used after
@@ -175,6 +176,19 @@ func WithCurrencyMigrationClock(now func() time.Time) CurrencyMigrationWorkerOpt
 	}
 }
 
+// WithCurrencyMigrationPauseController wires the soft-pause controller so
+// the worker skips claiming new migrations while the currency-migration
+// worker type is paused (#1308). The recovery sweep still runs while
+// paused — only the new claim is gated. A nil checker leaves the worker
+// unpaused.
+func WithCurrencyMigrationPauseController(pc PauseChecker) CurrencyMigrationWorkerOption {
+	return func(o *currencyMigrationWorkerOptions) {
+		if pc != nil {
+			o.pause = pc
+		}
+	}
+}
+
 // CurrencyMigrationWorker periodically sweeps stuck running rows,
 // claims one pending migration per tick, and hands the row to the
 // CurrencyMigrationProcessor for TX2.
@@ -205,6 +219,7 @@ type CurrencyMigrationWorker struct {
 	activeInterval time.Duration
 	idleInterval   time.Duration
 	clock          func() time.Time
+	pause          PauseChecker
 
 	stopCh   chan struct{}
 	stopOnce sync.Once
@@ -232,6 +247,7 @@ func NewCurrencyMigrationWorker(reg registry.CurrencyMigrationRegistry, processo
 		activeInterval: options.activeInterval,
 		idleInterval:   options.idleInterval,
 		clock:          options.clock,
+		pause:          options.pause,
 		stopCh:         make(chan struct{}),
 	}
 }
@@ -334,6 +350,14 @@ func (w *CurrencyMigrationWorker) run(ctx context.Context) {
 // run loop uses this signal to switch to active cadence.
 func (w *CurrencyMigrationWorker) tick(ctx context.Context) bool {
 	w.runSweep(ctx)
+
+	// Soft-pause (#1308): the recovery sweep above MUST still run while
+	// paused (it recovers crashed-worker stuck rows), but claiming a new
+	// migration is gated. Returning false keeps the worker on its idle
+	// cadence so a paused worker doesn't spin at the active interval.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeCurrencyMigration) {
+		return false
+	}
 
 	op, err := w.registry.ClaimNextPending(ctx)
 	switch {

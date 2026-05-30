@@ -1746,6 +1746,34 @@ type SystemAdminGrantRegistry interface {
 	List(ctx context.Context) ([]*models.SystemAdminGrant, error)
 }
 
+// WorkerControlRegistry stores the global soft-pause control rows for
+// background workers (#1308). One row per worker type; an absent row
+// means the worker runs normally, a present row with paused=true means
+// the worker's run loop skips its work each tick until resumed.
+//
+// The registry is NOT tenant-scoped and has NO RLS — worker pause state
+// is a platform-operator control orthogonal to tenants (same posture as
+// SystemAdminGrantRegistry / AuditLogRegistry). It lives directly on
+// FactorySet and is identical in user-mode and service-mode sets.
+type WorkerControlRegistry interface {
+	// List returns every worker_control row. An absent worker type means
+	// that worker is running (the caller treats "no row" as not-paused).
+	List(ctx context.Context) ([]*models.WorkerControl, error)
+
+	// Pause idempotently marks workerType paused. pausedBy and reason may
+	// be "" (stored as NULL). Re-pausing an already-paused type updates
+	// paused_by/reason but PRESERVES the original paused_at so the pause
+	// timestamp reflects when the worker first stopped. Returns the
+	// resulting row.
+	Pause(ctx context.Context, workerType, pausedBy, reason string) (*models.WorkerControl, error)
+
+	// Resume idempotently marks workerType not paused, clearing
+	// paused_at/paused_by/reason. When no row exists it is a no-op and
+	// returns a synthetic not-paused WorkerControl{WorkerType: workerType}
+	// without inserting a row. Returns the resulting state.
+	Resume(ctx context.Context, workerType string) (*models.WorkerControl, error)
+}
+
 // AdminUserSortField names the columns the admin user listing endpoint
 // understands for sorting. Names are part of the public API surface; the
 // FE codegen treats them as opaque strings sent in `?sort`.
@@ -2046,6 +2074,7 @@ type Set struct {
 	CommodityScanAuditRegistry     CommodityScanAuditRegistry    // CommodityScanAuditRegistry records every AI vision scan request (#1720); also backs the per-user rate limiter
 	SystemAdminGrantRegistry       SystemAdminGrantRegistry      // Platform-admin grant rows (#1784); no tenant scope, no HTTP write surface
 	OAuthIdentityRegistry          OAuthIdentityRegistry         // OAuth provider link rows (#1394); service-mode (looked up before user session exists in callback)
+	WorkerControlRegistry          WorkerControlRegistry         // Background-worker soft-pause control rows (#1308); no tenant scope, no RLS
 }
 
 // Search-related types and functions
@@ -2117,6 +2146,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.CommodityScanAuditRegistry, validation.Required),
 		validation.Field(&s.SystemAdminGrantRegistry, validation.Required),
 		validation.Field(&s.OAuthIdentityRegistry, validation.Required),
+		validation.Field(&s.WorkerControlRegistry, validation.Required),
 	)
 
 	return validation.ValidateStructWithContext(ctx, s, fields...)

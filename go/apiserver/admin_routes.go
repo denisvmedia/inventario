@@ -194,6 +194,12 @@ func Admin(params AdminParams) func(r chi.Router) {
 		jwtSecret:    params.JWTSecret,
 		ttl:          params.ImpersonationTTL,
 	}
+	// #1308: background-worker soft-pause control plane. FactorySet +
+	// AuditService are guaranteed non-nil by the fail-fast block above.
+	workersAPI := &adminWorkersAPI{
+		factorySet:   params.FactorySet,
+		auditService: params.AuditService,
+	}
 	// #1785 Phase 5 removed the legacy `RequireSystemAdmin` gate from
 	// every admin route: the CRUD subtree is gated by RequireBackofficeAuth
 	// (Phase 3), impersonation/start is gated by RequirePlatformAdmin
@@ -257,7 +263,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		// tokens (and vice versa).
 		r.Group(func(r chi.Router) {
 			r.Use(backofficeAuth)
-			adminBackofficeRoutes(r, tenantsAPI, usersAPI, groupsAPI, groupMembersAPI, impersonationAPI)
+			adminBackofficeRoutes(r, tenantsAPI, usersAPI, groupsAPI, groupMembersAPI, impersonationAPI, workersAPI)
 		})
 	}
 }
@@ -282,6 +288,7 @@ func adminBackofficeRoutes(
 	groupsAPI *adminGroupsAPI,
 	groupMembersAPI *adminGroupMembersAPI,
 	impersonationAPI *adminImpersonationAPI,
+	workersAPI *adminWorkersAPI,
 ) {
 	r.Get("/_ping", adminPing)
 
@@ -319,6 +326,15 @@ func adminBackofficeRoutes(
 	r.Post("/groups/{groupID}/members", groupMembersAPI.addMember)
 	r.Delete("/groups/{groupID}/members/{userID}", groupMembersAPI.removeMember)
 	r.Patch("/groups/{groupID}/members/{userID}", groupMembersAPI.updateMemberRole)
+
+	// #1308: background-worker soft-pause control plane. List the
+	// canonical worker types with their pause state; pause / resume by
+	// worker type. No tenant scope — worker_control is a platform control
+	// orthogonal to tenants. Each handler audit-logs via the shared
+	// AuditService.
+	r.Get("/workers", workersAPI.listWorkers)
+	r.Post("/workers/{workerType}/pause", workersAPI.pauseWorker)
+	r.Post("/workers/{workerType}/resume", workersAPI.resumeWorker)
 
 	// #1785 Phase 5: impersonation-start is gated on platform_admin —
 	// support_agent (the read-mostly persona) cannot borrow a tenant

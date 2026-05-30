@@ -20,6 +20,19 @@ import (
 // the adapter signatures below stay readable.
 type currencyMigrationOp = models.CurrencyMigration
 
+// StartPauseController starts the background-worker soft-pause controller
+// (#1308) and returns its stop function. When rs.PauseController is nil
+// (ModeAPIServer, where no worker run loop exists to gate) it is a no-op.
+// It must be started BEFORE the workers so the first worker tick observes
+// the correct pause state, and stopped AFTER them.
+func StartPauseController(ctx context.Context, rs *RuntimeSetup) func() {
+	if rs.PauseController == nil {
+		return func() {}
+	}
+	rs.PauseController.Start(ctx)
+	return rs.PauseController.Stop
+}
+
 // StartEmailLifecycle starts the configured email service (if any) and returns
 // the matching stop function. cfg is accepted (and ignored) so the signature
 // matches the other Start* helpers and lets them be stored in a uniform slice.
@@ -32,10 +45,13 @@ func StartEmailLifecycle(ctx context.Context, rs *RuntimeSetup, _ *Config) func(
 // function.
 func StartExportWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
 	service := export.NewExportService(rs.FactorySet, rs.Params.UploadLocation)
-	worker := export.NewExportWorker(
-		service, rs.FactorySet, cfg.MaxConcurrentExports,
+	opts := []export.WorkerOption{
 		export.WithPollInterval(rs.WorkerDurations.ExportPollInterval),
-	)
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, export.WithPauseController(rs.PauseController))
+	}
+	worker := export.NewExportWorker(service, rs.FactorySet, cfg.MaxConcurrentExports, opts...)
 	worker.Start(ctx)
 	return worker.Stop
 }
@@ -44,10 +60,13 @@ func StartExportWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func(
 // function.
 func StartImportWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
 	service := importpkg.NewImportService(rs.FactorySet, rs.Params.UploadLocation)
-	worker := importpkg.NewImportWorker(
-		service, rs.FactorySet, cfg.MaxConcurrentImports,
+	opts := []importpkg.WorkerOption{
 		importpkg.WithPollInterval(rs.WorkerDurations.ImportPollInterval),
-	)
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, importpkg.WithPauseController(rs.PauseController))
+	}
+	worker := importpkg.NewImportWorker(service, rs.FactorySet, cfg.MaxConcurrentImports, opts...)
 	worker.Start(ctx)
 	return worker.Stop
 }
@@ -57,10 +76,15 @@ func StartImportWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func(
 // interface) and its stop function.
 func StartRestoreWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) (*restore.RestoreWorker, func()) {
 	service := restore.NewRestoreService(rs.FactorySet, rs.Params.EntityService, rs.Params.UploadLocation)
-	worker := restore.NewRestoreWorker(
-		service, rs.FactorySet.CreateServiceRegistrySet(), rs.Params.UploadLocation,
+	opts := []restore.WorkerOption{
 		restore.WithPollInterval(rs.WorkerDurations.RestorePollInterval),
 		restore.WithMaxConcurrent(cfg.MaxConcurrentRestores),
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, restore.WithPauseController(rs.PauseController))
+	}
+	worker := restore.NewRestoreWorker(
+		service, rs.FactorySet.CreateServiceRegistrySet(), rs.Params.UploadLocation, opts...,
 	)
 	worker.Start(ctx)
 	return worker, worker.Stop
@@ -69,14 +93,19 @@ func StartRestoreWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) (*re
 // StartThumbnailWorker wires and starts the thumbnail generation worker and
 // returns its stop function.
 func StartThumbnailWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
-	worker := services.NewThumbnailGenerationWorker(
-		rs.FactorySet, rs.Params.UploadLocation, rs.Params.ThumbnailConfig,
+	opts := []services.ThumbnailWorkerOption{
 		services.WithThumbnailPollInterval(rs.WorkerDurations.ThumbnailPollInterval),
 		services.WithThumbnailBatchSize(cfg.ThumbnailBatchSize),
 		services.WithThumbnailCleanupInterval(rs.WorkerDurations.ThumbnailCleanupInterval),
 		services.WithThumbnailJobRetentionPeriod(rs.WorkerDurations.ThumbnailJobRetentionPeriod),
 		services.WithThumbnailJobBatchTimeout(rs.WorkerDurations.ThumbnailJobBatchTimeout),
 		services.WithDetachedThumbnailJobTimeout(rs.WorkerDurations.DetachedThumbnailJobTimeout),
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithThumbnailPauseController(rs.PauseController))
+	}
+	worker := services.NewThumbnailGenerationWorker(
+		rs.FactorySet, rs.Params.UploadLocation, rs.Params.ThumbnailConfig, opts...,
 	)
 	worker.Start(ctx)
 	return worker.Stop
@@ -86,10 +115,13 @@ func StartThumbnailWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) fu
 // worker (which deletes expired tokens on the configured interval) and returns
 // its stop function.
 func StartRefreshTokenCleanupWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
-	worker := services.NewRefreshTokenCleanupWorker(
-		rs.FactorySet.RefreshTokenRegistry,
+	opts := []services.RefreshTokenCleanupOption{
 		services.WithRefreshTokenCleanupInterval(rs.WorkerDurations.RefreshTokenCleanupInterval),
-	)
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithRefreshTokenCleanupPauseController(rs.PauseController))
+	}
+	worker := services.NewRefreshTokenCleanupWorker(rs.FactorySet.RefreshTokenRegistry, opts...)
 	worker.Start(ctx)
 	return worker.Stop
 }
@@ -100,7 +132,11 @@ func StartRefreshTokenCleanupWorker(ctx context.Context, rs *RuntimeSetup, _ *Co
 // 24h sweep) match the design doc and are conservative enough that
 // adding a knob is YAGNI for the v1 surface.
 func StartLoginEventRetentionWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
-	worker := services.NewLoginEventRetentionWorker(rs.FactorySet.LoginEventRegistry)
+	var opts []services.LoginEventRetentionOption
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithLoginEventRetentionPauseController(rs.PauseController))
+	}
+	worker := services.NewLoginEventRetentionWorker(rs.FactorySet.LoginEventRegistry, opts...)
 	worker.Start(ctx)
 	return worker.Stop
 }
@@ -111,10 +147,13 @@ func StartLoginEventRetentionWorker(ctx context.Context, rs *RuntimeSetup, _ *Co
 func StartGroupPurgeWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
 	fileService := services.NewFileService(rs.FactorySet, rs.Params.UploadLocation)
 	service := services.NewGroupPurgeService(rs.FactorySet, fileService)
-	worker := services.NewGroupPurgeWorker(
-		service,
+	opts := []services.GroupPurgeOption{
 		services.WithGroupPurgeInterval(rs.WorkerDurations.GroupPurgeInterval),
-	)
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithGroupPurgePauseController(rs.PauseController))
+	}
+	worker := services.NewGroupPurgeWorker(service, opts...)
 	worker.Start(ctx)
 	return worker.Stop
 }
@@ -137,10 +176,13 @@ func StartWarrantyReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Con
 	prefs := notifications.NewService(rs.FactorySet.SettingsRegistryFactory)
 	prefs.SetGroupPrefs(rs.FactorySet.GroupNotificationPrefRegistry)
 	service := services.NewWarrantyReminderService(rs.FactorySet, rs.EmailLifecycle.Service, urlBuilder).WithPreferences(prefs)
-	worker := services.NewWarrantyReminderWorker(
-		service,
+	opts := []services.WarrantyReminderOption{
 		services.WithWarrantyReminderInterval(rs.WorkerDurations.WarrantyReminderInterval),
-	)
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithWarrantyReminderPauseController(rs.PauseController))
+	}
+	worker := services.NewWarrantyReminderWorker(service, opts...)
 	worker.Start(ctx)
 	return worker.Stop
 }
@@ -160,10 +202,13 @@ func StartLoanReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config)
 	service := services.NewLoanReminderService(rs.FactorySet, rs.EmailLifecycle.Service, urlBuilder).
 		WithPreferences(prefs).
 		WithDueSoonDays(cfg.LoanReminderDueSoonDays)
-	worker := services.NewLoanReminderWorker(
-		service,
+	opts := []services.LoanReminderOption{
 		services.WithLoanReminderInterval(rs.WorkerDurations.LoanReminderInterval),
-	)
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithLoanReminderPauseController(rs.PauseController))
+	}
+	worker := services.NewLoanReminderWorker(service, opts...)
 	worker.Start(ctx)
 	return worker.Stop
 }
@@ -177,10 +222,13 @@ func StartLoanReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config)
 func StartStorageQuotaReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
 	filesURL, settingsURL := buildStorageQuotaURLBuilders(cfg.PublicURL)
 	service := services.NewStorageQuotaReminderService(rs.FactorySet, rs.EmailLifecycle.Service, filesURL, settingsURL)
-	worker := services.NewStorageQuotaReminderWorker(
-		service,
+	opts := []services.StorageQuotaReminderOption{
 		services.WithStorageQuotaReminderInterval(rs.WorkerDurations.StorageQuotaReminderInterval),
-	)
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithStorageQuotaReminderPauseController(rs.PauseController))
+	}
+	worker := services.NewStorageQuotaReminderWorker(service, opts...)
 	worker.Start(ctx)
 	return worker.Stop
 }
@@ -252,10 +300,13 @@ func StartMaintenanceReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *
 	prefs := notifications.NewService(rs.FactorySet.SettingsRegistryFactory)
 	prefs.SetGroupPrefs(rs.FactorySet.GroupNotificationPrefRegistry)
 	service := services.NewMaintenanceReminderService(rs.FactorySet, rs.EmailLifecycle.Service, urlBuilder).WithPreferences(prefs)
-	worker := services.NewMaintenanceReminderWorker(
-		service,
+	opts := []services.MaintenanceReminderOption{
 		services.WithMaintenanceReminderInterval(rs.WorkerDurations.MaintenanceReminderInterval),
-	)
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithMaintenanceReminderPauseController(rs.PauseController))
+	}
+	worker := services.NewMaintenanceReminderWorker(service, opts...)
 	worker.Start(ctx)
 	return worker.Stop
 }
@@ -285,10 +336,16 @@ func StartCurrencyMigrationWorker(ctx context.Context, rs *RuntimeSetup, cfg *Co
 
 	processor := pgFactory.NewProcessor()
 	adapter := &currencyMigrationProcessorAdapter{inner: processor}
+	opts := []services.CurrencyMigrationWorkerOption{
+		services.WithCurrencyMigrationActiveInterval(rs.WorkerDurations.CurrencyMigrationInterval),
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithCurrencyMigrationPauseController(rs.PauseController))
+	}
 	worker := services.NewCurrencyMigrationWorker(
 		rs.FactorySet.CurrencyMigrationRegistryFactory.CreateServiceRegistry(),
 		adapter,
-		services.WithCurrencyMigrationActiveInterval(rs.WorkerDurations.CurrencyMigrationInterval),
+		opts...,
 	)
 	worker.Start(ctx)
 	return worker.Stop

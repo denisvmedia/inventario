@@ -17,12 +17,21 @@ const (
 	defaultMaxConcurrentRestores = 1
 )
 
+// PauseChecker reports whether a worker type is currently soft-paused
+// (#1308). Declared locally so this package depends only on models, not
+// on the workerpause controller — avoiding an import cycle while still
+// being satisfied by *workerpause.Controller.
+type PauseChecker interface {
+	IsPaused(models.WorkerType) bool
+}
+
 // RestoreWorker processes restore requests in the background
 type RestoreWorker struct {
 	restoreService *RestoreService
 	registrySet    *registry.Set
 	uploadLocation string
 	pollInterval   time.Duration
+	pause          PauseChecker
 	stopCh         chan struct{}
 	wg             sync.WaitGroup
 	isRunning      bool
@@ -37,6 +46,7 @@ type WorkerOption func(*restoreWorkerOptions)
 type restoreWorkerOptions struct {
 	pollInterval  time.Duration
 	maxConcurrent int
+	pause         PauseChecker
 }
 
 // WithPollInterval overrides the default interval between restore queue polls.
@@ -59,6 +69,17 @@ func WithMaxConcurrent(n int) WorkerOption {
 	}
 }
 
+// WithPauseController wires the soft-pause controller so the worker skips
+// its claim phase while the restore worker type is paused (#1308). A nil
+// checker leaves the worker unpaused.
+func WithPauseController(pc PauseChecker) WorkerOption {
+	return func(o *restoreWorkerOptions) {
+		if pc != nil {
+			o.pause = pc
+		}
+	}
+}
+
 // NewRestoreWorker creates a new restore worker
 func NewRestoreWorker(restoreService *RestoreService, registrySet *registry.Set, uploadLocation string, opts ...WorkerOption) *RestoreWorker {
 	options := restoreWorkerOptions{
@@ -73,6 +94,7 @@ func NewRestoreWorker(restoreService *RestoreService, registrySet *registry.Set,
 		registrySet:    registrySet,
 		uploadLocation: uploadLocation,
 		pollInterval:   options.pollInterval,
+		pause:          options.pause,
 		stopCh:         make(chan struct{}),
 		semaphore:      semaphore.NewWeighted(int64(options.maxConcurrent)),
 	}
@@ -146,6 +168,13 @@ func (w *RestoreWorker) run(ctx context.Context) {
 
 // processPendingRestores finds and processes pending restore requests
 func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
+	// Soft-pause (#1308): skip the claim phase while paused. The ticker
+	// keeps running so resuming takes effect on the next tick without a
+	// restart.
+	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeRestore) {
+		return
+	}
+
 	restoreOperations, err := w.registrySet.RestoreOperationRegistry.List(ctx)
 	if err != nil {
 		slog.Error("Failed to get restore operations", "error", err)
