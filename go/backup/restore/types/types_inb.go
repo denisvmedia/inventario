@@ -85,30 +85,52 @@ type INBArea struct {
 // INBCommodity is a commodity row keyed by immutable UUID; AreaID is the parent
 // area UUID. The three file-reference arrays carry the attached files.
 type INBCommodity struct {
-	ID                     string       `json:"id"`
-	Name                   string       `json:"name"`
-	ShortName              string       `json:"shortName,omitempty"`
-	Type                   string       `json:"type,omitempty"`
-	AreaID                 string       `json:"areaId"`
-	Count                  int          `json:"count"`
-	OriginalPrice          string       `json:"originalPrice,omitempty"`
-	OriginalPriceCurrency  string       `json:"originalPriceCurrency,omitempty"`
-	ConvertedOriginalPrice string       `json:"convertedOriginalPrice,omitempty"`
-	CurrentPrice           string       `json:"currentPrice,omitempty"`
-	SerialNumber           string       `json:"serialNumber,omitempty"`
-	ExtraSerialNumbers     []string     `json:"extraSerialNumbers,omitempty"`
-	PartNumbers            []string     `json:"partNumbers,omitempty"`
-	Tags                   []string     `json:"tags,omitempty"`
-	Status                 string       `json:"status,omitempty"`
-	PurchaseDate           string       `json:"purchaseDate,omitempty"`
-	RegisteredDate         string       `json:"registeredDate,omitempty"`
-	LastModifiedDate       string       `json:"lastModifiedDate,omitempty"`
-	URLs                   []string     `json:"urls,omitempty"`
-	Comments               string       `json:"comments,omitempty"`
-	Draft                  bool         `json:"draft"`
-	Images                 []INBFileRef `json:"images,omitempty"`
-	Invoices               []INBFileRef `json:"invoices,omitempty"`
-	Manuals                []INBFileRef `json:"manuals,omitempty"`
+	ID                     string   `json:"id"`
+	Name                   string   `json:"name"`
+	ShortName              string   `json:"shortName,omitempty"`
+	Type                   string   `json:"type,omitempty"`
+	AreaID                 string   `json:"areaId"`
+	Count                  int      `json:"count"`
+	OriginalPrice          string   `json:"originalPrice,omitempty"`
+	OriginalPriceCurrency  string   `json:"originalPriceCurrency,omitempty"`
+	ConvertedOriginalPrice string   `json:"convertedOriginalPrice,omitempty"`
+	CurrentPrice           string   `json:"currentPrice,omitempty"`
+	SerialNumber           string   `json:"serialNumber,omitempty"`
+	ExtraSerialNumbers     []string `json:"extraSerialNumbers,omitempty"`
+	PartNumbers            []string `json:"partNumbers,omitempty"`
+	Tags                   []string `json:"tags,omitempty"`
+	Status                 string   `json:"status,omitempty"`
+	PurchaseDate           string   `json:"purchaseDate,omitempty"`
+	RegisteredDate         string   `json:"registeredDate,omitempty"`
+	LastModifiedDate       string   `json:"lastModifiedDate,omitempty"`
+	URLs                   []string `json:"urls,omitempty"`
+	Comments               string   `json:"comments,omitempty"`
+	Draft                  bool     `json:"draft"`
+
+	// Extended commodity fields (#534 round-trip parity). MUST keep json tags
+	// identical to backup/export.INBCommodity. Warranty (#1554), terminal-status
+	// metadata (#1611), acquisition provenance (#202) and the user-picked cover
+	// photo (#1451) round-trip so a restored commodity is a lossless copy.
+	WarrantyExpiresAt string `json:"warrantyExpiresAt,omitempty"`
+	WarrantyNotes     string `json:"warrantyNotes,omitempty"`
+	StatusDate        string `json:"statusDate,omitempty"`
+	StatusNote        string `json:"statusNote,omitempty"`
+	SalePrice         string `json:"salePrice,omitempty"`
+	// AcquisitionPrice / AcquisitionCurrency are restored through the trusted
+	// registry.WithRestoreAcquisition context seam (the normal write path nils
+	// them), so ConvertToCommodity deliberately does NOT set them on the model —
+	// the processor reads them off the DTO (RestoredAcquisition) and signals the
+	// pair to Create via context, which writes it onto the fresh row.
+	AcquisitionPrice    string `json:"acquisitionPrice,omitempty"`
+	AcquisitionCurrency string `json:"acquisitionCurrency,omitempty"`
+	// CoverFileID is the cover photo's immutable UUID; the processor re-resolves
+	// it to the new file's DB id and patches the commodity after its files are
+	// created (the file does not yet exist when the commodity row is created).
+	CoverFileID string `json:"coverFileId,omitempty"`
+
+	Images   []INBFileRef `json:"images,omitempty"`
+	Invoices []INBFileRef `json:"invoices,omitempty"`
+	Manuals  []INBFileRef `json:"manuals,omitempty"`
 }
 
 // INBFileRef references a commodity-attached file. Path is the file's location
@@ -214,7 +236,45 @@ func (c *INBCommodity) ConvertToCommodity() (*models.Commodity, error) {
 	if c.LastModifiedDate != "" {
 		commodity.LastModifiedDate = models.ToPDate(models.Date(c.LastModifiedDate))
 	}
+
+	// Extended commodity fields (#534). Warranty + terminal-status metadata are
+	// plain columns the registry writes verbatim. Acquisition and cover are
+	// handled by the processor (restore-only seam / post-files patch), so they
+	// are intentionally NOT set here.
+	if c.WarrantyExpiresAt != "" {
+		commodity.WarrantyExpiresAt = models.ToPDate(models.Date(c.WarrantyExpiresAt))
+	}
+	commodity.WarrantyNotes = c.WarrantyNotes
+	if c.StatusDate != "" {
+		commodity.StatusDate = models.ToPDate(models.Date(c.StatusDate))
+	}
+	commodity.StatusNote = c.StatusNote
+	salePrice, err := parseDecimalPtr(c.SalePrice)
+	if err != nil {
+		return nil, errxtrace.Wrap("invalid salePrice", err, errx.Attrs("commodity_id", c.ID))
+	}
+	commodity.SalePrice = salePrice
+
 	return commodity, nil
+}
+
+// RestoredAcquisition returns the acquisition provenance pair (#202) decoded
+// from the archive, or (nil, nil) when the archive carried neither. A
+// non-empty-but-unparseable price surfaces an error so a corrupt archive fails
+// the restore rather than silently dropping the frozen acquisition history. The
+// caller signals the pair to Create via the trusted registry.WithRestoreAcquisition
+// context seam, never the normal write path.
+func (c *INBCommodity) RestoredAcquisition() (*decimal.Decimal, *models.Currency, error) {
+	price, err := parseDecimalPtr(c.AcquisitionPrice)
+	if err != nil {
+		return nil, nil, errxtrace.Wrap("invalid acquisitionPrice", err, errx.Attrs("commodity_id", c.ID))
+	}
+	if price == nil || c.AcquisitionCurrency == "" {
+		// Both-or-neither: a half-present pair is treated as absent.
+		return nil, nil, nil
+	}
+	currency := models.Currency(c.AcquisitionCurrency)
+	return price, &currency, nil
 }
 
 // ConvertToFileEntity builds a models.FileEntity from an INBFileRef for a
@@ -274,6 +334,22 @@ func parseDecimal(s string) (decimal.Decimal, error) {
 		return decimal.Zero, errxtrace.Wrap("failed to parse decimal", err, errx.Attrs("value", s))
 	}
 	return d, nil
+}
+
+// parseDecimalPtr parses a nullable decimal column (SalePrice / AcquisitionPrice).
+// An absent value (empty string) yields a nil pointer — the column stays NULL —
+// while a non-empty but unparseable value surfaces an error rather than being
+// coerced. A legitimate "0" round-trips as a set pointer holding zero, mirroring
+// the exporter's nil-vs-zero distinction.
+func parseDecimalPtr(s string) (*decimal.Decimal, error) {
+	if s == "" {
+		return nil, nil
+	}
+	d, err := decimal.NewFromString(s)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to parse decimal", err, errx.Attrs("value", s))
+	}
+	return &d, nil
 }
 
 // parseInbTimestamp parses an RFC3339 timestamp. An absent value (empty string)

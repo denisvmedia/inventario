@@ -9,6 +9,7 @@ import (
 	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/backup/export/types"
@@ -43,6 +44,11 @@ type inbBuilder struct {
 	// manuals) → its in-scope, size-resolved candidate files (orphans already
 	// dropped).
 	filesByCommodityID map[string]map[string][]*candidateFile
+	// fileUUIDByDBID maps a file's volatile DB id → its immutable UUID, for
+	// every commodity-attached file (orphans included — this is metadata only,
+	// used to resolve a commodity's cover_file_id DB key to the stable UUID
+	// written into the archive). #534 / #1451.
+	fileUUIDByDBID map[string]string
 }
 
 // candidateFile is a commodity-attached file whose size has already been
@@ -233,6 +239,7 @@ func (b *inbBuilder) indexCommodityFiles() error {
 	}
 
 	b.filesByCommodityID = map[string]map[string][]*candidateFile{}
+	b.fileUUIDByDBID = make(map[string]string, len(files))
 	for _, file := range files {
 		if file == nil || file.File == nil {
 			continue
@@ -244,6 +251,13 @@ func (b *inbBuilder) indexCommodityFiles() error {
 		if !isCommodityFileBucket(bucket) {
 			continue
 		}
+
+		// Record the DB-id → UUID mapping for EVERY commodity-attached file,
+		// before the orphan-size filter below: the cover-file cross-reference
+		// only needs the stable UUID, and resolving it for a file whose blob
+		// later proves missing is harmless (the restore drops the cover if its
+		// target file never lands).
+		b.fileUUIDByDBID[file.ID] = file.UUID
 
 		size, ok := b.resolveFileSize(file)
 		if !ok {
@@ -425,6 +439,31 @@ func (b *inbBuilder) planCommodity(loc *models.Location, area *models.Area, com 
 	}
 	if com.LastModifiedDate != nil {
 		inbCom.LastModifiedDate = string(*com.LastModifiedDate)
+	}
+
+	// Extended commodity fields (#534 round-trip parity).
+	if com.WarrantyExpiresAt != nil {
+		inbCom.WarrantyExpiresAt = string(*com.WarrantyExpiresAt)
+	}
+	inbCom.WarrantyNotes = com.WarrantyNotes
+	if com.StatusDate != nil {
+		inbCom.StatusDate = string(*com.StatusDate)
+	}
+	inbCom.StatusNote = com.StatusNote
+	inbCom.SalePrice = ptrDecimalString(com.SalePrice)
+	inbCom.AcquisitionPrice = ptrDecimalString(com.AcquisitionPrice)
+	if com.AcquisitionCurrency != nil {
+		inbCom.AcquisitionCurrency = string(*com.AcquisitionCurrency)
+	}
+	// Resolve the cover photo's volatile DB id to its immutable UUID so the
+	// reference round-trips stably. A cover pointing at a file outside the
+	// preloaded commodity-file index (already deleted, or never an attachment)
+	// resolves to "" and is simply omitted — the restore then leaves the cover
+	// unset and the resolver's first-photo fallback takes over.
+	if com.CoverFileID != nil {
+		if coverUUID := b.fileUUIDByDBID[*com.CoverFileID]; coverUUID != "" {
+			inbCom.CoverFileID = coverUUID
+		}
 	}
 
 	pending := b.planCommodityFiles(loc, com, &inbCom)
@@ -630,6 +669,19 @@ func decimalString(d interface{ String() string }) string {
 		return ""
 	}
 	return s
+}
+
+// ptrDecimalString renders a nullable decimal (SalePrice / AcquisitionPrice).
+// Unlike decimalString it preserves a legitimate zero value: the meaningful
+// distinction for these columns is nil (absent) vs set, so a non-nil pointer
+// holding 0 is emitted as "0" and only a nil pointer yields "" (the omitempty
+// JSON field then disappears). The restore side mirrors this: empty → nil, any
+// non-empty value → a set pointer.
+func ptrDecimalString(d *decimal.Decimal) string {
+	if d == nil {
+		return ""
+	}
+	return d.String()
 }
 
 // urlStrings flattens a slice of *URL to their string forms.

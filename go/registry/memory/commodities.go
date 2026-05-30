@@ -105,12 +105,19 @@ func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityReg
 }
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
-	// Acquisition columns are server-managed (issue #1550 / #202): a
-	// fresh row never has them set; the migration worker fills them
-	// write-once on the first Case-A migration. Drop any value the
-	// caller smuggled in via the JSON:API payload before persisting.
-	commodity.AcquisitionPrice = nil
-	commodity.AcquisitionCurrency = nil
+	// Acquisition columns are server-managed (issue #1550 / #202). The only
+	// legitimate writers are the migration worker (write-once on the first
+	// Case-A migration) and the signature-verified #534 backup restore, which
+	// reconstructs the archived pair on a fresh row by signalling it through the
+	// trusted WithRestoreAcquisition context seam. Absent that signal, drop any
+	// value the caller smuggled in via the JSON:API payload before persisting.
+	if price, currency, ok := registry.RestoreAcquisitionFromContext(ctx); ok {
+		commodity.AcquisitionPrice = &price
+		commodity.AcquisitionCurrency = &currency
+	} else {
+		commodity.AcquisitionPrice = nil
+		commodity.AcquisitionCurrency = nil
+	}
 
 	// Use CreateWithUser to ensure user context is applied
 	newCommodity, err := r.Registry.CreateWithUser(ctx, commodity)

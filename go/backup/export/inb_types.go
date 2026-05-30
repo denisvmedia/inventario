@@ -98,30 +98,51 @@ type INBArea struct {
 // parent area's immutable UUID. The three file-reference arrays carry the
 // commodity's attached images / invoices / manuals.
 type INBCommodity struct {
-	ID                     string       `json:"id"`
-	Name                   string       `json:"name"`
-	ShortName              string       `json:"shortName,omitempty"`
-	Type                   string       `json:"type,omitempty"`
-	AreaID                 string       `json:"areaId"`
-	Count                  int          `json:"count"`
-	OriginalPrice          string       `json:"originalPrice,omitempty"`
-	OriginalPriceCurrency  string       `json:"originalPriceCurrency,omitempty"`
-	ConvertedOriginalPrice string       `json:"convertedOriginalPrice,omitempty"`
-	CurrentPrice           string       `json:"currentPrice,omitempty"`
-	SerialNumber           string       `json:"serialNumber,omitempty"`
-	ExtraSerialNumbers     []string     `json:"extraSerialNumbers,omitempty"`
-	PartNumbers            []string     `json:"partNumbers,omitempty"`
-	Tags                   []string     `json:"tags,omitempty"`
-	Status                 string       `json:"status,omitempty"`
-	PurchaseDate           string       `json:"purchaseDate,omitempty"`
-	RegisteredDate         string       `json:"registeredDate,omitempty"`
-	LastModifiedDate       string       `json:"lastModifiedDate,omitempty"`
-	URLs                   []string     `json:"urls,omitempty"`
-	Comments               string       `json:"comments,omitempty"`
-	Draft                  bool         `json:"draft"`
-	Images                 []INBFileRef `json:"images,omitempty"`
-	Invoices               []INBFileRef `json:"invoices,omitempty"`
-	Manuals                []INBFileRef `json:"manuals,omitempty"`
+	ID                     string   `json:"id"`
+	Name                   string   `json:"name"`
+	ShortName              string   `json:"shortName,omitempty"`
+	Type                   string   `json:"type,omitempty"`
+	AreaID                 string   `json:"areaId"`
+	Count                  int      `json:"count"`
+	OriginalPrice          string   `json:"originalPrice,omitempty"`
+	OriginalPriceCurrency  string   `json:"originalPriceCurrency,omitempty"`
+	ConvertedOriginalPrice string   `json:"convertedOriginalPrice,omitempty"`
+	CurrentPrice           string   `json:"currentPrice,omitempty"`
+	SerialNumber           string   `json:"serialNumber,omitempty"`
+	ExtraSerialNumbers     []string `json:"extraSerialNumbers,omitempty"`
+	PartNumbers            []string `json:"partNumbers,omitempty"`
+	Tags                   []string `json:"tags,omitempty"`
+	Status                 string   `json:"status,omitempty"`
+	PurchaseDate           string   `json:"purchaseDate,omitempty"`
+	RegisteredDate         string   `json:"registeredDate,omitempty"`
+	LastModifiedDate       string   `json:"lastModifiedDate,omitempty"`
+	URLs                   []string `json:"urls,omitempty"`
+	Comments               string   `json:"comments,omitempty"`
+	Draft                  bool     `json:"draft"`
+
+	// Extended commodity fields (#534 round-trip parity). Warranty (#1554),
+	// terminal-status metadata (#1611), acquisition provenance (#202), and the
+	// user-picked cover photo (#1451) all round-trip so a restored commodity is
+	// a lossless copy of the exported one.
+	WarrantyExpiresAt string `json:"warrantyExpiresAt,omitempty"`
+	WarrantyNotes     string `json:"warrantyNotes,omitempty"`
+	StatusDate        string `json:"statusDate,omitempty"`
+	StatusNote        string `json:"statusNote,omitempty"`
+	SalePrice         string `json:"salePrice,omitempty"`
+	// AcquisitionPrice / AcquisitionCurrency are the write-once acquisition
+	// provenance pair (#202). They are restored through the trusted
+	// registry.WithRestoreAcquisition context seam, never the normal write path.
+	AcquisitionPrice    string `json:"acquisitionPrice,omitempty"`
+	AcquisitionCurrency string `json:"acquisitionCurrency,omitempty"`
+	// CoverFileID is the IMMUTABLE UUID of the commodity's user-picked cover
+	// photo (#1451). Stored as a UUID (not the volatile cover_file_id DB key)
+	// so it round-trips stably; the restore side re-resolves it to the new
+	// file's DB id after the commodity's files are recreated.
+	CoverFileID string `json:"coverFileId,omitempty"`
+
+	Images   []INBFileRef `json:"images,omitempty"`
+	Invoices []INBFileRef `json:"invoices,omitempty"`
+	Manuals  []INBFileRef `json:"manuals,omitempty"`
 }
 
 // INBFileRef is a reference to a commodity-attached file. Path is the file's

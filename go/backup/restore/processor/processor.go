@@ -28,6 +28,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/inb"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 )
 
 // inbMemberLimits bounds the inner tar walk so a hostile archive can't exhaust
@@ -203,6 +204,54 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		return errx.Classify(ErrMissingFileMembers, errx.Attrs("count", len(missing), "members", missing))
 	}
 
+	// Patch cover-photo cross-references last: only now is idMapping.Files fully
+	// populated, so a cover that points at one of the just-restored files can be
+	// resolved to its new DB id.
+	if err := walker.applyPendingCovers(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// applyPendingCovers resolves each queued commodity → cover-photo reference and
+// patches the commodity's CoverFileID to the new file's DB id. A cover whose
+// file UUID never landed (e.g. an orphaned/dropped attachment) is skipped
+// silently — the cover-resolver's first-photo fallback then applies. The patch
+// goes through the normal commodity Update (CoverFileID is an ordinary column);
+// the registry preserves the acquisition pair across that write.
+func (w *inbWalker) applyPendingCovers() error {
+	if len(w.pendingCovers) == 0 {
+		return nil
+	}
+
+	comReg, err := w.proc.factorySet.CommodityRegistryFactory.CreateUserRegistry(w.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user commodity registry for cover patch", err)
+	}
+
+	for _, pc := range w.pendingCovers {
+		commodityDBID, ok := w.idMapping.Commodities[pc.commodityUUID]
+		if !ok || commodityDBID == "" {
+			continue
+		}
+		coverFileDBID, ok := w.idMapping.Files[pc.coverFileUUID]
+		if !ok || coverFileDBID == "" {
+			// The cover photo's file was not restored (orphan / missing member);
+			// leave the cover unset and let the first-photo fallback take over.
+			continue
+		}
+
+		commodity, getErr := comReg.Get(w.ctx, commodityDBID)
+		if getErr != nil {
+			return errxtrace.Wrap("failed to load commodity for cover patch", getErr, errx.Attrs("commodity_id", pc.commodityUUID))
+		}
+		coverID := coverFileDBID
+		commodity.CoverFileID = &coverID
+		if _, updErr := comReg.Update(w.ctx, *commodity); updErr != nil {
+			return errxtrace.Wrap("failed to patch commodity cover", updErr, errx.Attrs("commodity_id", pc.commodityUUID))
+		}
+	}
 	return nil
 }
 
@@ -211,6 +260,16 @@ type inbPendingFile struct {
 	ref           types.INBFileRef
 	bucket        string // images / invoices / manuals
 	commodityUUID string
+}
+
+// inbPendingCover records a commodity → cover-photo cross-reference that can
+// only be resolved after the commodity's files are created. The cover is
+// archived as the file's immutable UUID; the new file DB id is not known until
+// the file member is streamed and its row created later in the tar walk, so the
+// patch is deferred to the end of the payload walk. #534 / #1451.
+type inbPendingCover struct {
+	commodityUUID string
+	coverFileUUID string
 }
 
 // inbWalker carries the per-restore state while walking inner-tar members.
@@ -230,6 +289,11 @@ type inbWalker struct {
 	// fileRefs maps an archive file path → its metadata, registered when a
 	// location document is processed. A file member must match one of these.
 	fileRefs map[string]inbPendingFile
+
+	// pendingCovers accumulates cover-photo cross-references to patch once every
+	// file member has been processed (so idMapping.Files is fully populated).
+	// Only created commodities (write strategies, non-dry-run) register one.
+	pendingCovers []inbPendingCover
 }
 
 // handleMember dispatches a tar member: the manifest is read for nothing
@@ -369,9 +433,34 @@ func (w *inbWalker) applyCommodity(c *types.INBCommodity) error {
 		return err
 	}
 
+	// Acquisition provenance (#202) is reconstructed on CREATE only, and only
+	// through the trusted WithRestoreAcquisition context seam — never a public
+	// registry bypass. Create reads the pair from ctx and writes it onto the
+	// fresh row; a merge_update of an existing row goes through Update, which
+	// ignores the signal and keeps the row's own write-once acquisition.
+	createCtx := w.ctx
+	if price, currency, aqErr := c.RestoredAcquisition(); aqErr != nil {
+		// A malformed acquisition price is archive corruption — abort the whole
+		// restore, consistent with ConvertToCommodity's strict numeric parsing.
+		return errx.Classify(
+			errxtrace.Wrap("failed to decode restored acquisition", aqErr, errx.Attrs("commodity_id", c.ID)),
+			ErrMalformedEntity,
+		)
+	} else if price != nil && currency != nil {
+		createCtx = registry.WithRestoreAcquisition(createCtx, *price, *currency)
+	}
+
 	existingCommodity := w.existing.Commodities[c.ID]
-	if err := l.applyStrategyForCommodityModel(w.ctx, commodity, existingCommodity, c.ID, w.stats, w.existing, w.idMapping, w.options); err != nil {
+	if err := l.applyStrategyForCommodityModel(createCtx, commodity, existingCommodity, c.ID, w.stats, w.existing, w.idMapping, w.options); err != nil {
 		return err
+	}
+
+	// Cover-photo cross-reference (#1451) is patched only after the commodity's
+	// files are restored (their new DB ids aren't known yet), and only for a
+	// freshly CREATED row — a dry-run writes nothing and a merge_update keeps the
+	// existing row's own cover.
+	if w.commodityWasCreated(existingCommodity) {
+		w.queueCoverPatch(c)
 	}
 
 	// Register file refs so the later file members know which commodity (and
@@ -380,6 +469,33 @@ func (w *inbWalker) applyCommodity(c *types.INBCommodity) error {
 	w.registerFileRefs(c.ID, "invoices", c.Invoices)
 	w.registerFileRefs(c.ID, "manuals", c.Manuals)
 	return nil
+}
+
+// commodityWasCreated reports whether applyStrategyForCommodityModel just
+// created a fresh row (vs. skipped/updated an existing one) for the current
+// options. A dry-run never persists, so it is always false. full_replace always
+// creates; merge_add / merge_update create only when no row pre-existed.
+func (w *inbWalker) commodityWasCreated(existingCommodity *models.Commodity) bool {
+	if w.options.DryRun {
+		return false
+	}
+	if w.options.Strategy == types.RestoreStrategyFullReplace {
+		return true
+	}
+	return existingCommodity == nil
+}
+
+// queueCoverPatch records the commodity's cover-photo cross-reference (#1451)
+// for the post-files patch. The cover is stored in the archive as the cover
+// file's immutable UUID; its destination DB id isn't known until that file is
+// restored, so the patch is deferred. A no-op when no cover was set.
+func (w *inbWalker) queueCoverPatch(c *types.INBCommodity) {
+	if c.CoverFileID != "" {
+		w.pendingCovers = append(w.pendingCovers, inbPendingCover{
+			commodityUUID: c.ID,
+			coverFileUUID: c.CoverFileID,
+		})
+	}
 }
 
 // registerFileRefs indexes a commodity's file references by their archive path.

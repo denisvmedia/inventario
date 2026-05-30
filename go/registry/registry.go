@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jellydator/validation"
+	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -214,6 +215,41 @@ type CommodityEventRegistry interface {
 	// ListByCommodity returns paginated events for the given commodity,
 	// newest first. Total reflects the filtered count (post-Kinds, pre-LIMIT).
 	ListByCommodity(ctx context.Context, commodityID string, offset, limit int, opts CommodityEventListOptions) ([]*models.CommodityEvent, int, error)
+}
+
+// restoreAcquisitionCtxKey keys a trusted, restore-only acquisition pair on a
+// context (see WithRestoreAcquisition).
+type restoreAcquisitionCtxKey struct{}
+
+type restoreAcquisition struct {
+	price    decimal.Decimal
+	currency models.Currency
+}
+
+// WithRestoreAcquisition marks ctx so the next CommodityRegistry.Create writes
+// the given write-once acquisition provenance pair (acquisition_price /
+// acquisition_currency, epic #202) onto the freshly created row instead of
+// clearing it. This is the single trusted seam by which the signature-verified
+// #534 backup restore reconstructs a commodity's archived acquisition history.
+//
+// It is deliberately a context signal, NOT a CommodityRegistry method, so the
+// write-once bypass is not exposed on the registry surface: the normal API path
+// never sets it, so Create still clears acquisition and Update still preserves
+// the existing DB values — acquisition stays server-managed and immutable for
+// every user write.
+func WithRestoreAcquisition(ctx context.Context, price decimal.Decimal, currency models.Currency) context.Context {
+	return context.WithValue(ctx, restoreAcquisitionCtxKey{}, restoreAcquisition{price: price, currency: currency})
+}
+
+// RestoreAcquisitionFromContext returns the trusted restore acquisition pair set
+// by WithRestoreAcquisition, if present. Consumed only by the CommodityRegistry
+// Create implementations.
+func RestoreAcquisitionFromContext(ctx context.Context) (price decimal.Decimal, currency models.Currency, ok bool) {
+	v, vok := ctx.Value(restoreAcquisitionCtxKey{}).(restoreAcquisition)
+	if !vok {
+		return decimal.Decimal{}, "", false
+	}
+	return v.price, v.currency, true
 }
 
 type CommodityRegistry interface {
