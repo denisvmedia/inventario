@@ -10,21 +10,12 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/go-extras/go-kit/must"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/appctx"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
 	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
 )
-
-// testUserID will be set dynamically when creating test user
-var testUserID string
-
-// testGroupID is the ID of the default LocationGroup created by newTestFactorySet.
-var testGroupID string
 
 // TestExtractTenantUserFromContext tests the ExtractTenantUserFromContext function
 func TestExtractTenantUserFromContext(t *testing.T) {
@@ -125,55 +116,6 @@ func TestExtractTenantUserFromContext(t *testing.T) {
 			}
 		})
 	}
-}
-
-// newTestFactorySet creates a factory set for testing
-func newTestFactorySet() *registry.FactorySet {
-	factorySet := memory.NewFactorySet()
-
-	// Create user with server-generated ID and capture it
-	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			// ID will be generated server-side for security
-			TenantID: "test-tenant",
-		},
-		Email:    "test@example.com",
-		Name:     "Test User",
-		IsActive: true,
-	}))
-	// Set the global testUserID to the generated ID
-	testUserID = createdUser.ID
-
-	must.Must(factorySet.TenantRegistry.Create(context.Background(), models.Tenant{
-		EntityID: models.EntityID{ID: "test-tenant"},
-		Name:     "Test Tenant",
-	}))
-
-	// Create a default location group — export's FileEntity creation now
-	// requires a non-empty group_id in context (FileEntity is group-scoped).
-	createdGroup := must.Must(factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant"},
-		Slug:                must.Must(models.GenerateGroupSlug()),
-		Name:                "Test Group",
-		Status:              models.LocationGroupStatusActive,
-		CreatedBy:           createdUser.ID,
-	}))
-	testGroupID = createdGroup.ID
-
-	return factorySet
-}
-
-// newTestContext creates a context with test user + group for testing.
-func newTestContext() context.Context {
-	ctx := appctx.WithUser(context.Background(), &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: testUserID},
-			TenantID: "test-tenant",
-		},
-	})
-	return appctx.WithGroup(ctx, &models.LocationGroup{
-		TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: testGroupID}, TenantID: "test-tenant"},
-	})
 }
 
 func TestNewExportService(t *testing.T) {

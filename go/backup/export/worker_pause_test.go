@@ -45,7 +45,7 @@ func TestExportWorkerSoftPause(t *testing.T) {
 		uploadLocation = "file://" + tempDir + "?create_dir=1"
 	}
 
-	exportService := NewExportService(factorySet, uploadLocation)
+	exportService := NewExportService(factorySet, uploadLocation, nil)
 
 	// The controller polls the WorkerControlRegistry; the worker consults
 	// the controller's lock-free IsPaused on its claim phase.
