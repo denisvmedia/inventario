@@ -331,12 +331,14 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-
-	// RED metrics (#843): installed after Recoverer so a recovered panic is
-	// counted as a 500, and after chi routing middleware so RoutePattern
-	// resolves to the matched template. The middleware self-skips "/metrics".
+	// RED metrics (#843): registered BEFORE Recoverer so it WRAPS it — the
+	// deferred status read then observes the 500 that Recoverer writes for a
+	// recovered panic. Installed inside Recoverer it would run its defer as
+	// the panic unwinds, before the 500 is written, and miscount panics as
+	// 2xx. It still sits inside chi routing, so RoutePattern resolves; it
+	// self-skips "/metrics".
 	r.Use(metrics.HTTPMiddleware)
+	r.Use(middleware.Recoverer)
 
 	// r.Get("/", func(w http.ResponseWriter, _r *http.Request) {
 	//	w.Write([]byte("Welcome to Inventario!"))

@@ -88,8 +88,16 @@ The business/email gauges also exist (at `0`) in the apiserver process because
 they are package-level, so a Prometheus that scrapes **only** the apiserver
 target will show those panels flat at `0`. To get real values, scrape the
 workers target too (uncomment the `inventario-workers` job in `prometheus.yml`,
-or in k8s add the worker PodMonitor — see `helm/inventario/README.md`). When both
-targets are scraped, the dashboard's `sum()`-based panels read correctly.
+or in k8s add the worker PodMonitor — see `helm/inventario/README.md`).
+
+Because these gauges are installation-wide (every producer reports the same
+total), the dashboard collapses them across targets with `max()` rather than
+`sum()` — e.g. `max(inventario_users)`,
+`max by (category) (inventario_file_storage_bytes)`,
+`max(inventario_email_queue_depth)`. `max()` drops the apiserver `0` series and,
+crucially, does not double-count when more than one `run all`/worker replica is
+scraped. (Counter/histogram panels — request rate, latency — correctly keep
+`sum(rate(...))`, since those aggregate per-process activity across the fleet.)
 
 ## Kubernetes
 

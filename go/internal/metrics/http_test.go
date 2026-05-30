@@ -71,6 +71,25 @@ func TestHTTPMiddleware_SkipsMetricsRoute(t *testing.T) {
 	c.Assert(after-before, qt.Equals, float64(0))
 }
 
+func TestNormalizeMethod(t *testing.T) {
+	c := qt.New(t)
+
+	// Standard methods pass through unchanged.
+	for _, m := range []string{
+		http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut,
+		http.MethodPatch, http.MethodDelete, http.MethodConnect,
+		http.MethodOptions, http.MethodTrace,
+	} {
+		c.Assert(metrics.NormalizeMethod(m), qt.Equals, m)
+	}
+
+	// Anything client-controlled outside the set collapses to OTHER, so an
+	// attacker cannot blow up the `method` label cardinality.
+	for _, m := range []string{"FOOBAR", "get", "", "PROPFIND", "x\x00y"} {
+		c.Assert(metrics.NormalizeMethod(m), qt.Equals, "OTHER")
+	}
+}
+
 func TestStatusClass(t *testing.T) {
 	tests := []struct {
 		code int

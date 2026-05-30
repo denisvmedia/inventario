@@ -47,6 +47,11 @@ func StatusClass(code int) string {
 	return statusClass(code)
 }
 
+// NormalizeMethod exposes normalizeMethod for tests.
+func NormalizeMethod(m string) string {
+	return normalizeMethod(m)
+}
+
 // CollectOnceForTest drives a single business collection sweep
 // synchronously, bypassing the goroutine, so tests can assert on the
 // gauge side effects deterministically.

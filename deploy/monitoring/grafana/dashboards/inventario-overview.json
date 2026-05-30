@@ -152,7 +152,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
       "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
       "targets": [
-        { "refId": "A", "expr": "inventario_email_queue_depth", "legendFormat": "queue depth" }
+        { "refId": "A", "expr": "max(inventario_email_queue_depth)", "legendFormat": "queue depth" }
       ]
     },
     {
@@ -175,13 +175,13 @@
       "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none", "textMode": "value_and_name", "orientation": "horizontal" },
       "targets": [
-        { "refId": "A", "expr": "inventario_tenants", "legendFormat": "tenants" },
-        { "refId": "B", "expr": "inventario_users", "legendFormat": "users" },
-        { "refId": "C", "expr": "inventario_location_groups", "legendFormat": "groups" },
-        { "refId": "D", "expr": "inventario_locations", "legendFormat": "locations" },
-        { "refId": "E", "expr": "inventario_areas", "legendFormat": "areas" },
-        { "refId": "F", "expr": "inventario_commodities", "legendFormat": "commodities" },
-        { "refId": "G", "expr": "inventario_files", "legendFormat": "files" }
+        { "refId": "A", "expr": "max(inventario_tenants)", "legendFormat": "tenants" },
+        { "refId": "B", "expr": "max(inventario_users)", "legendFormat": "users" },
+        { "refId": "C", "expr": "max(inventario_location_groups)", "legendFormat": "groups" },
+        { "refId": "D", "expr": "max(inventario_locations)", "legendFormat": "locations" },
+        { "refId": "E", "expr": "max(inventario_areas)", "legendFormat": "areas" },
+        { "refId": "F", "expr": "max(inventario_commodities)", "legendFormat": "commodities" },
+        { "refId": "G", "expr": "max(inventario_files)", "legendFormat": "files" }
       ]
     },
     {
@@ -192,7 +192,7 @@
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 48 },
       "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 40, "stacking": { "mode": "normal" } } }, "overrides": [] },
       "targets": [
-        { "refId": "A", "expr": "sum by (category) (inventario_file_storage_bytes)", "legendFormat": "{{category}}" }
+        { "refId": "A", "expr": "max by (category) (inventario_file_storage_bytes)", "legendFormat": "{{category}}" }
       ]
     },
     {
