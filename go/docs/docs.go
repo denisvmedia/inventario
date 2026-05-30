@@ -13516,12 +13516,10 @@ const docTemplate = `{
         "models.TagKind": {
             "type": "string",
             "enum": [
-                "",
                 "commodity",
                 "file"
             ],
             "x-enum-varnames": [
-                "TagKindAny",
                 "TagKindCommodity",
                 "TagKindFile"
             ]

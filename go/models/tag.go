@@ -91,15 +91,22 @@ func (c TagColor) Validate() error {
 type TagKind string
 
 const (
-	// TagKindAny is the empty-string filter sentinel meaning "no kind
-	// filter". Never a valid *stored* value — IsValid rejects it; the
-	// model validator requires a concrete kind.
-	TagKindAny TagKind = ""
 	// TagKindCommodity is the kind for tags attached to commodities (items).
 	TagKindCommodity TagKind = "commodity"
 	// TagKindFile is the kind for tags attached to files.
 	TagKindFile TagKind = "file"
 )
+
+// TagKindAny is the empty-string filter sentinel meaning "no kind filter".
+// Declared as a `var` (not a `const` in the enum block) so swag does NOT
+// fold "" into the public models.TagKind OpenAPI enum — the exported
+// contract / generated client types are commodity|file only. Same technique
+// as DefaultTagColor above. Never a valid *stored* value: IsValid rejects it
+// and the model validator requires a concrete kind; it exists purely as an
+// internal "no filter" sentinel.
+//
+//nolint:gochecknoglobals // intentional: keep "" out of the swag enum; see comment above.
+var TagKindAny TagKind = ""
 
 // IsValid reports whether k is a valid *stored* kind (commodity or file).
 // The empty string (TagKindAny) is a filter-only sentinel and is NOT valid

@@ -4288,12 +4288,10 @@ definitions:
     - TagColorMuted
   models.TagKind:
     enum:
-    - ""
     - commodity
     - file
     type: string
     x-enum-varnames:
-    - TagKindAny
     - TagKindCommodity
     - TagKindFile
   models.TenantStatus:

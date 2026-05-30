@@ -11810,7 +11810,7 @@ export type components = {
         /** @enum {string} */
         "models.TagColor": "amber" | "green" | "blue" | "orange" | "red" | "muted";
         /** @enum {string} */
-        "models.TagKind": "" | "commodity" | "file";
+        "models.TagKind": "commodity" | "file";
         /** @enum {string} */
         "models.TenantStatus": "active" | "suspended" | "inactive";
         "models.User": {

@@ -131,7 +131,12 @@ export function useTagAutocomplete(q: string, limit = 10, opts: AutocompleteOpti
   const kind = opts.kind
   return useQuery<TagAutocompleteEntry[]>({
     queryKey: tagKeys.autocomplete(slug, q, limit, kind),
-    queryFn: ({ signal }) => autocompleteTags(q, limit, { kind: kind as TagKind, signal }),
+    queryFn: ({ signal }) => {
+      // Defensive: `enabled` already gates on kind, but a manual refetch()
+      // bypasses it — never issue a malformed `kind=undefined` request.
+      if (!kind) return Promise.resolve([])
+      return autocompleteTags(q, limit, { kind, signal })
+    },
     enabled: enabled && slug.length > 0 && kind !== undefined,
     // Keep the previous result visible while the next query (next
     // keystroke / different prefix) is in flight. Without this, `data`
