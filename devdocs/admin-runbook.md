@@ -311,8 +311,10 @@ claim phase** while paused:
 - **Resuming is immediate** — it takes effect on the worker's next tick
   (≤ ~10s, the controller poll interval) with **no process restart**.
 - **State persists across restarts** and is stored in the
-  `worker_control` table (one row per paused worker; an absent row means
-  the worker runs normally).
+  `worker_control` table. A row with `paused=true` is paused; `paused=false`
+  — or no row at all — means the worker runs normally. Resuming flips the
+  flag to `false` (the row is kept, not deleted), so a paused-then-resumed
+  worker leaves a `paused=false` row behind.
 - **The whole fleet is coordinated via the shared database** — every
   replica's pause controller polls the same table, so a single
   pause/resume applies everywhere.

@@ -128,10 +128,12 @@ type WorkerControl struct {
 	//migrator:schema:field name="paused" type="BOOLEAN" not_null="true" default="false"
 	Paused bool `json:"paused" db:"paused"`
 
-	// PausedBy records the operator id/email who paused the worker. NULL
-	// when paused via the CLI (no authenticated operator session). Not an
-	// FK — this control plane is intentionally decoupled from the users
-	// table (and a CLI/back-office operator may not be a tenant user row).
+	// PausedBy records who paused the worker: the back-office operator id
+	// for an API pause, or the literal "cli" for a CLI pause (the CLI has
+	// no authenticated operator session). NULL only when no actor was
+	// recorded. Not an FK — this control plane is intentionally decoupled
+	// from the users table (and a CLI/back-office operator may not be a
+	// tenant user row).
 	//migrator:schema:field name="paused_by" type="TEXT"
 	PausedBy *string `json:"paused_by,omitempty" db:"paused_by"`
 
