@@ -115,8 +115,9 @@ test.describe('Exports / Restores (React)', () => {
 
     // --- Restore appears in history; poll until status flips to a
     // terminal value (the restore worker writes ~immediately for an
-    // empty / minimal dataset).
-    await expect(page.getByTestId('page-export-detail')).toBeVisible()
+    // empty / minimal dataset). 30s timeout: the post-submit navigation +
+    // createExportRestore round-trip is slower on webkit than the 10s default.
+    await expect(page.getByTestId('page-export-detail')).toBeVisible({ timeout: 30_000 })
     const restoresList = page.getByTestId('restores-list')
     await expect(restoresList).toBeVisible({ timeout: 30_000 })
     const firstRestore = restoresList.locator('[data-testid^="restore-row-"]').first()
