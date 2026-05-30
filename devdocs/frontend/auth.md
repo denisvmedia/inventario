@@ -153,7 +153,7 @@ Full guard placement is in [routing.md](routing.md); the auth-relevant summary:
 `HostTenantResolver` (`../../go/apiserver/tenant_context.go`) maps the subdomain
 to a tenant (e.g. `acme.inventario.app` → tenant `acme`) before the login
 handler runs, via `PublicTenantMiddleware`. In single-tenant mode (empty base
-domain) the middleware selects the one tenant. The frontend never sends, asks
+domain) the middleware selects the default tenant. The frontend never sends, asks
 for, or displays a tenant identifier at login.
 
 The issue that tracked this (#1038) noted an **optional** per-deployment "tenant
