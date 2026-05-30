@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import { useAreas } from "@/features/areas/hooks"
-import { useCommodities } from "@/features/commodities/hooks"
+import { useAllCommodities } from "@/features/commodities/hooks"
 import {
   COMMODITY_WARRANTY_STATUSES,
   effectiveWarrantyExpiry,
@@ -59,9 +59,9 @@ function daysUntil(dateStr: string | undefined): number | null {
 // dashboard / item-detail tab) read the same `--status-*` tokens.
 //
 // Counts: the per-tab badges + summary cards are computed from the
-// "all rows" query — a single perPage=200 fetch — rather than four
-// concurrent filtered queries, so the badges stay accurate when the
-// user moves between tabs without a refetch.
+// "all rows" query — every commodity, paged in via useAllCommodities —
+// rather than four concurrent filtered queries, so the badges stay
+// accurate when the user moves between tabs without a refetch.
 export function WarrantiesListPage() {
   const { t } = useTranslation(["warranties", "commodities", "common"])
   const { currentGroup } = useCurrentGroup()
@@ -69,17 +69,19 @@ export function WarrantiesListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = parseTab(searchParams.get("tab"))
 
-  // Single fetch for everything. perPage=200 covers all but the largest
-  // groups; if a user blows past that we'd add server-side pagination
-  // here, but the BE's `warranty_status=` filter still works either way
-  // since the tab partitioning happens client-side from this dataset.
+  // Fetch EVERY commodity so the client-side tab partitioning + counts are
+  // accurate. Must use useAllCommodities (pages in 100-row batches), NOT
+  // useCommodities({perPage:200}): the BE caps per_page at 100 and falls back
+  // to the default 50 for anything larger, so a single perPage=200 request
+  // silently returns only the first 50 rows — a group with >50 commodities
+  // would then drop items from the warranty buckets entirely.
   //
   // Both queries are gated on `currentGroup` because the http client
   // rewrites /commodities → /g/{slug}/commodities only after the
   // GroupProvider's useEffect has populated the slug slot (same
   // pattern useDashboardData uses). Firing before that would 404.
   const enabled = !!currentGroup
-  const list = useCommodities({ perPage: 200, includeInactive: true }, { enabled })
+  const list = useAllCommodities({ includeInactive: true }, { enabled })
   const areas = useAreas({ enabled })
   const areaName = useMemo(() => {
     const map = new Map<string, string>()
