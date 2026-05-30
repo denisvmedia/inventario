@@ -6,6 +6,7 @@ import { screen, waitFor, act } from "@testing-library/react"
 import { server } from "@/test/server"
 import { renderWithProviders } from "@/test/render"
 import { AuthProvider, useAuth } from "@/features/auth/AuthContext"
+import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
 import { __resetBootRefreshForTests } from "@/features/auth/bootRefresh"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -145,5 +146,65 @@ describe("useAuth", () => {
     const params = new URLSearchParams(search)
     expect(params.get("reason")).toBe("session_expired")
     expect(params.get("redirect")).toBe("/")
+  })
+
+  // #1038 — a non-401 probe failure (transient 5xx / network blip) is NOT a
+  // logout. AuthContext must hold the boot fallback: user stays `undefined`,
+  // isInitialized stays false, and the user is NOT bounced to /login. (Uses
+  // 500, not 503 — a 503 bounces the whole shell to /maintenance.)
+  it("holds the boot fallback on a transient /auth/me error instead of logging out", async () => {
+    let meCalls = 0
+    setAccessToken("good-token")
+    server.use(
+      msw.get(api("/auth/me"), () => {
+        meCalls++
+        return HttpResponse.json({ error: "boom" }, { status: 500 })
+      })
+    )
+    renderWithProviders({ initialPath: "/", routes })
+    await waitFor(() => expect(meCalls).toBeGreaterThan(0))
+    await waitFor(() => {
+      const probe = screen.getByTestId("probe")
+      expect(probe.getAttribute("data-initialized")).toBe("false")
+      expect(probe.getAttribute("data-authenticated")).toBe("false")
+    })
+    // Transient error must not redirect — the probe is still mounted.
+    expect(screen.queryByTestId("login-stub")).not.toBeInTheDocument()
+  })
+
+  // #1038 — logging out clears stored credentials and, on a guarded route,
+  // drops the user to `null` so ProtectedRoute redirects to /login.
+  it("clears credentials and redirects a guarded route to /login on logout", async () => {
+    setAccessToken("good-token")
+    server.use(
+      msw.get(api("/auth/me"), () =>
+        HttpResponse.json({ id: "u1", email: "denis@example.com", name: "Denis" })
+      ),
+      msw.post(api("/auth/logout"), () => new HttpResponse(null, { status: 204 }))
+    )
+    const guardedRoutes = (
+      <>
+        <Route
+          path="/"
+          element={
+            <AuthProvider>
+              <ProtectedRoute fallback={<div data-testid="boot" />}>
+                <Probe />
+              </ProtectedRoute>
+            </AuthProvider>
+          }
+        />
+        <Route path="/login" element={<LoginEcho />} />
+      </>
+    )
+    renderWithProviders({ initialPath: "/", routes: guardedRoutes })
+    await waitFor(() =>
+      expect(screen.getByTestId("probe").getAttribute("data-authenticated")).toBe("true")
+    )
+    await act(async () => {
+      screen.getByRole("button", { name: /sign out/i }).click()
+    })
+    await waitFor(() => expect(screen.getByTestId("login-stub")).toBeInTheDocument())
+    expect(getAccessToken()).toBeNull()
   })
 })

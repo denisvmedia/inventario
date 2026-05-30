@@ -61,6 +61,12 @@ interface LoginMFAChallengeBody {
 // login persists the access + CSRF tokens before resolving so the very next
 // /auth/me probe sees them.
 //
+// Tenancy is HOST-BASED: the request body carries only { email, password } —
+// no tenantSlug. The backend's HostTenantResolver derives the tenant from the
+// request host (subdomain) before this handler runs, so the frontend never
+// sends or asks for a tenant identifier. See devdocs/frontend/auth.md
+// ("Login input model — host-based tenancy") and go/apiserver/tenant_context.go.
+//
 // When MFA is enabled the backend returns 200 with `mfa_required: true`
 // instead of issuing tokens. We disambiguate via the field rather than
 // HTTP status because credentials were correct — it's the *step* that

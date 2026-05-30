@@ -20,6 +20,7 @@ codebase uses.
 | [accessibility.md](accessibility.md) | Focus rings, label/htmlFor, modal a11y, contrast, reduced motion. |
 | [data.md](data.md) | TanStack Query keys, mutations, optimistic updates, cache invalidation. |
 | [routing.md](routing.md) | Adding a route, group context, route guards. |
+| [auth.md](auth.md) | Auth state model, token/session storage, the 401-refresh interceptor, host-based tenancy, route-guard redirects. |
 | [i18n.md](i18n.md) | Adding a translatable string, namespaces, locale fallback, `preservePatterns`. |
 | [imports-and-bans.md](imports-and-bans.md) | Why a dependency is on the no-fly list (next-themes, @base-ui/react, FontAwesome, Bolt artifacts). |
 | [testing.md](testing.md) | Vitest harness, MSW handler factories, jest-axe, coverage thresholds. |
