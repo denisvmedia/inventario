@@ -224,6 +224,40 @@ test.describe('Exports / Restores (React)', () => {
     // --- Import success navigates straight to the restore form for the
     // freshly-created "imported" export. ---
     await expect(page.getByTestId('page-export-restore')).toBeVisible({ timeout: 30_000 })
+
+    // The imported export is created "pending"; the import worker parses the
+    // signed `.inb` (verifies the signature + reads the manifest) before the
+    // export flips to "completed". A restore can only be created once the export
+    // is completed — the BE returns 409 otherwise — so wait for that before
+    // submitting, rather than racing the async worker.
+    const restoreMatch = new URL(page.url()).pathname.match(
+      /\/g\/([^/]+)\/exports\/([^/?#]+)\/restore/,
+    )
+    const importGroupSlug = restoreMatch?.[1] ?? group.slug
+    const importExportId = restoreMatch?.[2]
+    expect(importExportId, 'restore URL carries the imported export id').toBeTruthy()
+    const pollAuth = await extractApiAuth(page)
+    await expect
+      .poll(
+        async () => {
+          const resp = await request.get(
+            `/api/v1/g/${importGroupSlug}/exports/${importExportId}`,
+            {
+              headers: {
+                Accept: 'application/vnd.api+json',
+                Authorization: `Bearer ${pollAuth.accessToken}`,
+                'X-CSRF-Token': pollAuth.csrfToken,
+              },
+            },
+          )
+          if (!resp.ok()) return `http-${resp.status()}`
+          const body = (await resp.json()) as { data?: { attributes?: { status?: string } } }
+          return body.data?.attributes?.status
+        },
+        { timeout: 30_000, intervals: [500, 1000, 1500] },
+      )
+      .toBe('completed')
+
     // Defaults are merge_add + dry_run + include_file_data; description
     // is required on both sides.
     await page.getByTestId('restore-description').fill(`E2E imported dry-run ${Date.now()}`)
