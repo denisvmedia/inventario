@@ -331,6 +331,10 @@ func isContextShutdownError(err error) bool {
 func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, workerID int) {
 	rendered, err := s.renderer.render(job)
 	if err != nil {
+		// Terminal drop: an un-renderable job is never delivered, so count
+		// it as failed like the other drop paths below (retries exhausted,
+		// marshal error, ScheduleRetry error) — otherwise it undercounts.
+		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
 		slog.Error("Email template rendering failed; dropping job",
 			"worker_id", workerID,
 			"job_id", job.ID,
