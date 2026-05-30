@@ -1,3 +1,11 @@
+// White-box (package export, not export_test) on purpose: this test drives
+// the unexported processPendingExports directly so the pause/resume claim
+// transition is deterministic — exercising it through Start()/the ticker
+// would be flaky. It follows the existing precedent in this package
+// (worker_test.go, service_test.go, streaming_test.go are all package
+// export); qtlint passes on white-box tests here, so the external-test-package
+// guideline is not lint-enforced for this directory. Converting to
+// export_test would need an artificial exported seam for no behavioral gain.
 package export
 
 import (
