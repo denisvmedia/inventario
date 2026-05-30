@@ -38,10 +38,18 @@ sops_get() {
     local key="$1"
     [ -f "$SECRETS_FILE" ] || return 0
     jq -r --arg k "$key" '
+        # Walk the dotted path, but only descend when the current value is an
+        # object. A missing intermediate key (e.g. the whole `velero` section
+        # absent on a bundle that never configured backups) makes the parent
+        # resolve to null/"" — indexing that with the next segment is a jq
+        # RUNTIME ERROR ("Cannot index string", exit 5), which under the
+        # caller`s `set -e` aborts the whole bootstrap. Guarding on object
+        # type returns empty for any missing segment instead, matching this
+        # helper`s documented "empty if absent" contract.
         def lookup($parts; $v):
           if ($parts | length) == 0 then $v
-          else lookup($parts[1:]; $v[$parts[0]] // "")
-          end;
+          elif ($v | type) == "object" then lookup($parts[1:]; $v[$parts[0]])
+          else "" end;
         lookup($k | split("."); .) // empty
     ' "$SECRETS_FILE" 2>/dev/null
 }
