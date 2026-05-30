@@ -2,6 +2,7 @@ package apiserver_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -77,6 +78,20 @@ func TestAdminListWorkers_ReflectsPauseState(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	// Every canonical worker type is listed.
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), len(models.AllWorkerTypes()))
+
+	// And the one we paused is flagged paused=true — assert the entry, not
+	// just cardinality, so the test fails if the listing ignores pause state.
+	var listed apiserver.WorkerControlListEnvelope
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &listed), qt.IsNil)
+	var thumb *apiserver.WorkerControlResource
+	for i := range listed.Data {
+		if listed.Data[i].ID == string(models.WorkerTypeThumbnail) {
+			thumb = &listed.Data[i]
+			break
+		}
+	}
+	c.Assert(thumb, qt.IsNotNil, qt.Commentf("thumbnail must be present in the listing"))
+	c.Assert(thumb.Attributes.Paused, qt.IsTrue)
 }
 
 func TestAdminResumeWorker_ClearsPause(t *testing.T) {
