@@ -614,7 +614,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               data-testid="commodity-detail-insurance"
             >
               <Link
-                to={`/g/${encodeURIComponent(slug)}/insurance/${encodeURIComponent(commodity.id)}`}
+                to={`/g/${encodeURIComponent(slug)}/reports/insurance?mode=item&item=${encodeURIComponent(commodity.id)}`}
               >
                 <BarChart3 className="size-3.5" aria-hidden="true" />
                 {t("commodities:detail.insuranceReport")}

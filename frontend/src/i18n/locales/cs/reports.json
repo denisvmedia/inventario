@@ -1,0 +1,62 @@
+{
+  "insurance": {
+    "back": "Zpět na sestavy",
+    "cards": {
+      "estimatedValue": "Odhadovaná hodnota",
+      "estimatedValueHint": "Aktuální odhad pro náhradu",
+      "purchasePrice": "Pořizovací cena",
+      "totalItems": "Celkem položek",
+      "totalPurchase": "Pořizovací cena celkem",
+      "totalValue": "Odhad celkové hodnoty"
+    },
+    "documentTitle": "Pojistná zpráva — {{name}}",
+    "empty": {
+      "noItem": "Vyberte položku pro vytvoření její pojistné zprávy.",
+      "noItems": "Pro toto umístění nebyly nalezeny žádné položky.",
+      "noLocation": "Vyberte umístění pro vytvoření jeho pojistné zprávy."
+    },
+    "fields": {
+      "location": "Umístění",
+      "purchaseDate": "Datum pořízení",
+      "serialNumber": "Sériové číslo",
+      "type": "Typ"
+    },
+    "footer": "{{group}} — Pojistná zpráva",
+    "footerGenerated": "Vytvořeno {{date}}",
+    "generated": "Vytvořeno",
+    "itemReportTitle": "Pojistná zpráva položky",
+    "locationReportTitle": "Pojistná zpráva umístění",
+    "modes": {
+      "item": "Položka",
+      "location": "Umístění"
+    },
+    "noValue": "—",
+    "photos": {
+      "full": "Plná velikost",
+      "heading_few": "Fotografie ({{count}})",
+      "heading_one": "Fotografie ({{count}})",
+      "heading_other": "Fotografií ({{count}})",
+      "label": "Fotografie:",
+      "thumbnails": "Náhledy"
+    },
+    "print": "Tisk / Uložit PDF",
+    "sections": {
+      "itemDetails": "Podrobnosti položky",
+      "notes": "Poznámky",
+      "warranty": "Stav záruky"
+    },
+    "selectItem": "Vyberte položku…",
+    "selectLocation": "Vyberte umístění…",
+    "title": "Pojistná zpráva",
+    "warranty": {
+      "expires": "platí do {{date}}",
+      "label": "Záruka:"
+    }
+  },
+  "landing": {
+    "description": "Vytvářejte tisknutelné sestavy z vašeho inventáře.",
+    "insuranceCardDescription": "Tisknutelný inventární výkaz pro jednu položku nebo celé umístění — hodnoty, záruka a fotografie.",
+    "insuranceCardTitle": "Pojistná zpráva",
+    "title": "Sestavy"
+  }
+}

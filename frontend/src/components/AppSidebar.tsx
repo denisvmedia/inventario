@@ -1,6 +1,7 @@
 import {
   CalendarClock,
   ChevronsUpDown,
+  FileBarChart,
   FolderOpen,
   HandCoins,
   HardDriveDownload,
@@ -156,6 +157,17 @@ const MANAGE: NavEntry[] = [
     labelKey: "common:nav.system",
     to: (g) => (g?.id ? `/groups/${encodeURIComponent(g.id)}/settings` : null),
     icon: Settings,
+  },
+]
+
+// Reports section (#1370). Group-scoped, like Inventory/Manage — hides
+// entirely without an active group. A single entry today (the Reports
+// landing); the landing lists the individual report types.
+const REPORTS: NavEntry[] = [
+  {
+    labelKey: "common:nav.reports",
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/reports` : null),
+    icon: FileBarChart,
   },
 ]
 
@@ -404,6 +416,24 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
             <SidebarGroupContent>
               <SidebarMenu>
                 {MANAGE.map((e) => (
+                  <NavRow
+                    key={e.labelKey}
+                    entry={e}
+                    group={currentGroup}
+                    onNavigate={closeMobileSidebar}
+                  />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
+
+        {showGroupSections ? (
+          <SidebarGroup data-testid="sidebar-reports-group">
+            <SidebarGroupLabel>{t("common:nav.groupReports")}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {REPORTS.map((e) => (
                   <NavRow
                     key={e.labelKey}
                     entry={e}

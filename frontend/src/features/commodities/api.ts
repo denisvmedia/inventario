@@ -128,10 +128,15 @@ function envelope(attrs: Partial<Commodity>) {
 
 // Returns the commodities for the active group. JSON:API envelope is
 // unwrapped here so consumers see a plain Commodity[]. The total comes
-// from the `meta.commodities` field, used by paginators.
+// from the `meta.commodities` field, used by paginators. `covers` carries
+// the per-id resolved cover descriptors parsed from `meta.covers` —
+// additive (#1370): existing consumers ignore it, and each commodity also
+// already carries its own `cover` field; the standalone map is exposed so
+// the insurance report's Location mode can render each item's cover
+// thumbnail without re-deriving from the list rows.
 export async function listCommodities(
   options: ListCommoditiesOptions = {}
-): Promise<{ commodities: Commodity[]; total: number }> {
+): Promise<{ commodities: Commodity[]; total: number; covers: Record<string, CommodityCover> }> {
   const params = new URLSearchParams()
   if (options.page !== undefined) params.set("page", String(options.page))
   if (options.perPage !== undefined) params.set("per_page", String(options.perPage))
@@ -158,14 +163,20 @@ export async function listCommodities(
   const qs = params.toString()
   const path = qs ? `/commodities?${qs}` : "/commodities"
   const body = await http.get<CommoditiesListResponse>(path, { signal: options.signal })
-  const covers = body.meta?.covers ?? {}
+  const coverPayloads = body.meta?.covers ?? {}
+  const covers: Record<string, CommodityCover> = {}
+  for (const [id, payload] of Object.entries(coverPayloads)) {
+    const normalized = normalizeCover(payload)
+    if (normalized) covers[id] = normalized
+  }
   return {
     commodities: (body.data ?? []).map((item) => ({
       ...item.attributes,
       id: item.id,
-      cover: normalizeCover(covers[item.id]),
+      cover: covers[item.id],
     })),
     total: body.meta?.commodities ?? body.data?.length ?? 0,
+    covers,
   }
 }
 

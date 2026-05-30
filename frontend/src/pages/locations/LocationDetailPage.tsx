@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useMatch, useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { ChevronRight, MapPin, MoreHorizontal, Package, Pencil, Plus, Trash2 } from "lucide-react"
+import {
+  ChevronRight,
+  MapPin,
+  MoreHorizontal,
+  Package,
+  Pencil,
+  Plus,
+  Shield,
+  Trash2,
+} from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -280,6 +289,22 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
                 ) : null}
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {slug && location.data.id ? (
+                  <Button
+                    asChild
+                    type="button"
+                    variant="outline"
+                    className="gap-2"
+                    data-testid="location-detail-insurance"
+                  >
+                    <Link
+                      to={`/g/${encodeURIComponent(slug)}/reports/insurance?mode=location&location=${encodeURIComponent(location.data.id)}`}
+                    >
+                      <Shield className="size-4" aria-hidden="true" />
+                      {t("locations:detail.insuranceReport")}
+                    </Link>
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="outline"

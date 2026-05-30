@@ -5,26 +5,54 @@ to backup/restore exports.
 
 ## Print
 
-The product has one print-optimized route in production:
+The product has two print-optimized routes in production:
 
 ```
-/g/:slug/commodities/:id/print
+/g/:slug/commodities/:id/print     — single commodity
+/g/:slug/reports/insurance         — insurance report (#1370)
 ```
 
-Component: `frontend/src/pages/commodities/CommodityPrintPage.tsx`.
+Components:
+
+- `frontend/src/pages/commodities/CommodityPrintPage.tsx`
+- `frontend/src/pages/reports/InsuranceReportPage.tsx`
 
 Used by:
 
-- The commodity detail page's "Print" action (kebab menu).
-- Future: a "Print location summary" surface (out of scope today).
+- The commodity detail page's "Print" action (kebab menu) →
+  commodity print.
+- The commodity detail page's "Insurance report" action and the
+  location detail page's "Insurance report" action → the insurance
+  report (item / location mode, respectively).
+- The "Reports" sidebar section → the reports landing
+  (`/g/:slug/reports`), which links to the insurance report.
 
-The route is mounted **inside the protected `<Shell>`** (same as every
-other group-scoped page), so on screen the user sees the sidebar and top
-bar. The print stylesheet (`@media print`) is what hides the chrome
-when the user actually prints — the page itself doesn't skip the
+Both routes are mounted **inside the protected `<Shell>`** (same as
+every other group-scoped page), so on screen the user sees the sidebar
+and top bar. The print stylesheet (`@media print`) is what hides the
+chrome when the user actually prints — the page itself doesn't skip the
 shell. A toolbar at the top of the rendered page exposes Back +
-Print actions; both are gated behind `print:hidden` so they don't
-land on paper.
+Print actions (the insurance report adds mode / subject / photo-size
+controls); all are gated behind `print:hidden` so they don't land on
+paper.
+
+### Insurance report (#1370)
+
+`/g/:slug/reports/insurance` is a single print-capable view with two
+modes selected via the query string:
+
+- `?mode=item&item=<id>` — one commodity (name, type, purchase price,
+  estimated value, warranty, location, photo gallery, notes).
+- `?mode=location&location=<id>` — every commodity in a location, with
+  per-location totals (count, purchase, estimated value) and a per-item
+  cover thumbnail.
+
+It mirrors the design mock's `InsuranceReportView` (Item + Location
+modes). Currency follows the same contract as the commodity print page
+(`original_price`/`original_price_currency` for purchase;
+`current_price`/`converted_original_price` in the group currency). See
+`devdocs/frontend/design-deviations.md` (#1370) for the adaptations from
+the mock.
 
 ## Print layout
 
@@ -110,7 +138,7 @@ This is **not** the print path. Conceptually:
 
 | Term | What it means | Where |
 | --- | --- | --- |
-| **Print** | Browser-rendered output for paper / PDF (via the browser's "Save as PDF") | `/g/:slug/commodities/:id/print` |
+| **Print** | Browser-rendered output for paper / PDF (via the browser's "Save as PDF") | `/g/:slug/commodities/:id/print`, `/g/:slug/reports/insurance` |
 | **Export** / **Backup** | Server-generated file that can be **imported** back to recreate the data | `/g/:slug/exports` |
 | **Restore** | The inverse of import — apply an export back to a group | `/g/:slug/exports/:id/restore` |
 
@@ -131,10 +159,14 @@ of scope for this brief; the email templates live BE-side.
 
 ## Hard rules
 
-1. **One print route in production.** Adding a second is an issue +
-   PR with the layout spec.
-2. **`print:` utilities for chrome hiding.** No `@media print` blocks
-   inside components — keep all print rules in `index.css`.
+1. **Print routes are deliberate.** Two exist today
+   (`commodities/:id/print`, `reports/insurance`); adding another is an
+   issue + PR with the layout spec, registered in this doc.
+2. **`print:` utilities for chrome hiding.** Keep print rules in
+   `index.css` or, for a self-contained print page, a single scoped
+   `@media print` block in the page (the precedent set by
+   `CommodityPrintPage.tsx` and followed by `InsuranceReportPage.tsx`).
+   Don't scatter `@media print` blocks across feature components.
 3. **No backgrounds in print.** Force `bg-white` (or omit) on
    surfaces; printers skip backgrounds by default.
 4. **Print is the route, export is the file.** Don't conflate the two

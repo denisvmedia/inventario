@@ -15,6 +15,7 @@ import {
   updateCommodity,
   type CommoditiesValue,
   type Commodity,
+  type CommodityCover,
   type CommodityEvent,
   type CommodityEventKind,
   type CommodityMeta,
@@ -40,7 +41,15 @@ export function useCommodities(opts: ListCommoditiesOptions = {}, query: QueryOp
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const enabled = query.enabled ?? true
-  return useQuery<{ commodities: Commodity[]; total: number }>({
+  // `covers` is additive (#1370): existing consumers destructure only
+  // `commodities` / `total`, so surfacing the per-id cover map alongside
+  // them is non-breaking. The insurance report's Location mode reads it
+  // to render each item's cover thumbnail.
+  return useQuery<{
+    commodities: Commodity[]
+    total: number
+    covers: Record<string, CommodityCover>
+  }>({
     queryKey: commodityKeys.list(slug, opts),
     queryFn: ({ signal }) => listCommodities({ ...opts, signal }),
     enabled,

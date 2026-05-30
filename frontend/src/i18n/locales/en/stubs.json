@@ -55,10 +55,6 @@
       "description": "Browse articles and guides for using Inventario.",
       "title": "Help center"
     },
-    "insuranceReport": {
-      "description": "Print-ready snapshot of an item's insurance-relevant details.",
-      "title": "Insurance report"
-    },
     "loginHistory": {
       "description": "Audit log of recent sign-ins, sources, and outcomes for your account.",
       "title": "Login history"

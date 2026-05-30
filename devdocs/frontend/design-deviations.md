@@ -650,3 +650,45 @@ _None yet._
 - **Why**: Backend design changed after the issue was written. The final BE keeps the admin's "return slot" server-side (jti-keyed) plus an httpOnly marker refresh cookie; `end` self-validates and hands the admin tokens back. A frontend-cached admin token would be redundant and a security liability (a long-lived admin credential sitting in localStorage during an impersonation session). Relatedly, auto-expiry recovery (`recoverFromImpersonationExpiry` in `lib/http.ts`) does NOT restore a cached admin token — it calls `POST /admin/impersonation/end` with the now-expired impersonation token, which the BE deliberately tolerates, and adopts the admin tokens from that response.
 - **Approved by**: agent-suggested-then-user-confirmed — the issue brief explicitly instructed this deviation and required it logged here.
 - **Reversion plan**: Permanent. The `admin_return_token` approach is incompatible with the shipped backend contract; it would only return if the BE dropped the server-side return slot.
+
+## #1370 — Insurance report (2026-05-30)
+
+**Issue:** [#1370](https://github.com/denisvmedia/inventario/issues/1370)
+
+The design mock ships an `InsuranceReportView` with two modes (Item + Location)
+toggled in a toolbar, a subject `Select`, a thumbnail/full-size photo toggle, a
+Print button, and a footer (group name + generated timestamp). The
+implementation follows that mock, adapted to the real app's data model and
+chrome. The GitHub issue's broader scope (full-inventory / filtered reports) was
+NOT built — only the mock's Item + Location modes.
+
+### Deviations
+
+1. **Issue's full-inventory / filtered report scope NOT built.** Shipped the
+   design mock's Item + Location modes only; there is no all-inventory or
+   filtered view.
+2. **No brand / model fields on the BE.** The mock's `{brand} {name}` title +
+   `{model}` subtitle become `name` + `short_name`; the brand/model rows are
+   omitted.
+3. **Mock `category` → real `type` enum.** Rendered via the existing
+   `commodities:type.*` catalogue (no separate report-side category map).
+4. **Currency uses the group currency + converted prices**, not the mock's
+   hardcoded USD. Item purchase = `original_price` in
+   `original_price_currency`; estimated value = `current_price` (group
+   currency); location purchase total sums `converted_original_price` (group
+   currency).
+5. **No color / B&W toggle.** Neither the mock nor `CommodityPrintPage` has one;
+   the thumb/full photo toggle is kept.
+6. **Mounted inside the Shell** (chrome hidden via an inline `@media print`
+   block) instead of the mock's fullscreen takeover — matches the
+   `CommodityPrintPage` precedent.
+7. **Location-mode photos use the per-item cover thumbnail** (from the list
+   endpoint's `meta.covers`, surfaced as `useCommodities().covers`) instead of a
+   full per-item gallery — the list endpoint carries covers, not full galleries.
+   Item mode still renders the full image gallery from the unified `/files`
+   surface.
+8. **No `ToggleGroup` shadcn primitive in the app**, so the mock's mode + photo
+   toggles are rendered as a small segmented-button group (`role="tablist"` /
+   `role="group"`) rather than the mock's `ToggleGroup`.
+
+---

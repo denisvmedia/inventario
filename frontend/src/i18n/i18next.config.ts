@@ -18,6 +18,7 @@ import * as enLoans from "./locales/en/loans.json"
 import * as enLocations from "./locales/en/locations.json"
 import * as enMaintenance from "./locales/en/maintenance.json"
 import * as enMembers from "./locales/en/members.json"
+import * as enReports from "./locales/en/reports.json"
 import * as enSearch from "./locales/en/search.json"
 import * as enServices from "./locales/en/services.json"
 import * as enSettings from "./locales/en/settings.json"
@@ -58,6 +59,7 @@ export const I18N_NAMESPACES = [
   "feedback",
   "admin",
   "backoffice",
+  "reports",
 ] as const
 export type I18nNamespace = (typeof I18N_NAMESPACES)[number]
 
@@ -88,6 +90,7 @@ const enResources = {
   feedback: enFeedback,
   admin: enAdmin,
   backoffice: enBackoffice,
+  reports: enReports,
 } as const
 
 // Lazy backend for cs/ru only. We list cs and ru explicitly via
