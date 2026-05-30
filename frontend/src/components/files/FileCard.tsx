@@ -75,12 +75,13 @@ export function FileCard({
   const visual = getFileVisualMeta(file)
   const FallbackIcon = visual.icon
   // Thumbnail keys come from services/file_signing_service.go — the BE
-  // emits `small` / `medium` / `large`. Falling back through the sizes
-  // means we always pick the smallest available (best for the
-  // grid-card cell), and finally drop to the full-resolution signed
-  // URL if no thumbnails were generated yet.
+  // emits `small` (150px) / `medium` (300px) / `large`. The grid card
+  // renders the cover in a full-width `aspect-[4/3]` box (~250–300px wide
+  // on a typical layout), so `small` gets upscaled ~2× and looks blurry —
+  // prefer `medium`, then fall back to `small`/`large`, and finally to
+  // the full-resolution signed URL if no thumbnails were generated yet.
   const thumbUrl =
-    signedUrl?.thumbnails?.small ?? signedUrl?.thumbnails?.medium ?? signedUrl?.thumbnails?.large
+    signedUrl?.thumbnails?.medium ?? signedUrl?.thumbnails?.small ?? signedUrl?.thumbnails?.large
   const renderImage = isImageMime(file.mime_type) && (thumbUrl || signedUrl?.url)
   const tags = file.tags ?? []
   const tile = FILE_CATEGORY_TILES.find((c) => c.key === file.category) ?? FILE_CATEGORY_TILES[0]

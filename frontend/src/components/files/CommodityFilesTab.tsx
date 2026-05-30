@@ -400,9 +400,12 @@ function PhotoGrid({
     <ul className="grid grid-cols-3 gap-1.5" data-testid="commodity-files-photo-grid">
       {photos.map(({ file, signedUrl }) => {
         const title = file.title?.trim() || file.path?.trim() || file.id
+        // Photo grid cells are `aspect-square w-full` in a 3-column grid
+        // (~200–300px wide), so the 150px `small` variant would upscale
+        // and blur — prefer `medium` (300px), then fall back.
         const thumbUrl =
-          signedUrl?.thumbnails?.small ??
           signedUrl?.thumbnails?.medium ??
+          signedUrl?.thumbnails?.small ??
           signedUrl?.thumbnails?.large ??
           signedUrl?.url
         const isExplicit = onSetCover && coverState?.current === file.id
