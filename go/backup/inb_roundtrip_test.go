@@ -371,20 +371,21 @@ func TestINBExport_DropsFileWithMissingBlob(t *testing.T) {
 
 	order, jsons := innerMembers(c, archive)
 	members := strings.Join(order, "\n")
-	c.Assert(strings.Contains(members, present), qt.IsTrue,
+	c.Assert(members, qt.Contains, present,
 		qt.Commentf("present file's member must be archived; members=%v", order))
-	c.Assert(strings.Contains(members, missing), qt.IsFalse,
+	c.Assert(members, qt.Not(qt.Contains), missing,
 		qt.Commentf("missing-blob file's member must be dropped; members=%v", order))
 
-	var locDocs string
+	var locDocs strings.Builder
 	for name, body := range jsons {
 		if name != "manifest.json" {
-			locDocs += string(body)
+			locDocs.Write(body)
 		}
 	}
-	c.Assert(strings.Contains(locDocs, present), qt.IsTrue,
+	locDocsStr := locDocs.String()
+	c.Assert(locDocsStr, qt.Contains, present,
 		qt.Commentf("present file must be referenced in the location doc"))
-	c.Assert(strings.Contains(locDocs, missing), qt.IsFalse,
+	c.Assert(locDocsStr, qt.Not(qt.Contains), missing,
 		qt.Commentf("orphan must not be referenced in the location doc"))
 
 	// The manifest's image count reflects only the retained file (1, not 2).
