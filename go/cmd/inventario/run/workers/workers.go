@@ -150,6 +150,7 @@ func (c *Command) run() error {
 		{WorkerMedia, []starter{bootstrap.StartThumbnailWorker}},
 		{WorkerHousekeeping, []starter{
 			bootstrap.StartRefreshTokenCleanupWorker,
+			bootstrap.StartEmailVerificationCleanupWorker,
 			bootstrap.StartLoginEventRetentionWorker,
 			bootstrap.StartGroupPurgeWorker,
 			bootstrap.StartWarrantyReminderWorker,

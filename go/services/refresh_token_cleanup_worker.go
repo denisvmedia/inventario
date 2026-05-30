@@ -1,3 +1,10 @@
+// RefreshTokenCleanupWorker mirrors EmailVerificationCleanupWorker by
+// design — same Start/Stop/runCleanup/cleanupOnce lifecycle and the same
+// soft-pause skip (#1308). Each worker still owns its own registry type,
+// worker-type pause key, and log wording, so a shared generic base would
+// erase those per-worker specifics for negligible LOC savings.
+//
+//nolint:dupl // intentional symmetry with the email-verification cleanup worker
 package services
 
 import (

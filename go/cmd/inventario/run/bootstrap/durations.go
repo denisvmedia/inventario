@@ -11,23 +11,24 @@ import (
 // bootstrap so that misconfiguration fails fast before any goroutines or the
 // HTTP listener are started.
 type WorkerDurations struct {
-	ExportPollInterval           time.Duration
-	ImportPollInterval           time.Duration
-	RestorePollInterval          time.Duration
-	RefreshTokenCleanupInterval  time.Duration
-	GroupPurgeInterval           time.Duration
-	WarrantyReminderInterval     time.Duration
-	StorageQuotaReminderInterval time.Duration
-	LoanReminderInterval         time.Duration
-	MaintenanceReminderInterval  time.Duration
-	CurrencyMigrationInterval    time.Duration
-	BusinessMetricsInterval      time.Duration
-	WorkerControlRefreshInterval time.Duration
-	ThumbnailPollInterval        time.Duration
-	ThumbnailCleanupInterval     time.Duration
-	ThumbnailJobRetentionPeriod  time.Duration
-	ThumbnailJobBatchTimeout     time.Duration
-	DetachedThumbnailJobTimeout  time.Duration
+	ExportPollInterval               time.Duration
+	ImportPollInterval               time.Duration
+	RestorePollInterval              time.Duration
+	RefreshTokenCleanupInterval      time.Duration
+	EmailVerificationCleanupInterval time.Duration
+	GroupPurgeInterval               time.Duration
+	WarrantyReminderInterval         time.Duration
+	StorageQuotaReminderInterval     time.Duration
+	LoanReminderInterval             time.Duration
+	MaintenanceReminderInterval      time.Duration
+	CurrencyMigrationInterval        time.Duration
+	BusinessMetricsInterval          time.Duration
+	WorkerControlRefreshInterval     time.Duration
+	ThumbnailPollInterval            time.Duration
+	ThumbnailCleanupInterval         time.Duration
+	ThumbnailJobRetentionPeriod      time.Duration
+	ThumbnailJobBatchTimeout         time.Duration
+	DetachedThumbnailJobTimeout      time.Duration
 }
 
 // parseWorkerDuration parses a single duration-valued flag. It enforces that
@@ -58,6 +59,7 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		{"import-poll-interval", cfg.ImportPollInterval, &out.ImportPollInterval},
 		{"restore-poll-interval", cfg.RestorePollInterval, &out.RestorePollInterval},
 		{"refresh-token-cleanup-interval", cfg.RefreshTokenCleanupInterval, &out.RefreshTokenCleanupInterval},
+		{"email-verification-cleanup-interval", cfg.EmailVerificationCleanupInterval, &out.EmailVerificationCleanupInterval},
 		{"group-purge-interval", cfg.GroupPurgeInterval, &out.GroupPurgeInterval},
 		{"warranty-reminder-interval", cfg.WarrantyReminderInterval, &out.WarrantyReminderInterval},
 		{"storage-quota-reminder-interval", cfg.StorageQuotaReminderInterval, &out.StorageQuotaReminderInterval},

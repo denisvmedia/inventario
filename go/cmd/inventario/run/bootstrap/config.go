@@ -16,48 +16,49 @@ import (
 // example --workers-only / --workers-exclude) live on the same struct but are
 // only bound to CLI flags on the subcommand that consumes them.
 type Config struct {
-	Addr                          string `yaml:"addr" env:"ADDR" env-default:":3333"`
-	UploadLocation                string `yaml:"upload_location" env:"UPLOAD_LOCATION" env-default:""`
-	MaxConcurrentExports          int    `yaml:"max_concurrent_exports" env:"MAX_CONCURRENT_EXPORTS" env-default:"0"`
-	MaxConcurrentImports          int    `yaml:"max_concurrent_imports" env:"MAX_CONCURRENT_IMPORTS" env-default:"0"`
-	MaxConcurrentRestores         int    `yaml:"max_concurrent_restores" env:"MAX_CONCURRENT_RESTORES" env-default:"0"`
-	ExportPollInterval            string `yaml:"export_poll_interval" env:"EXPORT_POLL_INTERVAL" env-default:""`
-	ImportPollInterval            string `yaml:"import_poll_interval" env:"IMPORT_POLL_INTERVAL" env-default:""`
-	RestorePollInterval           string `yaml:"restore_poll_interval" env:"RESTORE_POLL_INTERVAL" env-default:""`
-	RefreshTokenCleanupInterval   string `yaml:"refresh_token_cleanup_interval" env:"REFRESH_TOKEN_CLEANUP_INTERVAL" env-default:""`
-	GroupPurgeInterval            string `yaml:"group_purge_interval" env:"GROUP_PURGE_INTERVAL" env-default:""`
-	WarrantyReminderInterval      string `yaml:"warranty_reminder_interval" env:"WARRANTY_REMINDER_INTERVAL" env-default:""`
-	StorageQuotaReminderInterval  string `yaml:"storage_quota_reminder_interval" env:"STORAGE_QUOTA_REMINDER_INTERVAL" env-default:""`
-	LoanReminderInterval          string `yaml:"loan_reminder_interval" env:"LOAN_REMINDER_INTERVAL" env-default:""`
-	LoanReminderDueSoonDays       int    `yaml:"loan_reminder_due_soon_days" env:"LOAN_REMINDER_DUE_SOON_DAYS" env-default:"0"`
-	MaintenanceReminderInterval   string `yaml:"maintenance_reminder_interval" env:"MAINTENANCE_REMINDER_INTERVAL" env-default:""`
-	CurrencyMigrationInterval     string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
-	BusinessMetricsInterval       string `yaml:"business_metrics_interval" env:"BUSINESS_METRICS_INTERVAL" env-default:""`
-	WorkerControlRefreshInterval  string `yaml:"worker_control_refresh_interval" env:"WORKER_CONTROL_REFRESH_INTERVAL" env-default:""`
-	JWTSecret                     string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
-	FileSigningKey                string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
-	FileURLExpiration             string `yaml:"file_url_expiration" env:"FILE_URL_EXPIRATION" env-default:"15m"`
-	ImpersonationTTL              string `yaml:"impersonation_ttl" env:"IMPERSONATION_TTL" env-default:"30m"`
-	ThumbnailMaxConcurrentPerUser int    `yaml:"thumbnail_max_concurrent_per_user" env:"THUMBNAIL_MAX_CONCURRENT_PER_USER" env-default:"0"`
-	ThumbnailRateLimitPerMinute   int    `yaml:"thumbnail_rate_limit_per_minute" env:"THUMBNAIL_RATE_LIMIT_PER_MINUTE" env-default:"0"`
-	ThumbnailSlotDuration         string `yaml:"thumbnail_slot_duration" env:"THUMBNAIL_SLOT_DURATION" env-default:"30m"`
-	ThumbnailBatchSize            int    `yaml:"thumbnail_batch_size" env:"THUMBNAIL_BATCH_SIZE" env-default:"0"`
-	ThumbnailPollInterval         string `yaml:"thumbnail_poll_interval" env:"THUMBNAIL_POLL_INTERVAL" env-default:""`
-	ThumbnailCleanupInterval      string `yaml:"thumbnail_cleanup_interval" env:"THUMBNAIL_CLEANUP_INTERVAL" env-default:""`
-	ThumbnailJobRetentionPeriod   string `yaml:"thumbnail_job_retention_period" env:"THUMBNAIL_JOB_RETENTION_PERIOD" env-default:""`
-	ThumbnailJobBatchTimeout      string `yaml:"thumbnail_job_batch_timeout" env:"THUMBNAIL_JOB_BATCH_TIMEOUT" env-default:""`
-	DetachedThumbnailJobTimeout   string `yaml:"detached_thumbnail_job_timeout" env:"DETACHED_THUMBNAIL_JOB_TIMEOUT" env-default:""`
-	TokenBlacklistRedisURL        string `yaml:"token_blacklist_redis_url" env:"TOKEN_BLACKLIST_REDIS_URL" env-default:""`
-	AuthRateLimitRedisURL         string `yaml:"auth_rate_limit_redis_url" env:"AUTH_RATE_LIMIT_REDIS_URL" env-default:""`
-	AuthRateLimitDisabled         bool   `yaml:"auth_rate_limit_disabled" env:"AUTH_RATE_LIMIT_DISABLED" env-default:"false"`
-	GlobalRateLimitRedisURL       string `yaml:"global_rate_limit_redis_url" env:"GLOBAL_RATE_LIMIT_REDIS_URL" env-default:""`
-	GlobalRateLimit               int    `yaml:"global_rate_limit" env:"GLOBAL_RATE_LIMIT" env-default:"1000"`
-	GlobalRateWindow              string `yaml:"global_rate_window" env:"GLOBAL_RATE_WINDOW" env-default:"1h"`
-	GlobalRateLimitDisabled       bool   `yaml:"global_rate_limit_disabled" env:"GLOBAL_RATE_LIMIT_DISABLED" env-default:"false"`
-	GlobalRateTrustedProxies      string `yaml:"global_rate_trusted_proxies" env:"GLOBAL_RATE_TRUSTED_PROXIES" env-default:""`
-	CSRFRedisURL                  string `yaml:"csrf_redis_url" env:"CSRF_REDIS_URL" env-default:""`
-	AllowedOrigins                string `yaml:"allowed_origins" env:"ALLOWED_ORIGINS" env-default:""`
-	PublicURL                     string `yaml:"public_url" env:"PUBLIC_URL" env-default:""`
+	Addr                             string `yaml:"addr" env:"ADDR" env-default:":3333"`
+	UploadLocation                   string `yaml:"upload_location" env:"UPLOAD_LOCATION" env-default:""`
+	MaxConcurrentExports             int    `yaml:"max_concurrent_exports" env:"MAX_CONCURRENT_EXPORTS" env-default:"0"`
+	MaxConcurrentImports             int    `yaml:"max_concurrent_imports" env:"MAX_CONCURRENT_IMPORTS" env-default:"0"`
+	MaxConcurrentRestores            int    `yaml:"max_concurrent_restores" env:"MAX_CONCURRENT_RESTORES" env-default:"0"`
+	ExportPollInterval               string `yaml:"export_poll_interval" env:"EXPORT_POLL_INTERVAL" env-default:""`
+	ImportPollInterval               string `yaml:"import_poll_interval" env:"IMPORT_POLL_INTERVAL" env-default:""`
+	RestorePollInterval              string `yaml:"restore_poll_interval" env:"RESTORE_POLL_INTERVAL" env-default:""`
+	RefreshTokenCleanupInterval      string `yaml:"refresh_token_cleanup_interval" env:"REFRESH_TOKEN_CLEANUP_INTERVAL" env-default:""`
+	EmailVerificationCleanupInterval string `yaml:"email_verification_cleanup_interval" env:"EMAIL_VERIFICATION_CLEANUP_INTERVAL" env-default:""`
+	GroupPurgeInterval               string `yaml:"group_purge_interval" env:"GROUP_PURGE_INTERVAL" env-default:""`
+	WarrantyReminderInterval         string `yaml:"warranty_reminder_interval" env:"WARRANTY_REMINDER_INTERVAL" env-default:""`
+	StorageQuotaReminderInterval     string `yaml:"storage_quota_reminder_interval" env:"STORAGE_QUOTA_REMINDER_INTERVAL" env-default:""`
+	LoanReminderInterval             string `yaml:"loan_reminder_interval" env:"LOAN_REMINDER_INTERVAL" env-default:""`
+	LoanReminderDueSoonDays          int    `yaml:"loan_reminder_due_soon_days" env:"LOAN_REMINDER_DUE_SOON_DAYS" env-default:"0"`
+	MaintenanceReminderInterval      string `yaml:"maintenance_reminder_interval" env:"MAINTENANCE_REMINDER_INTERVAL" env-default:""`
+	CurrencyMigrationInterval        string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
+	BusinessMetricsInterval          string `yaml:"business_metrics_interval" env:"BUSINESS_METRICS_INTERVAL" env-default:""`
+	WorkerControlRefreshInterval     string `yaml:"worker_control_refresh_interval" env:"WORKER_CONTROL_REFRESH_INTERVAL" env-default:""`
+	JWTSecret                        string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
+	FileSigningKey                   string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
+	FileURLExpiration                string `yaml:"file_url_expiration" env:"FILE_URL_EXPIRATION" env-default:"15m"`
+	ImpersonationTTL                 string `yaml:"impersonation_ttl" env:"IMPERSONATION_TTL" env-default:"30m"`
+	ThumbnailMaxConcurrentPerUser    int    `yaml:"thumbnail_max_concurrent_per_user" env:"THUMBNAIL_MAX_CONCURRENT_PER_USER" env-default:"0"`
+	ThumbnailRateLimitPerMinute      int    `yaml:"thumbnail_rate_limit_per_minute" env:"THUMBNAIL_RATE_LIMIT_PER_MINUTE" env-default:"0"`
+	ThumbnailSlotDuration            string `yaml:"thumbnail_slot_duration" env:"THUMBNAIL_SLOT_DURATION" env-default:"30m"`
+	ThumbnailBatchSize               int    `yaml:"thumbnail_batch_size" env:"THUMBNAIL_BATCH_SIZE" env-default:"0"`
+	ThumbnailPollInterval            string `yaml:"thumbnail_poll_interval" env:"THUMBNAIL_POLL_INTERVAL" env-default:""`
+	ThumbnailCleanupInterval         string `yaml:"thumbnail_cleanup_interval" env:"THUMBNAIL_CLEANUP_INTERVAL" env-default:""`
+	ThumbnailJobRetentionPeriod      string `yaml:"thumbnail_job_retention_period" env:"THUMBNAIL_JOB_RETENTION_PERIOD" env-default:""`
+	ThumbnailJobBatchTimeout         string `yaml:"thumbnail_job_batch_timeout" env:"THUMBNAIL_JOB_BATCH_TIMEOUT" env-default:""`
+	DetachedThumbnailJobTimeout      string `yaml:"detached_thumbnail_job_timeout" env:"DETACHED_THUMBNAIL_JOB_TIMEOUT" env-default:""`
+	TokenBlacklistRedisURL           string `yaml:"token_blacklist_redis_url" env:"TOKEN_BLACKLIST_REDIS_URL" env-default:""`
+	AuthRateLimitRedisURL            string `yaml:"auth_rate_limit_redis_url" env:"AUTH_RATE_LIMIT_REDIS_URL" env-default:""`
+	AuthRateLimitDisabled            bool   `yaml:"auth_rate_limit_disabled" env:"AUTH_RATE_LIMIT_DISABLED" env-default:"false"`
+	GlobalRateLimitRedisURL          string `yaml:"global_rate_limit_redis_url" env:"GLOBAL_RATE_LIMIT_REDIS_URL" env-default:""`
+	GlobalRateLimit                  int    `yaml:"global_rate_limit" env:"GLOBAL_RATE_LIMIT" env-default:"1000"`
+	GlobalRateWindow                 string `yaml:"global_rate_window" env:"GLOBAL_RATE_WINDOW" env-default:"1h"`
+	GlobalRateLimitDisabled          bool   `yaml:"global_rate_limit_disabled" env:"GLOBAL_RATE_LIMIT_DISABLED" env-default:"false"`
+	GlobalRateTrustedProxies         string `yaml:"global_rate_trusted_proxies" env:"GLOBAL_RATE_TRUSTED_PROXIES" env-default:""`
+	CSRFRedisURL                     string `yaml:"csrf_redis_url" env:"CSRF_REDIS_URL" env-default:""`
+	AllowedOrigins                   string `yaml:"allowed_origins" env:"ALLOWED_ORIGINS" env-default:""`
+	PublicURL                        string `yaml:"public_url" env:"PUBLIC_URL" env-default:""`
 
 	LogEmailURLs bool `yaml:"log_email_urls" env:"LOG_EMAIL_URLS" env-default:"false"`
 
@@ -241,6 +242,9 @@ func (c *Config) setWorkerDefaults() {
 	}
 	if c.RefreshTokenCleanupInterval == "" {
 		c.RefreshTokenCleanupInterval = defaults.GetRefreshTokenCleanupInterval()
+	}
+	if c.EmailVerificationCleanupInterval == "" {
+		c.EmailVerificationCleanupInterval = defaults.GetEmailVerificationCleanupInterval()
 	}
 	if c.GroupPurgeInterval == "" {
 		c.GroupPurgeInterval = defaults.GetGroupPurgeInterval()

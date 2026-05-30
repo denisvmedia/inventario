@@ -338,9 +338,9 @@ The pausable worker types (stable identifiers used by the CLI, the API,
 and the `worker_control.worker_type` column):
 
 `export`, `import`, `restore`, `thumbnail`, `refresh-token-cleanup`,
-`login-event-retention`, `group-purge`, `warranty-reminder`,
-`storage-quota-reminder`, `loan-reminder`, `maintenance-reminder`,
-`currency-migration`.
+`email-verification-cleanup`, `login-event-retention`, `group-purge`,
+`warranty-reminder`, `storage-quota-reminder`, `loan-reminder`,
+`maintenance-reminder`, `currency-migration`.
 
 > Email delivery is intentionally **not** in this set — it is a Redis
 > subscriber rather than a polling worker, with a separate pause story.

@@ -126,6 +126,21 @@ func StartRefreshTokenCleanupWorker(ctx context.Context, rs *RuntimeSetup, _ *Co
 	return worker.Stop
 }
 
+// StartEmailVerificationCleanupWorker wires and starts the email verification
+// cleanup worker (which deletes expired verification tokens on the configured
+// interval) and returns its stop function.
+func StartEmailVerificationCleanupWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	opts := []services.EmailVerificationCleanupOption{
+		services.WithEmailVerificationCleanupInterval(rs.WorkerDurations.EmailVerificationCleanupInterval),
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithEmailVerificationCleanupPauseController(rs.PauseController))
+	}
+	worker := services.NewEmailVerificationCleanupWorker(rs.FactorySet.EmailVerificationRegistry, opts...)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
 // StartLoginEventRetentionWorker wires and starts the login_events
 // retention worker (#1379). The retention window and sweep interval
 // are not currently surfaced as flags — the defaults (90d retention,
