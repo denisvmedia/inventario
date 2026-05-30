@@ -104,6 +104,64 @@ describe("<LoginPage />", () => {
     expect(await screen.findByTestId("server-error")).toHaveTextContent(/invalid credentials/i)
   })
 
+  // Unhappy paths beyond 401 (#1038). Every login failure funnels through
+  // parseServerError into the same destructive banner and the page stays on
+  // /login — none of these trigger a refresh-and-retry (/auth/login is a
+  // NON_REFRESHABLE_AUTH_PATH) or a navigation.
+  it("surfaces a 422 validation error from the JSON:API envelope", async () => {
+    server.use(
+      msw.post(api("/auth/login"), () =>
+        HttpResponse.json(
+          { errors: [{ detail: "Email and password are required" }] },
+          { status: 422 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderLogin()
+    await user.type(screen.getByTestId("email"), "alex@example.com")
+    await user.type(screen.getByTestId("password"), "secret-pw")
+    await user.click(screen.getByTestId("login-button"))
+    expect(await screen.findByTestId("server-error")).toHaveTextContent(
+      /email and password are required/i
+    )
+    // Still on the login page — no token stored, no navigation away.
+    expect(screen.getByTestId("login-page")).toBeInTheDocument()
+    expect(getAccessToken()).toBeNull()
+  })
+
+  it("surfaces a 429 rate-limit error inline", async () => {
+    server.use(
+      msw.post(api("/auth/login"), () =>
+        HttpResponse.json(
+          { error: "Too many attempts. Please wait and try again." },
+          { status: 429 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderLogin()
+    await user.type(screen.getByTestId("email"), "alex@example.com")
+    await user.type(screen.getByTestId("password"), "secret-pw")
+    await user.click(screen.getByTestId("login-button"))
+    expect(await screen.findByTestId("server-error")).toHaveTextContent(/too many attempts/i)
+    expect(screen.getByTestId("login-page")).toBeInTheDocument()
+  })
+
+  it("falls back to generic copy when a 5xx returns an opaque body", async () => {
+    // 500 (not 503 — a 503 bounces the shell to /maintenance) with no useful
+    // body: parseServerError can extract nothing, so the page shows the
+    // generic auth:login.errorGeneric copy rather than an empty banner.
+    server.use(msw.post(api("/auth/login"), () => new HttpResponse(null, { status: 500 })))
+    const user = userEvent.setup()
+    renderLogin()
+    await user.type(screen.getByTestId("email"), "alex@example.com")
+    await user.type(screen.getByTestId("password"), "secret-pw")
+    await user.click(screen.getByTestId("login-button"))
+    expect(await screen.findByTestId("server-error")).toHaveTextContent(/sign-in failed/i)
+    expect(screen.getByTestId("login-page")).toBeInTheDocument()
+  })
+
   it("auto-accepts a pending invite after successful login", async () => {
     savePendingInvite({ token: "inv-tok", groupName: "Household" })
     let acceptCalls = 0
