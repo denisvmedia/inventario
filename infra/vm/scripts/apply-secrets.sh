@@ -35,10 +35,16 @@ warn() { printf '\n[!] %s\n' "$*" >&2; }
 lookup() {
     local key="$1"
     jq -r --arg k "$key" '
+        # Only descend into objects. A missing intermediate key makes the
+        # parent resolve to null/"" — indexing that with the next segment is a
+        # jq RUNTIME ERROR ("Cannot index string", exit 5) that, under this
+        # script`s `set -Eeuo pipefail`, aborts the whole run. Guarding on
+        # object type returns empty for any missing segment, matching the
+        # "empty string if any segment is missing" contract above.
         def lookup($parts; $v):
           if ($parts | length) == 0 then $v
-          else lookup($parts[1:]; $v[$parts[0]] // "")
-          end;
+          elif ($v | type) == "object" then lookup($parts[1:]; $v[$parts[0]])
+          else "" end;
         lookup($k | split("."); .) // empty
     ' <<<"$SECRETS_JSON" 2>/dev/null
 }
