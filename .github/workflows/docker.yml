@@ -363,6 +363,52 @@ jobs:
             docker buildx imagetools inspect "$tag"
           done <<< "${{ steps.meta.outputs.tags }}"
 
+  # Pin the just-published master image SHA for the master ArgoCD
+  # ApplicationSet (infra/argocd/applicationset-master.yaml). That appset
+  # uses a git-`files` generator instead of scmProvider (the repo owner is
+  # a GitHub *user*, and scmProvider only lists *org* repos → 404), so the
+  # master head SHA has to reach ArgoCD via git. We write it to a one-file
+  # orphan branch `argocd/master-pin`; the generator reads it and templates
+  # image.tag + chart revision, so each master push is a real manifest diff
+  # ArgoCD auto-syncs on. Master-push only; the pin branch never re-triggers
+  # this workflow (it fires on push to master / tags), so there is no loop.
+  pin-master-image:
+    name: Pin master image for ArgoCD
+    needs: merge
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Force-push the master image pin to argocd/master-pin
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          PIN_BRANCH="argocd/master-pin"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Recreate the orphan branch from scratch each run so it holds
+          # exactly one file and carries no master history.
+          git checkout --orphan "$PIN_BRANCH"
+          git rm -rf . >/dev/null 2>&1 || true
+          git clean -fdx >/dev/null 2>&1 || true
+
+          mkdir -p infra/argocd
+          printf '{\n  "sha": "%s",\n  "imageTag": "sha-%s"\n}\n' \
+            "$COMMIT_SHA" "$SHORT_SHA" > infra/argocd/master-image.json
+
+          git add infra/argocd/master-image.json
+          git commit -m "chore(argocd): pin master image sha-${SHORT_SHA}"
+          git push -f origin "$PIN_BRANCH"
+          echo "Pinned inv-vcl01-master image to sha-${SHORT_SHA}"
+
   cleanup:
     name: Cleanup PR image
     if: |
