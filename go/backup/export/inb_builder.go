@@ -19,6 +19,11 @@ import (
 
 // inbBuilder accumulates the per-location JSON documents + their commodity file
 // members into the inner tar while collecting export statistics.
+//
+// The whole in-scope tree (locations, areas, commodities, commodity-attached
+// files) is preloaded ONCE up front (preload) and indexed by parent ID, so the
+// plan/write passes never re-`List()` a registry inside a loop (no N+1). Only
+// metadata is buffered; file bytes are streamed straight from blob storage.
 type inbBuilder struct {
 	svc    *ExportService
 	ctx    context.Context
@@ -27,6 +32,26 @@ type inbBuilder struct {
 	bucket *blob.Bucket
 	tw     *tar.Writer
 	stats  *types.ExportStats
+
+	// Indexes built once by preload — every per-location/area/commodity/file
+	// lookup in the plan/write passes reads from these (O(1)), never from a
+	// registry List().
+	locations           []*models.Location
+	areasByLocationID   map[string][]*models.Area
+	commoditiesByAreaID map[string][]*models.Commodity
+	// filesByCommodityID maps a commodity DB ID → bucket (images/invoices/
+	// manuals) → its in-scope, size-resolved candidate files (orphans already
+	// dropped).
+	filesByCommodityID map[string]map[string][]*candidateFile
+}
+
+// candidateFile is a commodity-attached file whose size has already been
+// resolved (recorded SizeBytes or a one-time bucket probe). Orphans (missing or
+// unsized blobs) are never turned into a candidateFile, so they are excluded
+// from both the doc and the statistics.
+type candidateFile struct {
+	file *models.FileEntity
+	size int64
 }
 
 // pendingFile records a commodity file whose bytes must be streamed into the tar
@@ -38,6 +63,16 @@ type pendingFile struct {
 	blobKey     string
 	size        int64
 	bucket      string // images / invoices / manuals (for stats)
+}
+
+// plannedLocation is the in-memory plan for one location produced by Pass 1: its
+// fully-built JSON document (metadata only — never file bytes), the in-archive
+// member name, and the ordered list of file bytes to stream right after the JSON
+// member in Pass 2.
+type plannedLocation struct {
+	member  string
+	doc     INBLocationDoc
+	pending []pendingFile
 }
 
 // inbScope captures the selection filter for an export. For whole-class export
@@ -108,10 +143,44 @@ func (b *inbBuilder) resolveSelectedScope() (*inbScope, error) {
 	return scope, nil
 }
 
-// listLocations returns the locations to emit. For selected_items it also
-// includes the locations that own a selected area or commodity, so a selected
-// commodity's location document exists to hang it under.
-func (b *inbBuilder) listLocations(scope *inbScope) ([]*models.Location, error) {
+// preload lists locations, areas, commodities, and the commodity-attached files
+// ONCE (RLS-scoped user registries — never CreateServiceRegistry) and builds the
+// parent-keyed indexes the plan/write passes read from. Each candidate file's
+// size is resolved here (recorded SizeBytes else a single bucket probe); orphans
+// are dropped so they never reach the doc or the statistics.
+func (b *inbBuilder) preload() error {
+	locations, err := b.loadLocations()
+	if err != nil {
+		return err
+	}
+	b.locations = locations
+
+	areas, err := b.loadAreas()
+	if err != nil {
+		return err
+	}
+	b.areasByLocationID = make(map[string][]*models.Area, len(areas))
+	for _, area := range areas {
+		b.areasByLocationID[area.LocationID] = append(b.areasByLocationID[area.LocationID], area)
+	}
+
+	commodities, err := b.loadCommodities()
+	if err != nil {
+		return err
+	}
+	b.commoditiesByAreaID = make(map[string][]*models.Commodity, len(commodities))
+	for _, com := range commodities {
+		b.commoditiesByAreaID[com.AreaID] = append(b.commoditiesByAreaID[com.AreaID], com)
+	}
+
+	if err := b.indexCommodityFiles(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// loadLocations lists every location once via the RLS-scoped user registry.
+func (b *inbBuilder) loadLocations() ([]*models.Location, error) {
 	locReg, err := b.svc.factorySet.LocationRegistryFactory.CreateUserRegistry(b.ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create location registry", err)
@@ -120,32 +189,11 @@ func (b *inbBuilder) listLocations(scope *inbScope) ([]*models.Location, error) 
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list locations", err)
 	}
-	if scope.allLocations {
-		return locations, nil
-	}
-
-	// selected_items: a location is in scope if it was explicitly selected
-	// OR it owns a selected area/commodity. We compute the implied parents by
-	// walking areas/commodities once.
-	implied, err := b.impliedLocationIDs(scope)
-	if err != nil {
-		return nil, err
-	}
-	var filtered []*models.Location
-	for _, loc := range locations {
-		if scope.locationIDs[loc.ID] || implied[loc.ID] {
-			filtered = append(filtered, loc)
-		}
-	}
-	return filtered, nil
+	return locations, nil
 }
 
-// impliedLocationIDs computes the set of location DB IDs that own a selected
-// area or commodity, so their documents are emitted even when the location
-// itself was not directly selected.
-func (b *inbBuilder) impliedLocationIDs(scope *inbScope) (map[string]bool, error) {
-	implied := map[string]bool{}
-
+// loadAreas lists every area once via the RLS-scoped user registry.
+func (b *inbBuilder) loadAreas() ([]*models.Area, error) {
 	areaReg, err := b.svc.factorySet.AreaRegistryFactory.CreateUserRegistry(b.ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create area registry", err)
@@ -154,14 +202,11 @@ func (b *inbBuilder) impliedLocationIDs(scope *inbScope) (map[string]bool, error
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list areas", err)
 	}
-	areaToLoc := map[string]string{}
-	for _, area := range areas {
-		areaToLoc[area.ID] = area.LocationID
-		if scope.areaIDs[area.ID] {
-			implied[area.LocationID] = true
-		}
-	}
+	return areas, nil
+}
 
+// loadCommodities lists every commodity once via the RLS-scoped user registry.
+func (b *inbBuilder) loadCommodities() ([]*models.Commodity, error) {
 	comReg, err := b.svc.factorySet.CommodityRegistryFactory.CreateUserRegistry(b.ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create commodity registry", err)
@@ -170,40 +215,162 @@ func (b *inbBuilder) impliedLocationIDs(scope *inbScope) (map[string]bool, error
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list commodities", err)
 	}
-	for _, com := range commodities {
-		if scope.commodityIDs[com.ID] {
-			if locID, ok := areaToLoc[com.AreaID]; ok {
+	return commodities, nil
+}
+
+// indexCommodityFiles lists files once and groups the commodity attachments by
+// commodity DB ID and bucket, resolving each file's size up front. Orphan rows
+// (missing/unsized blob) are dropped here so they never appear in the doc or the
+// statistics.
+func (b *inbBuilder) indexCommodityFiles() error {
+	fileReg, err := b.svc.factorySet.FileRegistryFactory.CreateUserRegistry(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create file registry", err)
+	}
+	files, err := fileReg.List(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list files", err)
+	}
+
+	b.filesByCommodityID = map[string]map[string][]*candidateFile{}
+	for _, file := range files {
+		if file == nil || file.File == nil {
+			continue
+		}
+		if file.LinkedEntityType != "commodity" {
+			continue
+		}
+		bucket := file.LinkedEntityMeta
+		if !isCommodityFileBucket(bucket) {
+			continue
+		}
+
+		size, ok := b.resolveFileSize(file)
+		if !ok {
+			// A missing/unsized blob (orphan row, manual delete) is dropped so
+			// it is excluded from both the doc and the statistics.
+			continue
+		}
+
+		byBucket := b.filesByCommodityID[file.LinkedEntityID]
+		if byBucket == nil {
+			byBucket = map[string][]*candidateFile{}
+			b.filesByCommodityID[file.LinkedEntityID] = byBucket
+		}
+		byBucket[bucket] = append(byBucket[bucket], &candidateFile{file: file, size: size})
+	}
+	return nil
+}
+
+// resolveFileSize returns the byte size to declare for a file member: the
+// recorded SizeBytes when >0, else a single bucket attributes probe. ok=false
+// when the blob is missing/unsized so the caller skips it (orphan).
+func (b *inbBuilder) resolveFileSize(file *models.FileEntity) (int64, bool) {
+	if size := fileSizeHint(file); size > 0 {
+		return size, true
+	}
+	// Probe the bucket for the exact size — the tar header needs it. A missing
+	// blob fails the probe and the file is treated as an orphan.
+	attrs, err := b.bucket.Attributes(b.ctx, file.OriginalPath)
+	if err != nil || attrs.Size <= 0 {
+		return 0, false
+	}
+	return attrs.Size, true
+}
+
+// inScopeLocations returns the locations to emit. For selected_items it also
+// includes the locations that own a selected area or commodity, so a selected
+// commodity's location document exists to hang it under. Reads only from the
+// preloaded indexes — no registry List().
+func (b *inbBuilder) inScopeLocations(scope *inbScope) []*models.Location {
+	if scope.allLocations {
+		return b.locations
+	}
+
+	// selected_items: a location is in scope if it was explicitly selected
+	// OR it owns a selected area/commodity.
+	implied := b.impliedLocationIDs(scope)
+	var filtered []*models.Location
+	for _, loc := range b.locations {
+		if scope.locationIDs[loc.ID] || implied[loc.ID] {
+			filtered = append(filtered, loc)
+		}
+	}
+	return filtered
+}
+
+// impliedLocationIDs computes the set of location DB IDs that own a selected
+// area or commodity, so their documents are emitted even when the location
+// itself was not directly selected. Reads only from the preloaded indexes.
+func (b *inbBuilder) impliedLocationIDs(scope *inbScope) map[string]bool {
+	implied := map[string]bool{}
+	for locID, areas := range b.areasByLocationID {
+		for _, area := range areas {
+			if scope.areaIDs[area.ID] {
 				implied[locID] = true
+			}
+			for _, com := range b.commoditiesByAreaID[area.ID] {
+				if scope.commodityIDs[com.ID] {
+					implied[locID] = true
+				}
 			}
 		}
 	}
-	return implied, nil
+	return implied
 }
 
-// buildLocationDoc assembles the full JSON document for one location (its areas
-// and their commodities, with each commodity's attached file references),
-// writes the JSON member FIRST, then streams the referenced file bytes. Writing
-// the JSON before the bytes lets the restore side register each file reference
-// before the corresponding member arrives. Returns the in-archive member name
-// for the manifest index.
-func (b *inbBuilder) buildLocationDoc(loc *models.Location, scope *inbScope) (string, error) {
-	areas, err := b.areasForLocation(loc, scope)
-	if err != nil {
-		return "", err
+// areasForLocation returns the in-scope areas of a location from the preloaded
+// index. An area is in scope if the class is unfiltered, it was selected, or it
+// hosts a selected commodity.
+func (b *inbBuilder) areasForLocation(loc *models.Location, scope *inbScope) []*models.Area {
+	var result []*models.Area
+	for _, area := range b.areasByLocationID[loc.ID] {
+		if scope.allAreas || scope.areaIDs[area.ID] || b.areaHasSelectedCommodity(area, scope) {
+			result = append(result, area)
+		}
 	}
+	return result
+}
 
-	commoditiesByArea, err := b.commoditiesForAreas(areas, scope, loc)
-	if err != nil {
-		return "", err
+// areaHasSelectedCommodity reports whether a selected_items export picked a
+// commodity that lives in this area (so the area must be emitted to host it).
+// Pure index lookup — no registry call.
+func (b *inbBuilder) areaHasSelectedCommodity(area *models.Area, scope *inbScope) bool {
+	if len(scope.commodityIDs) == 0 {
+		return false
 	}
+	for _, com := range b.commoditiesByAreaID[area.ID] {
+		if scope.commodityIDs[com.ID] {
+			return true
+		}
+	}
+	return false
+}
 
+// commoditiesForArea returns the in-scope commodities of an area from the
+// preloaded index.
+func (b *inbBuilder) commoditiesForArea(area *models.Area, scope *inbScope) []*models.Commodity {
+	var out []*models.Commodity
+	for _, com := range b.commoditiesByAreaID[area.ID] {
+		if scope.allCommodities || scope.commodityIDs[com.ID] {
+			out = append(out, com)
+		}
+	}
+	return out
+}
+
+// planLocation builds the in-memory plan for one location: its JSON document
+// (metadata only) plus the ordered pending-file list (sizes already resolved),
+// and accumulates ALL statistics for the location's subtree. No DB/List and no
+// file bytes touch the heap here.
+func (b *inbBuilder) planLocation(loc *models.Location, scope *inbScope) plannedLocation {
 	doc := INBLocationDoc{
 		Location: INBLocation{ID: loc.UUID, Name: loc.Name, Address: loc.Address},
 	}
 	b.stats.LocationCount++
 
 	var pending []pendingFile
-	for _, area := range areas {
+	for _, area := range b.areasForLocation(loc, scope) {
 		doc.Areas = append(doc.Areas, INBArea{
 			ID:         area.UUID,
 			Name:       area.Name,
@@ -211,11 +378,8 @@ func (b *inbBuilder) buildLocationDoc(loc *models.Location, scope *inbScope) (st
 		})
 		b.stats.AreaCount++
 
-		for _, com := range commoditiesByArea[area.ID] {
-			inbCom, comPending, cErr := b.buildCommodity(loc, area, com)
-			if cErr != nil {
-				return "", cErr
-			}
+		for _, com := range b.commoditiesForArea(area, scope) {
+			inbCom, comPending := b.planCommodity(loc, area, com)
 			doc.Commodities = append(doc.Commodities, inbCom)
 			pending = append(pending, comPending...)
 			b.stats.CommodityCount++
@@ -224,118 +388,15 @@ func (b *inbBuilder) buildLocationDoc(loc *models.Location, scope *inbScope) (st
 
 	member := fmt.Sprintf("location-%s-%s.json", textutils.CleanFilename(loc.Name), loc.UUID)
 	member = blobkeys.SanitizeArchivePath(member)
-	// Location JSON first…
-	if err := b.writeJSONMember(member, doc); err != nil {
-		return "", err
-	}
-	// …then the referenced file bytes.
-	for _, pf := range pending {
-		if err := b.flushPendingFile(pf); err != nil {
-			// A missing blob (orphan row, manual delete) must not abort the
-			// whole export — the ref was already omitted from the doc when the
-			// size probe failed, so we only reach here for genuine stream
-			// errors, which we surface.
-			return "", err
-		}
-	}
-	return member, nil
+	return plannedLocation{member: member, doc: doc, pending: pending}
 }
 
-// flushPendingFile streams one collected file's bytes into the tar and updates
-// stats.
-func (b *inbBuilder) flushPendingFile(pf pendingFile) error {
-	written, err := b.writeFileMember(pf.archivePath, pf.blobKey, pf.size)
-	if err != nil {
-		return err
-	}
-	b.stats.BinaryDataSize += written
-	b.stats.FileCount++
-	incBucketStat(b.stats, pf.bucket)
-	return nil
-}
-
-// areasForLocation returns the in-scope areas of a location.
-func (b *inbBuilder) areasForLocation(loc *models.Location, scope *inbScope) ([]*models.Area, error) {
-	areaReg, err := b.svc.factorySet.AreaRegistryFactory.CreateUserRegistry(b.ctx)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to create area registry", err)
-	}
-	areas, err := areaReg.List(b.ctx)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to list areas", err)
-	}
-	var result []*models.Area
-	for _, area := range areas {
-		if area.LocationID != loc.ID {
-			continue
-		}
-		hasSelected, hErr := b.areaHasSelectedCommodity(area, scope)
-		if hErr != nil {
-			return nil, hErr
-		}
-		if scope.allAreas || scope.areaIDs[area.ID] || hasSelected {
-			result = append(result, area)
-		}
-	}
-	return result, nil
-}
-
-// areaHasSelectedCommodity reports whether a selected_items export picked a
-// commodity that lives in this area (so the area must be emitted to host it).
-// It uses the RLS-scoped user registry so only the exporting user's commodities
-// are considered, and surfaces the List error rather than silently dropping
-// selected commodities by treating a failure as "no match".
-func (b *inbBuilder) areaHasSelectedCommodity(area *models.Area, scope *inbScope) (bool, error) {
-	if len(scope.commodityIDs) == 0 {
-		return false, nil
-	}
-	comReg, err := b.svc.factorySet.CommodityRegistryFactory.CreateUserRegistry(b.ctx)
-	if err != nil {
-		return false, errxtrace.Wrap("failed to create commodity registry", err)
-	}
-	commodities, err := comReg.List(b.ctx)
-	if err != nil {
-		return false, errxtrace.Wrap("failed to list commodities", err)
-	}
-	for _, com := range commodities {
-		if com.AreaID == area.ID && scope.commodityIDs[com.ID] {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// commoditiesForAreas returns the in-scope commodities for the given areas,
-// keyed by area DB ID.
-func (b *inbBuilder) commoditiesForAreas(areas []*models.Area, scope *inbScope, _ *models.Location) (map[string][]*models.Commodity, error) {
-	comReg, err := b.svc.factorySet.CommodityRegistryFactory.CreateUserRegistry(b.ctx)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to create commodity registry", err)
-	}
-	commodities, err := comReg.List(b.ctx)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to list commodities", err)
-	}
-	areaIDs := map[string]bool{}
-	for _, a := range areas {
-		areaIDs[a.ID] = true
-	}
-	out := map[string][]*models.Commodity{}
-	for _, com := range commodities {
-		if !areaIDs[com.AreaID] {
-			continue
-		}
-		if scope.allCommodities || scope.commodityIDs[com.ID] {
-			out[com.AreaID] = append(out[com.AreaID], com)
-		}
-	}
-	return out, nil
-}
-
-// buildCommodity converts a commodity row to its INBCommodity shape and collects
-// (without yet streaming) its attached image/invoice/manual file references. The
-// bytes are flushed by buildLocationDoc AFTER the location JSON is written.
-func (b *inbBuilder) buildCommodity(loc *models.Location, area *models.Area, com *models.Commodity) (INBCommodity, []pendingFile, error) {
+// planCommodity converts a commodity row to its INBCommodity shape and collects
+// its image/invoice/manual file references from the preloaded index, recording
+// each candidate as a pendingFile (size already resolved). All file/bucket stats
+// are accumulated here so Pass 1 holds the full statistics before manifest.json
+// is written.
+func (b *inbBuilder) planCommodity(loc *models.Location, area *models.Area, com *models.Commodity) (INBCommodity, []pendingFile) {
 	inbCom := INBCommodity{
 		ID:                     com.UUID,
 		Name:                   com.Name,
@@ -366,72 +427,47 @@ func (b *inbBuilder) buildCommodity(loc *models.Location, area *models.Area, com
 		inbCom.LastModifiedDate = string(*com.LastModifiedDate)
 	}
 
-	pending, err := b.collectCommodityFiles(loc, com, &inbCom)
-	if err != nil {
-		return INBCommodity{}, nil, err
-	}
-	return inbCom, pending, nil
+	pending := b.planCommodityFiles(loc, com, &inbCom)
+	return inbCom, pending
 }
 
-// collectCommodityFiles records the commodity's image/invoice/manual file
-// references on inbCom and returns the corresponding pendingFile list (bytes to
-// be streamed after the location JSON). The unified files table is the single
-// source: rows linked to this commodity (linked_entity_type="commodity") are
-// bucketed by linked_entity_meta (images/invoices/manuals).
-func (b *inbBuilder) collectCommodityFiles(loc *models.Location, com *models.Commodity, inbCom *INBCommodity) ([]pendingFile, error) {
-	fileReg, err := b.svc.factorySet.FileRegistryFactory.CreateUserRegistry(b.ctx)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to create file registry", err)
-	}
-	files, err := fileReg.List(b.ctx)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to list files", err)
+// planCommodityFiles records the commodity's image/invoice/manual file
+// references on inbCom (from the preloaded, size-resolved index) and returns the
+// corresponding ordered pendingFile list. Bucket/file/totalFileSize statistics
+// are accumulated here.
+func (b *inbBuilder) planCommodityFiles(loc *models.Location, com *models.Commodity, inbCom *INBCommodity) []pendingFile {
+	byBucket := b.filesByCommodityID[com.ID]
+	if byBucket == nil {
+		return nil
 	}
 
 	var pending []pendingFile
 	locSlug := textutils.CleanFilename(loc.Name)
-	for _, file := range files {
-		if file == nil || file.File == nil {
-			continue
-		}
-		if file.LinkedEntityType != "commodity" || file.LinkedEntityID != com.ID {
-			continue
-		}
-		bucket := file.LinkedEntityMeta
-		if !isCommodityFileBucket(bucket) {
-			continue
-		}
+	// Iterate the buckets in a fixed order so the archive layout is
+	// deterministic regardless of map iteration order.
+	for _, bucket := range commodityFileBuckets {
+		for _, cand := range byBucket[bucket] {
+			ref, pf := b.buildFileRef(locSlug, com, bucket, cand)
+			appendFileRef(inbCom, bucket, ref)
+			pending = append(pending, pf)
 
-		ref, pf, ok := b.prepareCommodityFile(locSlug, com, bucket, file)
-		if !ok {
-			// A missing/unsized blob (orphan row, manual delete) is omitted from
-			// both the doc and the stream so the export stays fail-soft.
-			continue
+			b.stats.BinaryDataSize += cand.size
+			b.stats.FileCount++
+			incBucketStat(b.stats, bucket)
 		}
-		appendFileRef(inbCom, bucket, ref)
-		pending = append(pending, pf)
 	}
-	return pending, nil
+	return pending
 }
 
-// prepareCommodityFile builds a file reference + its pending stream entry,
-// probing the blob size for the tar header. Returns ok=false when the blob is
-// missing/unsized so the caller can skip it.
-func (b *inbBuilder) prepareCommodityFile(locSlug string, com *models.Commodity, bucket string, file *models.FileEntity) (INBFileRef, pendingFile, bool) {
+// buildFileRef builds a file reference + its pending stream entry from a
+// size-resolved candidate file. No probing happens here — the size was resolved
+// once in preload.
+func (b *inbBuilder) buildFileRef(locSlug string, com *models.Commodity, bucket string, cand *candidateFile) (INBFileRef, pendingFile) {
+	file := cand.file
 	name := blobkeys.SanitizeArchivePath(fileMemberName(file))
 	archivePath := blobkeys.SanitizeArchivePath(
 		fmt.Sprintf("%s%s/%s/%s/%s", INBFilesPrefix, locSlug, com.UUID, bucket, name),
 	)
-
-	size := fileSizeHint(file)
-	if size <= 0 {
-		// Probe the bucket for the exact size — the tar header needs it.
-		attrs, err := b.bucket.Attributes(b.ctx, file.OriginalPath)
-		if err != nil {
-			return INBFileRef{}, pendingFile{}, false
-		}
-		size = attrs.Size
-	}
 
 	ref := INBFileRef{
 		ID:           file.UUID,
@@ -446,37 +482,84 @@ func (b *inbBuilder) prepareCommodityFile(locSlug string, com *models.Commodity,
 		CreatedAt:    file.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:    file.UpdatedAt.UTC().Format(time.RFC3339),
 	}
-	pf := pendingFile{archivePath: archivePath, blobKey: file.OriginalPath, size: size, bucket: bucket}
-	return ref, pf, true
+	pf := pendingFile{archivePath: archivePath, blobKey: file.OriginalPath, size: cand.size, bucket: bucket}
+	return ref, pf
 }
 
-// run walks the in-scope locations and emits one JSON member per location plus
-// each commodity's attached file bytes. Returns the manifest location index.
-func (b *inbBuilder) run() ([]INBManifestLoc, error) {
+// run preloads the in-scope tree once, then makes two cheap in-memory passes:
+//
+//	Pass 1 (plan): walk the indexes, build each location's JSON doc + ordered
+//	pending-file list, and accumulate ALL statistics. The manifest location
+//	index is produced here too.
+//
+//	Pass 2 (write): the caller writes manifest.json FIRST (stats are now known),
+//	then calls writePlannedLocations to emit, per location, its JSON member
+//	followed by its file bytes (streamed via io.Copy — no file bytes on the
+//	heap). The JSON precedes its file bytes so restore registers each ref before
+//	the member arrives.
+//
+// run returns the per-location plan and the manifest location index; it does NOT
+// write anything itself, so writePayload can interleave the manifest first.
+func (b *inbBuilder) run() ([]plannedLocation, []INBManifestLoc, error) {
 	scope, err := b.resolveScope()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	locations, err := b.listLocations(scope)
-	if err != nil {
-		return nil, err
+	if err := b.preload(); err != nil {
+		return nil, nil, err
 	}
-	var manifestLocs []INBManifestLoc
+
+	locations := b.inScopeLocations(scope)
+	planned := make([]plannedLocation, 0, len(locations))
+	manifestLocs := make([]INBManifestLoc, 0, len(locations))
 	for _, loc := range locations {
-		member, mErr := b.buildLocationDoc(loc, scope)
-		if mErr != nil {
-			return nil, mErr
-		}
+		pl := b.planLocation(loc, scope)
+		planned = append(planned, pl)
 		manifestLocs = append(manifestLocs, INBManifestLoc{
 			ID:   loc.UUID,
 			Name: loc.Name,
-			File: member,
+			File: pl.member,
 		})
 	}
-	return manifestLocs, nil
+	return planned, manifestLocs, nil
+}
+
+// writePlannedLocations performs Pass 2: for each planned location it writes the
+// JSON member FIRST, then streams that location's file bytes. Called by
+// writePayload AFTER manifest.json has been emitted.
+func (b *inbBuilder) writePlannedLocations(planned []plannedLocation) error {
+	for i := range planned {
+		pl := &planned[i]
+		// Location JSON first…
+		if err := b.writeJSONMember(pl.member, pl.doc); err != nil {
+			return err
+		}
+		// …then the referenced file bytes.
+		for _, pf := range pl.pending {
+			if err := b.flushPendingFile(pf); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// flushPendingFile streams one collected file's bytes into the tar. The byte
+// count is informational here — the statistics were already accumulated in Pass
+// 1 from the resolved size, so a stream error fails the export rather than
+// silently under-counting.
+func (b *inbBuilder) flushPendingFile(pf pendingFile) error {
+	if _, err := b.writeFileMember(pf.archivePath, pf.blobKey, pf.size); err != nil {
+		return err
+	}
+	return nil
 }
 
 // --- small free helpers ---
+
+// commodityFileBuckets is the fixed iteration order for a commodity's attachment
+// buckets, so the archive layout is deterministic.
+var commodityFileBuckets = []string{"images", "invoices", "manuals"}
 
 // isCommodityFileBucket reports whether a linked_entity_meta value is one of the
 // three commodity attachment buckets.

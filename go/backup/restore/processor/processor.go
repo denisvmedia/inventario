@@ -50,6 +50,13 @@ var (
 	// references were never delivered as file members in the archive. Succeeding
 	// silently would drop file data with no signal to the operator.
 	ErrMissingFileMembers = errx.NewSentinel("backup archive is missing declared file members")
+
+	// ErrMalformedEntity flags a structurally-corrupt entity field (an
+	// unparseable numeric/timestamp value) decoded from the archive. Unlike a
+	// per-item validation or mapping error — which applyLocationDoc tolerates
+	// and counts — a malformed field means the archive itself is corrupt, so it
+	// aborts the whole restore rather than silently coercing the bad value.
+	ErrMalformedEntity = errx.NewSentinel("backup archive contains a malformed entity field")
 )
 
 // decodeAndRestore is the default `.inb` decode entry point (#534). It verifies
@@ -285,12 +292,21 @@ func (w *inbWalker) applyLocationDoc(doc *types.INBLocationDoc) error {
 
 	for i := range doc.Areas {
 		if err := w.applyArea(&doc.Areas[i]); err != nil {
+			if errors.Is(err, ErrMalformedEntity) {
+				return err
+			}
 			w.stats.ErrorCount++
 			w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("failed to process area: %v", err))
 		}
 	}
 	for i := range doc.Commodities {
 		if err := w.applyCommodity(&doc.Commodities[i]); err != nil {
+			// A malformed field (unparseable price/timestamp) is archive
+			// corruption — abort the whole restore. Other per-item errors stay
+			// tolerated-and-counted as before.
+			if errors.Is(err, ErrMalformedEntity) {
+				return err
+			}
 			w.stats.ErrorCount++
 			w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("failed to process commodity: %v", err))
 		}
@@ -322,7 +338,16 @@ func (w *inbWalker) applyCommodity(c *types.INBCommodity) error {
 	if !ok || actualAreaID == "" {
 		return fmt.Errorf("commodity %s references unmapped area %s", c.ID, c.AreaID)
 	}
-	commodity := c.ConvertToCommodity()
+	commodity, err := c.ConvertToCommodity()
+	if err != nil {
+		// A malformed numeric field corrupts the restored value — abort the
+		// restore (ErrMalformedEntity is propagated hard by applyLocationDoc)
+		// rather than silently coercing it to zero.
+		return errx.Classify(
+			errxtrace.Wrap("failed to convert commodity", err, errx.Attrs("commodity_id", c.ID)),
+			ErrMalformedEntity,
+		)
+	}
 	commodity.AreaID = actualAreaID
 
 	// Mirror the XML restore: when the commodity's original currency matches the
@@ -407,13 +432,26 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	}
 	blobKey := blobkeys.BuildFileBlobKey(user.TenantID, pending.ref.ID, ext)
 
+	// Build the file entity BEFORE streaming the bytes: a malformed timestamp
+	// corrupts the restored metadata, so fail the restore (rather than coercing
+	// to time.Now()) without first writing a doomed blob.
+	fileEntity, err := pending.ref.ConvertToFileEntity(linkedDBID, pending.bucket, blobKey)
+	if err != nil {
+		// A malformed timestamp is archive corruption — drain the member and
+		// abort the restore (handleFileMember errors already propagate hard).
+		_, _ = io.Copy(io.Discard, r)
+		return errx.Classify(
+			errxtrace.Wrap("failed to convert file entity", err, errx.Attrs("file_id", pending.ref.ID)),
+			ErrMalformedEntity,
+		)
+	}
+
 	written, err := w.streamFileBytes(blobKey, r, hdr.Size)
 	if err != nil {
 		return err
 	}
 	w.stats.BinaryDataSize += written
 
-	fileEntity := pending.ref.ConvertToFileEntity(linkedDBID, pending.bucket, blobKey)
 	// Record the restored byte count so per-group storage-usage accounting
 	// (#1388) isn't under-counted — `.inb` is the first format to round-trip
 	// commodity file bytes, so this is the authoritative size on restore.

@@ -9,10 +9,12 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/memblob"
 
@@ -173,17 +175,24 @@ func (f *inbFixture) fileByUUID(c *qt.C, uuid string) *models.FileEntity {
 	return nil
 }
 
-// runExport drives the .inb export and returns the blob key + raw archive bytes.
+// runExport drives a full_database .inb export and returns the blob key + raw
+// archive bytes.
 func (f *inbFixture) runExport(c *qt.C, signer *backupsign.Signer) (string, []byte) {
-	svc := export.NewExportService(f.fs, inbUploadLocation, signer)
-
-	expReg := must.Must(f.fs.ExportRegistryFactory.CreateUserRegistry(f.ctx))
-	exportRow := models.Export{
+	return f.runExportRow(c, signer, models.Export{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
 		Type:                     models.ExportTypeFullDatabase,
 		Status:                   models.ExportStatusPending,
 		Description:              "test backup",
-	}
+	})
+}
+
+// runExportRow drives the .inb export for a caller-built export row (so a test
+// can exercise a selected_items export) and returns the blob key + archive
+// bytes.
+func (f *inbFixture) runExportRow(c *qt.C, signer *backupsign.Signer, exportRow models.Export) (string, []byte) {
+	svc := export.NewExportService(f.fs, inbUploadLocation, signer)
+
+	expReg := must.Must(f.fs.ExportRegistryFactory.CreateUserRegistry(f.ctx))
 	created := must.Must(expReg.Create(f.ctx, exportRow))
 
 	err := svc.ProcessExport(f.ctx, created.ID)
@@ -197,6 +206,33 @@ func (f *inbFixture) runExport(c *qt.C, signer *backupsign.Signer) (string, []by
 	defer bucket.Close()
 	data := must.Must(bucket.ReadAll(f.ctx, updated.FilePath))
 	return updated.FilePath, data
+}
+
+// innerMembers inflates an .inb archive's payload and returns the ordered list
+// of inner-tar member names plus a name→JSON-bytes map of every .json member.
+func innerMembers(c *qt.C, archive []byte) ([]string, map[string][]byte) {
+	tr := tar.NewReader(bytes.NewReader(archive))
+	_ = must.Must(tr.Next()) // signature member
+	_ = must.Must(io.ReadAll(tr))
+	_ = must.Must(tr.Next()) // payload member
+	payload := must.Must(io.ReadAll(tr))
+
+	gzr := must.Must(gzip.NewReader(bytes.NewReader(payload)))
+	itr := tar.NewReader(gzr)
+	var order []string
+	jsons := map[string][]byte{}
+	for {
+		h, err := itr.Next()
+		if err == io.EOF {
+			break
+		}
+		c.Assert(err, qt.IsNil)
+		order = append(order, h.Name)
+		if strings.HasSuffix(h.Name, ".json") {
+			jsons[h.Name] = must.Must(io.ReadAll(io.LimitReader(itr, 64<<20)))
+		}
+	}
+	return order, jsons
 }
 
 func TestINBExport_ContainerStructure(t *testing.T) {
@@ -559,6 +595,137 @@ func TestINBRestore_MissingFileMemberFails(t *testing.T) {
 	c.Assert(final.Status, qt.Equals, models.RestoreStatusFailed)
 }
 
+// inbDocForFixture builds an INBLocationDoc for the fixture's location/area/
+// commodity, letting the caller mutate the single commodity (e.g. to inject a
+// malformed price) and optionally attach a file ref before it is serialized.
+func inbDocForFixture(c *qt.C, f *inbFixture, mutate func(com *types.INBCommodity)) types.INBLocationDoc {
+	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	com := must.Must(comReg.List(f.ctx))[0]
+	areaReg := must.Must(f.fs.AreaRegistryFactory.CreateUserRegistry(f.ctx))
+	area := must.Must(areaReg.List(f.ctx))[0]
+	locReg := must.Must(f.fs.LocationRegistryFactory.CreateUserRegistry(f.ctx))
+	loc := must.Must(locReg.Get(f.ctx, f.locID))
+
+	inbCom := types.INBCommodity{
+		ID:                    com.UUID,
+		Name:                  com.Name,
+		ShortName:             com.ShortName,
+		Type:                  string(com.Type),
+		AreaID:                area.UUID,
+		Count:                 com.Count,
+		Status:                string(com.Status),
+		OriginalPriceCurrency: string(com.OriginalPriceCurrency),
+		Draft:                 com.Draft,
+	}
+	if mutate != nil {
+		mutate(&inbCom)
+	}
+	return types.INBLocationDoc{
+		Location:    types.INBLocation{ID: loc.UUID, Name: loc.Name, Address: loc.Address},
+		Areas:       []types.INBArea{{ID: area.UUID, Name: area.Name, LocationID: loc.UUID}},
+		Commodities: []types.INBCommodity{inbCom},
+	}
+}
+
+// signedArchiveFromDoc builds a fully-signed .inb archive containing a manifest
+// plus a single hand-built location document.
+func signedArchiveFromDoc(c *qt.C, signer *backupsign.Signer, doc types.INBLocationDoc) []byte {
+	docJSON := must.Must(json.Marshal(doc))
+	return signedArchiveFromInnerTar(c, signer, func(tw *tar.Writer) {
+		writeMember(c, tw, &tar.Header{Name: "manifest.json", Mode: 0o600, Typeflag: tar.TypeReg}, []byte(`{"version":"2.0"}`))
+		writeMember(c, tw, &tar.Header{Name: "location-home.json", Mode: 0o600, Typeflag: tar.TypeReg}, docJSON)
+	})
+}
+
+// TestINBRestore_MalformedPriceFails guards the Item-B fix: a commodity whose
+// originalPrice is non-empty but unparseable must FAIL the restore with a clear
+// error rather than being silently coerced to zero.
+func TestINBRestore_MalformedPriceFails(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	doc := inbDocForFixture(c, f, func(com *types.INBCommodity) {
+		com.OriginalPrice = "not-a-number"
+	})
+	archive := signedArchiveFromDoc(c, signer, doc)
+
+	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
+	key := "t/tenant-a/restores/bad-price.inb"
+	c.Assert(bucket.WriteAll(f.ctx, key, archive, nil), qt.IsNil)
+	bucket.Close()
+
+	final, err := restoreInb(c, f, signer, key)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusFailed)
+	c.Assert(final.ErrorMessage, qt.Contains, "originalPrice")
+}
+
+// TestINBRestore_MalformedTimestampFails guards the Item-B fix for file
+// metadata: a file reference whose createdAt is non-empty but unparseable must
+// FAIL the restore rather than being coerced to time.Now(). The file member IS
+// delivered so the failure is the conversion, not a missing member.
+func TestINBRestore_MalformedTimestampFails(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	com := must.Must(comReg.List(f.ctx))[0]
+	filePath := "files/home/" + com.UUID + "/images/photo.jpg"
+
+	doc := inbDocForFixture(c, f, func(inbCom *types.INBCommodity) {
+		inbCom.Images = []types.INBFileRef{{
+			ID:        "file-bad-ts",
+			Path:      filePath,
+			Name:      "photo",
+			Extension: ".jpg",
+			MimeType:  "image/jpeg",
+			CreatedAt: "definitely-not-a-timestamp",
+		}}
+	})
+
+	docJSON := must.Must(json.Marshal(doc))
+	archive := signedArchiveFromInnerTar(c, signer, func(tw *tar.Writer) {
+		writeMember(c, tw, &tar.Header{Name: "manifest.json", Mode: 0o600, Typeflag: tar.TypeReg}, []byte(`{"version":"2.0"}`))
+		writeMember(c, tw, &tar.Header{Name: "location-home.json", Mode: 0o600, Typeflag: tar.TypeReg}, docJSON)
+		writeMember(c, tw, &tar.Header{Name: filePath, Mode: 0o600, Typeflag: tar.TypeReg}, []byte("jpeg-bytes"))
+	})
+
+	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
+	key := "t/tenant-a/restores/bad-timestamp.inb"
+	c.Assert(bucket.WriteAll(f.ctx, key, archive, nil), qt.IsNil)
+	bucket.Close()
+
+	final, err := restoreInb(c, f, signer, key)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusFailed)
+}
+
+// TestINBRestore_ValidPriceAndTimestampRoundTrip is the Item-B happy-path twin:
+// a commodity with a well-formed price and a file with a valid RFC3339 timestamp
+// must still restore cleanly, so the stricter parsing did not break valid data.
+func TestINBRestore_ValidPriceAndTimestampRoundTrip(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+	f.attachCommodityFile(c, "images", 1024)
+
+	// Give the commodity a real, parseable price so the strict parser exercises
+	// the success path.
+	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	com := must.Must(comReg.List(f.ctx))[0]
+	com.OriginalPrice = decimal.RequireFromString("199.99")
+	must.Must(comReg.Update(f.ctx, *com))
+
+	blobKey, _ := f.runExport(c, signer)
+	final, err := restoreInb(c, f, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted)
+	c.Assert(final.CommodityCount >= 1, qt.IsTrue)
+	c.Assert(final.ImageCount >= 1, qt.IsTrue)
+}
+
 // signedArchiveFromInnerTar builds a fully-signed .inb archive whose inner tar
 // is produced by buildInner. Used to craft hostile-but-correctly-signed
 // archives so the restore guards (not the signature check) are what reject them.
@@ -629,6 +796,127 @@ func TestINBRestore_RejectsSymlinkMember(t *testing.T) {
 	final, err := restoreInb(c, f, signer, key)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(final.Status, qt.Equals, models.RestoreStatusFailed)
+}
+
+// TestINBExport_ManifestIsFirstMember guards the Pass-1/Pass-2 refactor: the
+// manifest is now written FIRST (with complete statistics), so the import
+// metadata path reaches it without inflating the location bodies. The first
+// inner-tar member must be manifest.json and it must carry the real statistics.
+func TestINBExport_ManifestIsFirstMember(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+	f.attachCommodityFile(c, "images", 2048)
+
+	_, archive := f.runExport(c, signer)
+
+	order, jsons := innerMembers(c, archive)
+	c.Assert(len(order) >= 1, qt.IsTrue)
+	c.Assert(order[0], qt.Equals, "manifest.json")
+
+	var manifest map[string]any
+	c.Assert(json.Unmarshal(jsons["manifest.json"], &manifest), qt.IsNil)
+	stats := manifest["statistics"].(map[string]any)
+	// Statistics must be fully populated even though the manifest is first —
+	// Pass 1 accumulates them before the manifest is emitted.
+	c.Assert(stats["locationCount"], qt.Equals, float64(1))
+	c.Assert(stats["areaCount"], qt.Equals, float64(1))
+	c.Assert(stats["commodityCount"], qt.Equals, float64(1))
+	c.Assert(stats["imageCount"], qt.Equals, float64(1))
+	c.Assert(stats["fileCount"], qt.Equals, float64(1))
+	c.Assert(stats["totalFileSize"], qt.Equals, float64(2048))
+}
+
+// TestINBExport_ManifestFirstStillRoundTrips proves the manifest-first layout
+// did not break restore: a full export (location → area → commodity + file)
+// still restores end-to-end with the manifest emitted before the bodies.
+func TestINBExport_ManifestFirstStillRoundTrips(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+	f.attachCommodityFile(c, "images", 4096)
+
+	blobKey, archive := f.runExport(c, signer)
+	order, _ := innerMembers(c, archive)
+	c.Assert(order[0], qt.Equals, "manifest.json")
+
+	final, err := restoreInb(c, f, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted)
+	c.Assert(final.LocationCount >= 1, qt.IsTrue)
+	c.Assert(final.AreaCount >= 1, qt.IsTrue)
+	c.Assert(final.CommodityCount >= 1, qt.IsTrue)
+	c.Assert(final.ImageCount >= 1, qt.IsTrue)
+}
+
+// TestINBExport_SelectedItemsScopeSurvivesRefactor proves the scope filtering
+// survived the preload/index refactor: a selected_items export that picks one of
+// two commodities must emit only that commodity (plus its implied location +
+// area), not the sibling commodity in another location.
+func TestINBExport_SelectedItemsScopeSurvivesRefactor(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	// Seed a SECOND location → area → commodity in the same group, so the
+	// scope filter has something to exclude.
+	locReg := must.Must(f.fs.LocationRegistryFactory.CreateUserRegistry(f.ctx))
+	loc2 := must.Must(locReg.Create(f.ctx, models.Location{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
+		Name:                     "Office",
+		Address:                  "9 Side St",
+	}))
+	areaReg := must.Must(f.fs.AreaRegistryFactory.CreateUserRegistry(f.ctx))
+	area2 := must.Must(areaReg.Create(f.ctx, models.Area{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
+		Name:                     "Desk",
+		LocationID:               loc2.ID,
+	}))
+	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	excluded := must.Must(comReg.Create(f.ctx, models.Commodity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
+		Name:                     "Monitor",
+		ShortName:                "mon",
+		Type:                     models.CommodityTypeElectronics,
+		AreaID:                   area2.ID,
+		Count:                    1,
+		Status:                   models.CommodityStatusInUse,
+		OriginalPriceCurrency:    "USD",
+		Draft:                    true,
+	}))
+
+	// The fixture's first commodity (the "TV") is the one we select.
+	selected := must.Must(comReg.List(f.ctx))[0]
+	for _, com := range must.Must(comReg.List(f.ctx)) {
+		if com.Name == "TV" {
+			selected = com
+		}
+	}
+
+	_, archive := f.runExportRow(c, signer, models.Export{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
+		Type:                     models.ExportTypeSelectedItems,
+		Status:                   models.ExportStatusPending,
+		Description:              "selected backup",
+		SelectedItems: models.ValuerSlice[models.ExportSelectedItem]{
+			{ID: selected.ID, Type: models.ExportSelectedItemTypeCommodity, Name: selected.Name},
+		},
+	})
+
+	// Concatenate every location JSON document and assert the selected
+	// commodity's UUID is present while the excluded one's UUID is absent.
+	_, jsons := innerMembers(c, archive)
+	var docBuilder strings.Builder
+	for name, body := range jsons {
+		if name != "manifest.json" {
+			docBuilder.Write(body)
+		}
+	}
+	allDocs := docBuilder.String()
+	c.Assert(allDocs, qt.Contains, selected.UUID, qt.Commentf("selected commodity must be exported"))
+	c.Assert(allDocs, qt.Not(qt.Contains), excluded.UUID, qt.Commentf("non-selected commodity must NOT be exported"))
+	// The excluded commodity's location (Office) must not appear either.
+	c.Assert(allDocs, qt.Not(qt.Contains), loc2.UUID, qt.Commentf("non-selected location must NOT be exported"))
 }
 
 // tamperPayload returns a copy of an .inb archive with one byte of the payload

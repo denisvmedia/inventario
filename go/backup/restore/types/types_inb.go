@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/models"
@@ -153,8 +155,20 @@ func (a *INBArea) ConvertToArea() *models.Area {
 }
 
 // ConvertToCommodity converts an INBCommodity to a models.Commodity. AreaID is
-// left as the source UUID; the caller resolves it to the destination DB ID.
-func (c *INBCommodity) ConvertToCommodity() *models.Commodity {
+// left as the source UUID; the caller resolves it to the destination DB ID. A
+// malformed numeric field surfaces an error (tagged with the field name and the
+// commodity UUID) rather than being silently coerced to zero, so a corrupt
+// archive fails the restore instead of restoring wrong data.
+func (c *INBCommodity) ConvertToCommodity() (*models.Commodity, error) {
+	originalPrice, err := parseDecimal(c.OriginalPrice)
+	if err != nil {
+		return nil, errxtrace.Wrap("invalid originalPrice", err, errx.Attrs("commodity_id", c.ID))
+	}
+	currentPrice, err := parseDecimal(c.CurrentPrice)
+	if err != nil {
+		return nil, errxtrace.Wrap("invalid currentPrice", err, errx.Attrs("commodity_id", c.ID))
+	}
+
 	commodity := &models.Commodity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{UUID: c.ID},
@@ -164,9 +178,9 @@ func (c *INBCommodity) ConvertToCommodity() *models.Commodity {
 		Type:                  models.CommodityType(c.Type),
 		AreaID:                c.AreaID,
 		Count:                 c.Count,
-		OriginalPrice:         parseDecimal(c.OriginalPrice),
+		OriginalPrice:         originalPrice,
 		OriginalPriceCurrency: models.Currency(c.OriginalPriceCurrency),
-		CurrentPrice:          parseDecimal(c.CurrentPrice),
+		CurrentPrice:          currentPrice,
 		SerialNumber:          c.SerialNumber,
 		Status:                models.CommodityStatus(c.Status),
 		Comments:              c.Comments,
@@ -176,7 +190,11 @@ func (c *INBCommodity) ConvertToCommodity() *models.Commodity {
 		Tags:                  models.ValuerSlice[string](c.Tags),
 	}
 	if c.ConvertedOriginalPrice != "" {
-		commodity.ConvertedOriginalPrice = parseDecimal(c.ConvertedOriginalPrice)
+		converted, cErr := parseDecimal(c.ConvertedOriginalPrice)
+		if cErr != nil {
+			return nil, errxtrace.Wrap("invalid convertedOriginalPrice", cErr, errx.Attrs("commodity_id", c.ID))
+		}
+		commodity.ConvertedOriginalPrice = converted
 	}
 	if len(c.URLs) > 0 {
 		urls := make([]*models.URL, 0, len(c.URLs))
@@ -196,17 +214,26 @@ func (c *INBCommodity) ConvertToCommodity() *models.Commodity {
 	if c.LastModifiedDate != "" {
 		commodity.LastModifiedDate = models.ToPDate(models.Date(c.LastModifiedDate))
 	}
-	return commodity
+	return commodity, nil
 }
 
 // ConvertToFileEntity builds a models.FileEntity from an INBFileRef for a
 // commodity attachment. linkedDBID is the destination commodity DB ID; bucket
 // is the linked_entity_meta (images/invoices/manuals). blobKey is the re-minted
 // destination blob key (under the importing tenant). The file's immutable UUID
-// is preserved.
-func (r *INBFileRef) ConvertToFileEntity(linkedDBID, bucket, blobKey string) *models.FileEntity {
-	createdAt := parseInbTimestamp(r.CreatedAt)
-	updatedAt := parseInbTimestamp(r.UpdatedAt)
+// is preserved. A malformed createdAt/updatedAt timestamp surfaces an error
+// (tagged with the field name and the file UUID) rather than being coerced to
+// time.Now(), so a corrupt archive fails the restore instead of restoring wrong
+// metadata.
+func (r *INBFileRef) ConvertToFileEntity(linkedDBID, bucket, blobKey string) (*models.FileEntity, error) {
+	createdAt, err := parseInbTimestamp(r.CreatedAt)
+	if err != nil {
+		return nil, errxtrace.Wrap("invalid createdAt", err, errx.Attrs("file_id", r.ID))
+	}
+	updatedAt, err := parseInbTimestamp(r.UpdatedAt)
+	if err != nil {
+		return nil, errxtrace.Wrap("invalid updatedAt", err, errx.Attrs("file_id", r.ID))
+	}
 
 	fileType := models.FileTypeFromMIME(r.MimeType)
 	category := models.FileCategoryFromContext("commodity", bucket, r.MimeType)
@@ -231,28 +258,37 @@ func (r *INBFileRef) ConvertToFileEntity(linkedDBID, bucket, blobKey string) *mo
 			Ext:          r.Extension,
 			MIMEType:     r.MimeType,
 		},
-	}
+	}, nil
 }
 
-func parseDecimal(s string) decimal.Decimal {
+// parseDecimal parses a decimal price string. An absent value (empty string) is
+// valid and yields decimal.Zero; a non-empty but unparseable value surfaces an
+// error rather than being silently coerced to zero, which would corrupt the
+// restored price.
+func parseDecimal(s string) (decimal.Decimal, error) {
 	if s == "" {
-		return decimal.Zero
+		return decimal.Zero, nil
 	}
 	d, err := decimal.NewFromString(s)
 	if err != nil {
-		return decimal.Zero
+		return decimal.Zero, errxtrace.Wrap("failed to parse decimal", err, errx.Attrs("value", s))
 	}
-	return d
+	return d, nil
 }
 
-func parseInbTimestamp(s string) time.Time {
+// parseInbTimestamp parses an RFC3339 timestamp. An absent value (empty string)
+// is valid and yields the zero time.Time; a non-empty but unparseable value
+// surfaces an error rather than being silently coerced to time.Now(), which
+// would fabricate a restored timestamp.
+func parseInbTimestamp(s string) (time.Time, error) {
 	if s == "" {
-		return time.Now()
+		return time.Time{}, nil
 	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}, errxtrace.Wrap("failed to parse timestamp", err, errx.Attrs("value", s))
 	}
-	return time.Now()
+	return t, nil
 }
 
 // fileBaseName derives the user-facing Path (filename without extension) for a

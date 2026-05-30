@@ -11,6 +11,7 @@ import {
   extractApiAuth,
   resolveActiveGroup,
 } from './includes/commodities-api.js'
+import { loginUser, SEEDED_TEST_USERS } from './includes/user-isolation-auth.js'
 
 /**
  * E2E coverage for the React Exports/Imports/Restores surface (#1415).
@@ -283,5 +284,61 @@ test.describe('Exports / Restores (React)', () => {
     // banner and never navigates the user into a usable restore form.
     await expect(page.getByTestId('import-error')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByTestId('page-export-restore')).toHaveCount(0)
+  })
+
+  // #534 — Cross-account/tenant isolation. A backup created by one account
+  // must not be reachable by a different, isolated account. The two seeded
+  // users (admin@test-org.com / user2@test-org.com) are data-isolated (see
+  // user-isolation.spec.ts), so the second account must be denied access to
+  // the owner's export through the owner's group-scoped route, and must not
+  // see it in its own export list. (The destructive cross-tenant invariant —
+  // a full_replace restore never touches another tenant — is locked at the
+  // unit level by TestINBRestore_FullReplaceDoesNotWipeOtherTenant.)
+  test('a second account cannot reach the owner\'s backup (cross-account isolation)', async ({
+    page,
+    request,
+    browser,
+  }) => {
+    // Owner = the app-fixture default user (admin@test-org.com).
+    const ownerAuth = await extractApiAuth(page)
+    const ownerGroup = await resolveActiveGroup(request, ownerAuth)
+    await createFullDatabaseExport(page, `E2E isolation owner ${Date.now()}`)
+    const exportId = new URL(page.url()).pathname.match(/\/exports\/([^/?#]+)/)?.[1]
+    expect(exportId, 'owner landed on the export detail page with an id in the URL').toBeTruthy()
+
+    // Second, isolated account logs in in its own browser context.
+    const otherContext = await browser.newContext()
+    try {
+      const otherPage = await otherContext.newPage()
+      await loginUser(otherPage, SEEDED_TEST_USERS[1].email, SEEDED_TEST_USERS[1].password)
+      const otherAuth = await extractApiAuth(otherPage)
+      const otherHeaders = {
+        Accept: 'application/vnd.api+json',
+        Authorization: `Bearer ${otherAuth.accessToken}`,
+        'X-CSRF-Token': otherAuth.csrfToken,
+      }
+
+      // (1) Direct fetch of the owner's export through the owner's group
+      // route must be rejected — the second account is not a member.
+      const denied = await request.get(`/api/v1/g/${ownerGroup.slug}/exports/${exportId}`, {
+        headers: otherHeaders,
+      })
+      expect(denied.status(), `cross-account export fetch returned ${denied.status()}`)
+        .toBeGreaterThanOrEqual(400)
+      expect(denied.status()).toBeLessThan(500)
+
+      // (2) The owner's export must not surface in the second account's own
+      // export list either.
+      const otherGroup = await resolveActiveGroup(request, otherAuth)
+      const list = await request.get(`/api/v1/g/${otherGroup.slug}/exports`, {
+        headers: otherHeaders,
+      })
+      expect(list.ok()).toBeTruthy()
+      const body = (await list.json()) as { data?: Array<{ id: string }> }
+      const ids = (body.data ?? []).map((e) => e.id)
+      expect(ids).not.toContain(exportId)
+    } finally {
+      await otherContext.close()
+    }
   })
 })

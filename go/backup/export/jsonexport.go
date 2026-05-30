@@ -116,9 +116,10 @@ func resolveExportTenant(ctx context.Context, export models.Export) string {
 }
 
 // writePayload builds the inner gzip(tar) payload into w while streaming the
-// bytes through a SHA-256 digest. It writes one per-location JSON member plus
-// the referenced commodity file members, then the manifest, and returns the
-// collected stats and the finalized digest.
+// bytes through a SHA-256 digest. It plans the whole tree in memory first (so
+// statistics are complete), writes manifest.json FIRST, then one per-location
+// JSON member followed by that location's referenced commodity file members, and
+// returns the collected stats and the finalized digest.
 func (s *ExportService) writePayload(
 	ctx context.Context,
 	export models.Export,
@@ -144,12 +145,24 @@ func (s *ExportService) writePayload(
 		stats:  stats,
 	}
 
-	manifestLocs, err := builder.run()
+	// Pass 1: plan the whole in-scope tree in memory (metadata only) and
+	// accumulate ALL statistics, so the manifest can be written first.
+	planned, manifestLocs, err := builder.run()
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// Write manifest.json FIRST — now that the statistics are fully known the
+	// import metadata path reaches them without inflating the payload bodies.
 	if err := builder.writeManifest(manifestLocs); err != nil {
+		return nil, nil, err
+	}
+
+	// Pass 2: write each location's JSON member followed by its streamed file
+	// bytes. The JSON precedes its file bytes so restore (which tolerates a
+	// manifest-first layout and keys off member names) registers each file
+	// reference before the corresponding member arrives.
+	if err := builder.writePlannedLocations(planned); err != nil {
 		return nil, nil, err
 	}
 
