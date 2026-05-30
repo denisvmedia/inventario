@@ -36,6 +36,7 @@ type Workers struct {
 	LoanReminderDueSoonDays      int    // Forward-looking window for the loan due-soon reminder (default 7)
 	MaintenanceReminderInterval  string // Maintenance reminder worker interval (e.g., "1h")
 	CurrencyMigrationInterval    string // Currency migration worker active-poll interval (e.g., "5s")
+	BusinessMetricsInterval      string // Business-metrics collector interval (e.g., "60s")
 }
 
 // ThumbnailGeneration contains default values for thumbnail generation configuration
@@ -102,6 +103,7 @@ func New() Config {
 			LoanReminderDueSoonDays:      7,
 			MaintenanceReminderInterval:  "1h",
 			CurrencyMigrationInterval:    "5s",
+			BusinessMetricsInterval:      "60s",
 		},
 		ThumbnailGeneration: ThumbnailGeneration{
 			MaxConcurrentPerUser: 5,     // Maximum 5 simultaneous thumbnail generation jobs per user
@@ -233,6 +235,14 @@ func GetMaintenanceReminderInterval() string {
 // knob the operator tunes.
 func GetCurrencyMigrationInterval() string {
 	return defaultConfig.Workers.CurrencyMigrationInterval
+}
+
+// GetBusinessMetricsInterval returns the default interval between
+// business-metrics collection sweeps (#843). 60s is frequent enough for
+// installation-wide gauges (tenants/users/storage move slowly) without
+// adding meaningful aggregate-query load.
+func GetBusinessMetricsInterval() string {
+	return defaultConfig.Workers.BusinessMetricsInterval
 }
 
 // GetThumbnailBatchSize returns the default thumbnail worker batch size

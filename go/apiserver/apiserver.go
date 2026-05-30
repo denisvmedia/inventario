@@ -29,6 +29,7 @@ import (
 	"github.com/denisvmedia/inventario/debug"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
+	"github.com/denisvmedia/inventario/internal/metrics"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -330,6 +331,13 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
+	// RED metrics (#843): registered BEFORE Recoverer so it WRAPS it — the
+	// deferred status read then observes the 500 that Recoverer writes for a
+	// recovered panic. Installed inside Recoverer it would run its defer as
+	// the panic unwinds, before the 500 is written, and miscount panics as
+	// 2xx. It still sits inside chi routing, so RoutePattern resolves; it
+	// self-skips "/metrics".
+	r.Use(metrics.HTTPMiddleware)
 	r.Use(middleware.Recoverer)
 
 	// r.Get("/", func(w http.ResponseWriter, _r *http.Request) {

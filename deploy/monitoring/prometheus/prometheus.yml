@@ -1,0 +1,45 @@
+# Prometheus scrape configuration for the Inventario observability stack
+# (issue #843). Used by the docker-compose `monitoring` profile.
+#
+# Two clocks to keep straight:
+#   - scrape_interval (below, 15s): how often Prometheus reads /metrics.
+#     Counters/histograms (HTTP, DB, auth, email) update in real time.
+#   - the app's business-metrics collector tick (60s, configured in the app
+#     via INVENTARIO_RUN_BUSINESS_METRICS_INTERVAL): how often the business
+#     gauges (inventario_users, inventario_commodities, ...) are recomputed.
+#     They therefore step every 60s and look flat in between — expected.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: inventario-dev
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  # Prometheus self-scrape — cheap sanity signal.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Inventario. In the default single-container compose the app runs `run all`,
+  # so the API and every worker counter are exported together on :3333.
+  - job_name: inventario
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["inventario:3333"]
+        labels:
+          service: inventario
+          role: all
+
+  # Split-deployment variant: a dedicated workers container exposes its probe
+  # listener (and worker/business metrics) on :3334. Left commented because the
+  # default compose has no separate workers container.
+  # - job_name: inventario-workers
+  #   metrics_path: /metrics
+  #   static_configs:
+  #     - targets: ["inventario-workers:3334"]
+  #       labels:
+  #         service: inventario
+  #         role: workers

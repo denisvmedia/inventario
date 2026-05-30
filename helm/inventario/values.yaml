@@ -88,13 +88,17 @@ run:
       targetMemoryUtilizationPercentage: null
       # Additional metrics entries (autoscaling/v2 MetricSpec), for
       # example an external metric exposed by the app's /metrics
-      # endpoint via a metrics adapter. Inventario does not ship
-      # custom metrics yet; this list stays empty by default.
+      # endpoint. Inventario DOES now ship Prometheus metrics on
+      # /metrics (API :3333, each worker :3334) — see the top-level
+      # `metrics:` block below. However, HPA on a custom metric still
+      # requires a metrics adapter (e.g. prometheus-adapter) to surface
+      # those series to the external.metrics.k8s.io API; this chart does
+      # not install one, so the list below stays empty by default.
       # metrics:
       #   - type: External
       #     external:
       #       metric:
-      #         name: inventario_jobs_pending
+      #         name: inventario_email_queue_depth
       #         selector:
       #           matchLabels:
       #             worker: media
@@ -248,6 +252,28 @@ run:
         limits:
           cpu: 1000m
           memory: 1Gi
+
+# ============================================================
+# Metrics / scraping (#843)
+# ============================================================
+# Prometheus metrics / scraping (#843). The app always serves /metrics on the
+# API port (3333) and each worker's probe port (3334); these toggles only
+# control how an external Prometheus discovers the pods. Both default OFF.
+metrics:
+  # Add prometheus.io/* scrape annotations to API + worker pods so a vanilla
+  # (operator-less) Prometheus kubernetes_sd job can discover them.
+  podAnnotations:
+    enabled: false
+  # ServiceMonitor for the Prometheus Operator. OFF by default and additionally
+  # guarded by a CRD-capability check, so enabling it without the operator is a
+  # no-op rather than a render error.
+  serviceMonitor:
+    enabled: false
+    interval: 15s
+    scrapeTimeout: 10s
+    # Extra labels for the ServiceMonitor (e.g. release: kube-prometheus-stack
+    # so the operator selects it).
+    labels: {}
 
 # ============================================================
 # Service (targets the apiserver endpoint — run.all or run.apiserver).

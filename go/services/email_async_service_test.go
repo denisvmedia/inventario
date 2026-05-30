@@ -55,6 +55,10 @@ func (q *erroringQueue) PromoteDueRetries(context.Context, time.Time, int) (int,
 	return 0, q.promoteErr
 }
 
+func (q *erroringQueue) Depth(context.Context) (int, error) {
+	return 0, nil
+}
+
 func (q *erroringQueue) DequeueCalls() int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -342,6 +346,12 @@ func (q *captureQueue) ScheduleRetry(_ context.Context, payload []byte, readyAt 
 
 func (q *captureQueue) PromoteDueRetries(context.Context, time.Time, int) (int, error) {
 	return 0, nil
+}
+
+func (q *captureQueue) Depth(context.Context) (int, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.dequeueItems), nil
 }
 
 func (q *captureQueue) EnqueuedPayloads() [][]byte {

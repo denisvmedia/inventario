@@ -11,6 +11,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/internal/metrics"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 )
@@ -85,6 +86,12 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	// back-office user; the operator CLI mints, regenerates, and wipes
 	// rows. Same no-RLS rationale as the rest of the back-office tables.
 	fs.BackofficeUserMFASecretRegistry = NewBackofficeUserMFASecretRegistry(dbx)
+	// Installation-wide business-metrics source (#843). Runs its aggregate
+	// reads under the background-worker role, so the counts and storage
+	// totals span every tenant; the bootstrap layer adapts this into the
+	// metrics.BusinessStats gauges. Service-mode only — never reachable
+	// from a request path.
+	fs.SystemStats = newSystemStatsFunc(dbx)
 	fs.PingFn = dbx.PingContext
 
 	return fs
@@ -146,6 +153,11 @@ func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (factoryS
 			return nil, errxtrace.Wrap("failed to parse PostgreSQL connection string", err)
 		}
 
+		// DB query metrics (#843): attach the pgx QueryTracer so every
+		// query is timed and counted by SQL verb. Set before the pool is
+		// built so it applies to all connections in the pool.
+		poolConfig.ConnConfig.Tracer = metrics.NewQueryTracer()
+
 		// Set some reasonable defaults if not specified
 		// Use smaller connection pools for testing to prevent exhaustion
 		if poolConfig.MaxConns == 0 {
@@ -177,6 +189,12 @@ func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (factoryS
 			return nil, errxtrace.Wrap("failed to initialize database schema", err)
 		}
 
+		// Pool-stats collector (#843): exposes pgxpool acquire/idle/total
+		// gauges. *pgxpool.Pool satisfies metrics.PoolStatProvider via its
+		// Stat() method. Unregistered on cleanup so per-test pools don't
+		// leak collectors.
+		unregisterPoolCollector := metrics.RegisterPoolCollector(pool)
+
 		// Create sqlx DB wrapper from pgxpool
 		sqlDB := stdlib.OpenDBFromPool(pool)
 		sqlxDB := sqlx.NewDb(sqlDB, "pgx")
@@ -185,6 +203,7 @@ func NewPostgresRegistrySet() (registrySetFunc func(c registry.Config) (factoryS
 		factorySet = NewFactorySet(sqlxDB)
 
 		doCleanup = func() error {
+			unregisterPoolCollector()
 			err := sqlxDB.Close()
 			pool.Close()
 			return err

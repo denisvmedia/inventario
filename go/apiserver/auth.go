@@ -18,6 +18,7 @@ import (
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/csrf"
+	"github.com/denisvmedia/inventario/internal/metrics"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -195,6 +196,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		} else if locked {
 			retryAfter := max(int(time.Until(resetAt).Seconds()), 0)
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+			metrics.RecordRateLimitRejection(metrics.RateLimitScopeAuth)
 			api.recordLoginEvent(r.Context(), tenantID, req.Email, nil, models.LoginOutcomeAccountLocked, r)
 			http.Error(w, "Too many failed login attempts. Please try again later.", http.StatusTooManyRequests)
 			return
@@ -1268,6 +1270,14 @@ func (api *AuthAPI) recordLoginEvent(ctx context.Context, tenantID, email string
 // we record the attempt against the email the client typed but cannot
 // link it to a row in users.
 func (api *AuthAPI) recordLoginEventWithMethod(ctx context.Context, tenantID, email string, userID *string, outcome models.LoginOutcome, method models.LoginMethod, r *http.Request) {
+	// Login-attempt metric (#843). Recorded here because this is the single
+	// chokepoint every login path funnels through (password flow via
+	// recordLoginEvent, OAuth callback directly), carrying both the resolved
+	// outcome and the credential method. Counted before the registry-nil /
+	// empty-tenant guards below so the attempt is still observed in
+	// test/memory-mode bootstrap where the audit row is intentionally skipped.
+	metrics.RecordLoginAttempt(string(outcome), string(method))
+
 	if api.loginEventRegistry == nil {
 		return
 	}
@@ -1344,7 +1354,13 @@ func (api *AuthAPI) issueAccessToken(ctx context.Context, user *models.User, rti
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(api.jwtSecret)
-	return tokenString, expiresAt, err
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	// Token-issuance metric (#843): only fired on a successfully signed
+	// token. Covers both fresh login and refresh-rotation callers (desired).
+	metrics.RecordTokenIssued(metrics.TokenTypeAccess)
+	return tokenString, expiresAt, nil
 }
 
 // persistRefreshToken stores a fresh refresh-token row in the database
@@ -1382,6 +1398,9 @@ func (api *AuthAPI) persistRefreshToken(ctx context.Context, r *http.Request, us
 	if err != nil {
 		return "", "", err
 	}
+	// Token-issuance metric (#843): only fired once the refresh row is
+	// actually persisted. Covers refresh-rotation callers too (desired).
+	metrics.RecordTokenIssued(metrics.TokenTypeRefresh)
 	return created.ID, raw, nil
 }
 

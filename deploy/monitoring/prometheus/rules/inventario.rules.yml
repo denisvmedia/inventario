@@ -1,0 +1,56 @@
+# Recording + alerting rules for Inventario (issue #843). Minimal but real:
+# the recording rules back the Overview dashboard's hot paths, and the alerts
+# are evaluated/visible in Prometheus' Alerts tab (no Alertmanager is shipped
+# in the dev compose, so they are not routed anywhere — they document intent
+# and surface in the UI).
+groups:
+  - name: inventario-recording
+    interval: 15s
+    rules:
+      # Server-error ratio over 5m, per matched route.
+      - record: inventario:http_5xx_ratio:rate5m
+        expr: |
+          sum by (route) (rate(inventario_http_requests_total{status_class="5xx"}[5m]))
+          /
+          clamp_min(sum by (route) (rate(inventario_http_requests_total[5m])), 1e-9)
+
+      # Global p95 request latency over 5m.
+      - record: inventario:http_request_p95_seconds:5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(inventario_http_request_duration_seconds_bucket[5m]))
+          )
+
+  - name: inventario-alerts
+    rules:
+      - alert: InventarioTargetDown
+        expr: up{job="inventario"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Inventario /metrics target is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }} (job inventario) for 2m."
+
+      - alert: InventarioHighErrorRate
+        expr: |
+          sum(rate(inventario_http_requests_total{status_class="5xx"}[5m]))
+          /
+          clamp_min(sum(rate(inventario_http_requests_total[5m])), 1e-9)
+          > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Inventario 5xx ratio > 5% (10m)"
+          description: "Global server-error ratio is {{ $value | humanizePercentage }} over the last 5m."
+
+      - alert: InventarioHighLatencyP95
+        expr: inventario:http_request_p95_seconds:5m > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Inventario p95 latency > 1s (10m)"
+          description: "Global p95 request latency is {{ $value }}s over the last 5m."

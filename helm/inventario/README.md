@@ -333,6 +333,40 @@ A typical upgrade looks like:
 
 Run `helm template ... --debug | grep -E 'replicas|resources|nodeSelector|tolerations|affinity'` after rewriting your values to confirm the new render still reflects your overrides.
 
+## Metrics & scraping
+
+Inventario always serves Prometheus metrics at `/metrics` — on the API HTTP port (`:3333`, served by `run.all` and `run.apiserver`) and on each worker's probe port (`:3334`, alongside `/healthz` and `/readyz`). The endpoint is unconditional; the `metrics.*` values only control how an external Prometheus *discovers* the pods. Everything below is **OFF by default** and does not change rendered output unless explicitly enabled.
+
+| Value | Default | Effect |
+| ----- | ------- | ------ |
+| `metrics.podAnnotations.enabled` | `false` | Adds `prometheus.io/scrape`, `prometheus.io/port`, and `prometheus.io/path=/metrics` annotations to the API and worker pods. Use this for a vanilla, **operator-less** Prometheus running a `kubernetes_sd_configs` (role: pod) discovery job. The port is role-aware: `3333` on API/combined pods, the worker's probe port (`3334`) on worker pods. |
+| `metrics.serviceMonitor.enabled` | `false` | Renders a `monitoring.coreos.com/v1` ServiceMonitor selecting the API Service's `http` port at `/metrics`. **Requires the Prometheus Operator** — the template is additionally guarded by a CRD-capability check (`.Capabilities.APIVersions.Has "monitoring.coreos.com/v1"`), so enabling it on a cluster without the operator is a no-op rather than a render error. Tune `interval`, `scrapeTimeout`, and `labels` (e.g. `release: kube-prometheus-stack` so the operator selects it). |
+
+```bash
+# Operator-less discovery: annotate API + worker pods.
+helm template inventario helm/inventario/ \
+  --set-string secrets.dbDsn='postgres://u:p@h:5432/inv?sslmode=require' \
+  --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+  --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+  --set setupJob.initData.adminPassword=test \
+  --set metrics.podAnnotations.enabled=true
+
+# Prometheus Operator: render a ServiceMonitor (no-op without the CRD).
+helm template inventario helm/inventario/ \
+  --set-string secrets.dbDsn='postgres://u:p@h:5432/inv?sslmode=require' \
+  --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+  --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+  --set setupJob.initData.adminPassword=test \
+  --set metrics.serviceMonitor.enabled=true \
+  --set metrics.serviceMonitor.labels.release=kube-prometheus-stack
+```
+
+The ServiceMonitor only covers the API Service. In split mode each worker group runs a **headless** Service (`clusterIP: None`, port name `probe`), which a ServiceMonitor cannot reliably target per-pod; scrape workers with `metrics.podAnnotations.enabled=true` (pod discovery) or add a PodMonitor (a commented example ships in `templates/servicemonitor.yaml`).
+
+Horizontal Pod Autoscaling on one of these custom metrics (e.g. `inventario_email_queue_depth`) is **not** wired up by enabling scraping: HPA reads custom/external metrics through the metrics API, which needs a metrics adapter such as [prometheus-adapter](https://github.com/kubernetes-sigs/prometheus-adapter). This chart does not install one — see the commented `run.*.autoscaling.metrics` example in `values.yaml`.
+
+A ready-to-run developer monitoring stack (Prometheus + Grafana via docker-compose) lives at [`deploy/monitoring/`](../../deploy/monitoring/README.md).
+
 ## Validation
 
 The chart is covered by the `helm-lint.yml` CI workflow across combined, split, demo, and misconfiguration scenarios. The commands below reproduce those scenarios locally:

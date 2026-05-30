@@ -69,6 +69,44 @@ func TestQueue_ScheduleRetryAndPromoteDueRetries(t *testing.T) {
 	c.Assert(string(got), qt.Equals, "future")
 }
 
+func TestQueue_Depth(t *testing.T) {
+	c := qt.New(t)
+
+	q := New(4)
+
+	depth, err := q.Depth(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(depth, qt.Equals, 0)
+
+	c.Assert(q.Enqueue(context.Background(), []byte("a")), qt.IsNil)
+	c.Assert(q.Enqueue(context.Background(), []byte("b")), qt.IsNil)
+
+	depth, err = q.Depth(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(depth, qt.Equals, 2)
+
+	got, err := q.Dequeue(context.Background(), 20*time.Millisecond)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.IsNotNil)
+
+	depth, err = q.Depth(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(depth, qt.Equals, 1)
+}
+
+func TestQueue_Depth_IgnoresScheduledRetries(t *testing.T) {
+	c := qt.New(t)
+
+	q := New(4)
+	now := time.Unix(1700000000, 0)
+
+	c.Assert(q.ScheduleRetry(context.Background(), []byte("retry"), now.Add(time.Hour)), qt.IsNil)
+
+	depth, err := q.Depth(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(depth, qt.Equals, 0)
+}
+
 func TestQueue_PromoteDueRetries_RespectsLimit(t *testing.T) {
 	c := qt.New(t)
 

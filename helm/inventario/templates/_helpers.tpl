@@ -132,6 +132,26 @@ Usage: include "inventario.workerName" (dict "root" . "role" "media")
 {{- end -}}
 
 {{/*
+Prometheus scrape annotations for a pod, emitted ONLY when
+.Values.metrics.podAnnotations.enabled is true. The app always serves
+/metrics; these annotations just let an operator-less Prometheus
+(kubernetes_sd_configs role: pod) discover the pod. The port differs by
+role — the API pods pass "3333", workers pass their probe port — so it is
+taken as an argument rather than hard-coded.
+Usage (drop under spec.template.metadata.annotations):
+  {{- include "inventario.metricsPodAnnotations" (dict "root" . "port" "3333") | nindent 8 }}
+Renders nothing when disabled, so callers must still guard the parent
+`annotations:` key so it is never emitted empty.
+*/}}
+{{- define "inventario.metricsPodAnnotations" -}}
+{{- if .root.Values.metrics.podAnnotations.enabled -}}
+prometheus.io/scrape: "true"
+prometheus.io/port: {{ .port | quote }}
+prometheus.io/path: "/metrics"
+{{- end -}}
+{{- end -}}
+
+{{/*
 Component selector labels for the combined (run.all) Deployment.
 Alias of appSelectorLabels kept for explicitness.
 */}}

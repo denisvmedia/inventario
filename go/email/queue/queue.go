@@ -23,4 +23,6 @@ type Queue interface {
 	// PromoteDueRetries moves due retry payloads to ready queue.
 	// Returns number of promoted payloads.
 	PromoteDueRetries(ctx context.Context, now time.Time, limit int) (int, error)
+	// Depth returns the number of payloads currently in the ready queue.
+	Depth(ctx context.Context) (int, error)
 }
