@@ -73,6 +73,7 @@ func TestConfigSetDefaults_WorkerTunablesAppliedFromDefaults(t *testing.T) {
 	c.Assert(cfg.ImportPollInterval, qt.Equals, "10s")
 	c.Assert(cfg.RestorePollInterval, qt.Equals, "10s")
 	c.Assert(cfg.RefreshTokenCleanupInterval, qt.Equals, "1h")
+	c.Assert(cfg.EmailVerificationCleanupInterval, qt.Equals, "1h")
 	c.Assert(cfg.ThumbnailBatchSize, qt.Equals, 10)
 	c.Assert(cfg.ThumbnailPollInterval, qt.Equals, "5s")
 	c.Assert(cfg.ThumbnailCleanupInterval, qt.Equals, "5m")
@@ -85,19 +86,20 @@ func TestConfigSetDefaults_WorkerTunablesPreserveExplicitValues(t *testing.T) {
 	c := qt.New(t)
 
 	cfg := bootstrap.Config{
-		MaxConcurrentExports:        7,
-		MaxConcurrentImports:        4,
-		MaxConcurrentRestores:       2,
-		ExportPollInterval:          "20s",
-		ImportPollInterval:          "25s",
-		RestorePollInterval:         "30s",
-		RefreshTokenCleanupInterval: "15m",
-		ThumbnailBatchSize:          25,
-		ThumbnailPollInterval:       "2s",
-		ThumbnailCleanupInterval:    "10m",
-		ThumbnailJobRetentionPeriod: "48h",
-		ThumbnailJobBatchTimeout:    "45s",
-		DetachedThumbnailJobTimeout: "4m",
+		MaxConcurrentExports:             7,
+		MaxConcurrentImports:             4,
+		MaxConcurrentRestores:            2,
+		ExportPollInterval:               "20s",
+		ImportPollInterval:               "25s",
+		RestorePollInterval:              "30s",
+		RefreshTokenCleanupInterval:      "15m",
+		EmailVerificationCleanupInterval: "20m",
+		ThumbnailBatchSize:               25,
+		ThumbnailPollInterval:            "2s",
+		ThumbnailCleanupInterval:         "10m",
+		ThumbnailJobRetentionPeriod:      "48h",
+		ThumbnailJobBatchTimeout:         "45s",
+		DetachedThumbnailJobTimeout:      "4m",
 	}
 	cfg.SetDefaults()
 
@@ -108,6 +110,7 @@ func TestConfigSetDefaults_WorkerTunablesPreserveExplicitValues(t *testing.T) {
 	c.Assert(cfg.ImportPollInterval, qt.Equals, "25s")
 	c.Assert(cfg.RestorePollInterval, qt.Equals, "30s")
 	c.Assert(cfg.RefreshTokenCleanupInterval, qt.Equals, "15m")
+	c.Assert(cfg.EmailVerificationCleanupInterval, qt.Equals, "20m")
 	c.Assert(cfg.ThumbnailBatchSize, qt.Equals, 25)
 	c.Assert(cfg.ThumbnailPollInterval, qt.Equals, "2s")
 	c.Assert(cfg.ThumbnailCleanupInterval, qt.Equals, "10m")

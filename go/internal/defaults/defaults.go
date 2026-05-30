@@ -22,22 +22,23 @@ type Database struct {
 
 // Workers contains default values for worker configuration
 type Workers struct {
-	MaxConcurrentExports         int
-	MaxConcurrentImports         int
-	MaxConcurrentRestores        int
-	ExportPollInterval           string // Export worker poll interval (e.g., "10s")
-	ImportPollInterval           string // Import worker poll interval (e.g., "10s")
-	RestorePollInterval          string // Restore worker poll interval (e.g., "10s")
-	RefreshTokenCleanupInterval  string // Refresh token cleanup interval (e.g., "1h")
-	GroupPurgeInterval           string // Group purge worker interval (e.g., "5m")
-	WarrantyReminderInterval     string // Warranty reminder worker interval (e.g., "1h")
-	StorageQuotaReminderInterval string // Storage quota warning worker interval (e.g., "1h")
-	LoanReminderInterval         string // Loan reminder worker interval (e.g., "1h")
-	LoanReminderDueSoonDays      int    // Forward-looking window for the loan due-soon reminder (default 7)
-	MaintenanceReminderInterval  string // Maintenance reminder worker interval (e.g., "1h")
-	CurrencyMigrationInterval    string // Currency migration worker active-poll interval (e.g., "5s")
-	BusinessMetricsInterval      string // Business-metrics collector interval (e.g., "60s")
-	WorkerControlRefreshInterval string // Worker soft-pause control poll interval (e.g., "10s")
+	MaxConcurrentExports             int
+	MaxConcurrentImports             int
+	MaxConcurrentRestores            int
+	ExportPollInterval               string // Export worker poll interval (e.g., "10s")
+	ImportPollInterval               string // Import worker poll interval (e.g., "10s")
+	RestorePollInterval              string // Restore worker poll interval (e.g., "10s")
+	RefreshTokenCleanupInterval      string // Refresh token cleanup interval (e.g., "1h")
+	EmailVerificationCleanupInterval string // Email verification token cleanup interval (e.g., "1h")
+	GroupPurgeInterval               string // Group purge worker interval (e.g., "5m")
+	WarrantyReminderInterval         string // Warranty reminder worker interval (e.g., "1h")
+	StorageQuotaReminderInterval     string // Storage quota warning worker interval (e.g., "1h")
+	LoanReminderInterval             string // Loan reminder worker interval (e.g., "1h")
+	LoanReminderDueSoonDays          int    // Forward-looking window for the loan due-soon reminder (default 7)
+	MaintenanceReminderInterval      string // Maintenance reminder worker interval (e.g., "1h")
+	CurrencyMigrationInterval        string // Currency migration worker active-poll interval (e.g., "5s")
+	BusinessMetricsInterval          string // Business-metrics collector interval (e.g., "60s")
+	WorkerControlRefreshInterval     string // Worker soft-pause control poll interval (e.g., "10s")
 }
 
 // ThumbnailGeneration contains default values for thumbnail generation configuration
@@ -90,22 +91,23 @@ func New() Config {
 			DSN: "memory://",
 		},
 		Workers: Workers{
-			MaxConcurrentExports:         3,
-			MaxConcurrentImports:         1,
-			MaxConcurrentRestores:        1,
-			ExportPollInterval:           "10s",
-			ImportPollInterval:           "10s",
-			RestorePollInterval:          "10s",
-			RefreshTokenCleanupInterval:  "1h",
-			GroupPurgeInterval:           "5m",
-			WarrantyReminderInterval:     "1h",
-			StorageQuotaReminderInterval: "1h",
-			LoanReminderInterval:         "1h",
-			LoanReminderDueSoonDays:      7,
-			MaintenanceReminderInterval:  "1h",
-			CurrencyMigrationInterval:    "5s",
-			BusinessMetricsInterval:      "60s",
-			WorkerControlRefreshInterval: "10s",
+			MaxConcurrentExports:             3,
+			MaxConcurrentImports:             1,
+			MaxConcurrentRestores:            1,
+			ExportPollInterval:               "10s",
+			ImportPollInterval:               "10s",
+			RestorePollInterval:              "10s",
+			RefreshTokenCleanupInterval:      "1h",
+			EmailVerificationCleanupInterval: "1h",
+			GroupPurgeInterval:               "5m",
+			WarrantyReminderInterval:         "1h",
+			StorageQuotaReminderInterval:     "1h",
+			LoanReminderInterval:             "1h",
+			LoanReminderDueSoonDays:          7,
+			MaintenanceReminderInterval:      "1h",
+			CurrencyMigrationInterval:        "5s",
+			BusinessMetricsInterval:          "60s",
+			WorkerControlRefreshInterval:     "10s",
 		},
 		ThumbnailGeneration: ThumbnailGeneration{
 			MaxConcurrentPerUser: 5,     // Maximum 5 simultaneous thumbnail generation jobs per user
@@ -191,6 +193,11 @@ func GetRestorePollInterval() string {
 // GetRefreshTokenCleanupInterval returns the default refresh token cleanup interval
 func GetRefreshTokenCleanupInterval() string {
 	return defaultConfig.Workers.RefreshTokenCleanupInterval
+}
+
+// GetEmailVerificationCleanupInterval returns the default email verification token cleanup interval
+func GetEmailVerificationCleanupInterval() string {
+	return defaultConfig.Workers.EmailVerificationCleanupInterval
 }
 
 // GetGroupPurgeInterval returns the default interval between group purge sweeps.

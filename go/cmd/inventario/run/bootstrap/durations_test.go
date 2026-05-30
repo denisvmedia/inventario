@@ -13,22 +13,23 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 	c := qt.New(t)
 
 	cfg := &bootstrap.Config{
-		ExportPollInterval:           "11s",
-		ImportPollInterval:           "12s",
-		RestorePollInterval:          "13s",
-		RefreshTokenCleanupInterval:  "2h",
-		GroupPurgeInterval:           "7m",
-		WarrantyReminderInterval:     "30m",
-		StorageQuotaReminderInterval: "20m",
-		LoanReminderInterval:         "45m",
-		MaintenanceReminderInterval:  "55m",
-		CurrencyMigrationInterval:    "8s",
-		BusinessMetricsInterval:      "90s",
-		ThumbnailPollInterval:        "7s",
-		ThumbnailCleanupInterval:     "6m",
-		ThumbnailJobRetentionPeriod:  "48h",
-		ThumbnailJobBatchTimeout:     "45s",
-		DetachedThumbnailJobTimeout:  "3m",
+		ExportPollInterval:               "11s",
+		ImportPollInterval:               "12s",
+		RestorePollInterval:              "13s",
+		RefreshTokenCleanupInterval:      "2h",
+		EmailVerificationCleanupInterval: "45m",
+		GroupPurgeInterval:               "7m",
+		WarrantyReminderInterval:         "30m",
+		StorageQuotaReminderInterval:     "20m",
+		LoanReminderInterval:             "45m",
+		MaintenanceReminderInterval:      "55m",
+		CurrencyMigrationInterval:        "8s",
+		BusinessMetricsInterval:          "90s",
+		ThumbnailPollInterval:            "7s",
+		ThumbnailCleanupInterval:         "6m",
+		ThumbnailJobRetentionPeriod:      "48h",
+		ThumbnailJobBatchTimeout:         "45s",
+		DetachedThumbnailJobTimeout:      "3m",
 	}
 
 	got, err := bootstrap.ParseWorkerDurations(cfg)
@@ -40,6 +41,7 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 	c.Assert(got.ImportPollInterval, qt.Equals, 12*time.Second)
 	c.Assert(got.RestorePollInterval, qt.Equals, 13*time.Second)
 	c.Assert(got.RefreshTokenCleanupInterval, qt.Equals, 2*time.Hour)
+	c.Assert(got.EmailVerificationCleanupInterval, qt.Equals, 45*time.Minute)
 	c.Assert(got.GroupPurgeInterval, qt.Equals, 7*time.Minute)
 	c.Assert(got.WarrantyReminderInterval, qt.Equals, 30*time.Minute)
 	c.Assert(got.StorageQuotaReminderInterval, qt.Equals, 20*time.Minute)
@@ -103,6 +105,12 @@ func TestParseWorkerDurations_FailsOnInvalidFlag(t *testing.T) {
 			name:        "non-positive thumbnail retention",
 			mutate:      func(c *bootstrap.Config) { c.ThumbnailJobRetentionPeriod = "-1h" },
 			wantFlag:    "thumbnail-job-retention-period",
+			wantMessage: "must be positive",
+		},
+		{
+			name:        "non-positive email verification cleanup interval",
+			mutate:      func(c *bootstrap.Config) { c.EmailVerificationCleanupInterval = "0s" },
+			wantFlag:    "email-verification-cleanup-interval",
 			wantMessage: "must be positive",
 		},
 		{
