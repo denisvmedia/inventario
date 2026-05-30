@@ -59,15 +59,16 @@ remote_apply() {
 # install (idempotent thereafter — the password is the seed value, not a
 # runtime credential).
 #
-# When the bundle also provides `jwt.secret` and/or `file_signing.key`, this
-# same Secret additionally carries `INVENTARIO_RUN_JWT_SECRET` and
-# `INVENTARIO_RUN_FILE_SIGNING_KEY`, pinning the apiserver's token-signing key
-# (sessions + back-office MFA) and file-URL signing key across restarts (#1943).
-# The chart loads the whole Secret via `envFrom`, so the keys reach the
-# apiserver as-is — no chart change needed. Both are OPTIONAL: an absent value
-# leaves the apiserver on its random per-restart fallback (JWT: every redeploy
-# logs users out and back-office MFA enrollment becomes undecryptable;
-# file-signing: previously-issued signed file-download URLs stop validating).
+# When the bundle provides any of `jwt.secret`, `file_signing.key`, or
+# `oauth_state.key`, this same Secret additionally carries the matching
+# `INVENTARIO_RUN_JWT_SECRET` / `INVENTARIO_RUN_FILE_SIGNING_KEY` /
+# `INVENTARIO_RUN_OAUTH_STATE_KEY`, pinning the apiserver's signing material
+# across restarts (#1943). The chart loads the whole Secret via `envFrom`, so
+# the keys reach the apiserver as-is — no chart change needed. All are OPTIONAL;
+# an absent value leaves that key on the apiserver's random per-restart fallback
+# (JWT: every redeploy logs users out and back-office MFA enrollment becomes
+# undecryptable; file-signing: previously-issued signed file-download URLs stop
+# validating; oauth-state: an in-flight OAuth sign-in fails state validation).
 #
 # Per-PR preview namespaces (`inv-vcl01-pr{N}`) are created dynamically by
 # ArgoCD and so are NOT covered here; their ApplicationSet template
@@ -94,6 +95,13 @@ fi
 FILE_SIGNING_KEY=$(lookup "file_signing.key")
 if [ -z "$FILE_SIGNING_KEY" ]; then
     warn "file_signing.key missing in secrets bundle; inv-vcl01-master/longevity will use an EPHEMERAL per-restart file-signing key (previously-issued signed file-download URLs stop validating after a redeploy). Set file_signing.key to make it stable."
+fi
+# Optional OAuth state-signing key for the persistent envs, same scheme. Only
+# matters when OAuth sign-in is enabled; absent it, an in-flight OAuth flow that
+# crosses a restart/replica fails state validation. Warn, don't fail.
+OAUTH_STATE_KEY=$(lookup "oauth_state.key")
+if [ -z "$OAUTH_STATE_KEY" ]; then
+    warn "oauth_state.key missing in secrets bundle; inv-vcl01-master/longevity will use an EPHEMERAL per-restart OAuth state key (an OAuth sign-in spanning a redeploy/replica fails state validation). Set oauth_state.key to make it stable."
 fi
 ADMIN_MISSING=0
 if [ -z "$ADMIN_PASSWORD" ]; then
@@ -135,6 +143,12 @@ EOF
                 cat <<EOF
   INVENTARIO_RUN_FILE_SIGNING_KEY: |-
 $(printf '%s' "$FILE_SIGNING_KEY" | sed 's/^/    /')
+EOF
+            fi
+            if [ -n "$OAUTH_STATE_KEY" ]; then
+                cat <<EOF
+  INVENTARIO_RUN_OAUTH_STATE_KEY: |-
+$(printf '%s' "$OAUTH_STATE_KEY" | sed 's/^/    /')
 EOF
             fi
         } | remote_apply

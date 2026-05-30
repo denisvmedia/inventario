@@ -100,12 +100,13 @@ spec:
               # SETUP_ADMIN_PASSWORD from it; runtime workloads slurp the
               # rest of envFrom unchanged (the demo.* stack provides DSNs
               # inline via the deployment's env: block). When the bundle
-              # provides jwt.secret / file_signing.key, the same Secret also
-              # carries INVENTARIO_RUN_JWT_SECRET / INVENTARIO_RUN_FILE_SIGNING_KEY
-              # so the apiserver's token-signing key (durable sessions +
-              # back-office MFA enrollment) and file-URL signing key are stable
-              # across restarts (#1943); absent either, the apiserver falls back
-              # to a random per-restart value for that key.
+              # provides jwt.secret / file_signing.key / oauth_state.key, the
+              # same Secret also carries the matching INVENTARIO_RUN_JWT_SECRET /
+              # INVENTARIO_RUN_FILE_SIGNING_KEY / INVENTARIO_RUN_OAUTH_STATE_KEY
+              # so the apiserver's signing material (durable sessions +
+              # back-office MFA, signed file URLs, in-flight OAuth state) is
+              # stable across restarts (#1943); absent any, the apiserver falls
+              # back to a random per-restart value for that key.
               secrets:
                 existingSecret: inventario-admin
               ingress:

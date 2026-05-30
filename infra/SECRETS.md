@@ -17,10 +17,10 @@ on the laptop, ships the plaintext to the VM tmpfs, and `apply-secrets.sh`
 turns the JSON into the admin / repo-creds / OAuth Kubernetes Secrets
 (`inv-vcl01-master` + `inv-vcl01-longevity` `inventario-admin`,
 `argocd/github-app-creds`, `tailscale/operator-oauth`). The `inventario-admin`
-Secret carries the admin seed password and, when `jwt.secret` / `file_signing.key`
-are set, stable `INVENTARIO_RUN_JWT_SECRET` / `INVENTARIO_RUN_FILE_SIGNING_KEY`
-so sessions, back-office MFA, and signed file URLs survive restarts (see §4b).
-When the `velero.*`
+Secret carries the admin seed password and, when the optional `jwt.secret` /
+`file_signing.key` / `oauth_state.key` fields are set, the matching stable
+signing keys so sessions, back-office MFA, signed file URLs, and in-flight
+OAuth sign-ins survive restarts (see §4b). When the `velero.*`
 keys are filled, `vm-install.sh` additionally materializes
 `velero/cloud-credentials` (R2 API token) and `velero/velero-repo-credentials`
 (the kopia repo password) at install time — see "Velero / Cloudflare R2" below.
@@ -229,17 +229,20 @@ Stash both for "Filling the bundle".
 
 ### 4b. Generate the stable signing keys (recommended for master + longevity)
 
-Two runtime keys pin the apiserver's signing material on the persistent envs.
+Three runtime keys pin the apiserver's signing material on the persistent envs.
 `apply-secrets.sh` writes each into the same `inventario-admin` Secret, and the
 chart loads the whole Secret via `envFrom`:
 
 - **`jwt.secret`** → `INVENTARIO_RUN_JWT_SECRET` — signs auth tokens.
 - **`file_signing.key`** → `INVENTARIO_RUN_FILE_SIGNING_KEY` — signs time-limited
   file-download URLs.
+- **`oauth_state.key`** → `INVENTARIO_RUN_OAUTH_STATE_KEY` — signs the OAuth
+  `state` parameter during social sign-in.
 
 Why they matter: when a field is empty, each apiserver pod generates a fresh
-**random** value at startup (`getJWTSecret()` / `getFileSigningKey()` in
-`go/cmd/inventario/run/bootstrap/crypto.go`). On a long-lived env:
+**random** value at startup (`getJWTSecret()` / `getFileSigningKey()` /
+`getOAuthStateKey()` in `go/cmd/inventario/run/bootstrap/crypto.go`). On a
+long-lived env:
 
 - An ephemeral **JWT secret** logs **everyone out on every redeploy**, and —
   because the back-office (super-admin) plane encrypts each operator's TOTP
@@ -249,8 +252,11 @@ Why they matter: when a field is empty, each apiserver pod generates a fresh
 - An ephemeral **file-signing key** invalidates previously-issued signed
   file-download URLs on every restart (the SPA re-fetches them, so it mostly
   self-heals, but bookmarked / in-flight links break).
+- An ephemeral **OAuth state key** fails state validation for any OAuth
+  sign-in that began before a restart/redeploy or lands on a different replica
+  after the provider redirect (only relevant when OAuth sign-in is enabled).
 
-Both are optional (an absent value keeps the ephemeral fallback, and
+All three are optional (an absent value keeps the ephemeral fallback, and
 `apply-secrets.sh` warns rather than fails). Generate each once and keep it
 stable:
 
@@ -258,6 +264,7 @@ stable:
 # one value per field — 64 hex chars each; set once, don't rotate casually
 openssl rand -hex 32   # -> jwt.secret
 openssl rand -hex 32   # -> file_signing.key
+openssl rand -hex 32   # -> oauth_state.key
 ```
 
 Rotating `jwt.secret` later is a deliberate act: it logs every session out and
@@ -265,7 +272,7 @@ invalidates existing back-office MFA enrollments (re-run
 `inventario backoffice mfa setup` afterwards). Per-PR previews are not covered —
 they stay on the ephemeral per-pod values by design.
 
-Stash both for "Filling the bundle".
+Stash all three for "Filling the bundle".
 
 ### 5. Optional: Tailscale auth-key (for `make recover` on a fresh VM)
 
@@ -339,7 +346,8 @@ cp infra/vm/secrets/secrets.example.yaml infra/vm/secrets/secrets.local.yaml
 chmod 600 infra/vm/secrets/secrets.local.yaml
 
 # 2. Fill in real values — admin.{email,password}, jwt.secret +
-#    file_signing.key (step 4b; recommended for master + longevity, optional),
+#    file_signing.key + oauth_state.key (step 4b; recommended for
+#    master + longevity, optional),
 #    tailscale.{auth_key, oauth_client_id, oauth_client_secret, tailnet_name},
 #    github.{app_id, app_installation_id, app_private_key, url}.
 #    Fill the velero.* block (step 6 above) ONLY if you want the daily R2
