@@ -59,14 +59,15 @@ remote_apply() {
 # install (idempotent thereafter — the password is the seed value, not a
 # runtime credential).
 #
-# When the bundle also provides `jwt.secret`, this same Secret additionally
-# carries `INVENTARIO_RUN_JWT_SECRET`, pinning the apiserver's token-signing
-# key so sessions and back-office MFA enrollments survive restarts (#1943).
-# The chart loads the whole Secret via `envFrom`, so the key reaches the
-# apiserver as-is — no chart change needed. It is OPTIONAL: an absent
-# jwt.secret leaves the apiserver on its random per-restart fallback (every
-# redeploy logs users out and any back-office MFA enrollment becomes
-# undecryptable).
+# When the bundle also provides `jwt.secret` and/or `file_signing.key`, this
+# same Secret additionally carries `INVENTARIO_RUN_JWT_SECRET` and
+# `INVENTARIO_RUN_FILE_SIGNING_KEY`, pinning the apiserver's token-signing key
+# (sessions + back-office MFA) and file-URL signing key across restarts (#1943).
+# The chart loads the whole Secret via `envFrom`, so the keys reach the
+# apiserver as-is — no chart change needed. Both are OPTIONAL: an absent value
+# leaves the apiserver on its random per-restart fallback (JWT: every redeploy
+# logs users out and back-office MFA enrollment becomes undecryptable;
+# file-signing: previously-issued signed file-download URLs stop validating).
 #
 # Per-PR preview namespaces (`inv-vcl01-pr{N}`) are created dynamically by
 # ArgoCD and so are NOT covered here; their ApplicationSet template
@@ -86,6 +87,13 @@ ADMIN_PASSWORD=$(lookup "admin.password")
 JWT_SECRET=$(lookup "jwt.secret")
 if [ -z "$JWT_SECRET" ]; then
     warn "jwt.secret missing in secrets bundle; inv-vcl01-master/longevity will use an EPHEMERAL per-restart JWT secret (every redeploy logs users out and back-office MFA enrollment won't survive a restart). Set jwt.secret to make it stable."
+fi
+# Optional file-URL signing key for the persistent envs, same scheme as
+# jwt.secret above. Absent it, signed file-download URLs break after a restart
+# (the SPA re-fetches them, so it mostly self-heals); warn, don't fail.
+FILE_SIGNING_KEY=$(lookup "file_signing.key")
+if [ -z "$FILE_SIGNING_KEY" ]; then
+    warn "file_signing.key missing in secrets bundle; inv-vcl01-master/longevity will use an EPHEMERAL per-restart file-signing key (previously-issued signed file-download URLs stop validating after a redeploy). Set file_signing.key to make it stable."
 fi
 ADMIN_MISSING=0
 if [ -z "$ADMIN_PASSWORD" ]; then
@@ -121,6 +129,12 @@ EOF
                 cat <<EOF
   INVENTARIO_RUN_JWT_SECRET: |-
 $(printf '%s' "$JWT_SECRET" | sed 's/^/    /')
+EOF
+            fi
+            if [ -n "$FILE_SIGNING_KEY" ]; then
+                cat <<EOF
+  INVENTARIO_RUN_FILE_SIGNING_KEY: |-
+$(printf '%s' "$FILE_SIGNING_KEY" | sed 's/^/    /')
 EOF
             fi
         } | remote_apply

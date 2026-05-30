@@ -17,9 +17,10 @@ on the laptop, ships the plaintext to the VM tmpfs, and `apply-secrets.sh`
 turns the JSON into the admin / repo-creds / OAuth Kubernetes Secrets
 (`inv-vcl01-master` + `inv-vcl01-longevity` `inventario-admin`,
 `argocd/github-app-creds`, `tailscale/operator-oauth`). The `inventario-admin`
-Secret carries the admin seed password and, when `jwt.secret` is set, a stable
-`INVENTARIO_RUN_JWT_SECRET` so sessions and back-office MFA survive restarts
-(see §4b). When the `velero.*`
+Secret carries the admin seed password and, when `jwt.secret` / `file_signing.key`
+are set, stable `INVENTARIO_RUN_JWT_SECRET` / `INVENTARIO_RUN_FILE_SIGNING_KEY`
+so sessions, back-office MFA, and signed file URLs survive restarts (see §4b).
+When the `velero.*`
 keys are filled, `vm-install.sh` additionally materializes
 `velero/cloud-credentials` (R2 API token) and `velero/velero-repo-credentials`
 (the kopia repo password) at install time — see "Velero / Cloudflare R2" below.
@@ -226,36 +227,45 @@ openssl rand -base64 24
 
 Stash both for "Filling the bundle".
 
-### 4b. Generate the stable JWT secret (recommended for master + longevity)
+### 4b. Generate the stable signing keys (recommended for master + longevity)
 
-The `jwt.secret` field pins the apiserver's token-signing key on the two
-persistent envs. `apply-secrets.sh` writes it into the same
-`inventario-admin` Secret under key `INVENTARIO_RUN_JWT_SECRET`, and the chart
-loads the whole Secret via `envFrom`, so the apiserver signs tokens with it.
+Two runtime keys pin the apiserver's signing material on the persistent envs.
+`apply-secrets.sh` writes each into the same `inventario-admin` Secret, and the
+chart loads the whole Secret via `envFrom`:
 
-Why it matters: when `jwt.secret` is empty, each apiserver pod generates a
-fresh **random** secret at startup (`getJWTSecret()` in
-`go/cmd/inventario/run/bootstrap/crypto.go`). On a long-lived env that means
-**every redeploy logs everyone out**, and — because the back-office (super-admin)
-auth plane encrypts each operator's TOTP secret with an HKDF subkey of this
-value — **a back-office MFA enrollment becomes undecryptable after the next
-restart**, so an operator can never complete a durable enrollment and is locked
-out of `/backoffice/login`.
+- **`jwt.secret`** → `INVENTARIO_RUN_JWT_SECRET` — signs auth tokens.
+- **`file_signing.key`** → `INVENTARIO_RUN_FILE_SIGNING_KEY` — signs time-limited
+  file-download URLs.
 
-It is optional (an absent value just keeps the ephemeral fallback, and
-`apply-secrets.sh` warns rather than fails), but set it for master/longevity:
+Why they matter: when a field is empty, each apiserver pod generates a fresh
+**random** value at startup (`getJWTSecret()` / `getFileSigningKey()` in
+`go/cmd/inventario/run/bootstrap/crypto.go`). On a long-lived env:
+
+- An ephemeral **JWT secret** logs **everyone out on every redeploy**, and —
+  because the back-office (super-admin) plane encrypts each operator's TOTP
+  secret with an HKDF subkey of it — makes a back-office MFA enrollment
+  **undecryptable after the next restart**, locking operators out of
+  `/backoffice/login`.
+- An ephemeral **file-signing key** invalidates previously-issued signed
+  file-download URLs on every restart (the SPA re-fetches them, so it mostly
+  self-heals, but bookmarked / in-flight links break).
+
+Both are optional (an absent value keeps the ephemeral fallback, and
+`apply-secrets.sh` warns rather than fails). Generate each once and keep it
+stable:
 
 ```bash
-# 64 hex chars — accepted as-is; set once, never rotate casually
-openssl rand -hex 32
+# one value per field — 64 hex chars each; set once, don't rotate casually
+openssl rand -hex 32   # -> jwt.secret
+openssl rand -hex 32   # -> file_signing.key
 ```
 
-Rotating it later is a deliberate act: it logs every session out and
+Rotating `jwt.secret` later is a deliberate act: it logs every session out and
 invalidates existing back-office MFA enrollments (re-run
-`inventario backoffice mfa setup` afterwards). Per-PR previews are not covered
-— they stay on the ephemeral per-pod secret by design.
+`inventario backoffice mfa setup` afterwards). Per-PR previews are not covered —
+they stay on the ephemeral per-pod values by design.
 
-Stash it for "Filling the bundle".
+Stash both for "Filling the bundle".
 
 ### 5. Optional: Tailscale auth-key (for `make recover` on a fresh VM)
 
@@ -328,8 +338,8 @@ cd <repo-root>
 cp infra/vm/secrets/secrets.example.yaml infra/vm/secrets/secrets.local.yaml
 chmod 600 infra/vm/secrets/secrets.local.yaml
 
-# 2. Fill in real values — admin.{email,password}, jwt.secret (step 4b;
-#    recommended for master + longevity, optional),
+# 2. Fill in real values — admin.{email,password}, jwt.secret +
+#    file_signing.key (step 4b; recommended for master + longevity, optional),
 #    tailscale.{auth_key, oauth_client_id, oauth_client_secret, tailnet_name},
 #    github.{app_id, app_installation_id, app_private_key, url}.
 #    Fill the velero.* block (step 6 above) ONLY if you want the daily R2
