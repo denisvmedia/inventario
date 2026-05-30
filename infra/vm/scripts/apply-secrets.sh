@@ -88,6 +88,13 @@ ADMIN_PASSWORD=$(lookup "admin.password")
 JWT_SECRET=$(lookup "jwt.secret")
 if [ -z "$JWT_SECRET" ]; then
     warn "jwt.secret missing in secrets bundle; inv-vcl01-master/longevity will use an EPHEMERAL per-restart JWT secret (every redeploy logs users out and back-office MFA enrollment won't survive a restart). Set jwt.secret to make it stable."
+elif [ "${#JWT_SECRET}" -lt 32 ]; then
+    # getJWTSecret() only accepts >=32 chars (plaintext) or >=64 hex chars;
+    # anything shorter is silently ignored and a random per-restart secret is
+    # generated. Drop it so we fall through to the ephemeral fallback loudly
+    # rather than injecting a value the apiserver will discard.
+    warn "jwt.secret is shorter than 32 chars; the apiserver ignores it and generates a random per-restart secret. Treating it as unset — use 'openssl rand -hex 32'."
+    JWT_SECRET=""
 fi
 # Optional file-URL signing key for the persistent envs, same scheme as
 # jwt.secret above. Absent it, signed file-download URLs break after a restart
@@ -95,6 +102,9 @@ fi
 FILE_SIGNING_KEY=$(lookup "file_signing.key")
 if [ -z "$FILE_SIGNING_KEY" ]; then
     warn "file_signing.key missing in secrets bundle; inv-vcl01-master/longevity will use an EPHEMERAL per-restart file-signing key (previously-issued signed file-download URLs stop validating after a redeploy). Set file_signing.key to make it stable."
+elif [ "${#FILE_SIGNING_KEY}" -lt 32 ]; then
+    warn "file_signing.key is shorter than 32 chars; the apiserver ignores it and generates a random per-restart key. Treating it as unset — use 'openssl rand -hex 32'."
+    FILE_SIGNING_KEY=""
 fi
 # Optional OAuth state-signing key for the persistent envs, same scheme. Only
 # matters when OAuth sign-in is enabled; absent it, an in-flight OAuth flow that
@@ -102,6 +112,9 @@ fi
 OAUTH_STATE_KEY=$(lookup "oauth_state.key")
 if [ -z "$OAUTH_STATE_KEY" ]; then
     warn "oauth_state.key missing in secrets bundle; inv-vcl01-master/longevity will use an EPHEMERAL per-restart OAuth state key (an OAuth sign-in spanning a redeploy/replica fails state validation). Set oauth_state.key to make it stable."
+elif [ "${#OAUTH_STATE_KEY}" -lt 32 ]; then
+    warn "oauth_state.key is shorter than 32 chars; the apiserver ignores it and generates a random per-restart key. Treating it as unset — use 'openssl rand -hex 32'."
+    OAUTH_STATE_KEY=""
 fi
 ADMIN_MISSING=0
 if [ -z "$ADMIN_PASSWORD" ]; then
