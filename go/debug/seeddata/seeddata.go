@@ -178,6 +178,18 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 			"user", user1.Email,
 			"location_count", locCount,
 		)
+		// The data tables are populated, but the bundled fixture BLOBS
+		// live in a separate store with an independent lifecycle. A DB
+		// seeded metadata-only (before blob uploads were enabled for its
+		// tenant, #1931) or a bucket wiped independently of the DB leaves
+		// fixture file rows pointing at objects that don't exist — the
+		// Files page then shows entries whose download/thumbnail 404s.
+		// Reconcile so the bucket converges back to the rows on the next
+		// seed call instead of staying permanently diverged. Best-effort
+		// and conservative — see reconcileSeedBlobs.
+		if err := reconcileSeedBlobs(userCtx, userRegistrySet, tenant, opts); err != nil {
+			return true, fmt.Errorf("reconcile seed blobs: %w", err)
+		}
 		return true, nil
 	}
 

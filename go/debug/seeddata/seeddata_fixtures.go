@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	"gocloud.dev/blob"
@@ -66,6 +67,27 @@ var fixtureMetadata = map[fixtureKind]fixtureMeta{
 	fixtureManual:          {Ext: ".pdf", MIMEType: "application/pdf"},
 }
 
+// seedBasenamePrefix is the fixed prefix every seed blob basename
+// carries (the full basename is `seed-<uuid><ext>`). It is the single
+// source of truth shared by the uploaders that MINT keys (upload) and
+// the reconciler that RECOGNISES already-seeded keys
+// (reconcileSeedBlobs / seedFixtureForRow).
+const seedBasenamePrefix = "seed-"
+
+// fixtureByPathBasename reverse-maps the Path stored on a seeded file
+// row back to the fixture it was created from. attachFile stores
+// Path = <fixture-basename> (e.g. "photo-livingroom", "invoice",
+// "manual"), so an untouched seed row round-trips cleanly here; a file a
+// user has since renamed won't match and the reconciler leaves it alone.
+var fixtureByPathBasename = func() map[string]fixtureKind {
+	m := make(map[string]fixtureKind, len(fixtureMetadata))
+	for fx := range fixtureMetadata {
+		base := strings.TrimSuffix(strings.TrimPrefix(string(fx), "_files/"), fixtureExt(fx))
+		m[base] = fx
+	}
+	return m
+}()
+
 // blobUploader writes seed fixture bytes into the configured upload
 // bucket. Implementations differ between "real backend" (open the bucket
 // via gocloud, copy bytes through) and "no backend" (no-op — the seed
@@ -78,6 +100,17 @@ var fixtureMetadata = map[fixtureKind]fixtureMeta{
 // namespace as user-uploaded files (#1793).
 type blobUploader interface {
 	upload(ctx context.Context, fixture fixtureKind, tenantID string) (storagePath string, sizeBytes int64, err error)
+	// ensure idempotently guarantees the fixture bytes exist at an
+	// ALREADY-KNOWN blob key (the OriginalPath recorded on an existing
+	// seed file row), returning the blob's authoritative size. Where
+	// upload mints a fresh key for a brand-new row, ensure repairs a row
+	// whose key predates its bytes — e.g. a database seeded metadata-only
+	// before blob uploads were enabled for its tenant (#1931), or a
+	// bucket that lost its contents independently of the DB. wrote
+	// reports whether bytes were actually written this call (false when
+	// the blob already existed, or for the no-op uploader). See
+	// reconcileSeedBlobs.
+	ensure(ctx context.Context, blobKey string, fixture fixtureKind) (sizeBytes int64, wrote bool, err error)
 	close()
 }
 
@@ -109,8 +142,15 @@ func (*noopUploader) upload(_ context.Context, fixture fixtureKind, tenantID str
 	// these rows obvious if anyone debugs the table. The full key is
 	// tenant-prefixed (#1793) for consistency with real uploads, even
 	// though no bucket actually receives the bytes.
-	basename := fmt.Sprintf("seed-%s%s", uuid.NewString(), filepath.Ext(string(fixture)))
+	basename := fmt.Sprintf("%s%s%s", seedBasenamePrefix, uuid.NewString(), filepath.Ext(string(fixture)))
 	return blobkeys.BuildSeedKey(tenantID, basename), 0, nil
+}
+
+// ensure is a no-op for the no-op uploader: with no bucket attached there
+// is nothing to write and nothing to repair. Returns wrote=false so the
+// reconciler doesn't touch the row's recorded size.
+func (*noopUploader) ensure(context.Context, string, fixtureKind) (int64, bool, error) {
+	return 0, false, nil
 }
 
 func (*noopUploader) close() {}
@@ -124,20 +164,55 @@ func (u *bucketUploader) upload(ctx context.Context, fixture fixtureKind, tenant
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to read fixture %s: %w", fixture, err)
 	}
-	basename := fmt.Sprintf("seed-%s%s", uuid.NewString(), filepath.Ext(string(fixture)))
+	basename := fmt.Sprintf("%s%s%s", seedBasenamePrefix, uuid.NewString(), filepath.Ext(string(fixture)))
 	storagePath := blobkeys.BuildSeedKey(tenantID, basename)
-	w, err := u.bucket.NewWriter(ctx, storagePath, nil)
+	if err := u.writeFixture(ctx, storagePath, data); err != nil {
+		return "", 0, err
+	}
+	return storagePath, int64(len(data)), nil
+}
+
+// ensure writes the fixture bytes at the given pre-existing key only when
+// the object is missing from the bucket, so it is safe to call on every
+// re-seed. When the blob is already present it returns its current size
+// without rewriting. See the blobUploader interface doc.
+func (u *bucketUploader) ensure(ctx context.Context, blobKey string, fixture fixtureKind) (int64, bool, error) {
+	exists, err := u.bucket.Exists(ctx, blobKey)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to open bucket writer for %s: %w", storagePath, err)
+		return 0, false, fmt.Errorf("failed to check existence of %s: %w", blobKey, err)
+	}
+	if exists {
+		attrs, aerr := u.bucket.Attributes(ctx, blobKey)
+		if aerr != nil {
+			return 0, false, fmt.Errorf("failed to read attributes of %s: %w", blobKey, aerr)
+		}
+		return attrs.Size, false, nil
+	}
+	data, err := fixturesFS.ReadFile(string(fixture))
+	if err != nil {
+		return 0, false, fmt.Errorf("failed to read fixture %s: %w", fixture, err)
+	}
+	if err := u.writeFixture(ctx, blobKey, data); err != nil {
+		return 0, false, err
+	}
+	return int64(len(data)), true, nil
+}
+
+// writeFixture streams data into the bucket at key, wrapping the
+// open/write/close trio shared by upload and ensure.
+func (u *bucketUploader) writeFixture(ctx context.Context, key string, data []byte) error {
+	w, err := u.bucket.NewWriter(ctx, key, nil)
+	if err != nil {
+		return fmt.Errorf("failed to open bucket writer for %s: %w", key, err)
 	}
 	if _, werr := w.Write(data); werr != nil {
 		_ = w.Close()
-		return "", 0, fmt.Errorf("failed to write seed fixture %s: %w", storagePath, werr)
+		return fmt.Errorf("failed to write seed fixture %s: %w", key, werr)
 	}
 	if cerr := w.Close(); cerr != nil {
-		return "", 0, fmt.Errorf("failed to close writer for %s: %w", storagePath, cerr)
+		return fmt.Errorf("failed to close writer for %s: %w", key, cerr)
 	}
-	return storagePath, int64(len(data)), nil
+	return nil
 }
 
 func (u *bucketUploader) close() {

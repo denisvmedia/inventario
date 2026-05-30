@@ -573,6 +573,105 @@ func TestSeedDataBlobUploads_WhenOptIn(t *testing.T) {
 		qt.Commentf("seed fixtures written to the configured bucket"))
 }
 
+// TestSeedDataReconcilesMissingBlobsOnReseed reproduces the production
+// failure mode behind inv-vcl01-master's empty Files page: a database
+// first seeded metadata-only (blob uploads disabled for its tenant, the
+// pre-#1931 default) carries fixture file rows with SizeBytes 0 and no
+// objects in the bucket. The location-count idempotency gate means a
+// later re-seed short-circuits the whole seed — so before the reconcile
+// step, the bytes were never backfilled and the rows stayed dangling
+// forever. A second seed with the bucket + opt-in now configured must
+// repair them.
+func TestSeedDataReconcilesMissingBlobsOnReseed(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	factorySet := memory.NewFactorySet()
+
+	// First seed: no UploadLocation → no-op uploader → metadata-only rows.
+	// This is the state any demo/preview env seeded before #1931 is in.
+	_, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{
+		TenantSlug:            "acme",
+		CreateTenantIfMissing: true,
+		// UploadLocation empty: metadata-only, mirrors the pre-opt-in seed.
+	})
+	c.Assert(err, qt.IsNil)
+
+	images, withBytes := seededImageStats(c, factorySet, ctx)
+	c.Assert(images > 0, qt.IsTrue)
+	c.Assert(withBytes, qt.Equals, 0,
+		qt.Commentf("first seed wrote no bytes — rows are metadata-only"))
+
+	// Second seed: bucket + opt-in now wired (the post-#1931 config). The
+	// location-count gate makes this an "already seeded" no-op for the
+	// data tables, but reconcileSeedBlobs must still backfill the bytes.
+	tempDir := t.TempDir()
+	alreadySeeded, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{
+		TenantSlug:       "acme",
+		UploadLocation:   "file://" + tempDir + "?create_dir=1",
+		AllowBlobUploads: true,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(alreadySeeded, qt.IsTrue,
+		qt.Commentf("data tables already populated — this is the reconcile path"))
+
+	imagesAfter, withBytesAfter := seededImageStats(c, factorySet, ctx)
+	c.Assert(imagesAfter, qt.Equals, images,
+		qt.Commentf("reconcile must not create or drop rows"))
+	c.Assert(withBytesAfter, qt.Equals, imagesAfter,
+		qt.Commentf("every fixture row now carries the real byte count"))
+
+	// The fixture bytes physically landed in the bucket at the rows'
+	// pre-existing keys.
+	c.Assert(countRegularFiles(c, tempDir) > 0, qt.IsTrue,
+		qt.Commentf("reconcile wrote the missing blobs to the bucket"))
+
+	// Idempotent: a third identical seed finds every blob present and is a
+	// clean no-op (no error, nothing rewritten).
+	alreadySeeded, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{
+		TenantSlug:       "acme",
+		UploadLocation:   "file://" + tempDir + "?create_dir=1",
+		AllowBlobUploads: true,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(alreadySeeded, qt.IsTrue)
+	_, withBytesFinal := seededImageStats(c, factorySet, ctx)
+	c.Assert(withBytesFinal, qt.Equals, imagesAfter)
+}
+
+// TestSeedDataReconcileRespectsBlobGate pins that the reconcile path
+// honours the same tenant gate as the fresh-seed upload path: a re-seed
+// of a non-`test-org` tenant WITHOUT the opt-in must not write bytes,
+// even with a real UploadLocation configured. Otherwise the reconcile
+// step would be a back door around the public-/api/v1/seed cost bound.
+func TestSeedDataReconcileRespectsBlobGate(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	factorySet := memory.NewFactorySet()
+
+	_, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{
+		TenantSlug:            "acme",
+		CreateTenantIfMissing: true,
+	})
+	c.Assert(err, qt.IsNil)
+
+	tempDir := t.TempDir()
+	alreadySeeded, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{
+		TenantSlug:     "acme",
+		UploadLocation: "file://" + tempDir + "?create_dir=1",
+		// AllowBlobUploads left false — no opt-in.
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(alreadySeeded, qt.IsTrue)
+
+	_, withBytes := seededImageStats(c, factorySet, ctx)
+	c.Assert(withBytes, qt.Equals, 0,
+		qt.Commentf("reconcile must not write bytes without the opt-in"))
+	c.Assert(countRegularFiles(c, tempDir), qt.Equals, 0,
+		qt.Commentf("no objects written to the bucket without the opt-in"))
+}
+
 // seededImageStats returns (number of image-category file rows, number
 // of those carrying non-zero SizeBytes). Image-category rows only ever
 // come from the bundled fixture upload path, so they cleanly isolate the
