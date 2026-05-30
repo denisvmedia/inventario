@@ -121,6 +121,18 @@ func NewFactorySet() *registry.FactorySet {
 		fs.MaintenanceReminderRegistry,
 		fs.GroupMembershipRegistry,
 	)
+	// SystemStats (#843): the memory backend is dev/test only and its
+	// data registries are tenant/group-scoped behind the per-request
+	// context, with no cheap installation-wide roll-up. Rather than range
+	// every registry's internal maps (which would couple this constructor
+	// to each registry's storage shape), report zeros for the business
+	// gauges. A non-nil zero-returning closure is preferred over leaving
+	// the field nil so the collector's behaviour is predictable in dev:
+	// the gauges publish at 0 instead of being skipped entirely. The
+	// postgres backend is the real producer of business metrics.
+	fs.SystemStats = func(context.Context) (registry.SystemStats, error) {
+		return registry.SystemStats{}, nil
+	}
 	fs.PingFn = func(context.Context) error { return nil }
 
 	return fs

@@ -29,6 +29,7 @@ import (
 	"github.com/denisvmedia/inventario/debug"
 	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
 	_ "github.com/denisvmedia/inventario/internal/fileblob"
+	"github.com/denisvmedia/inventario/internal/metrics"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -331,6 +332,11 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+
+	// RED metrics (#843): installed after Recoverer so a recovered panic is
+	// counted as a 500, and after chi routing middleware so RoutePattern
+	// resolves to the matched template. The middleware self-skips "/metrics".
+	r.Use(metrics.HTTPMiddleware)
 
 	// r.Get("/", func(w http.ResponseWriter, _r *http.Request) {
 	//	w.Write([]byte("Welcome to Inventario!"))

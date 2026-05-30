@@ -39,9 +39,15 @@ spec:
         {{- with $cfg.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with $cfg.podAnnotations }}
+      {{- $metricsAnnotations := include "inventario.metricsPodAnnotations" (dict "root" $root "port" (toString $probePort)) }}
+      {{- if or $cfg.podAnnotations (trim $metricsAnnotations) }}
       annotations:
+        {{- with $cfg.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with trim $metricsAnnotations }}
+        {{- . | nindent 8 }}
+        {{- end }}
       {{- end }}
     spec:
       {{- with $root.Values.image.pullSecrets }}

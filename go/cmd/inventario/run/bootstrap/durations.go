@@ -21,6 +21,7 @@ type WorkerDurations struct {
 	LoanReminderInterval         time.Duration
 	MaintenanceReminderInterval  time.Duration
 	CurrencyMigrationInterval    time.Duration
+	BusinessMetricsInterval      time.Duration
 	ThumbnailPollInterval        time.Duration
 	ThumbnailCleanupInterval     time.Duration
 	ThumbnailJobRetentionPeriod  time.Duration
@@ -62,6 +63,7 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		{"loan-reminder-interval", cfg.LoanReminderInterval, &out.LoanReminderInterval},
 		{"maintenance-reminder-interval", cfg.MaintenanceReminderInterval, &out.MaintenanceReminderInterval},
 		{"currency-migration-interval", cfg.CurrencyMigrationInterval, &out.CurrencyMigrationInterval},
+		{"business-metrics-interval", cfg.BusinessMetricsInterval, &out.BusinessMetricsInterval},
 		{"thumbnail-poll-interval", cfg.ThumbnailPollInterval, &out.ThumbnailPollInterval},
 		{"thumbnail-cleanup-interval", cfg.ThumbnailCleanupInterval, &out.ThumbnailCleanupInterval},
 		{"thumbnail-job-retention-period", cfg.ThumbnailJobRetentionPeriod, &out.ThumbnailJobRetentionPeriod},

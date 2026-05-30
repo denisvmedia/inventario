@@ -255,6 +255,18 @@ sudo journalctl -u inventario -f
 ./inventario run 2>&1 | tee /var/log/inventario.log
 ```
 
+### Observability
+
+Prometheus metrics are **always on** at `/metrics` — on the API HTTP port (`3333`) and, in split deployments, on each worker's probe port (`3334`). No flag is required to expose them.
+
+```bash
+# Scrape metrics from a running instance
+curl http://localhost:3333/metrics
+```
+
+- **Local / docker-compose:** a ready-to-run Prometheus + Grafana stack lives at [`deploy/monitoring/`](deploy/monitoring/README.md) (`docker compose --profile monitoring up -d`).
+- **Kubernetes:** the Helm chart can emit `prometheus.io/*` pod annotations (operator-less discovery) or a ServiceMonitor (Prometheus Operator). Both default off — see [`helm/inventario/README.md`](helm/inventario/README.md) → "Metrics & scraping".
+
 ## Maintenance
 
 ### Database Backups

@@ -129,6 +129,58 @@ func TestQueue_CustomKeysIsolation(t *testing.T) {
 	c.Assert(string(got), qt.Equals, "only-q1")
 }
 
+func TestQueue_Depth(t *testing.T) {
+	c := qt.New(t)
+
+	mr, err := miniredis.Run()
+	c.Assert(err, qt.IsNil)
+	defer mr.Close()
+
+	q, err := NewFromConfig(Config{
+		RedisURL: fmt.Sprintf("redis://%s/0", mr.Addr()),
+	})
+	c.Assert(err, qt.IsNil)
+
+	depth, err := q.Depth(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(depth, qt.Equals, 0)
+
+	c.Assert(q.Enqueue(context.Background(), []byte("a")), qt.IsNil)
+	c.Assert(q.Enqueue(context.Background(), []byte("b")), qt.IsNil)
+
+	depth, err = q.Depth(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(depth, qt.Equals, 2)
+
+	got, err := q.Dequeue(context.Background(), 20*time.Millisecond)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.IsNotNil)
+
+	depth, err = q.Depth(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(depth, qt.Equals, 1)
+}
+
+func TestQueue_Depth_IgnoresScheduledRetries(t *testing.T) {
+	c := qt.New(t)
+
+	mr, err := miniredis.Run()
+	c.Assert(err, qt.IsNil)
+	defer mr.Close()
+
+	q, err := NewFromConfig(Config{
+		RedisURL: fmt.Sprintf("redis://%s/0", mr.Addr()),
+	})
+	c.Assert(err, qt.IsNil)
+
+	now := time.Unix(1700000000, 0)
+	c.Assert(q.ScheduleRetry(context.Background(), []byte("retry"), now.Add(time.Hour)), qt.IsNil)
+
+	depth, err := q.Depth(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(depth, qt.Equals, 0)
+}
+
 func TestQueue_PromoteDueRetries_RespectsLimit(t *testing.T) {
 	c := qt.New(t)
 

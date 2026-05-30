@@ -8,7 +8,9 @@ import (
 	"github.com/denisvmedia/inventario/backup/export"
 	importpkg "github.com/denisvmedia/inventario/backup/import"
 	"github.com/denisvmedia/inventario/backup/restore"
+	"github.com/denisvmedia/inventario/internal/metrics"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
 	"github.com/denisvmedia/inventario/services"
 	"github.com/denisvmedia/inventario/services/notifications"
@@ -181,6 +183,64 @@ func StartStorageQuotaReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg 
 	)
 	worker.Start(ctx)
 	return worker.Stop
+}
+
+// StartBusinessMetricsWorker wires and starts the installation-wide
+// business-metrics collector (#843). It mirrors the reminder-worker
+// wiring: pulls the configured interval from rs.WorkerDurations and owns
+// a single goroutine with a graceful stop.
+//
+// The collector reads through rs.FactorySet.SystemStats, which bypasses
+// tenant scoping (the postgres source runs under the background-worker
+// role), so this MUST run in exactly one producer — the housekeeping
+// worker group / `run all` — never the apiserver path, otherwise split
+// deployments would publish duplicate series for the same gauges.
+//
+// Returns a no-op stop when no SystemStats source is configured (e.g. a
+// backend that left the field nil); the collector itself also no-ops on
+// a nil source, but short-circuiting here keeps the log honest.
+func StartBusinessMetricsWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	if rs.FactorySet.SystemStats == nil {
+		slog.Info("Business metrics collector disabled; no SystemStats source configured")
+		return func() {}
+	}
+
+	// Adapt registry.SystemStats → metrics.BusinessStats field-by-field.
+	// The explicit copy (rather than a struct cast) keeps the metrics
+	// package free of any registry import and fails at compile time here
+	// if either struct drifts.
+	source := func(ctx context.Context) (metrics.BusinessStats, error) {
+		s, err := rs.FactorySet.SystemStats(ctx)
+		if err != nil {
+			return metrics.BusinessStats{}, err
+		}
+		return systemStatsToBusinessStats(s), nil
+	}
+
+	coll := metrics.NewBusinessCollector(source, rs.WorkerDurations.BusinessMetricsInterval)
+	coll.Start(ctx)
+	return coll.Stop
+}
+
+// systemStatsToBusinessStats copies the registry-layer SystemStats
+// snapshot into the metrics-layer BusinessStats the collector consumes.
+// Kept as an explicit, separately-testable function so the field mapping
+// is asserted in a unit test without needing a database.
+func systemStatsToBusinessStats(s registry.SystemStats) metrics.BusinessStats {
+	return metrics.BusinessStats{
+		Tenants:        s.Tenants,
+		Users:          s.Users,
+		LocationGroups: s.LocationGroups,
+		Locations:      s.Locations,
+		Areas:          s.Areas,
+		Commodities:    s.Commodities,
+		Files:          s.Files,
+
+		StorageImages:    s.StorageImages,
+		StorageDocuments: s.StorageDocuments,
+		StorageOther:     s.StorageOther,
+		StorageExports:   s.StorageExports,
+	}
 }
 
 // StartMaintenanceReminderWorker wires and starts the maintenance

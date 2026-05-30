@@ -1,0 +1,63 @@
+{{- /*
+Prometheus Operator ServiceMonitor for the API Service (#843).
+
+Double-gated so it is inert by default AND safe to enable on a cluster
+without the Prometheus Operator:
+  1. .Values.metrics.serviceMonitor.enabled must be true, AND
+  2. the monitoring.coreos.com/v1 CRD must be installed
+     (.Capabilities.APIVersions.Has). Without (2), enabling the toggle is a
+     no-op rather than a render error — `helm template` / `helm install`
+     never fail when the operator is absent.
+
+This scrapes the apiserver Service `http` port (:3333) at /metrics. The app
+also exposes /metrics on each worker's probe port (:3334), but in split mode
+the worker Service is headless (clusterIP: None) with port name `probe`; a
+ServiceMonitor cannot reliably target a headless Service's per-pod endpoints,
+so worker scraping needs a PodMonitor (see the commented stanza at the bottom)
+or a kubernetes_sd pod job (metrics.podAnnotations.enabled=true).
+*/ -}}
+{{- if and .Values.metrics.serviceMonitor.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+{{- if eq (include "inventario.apiserverRendered" .) "true" }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "inventario.fullname" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "inventario.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+{{- end }}
+{{- end }}
+{{- /*
+Worker (:3334) scraping in split mode needs a separate PodMonitor (or a
+kubernetes_sd pod job via metrics.podAnnotations.enabled=true) because the
+worker Service is headless with port name `probe`. Example PodMonitor — left
+COMMENTED on purpose; this chart does NOT render it:
+
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "inventario.fullname" . }}-workers
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{ include "inventario.selectorLabels" . | nindent 6 }}
+  podMetricsEndpoints:
+    - port: probe
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+*/ -}}

@@ -23,6 +23,7 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 		LoanReminderInterval:         "45m",
 		MaintenanceReminderInterval:  "55m",
 		CurrencyMigrationInterval:    "8s",
+		BusinessMetricsInterval:      "90s",
 		ThumbnailPollInterval:        "7s",
 		ThumbnailCleanupInterval:     "6m",
 		ThumbnailJobRetentionPeriod:  "48h",
@@ -42,6 +43,7 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 	c.Assert(got.LoanReminderInterval, qt.Equals, 45*time.Minute)
 	c.Assert(got.MaintenanceReminderInterval, qt.Equals, 55*time.Minute)
 	c.Assert(got.CurrencyMigrationInterval, qt.Equals, 8*time.Second)
+	c.Assert(got.BusinessMetricsInterval, qt.Equals, 90*time.Second)
 	c.Assert(got.ThumbnailPollInterval, qt.Equals, 7*time.Second)
 	c.Assert(got.ThumbnailCleanupInterval, qt.Equals, 6*time.Minute)
 	c.Assert(got.ThumbnailJobRetentionPeriod, qt.Equals, 48*time.Hour)

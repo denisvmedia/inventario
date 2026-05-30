@@ -181,6 +181,16 @@ View health status:
 docker-compose ps
 ```
 
+## Monitoring (optional)
+
+Inventario exposes Prometheus metrics at `/metrics` (API port `3333`). A self-contained Prometheus + Grafana stack for local development ships under [`deploy/monitoring/`](deploy/monitoring/README.md) and is wired into this compose project behind a profile:
+
+```bash
+docker compose --profile monitoring up -d
+```
+
+See [`deploy/monitoring/README.md`](deploy/monitoring/README.md) for the dashboards, scrape config, and access URLs.
+
 ## Production Deployment
 
 For production deployment, consider:

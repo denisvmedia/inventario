@@ -130,6 +130,35 @@ type OperationSlotRegistryFactory interface {
 	ServiceRegistryFactory[models.OperationSlot, OperationSlotRegistry]
 }
 
+// SystemStats is a point-in-time snapshot of installation-wide entity
+// counts and storage usage. It is the registry-layer mirror of
+// metrics.BusinessStats: defining it here keeps the registry package
+// free of any dependency on internal/metrics (which must stay a leaf —
+// it must NOT import registry). The backend constructor populates the
+// SystemStatsFunc; the bootstrap layer adapts SystemStats →
+// metrics.BusinessStats field-by-field when wiring the collector.
+type SystemStats struct {
+	Tenants        int64
+	Users          int64
+	LocationGroups int64
+	Locations      int64
+	Areas          int64
+	Commodities    int64
+	Files          int64
+
+	StorageImages    int64
+	StorageDocuments int64
+	StorageOther     int64
+	StorageExports   int64
+}
+
+// SystemStatsFunc returns a fresh installation-wide SystemStats
+// snapshot. Implementations bypass tenant scoping (postgres runs the
+// reads under the background-worker role) to report totals across every
+// tenant and group — it is NOT user-aware and must never be invoked
+// from an HTTP request path.
+type SystemStatsFunc func(ctx context.Context) (SystemStats, error)
+
 // FactorySet contains all registry factories - these create safe, context-aware registries
 type FactorySet struct {
 	LocationRegistryFactory               LocationRegistryFactory
@@ -201,6 +230,16 @@ type FactorySet struct {
 	// external OAuth provider accounts (#1394). Service-mode only — the
 	// OAuth callback resolves identities before any user session exists.
 	OAuthIdentityRegistry OAuthIdentityRegistry
+
+	// SystemStats reports installation-wide entity counts and storage
+	// usage for the business-metrics collector (#843). It deliberately
+	// bypasses tenant scoping — the totals cover every tenant and group,
+	// so it must NOT be called from any user-facing request path. It is
+	// populated by the backend constructor (postgres runs the aggregate
+	// reads under the background-worker role; the memory backend reports
+	// zeros). Nil-able: a nil func means "no business gauges", and the
+	// collector no-ops on a nil source.
+	SystemStats SystemStatsFunc
 }
 
 // Ping checks readiness of the backing registry dependency (e.g. database).

@@ -78,6 +78,16 @@ func (q *Queue) ScheduleRetry(ctx context.Context, payload []byte, readyAt time.
 	return nil
 }
 
+// Depth returns the number of payloads currently in the ready queue.
+//
+// It reports only the ready channel buffer (what Enqueue/Dequeue operate
+// on), not the delayed-retry slice. len on a channel is safe to call
+// concurrently and the retry mutex guards only the retries slice, so no
+// lock is taken here.
+func (q *Queue) Depth(_ context.Context) (int, error) {
+	return len(q.ready), nil
+}
+
 // PromoteDueRetries moves due payloads to ready queue.
 func (q *Queue) PromoteDueRetries(ctx context.Context, now time.Time, limit int) (int, error) {
 	if limit <= 0 {

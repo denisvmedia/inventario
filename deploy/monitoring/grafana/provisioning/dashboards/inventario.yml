@@ -1,0 +1,14 @@
+# Grafana dashboard provisioning (issue #843). Loads the version-controlled
+# dashboard JSON read-only (no UI edits / deletes), so it stays reproducible.
+apiVersion: 1
+providers:
+  - name: inventario
+    orgId: 1
+    folder: Inventario
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

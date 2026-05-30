@@ -113,6 +113,19 @@ func (q *Queue) ScheduleRetry(ctx context.Context, payload []byte, readyAt time.
 	}).Err()
 }
 
+// Depth returns the number of payloads currently in the ready list.
+//
+// It counts only the ready list (the LIST that Enqueue/Dequeue operate
+// on via RPUSH/BLPOP), not the delayed-retry sorted set, so the reported
+// depth matches what workers can consume immediately.
+func (q *Queue) Depth(ctx context.Context) (int, error) {
+	n, err := q.client.LLen(ctx, q.readyKey).Result()
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
 // PromoteDueRetries moves due delayed payloads into ready list.
 func (q *Queue) PromoteDueRetries(ctx context.Context, now time.Time, limit int) (int, error) {
 	moved, err := q.client.Eval(

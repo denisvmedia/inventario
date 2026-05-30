@@ -33,6 +33,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.IntVar(&cfg.LoanReminderDueSoonDays, "loan-reminder-due-soon-days", cfg.LoanReminderDueSoonDays, "Forward-looking window in days for the due-soon loan reminder (default 7)")
 	flags.StringVar(&cfg.MaintenanceReminderInterval, "maintenance-reminder-interval", cfg.MaintenanceReminderInterval, "Interval between maintenance reminder sweeps (14/7/1-day + overdue maintenance emails; e.g., 1h)")
 	flags.StringVar(&cfg.CurrencyMigrationInterval, "currency-migration-interval", cfg.CurrencyMigrationInterval, "Currency migration worker active-poll interval (when pending rows exist; idle cadence is fixed at 1m). Values like 5s, 10s.")
+	flags.StringVar(&cfg.BusinessMetricsInterval, "business-metrics-interval", cfg.BusinessMetricsInterval, "Interval between installation-wide business-metrics collection sweeps (#843; e.g., 60s)")
 	flags.IntVar(&cfg.ThumbnailBatchSize, "thumbnail-batch-size", cfg.ThumbnailBatchSize, "Maximum thumbnail jobs processed per batch")
 	flags.StringVar(&cfg.ThumbnailPollInterval, "thumbnail-poll-interval", cfg.ThumbnailPollInterval, "Thumbnail worker poll interval (e.g., 5s, 10s)")
 	flags.StringVar(&cfg.ThumbnailCleanupInterval, "thumbnail-cleanup-interval", cfg.ThumbnailCleanupInterval, "Interval between thumbnail job cleanup runs (e.g., 5m)")

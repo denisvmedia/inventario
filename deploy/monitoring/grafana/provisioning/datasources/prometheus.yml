@@ -1,0 +1,14 @@
+# Grafana datasource provisioning (issue #843). Points Grafana at the
+# Prometheus service over the shared inventario-network.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: inventario-prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # Match prometheus.yml scrape_interval so $__rate_interval is sane.
+      timeInterval: 15s

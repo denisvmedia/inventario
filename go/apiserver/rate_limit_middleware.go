@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/internal/metrics"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -97,6 +98,7 @@ func GlobalRateLimitMiddleware(limiter services.GlobalRateLimiter, trustedProxyN
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				metrics.RecordRateLimitRejection(metrics.RateLimitScopeGlobal)
 				slog.Warn("Global rate limit exceeded", "ip", ip, "path", r.URL.Path, "method", r.Method, "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return

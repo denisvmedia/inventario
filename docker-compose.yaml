@@ -236,6 +236,71 @@ services:
       retries: 3
       start_period: 60s
 
+  # ---------------------------------------------------------------------------
+  # Observability stack (issue #843) — opt-in, OFF by default.
+  # Start with:  docker compose --profile monitoring up -d
+  # Prometheus scrapes the app's /metrics (default registry) on :3333; Grafana
+  # auto-provisions a Prometheus datasource + the "Inventario / Overview"
+  # dashboard. Kept behind a profile so a plain `docker compose up` and the e2e
+  # stack stay lean and unaffected.
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    depends_on:
+      inventario:
+        condition: service_healthy
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ./deploy/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - inventario-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # Dev convenience only: anonymous read-only viewer. DO NOT enable on any
+      # internet-exposed deployment.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+    volumes:
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    networks:
+      - inventario-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   # PostgreSQL Test Database
   postgres-test:
     profiles: ["test"]
@@ -461,6 +526,10 @@ volumes:
   inventario-uploads:
   inventario-data:
   redis-data:
+
+  # Observability stack volumes (issue #843, monitoring profile)
+  prometheus-data:
+  grafana-data:
 
   # Test volumes (optional, using tmpfs above)
   postgres-test-data:
