@@ -281,6 +281,17 @@ func (b *inbBuilder) indexCommodityFiles() error {
 // when the blob is missing/unsized so the caller skips it (orphan).
 func (b *inbBuilder) resolveFileSize(file *models.FileEntity) (int64, bool) {
 	if size := fileSizeHint(file); size > 0 {
+		// Trust the recorded size for the tar header, but still confirm the blob
+		// actually exists before committing the file to the plan. A row can carry
+		// a SizeBytes hint while its bytes were never written (seed fixtures) or
+		// were manually deleted; without this probe the missing blob isn't caught
+		// until flushPendingFile streams it, which aborts the WHOLE export instead
+		// of dropping the single orphan here (the streaming exporter cannot recover
+		// once the location JSON referencing the member has already been emitted).
+		exists, err := b.bucket.Exists(b.ctx, file.OriginalPath)
+		if err != nil || !exists {
+			return 0, false
+		}
 		return size, true
 	}
 	// Probe the bucket for the exact size — the tar header needs it. A missing

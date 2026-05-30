@@ -161,6 +161,43 @@ func (f *inbFixture) attachCommodityFileFull(c *qt.C, bucketMeta, filePath, titl
 	return created.UUID
 }
 
+// attachCommodityFileMissingBlob creates an image FileEntity linked to the
+// fixture's first commodity that carries a SizeBytes hint (exactly as a real
+// upload records) but deliberately writes NO blob. This models an orphan row:
+// a manually-deleted blob, or seed fixtures that record file metadata without
+// uploading the bytes. Returns the file's UUID. The exporter must DROP such a
+// row rather than abort the whole backup when its member cannot be opened.
+func (f *inbFixture) attachCommodityFileMissingBlob(c *qt.C, bucketMeta string, size int) string {
+	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	commodities := must.Must(comReg.List(f.ctx))
+	c.Assert(len(commodities) >= 1, qt.IsTrue)
+	com := commodities[0]
+
+	fileReg := must.Must(f.fs.FileRegistryFactory.CreateUserRegistry(f.ctx))
+	fileRow := models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
+		Title:                    "orphan",
+		Type:                     models.FileTypeFromMIME("image/jpeg"),
+		Category:                 models.FileCategoryFromContext("commodity", bucketMeta, "image/jpeg"),
+		Tags:                     models.StringSlice{},
+		LinkedEntityType:         "commodity",
+		LinkedEntityID:           com.ID,
+		LinkedEntityMeta:         bucketMeta,
+		File: &models.File{
+			Path:      "orphan",
+			Ext:       ".jpg",
+			MIMEType:  "image/jpeg",
+			SizeBytes: int64(size), // the size hint is present…
+		},
+	}
+	created := must.Must(fileReg.Create(f.ctx, fileRow))
+	// …and the key is recorded, but no bucket.WriteAll happens — the blob the
+	// key points at never lands, reproducing the seed/orphan condition.
+	created.OriginalPath = "t/tenant-a/files/" + created.UUID + ".jpg"
+	must.Must(fileReg.Update(f.ctx, *created))
+	return created.UUID
+}
+
 // fileByUUID returns the (restored) FileEntity with the given immutable UUID, or
 // fails the test if it is absent.
 func (f *inbFixture) fileByUUID(c *qt.C, uuid string) *models.FileEntity {
@@ -312,6 +349,50 @@ func TestINBExport_GzipLevel3(t *testing.T) {
 	// fixture is tiny so 64 MiB is plenty.
 	_, err = io.Copy(io.Discard, io.LimitReader(gzr, 64<<20))
 	c.Assert(err, qt.IsNil)
+}
+
+// TestINBExport_DropsFileWithMissingBlob is the regression for the export
+// aborting when a file row carries a SizeBytes hint but its blob was never
+// written. Orphan rows like this are normal (manual blob deletes; seed fixtures
+// that record file metadata without uploading bytes — the exact condition that
+// turned every e2e docker lane red on #534). The export must COMPLETE and simply
+// omit the orphan; it must never fail the whole backup over one missing member.
+func TestINBExport_DropsFileWithMissingBlob(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	present := f.attachCommodityFile(c, "images", 256)            // blob exists
+	missing := f.attachCommodityFileMissingBlob(c, "images", 512) // hint, no blob
+
+	// runExport asserts Status==Completed internally, so reaching this line at
+	// all proves the missing blob no longer aborts the export.
+	_, archive := f.runExport(c, signer)
+
+	order, jsons := innerMembers(c, archive)
+	members := strings.Join(order, "\n")
+	c.Assert(strings.Contains(members, present), qt.IsTrue,
+		qt.Commentf("present file's member must be archived; members=%v", order))
+	c.Assert(strings.Contains(members, missing), qt.IsFalse,
+		qt.Commentf("missing-blob file's member must be dropped; members=%v", order))
+
+	var locDocs string
+	for name, body := range jsons {
+		if name != "manifest.json" {
+			locDocs += string(body)
+		}
+	}
+	c.Assert(strings.Contains(locDocs, present), qt.IsTrue,
+		qt.Commentf("present file must be referenced in the location doc"))
+	c.Assert(strings.Contains(locDocs, missing), qt.IsFalse,
+		qt.Commentf("orphan must not be referenced in the location doc"))
+
+	// The manifest's image count reflects only the retained file (1, not 2).
+	var manifest map[string]any
+	c.Assert(json.Unmarshal(jsons["manifest.json"], &manifest), qt.IsNil)
+	stats := manifest["statistics"].(map[string]any)
+	c.Assert(stats["imageCount"], qt.Equals, float64(1),
+		qt.Commentf("only the file with a real blob should be counted"))
 }
 
 func TestINBRestore_RejectsBadSignature(t *testing.T) {
