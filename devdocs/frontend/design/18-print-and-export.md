@@ -29,12 +29,14 @@ Used by:
 
 Both routes are mounted **inside the protected `<Shell>`** (same as
 every other group-scoped page), so on screen the user sees the sidebar
-and top bar. The print stylesheet (`@media print`) is what hides the
-chrome when the user actually prints — the page itself doesn't skip the
-shell. A toolbar at the top of the rendered page exposes Back +
-Print actions (the insurance report adds mode / subject / photo-size
-controls); all are gated behind `print:hidden` so they don't land on
-paper.
+and top bar. A single global `@media print` block in
+`frontend/src/index.css` is what hides the Shell chrome (sidebar, top
+bar, banners) and neutralizes the inset/container padding when the user
+actually prints — the page itself doesn't skip the shell. A toolbar at
+the top of each rendered page exposes Back + Print actions (the
+insurance report adds mode / subject / photo-size controls); these
+**page-local** controls are gated behind `print:hidden` / `.print-hide`
+so they don't land on paper.
 
 ### Insurance report (#1370)
 
@@ -85,14 +87,22 @@ the printed sheet renders only the report sections:
 
 ## Print stylesheet
 
-`@media print` rules in `frontend/src/index.css`:
+The single global `@media print` block in `frontend/src/index.css`
+hides the app-shell chrome for every print route:
 
-- Hide non-essential chrome (`@media print { .print\:hidden { display: none; } }` etc.).
-- Force `bg-card` to `bg-white` (printers don't render backgrounds by
-  default; explicit white).
-- Disable all hover / transition / animation utilities.
-- Page break: `break-inside-avoid` on cards, `break-after-page` on
-  major sections.
+- Hide the Shell sidebar (`[data-slot="sidebar"]`), the SidebarInset's
+  TopBar (`[data-slot="sidebar-inset"] > header`) and any active
+  banners (`[data-slot="sidebar-inset"] > [role="status"]`).
+- Neutralize the inset margins/rounding/shadow and the page
+  `.container` padding so the report sheet isn't inset on paper.
+- Force `body` background to white (printers don't render backgrounds
+  by default; explicit white).
+
+Page-local controls (each print page's own toolbar) hide themselves via
+`print:hidden` / a small page-scoped `.print-hide` rule — see Hard Rule
+2. Forcing `bg-card` → white on individual surfaces, disabling
+hover/transition utilities, and `break-inside-avoid` / `break-after-page`
+page-break rules ride on the page's own scoped block or `print:` utilities.
 
 Print-specific Tailwind utilities (built-in in v4):
 
@@ -162,11 +172,17 @@ of scope for this brief; the email templates live BE-side.
 1. **Print routes are deliberate.** Two exist today
    (`commodities/:id/print`, `reports/insurance`); adding another is an
    issue + PR with the layout spec, registered in this doc.
-2. **`print:` utilities for chrome hiding.** Keep print rules in
-   `index.css` or, for a self-contained print page, a single scoped
-   `@media print` block in the page (the precedent set by
-   `CommodityPrintPage.tsx` and followed by `InsuranceReportPage.tsx`).
-   Don't scatter `@media print` blocks across feature components.
+2. **App-shell chrome hiding lives in `index.css`.** The single global
+   `@media print` block in `frontend/src/index.css` hides the
+   sidebar / top bar / banners and neutralizes the inset + container
+   padding for every print route. A print page may add **one** small
+   scoped `@media print` block for its own **page-local** concerns
+   (hiding its toolbar via `.print-hide`, dropping its sheet's shadow,
+   `break-inside-avoid` on sections) — the precedent set by
+   `CommodityPrintPage.tsx` and followed by `InsuranceReportPage.tsx`.
+   The anti-pattern is *scattering* `@media print` blocks across many
+   feature components, or duplicating the shell-chrome hiding outside
+   `index.css`.
 3. **No backgrounds in print.** Force `bg-white` (or omit) on
    surfaces; printers skip backgrounds by default.
 4. **Print is the route, export is the file.** Don't conflate the two
@@ -181,9 +197,12 @@ of scope for this brief; the email templates live BE-side.
 - A custom client-side PDF library (`pdfmake`, `jsPDF`). Bans the
   bundle budget — see [../imports-and-bans.md](../imports-and-bans.md). Use the print route +
   browser PDF export.
-- A `@media print` block inside a feature component. All print rules
-  in `index.css`.
-- Printing the sidebar. Use `print:hidden` on the Shell.
+- *Scattering* `@media print` blocks across many feature components.
+  Shell-chrome hiding lives once in `index.css`; a print page may keep a
+  single scoped block for its own page-local controls (Hard Rule 2).
+- Printing the sidebar / top bar / banners. The global `@media print`
+  block in `index.css` hides them via the Shell's `data-slot` selectors;
+  don't re-implement chrome-hiding per page.
 - Watermarks ("CONFIDENTIAL", company logos). Inventario doesn't
   watermark prints; the user controls the data.
 

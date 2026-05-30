@@ -5,16 +5,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { InsuranceReportPage } from "@/pages/reports/InsuranceReportPage"
 import { useAreas } from "@/features/areas/hooks"
-import { useCommodities, useCommodity } from "@/features/commodities/hooks"
+import { useAllCommodities, useCommodity } from "@/features/commodities/hooks"
 import { useFiles } from "@/features/files/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useLocations } from "@/features/locations/hooks"
 
 // The report page reads from a handful of feature hooks; mock them all so
 // the test drives pure presentation off fixtures (mirrors the
-// CommodityDetailPage test harness).
+// CommodityDetailPage test harness). The selector list + location
+// filtering/totals source is `useAllCommodities` (the paging hook that
+// works around the list endpoint's per_page=100 cap, #1370 review).
 vi.mock("@/features/commodities/hooks", () => ({
-  useCommodities: vi.fn(),
+  useAllCommodities: vi.fn(),
   useCommodity: vi.fn(),
 }))
 vi.mock("@/features/areas/hooks", () => ({ useAreas: vi.fn() }))
@@ -25,7 +27,7 @@ vi.mock("@/features/group/GroupContext", async () => {
   return { ...actual, useCurrentGroup: vi.fn() }
 })
 
-const mockUseCommodities = vi.mocked(useCommodities)
+const mockUseAllCommodities = vi.mocked(useAllCommodities)
 const mockUseCommodity = vi.mocked(useCommodity)
 const mockUseAreas = vi.mocked(useAreas)
 const mockUseLocations = vi.mocked(useLocations)
@@ -107,11 +109,11 @@ afterEach(() => {
 describe("<InsuranceReportPage /> — item mode", () => {
   beforeEach(() => {
     baseHooks()
-    mockUseCommodities.mockReturnValue({
+    mockUseAllCommodities.mockReturnValue({
       data: { commodities: [itemC1, itemC2], total: 2, covers: {} },
       isLoading: false,
       isError: false,
-    } as unknown as ReturnType<typeof useCommodities>)
+    } as unknown as ReturnType<typeof useAllCommodities>)
     mockUseCommodity.mockReturnValue({
       data: { commodity: itemC1, meta: {} },
       isLoading: false,
@@ -133,16 +135,47 @@ describe("<InsuranceReportPage /> — item mode", () => {
     // Warranty notes surface.
     expect(within(report).getByText("Manufacturer 3-year")).toBeInTheDocument()
   })
+
+  it("detail fetch honors the raw item param even when it is absent from the list", () => {
+    // The active-only selector list (useAllCommodities) holds c1/c2, but the
+    // URL deep-links a sold item `c9` that the list omits. The DETAIL fetch
+    // must honor the RAW param — NOT silently fall back to the first list
+    // entry (#1370 review #2). We assert the page passed `c9` (not `c1`) to
+    // useCommodity, which is the load-bearing contract; gating the detail
+    // fetch on list membership is exactly the bug being fixed.
+    const soldItem = {
+      id: "c9",
+      name: "Retired Projector",
+      type: "electronics",
+      converted_original_price: 300,
+      current_price: 120,
+      area_id: "a1",
+    }
+    mockUseCommodity.mockReturnValue({
+      data: { commodity: soldItem, meta: {} },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCommodity>)
+    renderPage("?mode=item&item=c9")
+    // The page must have asked for c9 (the raw param), never c1 (first list
+    // item). useCommodity is called as `useCommodity(id, { enabled })`.
+    const requestedIds = mockUseCommodity.mock.calls.map((call) => call[0])
+    expect(requestedIds).toContain("c9")
+    expect(requestedIds).not.toContain("c1")
+    // And the rendered subject is c9, not the first list entry.
+    const report = screen.getByTestId("report-item")
+    expect(within(report).getByText("Retired Projector")).toBeInTheDocument()
+  })
 })
 
 describe("<InsuranceReportPage /> — location mode", () => {
   beforeEach(() => {
     baseHooks()
-    mockUseCommodities.mockReturnValue({
+    mockUseAllCommodities.mockReturnValue({
       data: { commodities: [itemC1, itemC2], total: 2, covers: {} },
       isLoading: false,
       isError: false,
-    } as unknown as ReturnType<typeof useCommodities>)
+    } as unknown as ReturnType<typeof useAllCommodities>)
     mockUseCommodity.mockReturnValue({
       data: undefined,
       isLoading: false,
@@ -164,11 +197,11 @@ describe("<InsuranceReportPage /> — location mode", () => {
   })
 
   it("shows the empty state when the location has no items", () => {
-    mockUseCommodities.mockReturnValue({
+    mockUseAllCommodities.mockReturnValue({
       data: { commodities: [], total: 0, covers: {} },
       isLoading: false,
       isError: false,
-    } as unknown as ReturnType<typeof useCommodities>)
+    } as unknown as ReturnType<typeof useAllCommodities>)
     renderPage("?mode=location&location=loc1")
     expect(screen.getByTestId("report-location-empty")).toBeInTheDocument()
     expect(screen.getByText("No items found for this location.")).toBeInTheDocument()

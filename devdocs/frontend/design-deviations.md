@@ -651,44 +651,15 @@ _None yet._
 - **Approved by**: agent-suggested-then-user-confirmed — the issue brief explicitly instructed this deviation and required it logged here.
 - **Reversion plan**: Permanent. The `admin_return_token` approach is incompatible with the shipped backend contract; it would only return if the BE dropped the server-side return slot.
 
-## #1370 — Insurance report (2026-05-30)
+### Reports
 
-**Issue:** [#1370](https://github.com/denisvmedia/inventario/issues/1370)
+#### 2026-05-30 — Insurance report (#1370)
 
-The design mock ships an `InsuranceReportView` with two modes (Item + Location)
-toggled in a toolbar, a subject `Select`, a thumbnail/full-size photo toggle, a
-Print button, and a footer (group name + generated timestamp). The
-implementation follows that mock, adapted to the real app's data model and
-chrome. The GitHub issue's broader scope (full-inventory / filtered reports) was
-NOT built — only the mock's Item + Location modes.
-
-### Deviations
-
-1. **Issue's full-inventory / filtered report scope NOT built.** Shipped the
-   design mock's Item + Location modes only; there is no all-inventory or
-   filtered view.
-2. **No brand / model fields on the BE.** The mock's `{brand} {name}` title +
-   `{model}` subtitle become `name` + `short_name`; the brand/model rows are
-   omitted.
-3. **Mock `category` → real `type` enum.** Rendered via the existing
-   `commodities:type.*` catalogue (no separate report-side category map).
-4. **Currency uses the group currency + converted prices**, not the mock's
-   hardcoded USD. Item purchase = `original_price` in
-   `original_price_currency`; estimated value = `current_price` (group
-   currency); location purchase total sums `converted_original_price` (group
-   currency).
-5. **No color / B&W toggle.** Neither the mock nor `CommodityPrintPage` has one;
-   the thumb/full photo toggle is kept.
-6. **Mounted inside the Shell** (chrome hidden via an inline `@media print`
-   block) instead of the mock's fullscreen takeover — matches the
-   `CommodityPrintPage` precedent.
-7. **Location-mode photos use the per-item cover thumbnail** (from the list
-   endpoint's `meta.covers`, surfaced as `useCommodities().covers`) instead of a
-   full per-item gallery — the list endpoint carries covers, not full galleries.
-   Item mode still renders the full image gallery from the unified `/files`
-   surface.
-8. **No `ToggleGroup` shadcn primitive in the app**, so the mock's mode + photo
-   toggles are rendered as a small segmented-button group (`role="tablist"` /
-   `role="group"`) rather than the mock's `ToggleGroup`.
+- **Issue/PR**: #1370 / PR #1950
+- **Mock**: [`design-mocks/src/views/InsuranceReportView.tsx`](../../design-mocks/src/views/InsuranceReportView.tsx) ships an insurance report with two modes (Item + Location) toggled in a toolbar via a `ToggleGroup`, a subject `Select`, a thumbnail/full-size photo `ToggleGroup`, a Print button, and a footer (group name + generated timestamp). The mock renders as a fullscreen takeover, hardcodes USD, titles each item `{brand} {name}` with a `{model}` subtitle, classifies via a `category` field, and renders a full per-item photo gallery in both modes.
+- **Reality**: `frontend/src/pages/reports/InsuranceReportPage.tsx` (+ `features/reports/components/{ItemReport,LocationReport,PhotoSection}.tsx`) follows the mock's two-mode layout, toolbar, subject selector, photo-size toggle, Print button, and footer, but adapts to the real app's data model and chrome via the following divergences: (1) **Scope** — only the mock's Item + Location modes ship; the GitHub issue's broader full-inventory / filtered-report scope was NOT built. (2) **Title** — `name` + `short_name` replace the mock's `{brand} {name}` / `{model}`; the brand/model rows are omitted (no such BE columns). (3) **Classification** — the mock's `category` becomes the real `type` enum, rendered via the existing `commodities:type.*` catalogue (no report-side category map). (4) **Currency** — uses the group currency + converted prices, not hardcoded USD: item purchase = `original_price` in `original_price_currency`, estimated value = `current_price` (group currency), location purchase total sums `converted_original_price` (group currency). (5) **No color / B&W toggle** — neither the mock nor `CommodityPrintPage` has one; the thumb/full photo toggle is kept. (6) **Mounted inside the Shell** — chrome is hidden via a global `@media print` block in `frontend/src/index.css` (see `devdocs/frontend/design/18-print-and-export.md`), not the mock's fullscreen takeover — matches the `CommodityPrintPage` precedent. (7) **Location-mode photos** use the per-item cover thumbnail (from the list endpoint's `meta.covers`, surfaced as `useAllCommodities().covers`) instead of a full per-item gallery — the list endpoint carries covers, not full galleries; item mode still renders the full gallery from the unified `/files` surface. (8) **No `ToggleGroup` primitive** in the app, so the mode + photo toggles are a small segmented-button group (`role="tablist"` / `role="group"`) rather than the mock's `ToggleGroup`.
+- **Why**: Backend data-model constraints (no brand/model columns, `type` not `category`, per-group immutable currency from #202/#1550, covers-not-galleries on the list endpoint), missing shadcn primitives (`ToggleGroup`), and the established `CommodityPrintPage` precedent (Shell-mounted print route, chrome hidden via `@media print`). The issue's broader full-inventory / filtered scope was deliberately deferred to match the design mock's two-mode shape.
+- **Approved by**: agent-suggested-then-user-confirmed.
+- **Reversion plan**: Permanent for the data-model-bound divergences (brand/model, category→type, currency, covers). The `ToggleGroup` segmented-button substitution resolves to 1:1 if/when a `toggle-group.tsx` primitive is vendored. The issue's full-inventory / filtered report scope is a future follow-up if requested.
 
 ---

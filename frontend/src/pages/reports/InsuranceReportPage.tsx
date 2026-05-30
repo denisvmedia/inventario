@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
-import { useCommodities, useCommodity } from "@/features/commodities/hooks"
+import { useAllCommodities, useCommodity } from "@/features/commodities/hooks"
 import { useFiles } from "@/features/files/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useLocations } from "@/features/locations/hooks"
@@ -61,11 +61,14 @@ export function InsuranceReportPage() {
   const areas = useAreas({ enabled })
   const locations = useLocations({ enabled })
   // Both modes read the group's commodity list — item mode to populate the
-  // selector + resolve the chosen item, location mode to render and total
-  // the location's items. A single query serves both: the options are
-  // identical, so the query key is too, and `covers` is read once here
-  // rather than in the location branch (Copilot review).
-  const commoditiesQuery = useCommodities({ perPage: 1000, includeInactive: false }, { enabled })
+  // selector, location mode to render and total the location's items. A
+  // single query serves both: the options are identical, so the query key
+  // is too, and `covers` is read once here rather than in the location
+  // branch (Copilot review). `useAllCommodities` pages the list endpoint
+  // (capped at per_page=100) so a location/group with >100 items still
+  // renders a complete list + correct totals — a plain
+  // `useCommodities({ perPage: 1000 })` would silently truncate at 100.
+  const commoditiesQuery = useAllCommodities({ includeInactive: false }, { enabled })
   const allCommodities = useMemo(
     () => commoditiesQuery.data?.commodities ?? [],
     [commoditiesQuery.data]
@@ -81,25 +84,38 @@ export function InsuranceReportPage() {
     return locationList[0]?.id ?? ""
   }, [locationParam, locationList])
 
-  // Item-mode selector is populated from the same group commodity list.
+  // Item-mode selector is populated from the same group commodity list. The
+  // <Select> value is only the highlighted option; it tolerates an id that
+  // isn't among the options (e.g. a deep link to an inactive/sold item that
+  // the active-only list omits) by falling back to the placeholder.
   const itemList = allCommodities
+  const firstListItemId = itemList[0]?.id ?? ""
   const selectedItemId = useMemo(() => {
     if (itemParam && itemList.some((c) => c.id === itemParam)) return itemParam
-    return itemList[0]?.id ?? ""
-  }, [itemParam, itemList])
+    return firstListItemId
+  }, [itemParam, itemList, firstListItemId])
+
+  // The DETAIL fetch honors the RAW param, not the list-membership-gated
+  // `selectedItemId` — a deep link to an item missing from the active-only
+  // list (inactive / sold) must render THAT item, not silently fall back to
+  // the first list entry (#1370 review). Only fall back to the first list
+  // item when no param was supplied at all.
+  const detailId = itemParam || firstListItemId
 
   // Item-mode detail + its image files (the photo gallery source).
-  const detail = useCommodity(selectedItemId || undefined, {
-    enabled: enabled && mode === "item" && !!selectedItemId,
+  const detail = useCommodity(detailId || undefined, {
+    enabled: enabled && mode === "item" && !!detailId,
   })
   const imageFilesQuery = useFiles(
     {
       linkedEntityType: "commodity",
-      linkedEntityId: selectedItemId,
+      linkedEntityId: detailId,
       category: "images",
       perPage: 100,
     },
-    { enabled: enabled && mode === "item" && !!selectedItemId }
+    // Photos are supplementary — intentionally NOT part of the report's
+    // loading/error gates below; the report renders without waiting on them.
+    { enabled: enabled && mode === "item" && !!detailId }
   )
 
   // Resolve "{Location} · {Area}" for any area id.
@@ -168,14 +184,20 @@ export function InsuranceReportPage() {
     setSearchParams(params, { replace: true })
   }
 
+  // Both modes depend on `areas` — item mode for the "{Location} · {Area}"
+  // breadcrumb, location mode for filtering items by area + the per-location
+  // totals. Location mode additionally depends on `locations` (the selector
+  // + header). Gate on these so the report doesn't flash an empty state /
+  // zero totals while `areas` is still resolving after commodities settle
+  // (#1370 review). Photos (`useFiles`) stay ungated — see the query above.
   const isLoading =
     mode === "item"
-      ? detail.isLoading || commoditiesQuery.isLoading
-      : commoditiesQuery.isLoading || locations.isLoading
+      ? detail.isLoading || commoditiesQuery.isLoading || areas.isLoading
+      : commoditiesQuery.isLoading || locations.isLoading || areas.isLoading
   const isError =
     mode === "item"
-      ? detail.isError || commoditiesQuery.isError
-      : commoditiesQuery.isError || locations.isError
+      ? detail.isError || commoditiesQuery.isError || areas.isError
+      : commoditiesQuery.isError || locations.isError || areas.isError
 
   return (
     <>

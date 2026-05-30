@@ -292,7 +292,6 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
                 {slug && location.data.id ? (
                   <Button
                     asChild
-                    type="button"
                     variant="outline"
                     className="gap-2"
                     data-testid="location-detail-insurance"
