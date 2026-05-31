@@ -442,18 +442,20 @@ jobs:
             package_api="/users/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
           fi
 
-          # For each package version, delete it if ANY of its tags is one of
-          # ours. The multi-arch manifest list carries both pr-<N> and its
+          # Pass 1 — collect the version ids to delete. We must NOT delete
+          # inside the `gh api --paginate` stream: removing a version from an
+          # earlier page shifts the remaining pages, so later matches would be
+          # skipped and survive cleanup. Drain the full listing first, then
+          # delete in pass 2. A version is ours if ANY of its tags is one of
+          # ours — the multi-arch manifest list carries both pr-<N> and its
           # sha-<7>; intermediate per-commit versions carry only sha-<7>.
-          deleted=0
+          versions_to_delete=()
           while IFS=$'\t' read -r version_id tags_csv; do
             [ -z "$version_id" ] && continue
             IFS=',' read -ra tags <<< "${tags_csv}"
             for t in "${tags[@]}"; do
               if [ -n "${pr_tags[$t]:-}" ]; then
-                gh api --method DELETE "${package_api}/${version_id}"
-                echo "Deleted package version ${version_id} (tags: ${tags_csv:-<none>})"
-                deleted=$((deleted + 1))
+                versions_to_delete+=("${version_id}"$'\t'"${tags_csv}")
                 break
               fi
             done
@@ -461,5 +463,16 @@ jobs:
             gh api "${package_api}?per_page=100" --paginate \
               --jq '.[] | [(.id|tostring), ((.metadata.container.tags // []) | join(","))] | @tsv'
           )
+
+          # Pass 2 — delete the collected versions.
+          deleted=0
+          if [ "${#versions_to_delete[@]}" -gt 0 ]; then
+            for row in "${versions_to_delete[@]}"; do
+              IFS=$'\t' read -r version_id tags_csv <<< "${row}"
+              gh api --method DELETE "${package_api}/${version_id}"
+              echo "Deleted package version ${version_id} (tags: ${tags_csv:-<none>})"
+              deleted=$((deleted + 1))
+            done
+          fi
 
           echo "Deleted ${deleted} package version(s) for PR #${PR_NUMBER}."
