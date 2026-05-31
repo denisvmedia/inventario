@@ -63,9 +63,6 @@
         "invoices": "Invoices",
         "other": "Other"
       },
-      "ctaDownload": "Download",
-      "ctaOpen": "Open",
-      "ctaView": "View",
       "dropDocuments": "Drop documents or",
       "dropFiles": "Drop files or",
       "dropImages": "Drop images or",

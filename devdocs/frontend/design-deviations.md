@@ -681,3 +681,22 @@ _None yet._
 - **Reversion plan**: Permanent for the data-model-bound divergences (brand/model, category→type, currency, covers). The `ToggleGroup` segmented-button substitution resolves to 1:1 if/when a `toggle-group.tsx` primitive is vendored. The issue's full-inventory / filtered report scope is a future follow-up if requested.
 
 ---
+
+## #1966 — Commodity Files tab: unified grid/list, diverging from the mock
+
+**Date:** 2026-05-31
+
+**Mock:** `design-mocks/src/components/ItemDetail.tsx` (`<TabsContent value="files">`) renders the commodity Files tab as a chip-bar + a square-thumbnail **photo grid** (`grid-cols-3`) **plus** a separate **non-photo row list**, shown simultaneously, with per-row View/Open/Download CTAs and inline delete. No grid/list toggle.
+
+**Reality (owner-requested, #1966):** the commodity Files tab now renders the chip-filtered set through the **shared `FileCard` (grid) / `FileListRow` (list)** components with a **grid/list toggle**, identical to the global Files page (`FilesListPage`) and the location/area `EntityFilesPanel`. The bespoke `PhotoGrid` + `NonPhotoList` split is gone; a file looks and behaves the same on every surface. The per-category chip filter is retained; clicking a file still opens the in-place `FilePreviewDialog` (the user stays on the commodity detail page).
+
+**Why the divergence:** the mock produced three different file-list presentations across the app (Files page toggle, 3-col entity grid, commodity chip + photo-grid + row-list). #1966 converges them for consistency. `design-mocks/` is a read-only mirror of upstream `inventario-design`, so it is intentionally **not** edited; this entry records the deliberate drift.
+
+**Behaviour notes:**
+- The per-photo **cover star** is available in **grid view only** (`FileCard`); `FileListRow` has no star. Photos were only ever a grid concept, so this is not a regression — set a cover from grid view.
+- Per-card inline **delete** and the **View/Open/Download** CTAs are removed (now consistent with the main Files page); delete/download happen from inside `FilePreviewDialog`.
+- The grid/list choice persists in `localStorage` under `files:entityViewMode` (shared with `EntityFilesPanel`; default **grid** — entity-detail surfaces are photo-first), distinct from the global Files page's `files:viewMode` (default list).
+
+**Approved by:** @denisvmedia (repo owner) — requested both the commodity-tab unification and the EntityFilesPanel convergence during the #1966 / PR #1984 review.
+
+**Reversion plan:** Revert PR #1984. Concretely: restore `CommodityFilesTab`'s bespoke `PhotoGrid` + `NonPhotoList` from git history, delete `FileCollection` / `FileViewToggle` / `useFilesViewMode`, and re-point `EntityFilesPanel` and `FilesListPage` back at their inline `FileCard`/`FileListRow` renderers. That returns every surface to the per-surface layouts defined in `design-mocks/src/components/ItemDetail.tsx` and `design-mocks/src/views/FileBrowserView.tsx`.

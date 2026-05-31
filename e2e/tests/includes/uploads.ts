@@ -163,30 +163,34 @@ export async function openFirstFileFromEntityPanel(page: Page): Promise<string> 
 }
 
 // ── Commodity Files tab (#1530 item 3) ──────────────────────────────
-// CommodityFilesTab replaces EntityFilesPanel on commodity detail. Its
-// surface is structurally different (chip-bar + photo grid + non-photo
-// list), so the e2e helpers below mirror the panel-era helpers above
-// against the new testid contract. Location detail still uses
-// EntityFilesPanel and keeps the originals.
+// CommodityFilesTab renders attached files through the shared
+// FileCollection (FileCard grid / FileListRow list) with a grid/list
+// toggle, plus a chip-bar — consistent with the global Files page and the
+// location/area EntityFilesPanel (#1966). The helpers below mirror the
+// panel-era helpers above against that shared testid contract.
 
 /**
  * Wait for the commodity Files tab to render the expected number of
- * attached files. The new tab splits the loaded set into a photo grid
- * (`commodity-files-photo-grid`) and a non-photo list
- * (`commodity-files-list`); we sum the rendered <li>s in each so the
- * count reflects the active chip's view.
+ * attached files. The tab renders the chip-filtered set through the shared
+ * FileCollection — a grid (`commodity-files-grid`, one `file-card-open-<id>`
+ * per card) or a list (`commodity-files-list`, one <li> per row) — so we
+ * sum whichever is mounted for the active chip.
  */
 export async function expectCommodityFilesCount(page: Page, expected: number): Promise<void> {
   if (expected === 0) {
     await expect(page.getByTestId('commodity-files-empty')).toBeVisible({ timeout: 15_000 })
     return
   }
-  const grid = page.getByTestId('commodity-files-photo-grid')
+  const grid = page.getByTestId('commodity-files-grid')
   const list = page.getByTestId('commodity-files-list')
   await expect(async () => {
-    const photos = (await grid.count()) ? await grid.locator('> li').count() : 0
-    const rows = (await list.count()) ? await list.locator('> li').count() : 0
-    expect(photos + rows, 'commodity files total').toBe(expected)
+    // Default view = grid: one `file-card-open-<id>` button per card.
+    // List view: one <li> per FileListRow.
+    const cards = (await grid.count())
+      ? await grid.locator('[data-testid^="file-card-open-"]').count()
+      : 0
+    const rows = (await list.count()) ? await list.locator('li').count() : 0
+    expect(cards + rows, 'commodity files total').toBe(expected)
   }).toPass({ timeout: 15_000, intervals: [100, 250, 500, 1000] })
 }
 
@@ -196,54 +200,64 @@ export async function expectCommodityFilesCount(page: Page, expected: number): P
  * need to assert each id 404s post-delete.
  */
 export async function getCommodityFileIds(page: Page): Promise<string[]> {
-  const photoIds = await page
-    .getByTestId('commodity-files-photo-grid')
-    .locator(
-      '[data-testid^="commodity-files-photo-"]:not([data-testid^="commodity-files-photo-cover-"]):not([data-testid^="commodity-files-photo-delete-"])',
-    )
+  const cardIds = await page
+    .locator('[data-testid^="file-card-open-"]')
     .evaluateAll((els) =>
-      els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/^commodity-files-photo-/, '')),
+      els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/^file-card-open-/, '')),
     )
   const rowIds = await page
     .getByTestId('commodity-files-list')
-    .locator('li[data-testid^="commodity-files-row-"]')
-    .evaluateAll((els) =>
-      els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/^commodity-files-row-/, '')),
+    .locator(
+      '[data-testid^="file-row-"]:not([data-testid*="-checkbox-"]):not([data-testid*="-tag-"])',
     )
-  return [...photoIds, ...rowIds].filter(Boolean)
+    .evaluateAll((els) =>
+      els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/^file-row-/, '')),
+    )
+  return [...new Set([...cardIds, ...rowIds].filter(Boolean))]
 }
 
 /**
- * Open the first PDF attachment in the commodity Files tab. Clicking
- * a row's "Open" CTA mounts the inline `FilePreviewDialog`'s PDF
- * variant (`file-preview-dialog-pdf`). Returns the file id and leaves
- * the dialog open for the caller to assert + close.
- *
- * The image preview branch routes to `ImageViewer`
- * (`file-image-viewer`) and the catch-all branch renders
- * `file-preview-dialog-other` — both are reachable via similar
- * helpers if a future spec needs them.
+ * Open the first PDF attachment in the commodity Files tab. Clicking a card
+ * opens the shared right-side `FileDetailSheet` *in place* (#1966) — the
+ * user stays on the commodity detail page (no navigation to `/files/:id`).
+ * The PDF preview renders inside the sheet, with an expand-to-fullscreen
+ * affordance (`file-detail-pdf-fullscreen`). Returns the file id and leaves
+ * the sheet open for the caller to assert + close.
  */
-export async function openFirstCommodityPdf(page: Page): Promise<string> {
-  const openBtn = page
-    .getByTestId('commodity-files-list')
-    .locator('button[data-testid^="commodity-files-row-open-"]')
-    .first()
+export async function openFirstCommodityPdf(page: Page, pdfId?: string): Promise<string> {
+  // `documents` is a broad category (PDF / DOCX / TXT / …), so we can't
+  // infer "is a PDF" from the card alone. Callers that know which
+  // attachment is the PDF pass its id; otherwise we fall back to the first
+  // document card and let the detail-sheet wait surface a wrong pick as a
+  // failure rather than silently hanging.
+  const openBtn = pdfId
+    ? page.getByTestId(`file-card-open-${pdfId}`)
+    : page
+        .locator('[data-testid^="file-card-"][data-category="documents"]')
+        .first()
+        .locator('[data-testid^="file-card-open-"]')
+        .first()
+  await openBtn.waitFor({ state: 'visible', timeout: 15_000 })
   const tid = await openBtn.getAttribute('data-testid')
   if (!tid) {
-    throw new Error('openFirstCommodityPdf: no openable row CTA found')
+    throw new Error('openFirstCommodityPdf: no openable document card found')
   }
-  const id = tid.replace(/^commodity-files-row-open-/, '')
+  const id = tid.replace(/^file-card-open-/, '')
   await openBtn.click()
-  await page.getByTestId('file-preview-dialog-pdf').waitFor({ state: 'visible', timeout: 15_000 })
+  await page.getByTestId('file-detail-sheet').waitFor({ state: 'visible', timeout: 15_000 })
   return id
 }
 
 /**
- * Click the per-row delete affordance on a commodity Files tab entry,
- * accept the destructive useConfirm dialog, and wait for the row to
- * unmount. Works for both photo-grid rows (`commodity-files-photo-…`)
- * and non-photo list rows (`commodity-files-row-…`).
+ * Open a commodity Files tab entry and delete it via the shared
+ * `FileDetailSheet`'s Delete action (#1966 — inline per-card delete is
+ * gone; delete happens from the side sheet, exactly like the Files page and
+ * the location/area panel). Accepts the destructive useConfirm dialog and
+ * waits for the card/row to unmount.
+ *
+ * The entity view mode (`files:entityViewMode`) is persisted and shared
+ * with EntityFilesPanel, so the tab may legitimately be in grid (FileCard)
+ * or list (FileListRow) mode — open whichever opener is currently rendered.
  */
 export async function deleteFromCommodityRow(
   page: Page,
@@ -251,21 +265,23 @@ export async function deleteFromCommodityRow(
   fileId: string,
   screenshotPrefix = 'delete',
 ): Promise<void> {
-  const photoDelete = page.getByTestId(`commodity-files-photo-delete-${fileId}`)
-  const rowDelete = page.getByTestId(`commodity-files-row-delete-${fileId}`)
-  const target = (await photoDelete.count()) ? photoDelete : rowDelete
-  // The photo-grid delete button is hover-only (`opacity-0
-  // group-hover:opacity-100`) so we use force:true; the click target
-  // is still wired regardless of opacity.
-  await target.click({ force: true })
+  const cardOpen = page.getByTestId(`file-card-open-${fileId}`)
+  const rowOpen = page.getByTestId(`file-row-${fileId}`)
+  const opener = (await cardOpen.count()) ? cardOpen : rowOpen
+  await opener.click()
+  const sheet = page.getByTestId('file-detail-sheet')
+  await sheet.waitFor({ state: 'visible', timeout: 15_000 })
+  await sheet.getByTestId('file-detail-delete').click()
   await page.getByTestId('confirm-dialog').waitFor({ state: 'visible', timeout: 5_000 })
   await recorder.takeScreenshot(`${screenshotPrefix}-confirm`)
   await page.getByTestId('confirm-accept').click()
   await page.getByTestId('confirm-dialog').waitFor({ state: 'hidden', timeout: 15_000 })
-  // Wait for the deleted row's testid to disappear so subsequent
-  // count assertions don't race the cache invalidation.
-  await expect(photoDelete).toHaveCount(0, { timeout: 15_000 })
-  await expect(rowDelete).toHaveCount(0, { timeout: 15_000 })
+  // The sheet closes on a successful delete (onOpenChange(false)); wait for
+  // it plus the card/row unmount so subsequent count assertions don't race
+  // the cache invalidation.
+  await sheet.waitFor({ state: 'hidden', timeout: 15_000 })
+  await expect(cardOpen).toHaveCount(0, { timeout: 15_000 })
+  await expect(rowOpen).toHaveCount(0, { timeout: 15_000 })
   await recorder.takeScreenshot(`${screenshotPrefix}-done`)
 }
 
