@@ -64,6 +64,7 @@ const SPECIAL_PURPOSE_PAGES = new Set<string>([
   "auth/ForgotPasswordPage.tsx",
   "auth/InviteAcceptPage.tsx",
   "auth/LoginPage.tsx",
+  "auth/MagicLinkPage.tsx",
   "auth/RegisterPage.tsx",
   "auth/ResetPasswordPage.tsx",
   "auth/VerifyEmailPage.tsx",

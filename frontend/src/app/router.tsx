@@ -59,6 +59,9 @@ const ResetPasswordPage = lazy(() =>
 const VerifyEmailPage = lazy(() =>
   import("@/pages/auth/VerifyEmailPage").then((m) => ({ default: m.VerifyEmailPage }))
 )
+const MagicLinkPage = lazy(() =>
+  import("@/pages/auth/MagicLinkPage").then((m) => ({ default: m.MagicLinkPage }))
+)
 const InviteAcceptPage = lazy(() =>
   import("@/pages/auth/InviteAcceptPage").then((m) => ({ default: m.InviteAcceptPage }))
 )
@@ -247,6 +250,7 @@ export function AppRoutes() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/magic-link" element={<MagicLinkPage />} />
         <Route path="/invite/:token" element={<InviteAcceptPage />} />
 
         {/* Maintenance is a public route — when the API returns 503 the

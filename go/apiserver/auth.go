@@ -107,6 +107,17 @@ type AuthAPI struct {
 	emailService             services.EmailService
 	mfaService               *services.MFAService
 	jwtSecret                []byte
+	// magicLinkRegistry stores passwordless sign-in tokens. Magic-link
+	// handlers live on AuthAPI so they can reuse the unexported session +
+	// MFA helpers (maybeIssueMFAChallenge, persistRefreshToken, …) directly.
+	magicLinkRegistry registry.MagicLinkTokenRegistry
+	// publicBaseURL is the deployment's public base URL used to build the
+	// /magic-link sign-in link. Sourced from Params.PublicURL.
+	publicBaseURL string
+	// magicLinkLoginEnabled is the effective gate for the magic-link flow:
+	// true only when the feature flag is on AND the email provider is not
+	// the stub. When false, both magic-link routes return 404.
+	magicLinkLoginEnabled bool
 }
 
 func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
@@ -855,6 +866,14 @@ type AuthParams struct {
 	OAuthRegistry         *oauth.Registry
 	OAuthStateSigner      *oauth.StateSigner
 	OAuthIdentityRegistry registry.OAuthIdentityRegistry
+
+	// MagicLinkRegistry stores passwordless sign-in tokens (the magic-link
+	// flow). PublicBaseURL builds the /magic-link link; MagicLinkLoginEnabled
+	// is the effective gate (feature flag AND non-stub email provider). When
+	// the gate is off the two magic-link routes return 404.
+	MagicLinkRegistry     registry.MagicLinkTokenRegistry
+	PublicBaseURL         string
+	MagicLinkLoginEnabled bool
 }
 
 // Auth sets up the authentication API routes.
@@ -873,6 +892,9 @@ func Auth(params AuthParams) func(r chi.Router) {
 		emailService:             params.EmailService,
 		mfaService:               params.MFAService,
 		jwtSecret:                params.JWTSecret,
+		magicLinkRegistry:        params.MagicLinkRegistry,
+		publicBaseURL:            strings.TrimSpace(params.PublicBaseURL),
+		magicLinkLoginEnabled:    params.MagicLinkLoginEnabled,
 	}
 
 	requireAuth := RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)
@@ -881,6 +903,14 @@ func Auth(params AuthParams) func(r chi.Router) {
 		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).Post("/login/mfa", api.loginMFA)
 		r.Post("/refresh", api.refresh)
 		r.Post("/logout", api.logout)
+		// Magic-link passwordless sign-in. Both routes are public/no-auth.
+		// The request route is per-email throttled (magic-link limiter) on
+		// top of the per-IP login limiter; verify gets per-IP only — the
+		// 256-bit token + account-lockout-at-verify cover per-account abuse.
+		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter), MagicLinkRequestRateLimitMiddleware(params.RateLimiter)).
+			Post("/magic-link/request", api.requestMagicLink)
+		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).
+			Post("/magic-link/verify", api.verifyMagicLink)
 		// Routes requiring authentication
 		r.With(requireAuth).Get("/me", api.handleGetCurrentUser)
 		r.With(requireAuth).Put("/me", api.handleUpdateCurrentUser)

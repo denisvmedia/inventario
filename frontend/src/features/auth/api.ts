@@ -71,11 +71,13 @@ interface LoginMFAChallengeBody {
 // instead of issuing tokens. We disambiguate via the field rather than
 // HTTP status because credentials were correct — it's the *step* that
 // is incomplete.
-export async function login(email: string, password: string): Promise<LoginOutcome> {
-  const body = await http.post<LoginResponse & Partial<LoginMFAChallengeBody>>("/auth/login", {
-    email,
-    password,
-  })
+// finalizeLoginResponse maps the shared /auth/login-shaped body into a
+// LoginOutcome. Both password login and magic-link verify (#magic-link)
+// resolve to the exact same wire shape — either a LoginResponse or an
+// `mfa_required` challenge — so they reuse this one helper. On the
+// non-MFA path it persists the access + CSRF tokens before resolving so
+// the very next /auth/me probe sees them.
+function finalizeLoginResponse(body: LoginResponse & Partial<LoginMFAChallengeBody>): LoginOutcome {
   if (body.mfa_required && body.mfa_token) {
     return {
       kind: "mfa_required",
@@ -87,6 +89,38 @@ export async function login(email: string, password: string): Promise<LoginOutco
   if (body.access_token) setAccessToken(body.access_token)
   if (body.csrf_token) setCsrfToken(body.csrf_token)
   return { kind: "ok", user: body.user }
+}
+
+export async function login(email: string, password: string): Promise<LoginOutcome> {
+  const body = await http.post<LoginResponse & Partial<LoginMFAChallengeBody>>("/auth/login", {
+    email,
+    password,
+  })
+  return finalizeLoginResponse(body)
+}
+
+// requestMagicLink asks the backend to email a one-time sign-in link. The
+// response is always a neutral 200 message regardless of whether the email
+// maps to an active account (anti-enumeration) — mirrors forgotPassword, so
+// callers treat the resolution as success copy, never an "email exists" probe.
+export async function requestMagicLink(email: string): Promise<string> {
+  const body = await http.post<MessageResponse>("/auth/magic-link/request", { email })
+  return body.message ?? ""
+}
+
+// verifyMagicLink exchanges the token from the emailed link for a session.
+// The backend returns the EXACT same shape as POST /auth/login — either a
+// LoginResponse (tokens issued) or an `mfa_required` challenge — so it reuses
+// finalizeLoginResponse: a non-MFA success logs the user in (tokens stored),
+// an `mfa_required` response is surfaced to the existing MFAChallenge UI. An
+// invalid / expired / replayed token comes back as a non-2xx → HttpError,
+// which MagicLinkPage maps to the "request a new link" state.
+export async function verifyMagicLink(token: string): Promise<LoginOutcome> {
+  const body = await http.post<LoginResponse & Partial<LoginMFAChallengeBody>>(
+    "/auth/magic-link/verify",
+    { token }
+  )
+  return finalizeLoginResponse(body)
 }
 
 // completeLoginMFA exchanges the mfa_token + a current TOTP code (or an

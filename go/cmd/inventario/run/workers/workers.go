@@ -151,6 +151,7 @@ func (c *Command) run() error {
 		{WorkerHousekeeping, []starter{
 			bootstrap.StartRefreshTokenCleanupWorker,
 			bootstrap.StartEmailVerificationCleanupWorker,
+			bootstrap.StartMagicLinkTokenCleanupWorker,
 			bootstrap.StartLoginEventRetentionWorker,
 			bootstrap.StartGroupPurgeWorker,
 			bootstrap.StartWarrantyReminderWorker,

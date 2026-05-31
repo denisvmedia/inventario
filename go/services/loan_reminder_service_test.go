@@ -46,6 +46,10 @@ func (r *recordingLoanEmailService) SendVerificationEmail(_ context.Context, _ s
 func (r *recordingLoanEmailService) SendPasswordResetEmail(_ context.Context, _ string, _ string, _ string) error {
 	return nil
 }
+
+func (r *recordingLoanEmailService) SendMagicLinkEmail(_ context.Context, _ string, _ string, _ string) error {
+	return nil
+}
 func (r *recordingLoanEmailService) SendPasswordChangedEmail(_ context.Context, _ string, _ string, _ time.Time) error {
 	return nil
 }
@@ -105,6 +109,9 @@ func (failingLoanEmailService) SendVerificationEmail(_ context.Context, _, _, _ 
 	return nil
 }
 func (failingLoanEmailService) SendPasswordResetEmail(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (failingLoanEmailService) SendMagicLinkEmail(_ context.Context, _, _, _ string) error {
 	return nil
 }
 func (failingLoanEmailService) SendPasswordChangedEmail(_ context.Context, _, _ string, _ time.Time) error {

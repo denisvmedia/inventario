@@ -26,6 +26,7 @@ type Config struct {
 	RestorePollInterval              string `yaml:"restore_poll_interval" env:"RESTORE_POLL_INTERVAL" env-default:""`
 	RefreshTokenCleanupInterval      string `yaml:"refresh_token_cleanup_interval" env:"REFRESH_TOKEN_CLEANUP_INTERVAL" env-default:""`
 	EmailVerificationCleanupInterval string `yaml:"email_verification_cleanup_interval" env:"EMAIL_VERIFICATION_CLEANUP_INTERVAL" env-default:""`
+	MagicLinkTokenCleanupInterval    string `yaml:"magic_link_token_cleanup_interval" env:"MAGIC_LINK_TOKEN_CLEANUP_INTERVAL" env-default:""`
 	GroupPurgeInterval               string `yaml:"group_purge_interval" env:"GROUP_PURGE_INTERVAL" env-default:""`
 	WarrantyReminderInterval         string `yaml:"warranty_reminder_interval" env:"WARRANTY_REMINDER_INTERVAL" env-default:""`
 	StorageQuotaReminderInterval     string `yaml:"storage_quota_reminder_interval" env:"STORAGE_QUOTA_REMINDER_INTERVAL" env-default:""`
@@ -79,6 +80,13 @@ type Config struct {
 	// owns the operator-facing toggle. The flag is removed entirely once
 	// the rollout settles (see §8 in #202).
 	FeatureCurrencyMigration bool `yaml:"feature_currency_migration" env:"FEATURE_CURRENCY_MIGRATION" env-default:"true"`
+
+	// MagicLinkLoginEnabled toggles the passwordless "magic link" sign-in
+	// flow. Default on; the effective gate computed in buildServerParams
+	// additionally requires a non-stub email provider, since a stub provider
+	// black-holes the sign-in link and would leave users unable to complete
+	// the flow. Flip off to remove the entry point and 404 the routes.
+	MagicLinkLoginEnabled bool `yaml:"magic_link_login_enabled" env:"MAGIC_LINK_LOGIN_ENABLED" env-default:"true"`
 
 	// CurrencyMigrationHMACKey signs the stateless preview tokens issued
 	// by the preview endpoint. Verification re-derives the signature from
@@ -253,6 +261,9 @@ func (c *Config) setWorkerDefaults() {
 	}
 	if c.EmailVerificationCleanupInterval == "" {
 		c.EmailVerificationCleanupInterval = defaults.GetEmailVerificationCleanupInterval()
+	}
+	if c.MagicLinkTokenCleanupInterval == "" {
+		c.MagicLinkTokenCleanupInterval = defaults.GetMagicLinkTokenCleanupInterval()
 	}
 	if c.GroupPurgeInterval == "" {
 		c.GroupPurgeInterval = defaults.GetGroupPurgeInterval()

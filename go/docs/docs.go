@@ -1324,6 +1324,119 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/magic-link/request": {
+            "post": {
+                "description": "Send a passwordless sign-in link to the given email address. Always returns 200 to prevent email enumeration. Returns 404 when magic-link login is disabled for this deployment.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Request a magic-link sign-in",
+                "parameters": [
+                    {
+                        "description": "Email address",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.MagicLinkRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - magic-link login disabled",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/magic-link/verify": {
+            "post": {
+                "description": "Exchange a one-time sign-in token for a session. Returns the same shapes as /auth/login (LoginResponse, or LoginMFARequiredResponse when MFA is enabled). Returns 404 when magic-link login is disabled.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Verify a magic-link sign-in",
+                "parameters": [
+                    {
+                        "description": "Sign-in token",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.MagicLinkVerifyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.LoginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - missing, invalid, or expired token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - account disabled",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - magic-link login disabled",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests - account locked",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/me": {
             "get": {
                 "description": "Return the currently authenticated user's profile. Also refreshes the CSRF token in the X-CSRF-Token response header.",
@@ -8282,6 +8395,10 @@ const docTemplate = `{
                 "currency_migration": {
                     "description": "CurrencyMigration mirrors Params.FeatureCurrencyMigration. When\nfalse the /currency-migrations endpoints return a coded 404 and\nthe FE hides the wizard entry point + history sheet on the\ngroup-settings page.",
                     "type": "boolean"
+                },
+                "magic_link_login": {
+                    "description": "MagicLinkLogin mirrors Params.MagicLinkLoginEnabled. The entry point\nis pre-login (a \"Email me a sign-in link\" affordance on the Login\npage), so it is exposed here on the public /feature-flags surface\nrather than the auth-gated /system endpoint. When false the FE hides\nthe affordance and the /auth/magic-link routes return 404.",
+                    "type": "boolean"
                 }
             }
         },
@@ -8599,6 +8716,22 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "apiserver.MagicLinkRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.MagicLinkVerifyRequest": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
                 }
             }
         },
@@ -13349,12 +13482,14 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "password",
+                "magic_link",
                 "oauth_google",
                 "oauth_github",
                 "oauth_other"
             ],
             "x-enum-varnames": [
                 "LoginMethodPassword",
+                "LoginMethodMagicLink",
                 "LoginMethodOAuthGoogle",
                 "LoginMethodOAuthGitHub",
                 "LoginMethodOAuthOther"

@@ -150,6 +150,10 @@ func (m *mockEmailServiceForAuth) SendPasswordResetEmail(_ context.Context, _ st
 	return nil
 }
 
+func (m *mockEmailServiceForAuth) SendMagicLinkEmail(_ context.Context, _ string, _ string, _ string) error {
+	return nil
+}
+
 func (m *mockEmailServiceForAuth) SendPasswordChangedEmail(_ context.Context, _ string, _ string, _ time.Time) error {
 	m.mu.Lock()
 	m.passwordChangedCalls++

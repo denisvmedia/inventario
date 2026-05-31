@@ -16,6 +16,7 @@ type WorkerDurations struct {
 	RestorePollInterval              time.Duration
 	RefreshTokenCleanupInterval      time.Duration
 	EmailVerificationCleanupInterval time.Duration
+	MagicLinkTokenCleanupInterval    time.Duration
 	GroupPurgeInterval               time.Duration
 	WarrantyReminderInterval         time.Duration
 	StorageQuotaReminderInterval     time.Duration
@@ -60,6 +61,7 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		{"restore-poll-interval", cfg.RestorePollInterval, &out.RestorePollInterval},
 		{"refresh-token-cleanup-interval", cfg.RefreshTokenCleanupInterval, &out.RefreshTokenCleanupInterval},
 		{"email-verification-cleanup-interval", cfg.EmailVerificationCleanupInterval, &out.EmailVerificationCleanupInterval},
+		{"magic-link-token-cleanup-interval", cfg.MagicLinkTokenCleanupInterval, &out.MagicLinkTokenCleanupInterval},
 		{"group-purge-interval", cfg.GroupPurgeInterval, &out.GroupPurgeInterval},
 		{"warranty-reminder-interval", cfg.WarrantyReminderInterval, &out.WarrantyReminderInterval},
 		{"storage-quota-reminder-interval", cfg.StorageQuotaReminderInterval, &out.StorageQuotaReminderInterval},

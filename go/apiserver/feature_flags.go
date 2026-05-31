@@ -28,6 +28,13 @@ type FeatureFlags struct {
 	// the FE hides the wizard entry point + history sheet on the
 	// group-settings page.
 	CurrencyMigration bool `json:"currency_migration"`
+
+	// MagicLinkLogin mirrors Params.MagicLinkLoginEnabled. The entry point
+	// is pre-login (a "Email me a sign-in link" affordance on the Login
+	// page), so it is exposed here on the public /feature-flags surface
+	// rather than the auth-gated /system endpoint. When false the FE hides
+	// the affordance and the /auth/magic-link routes return 404.
+	MagicLinkLogin bool `json:"magic_link_login"`
 }
 
 // FeatureFlagsHandler returns a constant-shaped feature-flag payload
@@ -45,6 +52,7 @@ type FeatureFlags struct {
 func FeatureFlagsHandler(params Params) func(r chi.Router) {
 	flags := FeatureFlags{
 		CurrencyMigration: params.FeatureCurrencyMigration,
+		MagicLinkLogin:    params.MagicLinkLoginEnabled,
 	}
 	return func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, _ *http.Request) {

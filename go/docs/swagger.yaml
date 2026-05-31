@@ -215,6 +215,14 @@ definitions:
           the FE hides the wizard entry point + history sheet on the
           group-settings page.
         type: boolean
+      magic_link_login:
+        description: |-
+          MagicLinkLogin mirrors Params.MagicLinkLoginEnabled. The entry point
+          is pre-login (a "Email me a sign-in link" affordance on the Login
+          page), so it is exposed here on the public /feature-flags surface
+          rather than the auth-gated /system endpoint. When false the FE hides
+          the affordance and the /auth/magic-link routes return 404.
+        type: boolean
     type: object
   apiserver.FeedbackRequest:
     properties:
@@ -445,6 +453,16 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  apiserver.MagicLinkRequest:
+    properties:
+      email:
+        type: string
+    type: object
+  apiserver.MagicLinkVerifyRequest:
+    properties:
+      token:
+        type: string
     type: object
   apiserver.PatchSettingRequest:
     properties:
@@ -3992,12 +4010,14 @@ definitions:
   models.LoginMethod:
     enum:
     - password
+    - magic_link
     - oauth_google
     - oauth_github
     - oauth_other
     type: string
     x-enum-varnames:
     - LoginMethodPassword
+    - LoginMethodMagicLink
     - LoginMethodOAuthGoogle
     - LoginMethodOAuthGitHub
     - LoginMethodOAuthOther
@@ -5403,6 +5423,84 @@ paths:
           schema:
             $ref: '#/definitions/apiserver.LogoutResponse'
       summary: Logout
+      tags:
+      - auth
+  /auth/magic-link/request:
+    post:
+      consumes:
+      - application/json
+      description: Send a passwordless sign-in link to the given email address. Always
+        returns 200 to prevent email enumeration. Returns 404 when magic-link login
+        is disabled for this deployment.
+      parameters:
+      - description: Email address
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.MagicLinkRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "404":
+          description: Not Found - magic-link login disabled
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests
+          schema:
+            type: string
+      summary: Request a magic-link sign-in
+      tags:
+      - auth
+  /auth/magic-link/verify:
+    post:
+      consumes:
+      - application/json
+      description: Exchange a one-time sign-in token for a session. Returns the same
+        shapes as /auth/login (LoginResponse, or LoginMFARequiredResponse when MFA
+        is enabled). Returns 404 when magic-link login is disabled.
+      parameters:
+      - description: Sign-in token
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.MagicLinkVerifyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.LoginResponse'
+        "400":
+          description: Bad Request - missing, invalid, or expired token
+          schema:
+            type: string
+        "403":
+          description: Forbidden - account disabled
+          schema:
+            type: string
+        "404":
+          description: Not Found - magic-link login disabled
+          schema:
+            type: string
+        "429":
+          description: Too Many Requests - account locked
+          schema:
+            type: string
+      summary: Verify a magic-link sign-in
       tags:
       - auth
   /auth/me:

@@ -21,6 +21,7 @@ type emailTemplateType string
 const (
 	emailTemplateVerification        emailTemplateType = "verification"
 	emailTemplatePasswordReset       emailTemplateType = "password_reset"
+	emailTemplateMagicLink           emailTemplateType = "magic_link"
 	emailTemplatePasswordChange      emailTemplateType = "password_changed"
 	emailTemplateWelcome             emailTemplateType = "welcome"
 	emailTemplateWarrantyReminder    emailTemplateType = "warranty_reminder"
@@ -121,6 +122,7 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 	htmlTemplateFiles := map[emailTemplateType]string{
 		emailTemplateVerification:        "email_templates/verification.html.tmpl",
 		emailTemplatePasswordReset:       "email_templates/password_reset.html.tmpl",
+		emailTemplateMagicLink:           "email_templates/magic_link.html.tmpl",
 		emailTemplatePasswordChange:      "email_templates/password_changed.html.tmpl",
 		emailTemplateWelcome:             "email_templates/welcome.html.tmpl",
 		emailTemplateWarrantyReminder:    "email_templates/warranty_reminder.html.tmpl",
@@ -134,6 +136,7 @@ func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 	textTemplateFiles := map[emailTemplateType]string{
 		emailTemplateVerification:        "email_templates/verification.txt.tmpl",
 		emailTemplatePasswordReset:       "email_templates/password_reset.txt.tmpl",
+		emailTemplateMagicLink:           "email_templates/magic_link.txt.tmpl",
 		emailTemplatePasswordChange:      "email_templates/password_changed.txt.tmpl",
 		emailTemplateWelcome:             "email_templates/welcome.txt.tmpl",
 		emailTemplateWarrantyReminder:    "email_templates/warranty_reminder.txt.tmpl",
@@ -295,6 +298,8 @@ func subjectByTemplateType(tt emailTemplateType) (string, bool) {
 		return "Verify your Inventario account", true
 	case emailTemplatePasswordReset:
 		return "Reset your Inventario password", true
+	case emailTemplateMagicLink:
+		return "Sign in to Inventario", true
 	case emailTemplatePasswordChange:
 		return "Your Inventario password was changed", true
 	case emailTemplateWelcome:
