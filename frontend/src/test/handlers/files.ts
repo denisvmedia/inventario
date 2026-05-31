@@ -71,7 +71,7 @@ export function detail(
   slug: string,
   id: string,
   attributes: unknown,
-  signedUrl?: { url: string; thumbnails?: Record<string, string> }
+  signedUrl?: { url: string; inline_url?: string; thumbnails?: Record<string, string> }
 ) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(id)}`), () =>

@@ -25,6 +25,21 @@ describe("<ImageViewer />", () => {
     expect(screen.queryByTestId("image-viewer-position")).not.toBeInTheDocument()
   })
 
+  it("renders as a portalled modal dialog so it stays interactive above the Sheet (#1962)", () => {
+    // The viewer is a Radix Dialog (modal, portalled) rather than a bare
+    // overlay nested in the Sheet's tree. As a stacked dismissable layer it
+    // owns pointer interactions, so the toolbar stays clickable and clicks
+    // don't fall through to — or dismiss — the Sheet underneath.
+    const { container } = render(
+      <ImageViewer open onOpenChange={vi.fn()} url="https://example/a.png" alt="A" />
+    )
+    const root = screen.getByTestId("file-image-viewer")
+    expect(root).toHaveAttribute("role", "dialog")
+    // Portalled out of the in-page render tree (to document.body), so it
+    // paints above the open Sheet instead of behind it.
+    expect(container).not.toContainElement(root)
+  })
+
   it("renders prev/next + position counter when siblings have more than one entry", () => {
     render(
       <ImageViewer

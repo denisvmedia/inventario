@@ -313,3 +313,80 @@ func TestSetStreamingHeaders(t *testing.T) {
 		})
 	}
 }
+
+func TestSetInlineStreamingHeaders(t *testing.T) {
+	tests := []struct {
+		name          string
+		contentType   string
+		fileSize      int64
+		filename      string
+		expectHeaders map[string]string
+	}{
+		{
+			name:        "inline disposition with filename",
+			contentType: "application/pdf",
+			fileSize:    2048,
+			filename:    "manual.pdf",
+			expectHeaders: map[string]string{
+				"Content-Type":           "application/pdf",
+				"Content-Length":         "2048",
+				"Cache-Control":          "private, max-age=0, must-revalidate",
+				"Accept-Ranges":          "bytes",
+				"X-Content-Type-Options": "nosniff",
+				"Content-Disposition":    `inline; filename=manual.pdf`,
+			},
+		},
+		{
+			name:        "image inline disposition",
+			contentType: "image/png",
+			fileSize:    512,
+			filename:    "photo.png",
+			expectHeaders: map[string]string{
+				"Content-Type":           "image/png",
+				"Content-Length":         "512",
+				"Cache-Control":          "private, max-age=0, must-revalidate",
+				"Accept-Ranges":          "bytes",
+				"X-Content-Type-Options": "nosniff",
+				"Content-Disposition":    `inline; filename=photo.png`,
+			},
+		},
+		{
+			name:        "no filename omits Content-Disposition",
+			contentType: "text/plain",
+			fileSize:    0,
+			filename:    "",
+			expectHeaders: map[string]string{
+				"Content-Type":           "text/plain",
+				"Content-Length":         "0",
+				"Cache-Control":          "private, max-age=0, must-revalidate",
+				"Accept-Ranges":          "bytes",
+				"X-Content-Type-Options": "nosniff",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			rr := httptest.NewRecorder()
+
+			downloadutils.SetInlineStreamingHeaders(rr, tt.contentType, tt.fileSize, tt.filename)
+
+			for key, expectedValue := range tt.expectHeaders {
+				actualValue := rr.Header().Get(key)
+				c.Assert(actualValue, qt.Equals, expectedValue, qt.Commentf("Header %s", key))
+			}
+
+			// The whole point of the inline path: it must NOT carry the
+			// download-forcing no-store cache header, and it must serve
+			// inline (not attachment) when a filename is present.
+			c.Assert(rr.Header().Get("Cache-Control"), qt.Not(qt.Contains), "no-store")
+			if tt.filename == "" {
+				c.Assert(rr.Header().Get("Content-Disposition"), qt.Equals, "")
+			} else {
+				c.Assert(rr.Header().Get("Content-Disposition"), qt.Contains, "inline")
+			}
+		})
+	}
+}

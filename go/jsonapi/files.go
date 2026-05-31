@@ -513,7 +513,8 @@ type SignedFileURLResponse struct {
 
 // URLData is an object that holds URL data information.
 type URLData struct {
-	URL        string            `json:"url"`                  // signed URL for file access
+	URL        string            `json:"url"`                  // signed URL for file access (attachment / download)
+	InlineURL  string            `json:"inline_url,omitempty"` // signed URL that serves the file inline for in-browser viewing ("Open in new tab", #1962); empty when not available
 	Thumbnails map[string]string `json:"thumbnails,omitempty"` // map of thumbnail size to signed URL
 }
 

@@ -83,7 +83,7 @@ describe("<FileDetailSheet />", () => {
     expect(screen.getByText("q4")).toBeInTheDocument()
   })
 
-  it("routes to the small Dialog (not the Sheet) when MIME isn't image or PDF", async () => {
+  it("renders non-previewable files through the Sheet, not a separate dialog (#1962)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...fileHandlers.detail(
@@ -104,19 +104,22 @@ describe("<FileDetailSheet />", () => {
       )
     )
     renderSheet("f1")
-    expect(await screen.findByTestId("file-preview-other-dialog")).toBeInTheDocument()
-    // Sheet-only metadata block and action row should not render.
-    expect(screen.queryByTestId("file-detail-sheet")).not.toBeInTheDocument()
-    expect(screen.queryByTestId("file-detail-edit")).not.toBeInTheDocument()
-    // Dialog shows the filename header, size, and Download CTA.
-    expect(screen.getByTestId("file-preview-other-filename")).toHaveTextContent("Archive")
-    expect(screen.getByTestId("file-preview-other-download")).toHaveAttribute(
+    // The body shows the "cannot preview, download to view" card once the
+    // file resolves — wait on it so the assertions don't race the fetch.
+    expect(await screen.findByTestId("file-detail-no-preview")).toBeInTheDocument()
+    // Same right-side Sheet as image/PDF — the legacy centered dialog is gone.
+    expect(screen.getByTestId("file-detail-sheet")).toBeInTheDocument()
+    expect(screen.queryByTestId("file-preview-other-dialog")).not.toBeInTheDocument()
+    // … and the full Sheet metadata + action row are present.
+    expect(screen.getByTestId("file-detail-filename")).toHaveTextContent("stuff.zip")
+    expect(screen.getByTestId("file-detail-edit")).toBeInTheDocument()
+    expect(screen.getByTestId("file-detail-download")).toHaveAttribute(
       "href",
       "https://cdn.example/stuff.zip"
     )
   })
 
-  it("delete button renders enabled on the small Dialog branch", async () => {
+  it("delete button renders enabled on the Sheet for non-previewable files", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...fileHandlers.detail(SLUG, "f1", {
@@ -130,8 +133,8 @@ describe("<FileDetailSheet />", () => {
       })
     )
     renderSheet("f1")
-    await waitFor(() => expect(screen.getByTestId("file-preview-other-delete")).toBeInTheDocument())
-    expect(screen.getByTestId("file-preview-other-delete")).not.toBeDisabled()
+    await waitFor(() => expect(screen.getByTestId("file-detail-delete")).toBeInTheDocument())
+    expect(screen.getByTestId("file-detail-delete")).not.toBeDisabled()
   })
 
   it("renders the dash fallback when path is an empty string (regression #1483)", async () => {
@@ -169,9 +172,6 @@ describe("<FileDetailSheet />", () => {
   it("renders the bare path when ext is missing", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
-      // Use a PDF so the file stays on the Sheet path (which renders
-      // the metadata block with the filename row). Non-previewable
-      // mimes route to the small Dialog after #1541.
       ...fileHandlers.detail(SLUG, "f1", {
         id: "f1",
         title: "Note",
@@ -187,7 +187,7 @@ describe("<FileDetailSheet />", () => {
     )
   })
 
-  it("clicking Delete on the small Dialog opens the confirm prompt", async () => {
+  it("clicking Delete opens the confirm prompt (non-previewable file)", async () => {
     const user = userEvent.setup()
     server.use(
       ...groupHandlers.list(groupFixture),
@@ -202,7 +202,7 @@ describe("<FileDetailSheet />", () => {
       })
     )
     renderSheet("f1")
-    const deleteBtn = await screen.findByTestId("file-preview-other-delete")
+    const deleteBtn = await screen.findByTestId("file-detail-delete")
     await user.click(deleteBtn)
     expect(await screen.findByTestId("confirm-dialog")).toBeInTheDocument()
     expect(screen.getByTestId("confirm-accept")).toBeInTheDocument()
@@ -213,8 +213,6 @@ describe("<FileDetailSheet />", () => {
     const onEdit = vi.fn()
     server.use(
       ...groupHandlers.list(groupFixture),
-      // Edit affordance lives on the Sheet path — use a PDF so the
-      // mime routing keeps the test on that surface.
       ...fileHandlers.detail(SLUG, "f1", {
         id: "f1",
         title: "X",
@@ -255,5 +253,87 @@ describe("<FileDetailSheet />", () => {
     expect(await screen.findByTestId("pdf-viewer-fullscreen")).toBeInTheDocument()
     // …and the fullscreen PDF dialog stays closed until it's used.
     expect(screen.queryByTestId("file-detail-pdf-fullscreen")).not.toBeInTheDocument()
+  })
+
+  it("'Open in new tab' targets the inline URL while Download keeps the attachment URL (#1962)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.detail(
+        SLUG,
+        "f1",
+        {
+          id: "f1",
+          title: "Receipt",
+          category: "documents",
+          type: "document",
+          path: "rec",
+          ext: ".pdf",
+          mime_type: "application/pdf",
+        },
+        {
+          url: "https://cdn.example/rec.pdf?disposition=attachment",
+          inline_url: "https://cdn.example/rec.pdf?disposition=inline",
+        }
+      )
+    )
+    renderSheet("f1")
+    const open = await screen.findByTestId("file-detail-open")
+    expect(open).toHaveAttribute("href", "https://cdn.example/rec.pdf?disposition=inline")
+    expect(open).toHaveAttribute("target", "_blank")
+    const download = screen.getByTestId("file-detail-download")
+    expect(download).toHaveAttribute("href", "https://cdn.example/rec.pdf?disposition=attachment")
+    expect(download).toHaveAttribute("download")
+  })
+
+  it("'Open in new tab' falls back to the attachment URL when no inline URL is provided", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.detail(
+        SLUG,
+        "f1",
+        {
+          id: "f1",
+          title: "Receipt",
+          category: "documents",
+          type: "document",
+          path: "rec",
+          ext: ".pdf",
+          mime_type: "application/pdf",
+        },
+        { url: "https://cdn.example/rec.pdf" }
+      )
+    )
+    renderSheet("f1")
+    const open = await screen.findByTestId("file-detail-open")
+    expect(open).toHaveAttribute("href", "https://cdn.example/rec.pdf")
+  })
+
+  it("opens the fullscreen image viewer above the Sheet on image preview click (#1962)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.detail(
+        SLUG,
+        "f1",
+        {
+          id: "f1",
+          title: "Living room",
+          category: "images",
+          type: "image",
+          path: "photo-livingroom",
+          ext: ".jpg",
+          mime_type: "image/jpeg",
+        },
+        { url: "https://cdn.example/photo-livingroom.jpg" }
+      )
+    )
+    renderSheet("f1")
+    const trigger = await screen.findByTestId("file-preview-image-trigger")
+    expect(screen.queryByTestId("file-image-viewer")).not.toBeInTheDocument()
+    await user.click(trigger)
+    // The viewer (a stacked Radix Dialog) portals to document.body so it
+    // paints above the Sheet; screen queries the whole document, so it's
+    // found here.
+    expect(await screen.findByTestId("file-image-viewer")).toBeInTheDocument()
   })
 })
