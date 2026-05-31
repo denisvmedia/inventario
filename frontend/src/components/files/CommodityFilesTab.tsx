@@ -172,14 +172,20 @@ export function CommodityFilesTab({
   }, [files, activeChip])
 
   // This commodity's photos, in grid order, for the fullscreen viewer's
-  // gallery navigation inside the detail sheet.
-  const imageSiblings: GalleryImage[] = files
-    .filter(({ file, signedUrl }) => isImageMime(file.mime_type) && !!signedUrl?.url)
-    .map(({ file, signedUrl }) => ({
-      id: file.id,
-      url: signedUrl?.url ?? "",
-      alt: file.title?.trim() || file.path?.trim() || file.id,
-    }))
+  // gallery navigation inside the detail sheet. Memoized like `files` /
+  // `counts` / `visible` so a re-render doesn't hand FileDetailSheet a
+  // fresh array reference each time.
+  const imageSiblings: GalleryImage[] = useMemo(
+    () =>
+      files
+        .filter(({ file, signedUrl }) => isImageMime(file.mime_type) && !!signedUrl?.url)
+        .map(({ file, signedUrl }) => ({
+          id: file.id,
+          url: signedUrl?.url ?? "",
+          alt: file.title?.trim() || file.path?.trim() || file.id,
+        })),
+    [files]
+  )
 
   const activeChipDef = CHIPS.find((c) => c.id === activeChip) ?? CHIPS[0]
   const ActiveEmptyIcon = activeChipDef.icon
