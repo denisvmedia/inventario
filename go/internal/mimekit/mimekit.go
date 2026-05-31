@@ -3,6 +3,7 @@ package mimekit
 import (
 	"mime"
 	"slices"
+	"strings"
 
 	"github.com/gabriel-vasile/mimetype"
 )
@@ -89,8 +90,17 @@ func IsImage(contentType string) bool {
 // the narrow allowlist (see inlineSafeContentTypes) must fall back to an
 // attachment download even when an inline serve was requested, so that
 // active content (HTML, SVG) can never execute in our origin.
+//
+// The content type is normalised before the lookup — parameters are
+// stripped and the media type is lowercased — so a stored value like
+// "text/plain; charset=utf-8" or "IMAGE/PNG" still matches the allowlist
+// (and, conversely, "text/html; charset=utf-8" still does not). An empty
+// or unparseable value falls through to the download case.
 func IsInlineSafe(contentType string) bool {
-	return slices.Contains(inlineSafeContentTypes, contentType)
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = mediaType
+	}
+	return slices.Contains(inlineSafeContentTypes, strings.ToLower(contentType))
 }
 
 func IsDoc(contentType string) bool {

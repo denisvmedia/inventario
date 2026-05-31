@@ -47,6 +47,15 @@ func TestIsInlineSafe(t *testing.T) {
 	c.Assert(mimekit.IsInlineSafe("application/zip"), qt.IsFalse)
 	c.Assert(mimekit.IsInlineSafe("application/octet-stream"), qt.IsFalse)
 	c.Assert(mimekit.IsInlineSafe(""), qt.IsFalse)
+
+	// Normalisation: parameters are stripped and case is folded, so a
+	// stored value with a charset or odd casing still resolves correctly.
+	c.Assert(mimekit.IsInlineSafe("text/plain; charset=utf-8"), qt.IsTrue)
+	c.Assert(mimekit.IsInlineSafe("IMAGE/PNG"), qt.IsTrue)
+	c.Assert(mimekit.IsInlineSafe("application/pdf; qs=0.001"), qt.IsTrue)
+	// Active content stays excluded even with parameters.
+	c.Assert(mimekit.IsInlineSafe("text/html; charset=utf-8"), qt.IsFalse)
+	c.Assert(mimekit.IsInlineSafe("image/svg+xml; charset=utf-8"), qt.IsFalse)
 }
 
 func TestExtensionByMime(t *testing.T) {
