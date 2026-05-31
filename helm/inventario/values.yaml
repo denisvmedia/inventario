@@ -737,6 +737,44 @@ setupJob:
     # Env: INVENTARIO_SEED_ALLOW_BLOB_UPLOADS
     seedBlobUploads: false
 
+    # Back-office (platform-operator) login password for /backoffice/login,
+    # consumed by the setup / init-data Job's `inventario backoffice bootstrap
+    # --password` step ONLY when backofficeUser.enabled=true (below). It is the
+    # BACKOFFICE_USER_PASSWORD value the chart bakes into its Secret, the exact
+    # mirror of adminPassword above. Empty by default; provide via
+    # --set setupJob.initData.backofficeUserPassword=<value> or via
+    # secrets.existingSecret key BACKOFFICE_USER_PASSWORD. Must satisfy the
+    # password policy (8+ chars, upper, lower, digit). Production never enables
+    # backofficeUser, so this stays empty there.
+    backofficeUserPassword: ""
+
+# ============================================================
+# Back-office user auto-provisioning (#1967)
+# ------------------------------------------------------------
+# Auto-creates the platform-operator identity used by /backoffice/login, the
+# same way setupJob.initData seeds the app admin. When enabled, the setup /
+# init-data Job runs `inventario backoffice bootstrap` (idempotent on email).
+#
+# DISABLED by default and gated to demo/preview overlays ONLY. NEVER enable in
+# production: there, operators are created manually via `inventario backoffice
+# bootstrap` so the one-time password is never written to a Secret, and MFA is
+# enrolled out-of-band via `inventario backoffice mfa setup`.
+# ============================================================
+backofficeUser:
+  enabled: false
+  # Operator login email + display name (non-secret; passed as --email/--name).
+  email: "operator@example.com"
+  name: "Platform Operator"
+  # Role: platform_admin (full mutation rights) or support_agent.
+  role: "platform_admin"
+  # mfaEnforced=false provisions a PASSWORD-ONLY operator so the seeded account
+  # can sign in on a demo env with no authenticator app. A Helm Job has no
+  # interactive terminal to complete TOTP enrollment, and an MFA-enforced
+  # operator with no secret row fails closed with HTTP 501 at /backoffice/login
+  # (the #1967 demo lockout). Leave false for demo; production never enables
+  # this block at all.
+  mfaEnforced: false
+
 # ============================================================
 # Namespace ResourceQuota + LimitRange (#1866)
 # ------------------------------------------------------------
