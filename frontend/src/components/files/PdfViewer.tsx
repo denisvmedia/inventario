@@ -1,6 +1,6 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronLeft, ChevronRight, Download, Minus, Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight, Download, Maximize2, Minus, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { pdfjsLib } from "@/lib/pdfjs"
@@ -19,9 +19,14 @@ const DEFAULT_SCALE = 1.5
 export interface PdfViewerProps {
   url: string
   onError?: (err: Error) => void
+  // When provided, the toolbar surfaces a fullscreen affordance. The
+  // file-detail sheet passes this on its inline viewer to pop the PDF into a
+  // fullscreen dialog (the dialog's own viewer omits it, so there's no
+  // recursive button).
+  onRequestFullscreen?: () => void
 }
 
-export function PdfViewer({ url, onError }: PdfViewerProps) {
+export function PdfViewer({ url, onError, onRequestFullscreen }: PdfViewerProps) {
   const { t } = useTranslation()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -34,6 +39,10 @@ export function PdfViewer({ url, onError }: PdfViewerProps) {
   const [scale, setScale] = useState(DEFAULT_SCALE)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Download progress in [0, 1] while the document streams in, or null when
+  // the total size is unknown (some servers omit Content-Length) — the bar
+  // falls back to an indeterminate pulse in that case.
+  const [progress, setProgress] = useState<number | null>(null)
 
   // Load the document once per URL change; pdfjs's getDocument returns
   // a worker-backed proxy so a swapped URL needs a fresh handle.
@@ -44,7 +53,14 @@ export function PdfViewer({ url, onError }: PdfViewerProps) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     setError(null)
+    setProgress(null)
     const task = pdfjsLib.getDocument({ url })
+    // pdf.js streams the document and reports byte progress; surface it so
+    // the user sees a determinate loading bar like a browser's native viewer.
+    task.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
+      if (cancelled) return
+      setProgress(total > 0 ? Math.min(1, loaded / total) : null)
+    }
     task.promise
       .then((doc) => {
         if (cancelled) return
@@ -184,6 +200,18 @@ export function PdfViewer({ url, onError }: PdfViewerProps) {
           <Plus className="size-4" aria-hidden="true" />
         </Button>
         <span className="ml-auto" />
+        {onRequestFullscreen ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRequestFullscreen}
+            disabled={loading}
+            aria-label={t("files:viewer.fullscreen", { defaultValue: "Fullscreen" })}
+            data-testid="pdf-viewer-fullscreen"
+          >
+            <Maximize2 className="size-4" aria-hidden="true" />
+          </Button>
+        ) : null}
         <Button asChild variant="outline" size="sm" data-testid="pdf-viewer-download">
           <a href={url} download>
             <Download className="mr-2 size-4" aria-hidden="true" />
@@ -192,8 +220,33 @@ export function PdfViewer({ url, onError }: PdfViewerProps) {
         </Button>
       </div>
       {loading ? (
-        <div className="flex aspect-[4/5] w-full items-center justify-center rounded-md border text-sm text-muted-foreground">
-          {t("common:loading", { defaultValue: "Loading…" })}
+        <div
+          className="flex aspect-[4/5] w-full flex-col items-center justify-center gap-3 rounded-md border text-sm text-muted-foreground"
+          data-testid="pdf-viewer-loading"
+        >
+          <span>{t("common:loading", { defaultValue: "Loading…" })}</span>
+          <div
+            className="h-1.5 w-40 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress === null ? undefined : Math.round(progress * 100)}
+          >
+            <div
+              className={
+                progress === null
+                  ? "h-full w-1/3 animate-pulse rounded-full bg-primary"
+                  : "h-full rounded-full bg-primary transition-[width] duration-150 ease-out"
+              }
+              style={progress === null ? undefined : { width: `${Math.round(progress * 100)}%` }}
+              data-testid="pdf-viewer-progress-bar"
+            />
+          </div>
+          {progress !== null ? (
+            <span className="tabular-nums text-xs" data-testid="pdf-viewer-progress-label">
+              {Math.round(progress * 100)}%
+            </span>
+          ) : null}
         </div>
       ) : error ? (
         <div

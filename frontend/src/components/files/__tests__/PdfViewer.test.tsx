@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { initI18n } from "@/i18n"
@@ -18,6 +18,19 @@ const getViewportMock = vi.fn(({ scale }: { scale: number }) => ({
   height: BASE_HEIGHT * scale,
 }))
 
+// When `pendingDoc` is set, getDocument hands back a task whose promise stays
+// unresolved until `resolveDoc()` is called, so a test can observe the loading
+// + progress UI before the document is ready. `lastTask` exposes the task so a
+// test can fire the component-assigned `onProgress` callback.
+type ProgressTask = {
+  promise: Promise<unknown>
+  destroy: () => void
+  onProgress?: (p: { loaded: number; total: number }) => void
+}
+let pendingDoc = false
+let resolveDoc: (() => void) | null = null
+let lastTask: ProgressTask | null = null
+
 vi.mock("@/lib/pdfjs", () => {
   const pageProxy = {
     getViewport: getViewportMock,
@@ -30,10 +43,18 @@ vi.mock("@/lib/pdfjs", () => {
   return {
     pdfjsLib: {
       GlobalWorkerOptions: { workerSrc: "" },
-      getDocument: vi.fn(() => ({
-        promise: Promise.resolve(doc),
-        destroy: vi.fn(),
-      })),
+      getDocument: vi.fn(() => {
+        const task: ProgressTask = {
+          destroy: vi.fn(),
+          promise: pendingDoc
+            ? new Promise((res) => {
+                resolveDoc = () => res(doc)
+              })
+            : Promise.resolve(doc),
+        }
+        lastTask = task
+        return task
+      }),
     },
   }
 })
@@ -172,5 +193,46 @@ describe("<PdfViewer />", () => {
     fireEvent.pointerMove(scroller, { pointerId: 1, clientX: 100, clientY: 100 })
     expect(scroller.scrollLeft).toBe(0)
     expect(scroller.scrollTop).toBe(0)
+  })
+
+  it("surfaces a fullscreen control only when onRequestFullscreen is wired", async () => {
+    const { PdfViewer } = await import("@/components/files/PdfViewer")
+    const onRequestFullscreen = vi.fn()
+
+    const plain = render(<PdfViewer url="https://example.test/doc.pdf" />)
+    await screen.findByTestId("pdf-viewer-canvas")
+    expect(screen.queryByTestId("pdf-viewer-fullscreen")).not.toBeInTheDocument()
+    plain.unmount()
+
+    render(
+      <PdfViewer url="https://example.test/doc.pdf" onRequestFullscreen={onRequestFullscreen} />
+    )
+    await screen.findByTestId("pdf-viewer-canvas")
+    const fullscreen = screen.getByTestId("pdf-viewer-fullscreen")
+    await userEvent.click(fullscreen)
+    expect(onRequestFullscreen).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows determinate download progress while the PDF streams in", async () => {
+    pendingDoc = true
+    try {
+      const { PdfViewer } = await import("@/components/files/PdfViewer")
+      render(<PdfViewer url="https://example.test/doc.pdf" />)
+      expect(await screen.findByTestId("pdf-viewer-loading")).toBeInTheDocument()
+      // No determinate label until pdf.js reports byte progress.
+      expect(screen.queryByTestId("pdf-viewer-progress-label")).not.toBeInTheDocument()
+
+      act(() => lastTask?.onProgress?.({ loaded: 50, total: 200 }))
+      expect(screen.getByTestId("pdf-viewer-progress-label")).toHaveTextContent("25%")
+      act(() => lastTask?.onProgress?.({ loaded: 200, total: 200 }))
+      expect(screen.getByTestId("pdf-viewer-progress-label")).toHaveTextContent("100%")
+
+      await act(async () => {
+        resolveDoc?.()
+      })
+      await screen.findByTestId("pdf-viewer-canvas")
+    } finally {
+      pendingDoc = false
+    }
   })
 })

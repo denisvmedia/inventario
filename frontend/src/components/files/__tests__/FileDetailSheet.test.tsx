@@ -230,4 +230,30 @@ describe("<FileDetailSheet />", () => {
     await user.click(screen.getByTestId("file-detail-edit"))
     expect(onEdit).toHaveBeenCalledWith("f1")
   })
+
+  it("wires a fullscreen affordance on the inline PDF preview (#1963)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.detail(
+        SLUG,
+        "f1",
+        {
+          id: "f1",
+          title: "Manual",
+          category: "documents",
+          type: "document",
+          path: "manual",
+          ext: ".pdf",
+          mime_type: "application/pdf",
+        },
+        { url: "https://cdn.example/manual.pdf" }
+      )
+    )
+    renderSheet("f1")
+    // The inline PdfViewer's toolbar surfaces the fullscreen button because
+    // FileDetailSheet passes onRequestFullscreen…
+    expect(await screen.findByTestId("pdf-viewer-fullscreen")).toBeInTheDocument()
+    // …and the fullscreen PDF dialog stays closed until it's used.
+    expect(screen.queryByTestId("file-detail-pdf-fullscreen")).not.toBeInTheDocument()
+  })
 })

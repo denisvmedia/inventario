@@ -9,6 +9,13 @@ import { PdfViewer } from "@/components/files/PdfViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import {
   Sheet,
@@ -74,6 +81,10 @@ export function FileDetailSheet({
   // sheet — that way Esc unwinds Image → Sheet (rather than closing
   // both at once) and the image isn't clipped by the sheet's max-width.
   const [imageViewerOpen, setImageViewerOpen] = useState(false)
+  // PDF gets the same expand-to-fullscreen affordance as images (#1963):
+  // the inline viewer's toolbar button flips this, and a fullscreen Dialog
+  // (a stacked layer, so it doesn't dismiss this Sheet) hosts a second viewer.
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
 
   const file = query.data?.file
   const signedUrl = query.data?.signedUrl?.url
@@ -151,6 +162,7 @@ export function FileDetailSheet({
               url={signedUrl}
               alt={title}
               onExpandImage={() => setImageViewerOpen(true)}
+              onExpandPdf={() => setPdfViewerOpen(true)}
             />
             <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[120px_1fr]">
               <dt className="text-muted-foreground">{t("files:detail.filename")}</dt>
@@ -279,6 +291,34 @@ export function FileDetailSheet({
             onSelectSibling,
           })
         : null}
+      {file && signedUrl && isPdfMime(file.mime_type) ? (
+        // Fullscreen PDF viewer — a stacked Dialog (peer of the Sheet) so
+        // closing it returns to the panel instead of dismissing the Sheet.
+        <Dialog open={pdfViewerOpen} onOpenChange={setPdfViewerOpen}>
+          <DialogContent
+            className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none border-0 bg-background p-4 [&>button]:hidden sm:max-w-none"
+            data-testid="file-detail-pdf-fullscreen"
+          >
+            <DialogHeader className="flex flex-row items-center gap-3 space-y-0 pb-3">
+              <DialogTitle className="line-clamp-1 flex-1 text-sm font-medium">{title}</DialogTitle>
+              <DialogDescription className="sr-only">
+                {t("files:detail.metadataTitle")}
+              </DialogDescription>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPdfViewerOpen(false)}
+                data-testid="file-detail-pdf-fullscreen-close"
+              >
+                {t("files:viewer.close", { defaultValue: "Close" })}
+              </Button>
+            </DialogHeader>
+            <div className="flex-1 overflow-auto">
+              <PdfViewer url={signedUrl} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </Sheet>
   )
 }
@@ -333,9 +373,10 @@ interface PreviewProps {
   url?: string
   alt: string
   onExpandImage?: () => void
+  onExpandPdf?: () => void
 }
 
-function FilePreview({ mime, url, alt, onExpandImage }: PreviewProps) {
+function FilePreview({ mime, url, alt, onExpandImage, onExpandPdf }: PreviewProps) {
   if (!url) return <div className="aspect-[4/3] w-full rounded-md bg-muted" aria-hidden="true" />
 
   if (isImageMime(mime)) {
@@ -360,7 +401,7 @@ function FilePreview({ mime, url, alt, onExpandImage }: PreviewProps) {
   }
 
   if (isPdfMime(mime)) {
-    return <PdfViewer url={url} />
+    return <PdfViewer url={url} onRequestFullscreen={onExpandPdf} />
   }
 
   // Defensive: the entry-point routing in FileDetailSheet sends every
