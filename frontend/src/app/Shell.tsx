@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/AppSidebar"
 import { CommandPalette } from "@/components/CommandPalette"
+import { CommitBadge } from "@/components/CommitBadge"
 import { CurrencyMigrationBanner } from "@/components/CurrencyMigrationBanner"
 import { ImpersonationBanner } from "@/components/ImpersonationBanner"
 import { InviteBanner } from "@/components/InviteBanner"
@@ -74,6 +75,9 @@ export function Shell() {
               </SidebarInset>
               <CommandPalette />
               <Toaster />
+              {/* Faint build-commit watermark, bottom-right, hidden on
+                  mobile; renders nothing in dev/tests (#1972). */}
+              <CommitBadge />
               {tour.isOpen ? (
                 <OnboardingTour
                   step={tour.step}
