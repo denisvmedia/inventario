@@ -179,6 +179,7 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 	}
 
 	params.FeatureCurrencyMigration = cfg.FeatureCurrencyMigration
+	params.MagicLinkLoginEnabled = resolveMagicLinkLoginEnabled(cfg)
 
 	emailLifecycle, err := buildEmailService(cfg)
 	if err != nil {
@@ -210,6 +211,20 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		emailLifecycle:            emailLifecycle,
 		closeReadinessRedisPinger: closeReadinessRedisPinger,
 	}, nil
+}
+
+// resolveMagicLinkLoginEnabled computes the effective magic-link gate. The
+// feature is auto-inert when the email provider is the stub: a stubbed provider
+// black-holes the sign-in link, so even with the flag on the user could never
+// complete the flow. Both conditions fold into one boolean; the flag-on-but-stub
+// combo warns loudly. Extracted from buildServerParams to keep its cyclomatic
+// complexity inside the linter budget.
+func resolveMagicLinkLoginEnabled(cfg *Config) bool {
+	stubEmail := normalizeEmailProvider(cfg.EmailProvider) == services.EmailProviderStub
+	if cfg.MagicLinkLoginEnabled && stubEmail {
+		slog.Warn("Magic-link login is enabled but the email provider is 'stub'; the feature is inert because sign-in links cannot be delivered. Configure a real email provider or set --magic-link-login-enabled=false to silence this warning.")
+	}
+	return cfg.MagicLinkLoginEnabled && !stubEmail
 }
 
 // wireCommodityScan constructs the apiserver.Params CommodityScanService

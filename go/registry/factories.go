@@ -187,6 +187,7 @@ type FactorySet struct {
 	AuditLogRegistry                      AuditLogRegistry              // AuditLogRegistry doesn't need factory as it's not user-aware
 	EmailVerificationRegistry             EmailVerificationRegistry     // EmailVerificationRegistry doesn't need factory as it's not user-aware
 	PasswordResetRegistry                 PasswordResetRegistry         // PasswordResetRegistry doesn't need factory as it's not user-aware
+	MagicLinkTokenRegistry                MagicLinkTokenRegistry        // MagicLinkTokenRegistry doesn't need factory as it's not user-aware (resolved pre-session like reset/verification)
 	LocationGroupRegistry                 LocationGroupRegistry         // LocationGroupRegistry is tenant-scoped, not user-aware
 	GroupMembershipRegistry               GroupMembershipRegistry       // GroupMembershipRegistry is tenant-scoped, not user-aware
 	GroupInviteRegistry                   GroupInviteRegistry           // GroupInviteRegistry is tenant-scoped, not user-aware

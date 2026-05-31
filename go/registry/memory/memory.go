@@ -56,6 +56,9 @@ func NewFactorySet() *registry.FactorySet {
 	fs.TenantRegistry = tenantReg
 	fs.EmailVerificationRegistry = NewEmailVerificationRegistry()
 	fs.PasswordResetRegistry = NewPasswordResetRegistry()
+	// Magic-link sign-in tokens — service-mode lookup resolved before any
+	// user session exists (same posture as reset/verification tokens).
+	fs.MagicLinkTokenRegistry = NewMagicLinkTokenRegistry()
 	// OAuth identities (#1394) — service-mode lookup keyed by
 	// (provider, provider_user_id) during the callback before any user
 	// session exists.

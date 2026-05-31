@@ -59,6 +59,10 @@ func (*capturingFeedbackEmailService) SendVerificationEmail(_ context.Context, _
 func (*capturingFeedbackEmailService) SendPasswordResetEmail(_ context.Context, _, _, _ string) error {
 	return nil
 }
+
+func (*capturingFeedbackEmailService) SendMagicLinkEmail(_ context.Context, _, _, _ string) error {
+	return nil
+}
 func (*capturingFeedbackEmailService) SendPasswordChangedEmail(_ context.Context, _, _ string, _ time.Time) error {
 	return nil
 }

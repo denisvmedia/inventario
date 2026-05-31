@@ -88,6 +88,7 @@ const PUBLIC_PATHS = [
   "/register",
   "/verify-email",
   "/reset-password",
+  "/magic-link",
   "/invite",
   "/backoffice/login",
 ]

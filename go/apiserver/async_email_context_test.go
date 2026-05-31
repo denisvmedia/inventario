@@ -93,6 +93,10 @@ func (m *blockingEmailService) SendWelcomeEmail(_ context.Context, _ string, _ s
 	return nil
 }
 
+func (m *blockingEmailService) SendMagicLinkEmail(_ context.Context, _ string, _ string, _ string) error {
+	return nil
+}
+
 func (m *blockingEmailService) SendWarrantyReminderEmail(_ context.Context, _ string, _ string, _ string, _ string, _ string, _ int) error {
 	return nil
 }

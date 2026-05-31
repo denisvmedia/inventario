@@ -45,6 +45,10 @@ func (r *recordingEmailService) SendPasswordResetEmail(_ context.Context, _ stri
 	return nil
 }
 
+func (r *recordingEmailService) SendMagicLinkEmail(_ context.Context, _ string, _ string, _ string) error {
+	return nil
+}
+
 func (r *recordingEmailService) SendPasswordChangedEmail(_ context.Context, _ string, _ string, _ time.Time) error {
 	return nil
 }
@@ -100,6 +104,9 @@ func (failingEmailService) SendVerificationEmail(_ context.Context, _ string, _ 
 	return errors.New("queue down")
 }
 func (failingEmailService) SendPasswordResetEmail(_ context.Context, _ string, _ string, _ string) error {
+	return errors.New("queue down")
+}
+func (failingEmailService) SendMagicLinkEmail(_ context.Context, _ string, _ string, _ string) error {
 	return errors.New("queue down")
 }
 func (failingEmailService) SendPasswordChangedEmail(_ context.Context, _ string, _ string, _ time.Time) error {

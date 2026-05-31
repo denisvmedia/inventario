@@ -47,6 +47,10 @@ func (r *recordingStorageQuotaEmailService) SendPasswordResetEmail(_ context.Con
 	return nil
 }
 
+func (r *recordingStorageQuotaEmailService) SendMagicLinkEmail(_ context.Context, _ string, _ string, _ string) error {
+	return nil
+}
+
 func (r *recordingStorageQuotaEmailService) SendPasswordChangedEmail(_ context.Context, _ string, _ string, _ time.Time) error {
 	return nil
 }

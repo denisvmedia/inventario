@@ -39,6 +39,9 @@ func (r *recordingMaintenanceEmailService) SendVerificationEmail(_ context.Conte
 func (r *recordingMaintenanceEmailService) SendPasswordResetEmail(_ context.Context, _, _, _ string) error {
 	return nil
 }
+func (r *recordingMaintenanceEmailService) SendMagicLinkEmail(_ context.Context, _, _, _ string) error {
+	return nil
+}
 func (r *recordingMaintenanceEmailService) SendPasswordChangedEmail(_ context.Context, _, _ string, _ time.Time) error {
 	return nil
 }

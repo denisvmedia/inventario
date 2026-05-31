@@ -22,6 +22,12 @@ type EmailService interface {
 	// SendPasswordResetEmail requests delivery of a password-reset email.
 	SendPasswordResetEmail(ctx context.Context, to, name, resetURL string) error
 
+	// SendMagicLinkEmail requests delivery of a passwordless sign-in
+	// ("magic link") email. signInURL carries the single-use, 15-minute
+	// token; like the reset/verification links it is treated as a bearer
+	// secret and is redacted from logs by the stub implementation.
+	SendMagicLinkEmail(ctx context.Context, to, name, signInURL string) error
+
 	// SendPasswordChangedEmail requests delivery of a password-change notification.
 	SendPasswordChangedEmail(ctx context.Context, to, name string, changedAt time.Time) error
 
@@ -285,6 +291,22 @@ func (s *StubEmailService) SendPasswordResetEmail(_ context.Context, to, name, r
 	}
 	//nolint:sloglint // structured fields are constructed dynamically.
 	slog.Info("STUB email: password-reset link", attrs...)
+	return nil
+}
+
+// SendMagicLinkEmail logs a safe version of the sign-in URL instead of sending an email.
+func (s *StubEmailService) SendMagicLinkEmail(_ context.Context, to, name, signInURL string) error {
+	attrs := []any{
+		"to", to,
+		"name", name,
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "url", signInURL)
+	} else {
+		attrs = append(attrs, "url_redacted", redactTokenFromURLForLogs(signInURL))
+	}
+	//nolint:sloglint // structured fields are constructed dynamically.
+	slog.Info("STUB email: magic-link sign-in link", attrs...)
 	return nil
 }
 

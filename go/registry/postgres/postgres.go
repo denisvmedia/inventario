@@ -55,6 +55,9 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.WorkerControlRegistry = NewWorkerControlRegistry(dbx)
 	fs.EmailVerificationRegistry = NewEmailVerificationRegistry(dbx)
 	fs.PasswordResetRegistry = NewPasswordResetRegistry(dbx)
+	// Magic-link sign-in tokens — service-mode lookup resolved before any
+	// user session exists (same posture as reset/verification tokens).
+	fs.MagicLinkTokenRegistry = NewMagicLinkTokenRegistry(dbx)
 	// OAuth identities (#1394) — service-mode lookup keyed by
 	// (provider, provider_user_id) during the callback before any user
 	// session exists.

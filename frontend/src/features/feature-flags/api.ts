@@ -17,6 +17,7 @@ export type FeatureFlags = Schema<"apiserver.FeatureFlags">
 // then 404s without context, which is the exact bug #1616 fixes.
 export const FEATURE_FLAGS_FALLBACK: FeatureFlags = {
   currency_migration: false,
+  magic_link_login: false,
 }
 
 export async function getFeatureFlags(signal?: AbortSignal): Promise<FeatureFlags> {

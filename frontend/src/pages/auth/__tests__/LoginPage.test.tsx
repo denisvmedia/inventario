@@ -50,6 +50,18 @@ beforeEach(() => {
   // unhandled-request error. Default to no providers — the row hides
   // itself and the login form behaves identically to the pre-#1394 layout.
   server.use(msw.get(api("/auth/oauth/providers"), () => HttpResponse.json({ providers: [] })))
+  // LoginPage reads the magic-link deployment flag on mount via
+  // useFeatureFlag (gating the "email me a sign-in link" affordance). Same
+  // reasoning as the OAuth stub above: provide a default handler so the
+  // mount-time GET /feature-flags doesn't trip MSW's
+  // `onUnhandledRequest: "error"`. Default both flags off — the magic-link
+  // button stays hidden and the password flow is unchanged. Tests that
+  // exercise the magic-link entry point override with `magic_link_login: true`.
+  server.use(
+    msw.get(api("/feature-flags"), () =>
+      HttpResponse.json({ currency_migration: false, magic_link_login: false })
+    )
+  )
 })
 
 describe("<LoginPage />", () => {
@@ -300,5 +312,72 @@ describe("<LoginPage />", () => {
   it("omits the OAuth link-required banner when the query param is absent", () => {
     renderLogin("/login")
     expect(screen.queryByTestId("oauth-link-required-banner")).not.toBeInTheDocument()
+  })
+
+  // #magic-link — the passwordless "email me a sign-in link" entry point is
+  // gated on the `magic_link_login` feature flag read at mount. The beforeEach
+  // above defaults the flag OFF; these cases assert both gate states and the
+  // request → neutral-confirmation flow.
+  it("hides the magic-link button when the feature flag is off (default)", async () => {
+    renderLogin()
+    // The password form is unchanged — both the form and submit button render.
+    expect(await screen.findByTestId("login-page")).toBeInTheDocument()
+    expect(screen.getByTestId("login-button")).toBeInTheDocument()
+    expect(screen.queryByTestId("magic-link-button")).not.toBeInTheDocument()
+  })
+
+  it("shows the magic-link button when the feature flag is on", async () => {
+    server.use(
+      msw.get(api("/feature-flags"), () =>
+        HttpResponse.json({ currency_migration: false, magic_link_login: true })
+      )
+    )
+    renderLogin()
+    expect(await screen.findByTestId("magic-link-button")).toBeInTheDocument()
+  })
+
+  it("blocks the magic-link request and shows the inline email error when the email is empty", async () => {
+    let requestCalls = 0
+    server.use(
+      msw.get(api("/feature-flags"), () =>
+        HttpResponse.json({ currency_migration: false, magic_link_login: true })
+      ),
+      msw.post(api("/auth/magic-link/request"), () => {
+        requestCalls++
+        return HttpResponse.json({ message: "If that email exists, we sent a link." })
+      })
+    )
+    const user = userEvent.setup()
+    renderLogin()
+    await user.click(await screen.findByTestId("magic-link-button"))
+    // RHF validates just the email field — the empty value surfaces the same
+    // inline error a normal submit would, and the request never fires.
+    expect(await screen.findByTestId("email-error")).toBeInTheDocument()
+    expect(requestCalls).toBe(0)
+    // No confirmation swap — still on the form.
+    expect(screen.getByTestId("login-page")).toBeInTheDocument()
+    expect(screen.queryByTestId("magic-link-sent")).not.toBeInTheDocument()
+  })
+
+  it("sends the magic-link request and shows the neutral confirmation on success", async () => {
+    server.use(
+      msw.get(api("/feature-flags"), () =>
+        HttpResponse.json({ currency_migration: false, magic_link_login: true })
+      ),
+      msw.post(api("/auth/magic-link/request"), async ({ request }) => {
+        const body = (await request.json()) as { email: string }
+        expect(body.email).toBe("alex@example.com")
+        return HttpResponse.json({ message: "If that email exists, we sent a link." })
+      })
+    )
+    const user = userEvent.setup()
+    renderLogin()
+    await user.type(screen.getByTestId("email"), "alex@example.com")
+    await user.click(await screen.findByTestId("magic-link-button"))
+    expect(await screen.findByTestId("magic-link-sent")).toBeInTheDocument()
+    // The password form is replaced by the confirmation surface.
+    expect(screen.queryByTestId("login-page")).not.toBeInTheDocument()
+    // The "back to sign in" affordance returns to the form.
+    expect(screen.getByTestId("magic-link-back")).toBeInTheDocument()
   })
 })

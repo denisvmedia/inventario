@@ -140,6 +140,16 @@ func (s *AsyncEmailService) SendPasswordResetEmail(ctx context.Context, to, name
 	})
 }
 
+// SendMagicLinkEmail enqueues a passwordless sign-in ("magic link") email.
+func (s *AsyncEmailService) SendMagicLinkEmail(ctx context.Context, to, name, signInURL string) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType: emailTemplateMagicLink,
+		To:           to,
+		Name:         name,
+		URL:          signInURL,
+	})
+}
+
 // SendPasswordChangedEmail enqueues a password-changed security notification.
 func (s *AsyncEmailService) SendPasswordChangedEmail(ctx context.Context, to, name string, changedAt time.Time) error {
 	return s.enqueue(ctx, emailJob{

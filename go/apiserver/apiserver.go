@@ -198,6 +198,13 @@ type Params struct {
 	// via `features.currencyMigration`.
 	FeatureCurrencyMigration bool
 
+	// MagicLinkLoginEnabled is the effective gate for the passwordless
+	// "magic link" sign-in flow. It is the AND of the config flag and a
+	// non-stub email provider, computed in bootstrap — when false the two
+	// /auth/magic-link routes return 404 and the magic_link_login feature
+	// flag reads false so the FE hides the entry point.
+	MagicLinkLoginEnabled bool
+
 	// ImpersonationTTL is the lifetime of an admin impersonation session
 	// (#1750). Operators tune it via INVENTARIO_RUN_IMPERSONATION_TTL;
 	// zero falls back to the 30-min default and any value above 30 min
@@ -450,6 +457,9 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			OAuthRegistry:            params.OAuthRegistry,
 			OAuthStateSigner:         params.OAuthStateSigner,
 			OAuthIdentityRegistry:    params.FactorySet.OAuthIdentityRegistry,
+			MagicLinkRegistry:        params.FactorySet.MagicLinkTokenRegistry,
+			PublicBaseURL:            params.PublicURL,
+			MagicLinkLoginEnabled:    params.MagicLinkLoginEnabled,
 		}))
 
 		// Back-office auth plane (issue #1785, Phase 2). Completely

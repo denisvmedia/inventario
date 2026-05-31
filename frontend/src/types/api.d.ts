@@ -1729,6 +1729,162 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/auth/magic-link/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request a magic-link sign-in
+         * @description Send a passwordless sign-in link to the given email address. Always returns 200 to prevent email enumeration. Returns 404 when magic-link login is disabled for this deployment.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Email address */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.MagicLinkRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: string;
+                        };
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Not Found - magic-link login disabled */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/magic-link/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify a magic-link sign-in
+         * @description Exchange a one-time sign-in token for a session. Returns the same
+         *     response shapes as /auth/login: a LoginResponse on success, or a
+         *     LoginMFARequiredResponse when the user has MFA enabled. Returns 404
+         *     when magic-link login is disabled for this deployment.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Sign-in token */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.MagicLinkVerifyRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.LoginResponse"];
+                    };
+                };
+                /** @description Bad Request - missing, invalid, or expired token */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Forbidden - account disabled */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Not Found - magic-link login disabled */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Too Many Requests - account locked */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -9387,6 +9543,14 @@ export type components = {
              *     group-settings page.
              */
             currency_migration?: boolean;
+            /**
+             * @description MagicLinkLogin mirrors Params.MagicLinkLoginEnabled. The entry point
+             *     is pre-login (a "Email me a sign-in link" affordance on the Login
+             *     page), so it is exposed here on the public /feature-flags surface
+             *     rather than the auth-gated /system endpoint. When false the FE hides
+             *     the affordance and the /auth/magic-link routes return 404.
+             */
+            magic_link_login?: boolean;
         };
         "apiserver.FeedbackRequest": {
             /**
@@ -9524,6 +9688,12 @@ export type components = {
         };
         "apiserver.MFAVerifyResponse": {
             backup_codes?: string[];
+        };
+        "apiserver.MagicLinkRequest": {
+            email?: string;
+        };
+        "apiserver.MagicLinkVerifyRequest": {
+            token?: string;
         };
         "apiserver.PatchSettingRequest": {
             /** @description Value is the setting value to apply and is required when using the object envelope. */

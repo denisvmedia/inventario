@@ -1312,6 +1312,33 @@ type EmailVerificationRegistry interface {
 	DeleteExpired(ctx context.Context) error
 }
 
+// MagicLinkTokenRegistry manages passwordless sign-in ("magic link") tokens.
+type MagicLinkTokenRegistry interface {
+	Registry[models.MagicLinkToken]
+
+	// GetByToken returns a magic-link token record by its token value.
+	GetByToken(ctx context.Context, token string) (*models.MagicLinkToken, error)
+
+	// DeleteByUserID removes all magic-link token records for the given user.
+	DeleteByUserID(ctx context.Context, userID string) error
+
+	// MarkClaimed atomically claims the sign-in token by setting
+	// claimed_at from NULL to the current time. The UPDATE filter includes
+	// `claimed_at IS NULL` AND `expires_at > now`, so exactly one of N concurrent
+	// requests carrying the same token wins the row: it returns (true, nil) and is
+	// the caller responsible for the one-time sign-in side effects (mint a
+	// session). Every other caller — whether it lost the race or the token was
+	// already claimed earlier — gets (false, nil) and must treat the link as
+	// already consumed. A token that does not exist, or one that has expired,
+	// also yields (false, nil): folding the expiry check into the UPDATE means an
+	// expired token can never be burned. This closes the check-then-act race that
+	// would otherwise let two requests both complete sign-in from the same link.
+	MarkClaimed(ctx context.Context, token string) (bool, error)
+
+	// DeleteExpired removes all records whose expiry time has passed.
+	DeleteExpired(ctx context.Context) error
+}
+
 // WarrantyReminderRegistry is the worker-only registry that records
 // "reminder X for commodity Y at threshold Z has been emitted" rows.
 // The (commodity_id, threshold_days) tuple is unique — Create returns

@@ -13,11 +13,13 @@ import {
   logout,
   regenerateMFABackupCodes,
   register,
+  requestMagicLink,
   resendVerification,
   resetPassword,
   startMFASetup,
   updateProfile,
   verifyEmail,
+  verifyMagicLink,
   verifyMFASetup,
   type ChangePasswordRequest,
   type CompleteLoginMFARequest,
@@ -152,6 +154,36 @@ export function useCompleteLoginMFA() {
 export function useRegister() {
   return useMutation<string, Error, RegisterRequest>({
     mutationFn: (req) => register(req),
+  })
+}
+
+// useRequestMagicLink fires the "email me a sign-in link" request from the
+// login page. Mirrors useForgotPassword: a single email arg, a generic
+// (anti-enumeration) success message, no cache effects.
+export function useRequestMagicLink() {
+  return useMutation<string, Error, string>({
+    mutationFn: (email) => requestMagicLink(email),
+  })
+}
+
+// useMagicLinkVerify mirrors useLogin for the link-verify step: it consumes
+// the token from the emailed link and resolves with a LoginOutcome. On a
+// non-MFA success the tokens are already stored by verifyMagicLink, so we
+// seed the cached user (short-circuiting the boot probe) and invalidate the
+// auth namespace. On an `mfa_required` outcome no tokens were issued — the
+// page hands off to <MFAChallenge>, which seeds the cache on completion.
+export function useMagicLinkVerify() {
+  const queryClient = useQueryClient()
+  return useMutation<LoginOutcome, Error, string>({
+    mutationFn: (token) => verifyMagicLink(token),
+    onSuccess: (outcome) => {
+      if (outcome.kind === "ok") {
+        if (outcome.user) {
+          queryClient.setQueryData(authKeys.currentUser(), outcome.user)
+        }
+        queryClient.invalidateQueries({ queryKey: authKeys.all })
+      }
+    },
   })
 }
 

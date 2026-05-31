@@ -27,6 +27,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.RestorePollInterval, "restore-poll-interval", cfg.RestorePollInterval, "Restore worker poll interval (e.g., 10s, 30s)")
 	flags.StringVar(&cfg.RefreshTokenCleanupInterval, "refresh-token-cleanup-interval", cfg.RefreshTokenCleanupInterval, "Interval between refresh token cleanup runs (e.g., 1h, 30m)")
 	flags.StringVar(&cfg.EmailVerificationCleanupInterval, "email-verification-cleanup-interval", cfg.EmailVerificationCleanupInterval, "Interval between email verification token cleanup runs (e.g., 1h, 30m)")
+	flags.StringVar(&cfg.MagicLinkTokenCleanupInterval, "magic-link-token-cleanup-interval", cfg.MagicLinkTokenCleanupInterval, "Interval between magic-link sign-in token cleanup runs (e.g., 1h, 30m)")
 	flags.StringVar(&cfg.GroupPurgeInterval, "group-purge-interval", cfg.GroupPurgeInterval, "Interval between group purge sweeps (hard-deletes pending_deletion groups and expired unused invites; e.g., 5m, 15m)")
 	flags.StringVar(&cfg.WarrantyReminderInterval, "warranty-reminder-interval", cfg.WarrantyReminderInterval, "Interval between warranty reminder sweeps (60/30/7-day expiry emails; e.g., 1h)")
 	flags.StringVar(&cfg.StorageQuotaReminderInterval, "storage-quota-reminder-interval", cfg.StorageQuotaReminderInterval, "Interval between storage quota warning sweeps (90% threshold emails; e.g., 1h)")
@@ -64,6 +65,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.CSRFRedisURL, "csrf-redis-url", cfg.CSRFRedisURL, "Redis URL for CSRF token storage (e.g., redis://localhost:6379/0); omit to use in-memory storage")
 	flags.StringVar(&cfg.AllowedOrigins, "allowed-origins", cfg.AllowedOrigins, "Comma-separated list of allowed CORS origins (e.g., https://example.com)")
 	flags.StringVar(&cfg.PublicURL, "public-url", cfg.PublicURL, "Public base URL used in transactional email links (e.g., https://inventario.example.com)")
+	flags.BoolVar(&cfg.MagicLinkLoginEnabled, "magic-link-login-enabled", cfg.MagicLinkLoginEnabled, "Enable passwordless magic-link sign-in (auto-inert when the email provider is stub)")
 
 	flags.StringVar(&cfg.EmailProvider, "email-provider", cfg.EmailProvider, "Email provider: stub, smtp, sendgrid, ses, mandrill, or mailchimp")
 	flags.BoolVar(&cfg.LogEmailURLs, "log-email-urls", cfg.LogEmailURLs, "Log full verification/password-reset URLs in stub email mode (includes sensitive tokens; unsafe for shared logs)")

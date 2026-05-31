@@ -89,6 +89,9 @@ func (c *Command) run() error {
 	stopEmailVerificationCleanup := bootstrap.StartEmailVerificationCleanupWorker(ctx, rs, c.cfg)
 	defer stopEmailVerificationCleanup()
 
+	stopMagicLinkTokenCleanup := bootstrap.StartMagicLinkTokenCleanupWorker(ctx, rs, c.cfg)
+	defer stopMagicLinkTokenCleanup()
+
 	stopLoginEventRetention := bootstrap.StartLoginEventRetentionWorker(ctx, rs, c.cfg)
 	defer stopLoginEventRetention()
 

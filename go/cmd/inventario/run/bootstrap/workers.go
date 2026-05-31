@@ -141,6 +141,21 @@ func StartEmailVerificationCleanupWorker(ctx context.Context, rs *RuntimeSetup, 
 	return worker.Stop
 }
 
+// StartMagicLinkTokenCleanupWorker wires and starts the magic-link token
+// cleanup worker (which deletes expired sign-in tokens on the configured
+// interval) and returns its stop function.
+func StartMagicLinkTokenCleanupWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	opts := []services.MagicLinkTokenCleanupOption{
+		services.WithMagicLinkTokenCleanupInterval(rs.WorkerDurations.MagicLinkTokenCleanupInterval),
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithMagicLinkTokenCleanupPauseController(rs.PauseController))
+	}
+	worker := services.NewMagicLinkTokenCleanupWorker(rs.FactorySet.MagicLinkTokenRegistry, opts...)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
 // StartLoginEventRetentionWorker wires and starts the login_events
 // retention worker (#1379). The retention window and sweep interval
 // are not currently surfaced as flags — the defaults (90d retention,
