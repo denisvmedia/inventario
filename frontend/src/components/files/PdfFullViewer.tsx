@@ -158,15 +158,44 @@ interface ThumbProps {
   pageNumber: number
   base: { width: number; height: number }
   active: boolean
+  root: HTMLElement | null
   onClick: () => void
 }
 
-function Thumbnail({ pdf, pageNumber, base, active, onClick }: ThumbProps) {
+// One page-thumbnail in the rail. Like `ContinuousPage`, it reserves its box up
+// front and only renders the canvas once it scrolls near the rail's viewport —
+// so a 200-page PDF doesn't kick off 200 thumbnail renders the moment the
+// sidebar mounts (which would undercut the lazy page rendering).
+function Thumbnail({ pdf, pageNumber, base, active, root, onClick }: ThumbProps) {
+  const wrapRef = useRef<HTMLButtonElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const scale = THUMB_WIDTH / base.width
-  usePageRender(pdf, pageNumber, scale, canvasRef, true)
+  const [render, setRender] = useState(!HAS_IO)
+
+  useEffect(() => {
+    if (!HAS_IO || render) return
+    const el = wrapRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setRender(true)
+      },
+      { root: root ?? null, rootMargin: "200px 0px" }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [root, render])
+
+  usePageRender(pdf, pageNumber, scale, canvasRef, render)
+
+  // Reserve the thumbnail box up front so the rail's scroll height is correct
+  // before the lazy render fills it (and IntersectionObserver has a stable,
+  // non-zero-height target to watch).
+  const boxHeight = Math.floor(base.height * scale)
+
   return (
     <button
+      ref={wrapRef}
       type="button"
       onClick={onClick}
       aria-current={active}
@@ -178,6 +207,7 @@ function Thumbnail({ pdf, pageNumber, base, active, onClick }: ThumbProps) {
           "overflow-hidden rounded-sm border bg-white",
           active ? "ring-2 ring-primary" : "ring-1 ring-border"
         )}
+        style={{ width: THUMB_WIDTH, height: boxHeight }}
       >
         <canvas ref={canvasRef} className="block" />
       </span>
@@ -211,6 +241,9 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
     scrollElRef.current = el
     setRootEl(el)
   }, [])
+  // The thumbnail rail's own scroll container, used as the IntersectionObserver
+  // root so thumbnails render lazily as they scroll into the rail's viewport.
+  const [sidebarEl, setSidebarEl] = useState<HTMLDivElement | null>(null)
   // Drag-to-pan bookkeeping (pointer origin + scroll offset), kept in a ref so
   // moves don't re-render the viewer.
   const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
@@ -548,6 +581,7 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
       <div className="flex min-h-0 flex-1">
         {sidebarOpen && pdf && base ? (
           <div
+            ref={setSidebarEl}
             className="w-36 shrink-0 overflow-y-auto border-r bg-background"
             data-testid="pdf-full-sidebar"
           >
@@ -559,6 +593,7 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
                     pageNumber={n}
                     base={base}
                     active={n === page}
+                    root={sidebarEl}
                     onClick={() => goToPage(n)}
                   />
                 </li>
