@@ -1,0 +1,45 @@
+{{- if and .Values.demo.mailpit.enabled .Values.demo.mailpit.ingress.enabled }}
+{{- $host := include "inventario.mailpitIngressHost" . -}}
+{{- if not $host }}
+{{- fail "demo.mailpit.ingress.enabled=true but no host could be derived — set demo.mailpit.ingress.host, or ingress.hosts[0].host so it can derive mail-<app host>" }}
+{{- end }}
+# Tailscale Ingress exposing the Mailpit web UI as its own tailnet node, a
+# sibling to the app's ingress. Host + tailscale.com/hostname default to
+# "mail-"<app ingress host> (see the inventario.mailpitIngressHost /
+# mailpitTsHostname helpers), so master/PR/longevity each get
+# mail-inv-vcl01-<env>.<tailnet>.ts.net with no per-environment values.
+#
+# Same plaintext-to-cluster + TLS-at-the-TS-proxy split as the app ingress and
+# infra/vm/cluster-extras/argocd-ts-ingress.yaml: tls lists the host but no
+# secretName — the TS operator issues and manages the cert internally.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "inventario.demoMailpitName" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-mailpit
+  annotations:
+    tailscale.com/hostname: {{ include "inventario.mailpitTsHostname" . | quote }}
+    {{- with .Values.demo.mailpit.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.demo.mailpit.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "inventario.demoMailpitName" . }}
+                port:
+                  number: 8025
+{{- end }}
