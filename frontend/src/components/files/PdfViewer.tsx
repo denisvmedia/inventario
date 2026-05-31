@@ -8,7 +8,9 @@ import { pdfjsLib } from "@/lib/pdfjs"
 const MIN_SCALE = 0.5
 const MAX_SCALE = 3
 const SCALE_STEP = 0.25
-const DEFAULT_SCALE = 1.5
+// Inline panel preview opens at 100% (the side-panel default); zoom in/out
+// from there. The fullscreen reader has its own fit-to-width default.
+const DEFAULT_SCALE = 1
 
 // pdfjs-dist canvas viewer ported from the legacy
 // `frontend/src/components/PDFViewerCanvas.vue`. Supports paged

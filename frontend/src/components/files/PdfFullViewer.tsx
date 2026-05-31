@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 import {
   ChevronLeft,
@@ -197,8 +203,17 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
   const { t } = useTranslation()
   // State-backed (callback ref) so the ResizeObserver + IntersectionObserver
   // can use the scroll element as their root without reading a ref during
-  // render (react-hooks/refs).
+  // render (react-hooks/refs). A parallel ref carries the same node for
+  // imperative scroll reads/writes (drag-to-pan), since state is immutable.
+  const scrollElRef = useRef<HTMLDivElement | null>(null)
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null)
+  const setScrollEl = useCallback((el: HTMLDivElement | null) => {
+    scrollElRef.current = el
+    setRootEl(el)
+  }, [])
+  // Drag-to-pan bookkeeping (pointer origin + scroll offset), kept in a ref so
+  // moves don't re-render the viewer.
+  const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   const pageEls = useRef(new Map<number, HTMLDivElement>())
 
   const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null)
@@ -357,6 +372,32 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
   const cycleFit = useCallback(() => {
     setFitMode((m) => (m === "width" ? "page" : "width"))
   }, [])
+
+  // Click-and-drag panning of the page area (mouse only; touch/pen keep native
+  // scrolling). Drives scrollLeft/scrollTop from the pointer delta — works in
+  // both continuous and single-page modes whenever there's overflow to pan.
+  function onPanStart(e: ReactPointerEvent<HTMLDivElement>) {
+    if (e.pointerType !== "mouse" || e.button !== 0) return
+    const el = scrollElRef.current
+    if (!el) return
+    if (el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight) return
+    panRef.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
+    el.setPointerCapture(e.pointerId)
+  }
+
+  function onPanMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const el = scrollElRef.current
+    const pan = panRef.current
+    if (!el || !pan) return
+    el.scrollLeft = pan.left - (e.clientX - pan.x)
+    el.scrollTop = pan.top - (e.clientY - pan.y)
+  }
+
+  function onPanEnd(e: ReactPointerEvent<HTMLDivElement>) {
+    const el = scrollElRef.current
+    if (el?.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
+    panRef.current = null
+  }
 
   const zoomPercent = Math.round(scale * 100)
 
@@ -526,7 +567,15 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
           </div>
         ) : null}
 
-        <div ref={setRootEl} className="min-w-0 flex-1 overflow-auto" data-testid="pdf-full-scroll">
+        <div
+          ref={setScrollEl}
+          className="min-w-0 flex-1 cursor-grab overflow-auto active:cursor-grabbing"
+          onPointerDown={onPanStart}
+          onPointerMove={onPanMove}
+          onPointerUp={onPanEnd}
+          onPointerCancel={onPanEnd}
+          data-testid="pdf-full-scroll"
+        >
           {error ? (
             <div
               className="flex h-full items-center justify-center p-6 text-sm text-destructive"

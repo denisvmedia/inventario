@@ -94,15 +94,17 @@ describe("<PdfViewer />", () => {
     const user = userEvent.setup()
     const canvas = await renderViewer()
 
-    // DEFAULT_SCALE = 1.5 → 600 * 1.5 = 900 CSS px.
-    await waitFor(() => expect(canvas.style.width).toBe("900px"))
+    // DEFAULT_SCALE = 1 → 600 * 1 = 600 CSS px.
+    await waitFor(() => expect(canvas.style.width).toBe("600px"))
 
     const zoomIn = screen.getByTestId("pdf-viewer-zoom-in")
-    await user.click(zoomIn) // 1.5 → 1.75
-    await waitFor(() => expect(canvas.style.width).toBe("1050px"))
+    await user.click(zoomIn) // 1.0 → 1.25
+    await waitFor(() => expect(canvas.style.width).toBe("750px"))
 
     // Keep zooming well past the old ~125% fit cap; the displayed size must
-    // keep tracking the zoom indicator instead of stalling.
+    // keep tracking the zoom indicator instead of stalling. 1.25 → 3.0 (MAX).
+    await user.click(zoomIn) // 1.25 → 1.5
+    await user.click(zoomIn) // 1.5  → 1.75
     await user.click(zoomIn) // 1.75 → 2.0
     await user.click(zoomIn) // 2.0  → 2.25
     await user.click(zoomIn) // 2.25 → 2.5
@@ -120,7 +122,7 @@ describe("<PdfViewer />", () => {
     // Once the canvas has been sized, the render task has been assigned and is
     // cancellable; unmount must tear it down so a follow-up render can't start
     // a second render() on the same canvas.
-    await waitFor(() => expect(canvas.style.width).toBe("900px"))
+    await waitFor(() => expect(canvas.style.width).toBe("600px"))
     unmount()
     expect(cancelMock).toHaveBeenCalled()
   })

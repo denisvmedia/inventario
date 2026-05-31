@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest"
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { initI18n } from "@/i18n"
@@ -92,5 +92,44 @@ describe("<PdfFullViewer />", () => {
     await waitFor(() => expect(screen.queryByTestId("pdf-full-sidebar")).not.toBeInTheDocument())
     await user.click(screen.getByTestId("pdf-full-close"))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("drags the page area to pan it when it overflows", async () => {
+    await renderViewer()
+    const scroller = screen.getByTestId("pdf-full-scroll")
+    // jsdom has no layout, so fake overflow geometry + a writable scroll pos.
+    let left = 0
+    let top = 0
+    Object.defineProperty(scroller, "scrollWidth", { configurable: true, value: 1800 })
+    Object.defineProperty(scroller, "clientWidth", { configurable: true, value: 700 })
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 2400 })
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 800 })
+    Object.defineProperty(scroller, "scrollLeft", {
+      configurable: true,
+      get: () => left,
+      set: (v) => {
+        left = v
+      },
+    })
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (v) => {
+        top = v
+      },
+    })
+    fireEvent.pointerDown(scroller, {
+      pointerId: 1,
+      pointerType: "mouse",
+      button: 0,
+      clientX: 300,
+      clientY: 300,
+    })
+    fireEvent.pointerMove(scroller, { pointerId: 1, clientX: 240, clientY: 250 })
+    // Dragging up/left reveals content to the right/bottom: 0 - (240-300) = 60,
+    // 0 - (250-300) = 50.
+    expect(scroller.scrollLeft).toBe(60)
+    expect(scroller.scrollTop).toBe(50)
+    fireEvent.pointerUp(scroller, { pointerId: 1 })
   })
 })
