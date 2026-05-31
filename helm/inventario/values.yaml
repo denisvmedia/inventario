@@ -577,6 +577,27 @@ setupJob:
   # See helm/inventario/README.md → "ArgoCD-managed migrations".
   argocdMode: false
 
+  # Hard wall-clock cap on the bootstrap/setup Job (templates/job-setup.yaml).
+  #
+  # WHY this exists: a setup Job pinned to an image tag that isn't in the
+  # registry — e.g. a PR preview pinned to sha-<commit> while CI is still
+  # building it, or after that tag was deleted — sits in ImagePullBackOff
+  # forever. ImagePullBackOff never starts the container, so `backoffLimit`
+  # is never consumed and the Job runs unbounded. In argocdMode (wave -5)
+  # that wedges the sync operation ("waiting for healthy state of …-setup"),
+  # and a perpetually-Running operation BLOCKS ArgoCD's resources-finalizer
+  # cascade — making the whole Application undeletable (#1971 post-mortem).
+  #
+  # A deadline turns "hang forever" into "fail after N seconds": the sync op
+  # fails instead of running, deletion is unblocked, and syncPolicy.retry on
+  # the ApplicationSets re-attempts until the image lands so the env
+  # self-heals. Set GENEROUSLY (> a cold CI build): while the pod sits in
+  # ImagePullBackOff the kubelet keeps retrying the pull, so an image that is
+  # merely still-building is picked up by the SAME Job attempt with zero
+  # failures; the deadline only trips on a genuinely-missing image.
+  # 0 disables the cap (restores the old unbounded behavior).
+  activeDeadlineSeconds: 900
+
   bootstrap:
     # Whether to run the DB bootstrap step (creates migrator DB user).
     # Set to false if you manage DB users externally.
@@ -597,6 +618,14 @@ setupJob:
     usernameForMigrations: "inventario_migrator"
 
   initData:
+    # Wall-clock cap on the init-data Job (templates/job-init-data.yaml,
+    # sync-wave +5). Same rationale as setupJob.activeDeadlineSeconds above
+    # (a missing image must fail the Job instead of hanging the sync op and
+    # blocking deletion), but larger because seeding — seedDatabase /
+    # seedBlobUploads — legitimately takes longer (it starts a temporary
+    # server in-pod and writes fixture blobs). 0 disables the cap.
+    activeDeadlineSeconds: 1800
+
     # Default tenant display name
     # Env: INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME
     defaultTenantName: "Default Organization"

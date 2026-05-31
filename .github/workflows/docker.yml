@@ -306,36 +306,20 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Delete currently tagged PR image versions before re-publishing
-        # PR-only. Delete-before-push keeps PR-tagged versions discoverable
-        # for the close-time cleanup instead of overwriting tags onto older
-        # GHCR versions.
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
-          PACKAGE_NAME: inventario
-          PR_TAG: pr-${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          owner_type="$(gh api "/users/${OWNER}" --jq '.type')"
-          if [ "${owner_type}" = "Organization" ]; then
-            package_api="/orgs/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
-          else
-            package_api="/users/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
-          fi
-          mapfile -t version_ids < <(
-            gh api "${package_api}?per_page=100" --paginate \
-              --jq '.[] | select(any((.metadata.container.tags // [])[]; . == env.PR_TAG)) | .id'
-          )
-          if [ "${#version_ids[@]}" -eq 0 ]; then
-            echo "No currently tagged GHCR package versions found for ${PR_TAG}"
-            exit 0
-          fi
-          for version_id in "${version_ids[@]}"; do
-            gh api --method DELETE "${package_api}/${version_id}"
-            echo "Deleted currently tagged package version ${version_id} for ${PR_TAG} before re-publish"
-          done
+      # NB: there is deliberately NO "delete the previous PR version before
+      # re-publishing" step here anymore. That step used to delete the GHCR
+      # version tagged pr-<N> on every push — but that version also carried
+      # the previous commit's sha-<7> tag, so it destroyed an image a running
+      # preview env could still be pulling (it pins image.tag to that exact
+      # sha until the ApplicationSet re-renders to the new head). That was the
+      # root trigger of the #1971 "stuck, undeletable preview" deadlock and it
+      # broke the in-code promise that sha-<7> is immutable per commit.
+      #
+      # Now every commit's image simply persists for the life of the PR
+      # (imagetools below just moves the mutable pr-<N> tag onto the new
+      # version; the prior version keeps its sha-<7> tag). All of a PR's
+      # images — pr-<N> and every per-commit sha-<7> — are reclaimed in one
+      # shot by the `cleanup` job when the PR closes.
 
       - name: Create multi-arch manifest list
         # Registry-side stitching: imagetools reads the per-arch manifests by
@@ -410,21 +394,46 @@ jobs:
           echo "Pinned inv-vcl01-master image to sha-${SHORT_SHA}"
 
   cleanup:
-    name: Cleanup PR image
+    name: Cleanup PR images
     if: |
       github.event_name == 'pull_request' &&
       github.event.action == 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # Needed to list the PR's commits so we know which sha-<7> tags belong
+      # to this PR (and only this PR).
+      pull-requests: read
     steps:
-      - name: Delete PR image
+      - name: Delete all GHCR image versions published by this PR
+        # Reclaim every image this PR ever published — the final pr-<N>
+        # version AND each per-commit sha-<7> version (we stopped deleting
+        # those on push; see the merge job). We enumerate the PR's commits to
+        # derive exactly which sha-<7> tags are ours, so we never touch
+        # master/edge/tag images or another PR's images.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
           PACKAGE_NAME: inventario
-          PR_TAG: pr-${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+
+          # Tags this PR may have published: pr-<N> + sha-<7> for every commit
+          # on the PR (paginated, so long PRs are fully covered). Commits that
+          # were rebased/force-pushed away aren't in this list; any image they
+          # left behind is swept later by time-based GHCR retention, not here.
+          declare -A pr_tags=( ["pr-${PR_NUMBER}"]=1 )
+          while IFS= read -r full_sha; do
+            [ -z "$full_sha" ] && continue
+            pr_tags["sha-${full_sha:0:7}"]=1
+          done < <(
+            gh api "/repos/${REPO}/pulls/${PR_NUMBER}/commits?per_page=100" --paginate \
+              --jq '.[].sha'
+          )
 
           owner_type="$(gh api "/users/${OWNER}" --jq '.type')"
           if [ "${owner_type}" = "Organization" ]; then
@@ -433,17 +442,24 @@ jobs:
             package_api="/users/${OWNER}/packages/container/${PACKAGE_NAME}/versions"
           fi
 
-          mapfile -t version_ids < <(
+          # For each package version, delete it if ANY of its tags is one of
+          # ours. The multi-arch manifest list carries both pr-<N> and its
+          # sha-<7>; intermediate per-commit versions carry only sha-<7>.
+          deleted=0
+          while IFS=$'\t' read -r version_id tags_csv; do
+            [ -z "$version_id" ] && continue
+            IFS=',' read -ra tags <<< "${tags_csv}"
+            for t in "${tags[@]}"; do
+              if [ -n "${pr_tags[$t]:-}" ]; then
+                gh api --method DELETE "${package_api}/${version_id}"
+                echo "Deleted package version ${version_id} (tags: ${tags_csv:-<none>})"
+                deleted=$((deleted + 1))
+                break
+              fi
+            done
+          done < <(
             gh api "${package_api}?per_page=100" --paginate \
-              --jq '.[] | select(any((.metadata.container.tags // [])[]; . == env.PR_TAG)) | .id'
+              --jq '.[] | [(.id|tostring), ((.metadata.container.tags // []) | join(","))] | @tsv'
           )
 
-          if [ "${#version_ids[@]}" -eq 0 ]; then
-            echo "No GHCR package versions found for ${PR_TAG}"
-            exit 0
-          fi
-
-          for version_id in "${version_ids[@]}"; do
-            gh api --method DELETE "${package_api}/${version_id}"
-            echo "Deleted package version ${version_id} for ${PR_TAG}"
-          done
+          echo "Deleted ${deleted} package version(s) for PR #${PR_NUMBER}."

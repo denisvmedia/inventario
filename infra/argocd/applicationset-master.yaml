@@ -144,6 +144,18 @@ spec:
         automated:
           prune: true
           selfHeal: true
+        # Re-attempt a failed sync with backoff so a master push self-heals
+        # across the same build/deploy race the PR previews hit: the pin file
+        # flips to the new sha-<7> as soon as the image publish job force-
+        # pushes it, but if a sync fires against an image that isn't fully
+        # propagated yet the setup Job fails fast (activeDeadlineSeconds) and
+        # retry re-syncs until it's pullable. Mirrors applicationset-pr.yaml.
+        retry:
+          limit: 10
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 3m
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true

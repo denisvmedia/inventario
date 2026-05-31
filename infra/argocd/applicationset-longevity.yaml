@@ -106,6 +106,16 @@ spec:
         automated:
           prune: true
           selfHeal: true
+        # Re-attempt a failed sync with backoff so a master push self-heals
+        # across the build/deploy race (see applicationset-master.yaml). The
+        # setup Job fails fast on a not-yet-pullable image
+        # (activeDeadlineSeconds) and retry re-syncs until it's published.
+        retry:
+          limit: 10
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 3m
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
