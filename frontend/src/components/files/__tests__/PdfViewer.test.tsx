@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest"
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { initI18n } from "@/i18n"
@@ -92,5 +92,85 @@ describe("<PdfViewer />", () => {
     await waitFor(() => expect(canvas.style.width).toBe("900px"))
     unmount()
     expect(cancelMock).toHaveBeenCalled()
+  })
+
+  // jsdom has no layout engine, so fake the overflow geometry + a writable
+  // scroll position to exercise the drag-to-pan handlers.
+  function stubScroller(
+    el: HTMLElement,
+    dims: { scrollWidth: number; clientWidth: number; scrollHeight: number; clientHeight: number }
+  ) {
+    let left = 0
+    let top = 0
+    Object.defineProperty(el, "scrollWidth", { configurable: true, value: dims.scrollWidth })
+    Object.defineProperty(el, "clientWidth", { configurable: true, value: dims.clientWidth })
+    Object.defineProperty(el, "scrollHeight", { configurable: true, value: dims.scrollHeight })
+    Object.defineProperty(el, "clientHeight", { configurable: true, value: dims.clientHeight })
+    Object.defineProperty(el, "scrollLeft", {
+      configurable: true,
+      get: () => left,
+      set: (v) => {
+        left = v
+      },
+    })
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (v) => {
+        top = v
+      },
+    })
+  }
+
+  it("drags the overflowing page to pan it (#1963 follow-up)", async () => {
+    await renderViewer()
+    const scroller = screen.getByTestId("pdf-viewer-scroll")
+    stubScroller(scroller, {
+      scrollWidth: 1836,
+      clientWidth: 669,
+      scrollHeight: 2376,
+      clientHeight: 800,
+    })
+
+    fireEvent.pointerDown(scroller, {
+      pointerId: 1,
+      pointerType: "mouse",
+      button: 0,
+      clientX: 200,
+      clientY: 200,
+    })
+    fireEvent.pointerMove(scroller, { pointerId: 1, clientX: 150, clientY: 160 })
+    // Dragging the page left/up reveals content to its right/bottom:
+    // scrollLeft = 0 - (150 - 200) = 50, scrollTop = 0 - (160 - 200) = 40.
+    expect(scroller.scrollLeft).toBe(50)
+    expect(scroller.scrollTop).toBe(40)
+
+    fireEvent.pointerUp(scroller, { pointerId: 1 })
+    // After release the page no longer follows the pointer.
+    fireEvent.pointerMove(scroller, { pointerId: 1, clientX: 0, clientY: 0 })
+    expect(scroller.scrollLeft).toBe(50)
+    expect(scroller.scrollTop).toBe(40)
+  })
+
+  it("does not pan when the page already fits (no overflow)", async () => {
+    await renderViewer()
+    const scroller = screen.getByTestId("pdf-viewer-scroll")
+    stubScroller(scroller, {
+      scrollWidth: 300,
+      clientWidth: 669,
+      scrollHeight: 396,
+      clientHeight: 800,
+    })
+
+    fireEvent.pointerDown(scroller, {
+      pointerId: 1,
+      pointerType: "mouse",
+      button: 0,
+      clientX: 200,
+      clientY: 200,
+    })
+    fireEvent.pointerMove(scroller, { pointerId: 1, clientX: 100, clientY: 100 })
+    expect(scroller.scrollLeft).toBe(0)
+    expect(scroller.scrollTop).toBe(0)
   })
 })

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronLeft, ChevronRight, Download, Minus, Plus } from "lucide-react"
 
@@ -24,6 +24,11 @@ export interface PdfViewerProps {
 export function PdfViewer({ url, onError }: PdfViewerProps) {
   const { t } = useTranslation()
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // Drag-to-pan bookkeeping: pointer origin + scroll offset captured on
+  // pointerdown. Kept in a ref so the move handler doesn't re-render the
+  // viewer on every mouse move.
+  const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null)
   const [page, setPage] = useState(1)
   const [scale, setScale] = useState(DEFAULT_SCALE)
@@ -98,6 +103,34 @@ export function PdfViewer({ url, onError }: PdfViewerProps) {
     }
   }, [pdf, page, scale])
 
+  // Click-and-drag panning of a zoomed page. The canvas overflows the
+  // `overflow-auto` container, so panning is just driving scrollLeft/scrollTop
+  // from the pointer delta (a "grab hand"). Mouse only — touch/pen keep the
+  // browser's native momentum scrolling.
+  function onPanStart(e: ReactPointerEvent<HTMLDivElement>) {
+    if (e.pointerType !== "mouse" || e.button !== 0) return
+    const el = scrollRef.current
+    if (!el) return
+    // Nothing to pan to while the page fits — leave clicks alone.
+    if (el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight) return
+    panRef.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop }
+    el.setPointerCapture(e.pointerId)
+  }
+
+  function onPanMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const el = scrollRef.current
+    const pan = panRef.current
+    if (!el || !pan) return
+    el.scrollLeft = pan.left - (e.clientX - pan.x)
+    el.scrollTop = pan.top - (e.clientY - pan.y)
+  }
+
+  function onPanEnd(e: ReactPointerEvent<HTMLDivElement>) {
+    const el = scrollRef.current
+    if (el?.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
+    panRef.current = null
+  }
+
   const numPages = pdf?.numPages ?? 0
 
   return (
@@ -170,12 +203,22 @@ export function PdfViewer({ url, onError }: PdfViewerProps) {
           {t("files:detail.previewLoadError")}
         </div>
       ) : (
-        <div className="overflow-auto rounded-md border bg-muted/40 p-2">
+        <div
+          ref={scrollRef}
+          className="cursor-grab overflow-auto rounded-md border bg-muted/40 p-2 active:cursor-grabbing"
+          onPointerDown={onPanStart}
+          onPointerMove={onPanMove}
+          onPointerUp={onPanEnd}
+          onPointerCancel={onPanEnd}
+          data-testid="pdf-viewer-scroll"
+        >
           {/* `min-w-fit` keeps this row at least as wide as the canvas so an
               over-container zoom overflows into the scroll area instead of
               being clamped; `justify-center` centres the page while it still
               fits, and because the row's left edge starts at the container's
-              left edge the start of a zoomed page stays scrollable. */}
+              left edge the start of a zoomed page stays scrollable. The grab
+              cursor + pointer handlers add click-and-drag panning so the parts
+              that don't fit on screen can be dragged into view. */}
           <div className="flex min-w-fit justify-center">
             <canvas ref={canvasRef} className="block" data-testid="pdf-viewer-canvas" />
           </div>
