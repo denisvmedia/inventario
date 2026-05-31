@@ -836,6 +836,13 @@ demo:
 
     image: minio/minio:RELEASE.2025-01-20T14-49-07Z
 
+    # Image for the `mc` client run by the one-shot bucket-create Job.
+    # Pinned to an immutable RELEASE tag (NOT :latest): in argocdMode that Job
+    # sits on an early sync-wave on the critical path, so a floating-tag drift
+    # or a transient registry hiccup must not be able to wedge the sync. Bump
+    # deliberately alongside `image` above.
+    mcImage: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+
     rootUser: minioadmin
     rootPassword: minioadmin123
 
@@ -856,6 +863,16 @@ demo:
       limits:
         cpu: 500m
         memory: 512Mi
+
+    # One-shot Job that creates the bucket. In argocdMode it runs at an early
+    # sync-wave (-6) on the critical path, so an unpullable mc image or a MinIO
+    # that never becomes ready must FAIL the Job (and surface a fast sync error)
+    # instead of hanging forever — a hung Job stalls the ArgoCD sync op and
+    # blocks namespace deletion (the undeletable-preview class fixed in
+    # #1974/#1971). Same rationale as setupJob.activeDeadlineSeconds; creating a
+    # bucket is near-instant once MinIO is up, so 300s is generous. 0 disables.
+    bucketJob:
+      activeDeadlineSeconds: 300
 
   mailpit:
     # Enable an in-cluster Mailpit mail-trap (SMTP catch-all + web UI) for
