@@ -1381,7 +1381,7 @@ const docTemplate = `{
         },
         "/auth/magic-link/verify": {
             "post": {
-                "description": "Exchange a one-time sign-in token for a session. Returns the same\nresponse shapes as /auth/login: a LoginResponse on success, or a\nLoginMFARequiredResponse when the user has MFA enabled. Returns 404\nwhen magic-link login is disabled for this deployment.",
+                "description": "Exchange a one-time sign-in token for a session. Returns the same shapes as /auth/login (LoginResponse, or LoginMFARequiredResponse when MFA is enabled). Returns 404 when magic-link login is disabled.",
                 "consumes": [
                     "application/json"
                 ],
@@ -13482,12 +13482,14 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "password",
+                "magic_link",
                 "oauth_google",
                 "oauth_github",
                 "oauth_other"
             ],
             "x-enum-varnames": [
                 "LoginMethodPassword",
+                "LoginMethodMagicLink",
                 "LoginMethodOAuthGoogle",
                 "LoginMethodOAuthGitHub",
                 "LoginMethodOAuthOther"

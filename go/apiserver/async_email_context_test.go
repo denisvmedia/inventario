@@ -30,6 +30,7 @@ type blockingEmailService struct {
 	release         <-chan struct{}
 	passwordResetCh chan asyncEmailObservation
 	verificationCh  chan asyncEmailObservation
+	magicLinkCh     chan asyncEmailObservation
 	passwordChanged chan struct{}
 	welcome         chan struct{}
 	// verificationCalls counts every SendVerificationEmail invocation so
@@ -93,7 +94,23 @@ func (m *blockingEmailService) SendWelcomeEmail(_ context.Context, _ string, _ s
 	return nil
 }
 
-func (m *blockingEmailService) SendMagicLinkEmail(_ context.Context, _ string, _ string, _ string) error {
+func (m *blockingEmailService) SendMagicLinkEmail(ctx context.Context, _ string, _ string, _ string) error {
+	if m.release != nil {
+		<-m.release
+	}
+	if m.magicLinkCh != nil {
+		deadline, hasDeadline := ctx.Deadline()
+		deadlineIn := time.Duration(0)
+		if hasDeadline {
+			deadlineIn = time.Until(deadline)
+		}
+		m.magicLinkCh <- asyncEmailObservation{
+			tenantID:    apiserver.TenantIDFromContext(ctx),
+			ctxErr:      ctx.Err(),
+			hasDeadline: hasDeadline,
+			deadlineIn:  deadlineIn,
+		}
+	}
 	return nil
 }
 
@@ -187,6 +204,55 @@ func TestHandleForgotPassword_EmailIsSentAfterRequestCancellation(t *testing.T) 
 		c.Assert(obs.deadlineIn <= 31*time.Second, qt.IsTrue)
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("expected password reset email to be sent")
+	}
+}
+
+// TestHandleMagicLinkRequest_EmailIsSentAfterRequestCancellation pins the same
+// detach contract for the magic-link send: cancelling the request context the
+// moment the handler returns must not cancel the in-flight sign-in email, which
+// runs on context.WithoutCancel(r.Context()) + a fresh timeout.
+func TestHandleMagicLinkRequest_EmailIsSentAfterRequestCancellation(t *testing.T) {
+	c := qt.New(t)
+
+	user := makeMagicLinkUser(true)
+	release := make(chan struct{})
+	emailSvc := &blockingEmailService{
+		release:     release,
+		magicLinkCh: make(chan asyncEmailObservation, 1),
+	}
+	r := newMagicLinkRouter(apiserver.AuthParams{
+		UserRegistry:          &mockUserRegistryForAuth{users: map[string]*models.User{user.ID: user}},
+		RefreshTokenRegistry:  memory.NewRefreshTokenRegistry(),
+		MagicLinkRegistry:     memory.NewMagicLinkTokenRegistry(),
+		EmailService:          emailSvc,
+		PublicBaseURL:         "https://app.example.com",
+		MagicLinkLoginEnabled: true,
+		JWTSecret:             []byte("test-secret-32-bytes-minimum-length"),
+	}, magicLinkTestTenantID)
+
+	body, err := json.Marshal(map[string]string{"email": user.Email})
+	c.Assert(err, qt.IsNil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodPost, "/auth/magic-link/request", bytes.NewReader(body)).WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+	c.Assert(w.Code, qt.Equals, http.StatusOK)
+
+	cancel()
+	close(release)
+
+	select {
+	case obs := <-emailSvc.magicLinkCh:
+		c.Assert(obs.tenantID, qt.Equals, magicLinkTestTenantID)
+		c.Assert(obs.ctxErr, qt.IsNil)
+		c.Assert(obs.hasDeadline, qt.IsTrue)
+		c.Assert(obs.deadlineIn > 20*time.Second, qt.IsTrue)
+		c.Assert(obs.deadlineIn <= 31*time.Second, qt.IsTrue)
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected magic-link email to be sent")
 	}
 }
 

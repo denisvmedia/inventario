@@ -104,10 +104,7 @@ func (api *AuthAPI) requestMagicLink(w http.ResponseWriter, r *http.Request) {
 // the existing MFA challenge when the user has TOTP enrolled.
 //
 // @Summary Verify a magic-link sign-in
-// @Description Exchange a one-time sign-in token for a session. Returns the same
-// @Description response shapes as /auth/login: a LoginResponse on success, or a
-// @Description LoginMFARequiredResponse when the user has MFA enabled. Returns 404
-// @Description when magic-link login is disabled for this deployment.
+// @Description Exchange a one-time sign-in token for a session. Returns the same shapes as /auth/login (LoginResponse, or LoginMFARequiredResponse when MFA is enabled). Returns 404 when magic-link login is disabled.
 // @Tags auth
 // @Accept json
 // @Produce json
@@ -193,6 +190,16 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	// still allowed — refusing would leak lockout state).
 	if !api.checkMFALoginLockout(w, r, user.Email) {
 		return
+	}
+
+	// Clear any stale failed-login counters now that the link has verified,
+	// mirroring the success branch of login(): otherwise a prior password
+	// typo's count survives and the next typo could immediately re-lock an
+	// account that just proved control of the inbox.
+	if api.rateLimiter != nil {
+		if err := api.rateLimiter.ClearFailedLogins(r.Context(), user.Email); err != nil {
+			slog.Error("Failed to clear failed login counters after magic-link auth", "user_id", user.ID, "error", err)
+		}
 	}
 
 	// Invalidate any other outstanding links for this user.
@@ -295,7 +302,7 @@ func (api *AuthAPI) issueMagicLinkSession(w http.ResponseWriter, r *http.Request
 	slog.Info("Successful magic-link login", "email", user.Email, "user_id", user.ID)
 	api.logAuth(r.Context(), "magic_link_login", &user.ID, &user.TenantID, true, r, nil)
 	userID := user.ID
-	api.recordLoginEvent(r.Context(), tenantID, user.Email, &userID, models.LoginOutcomeOK, r)
+	api.recordLoginEventWithMethod(r.Context(), tenantID, user.Email, &userID, models.LoginOutcomeOK, models.LoginMethodMagicLink, r)
 
 	// Stamp the wire-only is_system_admin advisory flag (#1784).
 	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, user)

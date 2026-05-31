@@ -1813,10 +1813,7 @@ export type paths = {
         put?: never;
         /**
          * Verify a magic-link sign-in
-         * @description Exchange a one-time sign-in token for a session. Returns the same
-         *     response shapes as /auth/login: a LoginResponse on success, or a
-         *     LoginMFARequiredResponse when the user has MFA enabled. Returns 404
-         *     when magic-link login is disabled for this deployment.
+         * @description Exchange a one-time sign-in token for a session. Returns the same shapes as /auth/login (LoginResponse, or LoginMFARequiredResponse when MFA is enabled). Returns 404 when magic-link login is disabled.
          */
         post: {
             parameters: {
@@ -12081,7 +12078,7 @@ export type components = {
         /** @enum {string} */
         "models.LocationGroupStatus": "active" | "pending_deletion";
         /** @enum {string} */
-        "models.LoginMethod": "password" | "oauth_google" | "oauth_github" | "oauth_other";
+        "models.LoginMethod": "password" | "magic_link" | "oauth_google" | "oauth_github" | "oauth_other";
         /** @enum {string} */
         "models.LoginOutcome": "ok" | "bad_password" | "account_locked" | "account_disabled" | "email_not_verified" | "mfa_required" | "bad_mfa" | "mfa_admin_reset" | "identity_linked" | "tenant_mismatch";
         "models.MaintenanceSchedule": {
