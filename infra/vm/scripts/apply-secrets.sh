@@ -136,8 +136,12 @@ fi
 # in the ApplicationSet if you want to defer the key.
 ANTHROPIC_API_KEY=$(lookup "anthropic.api_key")
 OPENAI_API_KEY=$(lookup "openai.api_key")
-if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$OPENAI_API_KEY" ]; then
-    warn "anthropic.api_key (and openai.api_key) missing in secrets bundle; inv-vcl01-master/longevity pin aivision.provider=anthropic, so their apiservers will CrashLoop until a key is set (AI-vision photo-scan boots fail-loud on an empty key). Fill anthropic.api_key, or flip aivision.provider to none/mock in the ApplicationSet to defer it."
+# Warn on a missing anthropic.api_key SPECIFICALLY: master + longevity pin
+# aivision.provider=anthropic, so that's the key they actually consume. Filling
+# only openai.api_key does NOT satisfy an anthropic-pinned env — it would still
+# CrashLoop — so the openai key is intentionally not part of this guard.
+if [ -z "$ANTHROPIC_API_KEY" ]; then
+    warn "anthropic.api_key missing in secrets bundle; inv-vcl01-master/longevity pin aivision.provider=anthropic, so their apiservers will CrashLoop until it is set (AI-vision photo-scan boots fail-loud on an empty key — setting only openai.api_key does NOT satisfy an anthropic-pinned env). Fill anthropic.api_key, or flip aivision.provider to none/mock (or openai, with openai.api_key) in the ApplicationSet to defer it."
 fi
 ADMIN_MISSING=0
 if [ -z "$ADMIN_PASSWORD" ]; then
