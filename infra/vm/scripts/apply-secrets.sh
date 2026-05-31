@@ -49,9 +49,20 @@ lookup() {
     ' <<<"$SECRETS_JSON" 2>/dev/null
 }
 
-# Pipe a manifest through `kubectl apply -f -` on the remote VM.
+# Pipe a manifest through server-side `kubectl apply` on the remote VM.
+#
+# Server-side apply (NOT the default client-side) is deliberate for the Secrets
+# this script emits: client-side apply stores the ENTIRE applied manifest —
+# including the plaintext `stringData` API keys / passwords — in the
+# `kubectl.kubernetes.io/last-applied-configuration` annotation, which then
+# leaks via `kubectl get secret -o yaml` / `describe` (and is far easier to
+# expose accidentally than the base64 `.data`). SSA records only field
+# ownership in `.metadata.managedFields` (no values), so the secret value never
+# lands in an annotation. `--force-conflicts` lets SSA take ownership of fields
+# previously written by a client-side apply (one-time migration for the
+# pre-existing inventario-admin / github / tailscale Secrets).
 remote_apply() {
-    ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
+    ssh "$VM" 'sudo /usr/local/bin/kubectl apply --server-side --force-conflicts -f -'
 }
 
 # --- inventario-admin (chart consumes via secrets.existingSecret) ---
