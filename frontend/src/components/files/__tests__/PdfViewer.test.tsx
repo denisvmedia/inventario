@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from "vitest"
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
@@ -64,6 +64,16 @@ beforeAll(async () => {
   // jsdom has no 2d canvas backend; the viewer bails when getContext is
   // null, so hand it a stub context to let the render path run.
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ({})) as never
+})
+
+// Reset the module-level mock state up front so a test that throws mid-run
+// (leaving e.g. `pendingDoc` true) can't pollute the next one.
+beforeEach(() => {
+  pendingDoc = false
+  resolveDoc = null
+  lastTask = null
+  cancelMock.mockClear()
+  renderMock.mockClear()
 })
 
 async function renderViewer() {
