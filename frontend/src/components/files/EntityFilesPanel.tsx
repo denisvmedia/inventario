@@ -1,12 +1,16 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { Upload } from "lucide-react"
 
 import { FileCard, type FileCardCoverState } from "@/components/files/FileCard"
+import { FileDetailSheet } from "@/components/files/FileDetailSheet"
+import type { GalleryImage } from "@/components/files/ImageViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { isImageMime } from "@/features/files/constants"
 import { useFiles } from "@/features/files/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 
@@ -15,9 +19,12 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 // `GET /files?linked_entity_type=…&linked_entity_id=…` endpoint
 // introduced for #1411 AC #4 (area linkage added under #1531 item 1).
 //
-// Click on a card deep-links to `/files/:id` which mounts the same
-// FileDetailSheet the main /files page uses, so detail / download /
-// edit / delete all reuse the validated path.
+// Clicking a card opens the same right-side FileDetailSheet the /files page
+// uses, but *in place* — driven by local state instead of navigating to
+// `/files/:id` — so the user keeps the entity-detail context (metadata +
+// inline preview, with expand-to-fullscreen from there). Image siblings are
+// passed through so the fullscreen viewer's gallery cycles this entity's
+// photos.
 //
 // `onAttachClick` (#1448): when provided, renders an "Attach files"
 // button in the header that opens an upload affordance with this
@@ -57,6 +64,9 @@ export function EntityFilesPanel({
   const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
+  // The file whose detail sheet is open, kept locally so opening it never
+  // leaves the entity-detail page (#1963 follow-up).
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const filesQuery = useFiles(
     {
@@ -70,12 +80,14 @@ export function EntityFilesPanel({
   const files = filesQuery.data?.files ?? []
   const total = filesQuery.data?.total ?? 0
 
-  // Deep-link to the global Files detail sheet — keeps URL shareable
-  // and reuses the validated detail / download / delete path.
-  const handleOpen = (fileId: string) => {
-    if (!slug) return
-    navigate(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(fileId)}`)
-  }
+  // This entity's photos, in grid order, for the fullscreen viewer's gallery.
+  const imageSiblings: GalleryImage[] = files
+    .filter(({ file, signedUrl }) => isImageMime(file.mime_type) && !!signedUrl?.url)
+    .map(({ file, signedUrl }) => ({
+      id: file.id,
+      url: signedUrl?.url ?? "",
+      alt: file.title?.trim() || file.path?.trim() || file.id,
+    }))
 
   return (
     <Card data-testid="entity-files-panel">
@@ -127,7 +139,7 @@ export function EntityFilesPanel({
                 key={file.id}
                 file={file}
                 signedUrl={signedUrl}
-                onOpen={handleOpen}
+                onOpen={() => setSelectedId(file.id)}
                 coverState={coverState}
                 onSetCover={onSetCover}
                 coverBusy={coverBusy}
@@ -136,6 +148,18 @@ export function EntityFilesPanel({
           </div>
         )}
       </CardContent>
+      <FileDetailSheet
+        fileId={selectedId}
+        open={!!selectedId}
+        onOpenChange={(next) => {
+          if (!next) setSelectedId(null)
+        }}
+        onEdit={(id) =>
+          navigate(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(id)}/edit`)
+        }
+        imageSiblings={imageSiblings}
+        onSelectSibling={(id) => setSelectedId(id)}
+      />
     </Card>
   )
 }

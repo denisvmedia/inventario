@@ -138,26 +138,27 @@ export async function expectEntityFilesPanelCount(page: Page, expected: number):
 }
 
 /**
- * Click the first file card in the entity-files panel. The card's
- * onClick navigates to `/g/<slug>/files/<id>` which mounts the
- * FileDetailSheet on the global Files page. Returns the navigated-to
- * file id so callers can assert against it later.
+ * Click the first file card in the entity-files panel. The card opens the
+ * FileDetailSheet *in place* (#1963) — the user stays on the entity-detail
+ * page (no navigation to `/g/<slug>/files/<id>`). Returns the file id so
+ * callers can assert against it later.
  */
 export async function openFirstFileFromEntityPanel(page: Page): Promise<string> {
   const grid = page.getByTestId('entity-files-panel-grid')
   await grid.waitFor({ state: 'visible', timeout: 15_000 })
   const firstOpenButton = grid.locator('[data-testid^="file-card-open-"]').first()
   // The testid pattern is `file-card-open-<id>`; pull the id straight
-  // out of the attribute so we don't need to wait on URL parsing
-  // before clicking.
+  // out of the attribute (the URL no longer changes, so we can't read it
+  // from there).
   const testId = await firstOpenButton.getAttribute('data-testid')
   if (!testId) {
     throw new Error('openFirstFileFromEntityPanel: first card has no data-testid')
   }
   const id = testId.replace(/^file-card-open-/, '')
   await firstOpenButton.click()
+  // Opens the side detail sheet in place — the route stays on the entity
+  // page (location/area/commodity), it does NOT navigate to /files/:id.
   await page.getByTestId('file-detail-sheet').waitFor({ state: 'visible', timeout: 15_000 })
-  await expect(page).toHaveURL(new RegExp(`/files/${id}(?:[/?#]|$)`))
   return id
 }
 

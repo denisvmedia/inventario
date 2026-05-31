@@ -25,13 +25,19 @@ describe("<ImageViewer />", () => {
     expect(screen.queryByTestId("image-viewer-position")).not.toBeInTheDocument()
   })
 
-  it("root carries pointer-events-auto so it stays interactive above a modal Sheet (#1962)", () => {
-    // A modal Radix Dialog (the FileDetailSheet) sets pointer-events:none
-    // on <body>; the body-portaled viewer inherits it, so the explicit
-    // override is what keeps the toolbar clickable and stops clicks
-    // falling through to the Sheet underneath. Guard against its removal.
-    render(<ImageViewer open onOpenChange={vi.fn()} url="https://example/a.png" alt="A" />)
-    expect(screen.getByTestId("file-image-viewer")).toHaveClass("pointer-events-auto")
+  it("renders as a portalled modal dialog so it stays interactive above the Sheet (#1962)", () => {
+    // The viewer is a Radix Dialog (modal, portalled) rather than a bare
+    // overlay nested in the Sheet's tree. As a stacked dismissable layer it
+    // owns pointer interactions, so the toolbar stays clickable and clicks
+    // don't fall through to — or dismiss — the Sheet underneath.
+    const { container } = render(
+      <ImageViewer open onOpenChange={vi.fn()} url="https://example/a.png" alt="A" />
+    )
+    const root = screen.getByTestId("file-image-viewer")
+    expect(root).toHaveAttribute("role", "dialog")
+    // Portalled out of the in-page render tree (to document.body), so it
+    // paints above the open Sheet instead of behind it.
+    expect(container).not.toContainElement(root)
   })
 
   it("renders prev/next + position counter when siblings have more than one entry", () => {
