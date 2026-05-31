@@ -25,6 +25,15 @@ describe("<ImageViewer />", () => {
     expect(screen.queryByTestId("image-viewer-position")).not.toBeInTheDocument()
   })
 
+  it("root carries pointer-events-auto so it stays interactive above a modal Sheet (#1962)", () => {
+    // A modal Radix Dialog (the FileDetailSheet) sets pointer-events:none
+    // on <body>; the body-portaled viewer inherits it, so the explicit
+    // override is what keeps the toolbar clickable and stops clicks
+    // falling through to the Sheet underneath. Guard against its removal.
+    render(<ImageViewer open onOpenChange={vi.fn()} url="https://example/a.png" alt="A" />)
+    expect(screen.getByTestId("file-image-viewer")).toHaveClass("pointer-events-auto")
+  })
+
   it("renders prev/next + position counter when siblings have more than one entry", () => {
     render(
       <ImageViewer

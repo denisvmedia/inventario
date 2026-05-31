@@ -21,6 +21,7 @@ import (
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/assets"
+	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/internal/textutils"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -252,11 +253,26 @@ func (api *filesAPI) generateSignedURLsForFiles(r *http.Request, files []*models
 
 		signedUrls[file.ID] = jsonapi.URLData{
 			URL:        originalURL,
+			InlineURL:  bestEffortInlineURL(api.fileSigningService, file, user.ID, binding),
 			Thumbnails: thumbnails,
 		}
 	}
 
 	return signedUrls
+}
+
+// bestEffortInlineURL mints the inline ("Open in new tab", #1962) signed
+// URL for a file, returning "" on any failure. The inline affordance is
+// purely additive — the FE falls back to the attachment URL — so a signing
+// error here (e.g. an extension-less file fails the ext sanity check) must
+// never break the surrounding list/detail/upload response.
+func bestEffortInlineURL(signing *services.FileSigningService, file *models.FileEntity, userID string, binding services.SessionBinding) string {
+	fileExt := strings.TrimPrefix(file.Ext, ".")
+	inlineURL, err := signing.GenerateInlineSignedURL(file.ID, fileExt, userID, binding)
+	if err != nil {
+		return ""
+	}
+	return inlineURL
 }
 
 // createFile creates a new file entity (metadata only, file must be uploaded via /uploads/files first).
@@ -742,7 +758,19 @@ func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	api.streamFileFromStorage(w, r, filePath, mimeType, file.Path+file.Ext)
+	// Inline serving (#1962, "Open in new tab") is opt-in via a
+	// `disposition=inline` query parameter that the SignedURLMiddleware has
+	// already validated as part of the HMAC — so reading it raw here is
+	// safe: a tampered/forged disposition would have 401'd upstream. We
+	// still gate on the content type: only mimekit.IsInlineSafe types are
+	// ever rendered inline, so an HTML/SVG upload can never execute in our
+	// origin even with a validly-signed inline URL.
+	disposition := services.DispositionAttachment
+	if r.URL.Query().Get("disposition") == "inline" && mimekit.IsInlineSafe(mimeType) {
+		disposition = services.DispositionInline
+	}
+
+	api.streamFileFromStorage(w, r, filePath, mimeType, file.Path+file.Ext, disposition)
 }
 
 // downloadThumbnail downloads a thumbnail file (always JPEG) with deferred generation support
@@ -806,7 +834,10 @@ func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 	mimeType := "image/jpeg"
 	filename := fmt.Sprintf("%s_%s.jpg", fileID, size)
 
-	api.streamFileFromStorage(w, r, thumbnailPath, mimeType, filename)
+	// Thumbnails are always served as attachments — they're consumed via
+	// <img src>, where the browser renders them regardless of disposition,
+	// so there's no inline-viewing case to support here.
+	api.streamFileFromStorage(w, r, thumbnailPath, mimeType, filename, services.DispositionAttachment)
 }
 
 // servePlaceholderThumbnail serves a placeholder image while triggering thumbnail generation
@@ -883,8 +914,12 @@ func placeholderFilename(size string) (string, bool) {
 	}
 }
 
-// streamFileFromStorage is a helper function to stream files from storage
-func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Request, filePath, mimeType, filename string) {
+// streamFileFromStorage is a helper function to stream files from storage.
+// With services.DispositionInline the response is served with
+// Content-Disposition: inline for in-browser viewing (#1962); otherwise it
+// is an attachment download. Callers must only request inline for
+// mimekit.IsInlineSafe content types.
+func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Request, filePath, mimeType, filename string, disposition services.Disposition) {
 	// Open the file from storage
 	b, err := blob.OpenBucket(r.Context(), api.uploadLocation)
 	if err != nil {
@@ -920,7 +955,11 @@ func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Reques
 	defer reader.Close()
 
 	// Set headers and stream the file
-	downloadutils.SetStreamingHeaders(w, mimeType, attrs.Size, filename)
+	if disposition == services.DispositionInline {
+		downloadutils.SetInlineStreamingHeaders(w, mimeType, attrs.Size, filename)
+	} else {
+		downloadutils.SetStreamingHeaders(w, mimeType, attrs.Size, filename)
+	}
 	if _, err := io.Copy(w, reader); err != nil {
 		// Log error but don't send response as headers are already sent
 		slog.Error("Failed to stream file", "error", err, "file_path", filePath)

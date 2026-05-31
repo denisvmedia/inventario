@@ -12314,6 +12314,10 @@ const docTemplate = `{
         "jsonapi.URLData": {
             "type": "object",
             "properties": {
+                "inline_url": {
+                    "description": "signed URL that serves the file inline for in-browser viewing (\"Open in new tab\", #1962); empty when not available",
+                    "type": "string"
+                },
                 "thumbnails": {
                     "description": "map of thumbnail size to signed URL",
                     "type": "object",
@@ -12322,7 +12326,7 @@ const docTemplate = `{
                     }
                 },
                 "url": {
-                    "description": "signed URL for file access",
+                    "description": "signed URL for file access (attachment / download)",
                     "type": "string"
                 }
             }

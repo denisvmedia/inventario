@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import {
   ChevronLeft,
@@ -130,13 +131,30 @@ export function ImageViewer(props: ImageViewerProps) {
 
   if (!open) return null
 
-  return (
+  // Render through a portal to document.body, above the Sheet (#1962):
+  // the FileDetailSheet's SheetContent is itself a body-level portal at
+  // z-50, so a non-portaled viewer nested in the page tree painted
+  // *behind* it. Portaling to body lifts the viewer into the same
+  // top-level stacking context, and z-[60] puts it above the open Sheet
+  // (and above the FilePreviewDialog's Dialog, which is also z-50) so the
+  // fullscreen image always paints on top.
+  //
+  // pointer-events-auto is load-bearing here: a modal Radix Dialog (the
+  // Sheet) sets `pointer-events: none` on <body> while open, and a
+  // body-portaled child inherits it — without the explicit override the
+  // viewer's toolbar would be dead and clicks would fall through to the
+  // hidden Sheet underneath. The override re-enables hit-testing for the
+  // viewer and its controls; it's a no-op when the viewer is opened from
+  // a non-modal host (FilePreviewDialog), where <body> is already auto.
+  // Esc / zoom / pan are additionally bound at the document level, so the
+  // viewer stays usable even outside the Sheet's focus scope.
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-label={alt}
       data-testid="file-image-viewer"
-      className="fixed inset-0 z-50 flex flex-col bg-black/90 text-white"
+      className="pointer-events-auto fixed inset-0 z-[60] flex flex-col bg-black/90 text-white"
     >
       <div className="flex items-center justify-between gap-2 p-3">
         <p className="line-clamp-1 max-w-[60vw] text-sm">
@@ -290,7 +308,8 @@ export function ImageViewer(props: ImageViewerProps) {
           }}
         />
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

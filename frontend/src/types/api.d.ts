@@ -11312,11 +11312,13 @@ export type components = {
             meta?: components["schemas"]["jsonapi.TagsMeta"];
         };
         "jsonapi.URLData": {
+            /** @description signed URL that serves the file inline for in-browser viewing ("Open in new tab", #1962); empty when not available */
+            inline_url?: string;
             /** @description map of thumbnail size to signed URL */
             thumbnails?: {
                 [key: string]: string;
             };
-            /** @description signed URL for file access */
+            /** @description signed URL for file access (attachment / download) */
             url?: string;
         };
         "jsonapi.UpdateProfileRequest": {

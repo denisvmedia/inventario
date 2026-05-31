@@ -77,6 +77,32 @@ type SignedURLClaims struct {
 	ExpiresAt time.Time // Expiration time
 }
 
+// Disposition selects how a signed file URL serves its bytes: as an
+// attachment download (the default) or inline for in-browser viewing
+// (the "Open in new tab" affordance, #1962). The choice is folded into
+// the HMAC message — and surfaced as a `disposition=inline` query
+// parameter only for the inline case — so it cannot be tampered with
+// after the URL is minted: flipping an attachment URL to inline (or
+// stripping inline off an inline URL) changes the validated message and
+// fails the signature check.
+type Disposition int
+
+const (
+	// DispositionAttachment serves the file as a download. The URL and
+	// signed message are byte-identical to the pre-#1962 format, so
+	// existing attachment URLs are unaffected.
+	DispositionAttachment Disposition = iota
+	// DispositionInline serves the file inline for viewing. Adds the
+	// `|inline` suffix to the signed message and a `disposition=inline`
+	// query parameter to the URL.
+	DispositionInline
+)
+
+// dispositionInlineParam is the literal query value (and HMAC suffix
+// token) that marks an inline URL. Kept as one constant so the generate
+// and validate sides cannot drift.
+const dispositionInlineParam = "inline"
+
 // GenerateSignedURL creates a signed URL for file access.
 //
 // The emitted URL is `/api/v1/files/download/files/{fileID}?sig=…&exp=…&uid=…&fid=…`
@@ -89,7 +115,25 @@ type SignedURLClaims struct {
 // signing call. An empty binding produces an unbound URL — validators
 // must be invoked with an empty binding to accept it. The binding is
 // folded into the HMAC message only and never written into the URL.
+//
+// This is the attachment (download) variant; GenerateInlineSignedURL
+// mints the inline (in-browser viewing) variant.
 func (s *FileSigningService) GenerateSignedURL(fileID, fileExt, userID string, binding SessionBinding) (string, error) {
+	return s.generateSignedURL(fileID, fileExt, userID, binding, DispositionAttachment)
+}
+
+// GenerateInlineSignedURL mints a signed URL that serves the file inline
+// (Content-Disposition: inline) for in-browser viewing — the frontend's
+// "Open in new tab" action (#1962). The serve handler still only honours
+// inline for content types that are safe to render same-origin (see
+// mimekit.IsInlineSafe); for everything else it falls back to an
+// attachment download, so this URL is never dangerous even for an
+// HTML/SVG upload.
+func (s *FileSigningService) GenerateInlineSignedURL(fileID, fileExt, userID string, binding SessionBinding) (string, error) {
+	return s.generateSignedURL(fileID, fileExt, userID, binding, DispositionInline)
+}
+
+func (s *FileSigningService) generateSignedURL(fileID, fileExt, userID string, binding SessionBinding, disposition Disposition) (string, error) {
 	if fileID == "" {
 		return "", errors.New("file ID is required")
 	}
@@ -112,6 +156,12 @@ func (s *FileSigningService) GenerateSignedURL(fileID, fileExt, userID string, b
 	// supported on this code path; in-flight unbound URLs are expected
 	// to 401 after a deploy and be re-fetched by the FE.
 	message := fmt.Sprintf("GET|%s|%s|%s|%d|%s", basePath, fileID, userID, expTimestamp, binding)
+	// Inline serving folds a `|inline` suffix into the signed message so
+	// the disposition is tamper-proof. Attachment URLs keep the exact
+	// pre-#1962 message (no suffix), so existing URLs are unaffected.
+	if disposition == DispositionInline {
+		message += "|" + dispositionInlineParam
+	}
 
 	// Generate HMAC signature
 	signature, err := s.generateSignature(message)
@@ -126,6 +176,9 @@ func (s *FileSigningService) GenerateSignedURL(fileID, fileExt, userID string, b
 		expTimestamp,
 		url.QueryEscape(userID),
 		url.QueryEscape(fileID))
+	if disposition == DispositionInline {
+		signedURL += "&disposition=" + dispositionInlineParam
+	}
 
 	return signedURL, nil
 }
@@ -278,6 +331,16 @@ func (s *FileSigningService) ValidateSignedURL(path string, queryParams url.Valu
 
 	// Recreate the message that was signed
 	message := fmt.Sprintf("GET|%s|%s|%s|%d|%s", path, fileID, userID, expTimestamp, binding)
+	// Mirror the generate side: only an explicit `disposition=inline`
+	// folds the `|inline` suffix into the message. Any other value (or
+	// none) reproduces the attachment message. This makes the
+	// disposition tamper-evident — appending `disposition=inline` to an
+	// attachment URL changes the validated message and fails the
+	// signature check, so inline serving can't be forced onto a URL that
+	// wasn't signed for it.
+	if queryParams.Get("disposition") == dispositionInlineParam {
+		message += "|" + dispositionInlineParam
+	}
 
 	// Validate the signature
 	if !s.validateSignature(message, signature) {
