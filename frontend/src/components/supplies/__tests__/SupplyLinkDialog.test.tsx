@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest"
 
 import { SupplyLinkDialog } from "@/components/supplies/SupplyLinkDialog"
 import { initI18n } from "@/i18n"
+import { HttpError } from "@/lib/http"
 
 beforeAll(async () => {
   await initI18n({ lng: "en" })
@@ -83,6 +84,39 @@ describe("<SupplyLinkDialog />", () => {
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
     expect(onSubmit.mock.calls[0]?.[0]?.label).toBe("Renamed")
+  })
+
+  it("maps a 422 field error from the server onto the input and stays open", async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    // The host catches, toasts, and re-throws; the dialog must map the
+    // BE's field-level 422 onto the offending input instead of silently
+    // closing or only relying on the toast.
+    const envelope = {
+      errors: [
+        {
+          status: "Unprocessable Entity",
+          error: {
+            type: "validation.Errors",
+            error: { data: { attributes: { url: "must be a valid URL" } } },
+          },
+        },
+      ],
+    }
+    const onSubmit = vi.fn().mockRejectedValue(new HttpError("boom", 422, "/supplies", envelope))
+    render(
+      <SupplyLinkDialog open title="Add link" onSubmit={onSubmit} onOpenChange={onOpenChange} />
+    )
+
+    await user.type(screen.getByTestId("supply-link-label-input"), "Water filter")
+    await user.type(screen.getByTestId("supply-link-url-input"), "https://example.com/x")
+    await user.click(screen.getByTestId("supply-link-submit"))
+
+    expect(await screen.findByTestId("supply-link-url-error")).toHaveTextContent(
+      "must be a valid URL"
+    )
+    // A field error keeps the dialog open so the user can fix it.
+    expect(onOpenChange).not.toHaveBeenCalled()
   })
 
   it("is axe-clean while open", async () => {

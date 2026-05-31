@@ -83,6 +83,9 @@ export function ServiceTab({ commodityId, commodityCount }: ServiceTabProps) {
       // detail/title/error/message field out and falls back to a generic
       // toast copy when nothing useful is in the payload.
       toast.error(parseServerError(err, t("services:toast.sendError")))
+      // Re-throw so the dialog can map field-level 422 errors onto its
+      // inputs (it stays open). The toast above is the summary.
+      throw err
     }
   }
 

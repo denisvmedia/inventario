@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { MaintenanceScheduleEntity } from "@/features/maintenance/api"
+import { applyServerFieldErrors } from "@/lib/form-errors"
 import {
   maintenanceFormSchema,
   type MaintenanceFormInput,
@@ -104,6 +105,7 @@ function MaintenanceScheduleForm({
     formState: { errors, isSubmitting },
     handleSubmit,
     register,
+    setError,
   } = useForm<MaintenanceFormInput, unknown, MaintenanceFormOutput>({
     resolver: zodResolver(maintenanceFormSchema),
     defaultValues: buildDefaults(initial),
@@ -120,12 +122,19 @@ function MaintenanceScheduleForm({
       // on a <input type="date"> with an edge value.
       noValidate
       onSubmit={handleSubmit(async (values) => {
-        await onSubmit({
-          title: values.title,
-          interval_days: values.interval_days,
-          next_due_at: values.next_due_at ? values.next_due_at : undefined,
-          notes: values.notes ? values.notes : undefined,
-        })
+        try {
+          await onSubmit({
+            title: values.title,
+            interval_days: values.interval_days,
+            next_due_at: values.next_due_at ? values.next_due_at : undefined,
+            notes: values.notes ? values.notes : undefined,
+          })
+        } catch (err) {
+          // Host toasts a summary and re-throws; map field-level 422s.
+          applyServerFieldErrors(err, setError, {
+            fields: ["title", "interval_days", "next_due_at", "notes"],
+          })
+        }
       })}
     >
       <DialogHeader>

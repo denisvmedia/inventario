@@ -247,10 +247,12 @@ func TestLocationsGet_InvalidID(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
-func TestLocationsUpdate_PartialData(t *testing.T) {
+func TestLocationsUpdate_AddressOptional(t *testing.T) {
 	c := qt.New(t)
 
-	// Use the full params which includes EntityService and all components
+	// Address is optional: a location may carry only a name. Updating with
+	// the address omitted must succeed and clear the stored address rather
+	// than rejecting the request with a 422 (the old, wrong behaviour).
 	params, testUser, testGroup := newParams()
 	locations := must.Must(getRegistrySetFromParams(params, testUser).LocationRegistry.List(c.Context()))
 	location := locations[0]
@@ -261,7 +263,7 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 			Type: "locations",
 			Attributes: models.WithID(location.ID, &models.Location{
 				Name: "Updated Name",
-				// Address field is not provided
+				// Address field is not provided — it is optional.
 			}),
 		},
 	}
@@ -278,8 +280,9 @@ func TestLocationsUpdate_PartialData(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	body := rr.Body.Bytes()
-	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("Body: %s", body))
-	c.Assert(body, checkers.JSONPathEquals("$.errors[0].error.error.data.attributes.address"), "cannot be blank")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("Body: %s", body))
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.name"), "Updated Name")
+	c.Assert(body, checkers.JSONPathEquals("$.data.attributes.address"), "")
 }
 
 func TestLocationsUpdate_ForeignIDInRequestBody(t *testing.T) {

@@ -20,6 +20,7 @@ import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { IconPicker, LOCATION_ICONS } from "@/components/locations/IconPicker"
 import type { Location } from "@/features/locations/api"
 import { locationSchema, type LocationFormInput } from "@/features/locations/schemas"
+import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 
 interface LocationFormDialogProps {
@@ -101,7 +102,18 @@ export function LocationFormDialog({
       await onSubmit(values)
       onOpenChange(false)
     } catch (err) {
-      setServerError(classifyServerError(err, t("locations:dialog.errorGeneric")))
+      // Map BE field-level validation errors (e.g. 422 `address: cannot be
+      // blank`) back onto the inputs so the failing field is highlighted
+      // with its inline message; only fall back to the generic banner for
+      // non-field errors or anything that couldn't be placed on a field.
+      const fieldResult = applyServerFieldErrors(err, form.setError, {
+        fields: Object.keys(locationSchema.shape),
+      })
+      setServerError(
+        shouldShowGenericError(fieldResult)
+          ? classifyServerError(err, t("locations:dialog.errorGeneric"))
+          : null
+      )
     }
   }
 

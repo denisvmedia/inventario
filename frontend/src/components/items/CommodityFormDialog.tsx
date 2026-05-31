@@ -42,7 +42,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { TagsInput } from "@/components/files/TagsInput"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { HttpError } from "@/lib/http"
+import { applyServerFieldErrors } from "@/lib/form-errors"
 import { clearPendingFiles, loadPendingFiles, savePendingFiles } from "@/lib/pending-files-store"
 import { type ClassifiedServerError, classifyServerError } from "@/lib/server-error"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
@@ -485,15 +485,13 @@ export function CommodityFormDialog({
       // first failing field. Necessary even with FE schema mirrors —
       // BE rules can be stricter than what the FE schema models, and
       // we should never silently round-trip a 422.
-      const fieldErrors = parseCommodityFieldErrors(err)
-      if (fieldErrors) {
-        for (const [name, message] of Object.entries(fieldErrors)) {
-          setError(name as keyof CommodityFormInput, { type: "server", message })
-        }
-        const firstField = Object.keys(fieldErrors)[0]
+      const fieldResult = applyServerFieldErrors(err, setError, {
+        fields: Object.values(STEP_FIELDS).flat(),
+      })
+      if (fieldResult && fieldResult.mapped.length > 0) {
         // Compound paths like `urls.0` need the root segment when
         // looking up which step owns the field.
-        const firstFieldRoot = firstField.split(".")[0]
+        const firstFieldRoot = fieldResult.mapped[0].split(".")[0]
         const targetStep = (FORM_STEPS as readonly string[]).find((s) =>
           STEP_FIELDS[s as StepKey].some((f) => f === firstFieldRoot)
         ) as StepKey | undefined
@@ -2368,78 +2366,6 @@ function clearDraft(key: string): void {
   } catch {
     // see writeDraft
   }
-}
-
-// parseCommodityFieldErrors extracts per-field validation messages
-// from the BE's 422 envelope so we can map them back onto RHF.
-//
-// The Inventario BE wraps validation errors in:
-//   {
-//     "errors": [
-//       {
-//         "status": "Unprocessable Entity",
-//         "error": {                 // jsonapi.Error.UserError (raw JSON)
-//           "type": "validation.Errors",
-//           "error": {               // ozzo / jellydator validation envelope
-//             "data": {
-//               "attributes": {
-//                 "<field>": "<message>"
-//               }
-//             }
-//           }
-//         }
-//       }
-//     ]
-//   }
-//
-// Returns a flat `{ field: message }` map limited to known commodity
-// form fields, or null when the response doesn't match the shape.
-function parseCommodityFieldErrors(err: unknown): Record<string, string> | null {
-  if (!(err instanceof HttpError)) return null
-  const data = err.data as unknown
-  if (!data || typeof data !== "object") return null
-  const errorsArr = (data as { errors?: unknown }).errors
-  if (!Array.isArray(errorsArr) || errorsArr.length === 0) return null
-  const first = errorsArr[0]
-  if (!first || typeof first !== "object") return null
-  const userErr = (first as { error?: unknown }).error
-  if (!userErr || typeof userErr !== "object") return null
-  const inner = (userErr as { error?: unknown }).error
-  if (!inner || typeof inner !== "object") return null
-  const dataObj = (inner as { data?: unknown }).data
-  if (!dataObj || typeof dataObj !== "object") return null
-  const attrs = (dataObj as { attributes?: unknown }).attributes
-  if (!attrs || typeof attrs !== "object") return null
-  // Only keep keys that actually live on the form (filter unknown
-  // server-only fields out so RHF.setError doesn't reject the path).
-  const known = new Set<string>()
-  for (const fields of Object.values(STEP_FIELDS)) {
-    for (const f of fields) known.add(f)
-  }
-  const result: Record<string, string> = {}
-  for (const [k, v] of Object.entries(attrs)) {
-    if (!known.has(k)) continue
-    if (typeof v === "string") {
-      result[k] = v
-      continue
-    }
-    // Array-typed fields (e.g. `urls`) come back as an object keyed
-    // by the failing index → message:
-    //   "urls": { "0": "Host: cannot be blank; …" }
-    // Emit compound paths (`urls.0`, `urls.1`) so RHF's `setError`
-    // can store the message under `errors.urls[idx]`, and our
-    // per-row error UI can attach the message to the offending row
-    // instead of forcing the user to scan a concatenated banner.
-    if (v && typeof v === "object") {
-      for (const [idx, msg] of Object.entries(v as Record<string, unknown>)) {
-        if (typeof msg !== "string") continue
-        const idxNum = Number(idx)
-        const compoundKey = Number.isFinite(idxNum) ? `${k}.${idxNum}` : k
-        result[compoundKey] = msg
-      }
-    }
-  }
-  return Object.keys(result).length > 0 ? result : null
 }
 
 // buildDefaults populates the form with safe initial values. For edit

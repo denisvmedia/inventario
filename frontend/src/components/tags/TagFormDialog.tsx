@@ -19,6 +19,7 @@ import { TagBadge } from "./TagBadge"
 import { TagColorPicker } from "./TagColorPicker"
 import type { TagColor, TagEntity } from "@/features/tags/api"
 import { normaliseSlug, tagFormSchema, type TagFormInput } from "@/features/tags/schemas"
+import { applyServerFieldErrors } from "@/lib/form-errors"
 
 export interface TagFormDialogProps {
   open: boolean
@@ -48,6 +49,7 @@ export function TagFormDialog({
     handleSubmit,
     register,
     reset,
+    setError,
     setValue,
     watch,
   } = useForm<TagFormInput>({
@@ -107,11 +109,17 @@ export function TagFormDialog({
         <form
           className="flex flex-col gap-4"
           onSubmit={handleSubmit(async (values) => {
-            await onSubmit({
-              label: values.label,
-              slug: values.slug,
-              color: values.color as TagColor,
-            })
+            try {
+              await onSubmit({
+                label: values.label,
+                slug: values.slug,
+                color: values.color as TagColor,
+              })
+            } catch (err) {
+              // Host toasts a summary and re-throws; map the BE's field-level
+              // 422 (e.g. duplicate slug) onto the inputs.
+              applyServerFieldErrors(err, setError, { fields: ["label", "slug", "color"] })
+            }
           })}
         >
           <div className="flex flex-col gap-1.5">

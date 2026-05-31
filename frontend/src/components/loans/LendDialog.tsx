@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { lendFormSchema, type LendFormInput } from "@/features/loans/schemas"
+import { applyServerFieldErrors } from "@/lib/form-errors"
 
 // LendSubmitValues normalises the form output to the shape callers
 // actually want — every field non-undefined string — so they don't
@@ -66,6 +67,7 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
     handleSubmit,
     register,
     reset,
+    setError,
   } = useForm<LendFormInput>({
     resolver: zodResolver(lendFormSchema),
     defaultValues: buildDefaults(),
@@ -92,13 +94,26 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
           // when a <input type="date"> has an empty/edge value.
           noValidate
           onSubmit={handleSubmit(async (values) => {
-            await onSubmit({
-              borrower_name: values.borrower_name,
-              borrower_contact: values.borrower_contact ?? "",
-              borrower_note: values.borrower_note ?? "",
-              lent_at: values.lent_at,
-              due_back_at: values.due_back_at ?? "",
-            })
+            try {
+              await onSubmit({
+                borrower_name: values.borrower_name,
+                borrower_contact: values.borrower_contact ?? "",
+                borrower_note: values.borrower_note ?? "",
+                lent_at: values.lent_at,
+                due_back_at: values.due_back_at ?? "",
+              })
+            } catch (err) {
+              // Host toasts a summary and re-throws; map field-level 422s.
+              applyServerFieldErrors(err, setError, {
+                fields: [
+                  "borrower_name",
+                  "borrower_contact",
+                  "borrower_note",
+                  "lent_at",
+                  "due_back_at",
+                ],
+              })
+            }
           })}
         >
           <div className="flex flex-col gap-1.5">

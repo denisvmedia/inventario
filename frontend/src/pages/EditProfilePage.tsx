@@ -41,6 +41,7 @@ import {
 } from "@/features/auth/schemas"
 import { useAppToast } from "@/hooks/useAppToast"
 import { HttpError } from "@/lib/http"
+import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
@@ -146,7 +147,17 @@ export function EditProfilePage() {
       // save and see a "Profile updated" banner.
       setProfileSaved(true)
     } catch (err) {
-      setProfileError(classifyServerError(err, t("settings:profile.edit.errorGeneric")))
+      // Map BE field validation onto the inputs (server uses snake_case
+      // `default_group_id`; the form field is camelCase `defaultGroupId`).
+      const fieldResult = applyServerFieldErrors(err, profileForm.setError, {
+        fields: Object.keys(profileEditSchema.shape),
+        map: { default_group_id: "defaultGroupId" },
+      })
+      setProfileError(
+        shouldShowGenericError(fieldResult)
+          ? classifyServerError(err, t("settings:profile.edit.errorGeneric"))
+          : null
+      )
     }
   }
 

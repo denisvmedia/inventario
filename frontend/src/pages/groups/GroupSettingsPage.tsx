@@ -62,6 +62,7 @@ import {
 } from "@/features/group/schemas"
 import { useAppToast } from "@/hooks/useAppToast"
 import { HttpError } from "@/lib/http"
+import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -342,7 +343,14 @@ function InfoSection({
       })
       toast.success(t("groups:settings.saved"))
     } catch (err) {
-      setServerError(parseServerError(err, t("groups:settings.errorGeneric")))
+      const fieldResult = applyServerFieldErrors(err, form.setError, {
+        fields: Object.keys(updateGroupSchema.shape),
+      })
+      setServerError(
+        shouldShowGenericError(fieldResult)
+          ? parseServerError(err, t("groups:settings.errorGeneric"))
+          : null
+      )
     }
   }
 

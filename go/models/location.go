@@ -62,9 +62,12 @@ func (*Location) Validate() error {
 func (a *Location) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
+	// Address is intentionally optional: a location may be a bare label
+	// ("Garage", "Storage unit") with no street address. The DB column is
+	// NOT NULL but an empty string satisfies it, so no migration is needed.
+	// The frontend form surfaces address as optional too.
 	fields = append(fields,
 		validation.Field(&a.Name, rules.NotEmpty),
-		validation.Field(&a.Address, rules.NotEmpty),
 	)
 
 	return validation.ValidateStructWithContext(ctx, a, fields...)

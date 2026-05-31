@@ -212,6 +212,9 @@ export function MaintenanceTab({ commodityId, commodityCount }: MaintenanceTabPr
                 t("maintenance:toast.saveError", { defaultValue: "Couldn't save the schedule." })
               )
             )
+            // Re-throw so the dialog can map field-level 422 errors onto its
+            // inputs (it stays open). The toast above is the summary.
+            throw err
           }
         }}
         submitting={create.isPending || update.isPending}

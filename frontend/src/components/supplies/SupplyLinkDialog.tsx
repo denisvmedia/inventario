@@ -21,6 +21,7 @@ import {
   type SupplyLinkFormValues,
 } from "@/features/supplies/schemas"
 import type { SupplyLinkEntity } from "@/features/supplies/api"
+import { applyServerFieldErrors } from "@/lib/form-errors"
 
 export type { SupplyLinkFormValues } from "@/features/supplies/schemas"
 
@@ -59,6 +60,7 @@ export function SupplyLinkDialog({
     handleSubmit,
     register,
     reset,
+    setError,
   } = useForm<SupplyLinkFormInput>({
     resolver: zodResolver(supplyLinkFormSchema),
     defaultValues: emptyDefaults,
@@ -96,11 +98,18 @@ export function SupplyLinkDialog({
           className="flex flex-col gap-4"
           noValidate
           onSubmit={handleSubmit(async (values) => {
-            await onSubmit({
-              label: values.label.trim(),
-              url: values.url.trim(),
-              notes: values.notes ?? "",
-            })
+            try {
+              await onSubmit({
+                label: values.label.trim(),
+                url: values.url.trim(),
+                notes: values.notes ?? "",
+              })
+            } catch (err) {
+              // The host toasts a summary and re-throws; map the BE's
+              // field-level 422 onto the inputs so the offending field is
+              // highlighted instead of the user only getting a toast.
+              applyServerFieldErrors(err, setError, { fields: ["label", "url", "notes"] })
+            }
           })}
         >
           <div className="flex flex-col gap-1.5">
