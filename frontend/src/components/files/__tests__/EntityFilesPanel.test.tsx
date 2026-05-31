@@ -6,6 +6,7 @@ import { axe } from "jest-axe"
 
 import { EntityFilesPanel } from "@/components/files/EntityFilesPanel"
 import { GroupProvider } from "@/features/group/GroupContext"
+import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { fileHandlers, groupHandlers } from "@/test/handlers"
@@ -33,11 +34,13 @@ function renderPanel(
         path="/g/:groupSlug/commodities/:id"
         element={
           <GroupProvider>
-            <EntityFilesPanel
-              linkedEntityType={linkedEntityType}
-              linkedEntityId={COMMODITY}
-              onAttachClick={options.onAttachClick}
-            />
+            <ConfirmProvider>
+              <EntityFilesPanel
+                linkedEntityType={linkedEntityType}
+                linkedEntityId={COMMODITY}
+                onAttachClick={options.onAttachClick}
+              />
+            </ConfirmProvider>
           </GroupProvider>
         }
       />
@@ -122,37 +125,39 @@ describe("<EntityFilesPanel />", () => {
     expect(onAttachClick).toHaveBeenCalledTimes(1)
   })
 
-  it("opens a clicked photo in place (fullscreen viewer) instead of routing away (#1963)", async () => {
+  it("opens a clicked file in the side detail panel in place, not routing away (#1963)", async () => {
     const user = userEvent.setup()
+    const imageFile = {
+      title: "Living room",
+      path: "living-room",
+      ext: ".jpg",
+      mime_type: "image/jpeg",
+      category: "images" as const,
+      type: "image",
+      linked_entity_type: "location",
+      linked_entity_id: COMMODITY,
+      created_at: "2026-04-02T10:00:00Z",
+    }
     server.use(
       ...groupHandlers.list(groupFixture),
-      ...fileHandlers.list(
+      ...fileHandlers.list(SLUG, [{ id: "f-img", attributes: imageFile }], {
+        signed_urls: { "f-img": { url: "https://cdn.example/living-room.jpg" } },
+      }),
+      // The side panel fetches the file detail when opened.
+      ...fileHandlers.detail(
         SLUG,
-        [
-          {
-            id: "f-img",
-            attributes: {
-              title: "Living room",
-              path: "living-room",
-              ext: ".jpg",
-              mime_type: "image/jpeg",
-              category: "images",
-              type: "image",
-              linked_entity_type: "location",
-              linked_entity_id: COMMODITY,
-              created_at: "2026-04-02T10:00:00Z",
-            },
-          },
-        ],
-        { signed_urls: { "f-img": { url: "https://cdn.example/living-room.jpg" } } }
+        "f-img",
+        { id: "f-img", ...imageFile },
+        { url: "https://cdn.example/living-room.jpg" }
       )
     )
     renderPanel("location")
     const trigger = await screen.findByTestId("file-card-open-f-img")
     await user.click(trigger)
-    // The image opens in the fullscreen viewer right here — no navigation to
-    // the global /files/:id surface.
-    expect(await screen.findByTestId("file-image-viewer")).toBeInTheDocument()
+    // The right-side detail Sheet opens in place (no immediate fullscreen, no
+    // navigation to /files/:id).
+    expect(await screen.findByTestId("file-detail-sheet")).toBeInTheDocument()
+    expect(screen.queryByTestId("file-image-viewer")).not.toBeInTheDocument()
   })
 
   it("is axe-clean in the populated state", async () => {
