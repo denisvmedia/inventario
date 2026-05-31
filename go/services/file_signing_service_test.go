@@ -724,6 +724,112 @@ func TestFileSigningService_SessionBindingMatrix(t *testing.T) {
 	})
 }
 
+// TestFileSigningService_InlineDisposition is the heart of #1962's
+// backend: the inline ("Open in new tab") disposition must be folded into
+// the HMAC so it cannot be tampered with — you can't flip an attachment
+// URL to inline, nor strip inline off an inline URL, without breaking the
+// signature.
+func TestFileSigningService_InlineDisposition(t *testing.T) {
+	signingKey := []byte("test-signing-key-32-bytes-long!!")
+	service := services.NewFileSigningService(signingKey, 15*time.Minute)
+
+	const (
+		fileID  = "file-1"
+		fileExt = "pdf"
+		userID  = "user-1"
+	)
+
+	t.Run("inline URL carries disposition=inline and validates", func(t *testing.T) {
+		c := qt.New(t)
+
+		inlineURL, err := service.GenerateInlineSignedURL(fileID, fileExt, userID, "")
+		c.Assert(err, qt.IsNil)
+
+		parsed, err := url.Parse(inlineURL)
+		c.Assert(err, qt.IsNil)
+		c.Assert(parsed.Query().Get("disposition"), qt.Equals, "inline")
+
+		claims, err := service.ValidateSignedURL(parsed.Path, parsed.Query(), "")
+		c.Assert(err, qt.IsNil)
+		c.Assert(claims, qt.IsNotNil)
+		c.Assert(claims.FileID, qt.Equals, fileID)
+	})
+
+	t.Run("attachment URL has no disposition param and is byte-compatible", func(t *testing.T) {
+		c := qt.New(t)
+
+		attachmentURL, err := service.GenerateSignedURL(fileID, fileExt, userID, "")
+		c.Assert(err, qt.IsNil)
+
+		parsed, err := url.Parse(attachmentURL)
+		c.Assert(err, qt.IsNil)
+		// The default path stays exactly as pre-#1962: no disposition param.
+		c.Assert(parsed.Query().Get("disposition"), qt.Equals, "")
+
+		_, err = service.ValidateSignedURL(parsed.Path, parsed.Query(), "")
+		c.Assert(err, qt.IsNil)
+	})
+
+	t.Run("forcing inline onto an attachment URL is rejected", func(t *testing.T) {
+		c := qt.New(t)
+
+		attachmentURL, err := service.GenerateSignedURL(fileID, fileExt, userID, "")
+		c.Assert(err, qt.IsNil)
+		parsed, err := url.Parse(attachmentURL)
+		c.Assert(err, qt.IsNil)
+
+		// Attacker appends disposition=inline to a download-only URL.
+		q := parsed.Query()
+		q.Set("disposition", "inline")
+		_, err = service.ValidateSignedURL(parsed.Path, q, "")
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Equals, "invalid signature")
+	})
+
+	t.Run("stripping inline off an inline URL is rejected", func(t *testing.T) {
+		c := qt.New(t)
+
+		inlineURL, err := service.GenerateInlineSignedURL(fileID, fileExt, userID, "")
+		c.Assert(err, qt.IsNil)
+		parsed, err := url.Parse(inlineURL)
+		c.Assert(err, qt.IsNil)
+
+		q := parsed.Query()
+		q.Del("disposition")
+		_, err = service.ValidateSignedURL(parsed.Path, q, "")
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Equals, "invalid signature")
+	})
+
+	t.Run("inline URL inherits the session binding", func(t *testing.T) {
+		c := qt.New(t)
+
+		inlineURL, err := service.GenerateInlineSignedURL(fileID, fileExt, userID, "session-A")
+		c.Assert(err, qt.IsNil)
+		parsed, err := url.Parse(inlineURL)
+		c.Assert(err, qt.IsNil)
+
+		// Same binding validates; a foreign one is rejected.
+		_, err = service.ValidateSignedURL(parsed.Path, parsed.Query(), "session-A")
+		c.Assert(err, qt.IsNil)
+		_, err = service.ValidateSignedURL(parsed.Path, parsed.Query(), "session-B")
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Equals, "invalid signature")
+	})
+
+	t.Run("inline generation enforces the same required fields", func(t *testing.T) {
+		c := qt.New(t)
+
+		_, err := service.GenerateInlineSignedURL("", fileExt, userID, "")
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Equals, "file ID is required")
+
+		_, err = service.GenerateInlineSignedURL(fileID, "", userID, "")
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Equals, "file extension is required")
+	})
+}
+
 // TestFileSigningService_ThumbnailsCarryBinding ensures the thumbnail URL
 // path also inherits the binding so a leaked thumbnail URL can't be used
 // from a foreign session either.

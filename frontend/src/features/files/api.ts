@@ -18,7 +18,15 @@ export type FileCategoryCounts = Schema<"jsonapi.FileCategoryCounts">
 // (apiserver/files.go::generateSignedURLsForFiles) best-effort populates
 // this for every file the caller can see.
 export interface URLData {
+  // Attachment URL — forces a download (Content-Disposition: attachment).
   url: string
+  // Inline URL — serves the file for in-browser viewing ("Open in new
+  // tab", #1962). The BE only serves a true inline disposition for
+  // preview-safe MIME types (images / PDF / text) and downloads the rest,
+  // so it's always safe to point a new tab at this. Absent on older
+  // payloads or when signing the inline variant failed — callers fall
+  // back to `url`.
+  inline_url?: string
   thumbnails?: Record<string, string>
 }
 

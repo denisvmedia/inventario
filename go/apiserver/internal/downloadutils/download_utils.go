@@ -89,3 +89,30 @@ func SetStreamingHeaders(w http.ResponseWriter, contentType string, fileSize int
 		w.Header().Set("Content-Disposition", attachmentHeader)
 	}
 }
+
+// SetInlineStreamingHeaders sets HTTP headers for serving a file inline so
+// the browser renders it for viewing (the "Open in new tab" affordance,
+// #1962) instead of forcing a download.
+//
+// Differences from SetStreamingHeaders:
+//   - Content-Disposition is `inline`, so the browser displays the file
+//     rather than downloading it.
+//   - Cache-Control is `private` (not `no-store`), so the opened tab can
+//     actually render the bytes while keeping the response out of shared
+//     caches — the URL is session-bound and short-lived anyway.
+//   - X-Content-Type-Options: nosniff prevents the browser from
+//     re-interpreting the declared Content-Type (e.g. sniffing text/plain
+//     into HTML), which is the other half of the inline-XSS defence —
+//     callers MUST only reach this path for mimekit.IsInlineSafe types.
+func SetInlineStreamingHeaders(w http.ResponseWriter, contentType string, fileSize int64, filename string) {
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
+	w.Header().Set("Cache-Control", "private, max-age=0, must-revalidate")
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	if filename != "" {
+		inlineHeader := mimekit.FormatInlineContentDisposition(filename)
+		w.Header().Set("Content-Disposition", inlineHeader)
+	}
+}

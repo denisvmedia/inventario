@@ -19,6 +19,19 @@ var xmlContentTypes = []string{
 	"text/xml",
 }
 
+// inlineSafeContentTypes is the allowlist of content types we are willing
+// to serve with `Content-Disposition: inline` on the same-origin signed
+// file route (the "Open in new tab" affordance, #1962). It is deliberately
+// narrow: types the browser renders for viewing and that cannot execute
+// script in our origin. text/html and image/svg+xml are EXCLUDED on
+// purpose — they can carry active content and would be a stored-XSS vector
+// if rendered inline same-origin. Anything outside this set falls back to
+// an attachment download even when an inline serve was requested.
+var inlineSafeContentTypes = append(append(
+	[]string(nil),
+	imageContentTypes...,
+), "application/pdf", "text/plain")
+
 // INBMIMEType is the canonical media type for a signed `.inb` backup
 // archive (issue #534). The archive is an uncompressed outer tar, so a
 // content sniffer rarely identifies it as anything more specific than
@@ -69,6 +82,15 @@ var allContentTypes = append(append(append(
 
 func IsImage(contentType string) bool {
 	return slices.Contains(imageContentTypes, contentType)
+}
+
+// IsInlineSafe reports whether contentType may be served with
+// Content-Disposition: inline for in-browser viewing. Everything outside
+// the narrow allowlist (see inlineSafeContentTypes) must fall back to an
+// attachment download even when an inline serve was requested, so that
+// active content (HTML, SVG) can never execute in our origin.
+func IsInlineSafe(contentType string) bool {
+	return slices.Contains(inlineSafeContentTypes, contentType)
 }
 
 func IsDoc(contentType string) bool {
@@ -122,4 +144,15 @@ func FormatContentDisposition(filename string) string {
 		"filename": filename,
 	}
 	return mime.FormatMediaType("attachment", params)
+}
+
+// FormatInlineContentDisposition formats a Content-Disposition header that
+// asks the browser to render the file inline (for viewing in a new tab,
+// #1962) rather than download it. Callers MUST gate this on IsInlineSafe —
+// it is never correct to emit inline for active content (HTML / SVG).
+func FormatInlineContentDisposition(filename string) string {
+	params := map[string]string{
+		"filename": filename,
+	}
+	return mime.FormatMediaType("inline", params)
 }

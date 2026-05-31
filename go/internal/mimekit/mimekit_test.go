@@ -26,6 +26,29 @@ func TestIsDoc(t *testing.T) {
 	c.Assert(mimekit.IsDoc("text/plain"), qt.IsFalse)
 }
 
+func TestIsInlineSafe(t *testing.T) {
+	c := qt.New(t)
+
+	// Renderable, non-active content → safe to serve inline.
+	c.Assert(mimekit.IsInlineSafe("image/png"), qt.IsTrue)
+	c.Assert(mimekit.IsInlineSafe("image/jpeg"), qt.IsTrue)
+	c.Assert(mimekit.IsInlineSafe("image/gif"), qt.IsTrue)
+	c.Assert(mimekit.IsInlineSafe("image/webp"), qt.IsTrue)
+	c.Assert(mimekit.IsInlineSafe("application/pdf"), qt.IsTrue)
+	c.Assert(mimekit.IsInlineSafe("text/plain"), qt.IsTrue)
+
+	// Active content MUST NOT be inline-able — it would execute in our
+	// origin (stored-XSS). These are the security-critical assertions.
+	c.Assert(mimekit.IsInlineSafe("text/html"), qt.IsFalse)
+	c.Assert(mimekit.IsInlineSafe("image/svg+xml"), qt.IsFalse)
+	c.Assert(mimekit.IsInlineSafe("application/xhtml+xml"), qt.IsFalse)
+
+	// Opaque / binary types fall back to download.
+	c.Assert(mimekit.IsInlineSafe("application/zip"), qt.IsFalse)
+	c.Assert(mimekit.IsInlineSafe("application/octet-stream"), qt.IsFalse)
+	c.Assert(mimekit.IsInlineSafe(""), qt.IsFalse)
+}
+
 func TestExtensionByMime(t *testing.T) {
 	c := qt.New(t)
 
@@ -93,6 +116,27 @@ func TestFormatContentDisposition(t *testing.T) {
 			c := qt.New(t)
 
 			c.Assert(mimekit.FormatContentDisposition(tc.filename), qt.Equals, tc.expected)
+		})
+	}
+}
+
+func TestFormatInlineContentDisposition(t *testing.T) {
+	testCases := []struct {
+		name     string
+		filename string
+		expected string
+	}{
+		{"Simple", "photo.jpg", `inline; filename=photo.jpg`},
+		{"With spaces", "my document.pdf", `inline; filename="my document.pdf"`},
+		{"Unicode characters", "résumé.pdf", `inline; filename*=utf-8''r%C3%A9sum%C3%A9.pdf`},
+		{"Empty filename", "", `inline; filename=""`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			c.Assert(mimekit.FormatInlineContentDisposition(tc.filename), qt.Equals, tc.expected)
 		})
 	}
 }
