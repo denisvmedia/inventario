@@ -6,6 +6,14 @@ metadata:
   labels:
     {{- include "inventario.labels" . | nindent 4 }}
     app.kubernetes.io/component: demo-minio
+  annotations:
+    # Bring the demo MinIO up BEFORE the wave--6 bucket-create Job and the
+    # wave--5 bootstrap setup Job. The same #1884 ordering gap that the
+    # demo-postgres infra fixed at -7 (see postgresql-deployment.yaml): every
+    # demo-minio resource shares -7 so the Secret/PVC exist when the
+    # Deployment starts and MinIO is reachable when the bucket Job runs at -6.
+    # Inert under plain `helm install`.
+    argocd.argoproj.io/sync-wave: "-7"
 spec:
   replicas: 1
   strategy:

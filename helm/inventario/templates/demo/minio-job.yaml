@@ -7,8 +7,19 @@ metadata:
     {{- include "inventario.labels" . | nindent 4 }}
     app.kubernetes.io/component: demo-minio
   annotations:
+    {{- if .Values.setupJob.argocdMode }}
+    # ArgoCD: a Helm post-install hook becomes a PostSync hook that runs AFTER
+    # the Sync-phase init-data seed Job (sync-wave +5) — so the bucket wouldn't
+    # exist when the seed writes blob bytes, leaving size_bytes=0 file rows.
+    # Create the bucket as an early Sync-wave resource instead: after the MinIO
+    # Deployment (-7), before setup/migrations (-5) and the init-data seed (+5).
+    # The mc container's `until mc alias set … sleep 2` loop waits for MinIO.
+    argocd.argoproj.io/sync-wave: "-6"
+    argocd.argoproj.io/sync-options: "Force=true,Replace=true"
+    {{- else }}
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    {{- end }}
 spec:
   backoffLimit: 6
   template:
