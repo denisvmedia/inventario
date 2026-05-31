@@ -18,12 +18,16 @@ import { cn } from "@/lib/utils"
 // its clicks don't bubble into the row activation handler.
 export interface FileListRowProps {
   file: FileEntity & { id: string }
-  selected: boolean
-  onToggleSelect: (id: string) => void
+  // Selection is optional: when `onToggleSelect` is omitted the row
+  // renders without a checkbox (read-only), mirroring FileCard — so the
+  // same row works on the bulk-select Files page and on the
+  // checkbox-free entity-detail surfaces (#1966).
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
   onOpen: (id: string) => void
 }
 
-export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileListRowProps) {
+export function FileListRow({ file, selected = false, onToggleSelect, onOpen }: FileListRowProps) {
   const { t } = useTranslation()
   const labelOf = useCategoryLabel()
   const tagLabelOf = useTagPillLabel()
@@ -51,6 +55,9 @@ export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileList
   const visual = getFileVisualMeta(file)
   const LeadingIcon = visual.icon
   const openLabel = t("files:list.openDetail", { title, defaultValue: `Open ${title}` })
+  // When no selection handler is wired, drop the checkbox column (and
+  // its leading grid track) so the row collapses cleanly to 5 columns.
+  const showCheckbox = !!onToggleSelect
 
   return (
     <li>
@@ -60,19 +67,24 @@ export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileList
           else (icon / Name+meta / Category badge / Uploaded / Size). */}
       <div
         className={cn(
-          "hidden grid-cols-[auto_auto_1fr_auto_auto_auto] items-center gap-4 px-4 transition-colors sm:grid",
+          "hidden items-center gap-4 px-4 transition-colors sm:grid",
+          showCheckbox
+            ? "grid-cols-[auto_auto_1fr_auto_auto_auto]"
+            : "grid-cols-[auto_1fr_auto_auto_auto]",
           selected ? "bg-accent" : "hover:bg-muted/40"
         )}
         data-testid={`file-row-${file.id}`}
         data-category={file.category}
         data-mime-group={visual.group}
       >
-        <Checkbox
-          checked={selected}
-          onCheckedChange={() => onToggleSelect(file.id)}
-          aria-label={t("files:list.selectFile", { title, defaultValue: `Select ${title}` })}
-          data-testid={`file-row-checkbox-${file.id}`}
-        />
+        {showCheckbox ? (
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onToggleSelect?.(file.id)}
+            aria-label={t("files:list.selectFile", { title, defaultValue: `Select ${title}` })}
+            data-testid={`file-row-checkbox-${file.id}`}
+          />
+        ) : null}
         <button
           type="button"
           onClick={() => onOpen(file.id)}
@@ -139,12 +151,14 @@ export function FileListRow({ file, selected, onToggleSelect, onOpen }: FileList
           selected ? "bg-accent" : "active:bg-muted/40"
         )}
       >
-        <Checkbox
-          checked={selected}
-          onCheckedChange={() => onToggleSelect(file.id)}
-          aria-label={t("files:list.selectFile", { title, defaultValue: `Select ${title}` })}
-          className="mt-0.5"
-        />
+        {showCheckbox ? (
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onToggleSelect?.(file.id)}
+            aria-label={t("files:list.selectFile", { title, defaultValue: `Select ${title}` })}
+            className="mt-0.5"
+          />
+        ) : null}
         <button
           type="button"
           onClick={() => onOpen(file.id)}

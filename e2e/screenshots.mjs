@@ -182,7 +182,7 @@ async function captureQuickAttach(pageTestId, prefix, entityName) {
     ? '[data-testid="commodity-files-upload-zone"]'
     : '[data-testid="entity-files-panel-attach"]'
   const postUploadSelector = isCommodity
-    ? '[data-testid="commodity-files-photo-grid"], [data-testid="commodity-files-list"]'
+    ? '[data-testid="commodity-files-grid"], [data-testid="commodity-files-list"]'
     : '[data-testid="entity-files-panel-grid"]'
   const attachBtn = page.locator(attachSelector)
   if ((await attachBtn.count()) === 0) {

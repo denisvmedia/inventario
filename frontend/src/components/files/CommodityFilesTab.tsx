@@ -1,62 +1,43 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  ExternalLink,
   File as FileIcon,
   FileText,
   Image as ImageIcon,
   Paperclip,
   Receipt,
-  Star,
-  Trash2,
   Upload,
 } from "lucide-react"
 
+import { FileCollection } from "@/components/files/FileCollection"
 import { FilePreviewDialog } from "@/components/files/FilePreviewDialog"
+import { FileViewToggle } from "@/components/files/FileViewToggle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useDeleteFile, useFiles } from "@/features/files/hooks"
-import type { FileCategory, ListedFile } from "@/features/files/api"
-import { isImageMime, isPdfMime } from "@/features/files/constants"
+import type { ListedFile } from "@/features/files/api"
+import { useFilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
-import { formatBytes } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
-// CommodityFilesTab is the Commodity-detail Files tab redesigned to
-// match the design mock (`design-mocks/src/components/ItemDetail.tsx`,
-// `<TabsContent value="files">`):
+// CommodityFilesTab is the Commodity-detail Files tab. It keeps the
+// segmented chip-bar (All / Images / Invoices / Documents / Other) and
+// the contextual upload zone from the design mock
+// (`design-mocks/src/components/ItemDetail.tsx`), but renders the
+// chip-filtered set through the shared `FileCollection` (FileCard grid /
+// FileListRow list) with a grid/list toggle — so a file looks and
+// behaves the same here as on the global Files page and the
+// location/area panel (#1966). The previous bespoke split (a square
+// PhotoGrid for images + a separate NonPhotoList for documents shown at
+// once) is gone.
 //
-// 1. Segmented chip-bar — `flex items-center gap-1 rounded-lg
-//    bg-muted/50 p-1`. All / Images / Invoices / Documents / Other.
-//    Each chip carries a count badge when > 0, derived client-side
-//    from the loaded set so toggling chips does NOT refetch.
-// 2. Contextual upload zone — dashed-border CTA whose copy reflects
-//    the active chip ("Drop images…" / "Drop invoices…" / etc.).
-//    Clicking opens the page-level upload dialog via `onAttachClick`;
-//    the page already owns the drag-drop overlay so we don't need a
-//    second drop catcher here.
-// 3. 3-column photo grid — `grid grid-cols-3 gap-1.5`, aspect-square
-//    thumbnails, hover-reveal cover star + delete button.
-// 4. Non-photo list — vertical list with mime-aware icon, title /
-//    size / tags + per-row CTA (View / Open / Download). The CTA
-//    button is the click target; tag pills + delete affordance live
-//    inline so a wrapping <button> would interleave nested
-//    interactive elements. Clicking View / Open opens the inline
-//    `FilePreviewDialog` (image fullscreen viewer for images, PDF
-//    canvas viewer for PDFs, small metadata + Download dialog for
-//    everything else) — mock parity with
-//    `design-mocks/src/components/FilePreviewDialog.tsx`. Download
-//    on non-previewable rows triggers a real browser download
-//    against the signed URL.
-// 5. Empty state — chip-aware copy.
+// Clicking a file opens the in-place `FilePreviewDialog` (the user stays
+// on the commodity detail page) — image fullscreen viewer for images,
+// PDF canvas viewer for PDFs, a small metadata + Download dialog for
+// everything else. Delete happens from inside that dialog.
 //
-// `EntityFilesPanel` is unchanged — `LocationDetailPage` still uses
-// it. This component is commodity-specific because the chip-bar is
-// the mock contract for that surface only.
 // Chip IDs map 1:1 to the BE `FileCategory` enum, with one synthetic
 // `invoices` chip retained for UX continuity (post-#1622 the `invoices`
 // FileCategory is gone, but a per-commodity "show me invoices" affordance
@@ -68,14 +49,13 @@ interface ChipDef {
   id: FilesTabCategory
   // i18n key under `commodities:detail.filesTab.chip`; passed to t().
   labelKey: "all" | "images" | "invoices" | "documents" | "other"
-  // Lucide icon component. Rendered inside the chip + the empty
-  // state.
+  // Lucide icon component. Rendered inside the chip + the empty state.
   icon: typeof Paperclip
-  // i18n key under `commodities:detail.filesTab` for the empty-state
-  // copy when the chip's bucket is empty.
+  // i18n key under `commodities:detail.filesTab` for the empty-state copy
+  // when the chip's bucket is empty.
   emptyKey: "emptyAll" | "emptyImages" | "emptyInvoices" | "emptyDocuments" | "emptyOther"
-  // i18n key under `commodities:detail.filesTab` for the upload-zone
-  // copy when this chip is active.
+  // i18n key under `commodities:detail.filesTab` for the upload-zone copy
+  // when this chip is active.
   dropKey: "dropFiles" | "dropImages" | "dropInvoices" | "dropDocuments"
 }
 
@@ -104,11 +84,11 @@ const CHIPS: ChipDef[] = [
   },
   {
     // Inventario's `models.FileCategory` enum has an `other` bucket
-    // alongside images / invoices / documents. The mock omits it but
-    // we surface it here so files that don't fit the three primary
-    // chips remain reachable from a dedicated tab — the upload zone
-    // falls back to the generic dropFiles copy because there is no
-    // "drop other-files" affordance worth distinguishing.
+    // alongside images / invoices / documents. The mock omits it but we
+    // surface it here so files that don't fit the three primary chips
+    // remain reachable from a dedicated tab — the upload zone falls back
+    // to the generic dropFiles copy because there is no "drop
+    // other-files" affordance worth distinguishing.
     id: "other",
     labelKey: "other",
     icon: FileIcon,
@@ -117,29 +97,26 @@ const CHIPS: ChipDef[] = [
   },
 ]
 
-// Per-page cap for the underlying `useFiles({ linkedEntity… })`
-// query. The chip-bar derives counts from the loaded set, so this
-// also caps the count displayed; 100 is well above the realistic
-// per-commodity attachment count and keeps a single round-trip
-// covering all four chips. If a future commodity blows past this,
-// the chip-bar count will be capped at 100 and only the loaded
-// rows render — consistent with how the global Files page handles
-// pagination today.
+// Per-page cap for the underlying `useFiles({ linkedEntity… })` query.
+// The chip-bar derives counts from the loaded set, so this also caps the
+// count displayed; 100 is well above the realistic per-commodity
+// attachment count and keeps a single round-trip covering all chips.
 const PAGE_SIZE = 100
 
 export interface CommodityFilesTabProps {
   commodityId: string
   // Opens the page-level UploadFilesDialog with the commodity
-  // preselected. The page also exposes a drag-drop overlay that
-  // opens the same dialog with files preloaded — see
-  // `CommodityDetailPage`'s `useFileDropZone` wiring.
+  // preselected. The page also exposes a drag-drop overlay that opens the
+  // same dialog with files preloaded — see `CommodityDetailPage`'s
+  // `useFileDropZone` wiring.
   onAttachClick: () => void
-  // Cover-photo wiring (issue #1451 option B) — propagates through
-  // to the per-photo star button. When omitted, the star is hidden.
+  // Cover-photo wiring (issue #1451 option B) — forwarded to FileCard's
+  // per-photo star button (grid view, image cards only). When omitted,
+  // the star is hidden.
   coverState?: { current?: string; auto?: string }
   onSetCover?: (fileId: string | null) => void
-  // True while the cover mutation is inflight — disables the star
-  // to prevent double-clicks from racing the optimistic cache update.
+  // True while the cover mutation is inflight — disables the star to
+  // prevent double-clicks from racing the optimistic cache update.
   coverBusy?: boolean
 }
 
@@ -158,35 +135,34 @@ export function CommodityFilesTab({
   const deleteMutation = useDeleteFile()
 
   const [activeChip, setActiveChip] = useState<FilesTabCategory>("all")
-  // Currently-open file for the inline FilePreviewDialog (mock parity
-  // — clicking a row / photo opens the preview overlay rather than
-  // navigating away from the commodity detail page). `null` means
-  // closed. Holding the full ListedFile (file + signedUrl) lets the
+  // Grid/list toggle, shared with the location/area panel via the same
+  // localStorage key (entity-detail surfaces default to grid).
+  const [viewMode, setViewMode] = useFilesViewMode("files:entityViewMode", "grid")
+  // Currently-open file for the inline FilePreviewDialog — clicking a
+  // file opens the preview overlay rather than navigating away. `null`
+  // means closed. Holding the full ListedFile (file + signedUrl) lets the
   // dialog branch on MIME without a re-fetch.
   const [previewFile, setPreviewFile] = useState<ListedFile | null>(null)
 
-  // Single query fans the five chips; client-side filtering keeps
-  // chip-toggle latency at zero. The badge query in
-  // `CommodityDetailPage` uses `perPage=1` to fetch only `meta.total`
-  // — it lives in a different cache slot from this one, on purpose
-  // (the badge round-trip stays cheap; this query loads up to
-  // `PAGE_SIZE` rows so the chip-bar / grid / list have data).
+  // Single query fans all chips; client-side filtering keeps chip-toggle
+  // latency at zero. The badge query in `CommodityDetailPage` uses
+  // perPage=1 to fetch only meta.total and lives in a different cache
+  // slot on purpose.
   const filesQuery = useFiles(
     { linkedEntityType: "commodity", linkedEntityId: commodityId, perPage: PAGE_SIZE },
     { enabled: !!commodityId && !!slug }
   )
   // Stable reference for downstream useMemo deps — a `?? []` fallback
-  // would mint a fresh array each render and bust the count + visible
-  // memos every time.
+  // would mint a fresh array each render and bust the memos every time.
   const files = useMemo(() => filesQuery.data?.files ?? [], [filesQuery.data?.files])
 
   const counts = useMemo(() => deriveCounts(files), [files])
 
   const visible = useMemo(() => {
     if (activeChip === "all") return files
-    // Post-#1622: the "invoices" chip filters by the `invoice` tag —
-    // the FileCategory enum dropped its `invoices` value. Every other
-    // chip still matches BE FileCategory 1:1.
+    // Post-#1622: the "invoices" chip filters by the `invoice` tag — the
+    // FileCategory enum dropped its `invoices` value. Every other chip
+    // still matches BE FileCategory 1:1.
     if (activeChip === "invoices") {
       return files.filter(
         (row) => Array.isArray(row.file.tags) && row.file.tags.includes("invoice")
@@ -195,24 +171,9 @@ export function CommodityFilesTab({
     return files.filter((row) => row.file.category === activeChip)
   }, [files, activeChip])
 
-  // Photos: rendered as the photo grid in "all" or "images". Other
-  // chips skip the grid because their bucket can't carry a photo.
-  const photos = useMemo(() => visible.filter((row) => row.file.category === "images"), [visible])
-  // Non-photos: rendered as the list in every chip except "images"
-  // (photo-only view doesn't show anything else).
-  const nonPhotos = useMemo(
-    () => visible.filter((row) => row.file.category !== "images"),
-    [visible]
-  )
-  const showGallery = (activeChip === "all" || activeChip === "images") && photos.length > 0
-  const showList = activeChip !== "images" && nonPhotos.length > 0
-
-  // Open the inline preview overlay for the row identified by id.
-  // Mock parity (design-mocks/src/components/FilePreviewDialog.tsx):
-  // image MIMEs land in the fullscreen ImageViewer, PDFs in a
-  // fullscreen Dialog with PdfViewer, everything else in a small
-  // metadata + Download dialog. The user stays on the commodity
-  // detail page; closing the dialog returns focus to the row.
+  // Open the inline preview overlay for the row identified by id. The
+  // user stays on the commodity detail page; closing the dialog returns
+  // focus to the file.
   function handleOpen(fileId: string) {
     const row = files.find((r) => r.file.id === fileId)
     if (!row) return
@@ -247,9 +208,9 @@ export function CommodityFilesTab({
   return (
     <>
       <div className="flex flex-col gap-3" data-testid="commodity-detail-files">
-        {/* Chip bar — `flex items-center gap-1 rounded-lg bg-muted/50
-          p-1` segmented control lifted from the mock. Each chip
-          renders an icon + (responsive) label + count badge. */}
+        {/* Chip bar — `flex items-center gap-1 rounded-lg bg-muted/50 p-1`
+          segmented control lifted from the mock. Each chip renders an
+          icon + (responsive) label + count badge. */}
         <div
           role="tablist"
           aria-label={t("commodities:detail.tabs.files")}
@@ -298,10 +259,10 @@ export function CommodityFilesTab({
           })}
         </div>
 
-        {/* Upload zone — dashed-border CTA. Click opens the upload
-          dialog via the parent. Drop is owned by the page-level
-          `<DropOverlay>` wired in CommodityDetailPage so a second
-          drop catcher here would just fight that one. */}
+        {/* Upload zone — dashed-border CTA. Click opens the upload dialog
+          via the parent. Drop is owned by the page-level `<DropOverlay>`
+          wired in CommodityDetailPage so a second drop catcher here would
+          just fight that one. */}
         <button
           type="button"
           onClick={onAttachClick}
@@ -328,12 +289,19 @@ export function CommodityFilesTab({
           </Alert>
         ) : filesQuery.isLoading ? (
           <div
-            className="grid grid-cols-3 gap-1.5"
+            className={cn(
+              viewMode === "grid"
+                ? "grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+                : "space-y-1"
+            )}
             data-testid="commodity-files-loading"
             aria-busy="true"
           >
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="aspect-square w-full rounded-lg" />
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton
+                key={i}
+                className={viewMode === "grid" ? "aspect-[4/3] w-full" : "h-12 w-full"}
+              />
             ))}
           </div>
         ) : visible.length === 0 ? (
@@ -348,24 +316,22 @@ export function CommodityFilesTab({
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {showGallery ? (
-              <PhotoGrid
-                photos={photos}
-                onOpen={handleOpen}
-                onDelete={handleDelete}
-                coverState={coverState}
-                onSetCover={onSetCover}
-                coverBusy={coverBusy}
+            <div className="flex justify-end">
+              <FileViewToggle
+                value={viewMode}
+                onChange={setViewMode}
+                testIdPrefix="commodity-files-view"
               />
-            ) : null}
-            {showList ? (
-              <NonPhotoList
-                rows={nonPhotos}
-                showCategoryPill={activeChip === "all"}
-                onOpen={handleOpen}
-                onDelete={handleDelete}
-              />
-            ) : null}
+            </div>
+            <FileCollection
+              items={visible}
+              viewMode={viewMode}
+              onOpen={handleOpen}
+              coverState={coverState}
+              onSetCover={onSetCover}
+              coverBusy={coverBusy}
+              idPrefix="commodity-files"
+            />
           </div>
         )}
       </div>
@@ -378,258 +344,13 @@ export function CommodityFilesTab({
   )
 }
 
-interface PhotoGridProps {
-  photos: ListedFile[]
-  onOpen: (id: string) => void
-  onDelete: (file: ListedFile["file"]) => void
-  coverState?: { current?: string; auto?: string }
-  onSetCover?: (fileId: string | null) => void
-  coverBusy?: boolean
-}
-
-function PhotoGrid({
-  photos,
-  onOpen,
-  onDelete,
-  coverState,
-  onSetCover,
-  coverBusy = false,
-}: PhotoGridProps) {
-  const { t } = useTranslation()
-  return (
-    <ul className="grid grid-cols-3 gap-1.5" data-testid="commodity-files-photo-grid">
-      {photos.map(({ file, signedUrl }) => {
-        const title = file.title?.trim() || file.path?.trim() || file.id
-        // Photo grid cells are `aspect-square w-full` in a 3-column grid
-        // (~200–300px wide), so the 150px `small` variant would upscale
-        // and blur — prefer `medium` (300px), then fall back.
-        const thumbUrl =
-          signedUrl?.thumbnails?.medium ??
-          signedUrl?.thumbnails?.small ??
-          signedUrl?.thumbnails?.large ??
-          signedUrl?.url
-        const isExplicit = onSetCover && coverState?.current === file.id
-        const isAutoPick = onSetCover && !coverState?.current && coverState?.auto === file.id
-        const showStar = !!onSetCover
-        const starLabel = isExplicit
-          ? t("files:cover.clearLabel", { defaultValue: "Clear cover" })
-          : isAutoPick
-            ? t("files:cover.pinLabel", { defaultValue: "Pin as cover" })
-            : t("files:cover.setLabel", { defaultValue: "Set as cover" })
-        return (
-          <li key={file.id} className="relative">
-            <button
-              type="button"
-              onClick={() => onOpen(file.id)}
-              aria-label={t("files:list.openDetail", {
-                title,
-                defaultValue: `Open ${title}`,
-              })}
-              className={cn(
-                "group relative aspect-square w-full overflow-hidden rounded-lg border border-border bg-muted",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              )}
-              data-testid={`commodity-files-photo-${file.id}`}
-            >
-              {thumbUrl ? (
-                <img
-                  src={thumbUrl}
-                  alt={title}
-                  loading="lazy"
-                  className="absolute inset-0 size-full object-cover"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <ImageIcon className="size-8 text-muted-foreground/30" aria-hidden="true" />
-                </div>
-              )}
-              {/* Hover overlay — surfaces the title only when the
-                  user hovers; keeps the grid clean otherwise. */}
-              <div className="absolute inset-0 flex items-end p-1.5 opacity-0 transition-colors group-hover:bg-black/30 group-hover:opacity-100">
-                <p className="truncate text-[10px] font-medium leading-tight text-white">{title}</p>
-              </div>
-            </button>
-            {showStar ? (
-              <Button
-                type="button"
-                size="icon"
-                variant={isExplicit ? "default" : "outline"}
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  if (!onSetCover || coverBusy) return
-                  onSetCover(isExplicit ? null : file.id)
-                }}
-                disabled={coverBusy}
-                aria-label={starLabel}
-                aria-pressed={!!isExplicit}
-                title={starLabel}
-                className={cn(
-                  "absolute left-1 top-1 z-10 size-6 rounded-full bg-background/90 backdrop-blur",
-                  !isExplicit &&
-                    !isAutoPick &&
-                    "opacity-0 transition-opacity hover:opacity-100 focus:opacity-100"
-                )}
-                data-testid={`commodity-files-photo-cover-${file.id}`}
-              >
-                <Star
-                  className={cn("size-3", isExplicit ? "fill-current" : "")}
-                  aria-hidden="true"
-                />
-              </Button>
-            ) : null}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onDelete(file)
-              }}
-              aria-label={t("files:detail.delete")}
-              title={t("files:detail.delete")}
-              className={cn(
-                "absolute right-1 top-1 z-10 flex size-5 items-center justify-center rounded-full bg-black/60 text-white transition-all",
-                "opacity-0 hover:bg-destructive group-hover:opacity-100 focus-visible:opacity-100",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              )}
-              data-testid={`commodity-files-photo-delete-${file.id}`}
-            >
-              <Trash2 className="size-2.5" aria-hidden="true" />
-            </button>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-interface NonPhotoListProps {
-  rows: ListedFile[]
-  showCategoryPill: boolean
-  onOpen: (id: string) => void
-  onDelete: (file: ListedFile["file"]) => void
-}
-
-function NonPhotoList({ rows, showCategoryPill, onOpen, onDelete }: NonPhotoListProps) {
-  const { t } = useTranslation()
-  return (
-    <ul className="flex flex-col gap-1.5" data-testid="commodity-files-list">
-      {rows.map(({ file, signedUrl }) => {
-        const title = file.title?.trim() || file.path?.trim() || file.id
-        const ctaKey = previewLabelKey(file.mime_type)
-        const Icon = mimeIconFor(file.mime_type, file.category, file.tags ?? undefined)
-        // Download CTA promises a real browser download — wire it as
-        // an <a download href={signedUrl}> via Button asChild so the
-        // user gets the file directly instead of bouncing through
-        // FileDetailSheet. View / Open keep the existing
-        // navigate-to-sheet path because the sheet is what renders
-        // the inline image / PDF viewer. Falls back to the sheet
-        // when the BE didn't ship a signed URL on the list row.
-        const isDownload = ctaKey === "ctaDownload"
-        const downloadUrl = isDownload ? signedUrl?.url : undefined
-        return (
-          <li
-            key={file.id}
-            className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
-            data-testid={`commodity-files-row-${file.id}`}
-          >
-            <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <p className="truncate text-sm font-medium" title={title}>
-                  {title}
-                </p>
-                {showCategoryPill && file.category ? (
-                  <span
-                    className={cn(
-                      "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                      categoryPillTone(file.category)
-                    )}
-                  >
-                    {t(`files:category${capitalize(file.category)}`)}
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-0.5 flex items-center gap-2">
-                {file.size_bytes !== undefined ? (
-                  <span className="text-xs text-muted-foreground">
-                    {formatBytes(file.size_bytes)}
-                  </span>
-                ) : null}
-                {file.tags?.slice(0, 3).map((tag) => (
-                  <Badge key={tag} variant="secondary" className="h-4 px-1.5 text-[10px]">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              {downloadUrl ? (
-                // `Button asChild` forwards the props it doesn't own to
-                // its child via Radix Slot, so adding `type="button"`
-                // here would emit invalid HTML (`<a type="button">`)
-                // and confuse some browsers' download heuristics. We
-                // drop it and let the anchor render as-is. Same pattern
-                // as the download links in `FileDetailSheet` /
-                // `PdfViewer` / `FilePreviewDialog`: no `target="_blank"`
-                // — `download` is the cue the browser needs to keep
-                // navigation in the same tab and trigger a save.
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs"
-                  data-testid={`commodity-files-row-open-${file.id}`}
-                >
-                  <a
-                    href={downloadUrl}
-                    download={file.original_path || file.path || title}
-                    rel="noopener noreferrer"
-                  >
-                    {t("commodities:detail.filesTab.ctaDownload")}
-                    <ExternalLink className="size-3" aria-hidden="true" />
-                  </a>
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs"
-                  onClick={() => onOpen(file.id)}
-                  data-testid={`commodity-files-row-open-${file.id}`}
-                >
-                  {t(`commodities:detail.filesTab.${ctaKey}`)}
-                  <ExternalLink className="size-3" aria-hidden="true" />
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => onDelete(file)}
-                aria-label={t("files:detail.delete")}
-                title={t("files:detail.delete")}
-                data-testid={`commodity-files-row-delete-${file.id}`}
-              >
-                <Trash2 className="size-3.5" aria-hidden="true" />
-              </Button>
-            </div>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
 // deriveCounts collapses a loaded file set into the five chip counts.
 // `all` is the total; `images` / `documents` / `other` match the BE
 // `models.FileCategory` enum 1:1. The `invoices` chip is a synthetic
-// tag-based filter (post-#1622) — it counts files carrying the
-// `invoice` tag regardless of category (they live in `documents` now).
-// A file can be in both `documents` (its category bucket) and
-// `invoices` (its tag-based view); the two counts overlap on purpose.
+// tag-based filter (post-#1622) — it counts files carrying the `invoice`
+// tag regardless of category (they live in `documents` now). A file can
+// be in both `documents` (its category bucket) and `invoices` (its
+// tag-based view); the two counts overlap on purpose.
 function deriveCounts(rows: ListedFile[]): Record<FilesTabCategory, number> {
   const counts: Record<FilesTabCategory, number> = {
     all: rows.length,
@@ -648,48 +369,4 @@ function deriveCounts(rows: ListedFile[]): Record<FilesTabCategory, number> {
     }
   }
   return counts
-}
-
-// previewLabelKey picks the View / Open / Download CTA copy based
-// on the file's MIME — image gets "View" (opens the inline image
-// viewer), PDF gets "Open" (browser native viewer), everything
-// else gets "Download" (the only meaningful action). Keys map to
-// `commodities:detail.filesTab.{ctaView,ctaOpen,ctaDownload}`.
-function previewLabelKey(mime: string | undefined): "ctaView" | "ctaOpen" | "ctaDownload" {
-  if (isImageMime(mime)) return "ctaView"
-  if (isPdfMime(mime)) return "ctaOpen"
-  return "ctaDownload"
-}
-
-function mimeIconFor(
-  mime: string | undefined,
-  category: FileCategory | undefined,
-  tags?: string[]
-): typeof Paperclip {
-  // Post-#1622 `invoices` is a tag, not a category — the Receipt glyph
-  // tracks the tag so an invoice-tagged document still reads as an
-  // invoice in the row.
-  if (Array.isArray(tags) && tags.includes("invoice")) return Receipt
-  if (category === "documents" || isPdfMime(mime)) return FileText
-  if (isImageMime(mime)) return ImageIcon
-  return FileIcon
-}
-
-// categoryPillTone resolves the category-pill background, mirroring
-// the mock's chart-token usage 1:1
-// (`design-mocks/src/components/ItemDetail.tsx` lines 341–346):
-// documents borrow `chart-3`. Other categories (and any future bucket)
-// fall back to the muted chrome so a typo or new enum value doesn't
-// fail the build silently.
-function categoryPillTone(category: FileCategory): string {
-  switch (category) {
-    case "documents":
-      return "bg-chart-3/10 text-chart-3"
-    default:
-      return "bg-muted text-foreground"
-  }
-}
-
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1)
 }

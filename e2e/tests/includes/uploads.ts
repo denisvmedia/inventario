@@ -180,12 +180,16 @@ export async function expectCommodityFilesCount(page: Page, expected: number): P
     await expect(page.getByTestId('commodity-files-empty')).toBeVisible({ timeout: 15_000 })
     return
   }
-  const grid = page.getByTestId('commodity-files-photo-grid')
+  const grid = page.getByTestId('commodity-files-grid')
   const list = page.getByTestId('commodity-files-list')
   await expect(async () => {
-    const photos = (await grid.count()) ? await grid.locator('> li').count() : 0
-    const rows = (await list.count()) ? await list.locator('> li').count() : 0
-    expect(photos + rows, 'commodity files total').toBe(expected)
+    // Default view = grid: one `file-card-open-<id>` button per card.
+    // List view: one <li> per FileListRow.
+    const cards = (await grid.count())
+      ? await grid.locator('[data-testid^="file-card-open-"]').count()
+      : 0
+    const rows = (await list.count()) ? await list.locator('li').count() : 0
+    expect(cards + rows, 'commodity files total').toBe(expected)
   }).toPass({ timeout: 15_000, intervals: [100, 250, 500, 1000] })
 }
 
@@ -195,21 +199,20 @@ export async function expectCommodityFilesCount(page: Page, expected: number): P
  * need to assert each id 404s post-delete.
  */
 export async function getCommodityFileIds(page: Page): Promise<string[]> {
-  const photoIds = await page
-    .getByTestId('commodity-files-photo-grid')
-    .locator(
-      '[data-testid^="commodity-files-photo-"]:not([data-testid^="commodity-files-photo-cover-"]):not([data-testid^="commodity-files-photo-delete-"])',
-    )
+  const cardIds = await page
+    .locator('[data-testid^="file-card-open-"]')
     .evaluateAll((els) =>
-      els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/^commodity-files-photo-/, '')),
+      els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/^file-card-open-/, '')),
     )
   const rowIds = await page
     .getByTestId('commodity-files-list')
-    .locator('li[data-testid^="commodity-files-row-"]')
-    .evaluateAll((els) =>
-      els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/^commodity-files-row-/, '')),
+    .locator(
+      '[data-testid^="file-row-"]:not([data-testid*="-checkbox-"]):not([data-testid*="-tag-"])',
     )
-  return [...photoIds, ...rowIds].filter(Boolean)
+    .evaluateAll((els) =>
+      els.map((e) => (e.getAttribute('data-testid') ?? '').replace(/^file-row-/, '')),
+    )
+  return [...new Set([...cardIds, ...rowIds].filter(Boolean))]
 }
 
 /**
@@ -224,15 +227,16 @@ export async function getCommodityFileIds(page: Page): Promise<string[]> {
  * helpers if a future spec needs them.
  */
 export async function openFirstCommodityPdf(page: Page): Promise<string> {
-  const openBtn = page
-    .getByTestId('commodity-files-list')
-    .locator('button[data-testid^="commodity-files-row-open-"]')
-    .first()
+  // PDFs live in the `documents` category; the FileCard root carries
+  // `data-category`, so target a document card and open it.
+  const card = page.locator('[data-testid^="file-card-"][data-category="documents"]').first()
+  await card.waitFor({ state: 'visible', timeout: 15_000 })
+  const openBtn = card.locator('[data-testid^="file-card-open-"]').first()
   const tid = await openBtn.getAttribute('data-testid')
   if (!tid) {
-    throw new Error('openFirstCommodityPdf: no openable row CTA found')
+    throw new Error('openFirstCommodityPdf: no openable document card found')
   }
-  const id = tid.replace(/^commodity-files-row-open-/, '')
+  const id = tid.replace(/^file-card-open-/, '')
   await openBtn.click()
   await page.getByTestId('file-preview-dialog-pdf').waitFor({ state: 'visible', timeout: 15_000 })
   return id
@@ -250,21 +254,24 @@ export async function deleteFromCommodityRow(
   fileId: string,
   screenshotPrefix = 'delete',
 ): Promise<void> {
-  const photoDelete = page.getByTestId(`commodity-files-photo-delete-${fileId}`)
-  const rowDelete = page.getByTestId(`commodity-files-row-delete-${fileId}`)
-  const target = (await photoDelete.count()) ? photoDelete : rowDelete
-  // The photo-grid delete button is hover-only (`opacity-0
-  // group-hover:opacity-100`) so we use force:true; the click target
-  // is still wired regardless of opacity.
-  await target.click({ force: true })
+  // Inline per-card delete is gone (#1966): open the file's
+  // FilePreviewDialog, use its Delete affordance, then accept the
+  // destructive useConfirm dialog.
+  await page.getByTestId(`file-card-open-${fileId}`).click()
+  const deleteBtn = page
+    .locator(
+      '[data-testid="file-preview-dialog-pdf-delete"], [data-testid="file-preview-dialog-other-delete"]',
+    )
+    .first()
+  await deleteBtn.waitFor({ state: 'visible', timeout: 15_000 })
+  await deleteBtn.click()
   await page.getByTestId('confirm-dialog').waitFor({ state: 'visible', timeout: 5_000 })
   await recorder.takeScreenshot(`${screenshotPrefix}-confirm`)
   await page.getByTestId('confirm-accept').click()
   await page.getByTestId('confirm-dialog').waitFor({ state: 'hidden', timeout: 15_000 })
-  // Wait for the deleted row's testid to disappear so subsequent
-  // count assertions don't race the cache invalidation.
-  await expect(photoDelete).toHaveCount(0, { timeout: 15_000 })
-  await expect(rowDelete).toHaveCount(0, { timeout: 15_000 })
+  // Wait for the deleted file's card to disappear so subsequent count
+  // assertions don't race the cache invalidation.
+  await expect(page.getByTestId(`file-card-open-${fileId}`)).toHaveCount(0, { timeout: 15_000 })
   await recorder.takeScreenshot(`${screenshotPrefix}-done`)
 }
 

@@ -2,12 +2,15 @@ import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { Upload } from "lucide-react"
 
-import { FileCard, type FileCardCoverState } from "@/components/files/FileCard"
+import type { FileCardCoverState } from "@/components/files/FileCard"
+import { FileCollection } from "@/components/files/FileCollection"
+import { FileViewToggle } from "@/components/files/FileViewToggle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useFiles } from "@/features/files/hooks"
+import { useFilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 
 // Files panel for entity-detail pages (commodity / location / area).
@@ -57,6 +60,9 @@ export function EntityFilesPanel({
   const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
+  // Shared with the commodity Files tab — entity-detail surfaces default
+  // to grid (they're photo-first).
+  const [viewMode, setViewMode] = useFilesViewMode("files:entityViewMode", "grid")
 
   const filesQuery = useFiles(
     {
@@ -84,19 +90,28 @@ export function EntityFilesPanel({
           <CardTitle className="text-base">{t("files:entityPanel.title")}</CardTitle>
           <CardDescription>{t("files:entityPanel.description", { count: total })}</CardDescription>
         </div>
-        {onAttachClick ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onAttachClick}
-            data-testid="entity-files-panel-attach"
-            className="gap-1.5 shrink-0"
-          >
-            <Upload className="size-3.5" aria-hidden="true" />
-            {t("files:entityPanel.attach")}
-          </Button>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {files.length > 0 ? (
+            <FileViewToggle
+              value={viewMode}
+              onChange={setViewMode}
+              testIdPrefix="entity-files-panel-view"
+            />
+          ) : null}
+          {onAttachClick ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onAttachClick}
+              data-testid="entity-files-panel-attach"
+              className="gap-1.5 shrink-0"
+            >
+              <Upload className="size-3.5" aria-hidden="true" />
+              {t("files:entityPanel.attach")}
+            </Button>
+          ) : null}
+        </div>
       </CardHeader>
       <CardContent>
         {filesQuery.isError ? (
@@ -118,22 +133,16 @@ export function EntityFilesPanel({
             {t("files:entityPanel.empty")}
           </p>
         ) : (
-          <div
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-            data-testid="entity-files-panel-grid"
-          >
-            {files.map(({ file, signedUrl }) => (
-              <FileCard
-                key={file.id}
-                file={file}
-                signedUrl={signedUrl}
-                onOpen={handleOpen}
-                coverState={coverState}
-                onSetCover={onSetCover}
-                coverBusy={coverBusy}
-              />
-            ))}
-          </div>
+          <FileCollection
+            items={files}
+            viewMode={viewMode}
+            onOpen={handleOpen}
+            coverState={coverState}
+            onSetCover={onSetCover}
+            coverBusy={coverBusy}
+            idPrefix="entity-files-panel"
+            gridClassName="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          />
         )}
       </CardContent>
     </Card>
