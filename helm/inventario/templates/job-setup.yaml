@@ -40,6 +40,15 @@ metadata:
     {{- end }}
 spec:
   backoffLimit: 3
+  {{- with .Values.setupJob.activeDeadlineSeconds }}
+  # Cap the Job's wall-clock so an unpullable image (e.g. a PR preview pinned
+  # to a sha- tag CI hasn't published yet / has GC'd) FAILS instead of sitting
+  # in ImagePullBackOff forever. A failed Job fails the sync op rather than
+  # leaving it Running, which is what otherwise deadlocks the
+  # resources-finalizer cascade and makes the Application undeletable. See
+  # values.yaml setupJob.activeDeadlineSeconds for the full rationale.
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
   {{- if not .Values.setupJob.argocdMode }}
   # Auto-delete the Job 24h after it completes — keeps `kubectl get jobs`
   # clean for `helm install` consumers where the Job is a one-shot hook.

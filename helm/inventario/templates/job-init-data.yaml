@@ -38,6 +38,12 @@ metadata:
     "argocd.argoproj.io/sync-options": "Force=true,Replace=true"
 spec:
   backoffLimit: 3
+  {{- with .Values.setupJob.initData.activeDeadlineSeconds }}
+  # Cap the Job's wall-clock so an unpullable image fails the Job (and the
+  # sync op) instead of hanging it indefinitely. See values.yaml
+  # setupJob.initData.activeDeadlineSeconds.
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
   template:
     metadata:
       labels:
