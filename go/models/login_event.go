@@ -60,6 +60,10 @@ type LoginMethod string
 const (
 	// LoginMethodPassword is the email + password flow.
 	LoginMethodPassword LoginMethod = "password"
+	// LoginMethodMagicLink is the passwordless magic-link sign-in flow.
+	// Recorded on the direct (non-MFA) completion so magic-link logins are
+	// distinguishable from password logins in the history/metrics.
+	LoginMethodMagicLink LoginMethod = "magic_link"
 	// LoginMethodOAuthGoogle is the Google OAuth sign-in flow (#1394).
 	// Recorded on both the start-of-session callback and any subsequent
 	// link-from-settings attempt so the history page reads consistently

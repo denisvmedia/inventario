@@ -20,6 +20,14 @@ const (
 	passwordResetAttemptsLimit  = 3
 	passwordResetAttemptsWindow = time.Hour
 
+	// magic-link sign-in request throttling. Per-email (mirrors the
+	// password-reset posture) because the request body carries an email
+	// and the abuse vector is enumerating/spamming a single inbox with
+	// sign-in links — 3/hour is generous for a legitimate user who didn't
+	// receive the first mail, tight enough to blunt mailbox flooding.
+	magicLinkAttemptsLimit  = 3
+	magicLinkAttemptsWindow = time.Hour
+
 	// feedback submission throttling (#1387). Per-user rather than
 	// per-IP because the endpoint is auth-gated and the abuse vector
 	// is a logged-in account spamming the support inbox, not anonymous
@@ -62,6 +70,11 @@ type AuthRateLimiter interface {
 	CheckLoginAttempt(ctx context.Context, ip string) (RateLimitResult, error)
 	CheckRegistrationAttempt(ctx context.Context, ip string) (RateLimitResult, error)
 	CheckPasswordResetAttempt(ctx context.Context, email string) (RateLimitResult, error)
+	// CheckMagicLinkAttempt throttles passwordless sign-in ("magic link")
+	// requests on a per-email basis. The request body carries an email, so
+	// (like password reset) the email is the natural rate-limit key — see
+	// the magicLinkAttemptsLimit comment for the rationale.
+	CheckMagicLinkAttempt(ctx context.Context, email string) (RateLimitResult, error)
 	// CheckFeedbackAttempt throttles in-app feedback submissions
 	// (#1387) on a per-user basis. The endpoint is auth-required, so
 	// `userID` (not IP) is the natural rate-limit key — see the
@@ -154,6 +167,11 @@ func (l *RedisAuthRateLimiter) CheckRegistrationAttempt(ctx context.Context, ip 
 func (l *RedisAuthRateLimiter) CheckPasswordResetAttempt(ctx context.Context, email string) (RateLimitResult, error) {
 	key := fmt.Sprintf("rate:auth:reset:email:%s", hashKeyPart(email))
 	return l.checkRate(ctx, key, passwordResetAttemptsLimit, passwordResetAttemptsWindow)
+}
+
+func (l *RedisAuthRateLimiter) CheckMagicLinkAttempt(ctx context.Context, email string) (RateLimitResult, error) {
+	key := fmt.Sprintf("rate:auth:magic-link:email:%s", hashKeyPart(email))
+	return l.checkRate(ctx, key, magicLinkAttemptsLimit, magicLinkAttemptsWindow)
 }
 
 func (l *RedisAuthRateLimiter) CheckFeedbackAttempt(ctx context.Context, userID string) (RateLimitResult, error) {
@@ -323,6 +341,11 @@ func (l *InMemoryAuthRateLimiter) CheckPasswordResetAttempt(_ context.Context, e
 	return l.checkRate(key, passwordResetAttemptsLimit, passwordResetAttemptsWindow), nil
 }
 
+func (l *InMemoryAuthRateLimiter) CheckMagicLinkAttempt(_ context.Context, email string) (RateLimitResult, error) {
+	key := fmt.Sprintf("rate:auth:magic-link:email:%s", hashKeyPart(email))
+	return l.checkRate(key, magicLinkAttemptsLimit, magicLinkAttemptsWindow), nil
+}
+
 func (l *InMemoryAuthRateLimiter) CheckFeedbackAttempt(_ context.Context, userID string) (RateLimitResult, error) {
 	key := fmt.Sprintf("rate:feedback:user:%s", hashKeyPart(userID))
 	return l.checkRate(key, feedbackAttemptsLimit, feedbackAttemptsWindow), nil
@@ -469,6 +492,10 @@ func (NoOpAuthRateLimiter) CheckRegistrationAttempt(_ context.Context, _ string)
 
 func (NoOpAuthRateLimiter) CheckPasswordResetAttempt(_ context.Context, _ string) (RateLimitResult, error) {
 	return RateLimitResult{Allowed: true, Limit: passwordResetAttemptsLimit, Remaining: passwordResetAttemptsLimit, ResetAt: time.Now().Add(passwordResetAttemptsWindow)}, nil
+}
+
+func (NoOpAuthRateLimiter) CheckMagicLinkAttempt(_ context.Context, _ string) (RateLimitResult, error) {
+	return RateLimitResult{Allowed: true, Limit: magicLinkAttemptsLimit, Remaining: magicLinkAttemptsLimit, ResetAt: time.Now().Add(magicLinkAttemptsWindow)}, nil
 }
 
 func (NoOpAuthRateLimiter) CheckFeedbackAttempt(_ context.Context, _ string) (RateLimitResult, error) {

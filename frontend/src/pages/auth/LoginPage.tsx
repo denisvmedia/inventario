@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom"
-import { ArrowRight, Link2, Mail } from "lucide-react"
+import { ArrowRight, Link2, Mail, Sparkles } from "lucide-react"
 
 import { AuthLayout } from "@/components/auth/AuthLayout"
 import { MFAChallenge } from "@/components/auth/MFAChallenge"
@@ -16,9 +16,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useAcceptInvite } from "@/features/invite/hooks"
-import { useLogin } from "@/features/auth/hooks"
+import { useLogin, useRequestMagicLink } from "@/features/auth/hooks"
 import { consumePendingInvite, peekPendingInvite } from "@/features/auth/inviteHandoff"
 import { loginSchema, type LoginInput } from "@/features/auth/schemas"
+import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { sanitizeRedirectPath } from "@/lib/safe-redirect"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -38,12 +39,24 @@ export function LoginPage() {
   const { isAuthenticated } = useAuth()
   const loginMutation = useLogin()
   const acceptInviteMutation = useAcceptInvite()
+  const requestMagicLinkMutation = useRequestMagicLink()
+
+  // Passwordless sign-in entry point (#magic-link). Gated on the public
+  // feature flag read at boot — same pattern as the currency-migration
+  // wizard (#1616) — so the affordance stays hidden when the BE has the
+  // feature off (which makes /auth/magic-link/* return a coded 404).
+  const magicLinkEnabled = useFeatureFlag("magic_link_login")
 
   const [pendingInvite] = useState(() => peekPendingInvite())
   const [serverError, setServerError] = useState<string | null>(null)
   // mfaChallenge holds the step-1 → step-2 handoff. When non-null,
   // <MFAChallenge> takes over the page and the password form is hidden.
   const [mfaChallenge, setMfaChallenge] = useState<{ mfaToken: string; email: string } | null>(null)
+  // magicLinkSent flips to the neutral "check your inbox" confirmation
+  // once the request resolves. The server returns the same 200 whether or
+  // not the email maps to an active account (anti-enumeration), so we show
+  // the confirmation unconditionally — mirrors ForgotPasswordPage.
+  const [magicLinkSent, setMagicLinkSent] = useState(false)
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -98,6 +111,10 @@ export function LoginPage() {
 
   const isPending =
     loginMutation.isPending || acceptInviteMutation.isPending || form.formState.isSubmitting
+  const isMagicLinkPending = requestMagicLinkMutation.isPending
+  // Both actions share the email field, so lock the whole form while
+  // either is in flight to avoid a half-submitted state.
+  const isBusy = isPending || isMagicLinkPending
 
   // Post-login redirect chain: invite-accept (#1285), then ?redirect, then /.
   // Extracted so both the password-only path and the MFA-completion path
@@ -139,6 +156,25 @@ export function LoginPage() {
     await finalizeLogin()
   }
 
+  // "Email me a sign-in link" reuses the email field rather than adding a
+  // second input. We validate just that one field through RHF (so an empty
+  // email surfaces the same inline error as a normal submit) before firing
+  // the request. The MFA branch is NOT handled here — magic links are
+  // verified on /magic-link, where mfa_required (if any) is surfaced; the
+  // request step never returns a challenge.
+  async function onSendMagicLink() {
+    setServerError(null)
+    const valid = await form.trigger("email")
+    if (!valid) return
+    const email = form.getValues("email").trim()
+    try {
+      await requestMagicLinkMutation.mutateAsync(email)
+      setMagicLinkSent(true)
+    } catch (err) {
+      setServerError(parseServerError(err, t("auth:magicLink.errorGeneric")))
+    }
+  }
+
   // When MFA is required, swap the form for the code-entry surface.
   // Cancelling drops the challenge state and goes back to step 1 —
   // the mfa_token becomes a dead letter, which is fine, it expires in
@@ -158,6 +194,42 @@ export function LoginPage() {
             form.reset({ email: mfaChallenge.email, password: "" })
           }}
         />
+      </AuthLayout>
+    )
+  }
+
+  // Neutral "check your inbox" confirmation after a magic-link request.
+  // Anti-enumeration: shown regardless of whether the email exists, with
+  // no detail that could confirm an account. Mirrors ForgotPasswordPage's
+  // success state.
+  if (magicLinkSent) {
+    return (
+      <AuthLayout>
+        <RouteTitle title={t("stubs:login")} />
+        <div className="space-y-6 text-center" data-testid="magic-link-sent">
+          <div className="flex justify-center">
+            <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
+              <Mail className="size-8 text-primary" aria-hidden="true" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {t("auth:magicLink.checkInbox")}
+            </h1>
+            <p className="text-sm text-muted-foreground">{t("auth:magicLink.checkInboxBody")}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setMagicLinkSent(false)
+              setServerError(null)
+            }}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
+            data-testid="magic-link-back"
+          >
+            {t("auth:magicLink.backToSignIn")}
+          </button>
+        </div>
       </AuthLayout>
     )
   }
@@ -220,7 +292,7 @@ export function LoginPage() {
                 autoComplete="email"
                 placeholder={t("auth:fields.emailPlaceholder")}
                 className="pl-9"
-                disabled={isPending}
+                disabled={isBusy}
                 aria-invalid={!!form.formState.errors.email}
                 data-testid="email"
                 {...form.register("email")}
@@ -247,7 +319,7 @@ export function LoginPage() {
               id="login-password"
               autoComplete="current-password"
               placeholder={t("auth:fields.passwordPlaceholder")}
-              disabled={isPending}
+              disabled={isBusy}
               aria-invalid={!!form.formState.errors.password}
               data-testid="password"
               {...form.register("password")}
@@ -268,12 +340,26 @@ export function LoginPage() {
           <Button
             type="submit"
             className="w-full gap-2"
-            disabled={isPending}
+            disabled={isBusy}
             data-testid="login-button"
           >
             {isPending ? t("auth:login.submitting") : t("auth:login.submit")}
             {!isPending ? <ArrowRight className="size-4" /> : null}
           </Button>
+
+          {magicLinkEnabled ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full gap-2"
+              disabled={isBusy}
+              onClick={onSendMagicLink}
+              data-testid="magic-link-button"
+            >
+              <Sparkles className="size-4" aria-hidden="true" />
+              {isMagicLinkPending ? t("auth:magicLink.sending") : t("auth:magicLink.sendCta")}
+            </Button>
+          ) : null}
         </form>
 
         <OAuthRow />

@@ -30,6 +30,7 @@ type Workers struct {
 	RestorePollInterval              string // Restore worker poll interval (e.g., "10s")
 	RefreshTokenCleanupInterval      string // Refresh token cleanup interval (e.g., "1h")
 	EmailVerificationCleanupInterval string // Email verification token cleanup interval (e.g., "1h")
+	MagicLinkTokenCleanupInterval    string // Magic-link sign-in token cleanup interval (e.g., "1h")
 	GroupPurgeInterval               string // Group purge worker interval (e.g., "5m")
 	WarrantyReminderInterval         string // Warranty reminder worker interval (e.g., "1h")
 	StorageQuotaReminderInterval     string // Storage quota warning worker interval (e.g., "1h")
@@ -99,6 +100,7 @@ func New() Config {
 			RestorePollInterval:              "10s",
 			RefreshTokenCleanupInterval:      "1h",
 			EmailVerificationCleanupInterval: "1h",
+			MagicLinkTokenCleanupInterval:    "1h",
 			GroupPurgeInterval:               "5m",
 			WarrantyReminderInterval:         "1h",
 			StorageQuotaReminderInterval:     "1h",
@@ -198,6 +200,11 @@ func GetRefreshTokenCleanupInterval() string {
 // GetEmailVerificationCleanupInterval returns the default email verification token cleanup interval
 func GetEmailVerificationCleanupInterval() string {
 	return defaultConfig.Workers.EmailVerificationCleanupInterval
+}
+
+// GetMagicLinkTokenCleanupInterval returns the default magic-link sign-in token cleanup interval
+func GetMagicLinkTokenCleanupInterval() string {
+	return defaultConfig.Workers.MagicLinkTokenCleanupInterval
 }
 
 // GetGroupPurgeInterval returns the default interval between group purge sweeps.

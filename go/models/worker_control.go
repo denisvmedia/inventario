@@ -27,6 +27,8 @@ const (
 	WorkerTypeRefreshTokenCleanup WorkerType = "refresh-token-cleanup"
 	// WorkerTypeEmailVerificationCleanup pauses the email-verification cleanup worker.
 	WorkerTypeEmailVerificationCleanup WorkerType = "email-verification-cleanup"
+	// WorkerTypeMagicLinkTokenCleanup pauses the magic-link token cleanup worker.
+	WorkerTypeMagicLinkTokenCleanup WorkerType = "magic-link-token-cleanup"
 	// WorkerTypeLoginEventRetention pauses the login-event retention worker.
 	WorkerTypeLoginEventRetention WorkerType = "login-event-retention"
 	// WorkerTypeGroupPurge pauses the group purge worker.
@@ -54,6 +56,7 @@ var allWorkerTypes = []WorkerType{
 	WorkerTypeThumbnail,
 	WorkerTypeRefreshTokenCleanup,
 	WorkerTypeEmailVerificationCleanup,
+	WorkerTypeMagicLinkTokenCleanup,
 	WorkerTypeLoginEventRetention,
 	WorkerTypeGroupPurge,
 	WorkerTypeWarrantyReminder,
@@ -82,6 +85,7 @@ func (w WorkerType) IsValid() bool {
 		WorkerTypeThumbnail,
 		WorkerTypeRefreshTokenCleanup,
 		WorkerTypeEmailVerificationCleanup,
+		WorkerTypeMagicLinkTokenCleanup,
 		WorkerTypeLoginEventRetention,
 		WorkerTypeGroupPurge,
 		WorkerTypeWarrantyReminder,

@@ -346,6 +346,80 @@ func PasswordResetRateLimitMiddleware(limiter services.AuthRateLimiter) func(htt
 	}
 }
 
+// MagicLinkRequestRateLimitMiddleware enforces per-email rate limiting on the
+// magic-link request endpoint. The email is extracted from the request body and
+// used as the rate-limit key. Like PasswordResetRateLimitMiddleware, it must read
+// the body to extract the email, so it reconstructs r.Body for the downstream
+// handler.
+func MagicLinkRequestRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if limiter == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Limit body size before reading to prevent DoS via large payloads.
+			// io.LimitReader is used instead of http.MaxBytesReader so the middleware
+			// has sole control over the response: LimitReader never writes to the
+			// ResponseWriter, eliminating any risk of a double-write on oversized payloads.
+			const maxBodyBytes = 4096
+			bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodyBytes+1))
+			_ = r.Body.Close()
+			if err != nil {
+				// Read error: let the handler deal with it.
+				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				next.ServeHTTP(w, r)
+				return
+			}
+			if int64(len(bodyBytes)) > maxBodyBytes {
+				// Body exceeded the limit; we control the 413 here exclusively.
+				http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			if len(bodyBytes) == 0 {
+				// Empty body: let the handler return 400.
+				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Restore body for the downstream handler.
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+			// Extract the email without consuming the body permanently.
+			var peek struct {
+				Email string `json:"email"`
+			}
+			_ = json.Unmarshal(bodyBytes, &peek)
+
+			email := strings.ToLower(strings.TrimSpace(peek.Email))
+			if email == "" {
+				// Let the handler return 400.
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			res, err := limiter.CheckMagicLinkAttempt(r.Context(), email)
+			if err != nil {
+				slog.Error("Magic-link rate limiter error", "error", err, "email", email)
+				next.ServeHTTP(w, r)
+				return
+			}
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", res.Limit))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", res.Remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", res.ResetAt.Unix()))
+			if !res.Allowed {
+				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				slog.Warn("Magic-link rate limit exceeded", "ip", remoteAddrIP(r), "retry_after_seconds", retryAfter)
+				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // remoteAddrIP extracts the host from r.RemoteAddr, ignoring all proxy headers.
 // This is intentional for rate limiting: proxy headers like X-Forwarded-For can be
 // forged by the client and must not be used to determine the key to rate-limit on.
