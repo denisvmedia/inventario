@@ -111,42 +111,18 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 }
 
 func TestCommodityRegistry_Create_UnhappyPath(t *testing.T) {
+	// The commodity registry's Create enforces referential integrity (the
+	// area must exist when set) but does NOT run model field validation —
+	// that lives at the model layer (models/commodity_test.go) and the API
+	// handler. Before area became optional (#1986), empty-name /
+	// empty-short-name / zero-count cases here only "failed" as a side
+	// effect of their zero-value (empty) area_id tripping the existence
+	// check; with area optional those rows now insert successfully, so the
+	// sole genuinely registry-rejected case is a non-existent area.
 	testCases := []struct {
 		name      string
 		commodity models.Commodity
 	}{
-		{
-			name: "empty name",
-			commodity: models.Commodity{
-				Name:                   "",
-				ShortName:              "TC",
-				Type:                   models.CommodityTypeElectronics,
-				Count:                  1,
-				OriginalPrice:          decimal.NewFromFloat(100.00),
-				OriginalPriceCurrency:  "USD",
-				ConvertedOriginalPrice: decimal.Zero,
-				CurrentPrice:           decimal.NewFromFloat(90.00),
-				Status:                 models.CommodityStatusInUse,
-				PurchaseDate:           models.ToPDate("2023-01-01"),
-				Draft:                  false,
-			},
-		},
-		{
-			name: "empty short name",
-			commodity: models.Commodity{
-				Name:                   "Test Commodity",
-				ShortName:              "",
-				Type:                   models.CommodityTypeElectronics,
-				Count:                  1,
-				OriginalPrice:          decimal.NewFromFloat(100.00),
-				OriginalPriceCurrency:  "USD",
-				ConvertedOriginalPrice: decimal.Zero,
-				CurrentPrice:           decimal.NewFromFloat(90.00),
-				Status:                 models.CommodityStatusInUse,
-				PurchaseDate:           models.ToPDate("2023-01-01"),
-				Draft:                  false,
-			},
-		},
 		{
 			name: "non-existent area",
 			commodity: models.Commodity{
@@ -155,22 +131,6 @@ func TestCommodityRegistry_Create_UnhappyPath(t *testing.T) {
 				Type:                   models.CommodityTypeElectronics,
 				AreaID:                 new("non-existent-area"),
 				Count:                  1,
-				OriginalPrice:          decimal.NewFromFloat(100.00),
-				OriginalPriceCurrency:  "USD",
-				ConvertedOriginalPrice: decimal.Zero,
-				CurrentPrice:           decimal.NewFromFloat(90.00),
-				Status:                 models.CommodityStatusInUse,
-				PurchaseDate:           models.ToPDate("2023-01-01"),
-				Draft:                  false,
-			},
-		},
-		{
-			name: "zero count",
-			commodity: models.Commodity{
-				Name:                   "Test Commodity",
-				ShortName:              "TC",
-				Type:                   models.CommodityTypeElectronics,
-				Count:                  0,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "USD",
 				ConvertedOriginalPrice: decimal.Zero,
