@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import {
   ChevronLeft,
   ChevronRight,
+  Loader2,
   Maximize2,
   Minus,
   Plus,
@@ -19,6 +20,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { useImageFadeIn } from "@/components/ui/fade-in-image"
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
 
 const MIN_SCALE = 0.5
 const MAX_SCALE = 6
@@ -89,6 +92,19 @@ export function ImageViewer(props: ImageViewerProps) {
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const draggingRef = useRef<{ x: number; y: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  // Fade the image in once it decodes instead of letting it snap onto
+  // the black backdrop (#1961). `useImageFadeIn` resets on `url`, so
+  // gallery navigation re-runs the fade. The opacity transition lives in
+  // the inline style next to the transform transition, so reduced-motion
+  // can't be a CSS variant here — gate it in JS instead.
+  const {
+    ref: imgRef,
+    status: imgStatus,
+    onLoad: onImgLoad,
+    onError: onImgError,
+  } = useImageFadeIn(url)
+  const prefersReducedMotion = usePrefersReducedMotion()
+  const imgSettled = imgStatus !== "loading"
 
   const reset = useCallback(() => {
     setScale(1)
@@ -269,7 +285,7 @@ export function ImageViewer(props: ImageViewerProps) {
         {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
         <div
           ref={containerRef}
-          className="flex flex-1 cursor-grab items-center justify-center overflow-hidden active:cursor-grabbing"
+          className="relative flex flex-1 cursor-grab items-center justify-center overflow-hidden active:cursor-grabbing"
           onWheel={(e) => {
             e.preventDefault()
             setScale((s) => clamp(s - e.deltaY * WHEEL_COEFFICIENT * s))
@@ -291,17 +307,37 @@ export function ImageViewer(props: ImageViewerProps) {
             draggingRef.current = null
           }}
         >
+          {imgStatus === "loading" ? (
+            <div
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
+              aria-hidden="true"
+              data-testid="image-viewer-loading"
+            >
+              <Loader2 className="size-8 animate-spin text-white/70" />
+            </div>
+          ) : null}
           <img
+            ref={imgRef}
             src={url}
             alt={alt}
             draggable={false}
+            decoding="async"
+            onLoad={onImgLoad}
+            onError={onImgError}
             data-testid="image-viewer-img"
             className="max-h-none max-w-none select-none"
             style={{
               transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
               transformOrigin: "center center",
+              // Skip the opacity fade entirely under reduced motion; the
+              // image just appears once decoded.
+              opacity: prefersReducedMotion || imgSettled ? 1 : 0,
               // eslint-disable-next-line react-hooks/refs -- read during render is intentional: this only toggles a CSS transition string, not behaviour. Using state would cause an extra re-render per dragstart/dragend.
-              transition: draggingRef.current ? "none" : "transform 80ms ease-out",
+              transition: draggingRef.current
+                ? "none"
+                : prefersReducedMotion
+                  ? "transform 80ms ease-out"
+                  : "transform 80ms ease-out, opacity 200ms ease-out",
             }}
           />
         </div>

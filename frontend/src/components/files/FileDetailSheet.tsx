@@ -26,6 +26,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { FadeInImage } from "@/components/ui/fade-in-image"
 import { useDeleteFile, useFile } from "@/features/files/hooks"
 import { isImageMime, isPdfMime } from "@/features/files/constants"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -385,11 +386,13 @@ function FilePreview({ mime, url, alt, onExpandImage, onExpandPdf }: PreviewProp
         onClick={onExpandImage}
         // Full-bleed banner: breaks out of the body's px-5 inset (#1962)
         // so the image spans the panel edge-to-edge while the metadata
-        // below stays inset.
-        className="group relative -mx-5 w-[calc(100%+2.5rem)] overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        // below stays inset. `min-h` reserves a box for the fade-in
+        // shimmer (#1961) and centers a short `object-contain` image so
+        // the panel doesn't grow from a zero-height placeholder.
+        className="group relative -mx-5 flex min-h-[12rem] w-[calc(100%+2.5rem)] items-center justify-center overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         data-testid="file-preview-image-trigger"
       >
-        <img
+        <FadeInImage
           src={url}
           alt={alt}
           className="max-h-[60vh] w-full object-contain"

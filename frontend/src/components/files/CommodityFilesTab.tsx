@@ -16,6 +16,7 @@ import { FilePreviewDialog } from "@/components/files/FilePreviewDialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { FadeInImage } from "@/components/ui/fade-in-image"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useDeleteFile, useFiles } from "@/features/files/hooks"
 import type { FileCategory, ListedFile } from "@/features/files/api"
@@ -432,7 +433,7 @@ function PhotoGrid({
               data-testid={`commodity-files-photo-${file.id}`}
             >
               {thumbUrl ? (
-                <img
+                <FadeInImage
                   src={thumbUrl}
                   alt={title}
                   loading="lazy"
