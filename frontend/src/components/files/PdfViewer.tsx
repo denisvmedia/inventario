@@ -70,10 +70,19 @@ export function PdfViewer({ url, onError }: PdfViewerProps) {
     if (!ctx) return
     pdf.getPage(page).then((pageProxy) => {
       if (cancelled) return
+      // Render at device-pixel resolution for crispness on HiDPI screens,
+      // but pin the canvas's *displayed* size to the scale-only viewport so
+      // the on-screen size tracks the zoom indicator 1:1. The CSS size is
+      // what overflows the surrounding `overflow-auto` container, so zooming
+      // in genuinely enlarges the page and the result can be scrolled.
+      const dpr = window.devicePixelRatio || 1
       const viewport = pageProxy.getViewport({ scale })
-      canvas.width = viewport.width
-      canvas.height = viewport.height
-      const renderTask = pageProxy.render({ canvas, canvasContext: ctx, viewport })
+      const renderViewport = pageProxy.getViewport({ scale: scale * dpr })
+      canvas.width = Math.floor(renderViewport.width)
+      canvas.height = Math.floor(renderViewport.height)
+      canvas.style.width = `${Math.floor(viewport.width)}px`
+      canvas.style.height = `${Math.floor(viewport.height)}px`
+      const renderTask = pageProxy.render({ canvas, canvasContext: ctx, viewport: renderViewport })
       renderTask.promise.catch(() => {
         // Cancelled renders throw; nothing to do.
       })
@@ -156,7 +165,14 @@ export function PdfViewer({ url, onError }: PdfViewerProps) {
         </div>
       ) : (
         <div className="overflow-auto rounded-md border bg-muted/40 p-2">
-          <canvas ref={canvasRef} className="mx-auto block max-w-full" />
+          {/* `min-w-fit` keeps this row at least as wide as the canvas so an
+              over-container zoom overflows into the scroll area instead of
+              being clamped; `justify-center` centres the page while it still
+              fits, and because the row's left edge starts at the container's
+              left edge the start of a zoomed page stays scrollable. */}
+          <div className="flex min-w-fit justify-center">
+            <canvas ref={canvasRef} className="block" data-testid="pdf-viewer-canvas" />
+          </div>
         </div>
       )}
     </div>
