@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { editLoanFormSchema, type EditLoanFormInput } from "@/features/loans/schemas"
 import type { LoanEntity, UpdateLoanRequest } from "@/features/loans/api"
+import { applyServerFieldErrors } from "@/lib/form-errors"
 import { formatDate } from "@/lib/intl"
 
 // Edit a loan's mutable fields. The dialog is intentionally separate
@@ -96,6 +97,7 @@ export function EditLoanDialog({
     handleSubmit,
     register,
     reset,
+    setError,
     setValue,
     watch,
   } = useForm<EditLoanFormInput>({
@@ -146,7 +148,14 @@ export function EditLoanDialog({
               borrower_note: values.borrower_note ?? "",
               due_back_at: values.due_back_at ?? "",
             })
-            await onSubmit(patch)
+            try {
+              await onSubmit(patch)
+            } catch (err) {
+              // Host toasts a summary and re-throws; map field-level 422s.
+              applyServerFieldErrors(err, setError, {
+                fields: ["borrower_name", "borrower_contact", "borrower_note", "due_back_at"],
+              })
+            }
           })}
         >
           <div className="flex flex-col gap-1.5">

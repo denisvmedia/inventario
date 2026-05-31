@@ -16,6 +16,7 @@ import { IconPicker } from "@/components/groups/IconPicker"
 import { useCreateGroup } from "@/features/group/hooks"
 import { createGroupSchema, type CreateGroupInput } from "@/features/group/schemas"
 import { useAppToast } from "@/hooks/useAppToast"
+import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
@@ -68,7 +69,14 @@ export function CreateGroupPage() {
       toast.success(t("groups:create.successToast"))
       navigate(`/g/${encodeURIComponent(created.slug)}`)
     } catch (err) {
-      setServerError(classifyServerError(err, t("groups:create.errorGeneric")))
+      const fieldResult = applyServerFieldErrors(err, form.setError, {
+        fields: Object.keys(createGroupSchema.shape),
+      })
+      setServerError(
+        shouldShowGenericError(fieldResult)
+          ? classifyServerError(err, t("groups:create.errorGeneric"))
+          : null
+      )
     }
   }
 

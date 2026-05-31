@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { CommodityStatusValue } from "@/features/commodities/constants"
+import { applyServerFieldErrors } from "@/lib/form-errors"
 
 // CURRENCY_SYMBOLS mirrors the mock's `CURRENCIES` lookup. We only need
 // the symbol prefix for the sale-price input adornment; the rest of
@@ -157,6 +158,7 @@ export function StatusTransitionDialog({
     handleSubmit,
     register,
     reset,
+    setError,
     setValue,
   } = useForm<StatusTransitionFormInput>({
     resolver: zodResolver(statusTransitionSchema),
@@ -221,7 +223,14 @@ export function StatusTransitionDialog({
             if (isSold && values.sale_price && values.sale_price !== "") {
               payload.sale_price = Number(values.sale_price)
             }
-            await onSubmit(payload)
+            try {
+              await onSubmit(payload)
+            } catch (err) {
+              // Host toasts a summary and re-throws; map field-level 422s.
+              applyServerFieldErrors(err, setError, {
+                fields: ["status_date", "status_note", "sale_price"],
+              })
+            }
           })}
         >
           <div className="flex flex-col gap-1.5">

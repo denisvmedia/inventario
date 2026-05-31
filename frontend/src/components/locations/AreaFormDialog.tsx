@@ -27,6 +27,7 @@ import { AREA_ICONS, IconPicker } from "@/components/locations/IconPicker"
 import type { Area } from "@/features/areas/api"
 import { areaSchema, type AreaFormInput } from "@/features/areas/schemas"
 import type { Location } from "@/features/locations/api"
+import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 
 interface AreaFormDialogProps {
@@ -113,7 +114,16 @@ export function AreaFormDialog({
       await onSubmit(values)
       onOpenChange(false)
     } catch (err) {
-      setServerError(classifyServerError(err, t("locations:areaDialog.errorGeneric")))
+      // Highlight the offending field on a 422 instead of only showing
+      // the generic banner; fall back to the banner for non-field errors.
+      const fieldResult = applyServerFieldErrors(err, form.setError, {
+        fields: Object.keys(areaSchema.shape),
+      })
+      setServerError(
+        shouldShowGenericError(fieldResult)
+          ? classifyServerError(err, t("locations:areaDialog.errorGeneric"))
+          : null
+      )
     }
   }
 

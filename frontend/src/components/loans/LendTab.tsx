@@ -87,6 +87,9 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
       // so the toast actually shows "commodity is already out (kind=…,
       // id=…, party=…)" instead of the generic transport message.
       toast.error(parseServerError(err, t("loans:toast.lendError")))
+      // Re-throw so the dialog can map field-level 422 errors onto its
+      // inputs (it stays open). The toast above is the summary.
+      throw err
     }
   }
 
@@ -118,6 +121,9 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
       setEditing(null)
     } catch (err) {
       toast.error(parseServerError(err, t("loans:toast.editError")))
+      // Re-throw so the dialog can map field-level 422 errors onto its
+      // inputs (it stays open). The toast above is the summary.
+      throw err
     }
   }
 

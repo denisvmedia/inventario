@@ -1,7 +1,28 @@
 import { describe, expect, it } from "vitest"
 
 import { HttpError } from "@/lib/http"
-import { classifyServerError, isRetryableKind, parseServerError } from "@/lib/server-error"
+import {
+  classifyServerError,
+  extractFieldErrors,
+  isRetryableKind,
+  parseServerError,
+} from "@/lib/server-error"
+
+// Builds the BE's nested 422 validation envelope around an `attributes`
+// object, mirroring what `errormarshal.Marshal(validation.Errors)` emits.
+function validationEnvelope(attributes: Record<string, unknown>) {
+  return {
+    errors: [
+      {
+        status: "Unprocessable Entity",
+        error: {
+          type: "validation.Errors",
+          error: { data: { attributes } },
+        },
+      },
+    ],
+  }
+}
 
 describe("parseServerError", () => {
   it("returns the trimmed string body when the server replied with plain text", () => {
@@ -70,6 +91,54 @@ describe("classifyServerError", () => {
       kind: "unknown",
       message: "Try again",
     })
+  })
+})
+
+describe("extractFieldErrors", () => {
+  it("pulls a single field message out of the nested 422 envelope", () => {
+    const err = new HttpError("boom", 422, "/x", validationEnvelope({ address: "cannot be blank" }))
+    expect(extractFieldErrors(err)).toEqual({ address: "cannot be blank" })
+  })
+
+  it("extracts every attribute when several fields fail", () => {
+    const err = new HttpError(
+      "boom",
+      422,
+      "/x",
+      validationEnvelope({ name: "cannot be blank", short_name: "is too long" })
+    )
+    expect(extractFieldErrors(err)).toEqual({
+      name: "cannot be blank",
+      short_name: "is too long",
+    })
+  })
+
+  it("flattens array-indexed fields into dotted paths", () => {
+    const err = new HttpError(
+      "boom",
+      422,
+      "/x",
+      validationEnvelope({ urls: { "0": "must be a valid URL", "2": "cannot be blank" } })
+    )
+    expect(extractFieldErrors(err)).toEqual({
+      "urls.0": "must be a valid URL",
+      "urls.2": "cannot be blank",
+    })
+  })
+
+  it("returns null for a non-HttpError value", () => {
+    expect(extractFieldErrors(new Error("nope"))).toBeNull()
+  })
+
+  it("returns null when the body isn't a field-validation envelope", () => {
+    // A plain JSON:API detail error carries no data.attributes map.
+    const err = new HttpError("boom", 422, "/x", { errors: [{ detail: "Bad input" }] })
+    expect(extractFieldErrors(err)).toBeNull()
+  })
+
+  it("returns null when attributes is present but empty", () => {
+    const err = new HttpError("boom", 422, "/x", validationEnvelope({}))
+    expect(extractFieldErrors(err)).toBeNull()
   })
 })
 

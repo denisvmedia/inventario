@@ -15,6 +15,7 @@ import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useFile, useUpdateFile } from "@/features/files/hooks"
 import { fileMetadataSchema, type FileMetadataFormInput } from "@/features/files/schemas"
+import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 
@@ -80,7 +81,14 @@ export function FileEditPage() {
       toast.success(t("files:edit.save"))
       onCancel()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
+      // Map BE field-level 422s onto the inputs; only toast for non-field
+      // errors (or anything that couldn't be placed on a field).
+      const result = applyServerFieldErrors(err, form.setError, {
+        fields: ["title", "description", "path", "category", "tags"],
+      })
+      if (shouldShowGenericError(result)) {
+        toast.error(err instanceof Error ? err.message : String(err))
+      }
     }
   }
 

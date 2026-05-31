@@ -266,6 +266,9 @@ export function TagsListPage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       toast.error(t("tags:form.createError", { error: message }))
+      // Re-throw so the dialog can map field-level 422 errors onto its
+      // inputs (it stays open). The toast above is the summary.
+      throw err
     }
   }
 
@@ -277,6 +280,9 @@ export function TagsListPage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       toast.error(t("tags:form.updateError", { error: message }))
+      // Re-throw so the dialog can map field-level 422 errors onto its
+      // inputs (it stays open). The toast above is the summary.
+      throw err
     }
   }
 

@@ -122,3 +122,63 @@ export function getServerErrorMeta(err: unknown): Record<string, string> | null 
   const first = (data as ErrorEnvelope).errors?.[0]
   return first?.meta ?? null
 }
+
+// Recursively flattens a validation-error tree into dotted field paths.
+// Leaf values are the human-readable messages; intermediate objects are
+// walked (array-valued fields arrive keyed by failing index, e.g.
+// `{ urls: { "0": "…" } }` → `urls.0`).
+function flattenFieldErrors(node: unknown, prefix: string, out: Record<string, string>): void {
+  if (!node || typeof node !== "object") return
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    const path = prefix ? `${prefix}.${key}` : key
+    if (typeof value === "string") {
+      out[path] = value
+    } else if (value && typeof value === "object") {
+      flattenFieldErrors(value, path, out)
+    }
+  }
+}
+
+// extractFieldErrors pulls per-field validation messages out of the BE's
+// 422 envelope so callers can map them onto individual form fields
+// instead of dropping a single generic banner. The Inventario BE nests
+// validation errors as:
+//
+//   {
+//     "errors": [
+//       {
+//         "status": "Unprocessable Entity",
+//         "error": {                 // jsonapi.Error.UserError (raw JSON)
+//           "type": "validation.Errors",
+//           "error": {               // ozzo / jellydator validation envelope
+//             "data": { "attributes": { "<field>": "<message>" } }
+//           }
+//         }
+//       }
+//     ]
+//   }
+//
+// Returns a flat `{ <dotted-field-path>: <message> }` map (e.g.
+// `{ address: "cannot be blank" }` or `{ "urls.0": "…" }`), or null when
+// the response isn't a field-level `validation.Errors` envelope. The
+// caller decides which keys actually live on its form — see
+// `applyServerFieldErrors` in `lib/form-errors.ts`.
+export function extractFieldErrors(err: unknown): Record<string, string> | null {
+  if (!(err instanceof HttpError)) return null
+  const data = err.data
+  if (!data || typeof data !== "object") return null
+  const first = (data as ErrorEnvelope).errors?.[0] as { error?: unknown } | undefined
+  if (!first || typeof first !== "object") return null
+  const userErr = first.error
+  if (!userErr || typeof userErr !== "object") return null
+  const inner = (userErr as { error?: unknown }).error
+  if (!inner || typeof inner !== "object") return null
+  const dataObj = (inner as { data?: unknown }).data
+  if (!dataObj || typeof dataObj !== "object") return null
+  const attrs = (dataObj as { attributes?: unknown }).attributes
+  if (!attrs || typeof attrs !== "object") return null
+
+  const result: Record<string, string> = {}
+  flattenFieldErrors(attrs, "", result)
+  return Object.keys(result).length > 0 ? result : null
+}

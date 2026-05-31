@@ -64,6 +64,9 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
           t("supplies:toasts.createError", { defaultValue: "Couldn't add the supply link." })
         )
       )
+      // Re-throw so the dialog can map field-level 422 errors onto its
+      // inputs (it stays open). The toast above is the summary.
+      throw err
     }
   }
 
@@ -86,6 +89,9 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
           t("supplies:toasts.updateError", { defaultValue: "Couldn't update the supply link." })
         )
       )
+      // Re-throw so the dialog can map field-level 422 errors onto its
+      // inputs (it stays open). The toast above is the summary.
+      throw err
     }
   }
 

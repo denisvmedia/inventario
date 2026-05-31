@@ -459,8 +459,11 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       })
       toast.success(t("commodities:toast.statusUpdated"))
       setTransitionTarget(null)
-    } catch {
+    } catch (err) {
       toast.error(t("commodities:toast.statusUpdateError"))
+      // Re-throw so the dialog can map field-level 422 errors onto its
+      // inputs (it stays open). The toast above is the summary.
+      throw err
     }
   }
 

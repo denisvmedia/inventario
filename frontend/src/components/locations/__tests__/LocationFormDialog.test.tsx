@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event"
 import { LocationFormDialog } from "@/components/locations/LocationFormDialog"
 import { renderWithProviders } from "@/test/render"
 import type { Location } from "@/features/locations/api"
+import { HttpError } from "@/lib/http"
 
 // Direct-mount tests for LocationFormDialog. The host pages
 // (LocationsListPage / LocationDetailPage) wire the dialog into
@@ -149,5 +150,40 @@ describe("<LocationFormDialog />", () => {
     // the typed-but-unsaved value.
     await Promise.resolve()
     expect(nameInput).toHaveValue("Mid-edit")
+  })
+
+  it("maps a 422 field validation error onto the offending input instead of a generic banner", async () => {
+    const user = userEvent.setup()
+    // The BE's nested 422 envelope, naming the failing attribute. The
+    // dialog must surface this inline on the address field — not as the
+    // generic "something went wrong" banner (the reported bug).
+    const envelope = {
+      errors: [
+        {
+          status: "Unprocessable Entity",
+          error: {
+            type: "validation.Errors",
+            error: { data: { attributes: { address: "cannot be blank" } } },
+          },
+        },
+      ],
+    }
+    const onSubmit = () => Promise.reject(new HttpError("boom", 422, "/locations", envelope))
+
+    renderWithProviders({
+      children: <LocationFormDialog open onOpenChange={() => undefined} onSubmit={onSubmit} />,
+    })
+
+    const nameInput = await screen.findByTestId("location-name-input")
+    await user.type(nameInput, "Garage")
+    await user.click(screen.getByTestId("location-form-submit"))
+
+    // The address field shows the server's field-level message…
+    await waitFor(() =>
+      expect(screen.getByTestId("location-address-error")).toHaveTextContent("cannot be blank")
+    )
+    // …and the generic server-error banner is suppressed because every
+    // error mapped cleanly onto a field.
+    expect(screen.queryByTestId("location-form-server-error")).not.toBeInTheDocument()
   })
 })

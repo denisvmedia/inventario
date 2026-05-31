@@ -32,6 +32,18 @@ func TestLocation_ValidateWithContext_HappyPath(t *testing.T) {
 		err := location.ValidateWithContext(ctx)
 		c.Assert(err, qt.IsNil)
 	})
+
+	t.Run("address is optional", func(t *testing.T) {
+		c := qt.New(t)
+
+		// A location with only a name and no address is valid — address is
+		// optional (a bare label like "Garage" needs no street address).
+		location := models.Location{Name: "Garage"}
+
+		ctx := context.Background()
+		err := location.ValidateWithContext(ctx)
+		c.Assert(err, qt.IsNil)
+	})
 }
 
 func TestLocation_ValidateWithContext_UnhappyPaths(t *testing.T) {
@@ -44,11 +56,6 @@ func TestLocation_ValidateWithContext_UnhappyPaths(t *testing.T) {
 			name:          "missing name",
 			location:      models.Location{Address: "123 Test Street"},
 			errorContains: "name: cannot be blank",
-		},
-		{
-			name:          "missing address",
-			location:      models.Location{Name: "Test Location"},
-			errorContains: "address: cannot be blank",
 		},
 		{
 			name:          "empty location",

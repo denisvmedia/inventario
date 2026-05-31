@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { serviceFormSchema, type ServiceFormInput } from "@/features/services/schemas"
+import { applyServerFieldErrors } from "@/lib/form-errors"
 
 // SendForServiceSubmitValues mirrors LendSubmitValues' shape — every
 // optional field surfaces as a non-undefined string so callers don't
@@ -66,6 +67,7 @@ export function SendForServiceDialog({
     handleSubmit,
     register,
     reset,
+    setError,
   } = useForm<ServiceFormInput>({
     resolver: zodResolver(serviceFormSchema),
     defaultValues: buildDefaults(),
@@ -86,15 +88,30 @@ export function SendForServiceDialog({
         <form
           className="flex flex-col gap-4"
           onSubmit={handleSubmit(async (values) => {
-            await onSubmit({
-              provider_name: values.provider_name,
-              provider_contact: values.provider_contact ?? "",
-              reason: values.reason ?? "",
-              sent_at: values.sent_at,
-              expected_return_at: values.expected_return_at ?? "",
-              cost_amount: values.cost_amount ?? "",
-              cost_currency: values.cost_currency ?? "",
-            })
+            try {
+              await onSubmit({
+                provider_name: values.provider_name,
+                provider_contact: values.provider_contact ?? "",
+                reason: values.reason ?? "",
+                sent_at: values.sent_at,
+                expected_return_at: values.expected_return_at ?? "",
+                cost_amount: values.cost_amount ?? "",
+                cost_currency: values.cost_currency ?? "",
+              })
+            } catch (err) {
+              // Host toasts a summary and re-throws; map field-level 422s.
+              applyServerFieldErrors(err, setError, {
+                fields: [
+                  "provider_name",
+                  "provider_contact",
+                  "reason",
+                  "sent_at",
+                  "expected_return_at",
+                  "cost_amount",
+                  "cost_currency",
+                ],
+              })
+            }
           })}
         >
           <div className="flex flex-col gap-1.5">
