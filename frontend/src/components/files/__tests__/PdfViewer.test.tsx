@@ -11,7 +11,8 @@ import { initI18n } from "@/i18n"
 const BASE_WIDTH = 600
 const BASE_HEIGHT = 800
 
-const renderMock = vi.fn(() => ({ promise: Promise.resolve() }))
+const cancelMock = vi.fn()
+const renderMock = vi.fn(() => ({ promise: Promise.resolve(), cancel: cancelMock }))
 const getViewportMock = vi.fn(({ scale }: { scale: number }) => ({
   width: BASE_WIDTH * scale,
   height: BASE_HEIGHT * scale,
@@ -78,5 +79,18 @@ describe("<PdfViewer />", () => {
     await user.click(zoomIn) // 2.75 → 3.0 (MAX_SCALE)
     await waitFor(() => expect(canvas.style.width).toBe("1800px"))
     expect(screen.getByTestId("pdf-viewer-zoom-level")).toHaveTextContent("300%")
+  })
+
+  it("cancels the in-flight pdf.js render on cleanup (no overlapping render)", async () => {
+    cancelMock.mockClear()
+    const { PdfViewer } = await import("@/components/files/PdfViewer")
+    const { unmount } = render(<PdfViewer url="https://example.test/doc.pdf" />)
+    const canvas = (await screen.findByTestId("pdf-viewer-canvas")) as HTMLCanvasElement
+    // Once the canvas has been sized, the render task has been assigned and is
+    // cancellable; unmount must tear it down so a follow-up render can't start
+    // a second render() on the same canvas.
+    await waitFor(() => expect(canvas.style.width).toBe("900px"))
+    unmount()
+    expect(cancelMock).toHaveBeenCalled()
   })
 })

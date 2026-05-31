@@ -65,6 +65,7 @@ export function PdfViewer({ url, onError }: PdfViewerProps) {
   useEffect(() => {
     if (!pdf || !canvasRef.current) return
     let cancelled = false
+    let renderTask: pdfjsLib.RenderTask | null = null
     const canvas = canvasRef.current
     const ctx = canvas.getContext("2d")
     if (!ctx) return
@@ -82,13 +83,18 @@ export function PdfViewer({ url, onError }: PdfViewerProps) {
       canvas.height = Math.floor(renderViewport.height)
       canvas.style.width = `${Math.floor(viewport.width)}px`
       canvas.style.height = `${Math.floor(viewport.height)}px`
-      const renderTask = pageProxy.render({ canvas, canvasContext: ctx, viewport: renderViewport })
+      renderTask = pageProxy.render({ canvas, canvasContext: ctx, viewport: renderViewport })
       renderTask.promise.catch(() => {
         // Cancelled renders throw; nothing to do.
       })
     })
+    // Cancel any in-flight render on cleanup so a rapid scale/page change
+    // can't start a second render() while the previous one still owns the
+    // canvas — pdf.js otherwise throws "Cannot use the same canvas during
+    // multiple render operations" (swallowed above, leaving stale output).
     return () => {
       cancelled = true
+      renderTask?.cancel()
     }
   }, [pdf, page, scale])
 
