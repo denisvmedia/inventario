@@ -34,13 +34,32 @@ export function useImageFadeIn(src: string | undefined) {
   const ref = useRef<HTMLImageElement>(null)
   const [status, setStatus] = useState<FadeStatus>("loading")
 
+  // Reset to `loading` the instant `src` changes, during render, so the
+  // new image's very first painted frame is already opacity-0 and the
+  // fade reliably plays — on gallery navigation and on the
+  // generating-placeholder → real-thumbnail swap alike. Doing this in an
+  // effect would leave one stale `loaded` frame at opacity-1 first, which
+  // the browser can coalesce into skipping the transition. This is
+  // React's endorsed "adjust state when a prop changes" pattern — a state
+  // mirror of the previous src, set during render (no extra commit; React
+  // restarts the render with the new state).
+  const [trackedSrc, setTrackedSrc] = useState(src)
+  if (trackedSrc !== src) {
+    setTrackedSrc(src)
+    setStatus("loading")
+  }
+
   useEffect(() => {
+    // Reconcile a cache hit: an image already in cache can fire `load`
+    // before React wired `onLoad`, so promote a `complete` element to
+    // `loaded` here (reading the external <img>.complete via the ref is
+    // the sanctioned way to sync it in). Promote-only — the render-phase
+    // reset above owns going back to `loading`. `naturalWidth > 0` also
+    // rejects a broken cached image (complete, but zero-sized).
     const img = ref.current
-    // Reconcile a cache hit (the load event may have fired before this
-    // handler was wired) and otherwise reset to `loading` for the new
-    // src. Reading the external DOM property (<img>.complete) via the ref
-    // is the sanctioned way to sync it into state.
-    setStatus(img?.complete && img.naturalWidth > 0 ? "loaded" : "loading")
+    if (img?.complete && img.naturalWidth > 0) {
+      setStatus("loaded")
+    }
   }, [src])
 
   const onLoad = useCallback(() => setStatus("loaded"), [])
@@ -54,9 +73,11 @@ export interface FadeInImageProps extends ComponentProps<"img"> {
   // when `placeholder` is supplied.
   placeholderClassName?: string
   // Overrides the default placeholder, rendered only while the image is
-  // still loading. Pass `null` to render no placeholder at all — the
-  // caller owns the backdrop then (e.g. a dark fullscreen surface where
-  // a muted box reads wrong).
+  // still loading. A custom node owns its own positioning (the default
+  // placeholder is `absolute inset-0`; a replacement is rendered as a
+  // bare sibling of the <img>). Pass `null` to render no placeholder at
+  // all — the caller owns the backdrop then (e.g. a dark fullscreen
+  // surface where a muted box reads wrong).
   placeholder?: ReactNode
 }
 
