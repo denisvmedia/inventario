@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useNavigate } from "react-router-dom"
 import {
   File as FileIcon,
   FileText,
@@ -10,16 +11,16 @@ import {
 } from "lucide-react"
 
 import { FileCollection } from "@/components/files/FileCollection"
-import { FilePreviewDialog } from "@/components/files/FilePreviewDialog"
+import { FileDetailSheet } from "@/components/files/FileDetailSheet"
 import { FileViewToggle } from "@/components/files/FileViewToggle"
+import type { GalleryImage } from "@/components/files/ImageViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useDeleteFile, useFiles } from "@/features/files/hooks"
+import { isImageMime } from "@/features/files/constants"
+import { useFiles } from "@/features/files/hooks"
 import type { ListedFile } from "@/features/files/api"
 import { useFilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useAppToast } from "@/hooks/useAppToast"
-import { useConfirm } from "@/hooks/useConfirm"
 import { cn } from "@/lib/utils"
 
 // CommodityFilesTab is the Commodity-detail Files tab. It keeps the
@@ -33,10 +34,13 @@ import { cn } from "@/lib/utils"
 // PhotoGrid for images + a separate NonPhotoList for documents shown at
 // once) is gone.
 //
-// Clicking a file opens the in-place `FilePreviewDialog` (the user stays
-// on the commodity detail page) — image fullscreen viewer for images,
-// PDF canvas viewer for PDFs, a small metadata + Download dialog for
-// everything else. Delete happens from inside that dialog.
+// Clicking a file opens the same right-side `FileDetailSheet` the global
+// Files page and the location/area `EntityFilesPanel` use, but *in place*
+// — driven by local state instead of navigating to `/files/:id` — so the
+// user keeps the commodity-detail context (metadata + inline preview, with
+// expand-to-fullscreen from there). Image siblings are passed through so
+// the fullscreen viewer's gallery cycles this commodity's photos. Delete /
+// download / edit all happen from inside the sheet.
 //
 // Chip IDs map 1:1 to the BE `FileCategory` enum, with one synthetic
 // `invoices` chip retained for UX continuity (post-#1622 the `invoices`
@@ -128,21 +132,17 @@ export function CommodityFilesTab({
   coverBusy = false,
 }: CommodityFilesTabProps) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
-  const toast = useAppToast()
-  const confirm = useConfirm()
-  const deleteMutation = useDeleteFile()
 
   const [activeChip, setActiveChip] = useState<FilesTabCategory>("all")
   // Grid/list toggle, shared with the location/area panel via the same
   // localStorage key (entity-detail surfaces default to grid).
   const [viewMode, setViewMode] = useFilesViewMode("files:entityViewMode", "grid")
-  // Currently-open file for the inline FilePreviewDialog — clicking a
-  // file opens the preview overlay rather than navigating away. `null`
-  // means closed. Holding the full ListedFile (file + signedUrl) lets the
-  // dialog branch on MIME without a re-fetch.
-  const [previewFile, setPreviewFile] = useState<ListedFile | null>(null)
+  // The file whose detail sheet is open, kept locally so opening it never
+  // leaves the commodity detail page (mirrors EntityFilesPanel, #1963).
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // Single query fans all chips; client-side filtering keeps chip-toggle
   // latency at zero. The badge query in `CommodityDetailPage` uses
@@ -171,36 +171,15 @@ export function CommodityFilesTab({
     return files.filter((row) => row.file.category === activeChip)
   }, [files, activeChip])
 
-  // Open the inline preview overlay for the row identified by id. The
-  // user stays on the commodity detail page; closing the dialog returns
-  // focus to the file.
-  function handleOpen(fileId: string) {
-    const row = files.find((r) => r.file.id === fileId)
-    if (!row) return
-    setPreviewFile(row)
-  }
-
-  async function handlePreviewDelete(fileId: string) {
-    const row = files.find((r) => r.file.id === fileId)
-    if (row) await handleDelete(row.file)
-  }
-
-  async function handleDelete(file: ListedFile["file"]) {
-    const title = file.title?.trim() || file.path?.trim() || file.id
-    const ok = await confirm({
-      title: t("files:detail.deleteConfirm.title"),
-      description: t("files:detail.deleteConfirm.description", { title }),
-      confirmLabel: t("files:detail.deleteConfirm.confirm"),
-      destructive: true,
-    })
-    if (!ok) return
-    try {
-      await deleteMutation.mutateAsync(file.id)
-      toast.success(t("files:detail.deleteSuccess"))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
-  }
+  // This commodity's photos, in grid order, for the fullscreen viewer's
+  // gallery navigation inside the detail sheet.
+  const imageSiblings: GalleryImage[] = files
+    .filter(({ file, signedUrl }) => isImageMime(file.mime_type) && !!signedUrl?.url)
+    .map(({ file, signedUrl }) => ({
+      id: file.id,
+      url: signedUrl?.url ?? "",
+      alt: file.title?.trim() || file.path?.trim() || file.id,
+    }))
 
   const activeChipDef = CHIPS.find((c) => c.id === activeChip) ?? CHIPS[0]
   const ActiveEmptyIcon = activeChipDef.icon
@@ -326,7 +305,7 @@ export function CommodityFilesTab({
             <FileCollection
               items={visible}
               viewMode={viewMode}
-              onOpen={handleOpen}
+              onOpen={(id) => setSelectedId(id)}
               coverState={coverState}
               onSetCover={onSetCover}
               coverBusy={coverBusy}
@@ -335,10 +314,17 @@ export function CommodityFilesTab({
           </div>
         )}
       </div>
-      <FilePreviewDialog
-        file={previewFile}
-        onClose={() => setPreviewFile(null)}
-        onDelete={handlePreviewDelete}
+      <FileDetailSheet
+        fileId={selectedId}
+        open={!!selectedId}
+        onOpenChange={(next) => {
+          if (!next) setSelectedId(null)
+        }}
+        onEdit={(id) =>
+          navigate(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(id)}/edit`)
+        }
+        imageSiblings={imageSiblings}
+        onSelectSibling={(id) => setSelectedId(id)}
       />
     </>
   )

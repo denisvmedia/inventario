@@ -212,26 +212,31 @@ describe("<CommodityFilesTab />", () => {
     expect(empty).toHaveTextContent(/No images yet/i)
   })
 
-  it("opens the inline FilePreviewDialog when a file is activated (PDF -> fullscreen)", async () => {
+  it("opens the right-side FileDetailSheet in place (not fullscreen) when a file is activated (#1966)", async () => {
     const user = userEvent.setup()
     server.use(
       ...groupHandlers.list(groupFixture),
-      ...fileHandlers.list(
+      ...fileHandlers.list(SLUG, [{ id: photoFixture.id, attributes: photoFixture }], {
+        signed_urls: { [photoFixture.id]: { url: "https://files.example.com/photo/raw" } },
+      }),
+      // The side panel fetches the file detail when opened.
+      ...fileHandlers.detail(
         SLUG,
-        [{ id: invoiceFixture.id, attributes: invoiceFixture }],
-        // Wire a signed URL so the PDF branch has a target; without it the
-        // dialog falls through to the preview-error copy and the test would
-        // fail to find the dialog testid.
-        { signed_urls: { [invoiceFixture.id]: { url: "https://files.example.com/inv/raw" } } }
+        photoFixture.id,
+        { id: photoFixture.id, ...photoFixture },
+        { url: "https://files.example.com/photo/raw" }
       )
     )
     renderTab()
-    const openBtn = await screen.findByTestId(`file-card-open-${invoiceFixture.id}`)
+    const openBtn = await screen.findByTestId(`file-card-open-${photoFixture.id}`)
     await user.click(openBtn)
-    // The click opens the inline FilePreviewDialog overlay (PDF → fullscreen
-    // Dialog) instead of routing the user away from the commodity detail
-    // page — issue #1966 keeps the inline-preview behaviour.
-    expect(await screen.findByTestId("file-preview-dialog-pdf")).toBeInTheDocument()
+    // Clicking a file opens the shared right-side FileDetailSheet *in place*
+    // (the user stays on the commodity detail page) — consistent with the
+    // Files page and the location/area panel, and NOT the fullscreen
+    // image/PDF viewer (#1966).
+    expect(await screen.findByTestId("file-detail-sheet")).toBeInTheDocument()
+    expect(screen.queryByTestId("file-image-viewer")).toBeNull()
+    expect(screen.queryByTestId("file-preview-dialog-pdf")).toBeNull()
   })
 
   it("surfaces an error alert when the list endpoint 500s", async () => {
