@@ -1,12 +1,14 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useNavigate } from "react-router-dom"
 import { Upload } from "lucide-react"
 
 import { FileCard, type FileCardCoverState } from "@/components/files/FileCard"
+import { FilePreviewDialog } from "@/components/files/FilePreviewDialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import type { ListedFile } from "@/features/files/api"
 import { useFiles } from "@/features/files/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 
@@ -15,9 +17,10 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 // `GET /files?linked_entity_type=…&linked_entity_id=…` endpoint
 // introduced for #1411 AC #4 (area linkage added under #1531 item 1).
 //
-// Click on a card deep-links to `/files/:id` which mounts the same
-// FileDetailSheet the main /files page uses, so detail / download /
-// edit / delete all reuse the validated path.
+// Clicking a card opens the file in place via FilePreviewDialog (image →
+// fullscreen viewer, PDF → fullscreen reader, other → download card),
+// keeping the user on the entity-detail page instead of routing away to
+// the global `/files/:id` surface.
 //
 // `onAttachClick` (#1448): when provided, renders an "Attach files"
 // button in the header that opens an upload affordance with this
@@ -54,9 +57,13 @@ export function EntityFilesPanel({
   coverBusy,
 }: EntityFilesPanelProps) {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
+  // Open the clicked file in place (#1963 follow-up) — image → fullscreen
+  // viewer, PDF → fullscreen reader, other → download card — instead of
+  // navigating away to the global /files/:id route and losing the entity
+  // context (the symptom the maintainer hit from a location's photo).
+  const [previewFile, setPreviewFile] = useState<ListedFile | null>(null)
 
   const filesQuery = useFiles(
     {
@@ -69,13 +76,6 @@ export function EntityFilesPanel({
 
   const files = filesQuery.data?.files ?? []
   const total = filesQuery.data?.total ?? 0
-
-  // Deep-link to the global Files detail sheet — keeps URL shareable
-  // and reuses the validated detail / download / delete path.
-  const handleOpen = (fileId: string) => {
-    if (!slug) return
-    navigate(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(fileId)}`)
-  }
 
   return (
     <Card data-testid="entity-files-panel">
@@ -127,7 +127,7 @@ export function EntityFilesPanel({
                 key={file.id}
                 file={file}
                 signedUrl={signedUrl}
-                onOpen={handleOpen}
+                onOpen={() => setPreviewFile({ file, signedUrl })}
                 coverState={coverState}
                 onSetCover={onSetCover}
                 coverBusy={coverBusy}
@@ -136,6 +136,7 @@ export function EntityFilesPanel({
           </div>
         )}
       </CardContent>
+      <FilePreviewDialog file={previewFile} onClose={() => setPreviewFile(null)} />
     </Card>
   )
 }

@@ -319,6 +319,36 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
     }
   }, [rootEl, viewMode, pdf, numPages])
 
+  // Single-page mode: the wheel flips whole pages (one flick = one page).
+  // A short cooldown stops a single momentum scroll from skipping several.
+  // Native (non-passive) listener so preventDefault stops the inner scroll.
+  // (A tall, zoomed-in page is still reachable via the scrollbar / drag; use
+  // fit-to-page to read it whole.)
+  useEffect(() => {
+    if (!rootEl || viewMode !== "paged" || !pdf) return
+    let accum = 0
+    let lastFlip = 0
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) return // leave pinch-zoom alone
+      e.preventDefault()
+      const now = performance.now()
+      if (now - lastFlip < 250) return
+      accum += e.deltaY
+      const THRESHOLD = 30
+      if (accum >= THRESHOLD) {
+        accum = 0
+        lastFlip = now
+        setPage((p) => Math.min(numPages, p + 1))
+      } else if (accum <= -THRESHOLD) {
+        accum = 0
+        lastFlip = now
+        setPage((p) => Math.max(1, p - 1))
+      }
+    }
+    rootEl.addEventListener("wheel", onWheel, { passive: false })
+    return () => rootEl.removeEventListener("wheel", onWheel)
+  }, [rootEl, viewMode, pdf, numPages])
+
   const zoom = useCallback((delta: number) => {
     setFitMode(null)
     setScale((s) => clampScale(s + delta))

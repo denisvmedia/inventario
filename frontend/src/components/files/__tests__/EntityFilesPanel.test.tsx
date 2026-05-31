@@ -122,6 +122,39 @@ describe("<EntityFilesPanel />", () => {
     expect(onAttachClick).toHaveBeenCalledTimes(1)
   })
 
+  it("opens a clicked photo in place (fullscreen viewer) instead of routing away (#1963)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(
+        SLUG,
+        [
+          {
+            id: "f-img",
+            attributes: {
+              title: "Living room",
+              path: "living-room",
+              ext: ".jpg",
+              mime_type: "image/jpeg",
+              category: "images",
+              type: "image",
+              linked_entity_type: "location",
+              linked_entity_id: COMMODITY,
+              created_at: "2026-04-02T10:00:00Z",
+            },
+          },
+        ],
+        { signed_urls: { "f-img": { url: "https://cdn.example/living-room.jpg" } } }
+      )
+    )
+    renderPanel("location")
+    const trigger = await screen.findByTestId("file-card-open-f-img")
+    await user.click(trigger)
+    // The image opens in the fullscreen viewer right here — no navigation to
+    // the global /files/:id surface.
+    expect(await screen.findByTestId("file-image-viewer")).toBeInTheDocument()
+  })
+
   it("is axe-clean in the populated state", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
