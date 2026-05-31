@@ -10,8 +10,9 @@
 # mail-inv-vcl01-<env>.<tailnet>.ts.net with no per-environment values.
 #
 # Same plaintext-to-cluster + TLS-at-the-TS-proxy split as the app ingress and
-# infra/vm/cluster-extras/argocd-ts-ingress.yaml: tls lists the host but no
-# secretName — the TS operator issues and manages the cert internally.
+# infra/vm/cluster-extras/argocd-ts-ingress.yaml: tls lists the host with no
+# managed secret (the app ingress omits secretName; argocd sets it to "" — both
+# equivalent), so the TS operator issues and manages the cert internally.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

@@ -8,6 +8,11 @@ metadata:
     app.kubernetes.io/component: demo-mailpit
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: the message store is an in-memory ring buffer,
+  # so there's nothing to drain — and it keeps the preview-base quota's surge
+  # math airtight (no transient 2nd Mailpit pod on an image bump).
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "inventario.selectorLabels" . | nindent 6 }}
@@ -29,8 +34,19 @@ spec:
             # In-memory ring buffer (no MP_DATABASE → nothing written to disk).
             - name: MP_MAX_MESSAGES
               value: {{ .Values.demo.mailpit.maxMessages | quote }}
+            # readOnlyRootFilesystem below makes / read-only; point any scratch
+            # writes at the mounted emptyDir.
+            - name: TMPDIR
+              value: /tmp
           securityContext:
+            # Hardened beyond the redis sidecar baseline to match the
+            # postgres/minio demo sidecars: unprivileged UID (both ports are
+            # >1024) + read-only rootfs (in-memory store needs no writable FS,
+            # only /tmp scratch, mounted below).
             allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           ports:
@@ -58,4 +74,10 @@ spec:
             failureThreshold: 3
           resources:
             {{- toYaml .Values.demo.mailpit.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 {{- end }}

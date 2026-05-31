@@ -333,6 +333,13 @@ explicit app.publicUrl; in demo-mailpit mode it falls back to
 https://<first ingress host> so verification / invite / reset links resolve to
 the same tailnet node the demo is served on, again without per-environment
 wiring. Outside demo-mailpit mode the historical empty default is preserved.
+
+NOTE: the fallback derives from the APP's ingress host, not the Mailpit one —
+the public URL is where the app (and its email links) live. If demo.mailpit is
+on with an explicit demo.mailpit.ingress.host but an EMPTY ingress.hosts (the
+app has no ingress host to derive from), set app.publicUrl explicitly; an empty
+public URL is rejected at boot for the smtp provider (ValidateEmailPublicURLConfig),
+so this fails loudly rather than silently shipping broken links.
 */}}
 {{- define "inventario.publicUrl" -}}
 {{- $explicit := .Values.app.publicUrl | default "" | trim -}}

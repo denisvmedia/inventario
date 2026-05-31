@@ -896,6 +896,8 @@ demo:
       # Explicit overrides (leave empty to derive from the app ingress host):
       #   host:       full FQDN, e.g. mail-inv-vcl01-master.<tailnet>.ts.net
       #   tsHostname: tailscale.com/hostname (first DNS label, no suffix)
+      # If you set `host` here but leave the app's ingress.hosts empty, also set
+      # app.publicUrl explicitly — it derives from the app host, not this one.
       host: ""
       tsHostname: ""
       # Extra annotations merged onto the derived tailscale.com/hostname.
