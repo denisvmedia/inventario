@@ -1,22 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
-import {
-  ChevronLeft,
-  ChevronRight,
-  LayoutGrid,
-  List,
-  Search,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react"
+import { ChevronLeft, ChevronRight, Search, Trash2, Upload, X } from "lucide-react"
 
 import { CategoryTiles } from "@/components/files/CategoryTiles"
-import { FileCard } from "@/components/files/FileCard"
+import { FileCollection } from "@/components/files/FileCollection"
 import { FileDetailSheet } from "@/components/files/FileDetailSheet"
+import { FileViewToggle } from "@/components/files/FileViewToggle"
 import type { GalleryImage } from "@/components/files/ImageViewer"
-import { FileListRow } from "@/components/files/FileListRow"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -39,6 +30,7 @@ import {
   useFileCategoryCounts,
   useFiles,
 } from "@/features/files/hooks"
+import { useFilesViewMode, type FilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
@@ -47,8 +39,6 @@ import { cn } from "@/lib/utils"
 
 const PAGE_SIZE = 24
 const VIEW_MODE_KEY = "files:viewMode"
-
-type ViewMode = "list" | "grid"
 
 // Files list page — the centrepiece of #1411, polished under #1538.
 // Renders five category tiles with live counts (BE: GET
@@ -72,16 +62,12 @@ export function FilesListPage() {
   const search = searchParams.get("q") ?? ""
   const tags = useMemo(() => splitTags(searchParams.get("tags")), [searchParams])
   const page = parsePageParam(searchParams.get("page"))
-  // View mode: URL `?view=` overrides; otherwise the user's localStorage
-  // pick survives across refreshes; otherwise default = list (per the
+  // View mode: URL `?view=` overrides; otherwise the localStorage-backed
+  // pick (shared hook) survives across refreshes; default = list (per the
   // #1538 mock).
-  const urlView = searchParams.get("view") as ViewMode | null
-  const [storedView, setStoredView] = useState<ViewMode>(() => {
-    if (typeof window === "undefined") return "list"
-    const raw = window.localStorage.getItem(VIEW_MODE_KEY)
-    return raw === "grid" || raw === "list" ? raw : "list"
-  })
-  const viewMode: ViewMode = urlView === "grid" || urlView === "list" ? urlView : storedView
+  const urlView = searchParams.get("view") as FilesViewMode | null
+  const [storedView, setStoredView] = useFilesViewMode(VIEW_MODE_KEY, "list")
+  const viewMode: FilesViewMode = urlView === "grid" || urlView === "list" ? urlView : storedView
 
   const [pendingSearch, setPendingSearch] = useState(search)
   // Re-seed input when URL search param changes (back/forward).
@@ -163,11 +149,10 @@ export function FilesListPage() {
     setSelected(new Set())
   }
 
-  function setViewMode(mode: ViewMode) {
+  function setViewMode(mode: FilesViewMode) {
+    // localStorage persistence is handled by the shared hook; here we
+    // additionally mirror the choice into the shareable `?view=` URL.
     setStoredView(mode)
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(VIEW_MODE_KEY, mode)
-    }
     setSearchParams((prev) => {
       const out = new URLSearchParams(prev)
       out.set("view", mode)
@@ -315,30 +300,7 @@ export function FilesListPage() {
             <ActiveIcon className={cn("size-3", activeTileMeta.activeColor)} aria-hidden="true" />
           </div>
           <p className="flex-1 text-xs text-muted-foreground">{descriptionOf(activeTile)}</p>
-          <div className="flex gap-1">
-            <Button
-              variant={viewMode === "list" ? "secondary" : "ghost"}
-              size="icon"
-              className="size-8"
-              onClick={() => setViewMode("list")}
-              aria-label={t("files:view.list", { defaultValue: "List view" })}
-              aria-pressed={viewMode === "list"}
-              data-testid="files-view-list"
-            >
-              <List className="size-4" aria-hidden="true" />
-            </Button>
-            <Button
-              variant={viewMode === "grid" ? "secondary" : "ghost"}
-              size="icon"
-              className="size-8"
-              onClick={() => setViewMode("grid")}
-              aria-label={t("files:view.grid", { defaultValue: "Grid view" })}
-              aria-pressed={viewMode === "grid"}
-              data-testid="files-view-grid"
-            >
-              <LayoutGrid className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
+          <FileViewToggle value={viewMode} onChange={setViewMode} />
         </div>
         <form
           className="relative"
@@ -515,63 +477,17 @@ export function FilesListPage() {
             </Button>
           ) : null}
         </div>
-      ) : viewMode === "grid" ? (
-        <div
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
-          data-testid="files-grid"
-        >
-          {items.map(({ file, signedUrl }) => (
-            <FileCard
-              key={file.id}
-              file={file}
-              signedUrl={signedUrl}
-              selected={selected.has(file.id)}
-              onToggleSelect={toggleOne}
-              onOpen={(id) => navigate(filesUrl(groupSlug, id))}
-            />
-          ))}
-        </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border bg-card" data-testid="files-list">
-          {/* Desktop header row — hidden on mobile (rows collapse). The
-              gap-4/px-4 rhythm mirrors the mock (FileBrowserView.tsx
-              ~line 692) and keeps the header aligned with FileListRow's
-              `grid-cols-subgrid` body row. */}
-          <div className="hidden grid-cols-[auto_auto_1fr_auto_auto_auto] gap-4 border-b bg-muted/50 px-4 py-2 sm:grid">
-            <div>
-              <Checkbox
-                checked={allSelectedOnPage}
-                onCheckedChange={toggleAllOnPage}
-                aria-label={t("files:list.selectAll")}
-                data-testid="files-list-select-all"
-              />
-            </div>
-            <span className="size-4" aria-hidden="true" />
-            <span className="text-xs font-medium text-muted-foreground">
-              {t("files:list.columnName", { defaultValue: "Name" })}
-            </span>
-            <span className="w-24 text-center text-xs font-medium text-muted-foreground">
-              {t("files:list.columnCategory", { defaultValue: "Category" })}
-            </span>
-            <span className="w-28 text-right text-xs font-medium text-muted-foreground">
-              {t("files:list.columnUploaded", { defaultValue: "Uploaded" })}
-            </span>
-            <span className="w-16 text-right text-xs font-medium text-muted-foreground">
-              {t("files:list.columnSize", { defaultValue: "Size" })}
-            </span>
-          </div>
-          <ul className="divide-y">
-            {items.map(({ file }) => (
-              <FileListRow
-                key={file.id}
-                file={file}
-                selected={selected.has(file.id)}
-                onToggleSelect={toggleOne}
-                onOpen={(id) => navigate(filesUrl(groupSlug, id))}
-              />
-            ))}
-          </ul>
-        </div>
+        <FileCollection
+          items={items}
+          viewMode={viewMode}
+          onOpen={(id) => navigate(filesUrl(groupSlug, id))}
+          selectedIds={selected}
+          onToggleSelect={toggleOne}
+          allSelectedOnPage={allSelectedOnPage}
+          onToggleAll={toggleAllOnPage}
+          showListHeader
+        />
       )}
 
       {total > PAGE_SIZE ? (

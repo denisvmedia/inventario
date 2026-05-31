@@ -251,15 +251,18 @@ test.describe('Commodity quick-attach (Files tab)', () => {
       invoiceFileId,
     )
 
-    // Open the inline preview for one of the PDFs and verify the
-    // dialog's PDF variant mounts. The image branch routes to
-    // `ImageViewer` (already covered by component-level vitest), and
-    // the "other" branch only fires for non-image / non-PDF MIMEs.
-    recorder.log(`Step ${step++}: opening inline PDF preview`)
+    // Open one of the PDFs — clicking a card opens the shared right-side
+    // FileDetailSheet *in place* (#1966), exactly like the Files page and
+    // the location/area panel (no fullscreen overlay, no navigation away).
+    // The PDF preview renders inside the sheet; assert the sheet + its
+    // metadata mount, then close it with Escape.
+    recorder.log(`Step ${step++}: opening the file detail sheet`)
     const pdfId = await openFirstCommodityPdf(page)
-    await expect(page.getByTestId('file-preview-dialog-pdf')).toBeVisible()
-    await page.getByTestId('file-preview-dialog-close').click()
-    await expect(page.getByTestId('file-preview-dialog-pdf')).toBeHidden()
+    const previewSheet = page.getByTestId('file-detail-sheet')
+    await expect(previewSheet).toBeVisible()
+    await expect(previewSheet.getByTestId('file-detail-filename')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(previewSheet).toBeHidden()
     await recorder.takeScreenshot('commodity-preview-closed')
 
     // Delete one row via the per-row affordance + useConfirm dialog;
