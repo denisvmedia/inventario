@@ -230,6 +230,7 @@ export function PdfViewer({ url, onError, onRequestFullscreen }: PdfViewerProps)
           <div
             className="h-1.5 w-40 overflow-hidden rounded-full bg-muted"
             role="progressbar"
+            aria-label={t("common:loading", { defaultValue: "Loading…" })}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={progress === null ? undefined : Math.round(progress * 100)}

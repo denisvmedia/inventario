@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import { Download, ExternalLink, File as FileIcon, Maximize2, Pencil, Trash2 } from "lucide-react"
@@ -80,6 +80,14 @@ export function FileDetailSheet({
   // the inline viewer's toolbar button flips this, and a fullscreen Dialog
   // (a stacked layer, so it doesn't dismiss this Sheet) hosts a second viewer.
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
+  // The Sheet is always mounted by its callers (FilesListPage, EntityFilesPanel,
+  // CommodityFilesTab) and just swaps `fileId`, so a fullscreen viewer left open
+  // on one file would otherwise carry over to the next. Reset on file change.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setImageViewerOpen(false)
+    setPdfViewerOpen(false)
+  }, [fileId])
 
   const file = query.data?.file
   const signedUrl = query.data?.signedUrl?.url

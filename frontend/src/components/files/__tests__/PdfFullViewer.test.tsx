@@ -75,6 +75,23 @@ describe("<PdfFullViewer />", () => {
     expect(screen.queryByTestId("pdf-full-page-1")).not.toBeInTheDocument()
   })
 
+  it("commits a typed page number on Enter, not on every keystroke", async () => {
+    const user = userEvent.setup()
+    await renderViewer()
+    await user.click(screen.getByTestId("pdf-full-mode")) // paged
+    const input = screen.getByTestId("pdf-full-page-input")
+    // Typing edits the draft only — no navigation mid-entry (the old onChange
+    // would have jumped to page 3 already).
+    fireEvent.change(input, { target: { value: "3" } })
+    expect(screen.getByTestId("pdf-full-page-1")).toBeInTheDocument()
+    expect(screen.queryByTestId("pdf-full-page-3")).not.toBeInTheDocument()
+    // Enter commits the draft and navigates.
+    fireEvent.keyDown(input, { key: "Enter" })
+    expect(screen.getByTestId("pdf-full-page-input")).toHaveValue(3)
+    expect(screen.getByTestId("pdf-full-page-3")).toBeInTheDocument()
+    expect(screen.queryByTestId("pdf-full-page-1")).not.toBeInTheDocument()
+  })
+
   it("manual zoom clears the fit mode and changes the zoom level", async () => {
     const user = userEvent.setup()
     await renderViewer()

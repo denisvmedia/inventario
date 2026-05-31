@@ -91,10 +91,13 @@ interface PageProps {
 }
 
 // One page in the continuous strip. Reserves its full (scaled) box up front so
-// the scrollbar reflects the whole document, and only renders the canvas once
-// it scrolls near the viewport — keeps a 200-page PDF from rendering 200
-// canvases at once. (The current-page indicator is derived from scroll
-// position in the parent, Chrome-style: the page nearest the viewport top.)
+// the scrollbar reflects the whole document, and only keeps a canvas rendered
+// while the page is near the viewport: a page that scrolls far away is evicted
+// (its canvas freed) and re-rendered on return — so a 200-page PDF never holds
+// 200 full-size canvases at once. (The current-page indicator is derived from
+// scroll position in the parent, Chrome-style: the page nearest the viewport
+// top — it reads the always-present wrapper boxes, not the canvases, so
+// eviction doesn't disturb it.)
 function ContinuousPage({ pdf, pageNumber, scale, base, root, registerRef }: PageProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -109,17 +112,30 @@ function ContinuousPage({ pdf, pageNumber, scale, base, root, registerRef }: Pag
     if (!HAS_IO) return
     const el = wrapRef.current
     if (!el) return
+    // Toggle both ways (the 600px margin keeps a buffer above/below the
+    // viewport rendered so scrolling stays smooth) so off-screen pages can be
+    // evicted, not just lazily mounted.
     const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) setRender(true)
-      },
-      { root: root ?? null, rootMargin: "300px 0px" }
+      (entries) => setRender(entries[entries.length - 1].isIntersecting),
+      { root: root ?? null, rootMargin: "600px 0px" }
     )
     io.observe(el)
     return () => io.disconnect()
   }, [root])
 
   usePageRender(pdf, pageNumber, scale, canvasRef, render)
+
+  // Free the bitmap once the page is evicted so its memory is reclaimed;
+  // usePageRender repaints it when `render` flips back on. The wrapper keeps its
+  // reserved size, so this doesn't shift layout.
+  useEffect(() => {
+    if (render) return
+    const canvas = canvasRef.current
+    if (canvas) {
+      canvas.width = 0
+      canvas.height = 0
+    }
+  }, [render])
 
   return (
     <div
@@ -134,12 +150,7 @@ function ContinuousPage({ pdf, pageNumber, scale, base, root, registerRef }: Pag
   )
 }
 
-function PagedPage({
-  pdf,
-  pageNumber,
-  scale,
-  base,
-}: Omit<PageProps, "root" | "onVisible" | "registerRef">) {
+function PagedPage({ pdf, pageNumber, scale, base }: Omit<PageProps, "root" | "registerRef">) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   usePageRender(pdf, pageNumber, scale, canvasRef, true)
   return (
@@ -198,7 +209,7 @@ function Thumbnail({ pdf, pageNumber, base, active, root, onClick }: ThumbProps)
       ref={wrapRef}
       type="button"
       onClick={onClick}
-      aria-current={active}
+      aria-current={active ? "page" : undefined}
       data-testid={`pdf-full-thumb-${pageNumber}`}
       className="flex w-full flex-col items-center gap-1 rounded-md p-2 text-xs text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
@@ -258,6 +269,9 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
   const [fitMode, setFitMode] = useState<FitMode>("width")
   const [viewMode, setViewMode] = useState<ViewMode>("continuous")
   const [page, setPage] = useState(1)
+  // Editable draft for the page-number field, kept separate from the committed
+  // `page` so typing a multi-digit number doesn't navigate on every keystroke.
+  const [pageInput, setPageInput] = useState("1")
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [area, setArea] = useState({ width: 0, height: 0 })
 
@@ -333,6 +347,18 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
     },
     [numPages, viewMode]
   )
+
+  // Mirror the committed page back into the editable field whenever it changes
+  // from elsewhere (nav buttons, wheel-flip, the scroll indicator), so the field
+  // shows the real page once a navigation settles.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPageInput(String(page))
+  }, [page])
+
+  const commitPageInput = useCallback(() => {
+    goToPage(Number(pageInput) || 1)
+  }, [goToPage, pageInput])
 
   // Current-page indicator in continuous mode (Chrome-style): the page whose
   // top edge sits nearest the viewport top. Driven off scroll so the counter
@@ -473,8 +499,15 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
             type="number"
             min={1}
             max={numPages || 1}
-            value={page}
-            onChange={(e) => goToPage(Number(e.target.value) || 1)}
+            value={pageInput}
+            onChange={(e) => setPageInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                commitPageInput()
+                e.currentTarget.blur()
+              }
+            }}
+            onBlur={commitPageInput}
             aria-label={t("files:viewer.pageNumber", { defaultValue: "Page number" })}
             data-testid="pdf-full-page-input"
             className="w-12 rounded border bg-background px-1 py-0.5 text-center tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
@@ -627,6 +660,7 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
               <div
                 className="h-1.5 w-40 overflow-hidden rounded-full bg-muted"
                 role="progressbar"
+                aria-label={t("common:loading", { defaultValue: "Loading…" })}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={progress === null ? undefined : Math.round(progress * 100)}
