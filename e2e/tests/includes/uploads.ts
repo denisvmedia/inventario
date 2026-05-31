@@ -226,12 +226,20 @@ export async function getCommodityFileIds(page: Page): Promise<string[]> {
  * `file-preview-dialog-other` — both are reachable via similar
  * helpers if a future spec needs them.
  */
-export async function openFirstCommodityPdf(page: Page): Promise<string> {
-  // PDFs live in the `documents` category; the FileCard root carries
-  // `data-category`, so target a document card and open it.
-  const card = page.locator('[data-testid^="file-card-"][data-category="documents"]').first()
-  await card.waitFor({ state: 'visible', timeout: 15_000 })
-  const openBtn = card.locator('[data-testid^="file-card-open-"]').first()
+export async function openFirstCommodityPdf(page: Page, pdfId?: string): Promise<string> {
+  // `documents` is a broad category (PDF / DOCX / TXT / …), so we can't
+  // infer "is a PDF" from the card alone. Callers that know which
+  // attachment is the PDF pass its id; otherwise we fall back to the first
+  // document card and let the PDF-dialog wait surface a wrong pick as a
+  // failure rather than silently hanging.
+  const openBtn = pdfId
+    ? page.getByTestId(`file-card-open-${pdfId}`)
+    : page
+        .locator('[data-testid^="file-card-"][data-category="documents"]')
+        .first()
+        .locator('[data-testid^="file-card-open-"]')
+        .first()
+  await openBtn.waitFor({ state: 'visible', timeout: 15_000 })
   const tid = await openBtn.getAttribute('data-testid')
   if (!tid) {
     throw new Error('openFirstCommodityPdf: no openable document card found')
@@ -256,8 +264,14 @@ export async function deleteFromCommodityRow(
 ): Promise<void> {
   // Inline per-card delete is gone (#1966): open the file's
   // FilePreviewDialog, use its Delete affordance, then accept the
-  // destructive useConfirm dialog.
-  await page.getByTestId(`file-card-open-${fileId}`).click()
+  // destructive useConfirm dialog. The entity view mode
+  // (`files:entityViewMode`) is persisted and shared with EntityFilesPanel,
+  // so the tab may legitimately be in grid (FileCard) or list (FileListRow)
+  // mode — open whichever opener is currently rendered.
+  const cardOpen = page.getByTestId(`file-card-open-${fileId}`)
+  const rowOpen = page.getByTestId(`file-row-${fileId}`)
+  const opener = (await cardOpen.count()) ? cardOpen : rowOpen
+  await opener.click()
   const deleteBtn = page
     .locator(
       '[data-testid="file-preview-dialog-pdf-delete"], [data-testid="file-preview-dialog-other-delete"]',
@@ -269,9 +283,10 @@ export async function deleteFromCommodityRow(
   await recorder.takeScreenshot(`${screenshotPrefix}-confirm`)
   await page.getByTestId('confirm-accept').click()
   await page.getByTestId('confirm-dialog').waitFor({ state: 'hidden', timeout: 15_000 })
-  // Wait for the deleted file's card to disappear so subsequent count
+  // Wait for the deleted file's card/row to disappear so subsequent count
   // assertions don't race the cache invalidation.
-  await expect(page.getByTestId(`file-card-open-${fileId}`)).toHaveCount(0, { timeout: 15_000 })
+  await expect(cardOpen).toHaveCount(0, { timeout: 15_000 })
+  await expect(rowOpen).toHaveCount(0, { timeout: 15_000 })
   await recorder.takeScreenshot(`${screenshotPrefix}-done`)
 }
 

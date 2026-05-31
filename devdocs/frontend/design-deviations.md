@@ -696,3 +696,7 @@ _None yet._
 - The per-photo **cover star** is available in **grid view only** (`FileCard`); `FileListRow` has no star. Photos were only ever a grid concept, so this is not a regression — set a cover from grid view.
 - Per-card inline **delete** and the **View/Open/Download** CTAs are removed (now consistent with the main Files page); delete/download happen from inside `FilePreviewDialog`.
 - The grid/list choice persists in `localStorage` under `files:entityViewMode` (shared with `EntityFilesPanel`; default **grid** — entity-detail surfaces are photo-first), distinct from the global Files page's `files:viewMode` (default list).
+
+**Approved by:** denis@5x5.cz (repo owner) — requested both the commodity-tab unification and the EntityFilesPanel convergence during the #1966 / PR #1984 review.
+
+**Reversion plan:** Revert PR #1984. Concretely: restore `CommodityFilesTab`'s bespoke `PhotoGrid` + `NonPhotoList` from git history, delete `FileCollection` / `FileViewToggle` / `useFilesViewMode`, and re-point `EntityFilesPanel` and `FilesListPage` back at their inline `FileCard`/`FileListRow` renderers. That returns every surface to the per-surface layouts defined in `design-mocks/src/components/ItemDetail.tsx` and `design-mocks/src/views/FileBrowserView.tsx`.

@@ -29,7 +29,12 @@ export function useFilesViewMode(
   const update = (next: FilesViewMode) => {
     setMode(next)
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(storageKey, next)
+      try {
+        window.localStorage.setItem(storageKey, next)
+      } catch {
+        // Ignore write failures (private mode, quota, security policy) —
+        // the in-memory state still updates, the choice just won't persist.
+      }
     }
   }
   return [mode, update]
