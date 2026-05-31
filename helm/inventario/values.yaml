@@ -856,3 +856,50 @@ demo:
       limits:
         cpu: 500m
         memory: 512Mi
+
+  mailpit:
+    # Enable an in-cluster Mailpit mail-trap (SMTP catch-all + web UI) for
+    # demo / preview environments. When enabled:
+    #   - the app's email provider is FORCED to smtp pointed at this sidecar
+    #     (:1025, no auth, no TLS) in templates/configmap.yaml, so
+    #     verification / invite / reset emails are captured instead of being
+    #     black-holed by the stub provider;
+    #   - app.publicUrl falls back to https://<first ingress host> (see the
+    #     inventario.publicUrl helper) so the links inside those emails resolve;
+    #   - set email.from to a non-empty bare address (the async email service
+    #     rejects an empty FROM for non-stub providers).
+    # Messages live in an in-memory ring buffer (emptyDir) — never persisted,
+    # never backed up, even in the longevity environment.
+    enabled: false
+
+    image: axllent/mailpit:v1.21
+
+    # Max retained messages (ring buffer); mirrors docker-compose's
+    # MP_MAX_MESSAGES. Env: MP_MAX_MESSAGES on the Mailpit container.
+    maxMessages: 500
+
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+
+    ingress:
+      # Publish the Mailpit web UI (:8025) as its OWN Tailscale node, sibling to
+      # the app's ingress. Host + tailscale.com/hostname are derived as
+      # "mail-"<app ingress host> by the inventario.mailpitIngressHost /
+      # mailpitTsHostname helpers, so no per-environment values are required.
+      enabled: false
+      className: tailscale
+      # Explicit overrides (leave empty to derive from the app ingress host):
+      #   host:       full FQDN, e.g. mail-inv-vcl01-master.<tailnet>.ts.net
+      #   tsHostname: tailscale.com/hostname (first DNS label, no suffix)
+      # If you set `host` here but leave the app's ingress.hosts empty, also set
+      # app.publicUrl explicitly — it derives from the app host, not this one.
+      host: ""
+      tsHostname: ""
+      # Extra annotations merged onto the derived tailscale.com/hostname.
+      annotations:
+        tailscale.com/http-redirect: "true"
