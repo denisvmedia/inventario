@@ -82,6 +82,13 @@ spec:
               setupJob:
                 initData:
                   adminPassword: "PreviewAdmin123"
+              # AI-vision photo-scan (#1976): PR previews run the `mock`
+              # provider — exercises the full Add-Item AI step (offer → scan →
+              # review → prefill) with a deterministic canned result, no API key
+              # and no vendor spend. The `mock` provider needs no secret, so
+              # there's no boot hazard here (unlike master/longevity's anthropic).
+              aivision:
+                provider: mock
               ingress:
                 annotations:
                   tailscale.com/hostname: 'inv-vcl01-pr{{.number}}'

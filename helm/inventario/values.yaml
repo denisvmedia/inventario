@@ -459,6 +459,54 @@ email:
     baseUrl: ""
 
 # ============================================================
+# AI vision — photo-scan that prefills the Add-Item form (#1720).
+# Non-sensitive knobs live here (ConfigMap); the per-provider API keys are
+# secrets — see secrets.aiVisionAnthropicApiKey / secrets.aiVisionOpenaiApiKey.
+# ============================================================
+aivision:
+  # Provider: none | mock | anthropic | openai
+  #   none      — feature off; POST .../commodities/scan returns 503.
+  #   mock      — deterministic canned result; no network, no API key.
+  #   anthropic — Claude vision; REQUIRES secrets.aiVisionAnthropicApiKey.
+  #   openai    — GPT-4o vision; REQUIRES secrets.aiVisionOpenaiApiKey.
+  # ⚠️ The apiserver fails to boot when a real provider is selected but its key
+  # is empty (fail-loud by design). Keep `none` unless the key is wired.
+  # Env: INVENTARIO_RUN_AI_VISION_PROVIDER
+  provider: "none"
+
+  # Anthropic model id (used when provider=anthropic).
+  # Env: INVENTARIO_RUN_AI_VISION_ANTHROPIC_MODEL
+  anthropicModel: "claude-sonnet-4-6"
+
+  # Anthropic API base URL override (empty = public api.anthropic.com).
+  # Env: INVENTARIO_RUN_AI_VISION_ANTHROPIC_BASE_URL
+  anthropicBaseUrl: ""
+
+  # OpenAI model id (used when provider=openai).
+  # Env: INVENTARIO_RUN_AI_VISION_OPENAI_MODEL
+  openaiModel: "gpt-4o"
+
+  # OpenAI API base URL override (empty = public api.openai.com).
+  # Env: INVENTARIO_RUN_AI_VISION_OPENAI_BASE_URL
+  openaiBaseUrl: ""
+
+  # Per-call upstream timeout (e.g. "20s").
+  # Env: INVENTARIO_RUN_AI_VISION_TIMEOUT
+  timeout: "20s"
+
+  # Max photos accepted per scan request.
+  # Env: INVENTARIO_RUN_AI_VISION_MAX_PHOTOS
+  maxPhotos: 5
+
+  # Max bytes accepted per photo (default 10 MiB).
+  # Env: INVENTARIO_RUN_AI_VISION_MAX_PHOTO_BYTES
+  maxPhotoBytes: 10485760
+
+  # Per-user hourly scan rate limit (0 disables the limit).
+  # Env: INVENTARIO_RUN_AI_VISION_RATE_LIMIT_PER_HOUR
+  rateLimitPerHour: 30
+
+# ============================================================
 # Secrets
 # ============================================================
 secrets:
@@ -478,6 +526,8 @@ secrets:
   #   INVENTARIO_RUN_SMTP_PASSWORD               (required for smtp provider)
   #   INVENTARIO_RUN_SENDGRID_API_KEY            (required for sendgrid provider)
   #   INVENTARIO_RUN_MANDRILL_API_KEY            (required for mandrill/mailchimp provider)
+  #   INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY (required when aivision.provider=anthropic)
+  #   INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY    (required when aivision.provider=openai)
   #   SETUP_ADMIN_PASSWORD                       (required by job-setup if setupJob.enabled)
   #   SETUP_SUPERUSER_DSN                        (optional; used when setupJob.bootstrap.superuserDsn is managed outside the chart)
   #   AWS_ACCESS_KEY_ID                          (required for S3/MinIO upload)
@@ -521,6 +571,11 @@ secrets:
   smtpPassword: ""               # Env: INVENTARIO_RUN_SMTP_PASSWORD
   sendgridApiKey: ""             # Env: INVENTARIO_RUN_SENDGRID_API_KEY
   mandrillApiKey: ""             # Env: INVENTARIO_RUN_MANDRILL_API_KEY
+
+  # AI-vision provider secrets (#1720). Required only for the matching
+  # aivision.provider; empty otherwise. See the `aivision:` block above.
+  aiVisionAnthropicApiKey: ""    # Env: INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY
+  aiVisionOpenaiApiKey: ""       # Env: INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY
 
   # S3/MinIO credentials (required when app.uploadLocation uses s3://)
   # Automatically set from demo.minio.* when demo.minio.enabled=true.

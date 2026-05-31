@@ -122,6 +122,23 @@ elif [ "${#OAUTH_STATE_KEY}" -lt 32 ]; then
     warn "oauth_state.key is shorter than 32 chars; the apiserver ignores it and generates a random per-restart key. Treating it as unset — use 'openssl rand -hex 32'."
     OAUTH_STATE_KEY=""
 fi
+# Optional AI-vision provider API keys for the persistent envs (#1976). When
+# present they are injected into the inventario-admin Secret below as
+# INVENTARIO_RUN_AI_VISION_{ANTHROPIC,OPENAI}_API_KEY so the apiserver can reach
+# the vendor; the chart loads the whole Secret via envFrom. No length check —
+# vendor keys are opaque, unlike the >=32-char signing keys above.
+#
+# The master + longevity ApplicationSets pin `aivision.provider: anthropic`, and
+# wireCommodityScan FAILS THE BOOT when a real provider is selected but its key
+# is empty. So a missing anthropic.api_key is a HARD warning here (the apiserver
+# will CrashLoop) — but still best-effort, not fatal, so a Phase-1 bundle without
+# it can bootstrap the rest of the cluster; flip aivision.provider to none/mock
+# in the ApplicationSet if you want to defer the key.
+ANTHROPIC_API_KEY=$(lookup "anthropic.api_key")
+OPENAI_API_KEY=$(lookup "openai.api_key")
+if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$OPENAI_API_KEY" ]; then
+    warn "anthropic.api_key (and openai.api_key) missing in secrets bundle; inv-vcl01-master/longevity pin aivision.provider=anthropic, so their apiservers will CrashLoop until a key is set (AI-vision photo-scan boots fail-loud on an empty key). Fill anthropic.api_key, or flip aivision.provider to none/mock in the ApplicationSet to defer it."
+fi
 ADMIN_MISSING=0
 if [ -z "$ADMIN_PASSWORD" ]; then
     warn "admin.password missing in secrets bundle; required by master + longevity ApplicationSets via secrets.existingSecret"
@@ -168,6 +185,18 @@ EOF
                 cat <<EOF
   INVENTARIO_RUN_OAUTH_STATE_KEY: |-
 $(printf '%s' "$OAUTH_STATE_KEY" | sed 's/^/    /')
+EOF
+            fi
+            if [ -n "$ANTHROPIC_API_KEY" ]; then
+                cat <<EOF
+  INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY: |-
+$(printf '%s' "$ANTHROPIC_API_KEY" | sed 's/^/    /')
+EOF
+            fi
+            if [ -n "$OPENAI_API_KEY" ]; then
+                cat <<EOF
+  INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY: |-
+$(printf '%s' "$OPENAI_API_KEY" | sed 's/^/    /')
 EOF
             fi
         } | remote_apply
