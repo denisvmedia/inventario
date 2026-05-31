@@ -4,6 +4,7 @@ import { Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { FadeInImage } from "@/components/ui/fade-in-image"
 import type { FileEntity, URLData } from "@/features/files/api"
 import {
   FILE_CATEGORY_TILES,
@@ -171,9 +172,9 @@ export function FileCard({
         data-testid={`file-card-open-${file.id}`}
         className="flex flex-1 flex-col text-left focus-visible:outline-none"
       >
-        <div className="relative aspect-[4/3] w-full overflow-hidden">
+        <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
           {renderImage ? (
-            <img
+            <FadeInImage
               src={thumbUrl ?? signedUrl?.url}
               alt={title}
               loading="lazy"

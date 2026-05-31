@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { ImageViewer } from "@/components/files/ImageViewer"
@@ -99,6 +99,19 @@ describe("<ImageViewer />", () => {
     render(<ImageViewer open onOpenChange={onOpenChange} url="https://example/a.png" alt="A" />)
     await user.keyboard("{Escape}")
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("shows a loading spinner until the image decodes, then fades it in (#1961)", () => {
+    render(<ImageViewer open onOpenChange={vi.fn()} url="https://example/a.png" alt="A" />)
+    const img = screen.getByTestId("image-viewer-img") as HTMLImageElement
+    // While loading: spinner up, image transparent (fade not yet started).
+    expect(screen.getByTestId("image-viewer-loading")).toBeInTheDocument()
+    expect(img.style.opacity).toBe("0")
+
+    fireEvent.load(img)
+    // After decode: spinner gone, image fully faded in.
+    expect(screen.queryByTestId("image-viewer-loading")).not.toBeInTheDocument()
+    expect(img.style.opacity).toBe("1")
   })
 
   it("clamps the displayed zoom level to the configured min/max", async () => {

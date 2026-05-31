@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 
+import { FadeInImage } from "@/components/ui/fade-in-image"
 import { cn } from "@/lib/utils"
 import {
   COMMODITY_TYPE_FALLBACK_ICON,
@@ -102,7 +103,7 @@ export function CommodityThumb({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted",
+        "relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted",
         className
       )}
       style={{ width: dim, height: dim }}
@@ -111,7 +112,7 @@ export function CommodityThumb({
       data-commodity-type={type ?? "unknown"}
     >
       {showImage ? (
-        <img
+        <FadeInImage
           src={url}
           alt={name ?? "Commodity photo"}
           loading="lazy"
