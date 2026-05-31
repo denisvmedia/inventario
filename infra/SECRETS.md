@@ -334,6 +334,41 @@ Stash all five values for "Filling the bundle".
 
 ---
 
+### 7. Optional: AI-vision provider API key (#1976)
+
+The AI-vision photo-scan feature (#1720) lets users prefill the Add-Item form
+from product photos. It's wired but defaults OFF; all preview-stack envs —
+`inv-vcl01-master`, `inv-vcl01-longevity`, AND the per-PR previews — pin
+`aivision.provider: anthropic`, so they need an Anthropic key to serve scans.
+
+1. Get a key at <https://console.anthropic.com/> → **API keys** (`sk-ant-...`).
+2. Put it in `anthropic.api_key` in the bundle (OpenAI users: `openai.api_key`
+   instead, and set `aivision.provider: openai` in the ApplicationSet).
+
+`apply-secrets.sh` delivers it two ways:
+
+- **master + longevity**: materialized into the static `inventario-admin` Secret
+  as `INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY`; the chart loads it via
+  `envFrom`.
+- **per-PR previews** (#1976): the namespaces are created on the fly by ArgoCD,
+  so the key goes into a separate `inventario-ai-vision` Secret (AI keys only)
+  in the `inventario-shared` namespace, annotated for **emberstack/reflector**
+  (installed by `vm-install.sh`) to auto-copy into every `inv-vcl01-pr{N}`
+  namespace. The PR chart's `extraEnvFrom` then loads it.
+
+> ⚠️ **Ordering / dependency hazard.** The apiserver **fails to boot** when
+> `aivision.provider=anthropic` but the key env is empty (intentional fail-loud
+> in `wireCommodityScan`). Fill `anthropic.api_key` and run `apply-secrets.sh`
+> **before** the `aivision.provider: anthropic` config syncs — otherwise the
+> master/longevity apiservers, and **every** PR preview, CrashLoop. A freshly
+> created PR preview may also CrashLoop briefly until reflector copies the
+> Secret into its new namespace — the kubelet then restarts the pod, which
+> re-reads the now-present Secret. To stage it the other
+> way round, flip the relevant ApplicationSet's `aivision.provider` back to
+> `none`/`mock` until the key is in place.
+
+---
+
 ## Filling the bundle
 
 With all the values from steps 1-5 in hand, populate the encrypted bundle:
@@ -350,6 +385,8 @@ chmod 600 infra/vm/secrets/secrets.local.yaml
 #    master + longevity, optional),
 #    tailscale.{auth_key, oauth_client_id, oauth_client_secret, tailnet_name},
 #    github.{app_id, app_installation_id, app_private_key, url}.
+#    Fill anthropic.api_key (step 7 above) ONLY to turn the AI-vision feature
+#    on for master + longevity — and mind the boot-ordering hazard noted there.
 #    Fill the velero.* block (step 6 above) ONLY if you want the daily R2
 #    backup of inv-vcl01-longevity; leave it empty to skip the Velero install.
 #    Don't leave half-filled velero.* keys — vm-install.sh treats the block as
@@ -509,6 +546,22 @@ GH Apps allow multiple active private keys. Painless flow:
 3. `make -C infra upgrade VM=...` → applies new Secret to argocd namespace,
    rolling-restarts `argocd-repo-server` + `argocd-applicationset-controller`.
 4. Wait 24h (sanity buffer) → App settings → delete old key.
+
+### Rotating the AI-vision provider API key (`anthropic.api_key` / `openai.api_key`)
+
+Safe to rotate any time — at worst an in-flight scan request fails and the user
+retries:
+
+1. Provider console → create a new key → keep the old one live for the handoff.
+2. `sops infra/vm/secrets/secrets.enc.yaml` → replace `anthropic.api_key` (or
+   `openai.api_key`).
+3. `make -C infra upgrade VM=...` → re-applies the `inventario-admin` Secret;
+   the apiserver picks up the new key on its next rollout.
+4. Revoke the old key in the provider console.
+
+> Do NOT blank the key while `aivision.provider` is still `anthropic`/`openai` —
+> the apiserver fails to boot on an empty key for a selected real provider. Flip
+> the provider to `none` first if you intend to disable the feature.
 
 ### Rotating the Tailscale OAuth client secret
 

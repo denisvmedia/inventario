@@ -289,6 +289,22 @@ note "Installing/upgrading ArgoCD"
     --set 'applicationSet.enabled=true' \
     --wait --timeout 10m
 
+# --- reflector (#1976 — copy the AI-vision API key into dynamic PR-preview namespaces) ---
+# emberstack/reflector is a tiny controller that mirrors annotated Secrets into
+# other namespaces. apply-secrets.sh creates a single sops-sourced
+# `inventario-ai-vision` Secret (AI keys only) annotated for reflection into
+# `inv-vcl01-pr[0-9]+`; reflector copies it into each per-PR namespace as ArgoCD
+# creates them, so PR previews can run the real Anthropic provider (the static
+# master/longevity envs get the key via apply-secrets.sh directly and don't need
+# this). Installed unconditionally — harmless with no source Secret; the
+# reflection annotations are what actually drive behavior.
+note "Installing/upgrading reflector"
+"$HELM" repo add emberstack https://emberstack.github.io/helm-charts >/dev/null 2>&1 || true
+"$HELM" repo update >/dev/null
+"$HELM" upgrade --install reflector emberstack/reflector \
+    --namespace reflector --create-namespace \
+    --wait --timeout 5m
+
 # --- Velero (#1865 — daily, encrypted, off-VM backup of inv-vcl01-longevity to R2) ---
 # Optional Phase-2 component. Gated on the velero.s3_* keys being present in
 # the sops bundle; a bundle without them simply skips Velero (preview-env core

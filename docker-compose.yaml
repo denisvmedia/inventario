@@ -211,6 +211,15 @@ services:
       INVENTARIO_RUN_SMTP_PORT: ${SMTP_PORT:-1025}
       INVENTARIO_RUN_SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
 
+      # AI-vision photo-scan (#1720). Defaults OFF. Set AI_VISION_PROVIDER=mock
+      # in .env for a no-key deterministic result, or =anthropic|openai with the
+      # matching API key to hit the real vendor.
+      INVENTARIO_RUN_AI_VISION_PROVIDER: ${AI_VISION_PROVIDER:-none}
+      INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY: ${AI_VISION_ANTHROPIC_API_KEY:-}
+      INVENTARIO_RUN_AI_VISION_ANTHROPIC_MODEL: ${AI_VISION_ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY: ${AI_VISION_OPENAI_API_KEY:-}
+      INVENTARIO_RUN_AI_VISION_OPENAI_MODEL: ${AI_VISION_OPENAI_MODEL:-gpt-4o}
+
       # Feature flags
       # Currency migration is on by default. Set FEATURE_CURRENCY_MIGRATION=false
       # in .env to disable the wizard, lock middleware, and worker.

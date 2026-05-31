@@ -299,6 +299,13 @@ spec:
             - secretRef:
                 name: {{ $secretName }}
           env:
+            # Same as job-init-data.yaml: the seed step boots a throwaway
+            # `inventario run` server, which would inherit provider=anthropic
+            # from the ConfigMap but has no API key here (extraEnvFrom is
+            # Deployment-only), failing the boot (fail-loud). Seeding never uses
+            # AI vision — force it off; explicit env overrides envFrom. (#1976)
+            - name: INVENTARIO_RUN_AI_VISION_PROVIDER
+              value: "none"
             - name: APP_DB_DSN
               {{- if .Values.demo.postgresql.enabled }}
               value: {{ include "inventario.dbDsn" . | quote }}

@@ -107,6 +107,13 @@ setupJob:
     # INVENTARIO_SEED_ALLOW_BLOB_UPLOADS on the Job's temporary seed server.
     seedBlobUploads: true
 
+# AI-vision photo-scan provider is intentionally NOT set in this shared overlay
+# — it's pinned per-Application to `anthropic` everywhere: master + longevity
+# (applicationset-{master,longevity}.yaml, key via inventario-admin) AND PR
+# previews (applicationset-pr.yaml, key reflected per-namespace as
+# inventario-ai-vision + extraEnvFrom). Anything that doesn't override it
+# inherits the chart default `none` (feature off), the safe fallback. (#1976)
+
 # Defensive guard-rails per #1866: cap aggregate compute/storage/pod-count
 # in every PR-preview namespace so one runaway pod can't starve other
 # previews sharing the same 16 GiB VM. Sized for the demo bundle below

@@ -62,8 +62,10 @@ type Provider struct {
 	maxTokens  int
 }
 
-// New constructs a Provider from cfg. Returns an error when APIKey is
-// empty so the registry constructor can downgrade to disabled.
+// New constructs a Provider from cfg. Returns ErrProviderAuth when APIKey is
+// empty. This is NOT a silent downgrade to disabled: NewProvider propagates the
+// error and wireCommodityScan treats a selected-but-keyless provider as a fatal
+// boot error (fail-loud). Only the provider name "none"/"" disables the feature.
 func New(cfg Config) (*Provider, error) {
 	if cfg.APIKey == "" {
 		return nil, errxtrace.Classify(aivision.ErrProviderAuth)
