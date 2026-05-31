@@ -504,6 +504,13 @@ export function CommodityFormDialog({
       // whether to offer a Retry button (network / unknown only —
       // validation / conflict need the user to edit before resubmit).
       // Falls back to a generic copy when the body has nothing useful.
+      //
+      // Unlike the single-step forms (which suppress the banner via
+      // shouldShowGenericError once every field error maps), this
+      // multi-step form ALWAYS keeps the banner as an always-on summary:
+      // inline errors point at the offending step, the banner gives the
+      // overall status. Don't "simplify" this to match the others — it
+      // would hide the step-jump cue.
       setServerError(classifyServerError(err, t("commodities:form.serverError")))
     }
   }

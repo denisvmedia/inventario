@@ -60,6 +60,7 @@ export function applyServerFieldErrors<TFieldValues extends FieldValues>(
     }
     // Swap only the root segment when remapped, preserving any compound
     // suffix (`urls.0` stays `urls.0`; `default_group_id` → `defaultGroupId`).
+    // `options.map` keys are root segments only — never a compound path.
     const formPath = formRoot + serverPath.slice(root.length)
     setError(formPath as Path<TFieldValues>, { type: "server", message })
     mapped.push(formPath)
