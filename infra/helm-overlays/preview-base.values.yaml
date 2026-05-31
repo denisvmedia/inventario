@@ -42,6 +42,25 @@ demo:
     enabled: true
   minio:
     enabled: true
+  # Mailpit mail-trap so the demo's transactional email actually works:
+  # enabling it FORCES the app's email provider to smtp → this Mailpit (see
+  # templates/configmap.yaml), and exposes Mailpit's web UI as its own
+  # Tailscale node at mail-<app host> (the chart derives host +
+  # tailscale.com/hostname from the per-Application app ingress host, so
+  # master / PR / longevity all work with no per-environment wiring).
+  mailpit:
+    enabled: true
+    ingress:
+      enabled: true
+
+# email.from MUST be a non-empty BARE address (no "Display Name <...>" form —
+# it is used verbatim as the SMTP envelope MAIL FROM): the async email service
+# rejects an empty FROM for non-stub providers, and demo.mailpit forces smtp.
+# Everything else (provider, smtp host/port/tls) is wired by the chart in
+# demo.mailpit mode; app.publicUrl is derived from the app ingress host so the
+# links in these emails resolve to the same tailnet node.
+email:
+  from: "noreply@inventario.example"
 
 # Bootstrap + migrate runs via the chart's setup Job (templates/job-setup.yaml).
 # Idempotent — re-applies safely.
@@ -88,23 +107,32 @@ setupJob:
     # INVENTARIO_SEED_ALLOW_BLOB_UPLOADS on the Job's temporary seed server.
     seedBlobUploads: true
 
+# AI-vision photo-scan provider is intentionally NOT set in this shared overlay
+# — it's pinned per-Application to `anthropic` everywhere: master + longevity
+# (applicationset-{master,longevity}.yaml, key via inventario-admin) AND PR
+# previews (applicationset-pr.yaml, key reflected per-namespace as
+# inventario-ai-vision + extraEnvFrom). Anything that doesn't override it
+# inherits the chart default `none` (feature off), the safe fallback. (#1976)
+
 # Defensive guard-rails per #1866: cap aggregate compute/storage/pod-count
 # in every PR-preview namespace so one runaway pod can't starve other
 # previews sharing the same 16 GiB VM. Sized for the demo bundle below
-# (run all + postgres + redis + minio + transient setup / init-data /
-# mc-bucket Jobs):
+# (run all + postgres + redis + minio + mailpit + transient setup /
+# init-data / mc-bucket Jobs):
 #   - Sum of always-on `limits.cpu` = 500m (inventario run all) + 500m
-#     (demo.postgres) + 200m (demo.redis) + 500m (demo.minio) = 1700m;
-#     `limits.cpu: "4"` leaves ~2300m headroom, enough for one rolling-
-#     update surge replica (+500m) and up to three transient Job pods
-#     defaulted by the chart's LimitRange (~500m each).
-#   - Sum of always-on `limits.memory` = 512+512+128+512 = 1664Mi;
-#     `limits.memory: "4Gi"` leaves ~2.4Gi headroom. WARNING: the
+#     (demo.postgres) + 200m (demo.redis) + 500m (demo.minio) + 100m
+#     (demo.mailpit) = 1800m; `limits.cpu: "4"` leaves ~2200m headroom,
+#     enough for one rolling-update surge replica (+500m) and up to three
+#     transient Job pods defaulted by the chart's LimitRange (~500m each).
+#   - Sum of always-on `limits.memory` = 512+512+128+512+64 = 1728Mi;
+#     `limits.memory: "4Gi"` leaves ~2.3Gi headroom. WARNING: the
 #     worst-case overlap (steady + surge + three Job pods getting the
-#     LimitRange-default 512Mi each) lands around 3712Mi, ~384Mi shy of
+#     LimitRange-default 512Mi each) lands around 3776Mi, ~320Mi shy of
 #     the cap. Bump `limits.memory` (and `requests.memory`) here in
 #     lockstep with any new chart-owned container that doesn't override
-#     the LimitRange default.
+#     the LimitRange default. demo.mailpit DOES set explicit resources
+#     (100m/64Mi limit), so only that 64Mi — not a LimitRange default —
+#     counts toward the steady-state sum above.
 #   - `requests.storage` covers the chart's single 10Gi uploads PVC with
 #     room for an operator-applied debug PVC. demo.* PVCs are disabled in
 #     this overlay (Postgres/MinIO use emptyDir), so 20Gi is generous.

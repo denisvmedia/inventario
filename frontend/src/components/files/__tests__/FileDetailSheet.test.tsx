@@ -229,6 +229,32 @@ describe("<FileDetailSheet />", () => {
     expect(onEdit).toHaveBeenCalledWith("f1")
   })
 
+  it("wires a fullscreen affordance on the inline PDF preview (#1963)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.detail(
+        SLUG,
+        "f1",
+        {
+          id: "f1",
+          title: "Manual",
+          category: "documents",
+          type: "document",
+          path: "manual",
+          ext: ".pdf",
+          mime_type: "application/pdf",
+        },
+        { url: "https://cdn.example/manual.pdf" }
+      )
+    )
+    renderSheet("f1")
+    // The inline PdfViewer's toolbar surfaces the fullscreen button because
+    // FileDetailSheet passes onRequestFullscreen…
+    expect(await screen.findByTestId("pdf-viewer-fullscreen")).toBeInTheDocument()
+    // …and the fullscreen PDF dialog stays closed until it's used.
+    expect(screen.queryByTestId("file-detail-pdf-fullscreen")).not.toBeInTheDocument()
+  })
+
   it("'Open in new tab' targets the inline URL while Download keeps the attachment URL (#1962)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
@@ -305,8 +331,9 @@ describe("<FileDetailSheet />", () => {
     const trigger = await screen.findByTestId("file-preview-image-trigger")
     expect(screen.queryByTestId("file-image-viewer")).not.toBeInTheDocument()
     await user.click(trigger)
-    // The viewer portals to document.body (so it paints above the Sheet);
-    // screen queries the whole document, so it's found here.
+    // The viewer (a stacked Radix Dialog) portals to document.body so it
+    // paints above the Sheet; screen queries the whole document, so it's
+    // found here.
     expect(await screen.findByTestId("file-image-viewer")).toBeInTheDocument()
   })
 })

@@ -66,3 +66,10 @@ services:
       # value just satisfies the handler's "configured?" check so the
       # e2e flow can exercise the happy path.
       INVENTARIO_RUN_SUPPORT_EMAIL: "support@e2e.test"
+      # AI-vision photo-scan runs the deterministic mock provider in e2e: the
+      # ai-scan.spec.ts suite mainly intercepts the network call, but the mock
+      # keeps the endpoint functional for any full-stack assertion and needs no
+      # key/spend. Rate limit off, matching the other high-throughput e2e
+      # disables above.
+      INVENTARIO_RUN_AI_VISION_PROVIDER: "mock"
+      INVENTARIO_RUN_AI_VISION_RATE_LIMIT_PER_HOUR: "0"

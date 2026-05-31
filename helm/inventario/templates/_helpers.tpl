@@ -291,6 +291,65 @@ whichever Deployment (all or apiserver) is currently enabled.
 {{- printf "%s-create-bucket" (include "inventario.demoMinioName" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "inventario.demoMailpitName" -}}
+{{- printf "%s-demo-mailpit" (include "inventario.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+mailpitIngressHost — full FQDN the Mailpit web UI is published at.
+
+Defaults to "mail-"-prefixing the app's first ingress host so each demo
+environment gets a sibling tailnet node (mail-<app-host>) with zero
+per-environment wiring — the app ingress host is already layered per-Application
+in infra/argocd/applicationset-*.yaml, so master/PR/longevity all derive
+correctly. Override with demo.mailpit.ingress.host for non-derivable setups.
+*/}}
+{{- define "inventario.mailpitIngressHost" -}}
+{{- $explicit := .Values.demo.mailpit.ingress.host | default "" | trim -}}
+{{- if $explicit -}}
+{{- $explicit -}}
+{{- else if .Values.ingress.hosts -}}
+{{- printf "mail-%s" (index .Values.ingress.hosts 0).host -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+mailpitTsHostname — the tailscale.com/hostname (first DNS label, no tailnet
+suffix; the TS operator appends the suffix from MagicDNS) for the Mailpit
+Ingress. Derived from the resolved Mailpit ingress host unless overridden.
+*/}}
+{{- define "inventario.mailpitTsHostname" -}}
+{{- $explicit := .Values.demo.mailpit.ingress.tsHostname | default "" | trim -}}
+{{- if $explicit -}}
+{{- $explicit -}}
+{{- else -}}
+{{- include "inventario.mailpitIngressHost" . | splitList "." | first -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+publicUrl — external base URL used in transactional email links. Prefers an
+explicit app.publicUrl; in demo-mailpit mode it falls back to
+https://<first ingress host> so verification / invite / reset links resolve to
+the same tailnet node the demo is served on, again without per-environment
+wiring. Outside demo-mailpit mode the historical empty default is preserved.
+
+NOTE: the fallback derives from the APP's ingress host, not the Mailpit one —
+the public URL is where the app (and its email links) live. If demo.mailpit is
+on with an explicit demo.mailpit.ingress.host but an EMPTY ingress.hosts (the
+app has no ingress host to derive from), set app.publicUrl explicitly; an empty
+public URL is rejected at boot for the smtp provider (ValidateEmailPublicURLConfig),
+so this fails loudly rather than silently shipping broken links.
+*/}}
+{{- define "inventario.publicUrl" -}}
+{{- $explicit := .Values.app.publicUrl | default "" | trim -}}
+{{- if $explicit -}}
+{{- $explicit -}}
+{{- else if and .Values.demo.mailpit.enabled .Values.ingress.hosts -}}
+{{- printf "https://%s" (index .Values.ingress.hosts 0).host -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "inventario.dbDsn" -}}
 {{- if .Values.demo.postgresql.enabled -}}
 {{- printf "postgres://%s:%s@%s:5432/%s?sslmode=disable" .Values.demo.postgresql.username .Values.demo.postgresql.password (include "inventario.demoPostgresName" .) .Values.demo.postgresql.database -}}

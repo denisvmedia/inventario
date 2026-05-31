@@ -154,12 +154,18 @@
   },
   "viewer": {
     "close": "Close",
+    "continuousView": "Continuous scroll",
+    "fitPage": "Fit to page",
+    "fitWidth": "Fit to width",
     "fullscreen": "Fullscreen",
     "nextImage": "Next image",
     "nextPage": "Next page",
+    "pageNumber": "Page number",
     "prevImage": "Previous image",
     "prevPage": "Previous page",
     "reset": "Reset zoom",
+    "singlePageView": "Single page view",
+    "toggleThumbnails": "Toggle page thumbnails",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out"
   }

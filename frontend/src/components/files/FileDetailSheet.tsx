@@ -1,13 +1,21 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import { Download, ExternalLink, File as FileIcon, Maximize2, Pencil, Trash2 } from "lucide-react"
 
 import { ImageViewer, type GalleryImage } from "@/components/files/ImageViewer"
+import { PdfFullViewer } from "@/components/files/PdfFullViewer"
 import { PdfViewer } from "@/components/files/PdfViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import {
   Sheet,
@@ -18,6 +26,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { FadeInImage } from "@/components/ui/fade-in-image"
 import { useDeleteFile, useFile } from "@/features/files/hooks"
 import { isImageMime, isPdfMime } from "@/features/files/constants"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -68,6 +77,18 @@ export function FileDetailSheet({
     ? `/g/${encodeURIComponent(currentGroup.slug)}/files`
     : "/files"
   const [imageViewerOpen, setImageViewerOpen] = useState(false)
+  // PDF gets the same expand-to-fullscreen affordance as images (#1963):
+  // the inline viewer's toolbar button flips this, and a fullscreen Dialog
+  // (a stacked layer, so it doesn't dismiss this Sheet) hosts a second viewer.
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
+  // The Sheet is always mounted by its callers (FilesListPage, EntityFilesPanel,
+  // CommodityFilesTab) and just swaps `fileId`, so a fullscreen viewer left open
+  // on one file would otherwise carry over to the next. Reset on file change.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setImageViewerOpen(false)
+    setPdfViewerOpen(false)
+  }, [fileId])
 
   const file = query.data?.file
   const signedUrl = query.data?.signedUrl?.url
@@ -139,6 +160,7 @@ export function FileDetailSheet({
                   url={signedUrl}
                   alt={title}
                   onExpandImage={() => setImageViewerOpen(true)}
+                  onExpandPdf={() => setPdfViewerOpen(true)}
                 />
                 <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[120px_1fr]">
                   <dt className="text-muted-foreground">{t("files:detail.filename")}</dt>
@@ -279,6 +301,24 @@ export function FileDetailSheet({
             onSelectSibling,
           })
         : null}
+      {file && signedUrl && isPdfMime(file.mime_type) ? (
+        // Fullscreen PDF reader — a stacked Dialog (peer of the Sheet) so
+        // closing it returns to the panel instead of dismissing the Sheet.
+        // PdfFullViewer brings its own toolbar (incl. close), so the Dialog is
+        // just a bare fullscreen host.
+        <Dialog open={pdfViewerOpen} onOpenChange={setPdfViewerOpen}>
+          <DialogContent
+            className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
+            data-testid="file-detail-pdf-fullscreen"
+          >
+            <DialogHeader className="sr-only">
+              <DialogTitle>{title}</DialogTitle>
+              <DialogDescription>{t("files:detail.metadataTitle")}</DialogDescription>
+            </DialogHeader>
+            <PdfFullViewer url={signedUrl} title={title} onClose={() => setPdfViewerOpen(false)} />
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </>
   )
 }
@@ -333,9 +373,10 @@ interface PreviewProps {
   url?: string
   alt: string
   onExpandImage?: () => void
+  onExpandPdf?: () => void
 }
 
-function FilePreview({ mime, url, alt, onExpandImage }: PreviewProps) {
+function FilePreview({ mime, url, alt, onExpandImage, onExpandPdf }: PreviewProps) {
   const { t } = useTranslation()
 
   if (isImageMime(mime) && url) {
@@ -345,11 +386,13 @@ function FilePreview({ mime, url, alt, onExpandImage }: PreviewProps) {
         onClick={onExpandImage}
         // Full-bleed banner: breaks out of the body's px-5 inset (#1962)
         // so the image spans the panel edge-to-edge while the metadata
-        // below stays inset.
-        className="group relative -mx-5 w-[calc(100%+2.5rem)] overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        // below stays inset. `min-h` reserves a box for the fade-in
+        // shimmer (#1961) and centers a short `object-contain` image so
+        // the panel doesn't grow from a zero-height placeholder.
+        className="group relative -mx-5 flex min-h-[12rem] w-[calc(100%+2.5rem)] items-center justify-center overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         data-testid="file-preview-image-trigger"
       >
-        <img
+        <FadeInImage
           src={url}
           alt={alt}
           className="max-h-[60vh] w-full object-contain"
@@ -363,7 +406,7 @@ function FilePreview({ mime, url, alt, onExpandImage }: PreviewProps) {
   }
 
   if (isPdfMime(mime) && url) {
-    return <PdfViewer url={url} />
+    return <PdfViewer url={url} onRequestFullscreen={onExpandPdf} />
   }
 
   // Non-previewable MIME (or a previewable one whose signed URL is

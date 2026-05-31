@@ -1,0 +1,23 @@
+{{- if .Values.demo.mailpit.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "inventario.demoMailpitName" . }}
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-mailpit
+spec:
+  selector:
+    {{- include "inventario.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-mailpit
+  ports:
+    # SMTP intake — the app's email queue worker connects here (see
+    # INVENTARIO_RUN_SMTP_HOST in templates/configmap.yaml).
+    - name: smtp
+      port: 1025
+      targetPort: smtp
+    # Web UI — backend for the Tailscale Ingress in mailpit-ingress.yaml.
+    - name: http
+      port: 8025
+      targetPort: http
+{{- end }}

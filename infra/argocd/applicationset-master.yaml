@@ -121,6 +121,17 @@ spec:
               # back to a random per-restart value for that key.
               secrets:
                 existingSecret: inventario-admin
+              # AI-vision photo-scan (#1976): enable Claude on this persistent
+              # env. The API key is NOT inlined here — apply-secrets.sh
+              # materializes it into the inventario-admin Secret from
+              # `anthropic.api_key` in the sops bundle, and the chart loads it
+              # via envFrom. ⚠️ ORDERING: the apiserver fails to boot when
+              # provider=anthropic but the key env is empty (intentional
+              # fail-loud in wireCommodityScan). Fill anthropic.api_key in the
+              # bundle and run apply-secrets.sh BEFORE this commit syncs, or
+              # this env CrashLoops. Flip to `none`/`mock` to defer the key.
+              aivision:
+                provider: anthropic
               ingress:
                 annotations:
                   tailscale.com/hostname: inv-vcl01-master

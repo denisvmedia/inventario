@@ -459,6 +459,72 @@ email:
     baseUrl: ""
 
 # ============================================================
+# AI vision — photo-scan that prefills the Add-Item form (#1720).
+# Non-sensitive knobs live here (ConfigMap); the per-provider API keys are
+# secrets — see secrets.aiVisionAnthropicApiKey / secrets.aiVisionOpenaiApiKey.
+# ============================================================
+aivision:
+  # Provider: none | mock | anthropic | openai
+  #   none      — feature off; POST .../commodities/scan returns 503.
+  #   mock      — deterministic canned result; no network, no API key.
+  #   anthropic — Claude vision; REQUIRES secrets.aiVisionAnthropicApiKey.
+  #   openai    — GPT-4o vision; REQUIRES secrets.aiVisionOpenaiApiKey.
+  # ⚠️ The apiserver fails to boot when a real provider is selected but its key
+  # is empty (fail-loud by design). Keep `none` unless the key is wired.
+  # Env: INVENTARIO_RUN_AI_VISION_PROVIDER
+  provider: "none"
+
+  # Anthropic model id (used when provider=anthropic).
+  # Env: INVENTARIO_RUN_AI_VISION_ANTHROPIC_MODEL
+  anthropicModel: "claude-sonnet-4-6"
+
+  # Anthropic API base URL override (empty = public api.anthropic.com).
+  # Env: INVENTARIO_RUN_AI_VISION_ANTHROPIC_BASE_URL
+  anthropicBaseUrl: ""
+
+  # OpenAI model id (used when provider=openai).
+  # Env: INVENTARIO_RUN_AI_VISION_OPENAI_MODEL
+  openaiModel: "gpt-4o"
+
+  # OpenAI API base URL override (empty = public api.openai.com).
+  # Env: INVENTARIO_RUN_AI_VISION_OPENAI_BASE_URL
+  openaiBaseUrl: ""
+
+  # Per-call upstream timeout (e.g. "20s").
+  # Env: INVENTARIO_RUN_AI_VISION_TIMEOUT
+  timeout: "20s"
+
+  # Max photos accepted per scan request.
+  # Env: INVENTARIO_RUN_AI_VISION_MAX_PHOTOS
+  maxPhotos: 5
+
+  # Max bytes accepted per photo (default 10 MiB).
+  # Env: INVENTARIO_RUN_AI_VISION_MAX_PHOTO_BYTES
+  maxPhotoBytes: 10485760
+
+  # Per-user hourly scan rate limit (0 disables the limit).
+  # Env: INVENTARIO_RUN_AI_VISION_RATE_LIMIT_PER_HOUR
+  rateLimitPerHour: 30
+
+# ============================================================
+# Extra envFrom sources appended verbatim to every app container's
+# `envFrom` (combined, apiserver, and worker Deployments). Each entry is a
+# standard EnvFromSource (secretRef / configMapRef). Use to inject env from
+# Secrets/ConfigMaps this chart does not manage.
+#
+# PR previews (#1976) use this to pull the AI-vision API key: a secret
+# reflector (emberstack/reflector) copies a sops-sourced Secret into each
+# dynamically-created inv-vcl01-pr{N} namespace as `inventario-ai-vision`,
+# and the deployment reads it via this list. `optional: true` keeps the pod
+# schedulable before the reflected copy lands (the app still fails loud on an
+# empty key, so set the key — see infra/argocd/applicationset-pr.yaml).
+# ============================================================
+extraEnvFrom: []
+#  - secretRef:
+#      name: inventario-ai-vision
+#      optional: true
+
+# ============================================================
 # Secrets
 # ============================================================
 secrets:
@@ -478,6 +544,8 @@ secrets:
   #   INVENTARIO_RUN_SMTP_PASSWORD               (required for smtp provider)
   #   INVENTARIO_RUN_SENDGRID_API_KEY            (required for sendgrid provider)
   #   INVENTARIO_RUN_MANDRILL_API_KEY            (required for mandrill/mailchimp provider)
+  #   INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY (required when aivision.provider=anthropic)
+  #   INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY    (required when aivision.provider=openai)
   #   SETUP_ADMIN_PASSWORD                       (required by job-setup if setupJob.enabled)
   #   SETUP_SUPERUSER_DSN                        (optional; used when setupJob.bootstrap.superuserDsn is managed outside the chart)
   #   AWS_ACCESS_KEY_ID                          (required for S3/MinIO upload)
@@ -521,6 +589,11 @@ secrets:
   smtpPassword: ""               # Env: INVENTARIO_RUN_SMTP_PASSWORD
   sendgridApiKey: ""             # Env: INVENTARIO_RUN_SENDGRID_API_KEY
   mandrillApiKey: ""             # Env: INVENTARIO_RUN_MANDRILL_API_KEY
+
+  # AI-vision provider secrets (#1720). Required only for the matching
+  # aivision.provider; empty otherwise. See the `aivision:` block above.
+  aiVisionAnthropicApiKey: ""    # Env: INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY
+  aiVisionOpenaiApiKey: ""       # Env: INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY
 
   # S3/MinIO credentials (required when app.uploadLocation uses s3://)
   # Automatically set from demo.minio.* when demo.minio.enabled=true.
@@ -836,6 +909,13 @@ demo:
 
     image: minio/minio:RELEASE.2025-01-20T14-49-07Z
 
+    # Image for the `mc` client run by the one-shot bucket-create Job.
+    # Pinned to an immutable RELEASE tag (NOT :latest): in argocdMode that Job
+    # sits on an early sync-wave on the critical path, so a floating-tag drift
+    # or a transient registry hiccup must not be able to wedge the sync. Bump
+    # deliberately alongside `image` above.
+    mcImage: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+
     rootUser: minioadmin
     rootPassword: minioadmin123
 
@@ -856,3 +936,60 @@ demo:
       limits:
         cpu: 500m
         memory: 512Mi
+
+    # One-shot Job that creates the bucket. In argocdMode it runs at an early
+    # sync-wave (-6) on the critical path, so an unpullable mc image or a MinIO
+    # that never becomes ready must FAIL the Job (and surface a fast sync error)
+    # instead of hanging forever — a hung Job stalls the ArgoCD sync op and
+    # blocks namespace deletion (the undeletable-preview class fixed in
+    # #1974/#1971). Same rationale as setupJob.activeDeadlineSeconds; creating a
+    # bucket is near-instant once MinIO is up, so 300s is generous. 0 disables.
+    bucketJob:
+      activeDeadlineSeconds: 300
+
+  mailpit:
+    # Enable an in-cluster Mailpit mail-trap (SMTP catch-all + web UI) for
+    # demo / preview environments. When enabled:
+    #   - the app's email provider is FORCED to smtp pointed at this sidecar
+    #     (:1025, no auth, no TLS) in templates/configmap.yaml, so
+    #     verification / invite / reset emails are captured instead of being
+    #     black-holed by the stub provider;
+    #   - app.publicUrl falls back to https://<first ingress host> (see the
+    #     inventario.publicUrl helper) so the links inside those emails resolve;
+    #   - set email.from to a non-empty bare address (the async email service
+    #     rejects an empty FROM for non-stub providers).
+    # Messages live in an in-memory ring buffer (emptyDir) — never persisted,
+    # never backed up, even in the longevity environment.
+    enabled: false
+
+    image: axllent/mailpit:v1.21
+
+    # Max retained messages (ring buffer); mirrors docker-compose's
+    # MP_MAX_MESSAGES. Env: MP_MAX_MESSAGES on the Mailpit container.
+    maxMessages: 500
+
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+
+    ingress:
+      # Publish the Mailpit web UI (:8025) as its OWN Tailscale node, sibling to
+      # the app's ingress. Host + tailscale.com/hostname are derived as
+      # "mail-"<app ingress host> by the inventario.mailpitIngressHost /
+      # mailpitTsHostname helpers, so no per-environment values are required.
+      enabled: false
+      className: tailscale
+      # Explicit overrides (leave empty to derive from the app ingress host):
+      #   host:       full FQDN, e.g. mail-inv-vcl01-master.<tailnet>.ts.net
+      #   tsHostname: tailscale.com/hostname (first DNS label, no suffix)
+      # If you set `host` here but leave the app's ingress.hosts empty, also set
+      # app.publicUrl explicitly — it derives from the app host, not this one.
+      host: ""
+      tsHostname: ""
+      # Extra annotations merged onto the derived tailscale.com/hostname.
+      annotations:
+        tailscale.com/http-redirect: "true"

@@ -92,6 +92,9 @@ spec:
                 name: {{ $fullName }}-config
             - secretRef:
                 name: {{ $secretName }}
+            {{- with $root.Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- if or $root.Values.demo.postgresql.enabled $root.Values.demo.redis.enabled $root.Values.demo.minio.enabled }}
           env:
             {{- if $root.Values.demo.postgresql.enabled }}

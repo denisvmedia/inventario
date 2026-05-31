@@ -14,7 +14,7 @@ data:
   INVENTARIO_RUN_THUMBNAIL_MAX_CONCURRENT_PER_USER: {{ .Values.app.thumbnailMaxConcurrentPerUser | quote }}
   INVENTARIO_RUN_THUMBNAIL_RATE_LIMIT_PER_MINUTE: {{ .Values.app.thumbnailRateLimitPerMinute | quote }}
   INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION: {{ .Values.app.thumbnailSlotDuration | quote }}
-  INVENTARIO_RUN_PUBLIC_URL: {{ .Values.app.publicUrl | quote }}
+  INVENTARIO_RUN_PUBLIC_URL: {{ include "inventario.publicUrl" . | quote }}
   INVENTARIO_RUN_ALLOWED_ORIGINS: {{ .Values.app.allowedOrigins | quote }}
   INVENTARIO_RUN_GLOBAL_RATE_LIMIT: {{ .Values.app.globalRateLimit | quote }}
   INVENTARIO_RUN_GLOBAL_RATE_WINDOW: {{ .Values.app.globalRateWindow | quote }}
@@ -25,17 +25,46 @@ data:
   # cmd/inventario/run/bootstrap/config.go resolves at runtime to
   # INVENTARIO_RUN_FEATURE_*. See values.yaml `features:` block.
   INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: {{ .Values.features.currencyMigration | quote }}
+  {{- if .Values.demo.mailpit.enabled }}
+  # Demo mail-trap (templates/demo/mailpit-*.yaml): route ALL transactional
+  # email to the in-cluster Mailpit sidecar — unauthenticated SMTP on :1025,
+  # no TLS — so verification / invite / reset messages are captured and
+  # viewable in its web UI instead of being black-holed by the stub provider.
+  # Enabling demo.mailpit deliberately forces the provider here so "turn on the
+  # mail-trap" also means "email actually flows to it"; email.provider /
+  # email.smtp.* below are ignored in this mode.
+  INVENTARIO_RUN_EMAIL_PROVIDER: "smtp"
+  INVENTARIO_RUN_SMTP_HOST: {{ include "inventario.demoMailpitName" . | quote }}
+  INVENTARIO_RUN_SMTP_PORT: "1025"
+  INVENTARIO_RUN_SMTP_USERNAME: ""
+  INVENTARIO_RUN_SMTP_USE_TLS: "false"
+  {{- else }}
   INVENTARIO_RUN_EMAIL_PROVIDER: {{ .Values.email.provider | quote }}
+  INVENTARIO_RUN_SMTP_HOST: {{ .Values.email.smtp.host | quote }}
+  INVENTARIO_RUN_SMTP_PORT: {{ .Values.email.smtp.port | quote }}
+  INVENTARIO_RUN_SMTP_USERNAME: {{ .Values.email.smtp.username | quote }}
+  INVENTARIO_RUN_SMTP_USE_TLS: {{ .Values.email.smtp.useTls | quote }}
+  {{- end }}
   INVENTARIO_RUN_EMAIL_FROM: {{ .Values.email.from | quote }}
   INVENTARIO_RUN_EMAIL_REPLY_TO: {{ .Values.email.replyTo | quote }}
   INVENTARIO_RUN_EMAIL_QUEUE_WORKERS: {{ .Values.email.queueWorkers | quote }}
   INVENTARIO_RUN_EMAIL_QUEUE_MAX_RETRIES: {{ .Values.email.queueMaxRetries | quote }}
   INVENTARIO_RUN_LOG_EMAIL_URLS: {{ .Values.email.logUrls | quote }}
-  INVENTARIO_RUN_SMTP_HOST: {{ .Values.email.smtp.host | quote }}
-  INVENTARIO_RUN_SMTP_PORT: {{ .Values.email.smtp.port | quote }}
-  INVENTARIO_RUN_SMTP_USERNAME: {{ .Values.email.smtp.username | quote }}
-  INVENTARIO_RUN_SMTP_USE_TLS: {{ .Values.email.smtp.useTls | quote }}
   INVENTARIO_RUN_SENDGRID_BASE_URL: {{ .Values.email.sendgrid.baseUrl | quote }}
   INVENTARIO_RUN_AWS_REGION: {{ .Values.email.aws.region | quote }}
   INVENTARIO_RUN_MANDRILL_BASE_URL: {{ .Values.email.mandrill.baseUrl | quote }}
+  # AI-vision photo-scan (#1720). Non-secret knobs; the per-provider API keys
+  # live in the Secret (templates/secret.yaml). See values.yaml `aivision:`.
+  INVENTARIO_RUN_AI_VISION_PROVIDER: {{ .Values.aivision.provider | quote }}
+  INVENTARIO_RUN_AI_VISION_ANTHROPIC_MODEL: {{ .Values.aivision.anthropicModel | quote }}
+  INVENTARIO_RUN_AI_VISION_ANTHROPIC_BASE_URL: {{ .Values.aivision.anthropicBaseUrl | quote }}
+  INVENTARIO_RUN_AI_VISION_OPENAI_MODEL: {{ .Values.aivision.openaiModel | quote }}
+  INVENTARIO_RUN_AI_VISION_OPENAI_BASE_URL: {{ .Values.aivision.openaiBaseUrl | quote }}
+  INVENTARIO_RUN_AI_VISION_TIMEOUT: {{ .Values.aivision.timeout | quote }}
+  # int64 coercion: Helm loads YAML numbers as float64, and `quote` would render
+  # a large value like 10485760 in scientific notation ("1.048576e+07"), which
+  # the Go int env parser rejects. int64 forces a plain integer string.
+  INVENTARIO_RUN_AI_VISION_MAX_PHOTOS: {{ .Values.aivision.maxPhotos | int64 | quote }}
+  INVENTARIO_RUN_AI_VISION_MAX_PHOTO_BYTES: {{ .Values.aivision.maxPhotoBytes | int64 | quote }}
+  INVENTARIO_RUN_AI_VISION_RATE_LIMIT_PER_HOUR: {{ .Values.aivision.rateLimitPerHour | int64 | quote }}
   TZ: {{ .Values.app.tz | quote }}

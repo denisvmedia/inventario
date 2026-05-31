@@ -152,6 +152,7 @@ Expected secret keys when using `secrets.existingSecret`:
 - `SETUP_SUPERUSER_DSN` (optional)
 - `INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL`, `INVENTARIO_RUN_AUTH_RATE_LIMIT_REDIS_URL`, `INVENTARIO_RUN_GLOBAL_RATE_LIMIT_REDIS_URL`, `INVENTARIO_RUN_CSRF_REDIS_URL`, `INVENTARIO_RUN_EMAIL_QUEUE_REDIS_URL` (optional)
 - `INVENTARIO_RUN_SMTP_PASSWORD`, `INVENTARIO_RUN_SENDGRID_API_KEY`, `INVENTARIO_RUN_MANDRILL_API_KEY` (provider-specific)
+- `INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY` (required when `aivision.provider=anthropic`), `INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY` (required when `aivision.provider=openai`)
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (required for `s3://` upload targets)
 
 Example existing Secret install:
@@ -257,6 +258,9 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `persistence.size` | `10Gi` | Resize the uploads PVC for local file storage. |
 | `email.provider` | `stub` | Switch to `smtp`, `sendgrid`, `ses`, `mandrill`, or `mailchimp` for real email. |
 | `email.from` | `""` | Required for real email delivery. |
+| `aivision.provider` | `none` | AI photo-scan provider: `none` (off, 503), `mock` (canned), `anthropic`, or `openai`. A real provider **requires** the matching `secrets.aiVision*ApiKey`, or the apiserver fails to boot. |
+| `aivision.anthropicModel` / `aivision.openaiModel` | `claude-sonnet-4-6` / `gpt-4o` | Model id used for the selected provider. |
+| `secrets.aiVisionAnthropicApiKey` / `secrets.aiVisionOpenaiApiKey` | `""` | Provider API key; required for the matching `aivision.provider` unless supplied via `secrets.existingSecret`. |
 | `secrets.existingSecret` | `""` | Use an externally managed Secret instead of chart-managed secret data. |
 | `secrets.dbDsn` | `""` | Required for production-style installs unless `secrets.existingSecret` is used. |
 | `secrets.migratorDbDsn` | `""` | Set when schema migrations need a different DB user than the app runtime. |

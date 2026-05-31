@@ -7,9 +7,28 @@ metadata:
     {{- include "inventario.labels" . | nindent 4 }}
     app.kubernetes.io/component: demo-minio
   annotations:
+    {{- if .Values.setupJob.argocdMode }}
+    # ArgoCD: a Helm post-install hook becomes a PostSync hook that runs AFTER
+    # the Sync-phase init-data seed Job (sync-wave +5) — so the bucket wouldn't
+    # exist when the seed writes blob bytes, leaving size_bytes=0 file rows.
+    # Create the bucket as an early Sync-wave resource instead: after the MinIO
+    # Deployment (-7), before setup/migrations (-5) and the init-data seed (+5).
+    # The mc container's `until mc alias set … sleep 2` loop waits for MinIO.
+    argocd.argoproj.io/sync-wave: "-6"
+    argocd.argoproj.io/sync-options: "Force=true,Replace=true"
+    {{- else }}
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    {{- end }}
 spec:
+  {{- with .Values.demo.minio.bucketJob.activeDeadlineSeconds }}
+  # Wall-clock cap so a stuck image pull or a never-ready MinIO FAILS the Job
+  # instead of hanging forever. In argocdMode this Job is a blocking sync-wave
+  # (-6) resource, so a hang would stall the sync op and wedge namespace
+  # deletion (#1974/#1971); under plain Helm it bounds the post-install hook.
+  # See values.yaml demo.minio.bucketJob.activeDeadlineSeconds.
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
   backoffLimit: 6
   template:
     metadata:
@@ -23,7 +42,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: mc
-          image: quay.io/minio/mc:latest
+          image: {{ .Values.demo.minio.mcImage | quote }}
           imagePullPolicy: IfNotPresent
           env:
             - name: MC_CONFIG_DIR
@@ -43,7 +62,13 @@ spec:
             - -c
             - |
               set -e
+              i=0
               until mc alias set demo {{ include "inventario.minioEndpointUrl" . }} "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                i=$((i+1))
+                if [ "$i" -ge 60 ]; then
+                  echo "MinIO not ready after 120s; giving up" >&2
+                  exit 1
+                fi
                 echo "Waiting for MinIO to become ready..."
                 sleep 2
               done

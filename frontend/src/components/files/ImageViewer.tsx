@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import {
   ChevronLeft,
   ChevronRight,
+  Loader2,
   Maximize2,
   Minus,
   Plus,
@@ -13,6 +13,15 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { useImageFadeIn } from "@/components/ui/fade-in-image"
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
 
 const MIN_SCALE = 0.5
 const MAX_SCALE = 6
@@ -83,6 +92,19 @@ export function ImageViewer(props: ImageViewerProps) {
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const draggingRef = useRef<{ x: number; y: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  // Fade the image in once it decodes instead of letting it snap onto
+  // the black backdrop (#1961). `useImageFadeIn` resets on `url`, so
+  // gallery navigation re-runs the fade. The opacity transition lives in
+  // the inline style next to the transform transition, so reduced-motion
+  // can't be a CSS variant here — gate it in JS instead.
+  const {
+    ref: imgRef,
+    status: imgStatus,
+    onLoad: onImgLoad,
+    onError: onImgError,
+  } = useImageFadeIn(url)
+  const prefersReducedMotion = usePrefersReducedMotion()
+  const imgSettled = imgStatus !== "loading"
 
   const reset = useCallback(() => {
     setScale(1)
@@ -111,10 +133,10 @@ export function ImageViewer(props: ImageViewerProps) {
     if (open) reset()
   }, [open, url, reset])
 
-  // Esc closes the viewer (Dialog/Sheet primitives in this codebase
-  // already trap focus + handle Esc, but this component is a plain
-  // overlay so we wire it explicitly). Arrow keys cycle through the
-  // gallery when one is provided.
+  // The wrapping Radix Dialog already traps focus and closes on Esc; this
+  // handler adds the viewer-specific shortcuts the Dialog doesn't know about
+  // — +/-/0 zoom and ←/→ gallery cycling. Esc stays here too as harmless
+  // defence-in-depth for the gallery/single modes.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -129,187 +151,198 @@ export function ImageViewer(props: ImageViewerProps) {
     return () => window.removeEventListener("keydown", onKey)
   }, [open, onOpenChange, reset, goPrev, goNext])
 
-  if (!open) return null
-
-  // Render through a portal to document.body, above the Sheet (#1962):
-  // the FileDetailSheet's SheetContent is itself a body-level portal at
-  // z-50, so a non-portaled viewer nested in the page tree painted
-  // *behind* it. Portaling to body lifts the viewer into the same
-  // top-level stacking context, and z-[60] puts it above the open Sheet
-  // (and above the FilePreviewDialog's Dialog, which is also z-50) so the
-  // fullscreen image always paints on top.
-  //
-  // pointer-events-auto is load-bearing here: a modal Radix Dialog (the
-  // Sheet) sets `pointer-events: none` on <body> while open, and a
-  // body-portaled child inherits it — without the explicit override the
-  // viewer's toolbar would be dead and clicks would fall through to the
-  // hidden Sheet underneath. The override re-enables hit-testing for the
-  // viewer and its controls; it's a no-op when the viewer is opened from
-  // a non-modal host (FilePreviewDialog), where <body> is already auto.
-  // Esc / zoom / pan are additionally bound at the document level, so the
-  // viewer stays usable even outside the Sheet's focus scope.
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={alt}
-      data-testid="file-image-viewer"
-      className="pointer-events-auto fixed inset-0 z-[60] flex flex-col bg-black/90 text-white"
-    >
-      <div className="flex items-center justify-between gap-2 p-3">
-        <p className="line-clamp-1 max-w-[60vw] text-sm">
-          {alt}
-          {isGallery && siblings.length > 1 ? (
-            <span
-              className="ml-2 text-xs text-white/60 tabular-nums"
-              data-testid="image-viewer-position"
-            >
-              {safeIndex + 1} / {siblings.length}
-            </span>
-          ) : null}
-        </p>
-        <div className="flex items-center gap-1">
-          {isGallery && siblings.length > 1 ? (
-            <>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-white hover:bg-white/10 hover:text-white"
-                onClick={goPrev}
-                aria-label={t("files:viewer.prevImage", { defaultValue: "Previous image" })}
-                data-testid="image-viewer-prev"
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {/* Radix Dialog (modal, portalled) rather than a bare fixed overlay:
+          when this viewer is opened from inside the file-detail Sheet, a
+          plain peer overlay registered every click/drag as an "interaction
+          outside" the Sheet and dismissed it (#1962). As a stacked Dialog
+          layer, interactions land inside this content and leave the Sheet
+          underneath intact, so the toolbar, drag-to-pan, and the close
+          button all return to the panel instead of tearing it down. */}
+      <DialogContent
+        aria-label={alt}
+        data-testid="file-image-viewer"
+        className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none border-0 bg-black/90 p-0 text-white [&>button]:hidden sm:max-w-none"
+      >
+        <DialogHeader className="sr-only">
+          <DialogTitle>{alt || t("files:detail.metadataTitle")}</DialogTitle>
+          <DialogDescription>{t("files:detail.metadataTitle")}</DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center justify-between gap-2 p-3">
+          <p className="line-clamp-1 max-w-[60vw] text-sm">
+            {alt}
+            {isGallery && siblings.length > 1 ? (
+              <span
+                className="ml-2 text-xs text-white/60 tabular-nums"
+                data-testid="image-viewer-position"
               >
-                <ChevronLeft className="size-4" aria-hidden="true" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-white hover:bg-white/10 hover:text-white"
-                onClick={goNext}
-                aria-label={t("files:viewer.nextImage", { defaultValue: "Next image" })}
-                data-testid="image-viewer-next"
-              >
-                <ChevronRight className="size-4" aria-hidden="true" />
-              </Button>
-              <span className="mx-1 h-4 w-px bg-white/20" aria-hidden="true" />
-            </>
-          ) : null}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:text-white hover:bg-white/10"
-            onClick={() => setScale((s) => clamp(s - STEP))}
-            aria-label={t("files:viewer.zoomOut", { defaultValue: "Zoom out" })}
-            data-testid="image-viewer-zoom-out"
-          >
-            <Minus className="size-4" aria-hidden="true" />
-          </Button>
-          <span
-            className="min-w-12 text-center text-xs tabular-nums"
-            data-testid="image-viewer-zoom-level"
-          >
-            {Math.round(scale * 100)}%
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:text-white hover:bg-white/10"
-            onClick={() => setScale((s) => clamp(s + STEP))}
-            aria-label={t("files:viewer.zoomIn", { defaultValue: "Zoom in" })}
-            data-testid="image-viewer-zoom-in"
-          >
-            <Plus className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:text-white hover:bg-white/10"
-            onClick={reset}
-            aria-label={t("files:viewer.reset", { defaultValue: "Reset zoom" })}
-            data-testid="image-viewer-reset"
-          >
-            <RotateCcw className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:text-white hover:bg-white/10"
-            onClick={() => containerRef.current?.requestFullscreen?.()}
-            aria-label={t("files:viewer.fullscreen", { defaultValue: "Fullscreen" })}
-            data-testid="image-viewer-fullscreen"
-          >
-            <Maximize2 className="size-4" aria-hidden="true" />
-          </Button>
-          {props.onDelete ? (
+                {safeIndex + 1} / {siblings.length}
+              </span>
+            ) : null}
+          </p>
+          <div className="flex items-center gap-1">
+            {isGallery && siblings.length > 1 ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white hover:bg-white/10 hover:text-white"
+                  onClick={goPrev}
+                  aria-label={t("files:viewer.prevImage", { defaultValue: "Previous image" })}
+                  data-testid="image-viewer-prev"
+                >
+                  <ChevronLeft className="size-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white hover:bg-white/10 hover:text-white"
+                  onClick={goNext}
+                  aria-label={t("files:viewer.nextImage", { defaultValue: "Next image" })}
+                  data-testid="image-viewer-next"
+                >
+                  <ChevronRight className="size-4" aria-hidden="true" />
+                </Button>
+                <span className="mx-1 h-4 w-px bg-white/20" aria-hidden="true" />
+              </>
+            ) : null}
             <Button
               variant="ghost"
               size="icon"
-              className="text-white hover:bg-destructive/30 hover:text-white"
-              onClick={props.onDelete}
-              aria-label={t("files:detail.delete")}
-              title={t("files:detail.delete")}
-              data-testid="image-viewer-delete"
+              className="text-white hover:text-white hover:bg-white/10"
+              onClick={() => setScale((s) => clamp(s - STEP))}
+              aria-label={t("files:viewer.zoomOut", { defaultValue: "Zoom out" })}
+              data-testid="image-viewer-zoom-out"
             >
-              <Trash2 className="size-4" aria-hidden="true" />
+              <Minus className="size-4" aria-hidden="true" />
             </Button>
-          ) : null}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:text-white hover:bg-white/10"
-            onClick={() => onOpenChange(false)}
-            aria-label={t("files:viewer.close", { defaultValue: "Close" })}
-            data-testid="image-viewer-close"
-          >
-            <X className="size-5" aria-hidden="true" />
-          </Button>
+            <span
+              className="min-w-12 text-center text-xs tabular-nums"
+              data-testid="image-viewer-zoom-level"
+            >
+              {Math.round(scale * 100)}%
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:text-white hover:bg-white/10"
+              onClick={() => setScale((s) => clamp(s + STEP))}
+              aria-label={t("files:viewer.zoomIn", { defaultValue: "Zoom in" })}
+              data-testid="image-viewer-zoom-in"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:text-white hover:bg-white/10"
+              onClick={reset}
+              aria-label={t("files:viewer.reset", { defaultValue: "Reset zoom" })}
+              data-testid="image-viewer-reset"
+            >
+              <RotateCcw className="size-4" aria-hidden="true" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:text-white hover:bg-white/10"
+              onClick={() => containerRef.current?.requestFullscreen?.()}
+              aria-label={t("files:viewer.fullscreen", { defaultValue: "Fullscreen" })}
+              data-testid="image-viewer-fullscreen"
+            >
+              <Maximize2 className="size-4" aria-hidden="true" />
+            </Button>
+            {props.onDelete ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-destructive/30 hover:text-white"
+                onClick={props.onDelete}
+                aria-label={t("files:detail.delete")}
+                title={t("files:detail.delete")}
+                data-testid="image-viewer-delete"
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:text-white hover:bg-white/10"
+              onClick={() => onOpenChange(false)}
+              aria-label={t("files:viewer.close", { defaultValue: "Close" })}
+              data-testid="image-viewer-close"
+            >
+              <X className="size-5" aria-hidden="true" />
+            </Button>
+          </div>
         </div>
-      </div>
-      {/* The viewport is mouse-only sugar — keyboard zoom (+/-/0) and Esc
+        {/* The viewport is mouse-only sugar — keyboard zoom (+/-/0) and Esc
           are bound at the document level above, the toolbar covers the
           accessible action set, so the static-div interactions are an
           intentional enhancement, not the only path. */}
-      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
-      <div
-        ref={containerRef}
-        className="flex flex-1 cursor-grab items-center justify-center overflow-hidden active:cursor-grabbing"
-        onWheel={(e) => {
-          e.preventDefault()
-          setScale((s) => clamp(s - e.deltaY * WHEEL_COEFFICIENT * s))
-        }}
-        onMouseDown={(e) => {
-          draggingRef.current = { x: e.clientX - offset.x, y: e.clientY - offset.y }
-        }}
-        onMouseMove={(e) => {
-          if (!draggingRef.current) return
-          setOffset({
-            x: e.clientX - draggingRef.current.x,
-            y: e.clientY - draggingRef.current.y,
-          })
-        }}
-        onMouseUp={() => {
-          draggingRef.current = null
-        }}
-        onMouseLeave={() => {
-          draggingRef.current = null
-        }}
-      >
-        <img
-          src={url}
-          alt={alt}
-          draggable={false}
-          data-testid="image-viewer-img"
-          className="max-h-none max-w-none select-none"
-          style={{
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-            transformOrigin: "center center",
-            // eslint-disable-next-line react-hooks/refs -- read during render is intentional: this only toggles a CSS transition string, not behaviour. Using state would cause an extra re-render per dragstart/dragend.
-            transition: draggingRef.current ? "none" : "transform 80ms ease-out",
+        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+        <div
+          ref={containerRef}
+          className="relative flex flex-1 cursor-grab items-center justify-center overflow-hidden active:cursor-grabbing"
+          onWheel={(e) => {
+            e.preventDefault()
+            setScale((s) => clamp(s - e.deltaY * WHEEL_COEFFICIENT * s))
           }}
-        />
-      </div>
-    </div>,
-    document.body
+          onMouseDown={(e) => {
+            draggingRef.current = { x: e.clientX - offset.x, y: e.clientY - offset.y }
+          }}
+          onMouseMove={(e) => {
+            if (!draggingRef.current) return
+            setOffset({
+              x: e.clientX - draggingRef.current.x,
+              y: e.clientY - draggingRef.current.y,
+            })
+          }}
+          onMouseUp={() => {
+            draggingRef.current = null
+          }}
+          onMouseLeave={() => {
+            draggingRef.current = null
+          }}
+        >
+          {imgStatus === "loading" ? (
+            <div
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
+              aria-hidden="true"
+              data-testid="image-viewer-loading"
+            >
+              <Loader2 className="size-8 animate-spin text-white/70" />
+            </div>
+          ) : null}
+          <img
+            ref={imgRef}
+            src={url}
+            alt={alt}
+            draggable={false}
+            decoding="async"
+            onLoad={onImgLoad}
+            onError={onImgError}
+            data-testid="image-viewer-img"
+            className="max-h-none max-w-none select-none"
+            style={{
+              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+              transformOrigin: "center center",
+              // Skip the opacity fade entirely under reduced motion; the
+              // image just appears once decoded.
+              opacity: prefersReducedMotion || imgSettled ? 1 : 0,
+              // eslint-disable-next-line react-hooks/refs -- read during render is intentional: this only toggles a CSS transition string, not behaviour. Using state would cause an extra re-render per dragstart/dragend.
+              transition: draggingRef.current
+                ? "none"
+                : prefersReducedMotion
+                  ? "transform 80ms ease-out"
+                  : "transform 80ms ease-out, opacity 200ms ease-out",
+            }}
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

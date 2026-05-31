@@ -40,14 +40,31 @@ metadata:
     {{- end }}
 spec:
   backoffLimit: 3
-  {{- with .Values.setupJob.activeDeadlineSeconds }}
-  # Cap the Job's wall-clock so an unpullable image (e.g. a PR preview pinned
-  # to a sha- tag CI hasn't published yet / has GC'd) FAILS instead of sitting
-  # in ImagePullBackOff forever. A failed Job fails the sync op rather than
-  # leaving it Running, which is what otherwise deadlocks the
-  # resources-finalizer cascade and makes the Application undeletable. See
-  # values.yaml setupJob.activeDeadlineSeconds for the full rationale.
-  activeDeadlineSeconds: {{ . }}
+  {{- /*
+    Cap the Job's wall-clock so an unpullable image (e.g. a PR preview pinned
+    to a sha- tag CI hasn't published yet / has GC'd) FAILS instead of sitting
+    in ImagePullBackOff forever. A failed Job fails the sync op rather than
+    leaving it Running, which is what otherwise deadlocks the
+    resources-finalizer cascade and makes the Application undeletable. See
+    values.yaml setupJob.activeDeadlineSeconds for the full rationale.
+
+    Budget depends on what this Job actually does:
+      - argocdMode  → bootstrap-only (migrate + init-data/seed run in the
+        Deployment's migrate init container and the separate wave +5
+        init-data Job), so the setup budget is just setupJob.activeDeadlineSeconds.
+      - non-argocd  → this ONE Job runs bootstrap + migrate + init-data +
+        (optional) seed sequentially, so its budget must cover BOTH phases.
+        Hence the SUM (not the max): the phases run back-to-back, so the seed
+        budget (setupJob.initData.activeDeadlineSeconds) is added on top of
+        the bootstrap budget rather than competing with it.
+    0 on both knobs leaves the cap unset (unbounded, old behavior).
+  */}}
+  {{- $deadline := int .Values.setupJob.activeDeadlineSeconds }}
+  {{- if not .Values.setupJob.argocdMode }}
+  {{- $deadline = add $deadline (int .Values.setupJob.initData.activeDeadlineSeconds) }}
+  {{- end }}
+  {{- if gt $deadline 0 }}
+  activeDeadlineSeconds: {{ $deadline }}
   {{- end }}
   {{- if not .Values.setupJob.argocdMode }}
   # Auto-delete the Job 24h after it completes — keeps `kubectl get jobs`
@@ -282,6 +299,13 @@ spec:
             - secretRef:
                 name: {{ $secretName }}
           env:
+            # Same as job-init-data.yaml: the seed step boots a throwaway
+            # `inventario run` server, which would inherit provider=anthropic
+            # from the ConfigMap but has no API key here (extraEnvFrom is
+            # Deployment-only), failing the boot (fail-loud). Seeding never uses
+            # AI vision — force it off; explicit env overrides envFrom. (#1976)
+            - name: INVENTARIO_RUN_AI_VISION_PROVIDER
+              value: "none"
             - name: APP_DB_DSN
               {{- if .Values.demo.postgresql.enabled }}
               value: {{ include "inventario.dbDsn" . | quote }}

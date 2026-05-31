@@ -49,9 +49,20 @@ lookup() {
     ' <<<"$SECRETS_JSON" 2>/dev/null
 }
 
-# Pipe a manifest through `kubectl apply -f -` on the remote VM.
+# Pipe a manifest through server-side `kubectl apply` on the remote VM.
+#
+# Server-side apply (NOT the default client-side) is deliberate for the Secrets
+# this script emits: client-side apply stores the ENTIRE applied manifest —
+# including the plaintext `stringData` API keys / passwords — in the
+# `kubectl.kubernetes.io/last-applied-configuration` annotation, which then
+# leaks via `kubectl get secret -o yaml` / `describe` (and is far easier to
+# expose accidentally than the base64 `.data`). SSA records only field
+# ownership in `.metadata.managedFields` (no values), so the secret value never
+# lands in an annotation. `--force-conflicts` lets SSA take ownership of fields
+# previously written by a client-side apply (one-time migration for the
+# pre-existing inventario-admin / github / tailscale Secrets).
 remote_apply() {
-    ssh "$VM" 'sudo /usr/local/bin/kubectl apply -f -'
+    ssh "$VM" 'sudo /usr/local/bin/kubectl apply --server-side --force-conflicts -f -'
 }
 
 # --- inventario-admin (chart consumes via secrets.existingSecret) ---
@@ -122,6 +133,27 @@ elif [ "${#OAUTH_STATE_KEY}" -lt 32 ]; then
     warn "oauth_state.key is shorter than 32 chars; the apiserver ignores it and generates a random per-restart key. Treating it as unset — use 'openssl rand -hex 32'."
     OAUTH_STATE_KEY=""
 fi
+# Optional AI-vision provider API keys for the persistent envs (#1976). When
+# present they are injected into the inventario-admin Secret below as
+# INVENTARIO_RUN_AI_VISION_{ANTHROPIC,OPENAI}_API_KEY so the apiserver can reach
+# the vendor; the chart loads the whole Secret via envFrom. No length check —
+# vendor keys are opaque, unlike the >=32-char signing keys above.
+#
+# The master + longevity ApplicationSets pin `aivision.provider: anthropic`, and
+# wireCommodityScan FAILS THE BOOT when a real provider is selected but its key
+# is empty. So a missing anthropic.api_key is a HARD warning here (the apiserver
+# will CrashLoop) — but still best-effort, not fatal, so a Phase-1 bundle without
+# it can bootstrap the rest of the cluster; flip aivision.provider to none/mock
+# in the ApplicationSet if you want to defer the key.
+ANTHROPIC_API_KEY=$(lookup "anthropic.api_key")
+OPENAI_API_KEY=$(lookup "openai.api_key")
+# Warn on a missing anthropic.api_key SPECIFICALLY: master + longevity pin
+# aivision.provider=anthropic, so that's the key they actually consume. Filling
+# only openai.api_key does NOT satisfy an anthropic-pinned env — it would still
+# CrashLoop — so the openai key is intentionally not part of this guard.
+if [ -z "$ANTHROPIC_API_KEY" ]; then
+    warn "anthropic.api_key missing in secrets bundle; inv-vcl01-master/longevity pin aivision.provider=anthropic, so their apiservers will CrashLoop until it is set (AI-vision photo-scan boots fail-loud on an empty key — setting only openai.api_key does NOT satisfy an anthropic-pinned env). Fill anthropic.api_key, or flip aivision.provider to none/mock (or openai, with openai.api_key) in the ApplicationSet to defer it."
+fi
 ADMIN_MISSING=0
 if [ -z "$ADMIN_PASSWORD" ]; then
     warn "admin.password missing in secrets bundle; required by master + longevity ApplicationSets via secrets.existingSecret"
@@ -170,8 +202,69 @@ EOF
 $(printf '%s' "$OAUTH_STATE_KEY" | sed 's/^/    /')
 EOF
             fi
+            if [ -n "$ANTHROPIC_API_KEY" ]; then
+                cat <<EOF
+  INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY: |-
+$(printf '%s' "$ANTHROPIC_API_KEY" | sed 's/^/    /')
+EOF
+            fi
+            if [ -n "$OPENAI_API_KEY" ]; then
+                cat <<EOF
+  INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY: |-
+$(printf '%s' "$OPENAI_API_KEY" | sed 's/^/    /')
+EOF
+            fi
         } | remote_apply
     done
+fi
+
+# --- inventario-ai-vision (reflected into dynamic PR-preview namespaces, #1976) ---
+# A SEPARATE Secret carrying ONLY the AI-vision keys — never the admin password,
+# JWT, file-signing, or OAuth-state material — so emberstack/reflector can safely
+# fan it out to every per-PR namespace without leaking the load-bearing secrets.
+# Reflector (installed by vm-install.sh) auto-creates a copy named
+# `inventario-ai-vision` in each `inv-vcl01-pr[0-9]+` namespace as ArgoCD spins
+# them up; the chart's extraEnvFrom (set in infra/argocd/applicationset-pr.yaml)
+# loads it so PR previews run the real Anthropic provider. The static
+# master/longevity envs do NOT use this — they get the key via inventario-admin
+# above. Created only when at least one AI key is present.
+if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$OPENAI_API_KEY" ]; then
+    note "Applying inventario-shared/inventario-ai-vision (reflected to inv-vcl01-pr*)"
+    {
+        cat <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inventario-shared
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inventario-ai-vision
+  namespace: inventario-shared
+  annotations:
+    reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
+    reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces: "inv-vcl01-pr[0-9]+"
+    reflector.v1.k8s.emberstack.com/reflection-auto-enabled: "true"
+    reflector.v1.k8s.emberstack.com/reflection-auto-namespaces: "inv-vcl01-pr[0-9]+"
+type: Opaque
+stringData:
+EOF
+        if [ -n "$ANTHROPIC_API_KEY" ]; then
+            cat <<EOF
+  INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY: |-
+$(printf '%s' "$ANTHROPIC_API_KEY" | sed 's/^/    /')
+EOF
+        fi
+        if [ -n "$OPENAI_API_KEY" ]; then
+            cat <<EOF
+  INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY: |-
+$(printf '%s' "$OPENAI_API_KEY" | sed 's/^/    /')
+EOF
+        fi
+    } | remote_apply
+else
+    warn "anthropic.api_key/openai.api_key both empty; skipping inventario-ai-vision. PR previews pin aivision.provider=anthropic and will CrashLoop until a key is set — fill anthropic.api_key, or flip applicationset-pr.yaml back to mock to defer."
 fi
 
 # --- argocd / github-app-creds (repo-creds + ApplicationSet PR-generator) ---
