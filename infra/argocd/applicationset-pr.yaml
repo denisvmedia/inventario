@@ -40,6 +40,16 @@ spec:
   template:
     metadata:
       name: 'inv-vcl01-pr{{.number}}'
+      # Cascade-prune the Application's resources when the PR is unlabeled or
+      # closed and the generator drops it. Without this finalizer the
+      # ApplicationSet deletes only the Application object and leaves the
+      # whole namespace's workloads (Deployments, demo Postgres/MinIO/Redis,
+      # the Tailscale Ingress) orphaned — which is why stale inv-vcl01-pr*
+      # namespaces used to pile up. Safe to enable now that
+      # setupJob.activeDeadlineSeconds (helm) stops a stuck image pull from
+      # wedging the sync op and thereby deadlocking this very finalizer.
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
       labels:
         inventario-preview: "true"
         inventario-pr: '{{.number}}'
@@ -95,6 +105,21 @@ spec:
         automated:
           prune: true
           selfHeal: true
+        # Re-attempt a failed sync with backoff. This is what makes the
+        # build/deploy race self-heal: the generator pins image.tag to the PR
+        # head's sha-<7> the instant the commit lands, but CI publishes that
+        # image a few minutes later. If the setup Job hits its
+        # activeDeadlineSeconds before the image exists, the sync fails;
+        # retry keeps re-syncing (and requeueAfterSeconds re-renders to the
+        # newest head SHA) until the image is published — so the preview
+        # converges on its own instead of going stuck-red or, worse,
+        # undeletable.
+        retry:
+          limit: 10
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 3m
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
