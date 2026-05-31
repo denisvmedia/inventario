@@ -204,7 +204,7 @@ func seedFullCommodity(c *qt.C, fs *registry.FactorySet, uctx context.Context, t
 		Name:                     "Vintage Camera",
 		ShortName:                "camera",
 		Type:                     models.CommodityTypeElectronics,
-		AreaID:                   area.ID,
+		AreaID:                   new(area.ID),
 		Count:                    1,
 		OriginalPrice:            decimal.RequireFromString("499.99"),
 		OriginalPriceCurrency:    models.Currency("USD"),

@@ -99,7 +99,7 @@ func newInbFixture(c *qt.C) *inbFixture {
 		Name:                     "TV",
 		ShortName:                "tv",
 		Type:                     models.CommodityTypeElectronics,
-		AreaID:                   area.ID,
+		AreaID:                   new(area.ID),
 		Count:                    1,
 		Status:                   models.CommodityStatusInUse,
 		OriginalPriceCurrency:    "USD",
@@ -475,6 +475,96 @@ func TestINBRoundTrip_FullReplace(t *testing.T) {
 	c.Assert(final.LocationCount >= 1, qt.IsTrue)
 	c.Assert(final.AreaCount >= 1, qt.IsTrue)
 	c.Assert(final.CommodityCount >= 1, qt.IsTrue, qt.Commentf("errors: %v", final.ErrorMessage))
+}
+
+// addUnassignedCommodity creates an area-less commodity (issue #1986) in the
+// fixture's group and returns its immutable UUID.
+func (f *inbFixture) addUnassignedCommodity(c *qt.C, name string) string {
+	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	com := must.Must(comReg.Create(f.ctx, models.Commodity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
+		Name:                     name,
+		ShortName:                "ua",
+		Type:                     models.CommodityTypeElectronics,
+		// AreaID left nil — this is the unassigned commodity under test.
+		Count:                 1,
+		Status:                models.CommodityStatusInUse,
+		OriginalPriceCurrency: "USD",
+		Draft:                 true,
+	}))
+	c.Assert(com.AreaID, qt.IsNil)
+	return com.UUID
+}
+
+// commodityByUUID lists commodities and returns the one with the given immutable
+// UUID (restored rows get fresh DB IDs but keep their UUID).
+func (f *inbFixture) commodityByUUID(c *qt.C, uuid string) *models.Commodity {
+	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	commodities := must.Must(comReg.List(f.ctx))
+	for _, com := range commodities {
+		if com != nil && com.UUID == uuid {
+			return com
+		}
+	}
+	c.Fatalf("commodity with UUID %s not found after restore", uuid)
+	return nil
+}
+
+// TestINBRoundTrip_UnassignedCommodity is the issue #1986 fidelity test: an
+// area-less commodity must export into its own member and restore with a nil
+// area — without fabricating any synthetic location/area in the restored data.
+func TestINBRoundTrip_UnassignedCommodity(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+	looseUUID := f.addUnassignedCommodity(c, "Loose Gadget")
+
+	blobKey, archive := f.runExport(c, signer)
+
+	// The archive carries the dedicated unassigned member, and the manifest
+	// records it.
+	order, jsons := innerMembers(c, archive)
+	c.Assert(order, qt.Contains, "unassigned-commodities.json")
+	var manifest map[string]any
+	c.Assert(json.Unmarshal(jsons["manifest.json"], &manifest), qt.IsNil)
+	c.Assert(manifest["unassignedFile"], qt.Equals, "unassigned-commodities.json")
+
+	// Count locations/areas BEFORE restore so we can prove restore adds none for
+	// the unassigned commodity.
+	locReg := must.Must(f.fs.LocationRegistryFactory.CreateUserRegistry(f.ctx))
+	areaReg := must.Must(f.fs.AreaRegistryFactory.CreateUserRegistry(f.ctx))
+	locsBefore := len(must.Must(locReg.List(f.ctx)))
+	areasBefore := len(must.Must(areaReg.List(f.ctx)))
+
+	final, err := restoreInb(c, f, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+
+	// The unassigned commodity round-trips with a nil area. Restored rows keep
+	// their immutable UUID but get fresh DB IDs, so look it up by UUID.
+	restored := f.commodityByUUID(c, looseUUID)
+	c.Assert(restored.AreaID, qt.IsNil)
+
+	// full_replace re-creates the same rows; no NEW synthetic location/area was
+	// fabricated to home the unassigned commodity.
+	c.Assert(must.Must(locReg.List(f.ctx)), qt.HasLen, locsBefore)
+	c.Assert(must.Must(areaReg.List(f.ctx)), qt.HasLen, areasBefore)
+}
+
+// TestINBExport_NoUnassignedMemberWhenNone proves an archive with zero area-less
+// commodities omits the unassigned member entirely (byte-stability, issue #1986).
+func TestINBExport_NoUnassignedMemberWhenNone(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c) // fixture's only commodity is area-bound
+
+	_, archive := f.runExport(c, signer)
+	order, jsons := innerMembers(c, archive)
+	c.Assert(order, qt.Not(qt.Contains), "unassigned-commodities.json")
+	var manifest map[string]any
+	c.Assert(json.Unmarshal(jsons["manifest.json"], &manifest), qt.IsNil)
+	_, present := manifest["unassignedFile"]
+	c.Assert(present, qt.IsFalse)
 }
 
 // seedSecondTenant creates a second tenant (tenant-b) with its own user, group,
@@ -960,7 +1050,7 @@ func TestINBExport_SelectedItemsScopeSurvivesRefactor(t *testing.T) {
 		Name:                     "Monitor",
 		ShortName:                "mon",
 		Type:                     models.CommodityTypeElectronics,
-		AreaID:                   area2.ID,
+		AreaID:                   new(area2.ID),
 		Count:                    1,
 		Status:                   models.CommodityStatusInUse,
 		OriginalPriceCurrency:    "USD",

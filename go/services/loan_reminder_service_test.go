@@ -465,7 +465,7 @@ func newLoanReminderServiceFixture(c *qt.C) (context.Context, *registry.Set, str
 	area, err := regSet.AreaRegistry.Create(ctx, models.Area{Name: "A", LocationID: loc.ID})
 	c.Assert(err, qt.IsNil)
 	commodity, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID:    area.ID,
+		AreaID:    new(area.ID),
 		Name:      "drill",
 		ShortName: "drill",
 		Type:      models.CommodityTypeOther,

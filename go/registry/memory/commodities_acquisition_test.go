@@ -62,7 +62,7 @@ func TestCommodityRegistry_Create_DropsAcquisitionPayload(t *testing.T) {
 	cur := models.Currency("USD")
 
 	created, err := set.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID:              area.ID,
+		AreaID:              new(area.ID),
 		Name:                "thing",
 		ShortName:           "t",
 		Status:              models.CommodityStatusInUse,
@@ -102,7 +102,7 @@ func TestCommodityRegistry_Create_RestoreAcquisitionContext(t *testing.T) {
 	restoreCtx := registry.WithRestoreAcquisition(ctx, price, currency)
 
 	created, err := set.CommodityRegistry.Create(restoreCtx, models.Commodity{
-		AreaID:    area.ID,
+		AreaID:    new(area.ID),
 		Name:      "thing",
 		ShortName: "t",
 		Status:    models.CommodityStatusInUse,
@@ -138,7 +138,7 @@ func TestCommodityRegistry_Update_PreservesAcquisition(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	created, err := set.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID:    area.ID,
+		AreaID:    new(area.ID),
 		Name:      "thing",
 		ShortName: "t",
 		Status:    models.CommodityStatusInUse,

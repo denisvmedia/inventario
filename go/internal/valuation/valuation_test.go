@@ -92,7 +92,7 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 	_, err = commodityRegistry.Create(ctx, models.Commodity{
 		Name:                  "Commodity 1",
 		ShortName:             "C1",
-		AreaID:                area1.ID,
+		AreaID:                new(area1.ID),
 		Count:                 2,
 		OriginalPrice:         decimal.NewFromFloat(100.00),
 		OriginalPriceCurrency: models.Currency(groupCurrency),
@@ -107,7 +107,7 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 	_, err = commodityRegistry.Create(ctx, models.Commodity{
 		Name:                  "Commodity 2",
 		ShortName:             "C2",
-		AreaID:                area1.ID,
+		AreaID:                new(area1.ID),
 		Count:                 1,
 		OriginalPrice:         decimal.NewFromFloat(200.00), // 0: invalid
 		OriginalPriceCurrency: models.Currency(nonGroupCurrency),
@@ -122,7 +122,7 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 	_, err = commodityRegistry.Create(ctx, models.Commodity{
 		Name:                   "Commodity 3",
 		ShortName:              "C3",
-		AreaID:                 area2.ID,
+		AreaID:                 new(area2.ID),
 		Count:                  3,
 		OriginalPrice:          decimal.NewFromFloat(300.00), // 300
 		OriginalPriceCurrency:  models.Currency(groupCurrency),
@@ -137,7 +137,7 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 	_, err = commodityRegistry.Create(ctx, models.Commodity{ // 400
 		Name:                  "Commodity 4",
 		ShortName:             "C4",
-		AreaID:                area2.ID,
+		AreaID:                new(area2.ID),
 		Count:                 1,
 		OriginalPrice:         decimal.NewFromFloat(400.00),
 		OriginalPriceCurrency: models.Currency(groupCurrency),
@@ -151,7 +151,7 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 	_, err = commodityRegistry.Create(ctx, models.Commodity{ // 0: sold
 		Name:                  "Commodity 5",
 		ShortName:             "C5",
-		AreaID:                area3.ID,
+		AreaID:                new(area3.ID),
 		Count:                 1,
 		OriginalPrice:         decimal.NewFromFloat(500.00),
 		OriginalPriceCurrency: models.Currency(nonGroupCurrency),
@@ -166,7 +166,7 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 	_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{ // 0: draft
 		Name:                  "Commodity 6",
 		ShortName:             "C6",
-		AreaID:                area3.ID,
+		AreaID:                new(area3.ID),
 		Count:                 1,
 		OriginalPrice:         decimal.NewFromFloat(600.00),
 		OriginalPriceCurrency: models.Currency(nonGroupCurrency),

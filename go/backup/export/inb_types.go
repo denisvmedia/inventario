@@ -17,6 +17,13 @@ const INBFormatVersion = "2.0"
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
 
+// INBUnassignedName is the inner-tar member holding the area-less ("unassigned")
+// commodities document (issue #1986). Commodities with no area have no location
+// home in the location-centric layout, so they are emitted here as a flat list.
+// The member is written ONLY when at least one unassigned commodity is in scope,
+// keeping archives with no unassigned items byte-stable (no empty member).
+const INBUnassignedName = "unassigned-commodities.json"
+
 // INBFilesPrefix is the inner-tar path prefix under which commodity file bytes
 // are stored: `files/<loc-slug>/<commodity-uuid>/<bucket>/<sanitized-name>`.
 const INBFilesPrefix = "files/"
@@ -37,7 +44,13 @@ type INBManifest struct {
 	Compression string           `json:"compression"`
 	Signature   INBSignatureInfo `json:"signature"`
 	Locations   []INBManifestLoc `json:"locations"`
-	Statistics  INBManifestStats `json:"statistics"`
+	// UnassignedFile names the inner-tar member holding the area-less
+	// commodities document (issue #1986), or "" when the archive contains no
+	// unassigned commodities (then the member is absent entirely). Restore
+	// keys off member names and tolerates its absence, so older archives
+	// without this field round-trip unchanged.
+	UnassignedFile string           `json:"unassignedFile,omitempty"`
+	Statistics     INBManifestStats `json:"statistics"`
 }
 
 // INBSignatureInfo records the signing algorithm + the public key (base64) and
@@ -80,6 +93,14 @@ type INBLocationDoc struct {
 	Commodities []INBCommodity `json:"commodities"`
 }
 
+// INBUnassignedDoc is the document written as the INBUnassignedName member: a
+// flat list of area-less commodities (issue #1986). Each INBCommodity has its
+// AreaID set to "" (the empty wire value for "no area"); the restore side maps
+// that back to a nil model AreaID via ConvertToCommodity.
+type INBUnassignedDoc struct {
+	Commodities []INBCommodity `json:"commodities"`
+}
+
 // INBLocation is a location row keyed by its immutable UUID.
 type INBLocation struct {
 	ID      string `json:"id"`
@@ -95,8 +116,9 @@ type INBArea struct {
 }
 
 // INBCommodity is a commodity row keyed by its immutable UUID; AreaID is the
-// parent area's immutable UUID. The three file-reference arrays carry the
-// commodity's attached images / invoices / manuals.
+// parent area's immutable UUID, or "" for an area-less ("unassigned") commodity
+// emitted in the INBUnassignedDoc member (issue #1986). The three file-reference
+// arrays carry the commodity's attached images / invoices / manuals.
 type INBCommodity struct {
 	ID                     string   `json:"id"`
 	Name                   string   `json:"name"`

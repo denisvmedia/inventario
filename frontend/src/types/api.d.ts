@@ -3480,6 +3480,8 @@ export type paths = {
                     status?: string[];
                     /** @description Filter by exact area ID */
                     area_id?: string;
+                    /** @description Only commodities with no area (ignored when area_id is set) */
+                    unassigned?: boolean;
                     /** @description Case-insensitive substring match on name + short_name */
                     q?: string;
                     /** @description Include drafts and non-in_use commodities (default false hides them) */
@@ -11411,6 +11413,14 @@ export type components = {
              *     only writes when both columns are still NULL.
              */
             readonly acquisition_price?: number;
+            /**
+             * @description AreaID is the area the commodity is filed under. Nullable (issue
+             *     #1986): a commodity may be created with no area and later
+             *     un-assigned. Mirrors CoverFileID's nullable-FK pointer style. No
+             *     on_delete clause — area deletion is handled at the service layer
+             *     (EntityService.DeleteAreaRecursive cascades to the area's
+             *     commodities), unchanged by this issue.
+             */
             area_id?: string;
             comments?: string;
             converted_original_price?: number;

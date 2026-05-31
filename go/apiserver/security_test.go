@@ -73,7 +73,7 @@ func TestSecurityIDRejection(t *testing.T) {
 					Type: "commodities",
 					Attributes: &models.Commodity{
 						Name:   "Test Commodity",
-						AreaID: "test-area-id",
+						AreaID: new("test-area-id"),
 						Count:  1,
 						Type:   "Electronics",
 						Status: "In Use",
@@ -361,7 +361,7 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 					Attributes: &models.Commodity{
 						Name:                  "Test Commodity",
 						ShortName:             "TestComm",
-						AreaID:                createdArea.ID,
+						AreaID:                new(createdArea.ID),
 						Count:                 1,
 						Type:                  models.CommodityTypeElectronics,
 						Status:                models.CommodityStatusInUse,

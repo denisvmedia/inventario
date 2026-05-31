@@ -56,7 +56,7 @@ func makeCommodity(id string, mutators ...func(*models.Commodity)) *models.Commo
 			GroupID:  "group-1",
 		},
 		Name:                  "Test Item",
-		AreaID:                "area-1",
+		AreaID:                new("area-1"),
 		Type:                  models.CommodityTypeOther,
 		Status:                models.CommodityStatusInUse,
 		Count:                 1,
@@ -140,7 +140,7 @@ func TestCommodityEventService_EmitUpdated_MovedAndPrice(t *testing.T) {
 
 	before := makeCommodity("c1")
 	after := makeCommodity("c1", func(c *models.Commodity) {
-		c.AreaID = "area-2"
+		c.AreaID = new("area-2")
 		c.CurrentPrice = decimal.NewFromInt(50)
 	})
 	svc.EmitUpdated(ctx, before, after)
@@ -151,6 +151,25 @@ func TestCommodityEventService_EmitUpdated_MovedAndPrice(t *testing.T) {
 	kinds := []models.CommodityEventKind{events[0].Kind, events[1].Kind}
 	c.Assert(kinds, qt.Contains, models.CommodityEventKindMoved)
 	c.Assert(kinds, qt.Contains, models.CommodityEventKindPriceChanged)
+}
+
+func TestCommodityEventService_EmitUpdated_Unassign(t *testing.T) {
+	// Issue #1986: clearing the area (A → nil) is a move and surfaces a
+	// `moved` event, with the after payload carrying an empty area_id.
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	before := makeCommodity("c1") // filed under "area-1"
+	after := makeCommodity("c1", func(c *models.Commodity) {
+		c.AreaID = nil
+	})
+	svc.EmitUpdated(ctx, before, after)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindMoved)
+	c.Assert(events[0].After["area_id"], qt.Equals, "")
 }
 
 func TestCommodityEventService_EmitUpdated_GenericUpdate(t *testing.T) {

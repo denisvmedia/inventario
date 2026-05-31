@@ -125,8 +125,11 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 		return nil, errxtrace.Wrap("failed to create commodity", err)
 	}
 
-	// Add this commodity to its parent area's commodity list
-	_ = r.areaRegistry.AddCommodity(ctx, newCommodity.AreaID, newCommodity.GetID())
+	// Add this commodity to its parent area's commodity list — but only
+	// when it has an area (issue #1986: area is optional).
+	if newCommodity.AreaID != nil && *newCommodity.AreaID != "" {
+		_ = r.areaRegistry.AddCommodity(ctx, *newCommodity.AreaID, newCommodity.GetID())
+	}
 
 	return newCommodity, nil
 }
@@ -235,16 +238,21 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 		return errxtrace.Wrap("failed to get commodity", err)
 	}
 
-	_ = r.areaRegistry.DeleteCommodity(ctx, commodity.AreaID, id)
+	// Area is optional (issue #1986): only untrack when it has one.
+	if commodity.AreaID != nil && *commodity.AreaID != "" {
+		_ = r.areaRegistry.DeleteCommodity(ctx, *commodity.AreaID, id)
+	}
 
 	err = r.Registry.Delete(ctx, id)
 	if err != nil {
 		return errxtrace.Wrap("failed to delete commodity", err)
 	}
 
-	err = r.areaRegistry.DeleteCommodity(ctx, commodity.AreaID, id)
-	if err != nil {
-		return errxtrace.Wrap("failed to delete commodity from area", err)
+	if commodity.AreaID != nil && *commodity.AreaID != "" {
+		err = r.areaRegistry.DeleteCommodity(ctx, *commodity.AreaID, id)
+		if err != nil {
+			return errxtrace.Wrap("failed to delete commodity from area", err)
+		}
 	}
 
 	return nil
@@ -260,7 +268,9 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	// caller sent must be ignored).
 	var oldAreaID string
 	if existingCommodity, err := r.Registry.Get(ctx, commodity.GetID()); err == nil {
-		oldAreaID = existingCommodity.AreaID
+		if existingCommodity.AreaID != nil {
+			oldAreaID = *existingCommodity.AreaID
+		}
 		commodity.AcquisitionPrice = clonePtrDecimal(existingCommodity.AcquisitionPrice)
 		commodity.AcquisitionCurrency = clonePtrCurrency(existingCommodity.AcquisitionCurrency)
 	}
@@ -271,15 +281,22 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		return nil, errxtrace.Wrap("failed to update commodity", err)
 	}
 
-	// Handle area registry tracking - area changed
-	if oldAreaID != "" && oldAreaID != updatedCommodity.AreaID {
-		// Remove from old area
-		_ = r.areaRegistry.DeleteCommodity(ctx, oldAreaID, updatedCommodity.GetID())
-		// Add to new area
-		_ = r.areaRegistry.AddCommodity(ctx, updatedCommodity.AreaID, updatedCommodity.GetID())
-	} else if oldAreaID == "" {
-		// This is a fallback case - add to area if not already tracked
-		_ = r.areaRegistry.AddCommodity(ctx, updatedCommodity.AreaID, updatedCommodity.GetID())
+	// Handle area registry tracking with pointer semantics (issue #1986:
+	// area is optional). "" stands for "no area". The four transitions —
+	// none→none, none→A, A→none (un-assign), A→B, A→A — all reduce to:
+	// drop from the old area if there was one, add to the new if there is
+	// one, only when they differ.
+	var newAreaID string
+	if updatedCommodity.AreaID != nil {
+		newAreaID = *updatedCommodity.AreaID
+	}
+	if oldAreaID != newAreaID {
+		if oldAreaID != "" {
+			_ = r.areaRegistry.DeleteCommodity(ctx, oldAreaID, updatedCommodity.GetID())
+		}
+		if newAreaID != "" {
+			_ = r.areaRegistry.AddCommodity(ctx, newAreaID, updatedCommodity.GetID())
+		}
 	}
 
 	return updatedCommodity, nil
@@ -349,6 +366,20 @@ func filterCommodities(in []*models.Commodity, opts registry.CommodityListOption
 // outer loop body stays under the gocognit threshold. `openSet` is the
 // pre-computed map form of OpenLoanCommodityIDs lifted by the caller
 // to keep the LentOut membership check O(1) per row.
+// commodityMatchesArea applies the AreaID / Unassigned filter (issue #1986). An
+// explicit AreaID wins over Unassigned; Unassigned alone keeps only area-less
+// rows. No filter set → always matches.
+func commodityMatchesArea(c *models.Commodity, opts registry.CommodityListOptions) bool {
+	switch {
+	case opts.AreaID != "":
+		return c.AreaID != nil && *c.AreaID == opts.AreaID
+	case opts.Unassigned:
+		return c.AreaID == nil || *c.AreaID == ""
+	default:
+		return true
+	}
+}
+
 func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, q string, now time.Time, openSet map[string]struct{}) bool {
 	// Default view hides drafts. The explicit Statuses filter never
 	// overrides this — drafts are orthogonal to status.
@@ -368,7 +399,7 @@ func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, q
 	if len(opts.Statuses) > 0 && !slices.Contains(opts.Statuses, c.Status) {
 		return false
 	}
-	if opts.AreaID != "" && c.AreaID != opts.AreaID {
+	if !commodityMatchesArea(c, opts) {
 		return false
 	}
 	if q != "" && !commoditySearchMatches(c, q) {
@@ -616,11 +647,16 @@ func (r *CommodityRegistry) AggregateByArea(ctx context.Context, groupBy []strin
 		if commodity.Draft {
 			continue
 		}
+		// Area is optional (issue #1986): unassigned commodities have no
+		// area to aggregate under, so skip them.
+		if commodity.AreaID == nil || *commodity.AreaID == "" {
+			continue
+		}
 		price, _ := commodity.OriginalPrice.Float64()
 		if !commodity.ConvertedOriginalPrice.IsZero() {
 			price, _ = commodity.ConvertedOriginalPrice.Float64()
 		}
-		areaMap[commodity.AreaID] = append(areaMap[commodity.AreaID], price)
+		areaMap[*commodity.AreaID] = append(areaMap[*commodity.AreaID], price)
 	}
 
 	var results []registry.AggregationResult

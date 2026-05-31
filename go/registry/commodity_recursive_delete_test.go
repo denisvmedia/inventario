@@ -42,7 +42,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 
 	commodity := models.Commodity{
 		Name:   "Test Commodity",
-		AreaID: createdArea.ID,
+		AreaID: new(createdArea.ID),
 		Type:   models.CommodityTypeElectronics,
 		Status: models.CommodityStatusInUse,
 		Count:  1,
@@ -195,7 +195,7 @@ func TestEntityService_DeleteCommodityRecursive_NoFiles(t *testing.T) {
 
 	commodity := models.Commodity{
 		Name:   "Test Commodity",
-		AreaID: createdArea.ID,
+		AreaID: new(createdArea.ID),
 		Type:   models.CommodityTypeElectronics,
 		Status: models.CommodityStatusInUse,
 		Count:  1,

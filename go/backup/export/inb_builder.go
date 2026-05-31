@@ -40,6 +40,11 @@ type inbBuilder struct {
 	locations           []*models.Location
 	areasByLocationID   map[string][]*models.Area
 	commoditiesByAreaID map[string][]*models.Commodity
+	// unassignedCommodities are the area-less commodities (issue #1986),
+	// collected during preload. They have no location/area home in the
+	// location-centric layout, so they are emitted in a dedicated top-level
+	// member instead (see planUnassigned / INBUnassignedDoc).
+	unassignedCommodities []*models.Commodity
 	// filesByCommodityID maps a commodity DB ID → bucket (images/invoices/
 	// manuals) → its in-scope, size-resolved candidate files (orphans already
 	// dropped).
@@ -78,6 +83,21 @@ type pendingFile struct {
 type plannedLocation struct {
 	member  string
 	doc     INBLocationDoc
+	pending []pendingFile
+}
+
+// unassignedFileSlug is the synthetic archive-path slug used for the file
+// members of area-less commodities (issue #1986), standing in for the parent
+// location's cleaned name that these commodities lack.
+const unassignedFileSlug = "unassigned"
+
+// plannedUnassigned is the in-memory plan for the area-less commodities member:
+// its built JSON document (metadata only) plus the ordered file bytes to stream
+// after it. present is false when no unassigned commodity is in scope, so the
+// member is omitted entirely (archive byte-stability — see INBUnassignedName).
+type plannedUnassigned struct {
+	present bool
+	doc     INBUnassignedDoc
 	pending []pendingFile
 }
 
@@ -176,7 +196,13 @@ func (b *inbBuilder) preload() error {
 	}
 	b.commoditiesByAreaID = make(map[string][]*models.Commodity, len(commodities))
 	for _, com := range commodities {
-		b.commoditiesByAreaID[com.AreaID] = append(b.commoditiesByAreaID[com.AreaID], com)
+		// Area is optional (issue #1986): only index commodities that have an
+		// area under it; collect the area-less ones for the unassigned member.
+		if com.AreaID != nil && *com.AreaID != "" {
+			b.commoditiesByAreaID[*com.AreaID] = append(b.commoditiesByAreaID[*com.AreaID], com)
+		} else {
+			b.unassignedCommodities = append(b.unassignedCommodities, com)
+		}
 	}
 
 	if err := b.indexCommodityFiles(); err != nil {
@@ -384,6 +410,48 @@ func (b *inbBuilder) commoditiesForArea(area *models.Area, scope *inbScope) []*m
 	return out
 }
 
+// unassignedInScope returns the area-less commodities to emit (issue #1986). For
+// whole-class exports every unassigned commodity is included; for selected_items
+// only those whose UUID was explicitly selected round-trip. (A location/area
+// selection never implies an unassigned commodity — it has no parent to imply
+// it.)
+func (b *inbBuilder) unassignedInScope(scope *inbScope) []*models.Commodity {
+	if scope.allCommodities {
+		return b.unassignedCommodities
+	}
+	var out []*models.Commodity
+	for _, com := range b.unassignedCommodities {
+		if scope.commodityIDs[com.ID] {
+			out = append(out, com)
+		}
+	}
+	return out
+}
+
+// planUnassigned builds the in-memory plan for the area-less commodities member
+// (issue #1986): the flat JSON document plus the ordered pending-file list, with
+// every commodity's file/bucket statistics accumulated. Returns present=false
+// (and writes nothing) when no unassigned commodity is in scope, so an archive
+// with none stays byte-stable.
+func (b *inbBuilder) planUnassigned(scope *inbScope) plannedUnassigned {
+	commodities := b.unassignedInScope(scope)
+	if len(commodities) == 0 {
+		return plannedUnassigned{present: false}
+	}
+
+	var doc INBUnassignedDoc
+	var pending []pendingFile
+	for _, com := range commodities {
+		// areaUUID "" marks the commodity as area-less; the synthetic slug
+		// gives its file members a stable archive home.
+		inbCom, comPending := b.planCommodity(unassignedFileSlug, "", com)
+		doc.Commodities = append(doc.Commodities, inbCom)
+		pending = append(pending, comPending...)
+		b.stats.CommodityCount++
+	}
+	return plannedUnassigned{present: true, doc: doc, pending: pending}
+}
+
 // planLocation builds the in-memory plan for one location: its JSON document
 // (metadata only) plus the ordered pending-file list (sizes already resolved),
 // and accumulates ALL statistics for the location's subtree. No DB/List and no
@@ -404,7 +472,7 @@ func (b *inbBuilder) planLocation(loc *models.Location, scope *inbScope) planned
 		b.stats.AreaCount++
 
 		for _, com := range b.commoditiesForArea(area, scope) {
-			inbCom, comPending := b.planCommodity(loc, area, com)
+			inbCom, comPending := b.planCommodity(textutils.CleanFilename(loc.Name), area.UUID, com)
 			doc.Commodities = append(doc.Commodities, inbCom)
 			pending = append(pending, comPending...)
 			b.stats.CommodityCount++
@@ -421,13 +489,18 @@ func (b *inbBuilder) planLocation(loc *models.Location, scope *inbScope) planned
 // each candidate as a pendingFile (size already resolved). All file/bucket stats
 // are accumulated here so Pass 1 holds the full statistics before manifest.json
 // is written.
-func (b *inbBuilder) planCommodity(loc *models.Location, area *models.Area, com *models.Commodity) (INBCommodity, []pendingFile) {
+//
+// locSlug is the archive-path slug for the commodity's file members (the parent
+// location's cleaned name, or a synthetic "unassigned" slug for area-less
+// commodities). areaUUID is the parent area's immutable UUID, or "" for an
+// area-less commodity (issue #1986).
+func (b *inbBuilder) planCommodity(locSlug, areaUUID string, com *models.Commodity) (INBCommodity, []pendingFile) {
 	inbCom := INBCommodity{
 		ID:                     com.UUID,
 		Name:                   com.Name,
 		ShortName:              com.ShortName,
 		Type:                   string(com.Type),
-		AreaID:                 area.UUID,
+		AreaID:                 areaUUID,
 		Count:                  com.Count,
 		OriginalPrice:          decimalString(com.OriginalPrice),
 		OriginalPriceCurrency:  string(com.OriginalPriceCurrency),
@@ -477,22 +550,22 @@ func (b *inbBuilder) planCommodity(loc *models.Location, area *models.Area, com 
 		}
 	}
 
-	pending := b.planCommodityFiles(loc, com, &inbCom)
+	pending := b.planCommodityFiles(locSlug, com, &inbCom)
 	return inbCom, pending
 }
 
 // planCommodityFiles records the commodity's image/invoice/manual file
 // references on inbCom (from the preloaded, size-resolved index) and returns the
 // corresponding ordered pendingFile list. Bucket/file/totalFileSize statistics
-// are accumulated here.
-func (b *inbBuilder) planCommodityFiles(loc *models.Location, com *models.Commodity, inbCom *INBCommodity) []pendingFile {
+// are accumulated here. locSlug is the archive-path slug (parent location's
+// cleaned name, or a synthetic "unassigned" for area-less commodities).
+func (b *inbBuilder) planCommodityFiles(locSlug string, com *models.Commodity, inbCom *INBCommodity) []pendingFile {
 	byBucket := b.filesByCommodityID[com.ID]
 	if byBucket == nil {
 		return nil
 	}
 
 	var pending []pendingFile
-	locSlug := textutils.CleanFilename(loc.Name)
 	// Iterate the buckets in a fixed order so the archive layout is
 	// deterministic regardless of map iteration order.
 	for _, bucket := range commodityFileBuckets {
@@ -554,15 +627,25 @@ func (b *inbBuilder) buildFileRef(locSlug string, com *models.Commodity, bucket 
 //	heap). The JSON precedes its file bytes so restore registers each ref before
 //	the member arrives.
 //
-// run returns the per-location plan and the manifest location index; it does NOT
-// write anything itself, so writePayload can interleave the manifest first.
-func (b *inbBuilder) run() ([]plannedLocation, []INBManifestLoc, error) {
+// inbPlan is the full output of Pass 1: every location's plan, the manifest
+// location index, and the area-less ("unassigned") commodities plan (issue
+// #1986). Bundled into one struct so run returns a single value plus error
+// (revive function-result-limit).
+type inbPlan struct {
+	locations    []plannedLocation
+	manifestLocs []INBManifestLoc
+	unassigned   plannedUnassigned
+}
+
+// run returns the Pass-1 plan; it does NOT write anything itself, so writePayload
+// can interleave the manifest first.
+func (b *inbBuilder) run() (inbPlan, error) {
 	scope, err := b.resolveScope()
 	if err != nil {
-		return nil, nil, err
+		return inbPlan{}, err
 	}
 	if err := b.preload(); err != nil {
-		return nil, nil, err
+		return inbPlan{}, err
 	}
 
 	locations := b.inScopeLocations(scope)
@@ -577,7 +660,12 @@ func (b *inbBuilder) run() ([]plannedLocation, []INBManifestLoc, error) {
 			File: pl.member,
 		})
 	}
-	return planned, manifestLocs, nil
+
+	return inbPlan{
+		locations:    planned,
+		manifestLocs: manifestLocs,
+		unassigned:   b.planUnassigned(scope),
+	}, nil
 }
 
 // writePlannedLocations performs Pass 2: for each planned location it writes the
@@ -595,6 +683,26 @@ func (b *inbBuilder) writePlannedLocations(planned []plannedLocation) error {
 			if err := b.flushPendingFile(pf); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// writeUnassigned writes the area-less commodities member (issue #1986): its
+// JSON document FIRST, then the referenced file bytes — mirroring the
+// location-member ordering so restore registers each file ref before its bytes
+// arrive. A no-op when no unassigned commodity was in scope (present=false), so
+// the member is omitted and the archive stays byte-stable.
+func (b *inbBuilder) writeUnassigned(pu plannedUnassigned) error {
+	if !pu.present {
+		return nil
+	}
+	if err := b.writeJSONMember(INBUnassignedName, pu.doc); err != nil {
+		return err
+	}
+	for _, pf := range pu.pending {
+		if err := b.flushPendingFile(pf); err != nil {
+			return err
 		}
 	}
 	return nil

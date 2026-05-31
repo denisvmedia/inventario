@@ -26,7 +26,7 @@ func TestCommodityRegistry_ListPaginated_LentOutFilter(t *testing.T) {
 	mk := func(name string) *models.Commodity {
 		c.Helper()
 		out, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-			AreaID:    areaID,
+			AreaID:    new(areaID),
 			Name:      name,
 			ShortName: name,
 			Status:    models.CommodityStatusInUse,

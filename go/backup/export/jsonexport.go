@@ -147,14 +147,21 @@ func (s *ExportService) writePayload(
 
 	// Pass 1: plan the whole in-scope tree in memory (metadata only) and
 	// accumulate ALL statistics, so the manifest can be written first.
-	planned, manifestLocs, err := builder.run()
+	plan, err := builder.run()
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Write manifest.json FIRST — now that the statistics are fully known the
 	// import metadata path reaches them without inflating the payload bodies.
-	if err := builder.writeManifest(manifestLocs); err != nil {
+	// The manifest records the unassigned member name only when one will be
+	// written (issue #1986), so a backup with no area-less commodities stays
+	// byte-stable.
+	unassignedMember := ""
+	if plan.unassigned.present {
+		unassignedMember = INBUnassignedName
+	}
+	if err := builder.writeManifest(plan.manifestLocs, unassignedMember); err != nil {
 		return nil, nil, err
 	}
 
@@ -162,7 +169,13 @@ func (s *ExportService) writePayload(
 	// bytes. The JSON precedes its file bytes so restore (which tolerates a
 	// manifest-first layout and keys off member names) registers each file
 	// reference before the corresponding member arrives.
-	if err := builder.writePlannedLocations(planned); err != nil {
+	if err := builder.writePlannedLocations(plan.locations); err != nil {
+		return nil, nil, err
+	}
+
+	// Then the area-less commodities member (issue #1986), same JSON-before-bytes
+	// ordering. Omitted entirely when no unassigned commodity is in scope.
+	if err := builder.writeUnassigned(plan.unassigned); err != nil {
 		return nil, nil, err
 	}
 
@@ -253,8 +266,9 @@ func (b *inbBuilder) writeFileMember(archivePath, blobKey string, size int64) (i
 }
 
 // writeManifest emits the manifest.json member from the accumulated stats and
-// the per-location index.
-func (b *inbBuilder) writeManifest(locs []INBManifestLoc) error {
+// the per-location index. unassignedMember names the area-less commodities member
+// (issue #1986), or "" when none is written (then the field is omitted).
+func (b *inbBuilder) writeManifest(locs []INBManifestLoc, unassignedMember string) error {
 	manifest := INBManifest{
 		ExportDate:  time.Now().UTC().Format(time.RFC3339),
 		ExportType:  string(b.export.Type),
@@ -266,7 +280,8 @@ func (b *inbBuilder) writeManifest(locs []INBManifestLoc) error {
 			PublicKey:   b.svc.signer.PublicKeyBase64(),
 			Fingerprint: b.svc.signer.Fingerprint(),
 		},
-		Locations: locs,
+		Locations:      locs,
+		UnassignedFile: unassignedMember,
 		Statistics: INBManifestStats{
 			LocationCount:  b.stats.LocationCount,
 			AreaCount:      b.stats.AreaCount,

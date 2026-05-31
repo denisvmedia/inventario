@@ -3212,6 +3212,13 @@ definitions:
         readOnly: true
         type: number
       area_id:
+        description: |-
+          AreaID is the area the commodity is filed under. Nullable (issue
+          #1986): a commodity may be created with no area and later
+          un-assigned. Mirrors CoverFileID's nullable-FK pointer style. No
+          on_delete clause — area deletion is handled at the service layer
+          (EntityService.DeleteAreaRecursive cascades to the area's
+          commodities), unchanged by this issue.
         type: string
       comments:
         type: string
@@ -6298,6 +6305,10 @@ paths:
         in: query
         name: area_id
         type: string
+      - description: Only commodities with no area (ignored when area_id is set)
+        in: query
+        name: unassigned
+        type: boolean
       - description: Case-insensitive substring match on name + short_name
         in: query
         name: q

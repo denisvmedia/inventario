@@ -39,7 +39,7 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 	areas, err := getRegistrySetFromParams(params, testUser).AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(areas, qt.Not(qt.HasLen), 0)
-	commodity.AreaID = areas[0].ID
+	commodity.AreaID = new(areas[0].ID)
 
 	createdCommodity, err := getRegistrySetFromParams(params, testUser).CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
@@ -186,7 +186,7 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 	areas, err := getRegistrySetFromParams(params, testUser).AreaRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(areas, qt.Not(qt.HasLen), 0)
-	commodity.AreaID = areas[0].ID
+	commodity.AreaID = new(areas[0].ID)
 
 	createdCommodity, err := getRegistrySetFromParams(params, testUser).CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
