@@ -152,6 +152,17 @@ spec:
             - secretRef:
                 name: {{ $secretName }}
           env:
+            # The seed step boots a throwaway `inventario run` server, which
+            # initializes the AI-vision provider. Seeding never uses it, and this
+            # Job does NOT carry the provider's API key (the reflected
+            # inventario-ai-vision Secret is wired via extraEnvFrom on the
+            # Deployments only). Inheriting provider=anthropic from the ConfigMap
+            # would therefore fail the temporary server's boot (wireCommodityScan
+            # is fail-loud on an empty key) and the seed would never run. Force
+            # the provider off here — an explicit `env` entry overrides the same
+            # key coming from the ConfigMap via envFrom. (#1976)
+            - name: INVENTARIO_RUN_AI_VISION_PROVIDER
+              value: "none"
             - name: APP_DB_DSN
               {{- if .Values.demo.postgresql.enabled }}
               value: {{ include "inventario.dbDsn" . | quote }}
