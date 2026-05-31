@@ -489,7 +489,7 @@ describe("<CommoditiesListPage />", () => {
   it("submits a new item via the create dialog and clears the form", async () => {
     // Replays the regression that motivated #1629: walk past the
     // initial AI placeholder step, fill Basics (Name + Short name +
-    // Type + Location → Area), skip Save-as-draft so the schema's
+    // Type), skip Save-as-draft so the schema's
     // whenNotDraft fields stay optional, walk Purchase → Warranty →
     // Extras → Files, then submit. After 201 the dialog closes and
     // the page navigates to /commodities/:newId.
@@ -559,8 +559,6 @@ describe("<CommoditiesListPage />", () => {
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
     await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
-    await pickRadixSelect(user, /^Location$/i, { optionLabel: /^Home$/i })
-    await pickRadixSelect(user, /^Area$/i, { optionLabel: /^Garage$/i })
     // Save-as-draft so purchase_date + price triad stay optional —
     // the test asserts the navigation contract, not the schema.
     await user.click(screen.getByLabelText(/Save as draft/i))
@@ -590,7 +588,6 @@ describe("<CommoditiesListPage />", () => {
           name: "Couch",
           short_name: "Couch",
           type: "furniture",
-          area_id: "a1",
           status: "in_use",
           draft: true,
         },

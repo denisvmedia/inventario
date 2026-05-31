@@ -128,11 +128,6 @@ describe("<CommodityFormDialog />", () => {
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
     await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     await pickSelect(user, /^Type$/i, /^Furniture$/i)
-    // Location → Area is a paired select: Area is disabled until a
-    // Location is selected (CommodityFormDialog L1208-L1212), so the
-    // walk must pick "Home" first.
-    await pickSelect(user, /^Location$/i, /^Home$/i)
-    await pickSelect(user, /^Area$/i, /^Garage$/i)
     // Tick the draft toggle so the schema's whenNotDraft block doesn't
     // require purchase_date + the price triad — keeps this test focused
     // on step navigation rather than every field.
@@ -154,7 +149,6 @@ describe("<CommodityFormDialog />", () => {
       name: "Couch",
       short_name: "Couch",
       type: "furniture",
-      area_id: "a1",
       status: "in_use",
       count: 1,
       original_price_currency: "USD",
@@ -183,8 +177,6 @@ describe("<CommodityFormDialog />", () => {
     await user.type(await screen.findByLabelText(/^Name$/i), "Stand")
     await user.type(screen.getByLabelText(/^Short name$/i), "Stand")
     await pickSelect(user, /^Type$/i, /^Furniture$/i)
-    await pickSelect(user, /^Location$/i, /^Home$/i)
-    await pickSelect(user, /^Area$/i, /^Garage$/i)
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     await screen.findByLabelText(/Purchase date/i)
@@ -221,8 +213,6 @@ describe("<CommodityFormDialog />", () => {
     await user.type(await screen.findByLabelText(/^Name$/i), "X")
     await user.type(screen.getByLabelText(/^Short name$/i), "X")
     await pickSelect(user, /^Type$/i, /^Other$/i)
-    await pickSelect(user, /^Location$/i, /^Home$/i)
-    await pickSelect(user, /^Area$/i, /^Garage$/i)
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     await screen.findByLabelText(/Purchase date/i)
@@ -260,6 +250,74 @@ describe("<CommodityFormDialog />", () => {
     // Radix Select trigger reflects the current value as its accessible
     // text content rather than a `value` attribute.
     expect(screen.getByLabelText(/^Status$/i)).toHaveTextContent(/Sold/i)
+  })
+
+  it("does not render the Location/Area picker in create mode (#1987)", async () => {
+    const user = userEvent.setup()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="create"
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+        />
+      ),
+    })
+    await walkPastAi(user)
+    // The create flow no longer asks for a location — items are created
+    // unassigned and a location is offered afterwards via a banner.
+    expect(screen.queryByRole("combobox", { name: /^Location$/i })).toBeNull()
+    expect(screen.queryByRole("combobox", { name: /^Area$/i })).toBeNull()
+  })
+
+  it("clears the location in edit mode and omits area_id on submit (#1986/#1987)", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="edit"
+          initialValues={{
+            id: "c1",
+            name: "Lamp",
+            short_name: "Lamp",
+            type: "other",
+            area_id: "a1",
+            status: "in_use",
+            count: 1,
+            draft: true,
+          }}
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={onSubmit}
+        />
+      ),
+    })
+    // Edit opens on Basics with the picker populated (area a1 → Home).
+    expect(await screen.findByRole("combobox", { name: /^Location$/i })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: /clear location/i }))
+    // Clearing un-assigns: the Clear affordance disappears with the value.
+    expect(screen.queryByRole("button", { name: /clear location/i })).toBeNull()
+    // Walk Basics → Purchase → Warranty → Extras → Files → submit.
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByLabelText(/Purchase date/i)
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-warranty-step")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-tags-input")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-submit")
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    // area_id is omitted (undefined) so the BE clears the assignment.
+    expect(onSubmit.mock.calls[0][0].area_id).toBeUndefined()
   })
 
   it("removes a tag chip with Backspace on an empty input", async () => {
@@ -541,8 +599,6 @@ describe("<CommodityFormDialog />", () => {
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
     await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     await pickSelect(user, /^Type$/i, /^Furniture$/i)
-    await pickSelect(user, /^Location$/i, /^Home$/i)
-    await pickSelect(user, /^Area$/i, /^Garage$/i)
     await user.click(screen.getByLabelText(/Save as draft/i))
     // Step through Basics → Purchase → Warranty → Extras → Files.
     await user.click(screen.getByTestId("commodity-form-next"))

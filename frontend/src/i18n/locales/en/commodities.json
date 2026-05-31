@@ -193,6 +193,7 @@
     "area": "Area",
     "areaPlaceholder": "Pick an area",
     "areaPlaceholderNoLocation": "Pick a location first",
+    "clearLocation": "Clear location",
     "comments": "Notes",
     "commentsPlaceholder": "Maintenance tips, filter models, anything useful…",
     "convertedOriginalPrice": "Converted Purchase Price ({{groupCurrency}})",
@@ -253,6 +254,11 @@
     "warranty": "Warranty"
   },
   "form": {
+    "assignLocationBanner": {
+      "cta": "Place in location",
+      "dismiss": "Dismiss",
+      "title": "Place this item in a location?"
+    },
     "back": "Back",
     "closeConfirm": {
       "description": "You have unsaved changes. Save them as a draft to finish later, or discard them and start over next time.",

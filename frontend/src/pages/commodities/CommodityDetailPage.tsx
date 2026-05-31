@@ -45,6 +45,7 @@ import { CommodityFilesTab } from "@/components/files/CommodityFilesTab"
 import { DropOverlay } from "@/components/files/DropOverlay"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { useFileDropZone } from "@/components/files/useFileDropZone"
+import { AssignLocationBanner } from "@/components/items/AssignLocationBanner"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import {
   StatusTransitionDialog,
@@ -485,6 +486,14 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             hint={t("files:entityPanel.dropHint")}
           />
         ) : null}
+        {/* Non-blocking nudge to file an unassigned item under a
+            location (#1987). Shows only when the item has no area and
+            the group actually has locations to choose from. The CTA
+            opens the edit dialog, which hosts the location/area picker. */}
+        <AssignLocationBanner
+          show={!commodity.area_id && (locations.data?.length ?? 0) > 0}
+          onAssign={() => setEditOpen(true)}
+        />
         {/* The Sheet variant renders its own X close button (top-right
             of the panel), so the explicit "Back to list" Link is
             page-only — clicking the X dismisses the overlay and lands
