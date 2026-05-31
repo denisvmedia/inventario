@@ -337,27 +337,35 @@ Stash all five values for "Filling the bundle".
 ### 7. Optional: AI-vision provider API key (#1976)
 
 The AI-vision photo-scan feature (#1720) lets users prefill the Add-Item form
-from product photos. It's wired but defaults OFF; the persistent envs
-(`inv-vcl01-master` + `inv-vcl01-longevity`) pin `aivision.provider: anthropic`,
-so they need an Anthropic key to actually serve scans. Per-PR previews run the
-`mock` provider (no key, no spend).
+from product photos. It's wired but defaults OFF; all preview-stack envs —
+`inv-vcl01-master`, `inv-vcl01-longevity`, AND the per-PR previews — pin
+`aivision.provider: anthropic`, so they need an Anthropic key to serve scans.
 
 1. Get a key at <https://console.anthropic.com/> → **API keys** (`sk-ant-...`).
 2. Put it in `anthropic.api_key` in the bundle (OpenAI users: `openai.api_key`
    instead, and set `aivision.provider: openai` in the ApplicationSet).
 
-`apply-secrets.sh` materializes it into the `inventario-admin` Secret as
-`INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY`; the chart loads the whole Secret
-via `envFrom`.
+`apply-secrets.sh` delivers it two ways:
 
-> ⚠️ **Ordering hazard.** The apiserver **fails to boot** when
+- **master + longevity**: materialized into the static `inventario-admin` Secret
+  as `INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY`; the chart loads it via
+  `envFrom`.
+- **per-PR previews** (#1976): the namespaces are created on the fly by ArgoCD,
+  so the key goes into a separate `inventario-ai-vision` Secret (AI keys only)
+  in the `inventario-shared` namespace, annotated for **emberstack/reflector**
+  (installed by `vm-install.sh`) to auto-copy into every `inv-vcl01-pr{N}`
+  namespace. The PR chart's `extraEnvFrom` then loads it.
+
+> ⚠️ **Ordering / dependency hazard.** The apiserver **fails to boot** when
 > `aivision.provider=anthropic` but the key env is empty (intentional fail-loud
 > in `wireCommodityScan`). Fill `anthropic.api_key` and run `apply-secrets.sh`
-> **before** the `aivision.provider: anthropic` config syncs to master/longevity
-> — otherwise those apiservers CrashLoop. To stage it the other way round, flip
-> the ApplicationSet's `aivision.provider` back to `none` (or `mock`) until the
-> key is in place. Leaving the key empty is otherwise harmless: every other env
-> ignores `anthropic.*`.
+> **before** the `aivision.provider: anthropic` config syncs — otherwise the
+> master/longevity apiservers, and **every** PR preview, CrashLoop. A freshly
+> created PR preview may also CrashLoop briefly until reflector copies the
+> Secret into its new namespace — the kubelet then restarts the pod, which
+> re-reads the now-present Secret. To stage it the other
+> way round, flip the relevant ApplicationSet's `aivision.provider` back to
+> `none`/`mock` until the key is in place.
 
 ---
 

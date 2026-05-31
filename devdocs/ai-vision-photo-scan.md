@@ -79,22 +79,33 @@ network call, so it does not depend on a real provider.
 Two halves — both required to actually serve scans:
 
 1. **Provider selector** (non-secret, ConfigMap). Set `aivision.provider` in the
-   chart values. The persistent envs already pin it in their ApplicationSets:
-   `anthropic` for `inv-vcl01-master` + `inv-vcl01-longevity`
-   (`infra/argocd/applicationset-{master,longevity}.yaml`), `mock` for PR
+   chart values. Every preview-stack env pins `anthropic` in its ApplicationSet:
+   `inv-vcl01-master` + `inv-vcl01-longevity`
+   (`infra/argocd/applicationset-{master,longevity}.yaml`) and the per-PR
    previews (`applicationset-pr.yaml`). Generic `helm install` defaults to
    `none`.
 2. **API key** (secret). Add `anthropic.api_key` to the sops bundle
    (`infra/vm/secrets/secrets.example.yaml` is the schema; see
-   `infra/SECRETS.md` step 7). `apply-secrets.sh` materializes it into the
-   `inventario-admin` Secret as `INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY`,
-   and the chart loads the whole Secret via `envFrom`. For a chart-managed
-   secret (no `existingSecret`), set `secrets.aiVisionAnthropicApiKey` instead.
+   `infra/SECRETS.md` step 7). `apply-secrets.sh` delivers it two ways:
+   - **master + longevity** (static namespaces): materialized into the
+     `inventario-admin` Secret as `INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY`,
+     loaded via `envFrom`.
+   - **per-PR previews** (dynamic namespaces, #1976): put into a separate
+     `inventario-ai-vision` Secret in `inventario-shared`, which
+     **emberstack/reflector** (installed by `vm-install.sh`) auto-copies into
+     each `inv-vcl01-pr{N}` namespace; the PR chart's `extraEnvFrom` loads it.
 
-> ⚠️ **Ordering.** Because master/longevity pin `provider: anthropic`, the key
-> must be in place **before** that config syncs, or those apiservers CrashLoop
-> (fail-loud above). Fill `anthropic.api_key` + run `apply-secrets.sh` first, or
-> flip the ApplicationSet's `aivision.provider` to `none`/`mock` to defer.
+   For a chart-managed secret (no `existingSecret`), set
+   `secrets.aiVisionAnthropicApiKey` instead.
+
+> ⚠️ **Ordering / dependency.** Because all three preview envs pin
+> `provider: anthropic`, the key must be in place **before** that config syncs,
+> or those apiservers CrashLoop (fail-loud above) — including **every** PR
+> preview. A fresh PR preview may CrashLoop briefly until reflector copies the
+> Secret into its new namespace — the kubelet then restarts the pod, which
+> re-reads the now-present Secret. Fill
+> `anthropic.api_key` + run `apply-secrets.sh` first, or flip the
+> ApplicationSet's `aivision.provider` to `none`/`mock` to defer.
 
 ### Verify
 
@@ -106,6 +117,9 @@ kubectl -n inv-vcl01-master get secret inventario-admin \
 # a successful scan lands an audit row:
 #   SELECT status, provider, model FROM commodity_scan_audits ORDER BY created_at DESC LIMIT 1;
 #   -> ok | anthropic | claude-sonnet-4-6
+
+# in a PR preview, confirm reflector copied the key into the per-PR namespace:
+kubectl -n inv-vcl01-pr<N> get secret inventario-ai-vision
 ```
 
 ## Operability
@@ -115,7 +129,16 @@ kubectl -n inv-vcl01-master get secret inventario-admin \
   `disabled`). The per-user hourly limiter counts only rows that actually
   reached the provider. The table is RLS-isolated per tenant.
 - **Cost control**: keep `AI_VISION_RATE_LIMIT_PER_HOUR` and
-  `AI_VISION_MAX_PHOTOS`/`AI_VISION_MAX_PHOTO_BYTES` set in production.
+  `AI_VISION_MAX_PHOTOS`/`AI_VISION_MAX_PHOTO_BYTES` set in production. PR
+  previews run the real provider too, so each preview scan bills the vendor —
+  they're tailnet-gated and rate-limited, but flip `applicationset-pr.yaml`'s
+  `aivision.provider` to `mock` if you'd rather previews not spend.
+- **Preview key delivery (#1976)**: per-PR namespaces are dynamic, so the key
+  reaches them via emberstack/reflector copying the `inventario-ai-vision`
+  Secret (AI keys only — never the admin/JWT material) into each
+  `inv-vcl01-pr{N}` namespace. The reflector is a hard dependency for preview
+  scans: if it's down, new previews CrashLoop until the Secret is present.
 - **Security**: the providers never log the API key or the auth header. The key
-  lives only in the sops bundle and the materialized Secret — never in git, the
-  ConfigMap, or logs.
+  lives only in the sops bundle and the cluster Secrets it's materialized into
+  (`inventario-admin` + the reflected `inventario-ai-vision`) — never in git,
+  the ConfigMap, or logs.

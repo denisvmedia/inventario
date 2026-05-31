@@ -82,13 +82,25 @@ spec:
               setupJob:
                 initData:
                   adminPassword: "PreviewAdmin123"
-              # AI-vision photo-scan (#1976): PR previews run the `mock`
-              # provider — exercises the full Add-Item AI step (offer → scan →
-              # review → prefill) with a deterministic canned result, no API key
-              # and no vendor spend. The `mock` provider needs no secret, so
-              # there's no boot hazard here (unlike master/longevity's anthropic).
+              # AI-vision photo-scan (#1976): PR previews run the REAL Anthropic
+              # provider so reviewers can test extraction on actual uploaded
+              # photos. The key is NOT inlined here (public repo) — emberstack/
+              # reflector (installed by vm-install.sh) copies the sops-sourced
+              # `inventario-ai-vision` Secret into each inv-vcl01-pr{N} namespace
+              # as it is created (see infra/vm/scripts/apply-secrets.sh), and the
+              # chart's extraEnvFrom below loads it. ⚠️ Requires anthropic.api_key
+              # in the sops bundle: with provider=anthropic and the reflected
+              # Secret absent/empty the preview apiserver CrashLoops (fail-loud) —
+              # there can be a brief CrashLoop right after namespace creation
+              # until reflector copies the Secret — the kubelet then restarts the
+              # pod and re-reads it. Flip provider back to `mock` to run keyless
+              # with canned data.
               aivision:
-                provider: mock
+                provider: anthropic
+              extraEnvFrom:
+                - secretRef:
+                    name: inventario-ai-vision
+                    optional: true
               ingress:
                 annotations:
                   tailscale.com/hostname: 'inv-vcl01-pr{{.number}}'

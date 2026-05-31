@@ -207,6 +207,55 @@ EOF
     done
 fi
 
+# --- inventario-ai-vision (reflected into dynamic PR-preview namespaces, #1976) ---
+# A SEPARATE Secret carrying ONLY the AI-vision keys — never the admin password,
+# JWT, file-signing, or OAuth-state material — so emberstack/reflector can safely
+# fan it out to every per-PR namespace without leaking the load-bearing secrets.
+# Reflector (installed by vm-install.sh) auto-creates a copy named
+# `inventario-ai-vision` in each `inv-vcl01-pr[0-9]+` namespace as ArgoCD spins
+# them up; the chart's extraEnvFrom (set in infra/argocd/applicationset-pr.yaml)
+# loads it so PR previews run the real Anthropic provider. The static
+# master/longevity envs do NOT use this — they get the key via inventario-admin
+# above. Created only when at least one AI key is present.
+if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$OPENAI_API_KEY" ]; then
+    note "Applying inventario-shared/inventario-ai-vision (reflected to inv-vcl01-pr*)"
+    {
+        cat <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inventario-shared
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inventario-ai-vision
+  namespace: inventario-shared
+  annotations:
+    reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
+    reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces: "inv-vcl01-pr[0-9]+"
+    reflector.v1.k8s.emberstack.com/reflection-auto-enabled: "true"
+    reflector.v1.k8s.emberstack.com/reflection-auto-namespaces: "inv-vcl01-pr[0-9]+"
+type: Opaque
+stringData:
+EOF
+        if [ -n "$ANTHROPIC_API_KEY" ]; then
+            cat <<EOF
+  INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY: |-
+$(printf '%s' "$ANTHROPIC_API_KEY" | sed 's/^/    /')
+EOF
+        fi
+        if [ -n "$OPENAI_API_KEY" ]; then
+            cat <<EOF
+  INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY: |-
+$(printf '%s' "$OPENAI_API_KEY" | sed 's/^/    /')
+EOF
+        fi
+    } | remote_apply
+else
+    warn "anthropic.api_key/openai.api_key both empty; skipping inventario-ai-vision. PR previews pin aivision.provider=anthropic and will CrashLoop until a key is set — fill anthropic.api_key, or flip applicationset-pr.yaml back to mock to defer."
+fi
+
 # --- argocd / github-app-creds (repo-creds + ApplicationSet PR-generator) ---
 GH_APP_ID=$(lookup "github.app_id")
 GH_INSTALL_ID=$(lookup "github.app_installation_id")

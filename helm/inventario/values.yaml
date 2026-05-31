@@ -507,6 +507,24 @@ aivision:
   rateLimitPerHour: 30
 
 # ============================================================
+# Extra envFrom sources appended verbatim to every app container's
+# `envFrom` (combined, apiserver, and worker Deployments). Each entry is a
+# standard EnvFromSource (secretRef / configMapRef). Use to inject env from
+# Secrets/ConfigMaps this chart does not manage.
+#
+# PR previews (#1976) use this to pull the AI-vision API key: a secret
+# reflector (emberstack/reflector) copies a sops-sourced Secret into each
+# dynamically-created inv-vcl01-pr{N} namespace as `inventario-ai-vision`,
+# and the deployment reads it via this list. `optional: true` keeps the pod
+# schedulable before the reflected copy lands (the app still fails loud on an
+# empty key, so set the key — see infra/argocd/applicationset-pr.yaml).
+# ============================================================
+extraEnvFrom: []
+#  - secretRef:
+#      name: inventario-ai-vision
+#      optional: true
+
+# ============================================================
 # Secrets
 # ============================================================
 secrets:
