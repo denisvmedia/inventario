@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { Download, ExternalLink, File as FileIcon, Maximize2, Pencil, Trash2 } from "lucide-react"
 
 import { ImageViewer, type GalleryImage } from "@/components/files/ImageViewer"
+import { PdfFullViewer } from "@/components/files/PdfFullViewer"
 import { PdfViewer } from "@/components/files/PdfViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -292,30 +293,20 @@ export function FileDetailSheet({
           })
         : null}
       {file && signedUrl && isPdfMime(file.mime_type) ? (
-        // Fullscreen PDF viewer — a stacked Dialog (peer of the Sheet) so
+        // Fullscreen PDF reader — a stacked Dialog (peer of the Sheet) so
         // closing it returns to the panel instead of dismissing the Sheet.
+        // PdfFullViewer brings its own toolbar (incl. close), so the Dialog is
+        // just a bare fullscreen host.
         <Dialog open={pdfViewerOpen} onOpenChange={setPdfViewerOpen}>
           <DialogContent
-            className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none border-0 bg-background p-4 [&>button]:hidden sm:max-w-none"
+            className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
             data-testid="file-detail-pdf-fullscreen"
           >
-            <DialogHeader className="flex flex-row items-center gap-3 space-y-0 pb-3">
-              <DialogTitle className="line-clamp-1 flex-1 text-sm font-medium">{title}</DialogTitle>
-              <DialogDescription className="sr-only">
-                {t("files:detail.metadataTitle")}
-              </DialogDescription>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPdfViewerOpen(false)}
-                data-testid="file-detail-pdf-fullscreen-close"
-              >
-                {t("files:viewer.close", { defaultValue: "Close" })}
-              </Button>
+            <DialogHeader className="sr-only">
+              <DialogTitle>{title}</DialogTitle>
+              <DialogDescription>{t("files:detail.metadataTitle")}</DialogDescription>
             </DialogHeader>
-            <div className="flex-1 overflow-auto">
-              <PdfViewer url={signedUrl} />
-            </div>
+            <PdfFullViewer url={signedUrl} title={title} onClose={() => setPdfViewerOpen(false)} />
           </DialogContent>
         </Dialog>
       ) : null}
