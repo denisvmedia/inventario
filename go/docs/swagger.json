@@ -7705,6 +7705,86 @@
                 }
             }
         },
+        "/public/commodities/scan": {
+            "post": {
+                "description": "Anonymous variant of the photo scan for the landing-page CTA (#1988). Unauthenticated, IP + global-daily rate limited, gated behind a deployment feature flag. Returns field guesses only and persists nothing.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Run an AI vision scan on uploaded photos (public)",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts).",
+                        "name": "photos",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional free-form hint (brand, category guess)",
+                        "name": "hint",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityScanResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Photo too large",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported MIME type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Too many photos / no photos",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limited",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "502": {
+                        "description": "Provider unavailable / parse error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "503": {
+                        "description": "Provider disabled",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "504": {
+                        "description": "Provider timed out",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/register": {
             "post": {
                 "description": "Create a user. Valid invite_token: account active, no email verification (caller still POSTs /invites/{token}/accept after login). Without an invite: mode decides (open, approval, or 403 closed).",
@@ -8397,6 +8477,10 @@
                 },
                 "magic_link_login": {
                     "description": "MagicLinkLogin mirrors Params.MagicLinkLoginEnabled. The entry point\nis pre-login (a \"Email me a sign-in link\" affordance on the Login\npage), so it is exposed here on the public /feature-flags surface\nrather than the auth-gated /system endpoint. When false the FE hides\nthe affordance and the /auth/magic-link routes return 404.",
+                    "type": "boolean"
+                },
+                "public_scan": {
+                    "description": "PublicScan mirrors Params.PublicScanEnabled. The entry point is the\nanonymous landing-page \"add your first item\" CTA (#1988), so — like\nMagicLinkLogin — it is read pre-login on this public surface. When\nfalse the FE hides the CTA and the POST /public/commodities/scan\nroute is not mounted (404).",
                     "type": "boolean"
                 }
             }

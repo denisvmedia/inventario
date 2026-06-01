@@ -41,8 +41,15 @@ const MaintenancePage = lazy(() =>
 const UIShowcasePage = import.meta.env.DEV
   ? lazy(() => import("@/pages/UIShowcasePage").then((m) => ({ default: m.UIShowcasePage })))
   : null
-const RootRedirect = lazy(() =>
-  import("@/pages/RootRedirect").then((m) => ({ default: m.RootRedirect }))
+// RootGate (#1988) owns the public "/" — anonymous users see the landing
+// CTA, authed users resolve to their dashboard via RootRedirect (which it
+// wraps in its own GroupProvider). It replaces the old nested
+// "/"→RootRedirect route that lived inside the GroupRequiredRoute tree.
+const RootGate = lazy(() => import("@/app/RootGate").then((m) => ({ default: m.RootGate })))
+// FirstItemResolver (#1988) replays an anonymously-drafted item into the
+// user's group after login. Group-exempt so a 0-group user reaches it.
+const FirstItemResolver = lazy(() =>
+  import("@/pages/FirstItemResolver").then((m) => ({ default: m.FirstItemResolver }))
 )
 const LoginPage = lazy(() =>
   import("@/pages/auth/LoginPage").then((m) => ({ default: m.LoginPage }))
@@ -260,6 +267,15 @@ export function AppRoutes() {
             URL params instead. #1542 / design-audit #1527. */}
         <Route path="/maintenance" element={<MaintenancePage />} />
 
+        {/* Public "/" (#1988). RootGate decides per auth state: anonymous
+            → the landing CTA ("add your first item before login"); authed
+            → RootRedirect (wrapped in its own GroupProvider) which bounces
+            to /g/<slug> or /no-group. Mounted ABOVE ProtectedRoute so a
+            logged-out visitor reaches the landing without a /login bounce;
+            the boot guard inside RootGate mirrors ProtectedRoute so a
+            logged-in user refreshing on "/" never flashes the landing. */}
+        <Route path="/" element={<RootGate />} />
+
         {/* Authenticated subtree: GroupProvider mounts once at the top so
             every protected page reads currentGroup from the same source.
             Shell (#1406) is the chrome — sidebar, top bar, palette,
@@ -277,6 +293,12 @@ export function AppRoutes() {
         >
           {/* Group-exempt: a logged-in user with zero groups can still reach these. */}
           <Route path="/no-group" element={<NoGroupPage />} />
+          {/* Post-login replay of an anonymously-drafted item (#1988).
+              Group-exempt because a brand-new user lands here with zero
+              groups — the resolver creates a "Main" group, POSTs the
+              stashed commodity, and uploads its pending files before
+              redirecting to the item's detail page. */}
+          <Route path="/welcome" element={<FirstItemResolver />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/edit" element={<EditProfilePage />} />
           <Route path="/profile/sessions" element={<SessionsPage />} />
@@ -317,9 +339,11 @@ export function AppRoutes() {
           <Route path="/exports" element={<UngroupedRedirect />} />
           <Route path="/exports/*" element={<UngroupedRedirect />} />
 
-          {/* Group-required: any path here either is /g/:slug/* itself or is
-              "/" (the redirect sentinel). GroupRequiredRoute bounces 0-group
-              users to /no-group. */}
+          {/* Group-required: every path here is /g/:slug/* itself.
+              GroupRequiredRoute bounces 0-group users to /no-group. The "/"
+              redirect sentinel moved OUT of this tree to the public RootGate
+              (#1988) so an anonymous visitor sees the landing instead of a
+              /login bounce. */}
           <Route
             element={
               <GroupRequiredRoute>
@@ -327,7 +351,6 @@ export function AppRoutes() {
               </GroupRequiredRoute>
             }
           >
-            <Route path="/" element={<RootRedirect />} />
             <Route path="/g/:groupSlug">
               <Route index element={<DashboardPage />} />
               <Route path="locations" element={<LocationsListPage />} />

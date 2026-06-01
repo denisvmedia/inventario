@@ -18,6 +18,7 @@ import { useAuth } from "@/features/auth/AuthContext"
 import { useAcceptInvite } from "@/features/invite/hooks"
 import { useLogin, useRequestMagicLink } from "@/features/auth/hooks"
 import { consumePendingInvite, peekPendingInvite } from "@/features/auth/inviteHandoff"
+import { peekPendingFirstItem } from "@/features/auth/firstItemHandoff"
 import { loginSchema, type LoginInput } from "@/features/auth/schemas"
 import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { sanitizeRedirectPath } from "@/lib/safe-redirect"
@@ -131,6 +132,17 @@ export function LoginPage() {
         // /invite/<token> manually. We deliberately don't surface this as
         // an error on the login page; the login itself succeeded.
       }
+    }
+    // Anonymous first-item handoff (#1988): if the user drafted an item on
+    // the landing page before logging in, route them to /welcome where
+    // FirstItemResolver replays the stash into their group. Takes
+    // precedence over the ?redirect default (which the landing's Add CTA
+    // sets to /welcome anyway — this also covers the case where the marker
+    // is set but ?redirect was lost across an OAuth round-trip). Peek, not
+    // consume: the resolver owns consumption so a failed replay can retry.
+    if (peekPendingFirstItem()) {
+      navigate("/welcome", { replace: true })
+      return
     }
     navigate(sanitizeRedirectPath(params.get("redirect")), { replace: true })
   }

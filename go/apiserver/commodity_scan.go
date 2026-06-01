@@ -76,6 +76,107 @@ func CommodityScan(scanService *services.CommodityScanService, maxFormBytes int6
 	}
 }
 
+// CommodityScanPublic returns the chi router function that mounts the
+// PUBLIC, unauthenticated photo-scan endpoint (#1988). It is the sibling
+// of CommodityScan but lives outside the JWT / RLS / registry / group
+// middleware chain — it backs the anonymous "add your first item" landing
+// CTA, where there is no tenant/user.
+//
+// Abuse is contained entirely upstream of this handler: a feature flag
+// (the route is only mounted when PublicScanEnabled is true), per-IP +
+// global-daily rate-limit middleware, and the per-call spend caps the
+// service still enforces. The handler writes NO DB rows (no audit, no
+// commodity) — it only returns structured field suggestions.
+//
+// scanService may be nil — the handler short-circuits to the typed 503
+// commodity_scan.provider_disabled the FE banner already renders.
+func CommodityScanPublic(scanService *services.CommodityScanService, maxFormBytes int64, maxPhotoBytes int) func(r chi.Router) {
+	api := &commodityScanAPI{
+		service:       scanService,
+		maxFormBytes:  maxFormBytes,
+		maxPhotoBytes: maxPhotoBytes,
+	}
+	return func(r chi.Router) {
+		r.Post("/", api.handlePublicScan)
+	}
+}
+
+// handlePublicScan is the POST handler for the public scan endpoint. It is
+// handleScan minus identity: no user context lookup (and no 500 when one
+// is absent), no audit row on the oversize/identity paths, and an empty
+// PreferredCurrencyCode (there is no group). It delegates to
+// CommodityScanService.ScanAnonymous and reuses the same body/photo
+// readers and the shared renderScanError → mapCommodityScanError mapping.
+//
+// @Summary Run an AI vision scan on uploaded photos (public)
+// @Description Anonymous variant of the photo scan for the landing-page CTA (#1988). Unauthenticated, IP + global-daily rate limited, gated behind a deployment feature flag. Returns field guesses only and persists nothing.
+// @Tags commodities
+// @Accept multipart/form-data
+// @Produce json-api
+// @Param photos formData file true "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts)."
+// @Param hint formData string false "Optional free-form hint (brand, category guess)"
+// @Success 200 {object} jsonapi.CommodityScanResponse "OK"
+// @Failure 413 {object} jsonapi.Errors "Photo too large"
+// @Failure 415 {object} jsonapi.Errors "Unsupported MIME type"
+// @Failure 422 {object} jsonapi.Errors "Too many photos / no photos"
+// @Failure 429 {object} jsonapi.Errors "Rate limited"
+// @Failure 502 {object} jsonapi.Errors "Provider unavailable / parse error"
+// @Failure 503 {object} jsonapi.Errors "Provider disabled"
+// @Failure 504 {object} jsonapi.Errors "Provider timed out"
+// @Router /public/commodities/scan [post]
+func (api *commodityScanAPI) handlePublicScan(w http.ResponseWriter, r *http.Request) {
+	// Enforce the body cap before the multipart parse. No identity to
+	// audit, so the 413 path renders the same typed error sans audit row.
+	if err := api.bufferBody(r); err != nil {
+		if errors.As(err, new(errBodyTooLarge)) {
+			_ = render.Render(w, r, jsonapi.NewErrors(scanError(
+				services.ErrScanPhotoTooLarge,
+				http.StatusRequestEntityTooLarge,
+				"Payload Too Large",
+				commodityScanPhotoTooLargeCode,
+			)))
+			return
+		}
+		renderScanError(w, r, classifyMultipartReadErr(err))
+		return
+	}
+
+	in, err := api.readPhotos(r, int64(api.maxPhotoBytes))
+	if err != nil {
+		if errors.As(err, new(errBodyTooLarge)) || errors.As(err, new(errOversizedPart)) {
+			_ = render.Render(w, r, jsonapi.NewErrors(scanError(
+				services.ErrScanPhotoTooLarge,
+				http.StatusRequestEntityTooLarge,
+				"Payload Too Large",
+				commodityScanPhotoTooLargeCode,
+			)))
+			return
+		}
+		renderScanError(w, r, err)
+		return
+	}
+
+	// No group context on the public path — leave the currency hint empty.
+	in.PreferredCurrencyCode = ""
+
+	if api.service == nil {
+		renderScanError(w, r, services.ErrScanProviderDisabled)
+		return
+	}
+
+	result, err := api.service.ScanAnonymous(r.Context(), in)
+	if err != nil {
+		renderScanError(w, r, err)
+		return
+	}
+
+	resp := newCommodityScanResponse(result)
+	if err := render.Render(w, r, resp); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
 // handleScan is the POST handler. It parses the multipart body,
 // validates the basics, and delegates to CommodityScanService.Scan,
 // then renders a JSON:API response with type "commodity_scan".

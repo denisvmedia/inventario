@@ -242,6 +242,24 @@ type Params struct {
 	// into memory.
 	CommodityScanMaxPhotoBytes int
 
+	// PublicScanEnabled gates the unauthenticated public photo-scan
+	// endpoint (#1988) that backs the landing-page "add your first item"
+	// CTA. Default FALSE: the endpoint spends real vendor tokens with no
+	// auth wall, so it must be opted into explicitly. When false the
+	// POST /public/commodities/scan route is NOT mounted (404) and the
+	// public_scan feature flag reads false so the FE hides the CTA. The
+	// route is also only mounted when CommodityScanService is non-nil.
+	PublicScanEnabled bool
+
+	// PublicScanRateLimiter enforces the public scan's per-IP and
+	// global-daily caps (#1988). It is INTENTIONALLY separate from
+	// AuthRateLimiter: the anonymous endpoint spends real vendor tokens, so
+	// its cost/abuse backstop must stay enforced even when login throttling
+	// is turned off via --no-auth-rate-limit (a test-only switch that swaps
+	// AuthRateLimiter for a no-op). When nil the server falls back to
+	// AuthRateLimiter so existing callers/tests keep working.
+	PublicScanRateLimiter services.AuthRateLimiter
+
 	// OAuthRegistry holds the third-party sign-in providers enabled in
 	// this deployment (#1394). Empty means OAuth is unconfigured — the
 	// /auth/oauth/providers endpoint surfaces an empty list and start /
@@ -378,6 +396,14 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	if globalRateLimiter == nil {
 		slog.Warn("GlobalRateLimiter not provided; falling back to in-memory implementation. This configuration is not suitable for production use.")
 		globalRateLimiter = services.NewInMemoryGlobalRateLimiter(1000, time.Hour)
+	}
+	// The public scan's cost/abuse caps are deliberately independent of the
+	// auth login limiter so --no-auth-rate-limit (a test-only switch) cannot
+	// silently strip them. Fall back to the auth limiter only when a dedicated
+	// one wasn't injected (older callers / tests that don't exercise the cap).
+	publicScanRateLimiter := params.PublicScanRateLimiter
+	if publicScanRateLimiter == nil {
+		publicScanRateLimiter = rateLimiter
 	}
 
 	// Use CSRF service from params (nil disables CSRF validation — see CSRFMiddleware).
@@ -517,6 +543,21 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			// gated off (#1616). Hence: unauthenticated, behind the same
 			// global rate limit as the other public reads.
 			r.Route("/feature-flags", FeatureFlagsHandler(params))
+			// Public, unauthenticated AI photo-scan (#1988) backing the
+			// landing-page "add your first item" CTA. Mounted ONLY when the
+			// operator has opted in (PublicScanEnabled) AND a scan service
+			// is wired — otherwise the route stays absent (404) so an
+			// anonymous endpoint that spends real vendor tokens is never
+			// exposed by default. It sits here, OUTSIDE the JWT / RLS /
+			// registry / group middleware, with its own per-IP + global-
+			// daily limiter layered on top of the global per-IP budget the
+			// surrounding group already applies.
+			if params.PublicScanEnabled && params.CommodityScanService != nil {
+				r.With(PublicScanRateLimitMiddleware(publicScanRateLimiter)).Route(
+					"/public/commodities/scan",
+					CommodityScanPublic(params.CommodityScanService, params.CommodityScanMaxBodyBytes, params.CommodityScanMaxPhotoBytes),
+				)
+			}
 			// Seed endpoint is public for e2e testing and development.
 			// Seed uses a service registry set since it's a privileged operation in dev/test.
 			r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet, params.UploadLocation))

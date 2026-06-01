@@ -223,6 +223,14 @@ definitions:
           rather than the auth-gated /system endpoint. When false the FE hides
           the affordance and the /auth/magic-link routes return 404.
         type: boolean
+      public_scan:
+        description: |-
+          PublicScan mirrors Params.PublicScanEnabled. The entry point is the
+          anonymous landing-page "add your first item" CTA (#1988), so — like
+          MagicLinkLogin — it is read pre-login on this public surface. When
+          false the FE hides the CTA and the POST /public/commodities/scan
+          route is not mounted (404).
+        type: boolean
     type: object
   apiserver.FeedbackRequest:
     properties:
@@ -9823,6 +9831,63 @@ paths:
       summary: Accept invite
       tags:
       - invites
+  /public/commodities/scan:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Anonymous variant of the photo scan for the landing-page CTA (#1988).
+        Unauthenticated, IP + global-daily rate limited, gated behind a deployment
+        feature flag. Returns field guesses only and persists nothing.
+      parameters:
+      - description: Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the
+          form field to upload up to 5 photos in a single request (multipart/form-data
+          with multiple `photos` parts).
+        in: formData
+        name: photos
+        required: true
+        type: file
+      - description: Optional free-form hint (brand, category guess)
+        in: formData
+        name: hint
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityScanResponse'
+        "413":
+          description: Photo too large
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "415":
+          description: Unsupported MIME type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Too many photos / no photos
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "429":
+          description: Rate limited
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "502":
+          description: Provider unavailable / parse error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "503":
+          description: Provider disabled
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "504":
+          description: Provider timed out
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Run an AI vision scan on uploaded photos (public)
+      tags:
+      - commodities
   /register:
     post:
       consumes:

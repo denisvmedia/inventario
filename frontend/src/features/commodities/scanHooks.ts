@@ -20,13 +20,19 @@ interface ScanVars {
 // scanning has a place to thread it through), but the shared `http`
 // wrapper reads the active group slug from GroupContext today, so the
 // slug isn't forwarded to the request body.
-export function useScanCommodityPhotos(slug: string) {
+//
+// `anonymous` (#1988) routes the request to the public
+// /public/commodities/scan endpoint with the group rewrite skipped, for
+// the unauthenticated landing-page "add your first item" flow. Defaults
+// to false so every existing authenticated caller is unaffected.
+export function useScanCommodityPhotos(slug: string, anonymous = false) {
   // Reference `slug` so eslint doesn't drop it from the signature —
   // it's documented in the JSDoc above as the stable scope identifier
   // for this mutation. When per-call overrides land, this becomes
   // `scanCommodityPhotos({ slug, ... })`.
   void slug
   return useMutation<ScanResult, Error, ScanVars>({
-    mutationFn: ({ photos, signal, hint }) => scanCommodityPhotos({ photos, signal, hint }),
+    mutationFn: ({ photos, signal, hint }) =>
+      scanCommodityPhotos({ photos, signal, hint, anonymous }),
   })
 }

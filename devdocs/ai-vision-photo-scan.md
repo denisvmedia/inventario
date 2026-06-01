@@ -20,10 +20,23 @@ a provider and supplies a key.
   canned result, no network).
 - Service: `go/services/commodity_scan_service.go` — validation (photo count,
   per-photo bytes, MIME allowlist), per-user hourly rate limit, and an audit
-  row on **every** outcome (`commodity_scan_audits` table).
-- HTTP: `POST /g/{groupSlug}/commodities/scan` in
+  row on **every** outcome (`commodity_scan_audits` table). `Scan` is the
+  authenticated path; `ScanAnonymous` runs the same pipeline with **no
+  identity, no audit row, and no per-user rate limit** (the shared
+  `validatePhotos` helper keeps the validation rules identical).
+- HTTP (authenticated): `POST /g/{groupSlug}/commodities/scan` in
   `go/apiserver/commodity_scan.go` — multipart `photos` (+ optional `hint`),
   behind JWT + RLS + CSRF + group-role gate, with body/part size caps.
+- HTTP (public, #1988): `POST /public/commodities/scan` in the same file
+  (`CommodityScanPublic` / `handlePublicScan`) — the **unauthenticated**
+  variant backing the landing-page "add your first item" CTA. Same pipeline
+  via `ScanAnonymous`, but mounted OUTSIDE the JWT/RLS/registry/group
+  middleware, gated behind a feature flag (default OFF), and guarded by
+  `PublicScanRateLimitMiddleware` (per-IP sliding window + a single global
+  daily cap). It writes no DB rows. Mounted only when
+  `PUBLIC_AI_VISION_SCAN_ENABLED=true` AND a real provider is configured;
+  otherwise the route returns `404` and the `public_scan` feature flag reads
+  `false` so the FE hides the CTA.
 - Config: parsed in `go/cmd/inventario/run/bootstrap/config.go`, wired in
   `server_params.go` (`wireCommodityScan`).
 - Frontend: `frontend/src/components/items/AiScanStep.tsx` +
@@ -51,6 +64,18 @@ All settings read from the `run` config section, i.e. the env var name is the
 | `AI_VISION_MAX_PHOTOS` | `5` | Per scan request |
 | `AI_VISION_MAX_PHOTO_BYTES` | `10485760` | 10 MiB per photo |
 | `AI_VISION_RATE_LIMIT_PER_HOUR` | `30` | Per-user; `0` disables |
+| `PUBLIC_AI_VISION_SCAN_ENABLED` | `false` | **Opt-in.** Enable the unauthenticated `POST /public/commodities/scan` endpoint (#1988). No effect unless a real provider is also configured. |
+
+> ⚠️ **The public endpoint has no auth wall.** Every anonymous call spends
+> real vendor tokens, so it ships **off by default**. When you flip
+> `PUBLIC_AI_VISION_SCAN_ENABLED=true`, abuse is contained by three layers:
+> the feature flag (route absent otherwise), the per-call `AI_VISION_MAX_*`
+> spend caps (shared with the authenticated path), and
+> `PublicScanRateLimitMiddleware` — a small per-IP sliding window plus a single
+> deployment-wide daily cap (defaults `3/hour` per IP and `200/day` global,
+> constants in `go/services/auth_rate_limiter.go`). The per-IP key is
+> `RemoteAddr`-only so a forged `X-Forwarded-For` can't move the bucket; both
+> checks fail open on a limiter-backend outage.
 
 > ⚠️ **Fail-loud on empty key.** Selecting a real provider (`anthropic` /
 > `openai`) with an empty API key makes the apiserver **fail to boot** — this is
@@ -124,15 +149,22 @@ kubectl -n inv-vcl01-pr<N> get secret inventario-ai-vision
 
 ## Operability
 
-- **Audit / rate limit**: every scan attempt writes a `commodity_scan_audits`
-  row (status `ok` / `error` / `timeout` / `validation` / `rate_limited` /
-  `disabled`). The per-user hourly limiter counts only rows that actually
-  reached the provider. The table is RLS-isolated per tenant.
+- **Audit / rate limit**: every *authenticated* scan attempt writes a
+  `commodity_scan_audits` row (status `ok` / `error` / `timeout` /
+  `validation` / `rate_limited` / `disabled`). The per-user hourly limiter
+  counts only rows that actually reached the provider. The table is
+  RLS-isolated per tenant. The **public** endpoint (#1988) writes NO audit
+  row (there is no tenant/user to attribute it to) — its abuse controls are
+  the per-IP + global-daily rate limiter, not the audit table.
 - **Cost control**: keep `AI_VISION_RATE_LIMIT_PER_HOUR` and
   `AI_VISION_MAX_PHOTOS`/`AI_VISION_MAX_PHOTO_BYTES` set in production. PR
   previews run the real provider too, so each preview scan bills the vendor —
   they're tailnet-gated and rate-limited, but flip `applicationset-pr.yaml`'s
   `aivision.provider` to `mock` if you'd rather previews not spend.
+  **`PUBLIC_AI_VISION_SCAN_ENABLED` is the highest-blast-radius cost knob**:
+  it exposes spend to anonymous traffic, so leave it `false` unless you've
+  sized the per-IP + global-daily caps for your deployment (see the
+  Configuration reference warning above).
 - **Preview key delivery (#1976)**: per-PR namespaces are dynamic, so the key
   reaches them via emberstack/reflector copying the `inventario-ai-vision`
   Secret (AI keys only — never the admin/JWT material) into each

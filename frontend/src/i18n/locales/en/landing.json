@@ -1,0 +1,28 @@
+{
+  "cards": {
+    "addItem": {
+      "description": "Snap a photo and let AI fill in the details — no account needed to start.",
+      "title": "Add New Item"
+    },
+    "browse": {
+      "description": "Log in to see and manage everything you own.",
+      "title": "Browse My Items"
+    }
+  },
+  "hero": {
+    "subtitle": "Track your belongings, their warranties and values in one place.",
+    "title": "Everything you own, organized"
+  },
+  "loginCta": "Log in to dashboard…",
+  "resolver": {
+    "defaultGroupName": "Main",
+    "errorGeneric": "Something went wrong while adding your item. Your draft is safe — try again.",
+    "errorTitle": "Couldn't add your item",
+    "pickGroupSubtitle": "Pick the group to add your first item to.",
+    "pickGroupTitle": "Where should this item go?",
+    "retry": "Try again",
+    "settingUp": "Setting things up…",
+    "skip": "Skip for now",
+    "title": "Setting up"
+  }
+}
