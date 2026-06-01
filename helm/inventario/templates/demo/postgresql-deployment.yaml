@@ -28,6 +28,19 @@ spec:
       app.kubernetes.io/component: demo-postgresql
   template:
     metadata:
+      {{- /*
+        recreateOnDeploy (master only): an image-tag-keyed annotation that
+        changes every master merge so this pod (and its emptyDir) is recreated
+        — wiping demo state so master is fresh each merge. Emits nothing unless
+        demo.recreateOnDeploy=true, and FAILS rendering if persistence is on
+        (PVC-backed longevity must never be roll-wiped). See _helpers.tpl.
+        spec.strategy is already Recreate above (single-writer emptyDir).
+      */}}
+      {{- $recreate := include "inventario.demoRecreatePodAnnotations" (dict "root" $ "store" "postgresql" "persistenceEnabled" .Values.demo.postgresql.persistence.enabled) }}
+      {{- if $recreate }}
+      annotations:
+        {{- $recreate | nindent 8 }}
+      {{- end }}
       labels:
         {{- include "inventario.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: demo-postgresql

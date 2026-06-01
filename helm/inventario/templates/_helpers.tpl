@@ -471,3 +471,66 @@ The caller is expected to render this list item under `initContainers:`.
 {{- printf "http://%s" (include "inventario.minioEndpoint" .) -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+demoRecreatePodAnnotations — pod-template annotations that force an emptyDir-backed
+demo datastore (Postgres / MinIO / Redis) to be RECREATED, and thereby WIPED, on
+every deploy whose resolved app image tag changes.
+
+Why this exists (the disposable-master model):
+  The preview platform runs two long-lived envs off the SAME master image pin:
+    * inv-vcl01-master    — meant to be DISPOSABLE: a fresh, empty demo dataset
+                            each merge (so stale rows — e.g. an old back-office
+                            operator — never linger).
+    * inv-vcl01-longevity — DURABLE: PVC-backed + Velero-backed; its data MUST
+                            survive every deploy.
+  A master push only rolls the app Deployment + setup/init-data Jobs; the
+  demo-postgres / demo-minio pods survive app redeploys, so on emptyDir their
+  state ACCUMULATES across merges and master never actually resets. Keying a
+  pod-template annotation to the per-commit image tag (`sha-<7>` on master)
+  changes the pod template every merge → the pod is recreated → its emptyDir is
+  wiped → the wave -5 setup Job + wave +5 init-data Job re-migrate, re-seed, and
+  (via #2001's idempotent `--ensure`) re-create the sops-sourced operator on the
+  clean store.
+
+Hard safety guard (impossible to wipe durable data):
+  This annotation is emitted ONLY when persistence is DISABLED for that store. If
+  a caller is configured with `demo.recreateOnDeploy: true` AND persistence on
+  (the longevity profile, gated by demo.<store>.persistence.enabled), rendering
+  FAILS LOUDLY — a roll-wipe of a PVC-backed store would be silent data loss, so
+  we refuse to render rather than annotate. Net effect: even an accidental
+  recreateOnDeploy=true on longevity can NEVER roll-wipe its Velero-backed PVCs.
+
+Usage (caller passes a dict so the helper knows which store's persistence to check):
+  {{- include "inventario.demoRecreatePodAnnotations"
+        (dict "root" $ "store" "postgresql" "persistenceEnabled" .Values.demo.postgresql.persistence.enabled) }}
+  Render under the pod template's `metadata.annotations:`; emits nothing (a no-op)
+  unless recreateOnDeploy is true on an emptyDir-backed store.
+*/}}
+{{- define "inventario.demoRecreatePodAnnotations" -}}
+{{- $root := .root -}}
+{{- if $root.Values.demo.recreateOnDeploy -}}
+{{- if .persistenceEnabled -}}
+{{- fail (printf "demo.recreateOnDeploy=true is incompatible with demo persistence: store %q has persistence.enabled=true. recreateOnDeploy rolls the demo pod on every deploy, which WIPES an emptyDir store — on a PVC-backed (e.g. longevity) store that would be silent data loss. Disable recreateOnDeploy for any env with demo persistence on; it is intended ONLY for the disposable, emptyDir-backed master env." .store) -}}
+{{- end -}}
+{{- $imageTag := default $root.Chart.AppVersion $root.Values.image.tag -}}
+checksum/recreate-on-deploy: {{ $imageTag | quote }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+demoRecreateStrategy — Deployment .spec.strategy for an emptyDir demo datastore.
+
+When recreateOnDeploy is on we WANT `Recreate`: a RollingUpdate would briefly run
+the old (data-bearing) pod alongside the new empty one, and the Service could route
+to the stale pod mid-roll. `Recreate` tears the old pod down first, so the wipe is
+clean. Postgres/MinIO already pin `Recreate` unconditionally (single-writer
+emptyDir); this helper exists so Redis (no strategy block) also flips to Recreate
+when it is being roll-wiped, and to keep the intent self-documenting.
+*/}}
+{{- define "inventario.demoRecreateStrategy" -}}
+{{- if .Values.demo.recreateOnDeploy -}}
+strategy:
+  type: Recreate
+{{- end -}}
+{{- end -}}
