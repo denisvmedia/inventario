@@ -119,6 +119,10 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 		commodity.AcquisitionCurrency = nil
 	}
 
+	// Normalize an explicit empty area to nil (#1986): empty and nil both
+	// mean unassigned, matching the postgres registry and the IS NULL filter.
+	commodity.NormalizeAreaID()
+
 	// Use CreateWithUser to ensure user context is applied
 	newCommodity, err := r.Registry.CreateWithUser(ctx, commodity)
 	if err != nil {
@@ -270,6 +274,10 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		commodity.AcquisitionPrice = clonePtrDecimal(existingCommodity.AcquisitionPrice)
 		commodity.AcquisitionCurrency = clonePtrCurrency(existingCommodity.AcquisitionCurrency)
 	}
+
+	// Normalize an explicit empty area to nil (#1986) so un-assigning via "" is
+	// stored as nil and the area-tracking below sees a single canonical form.
+	commodity.NormalizeAreaID()
 
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
 	updatedCommodity, err := r.Registry.UpdateWithUser(ctx, commodity)

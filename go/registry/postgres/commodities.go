@@ -109,6 +109,11 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 		commodity.AcquisitionCurrency = nil
 	}
 
+	// Normalize an explicit empty area to nil so "" and NULL both mean
+	// "unassigned" (#1986): a stored "" would miss the `area_id IS NULL`
+	// filter and match no real area.
+	commodity.NormalizeAreaID()
+
 	reg := r.newSQLRegistry()
 
 	createdCommodity, err := reg.Create(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx) error {
@@ -359,9 +364,9 @@ func commodityAreaCond(opts registry.CommodityListOptions, idx int) (cond string
 // and the next free placeholder index. Each status maps to a closed-form
 // predicate on warranty_expires_at; multiple statuses are OR-ed, then AND-ed into
 // the surrounding WHERE. Every non-`none` predicate guards against
-// `warranty_expires_at = ”` alongside the NULL check — empty strings reach the
+// an empty `warranty_expires_at` alongside the NULL check — empty strings reach the
 // column via the PDate zero value and would otherwise satisfy `expired`'s `<`
-// test (since ” sorts below any ISO date), surfacing "no warranty" rows.
+// test (an empty string sorts below any ISO date), surfacing "no warranty" rows.
 func buildWarrantyStatusCond(opts registry.CommodityListOptions, startIdx int) (string, []any, int) {
 	if len(opts.WarrantyStatuses) == 0 {
 		return "", nil, startIdx
@@ -564,6 +569,10 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		commodity.AcquisitionPrice = clonePtrDecimal(existing.AcquisitionPrice)
 		commodity.AcquisitionCurrency = clonePtrCurrency(existing.AcquisitionCurrency)
 	}
+
+	// Normalize an explicit empty area to nil (#1986) — un-assigning via an
+	// empty string persists as NULL, consistent with the IS NULL filter.
+	commodity.NormalizeAreaID()
 
 	reg := r.newSQLRegistry()
 

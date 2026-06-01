@@ -338,6 +338,17 @@ func (*Commodity) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 
+// NormalizeAreaID collapses an explicit empty area to nil so "" and a nil
+// pointer both mean "unassigned" (issue #1986). Without it, a payload with
+// `"area_id": ""` would persist as an empty string that the `area_id IS NULL`
+// filter misses and that matches no real area. Registries call this before
+// persisting so a stored area_id is always either NULL or a real area id.
+func (a *Commodity) NormalizeAreaID() {
+	if a.AreaID != nil && *a.AreaID == "" {
+		a.AreaID = nil
+	}
+}
+
 func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 	groupCurrency, err := validationctx.GroupCurrencyFromContext(ctx)
 	if errors.Is(err, validationctx.ErrGroupCurrencyNotSet) {

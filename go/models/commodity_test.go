@@ -788,3 +788,28 @@ func TestCommodity_ValidateWithContext_QuantityForbidsWarranty(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 	})
 }
+
+func TestCommodity_NormalizeAreaID(t *testing.T) {
+	testCases := []struct {
+		name string
+		in   *string
+		want *string
+	}{
+		{"empty string collapses to nil", new(""), nil},
+		{"nil stays nil", nil, nil},
+		{"real id preserved", new("area-1"), new("area-1")},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			commodity := models.Commodity{AreaID: tc.in}
+			commodity.NormalizeAreaID()
+			if tc.want == nil {
+				c.Assert(commodity.AreaID, qt.IsNil)
+			} else {
+				c.Assert(commodity.AreaID, qt.IsNotNil)
+				c.Assert(*commodity.AreaID, qt.Equals, *tc.want)
+			}
+		})
+	}
+}
