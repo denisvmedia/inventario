@@ -438,6 +438,39 @@ export async function createCommodity(
   return page.url();
 }
 
+// fillCommodityWizardAndSubmit walks the create wizard from the Basics step
+// through a submit click, reusing the same per-step fillers as
+// createCommodity. Unlike createCommodity it does NOT click the list "Add"
+// button, does NOT skip an AI step, and does NOT assert any post-submit URL —
+// the caller owns the entry surface (e.g. the anonymous landing dialog, whose
+// submit redirects to /login rather than to a detail page) and whatever
+// navigation the submit triggers. Pass a commodity with no chip fields
+// (tags / extra serials / part numbers) to avoid the webkit Enter-leak quirk
+// that can submit the form early from the Extras step.
+export async function fillCommodityWizardAndSubmit(
+  page: Page,
+  c: TestCommodity,
+): Promise<void> {
+  await waitForStep(page, "basics");
+  await fillBasicsStep(page, c);
+  await gotoNext(page);
+
+  await waitForStep(page, "purchase");
+  await fillPurchaseStep(page, c);
+  await gotoNext(page);
+
+  await waitForStep(page, "warranty");
+  await fillWarrantyStep(page, c);
+  await gotoNext(page);
+
+  await waitForStep(page, "extras");
+  await fillExtrasStep(page, c);
+  await gotoNext(page);
+
+  await waitForStep(page, "files");
+  await page.click('[data-testid="commodity-form-submit"]');
+}
+
 // assignCommodityLocation files an already-created commodity under a
 // location/area via the edit dialog — the post-create counterpart to the
 // location picker the create dialog dropped (#1987). It opens edit, selects
