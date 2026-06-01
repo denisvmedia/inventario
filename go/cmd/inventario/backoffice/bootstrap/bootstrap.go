@@ -28,14 +28,20 @@ type Config struct {
 	Role     string `yaml:"role" env:"ROLE"`
 	Password string `yaml:"password" env:"PASSWORD"`
 	Force    bool   `yaml:"force" env:"FORCE"`
-	// MFAEnforced defaults to true (secure posture): the operator must enrol
-	// TOTP via `inventario backoffice mfa setup` before they can sign in.
-	// Demo/preview auto-provisioning sets --mfa-enforced=false so the seeded
-	// operator can sign in with password only — a Helm Job has no interactive
-	// terminal to complete TOTP enrolment, and an MFA-enforced no-secret row
-	// fails closed with HTTP 501 at login (issue #1967). env-default keeps the
-	// secure default when the value comes from config/env rather than a flag.
-	MFAEnforced bool `yaml:"mfa-enforced" env:"MFA_ENFORCED" env-default:"true"`
+	// MFAEnforced is a *bool so an OMITTED value (nil) stays distinct from an
+	// explicit false. nil flows to the service, which applies the secure
+	// default of true (see services/backoffice.resolveMFAEnforced): the
+	// operator must enrol TOTP via `inventario backoffice mfa setup` before
+	// /backoffice/login will issue a session token (a no-secret MFAEnforced=true
+	// row fails closed with HTTP 501). A plain bool would be unsafe here —
+	// shared.ReadSection overwrites this struct from a zero-valued wrapper, and
+	// cleanenv can't tell an omitted YAML/env key from an explicit `false` (both
+	// are the bool zero value), so an env-default on a bool could silently flip
+	// an operator's explicit `mfa-enforced: false` back to true or leave a
+	// partially-populated config section insecurely false. The pointer makes the
+	// unset/true/false states explicit; demo/preview pass --mfa-enforced=false
+	// to provision a password-only operator (issue #1967).
+	MFAEnforced *bool `yaml:"mfa-enforced" env:"MFA_ENFORCED"`
 }
 
 // Command is the cobra wrapper around `backoffice bootstrap`.
@@ -43,18 +49,21 @@ type Command struct {
 	command.Base
 
 	config Config
+	// mfaEnforcedFlag backs the --mfa-enforced flag. cobra needs a concrete
+	// bool; run() promotes it into the request only when the flag was
+	// explicitly set (Flags().Changed), giving precedence
+	// flag > config/env > secure default (nil → true at the service).
+	mfaEnforcedFlag bool
 }
 
 // New constructs the command with the supplied database config.
 func New(dbConfig *shared.DatabaseConfig) *Command {
 	c := &Command{}
 
-	// Secure default: MFA is enforced unless the operator/Job explicitly opts
-	// out with --mfa-enforced=false. Set before TryReadSection so a config
-	// file / env that omits the key keeps the safe value; cleanenv's
-	// env-default:"true" preserves it on the env path too.
-	c.config.MFAEnforced = true
-
+	// Populate config from an optional config.yaml `backoffice.bootstrap`
+	// section + INVENTARIO_BACKOFFICE_BOOTSTRAP_* env. MFAEnforced is a *bool,
+	// so an omitted key stays nil (→ secure default at the service) rather than
+	// a silent insecure false.
 	shared.TryReadSection("backoffice.bootstrap", &c.config)
 
 	c.Base = command.NewBase(&cobra.Command{
@@ -117,7 +126,7 @@ func (c *Command) registerFlags() {
 	c.Cmd().Flags().StringVar(&c.config.Role, "role", c.config.Role, "Back-office role: platform_admin (default) or support_agent")
 	c.Cmd().Flags().StringVar(&c.config.Password, "password", c.config.Password, "Password (auto-generated if omitted)")
 	c.Cmd().Flags().BoolVar(&c.config.Force, "force", c.config.Force, "Allow adding a second+ back-office user when one already exists")
-	c.Cmd().Flags().BoolVar(&c.config.MFAEnforced, "mfa-enforced", c.config.MFAEnforced, "Require TOTP enrollment before the operator can sign in (default true; set false for demo/preview where password-only login is wanted)")
+	c.Cmd().Flags().BoolVar(&c.mfaEnforcedFlag, "mfa-enforced", true, "Require TOTP enrollment before the operator can sign in (default true; set --mfa-enforced=false for demo/preview where password-only login is wanted)")
 }
 
 func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
@@ -161,16 +170,24 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 		}
 	}()
 
+	// MFA precedence: an explicit --mfa-enforced flag wins; otherwise fall back
+	// to the config-file/env value (cfg.MFAEnforced, nil when unset). A nil
+	// reaches the service as "use the secure default" (true). Flags().Changed
+	// lets --mfa-enforced=false win while an omitted flag defers to config/env,
+	// and an absent value everywhere stays enforced.
+	mfaEnforced := cfg.MFAEnforced
+	if c.Cmd().Flags().Changed("mfa-enforced") {
+		v := c.mfaEnforcedFlag
+		mfaEnforced = &v
+	}
+
 	result, err := svc.Bootstrap(c.Cmd().Context(), backoffice.BootstrapRequest{
-		Email:    email,
-		Name:     name,
-		Role:     role,
-		Password: cfg.Password,
-		Force:    cfg.Force,
-		// Pass the flag value through as a non-nil override; the CLI's own
-		// default is true, so omitting --mfa-enforced preserves the secure
-		// posture while demo Jobs can opt out with --mfa-enforced=false.
-		MFAEnforced: &cfg.MFAEnforced,
+		Email:       email,
+		Name:        name,
+		Role:        role,
+		Password:    cfg.Password,
+		Force:       cfg.Force,
+		MFAEnforced: mfaEnforced,
 	})
 	if err != nil {
 		return errxtrace.Wrap("failed to bootstrap backoffice user", err)
