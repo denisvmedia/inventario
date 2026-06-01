@@ -232,25 +232,21 @@ func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, erro
 }
 
 func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
-	// Remove this commodity from its parent area's commodity list
+	// Pre-fetch so we know the parent area to untrack once the row is gone.
 	commodity, err := r.Registry.Get(ctx, id)
 	if err != nil {
 		return errxtrace.Wrap("failed to get commodity", err)
 	}
 
-	// Area is optional (issue #1986): only untrack when it has one.
-	if commodity.AreaID != nil && *commodity.AreaID != "" {
-		_ = r.areaRegistry.DeleteCommodity(ctx, *commodity.AreaID, id)
-	}
-
-	err = r.Registry.Delete(ctx, id)
-	if err != nil {
+	if err := r.Registry.Delete(ctx, id); err != nil {
 		return errxtrace.Wrap("failed to delete commodity", err)
 	}
 
+	// Untrack from the parent area's commodity list — only after the row
+	// delete succeeds (so a failed delete can't desync the area index) and
+	// only when it had an area (optional since issue #1986).
 	if commodity.AreaID != nil && *commodity.AreaID != "" {
-		err = r.areaRegistry.DeleteCommodity(ctx, *commodity.AreaID, id)
-		if err != nil {
+		if err := r.areaRegistry.DeleteCommodity(ctx, *commodity.AreaID, id); err != nil {
 			return errxtrace.Wrap("failed to delete commodity from area", err)
 		}
 	}
