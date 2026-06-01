@@ -192,3 +192,28 @@ func TestService_BootstrapRefusesWithoutEnsureOrForce(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(users, qt.HasLen, 1)
 }
+
+// TestService_BootstrapRejectsForceAndEnsure pins the mutual-exclusion guard:
+// Force and Ensure are opposites, so combining them is a fail-closed error and
+// must NOT fall through to Force's create-an-extra path (which would defeat
+// Ensure's "never creates a second operator" contract).
+func TestService_BootstrapRejectsForceAndEnsure(t *testing.T) {
+	c := qt.New(t)
+	fs := setupMemoryAsPostgres(c)
+	svc := newService(c)
+	ctx := context.Background()
+
+	_, err := svc.Bootstrap(ctx, backoffice.BootstrapRequest{
+		Email:  "first@example.com",
+		Name:   "First",
+		Force:  true,
+		Ensure: true,
+	})
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "mutually exclusive")
+
+	// The contradiction is rejected before any write — the table stays empty.
+	users, err := fs.BackofficeUserRegistry.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(users, qt.HasLen, 0)
+}

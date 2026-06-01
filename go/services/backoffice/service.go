@@ -91,7 +91,10 @@ type BootstrapRequest struct {
 	// creates an extra operator and never weakens the interactive Force gate;
 	// it only converts the count>0/!Force refusal into a benign exit-0 for
 	// callers that opt in. Distinct from Force: Force ADDS another operator,
-	// Ensure leaves the existing one untouched. See BootstrapResult.
+	// Ensure leaves the existing one untouched — and because they are opposites,
+	// Bootstrap rejects a request that sets BOTH (a fail-closed guard against a
+	// provisioning Job accidentally creating a second operator). See
+	// BootstrapResult.
 	Ensure bool
 	// MFAEnforced controls the new operator's MFAEnforced column. nil keeps
 	// the secure default (true): the operator must enrol TOTP via
@@ -118,6 +121,48 @@ type BootstrapResult struct {
 	// dereference User on this branch. Distinct from AlreadyExisted, which means
 	// the SAME email was already present (an idempotent same-email re-run).
 	EnsuredExisting bool
+}
+
+// validateBootstrapRequest normalizes and validates the request fields shared
+// by every Bootstrap path, returning the trimmed email/name and the resolved
+// role. Extracted from Bootstrap to keep that function under the gocyclo budget.
+//
+// The Force/Ensure mutual-exclusion check lives here so the contradiction is
+// rejected up front, before any registry read or write: Force ADDS an operator
+// even when the table is non-empty, while Ensure's contract is to leave any
+// existing operator UNTOUCHED. Setting both is a config/env mistake (e.g. a Job
+// inheriting a stray --force); failing closed prevents it from silently creating
+// a second operator via the force gate — the "never creates an extra" promise
+// Ensure makes.
+func validateBootstrapRequest(req BootstrapRequest) (validatedBootstrap, error) {
+	if req.Force && req.Ensure {
+		return validatedBootstrap{}, errors.New("Force and Ensure are mutually exclusive (Force adds an operator; Ensure leaves any existing operator untouched)")
+	}
+
+	email := strings.TrimSpace(req.Email)
+	if email == "" {
+		return validatedBootstrap{}, errors.New("email is required")
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return validatedBootstrap{}, errors.New("name is required")
+	}
+	role := req.Role
+	if role == "" {
+		role = models.BackofficeRolePlatformAdmin
+	}
+	if !role.IsValid() {
+		return validatedBootstrap{}, fmt.Errorf("invalid role %q (must be one of: support_agent, platform_admin)", string(role))
+	}
+	return validatedBootstrap{email: email, name: name, role: role}, nil
+}
+
+// validatedBootstrap holds the normalized, validated inputs shared by every
+// Bootstrap path (the trimmed email/name and the resolved role).
+type validatedBootstrap struct {
+	email string
+	name  string
+	role  models.BackofficeRole
 }
 
 // Bootstrap creates the first (or, with --force, an additional) back-
@@ -147,21 +192,11 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 		return nil, errors.New("backoffice user registry not configured")
 	}
 
-	email := strings.TrimSpace(req.Email)
-	if email == "" {
-		return nil, errors.New("email is required")
+	v, err := validateBootstrapRequest(req)
+	if err != nil {
+		return nil, err
 	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		return nil, errors.New("name is required")
-	}
-	role := req.Role
-	if role == "" {
-		role = models.BackofficeRolePlatformAdmin
-	}
-	if !role.IsValid() {
-		return nil, fmt.Errorf("invalid role %q (must be one of: support_agent, platform_admin)", string(role))
-	}
+	email, name, role := v.email, v.name, v.role
 
 	// 1. Idempotency check by email. GetByEmail is case-insensitive at
 	// the registry layer, so re-running with the same email in a
