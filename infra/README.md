@@ -628,6 +628,11 @@ with kubectl" is self-correcting; no manual re-sync needed.
 
 ## 5. Troubleshooting
 
+> For a fast, copy-pasteable command reference (inspecting ArgoCD, reading
+> crash-looping pod logs, the `master-pin` flow, safe secret/DB inspection),
+> see the [**troubleshooting cheat-sheet**](./CHEATSHEET.md). The sections
+> below are the longer scenario walkthroughs.
+
 ### Preview not appearing after labeling
 
 1. Confirm the label is exactly `preview` (case-sensitive — `Preview` won't match).
