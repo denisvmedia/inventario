@@ -107,6 +107,29 @@ setupJob:
     # INVENTARIO_SEED_ALLOW_BLOB_UPLOADS on the Job's temporary seed server.
     seedBlobUploads: true
 
+# Auto-provision the back-office (platform-operator) identity for
+# /backoffice/login on every preview/demo env (#1967). Shared by PR previews,
+# master, and longevity (all layer this file). Password-only (mfaEnforced:
+# false) so it can sign in without an authenticator app — a Helm Job can't
+# complete interactive TOTP enrollment, and an MFA-enforced no-secret operator
+# fails closed with HTTP 501 at login.
+#
+# The BACKOFFICE_USER_PASSWORD the bootstrap step consumes is sourced per
+# Application, exactly like SETUP_ADMIN_PASSWORD:
+#   - PR previews (applicationset-pr.yaml): inlined dev value under
+#     setupJob.initData.backofficeUserPassword (the chart renders its own
+#     Secret there).
+#   - master + longevity (secrets.existingSecret: inventario-admin): the
+#     sops bundle's backoffice.password, materialized into inventario-admin
+#     under key BACKOFFICE_USER_PASSWORD by infra/vm/scripts/apply-secrets.sh.
+# This is demo/preview ONLY — production never layers this overlay.
+backofficeUser:
+  enabled: true
+  email: "operator@inventario.example"
+  name: "Demo Operator"
+  role: "platform_admin"
+  mfaEnforced: false
+
 # AI-vision photo-scan provider is intentionally NOT set in this shared overlay
 # — it's pinned per-Application to `anthropic` everywhere: master + longevity
 # (applicationset-{master,longevity}.yaml, key via inventario-admin) AND PR

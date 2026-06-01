@@ -88,6 +88,36 @@ spec:
                 exit 1
               fi
 
+              # Auto-provision the back-office (platform-operator) identity for
+              # /backoffice/login when enabled (#1967). Demo/preview only —
+              # gated by backofficeUser.enabled. Idempotent on email: a re-run
+              # prints "already exists" and exits 0. The bootstrap command
+              # reuses the INVENTARIO_DB_DSN exported above (migrator DSN).
+              if [ "${BACKOFFICE_USER_ENABLED:-false}" = "true" ]; then
+                if [ -z "${INVENTARIO_BACKOFFICE_BOOTSTRAP_PASSWORD:-}" ]; then
+                  echo "backofficeUser.enabled=true but BACKOFFICE_USER_PASSWORD is empty; refusing to provision an operator with an uncapturable auto-generated password (set setupJob.initData.backofficeUserPassword for PR previews, or the BACKOFFICE_USER_PASSWORD key in secrets.existingSecret / the sops bundle for master+longevity)"
+                  exit 1
+                fi
+                k=1
+                while [ "$k" -le 15 ]; do
+                  if inventario backoffice bootstrap \
+                    --email="$INVENTARIO_BACKOFFICE_BOOTSTRAP_EMAIL" \
+                    --name="$INVENTARIO_BACKOFFICE_BOOTSTRAP_NAME" \
+                    --role="$INVENTARIO_BACKOFFICE_BOOTSTRAP_ROLE" \
+                    --password="$INVENTARIO_BACKOFFICE_BOOTSTRAP_PASSWORD" \
+                    --mfa-enforced="$INVENTARIO_BACKOFFICE_BOOTSTRAP_MFA_ENFORCED"; then
+                    break
+                  fi
+                  echo "Back-office bootstrap attempt $k failed, retrying in 2 seconds..."
+                  k=$((k + 1))
+                  sleep 2
+                done
+                if [ "$k" -gt 15 ]; then
+                  echo "Back-office bootstrap failed after 15 attempts"
+                  exit 1
+                fi
+              fi
+
               if [ "${SEED_DATABASE:-false}" != "true" ]; then
                 echo "Skipping database seeding"
                 exit 0
@@ -195,6 +225,28 @@ spec:
                   key: SETUP_ADMIN_PASSWORD
             - name: INVENTARIO_MIGRATE_DATA_ADMIN_NAME
               value: {{ .Values.setupJob.initData.adminName | quote }}
+            # Back-office (platform-operator) auto-provisioning (#1967). The
+            # shell step above only runs when BACKOFFICE_USER_ENABLED=true.
+            # Demo/preview overlays flip backofficeUser.enabled on; production
+            # leaves it false and provisions operators manually.
+            - name: BACKOFFICE_USER_ENABLED
+              value: {{ ternary "true" "false" .Values.backofficeUser.enabled | quote }}
+            {{- if .Values.backofficeUser.enabled }}
+            - name: INVENTARIO_BACKOFFICE_BOOTSTRAP_EMAIL
+              value: {{ .Values.backofficeUser.email | quote }}
+            - name: INVENTARIO_BACKOFFICE_BOOTSTRAP_NAME
+              value: {{ .Values.backofficeUser.name | quote }}
+            - name: INVENTARIO_BACKOFFICE_BOOTSTRAP_ROLE
+              value: {{ .Values.backofficeUser.role | quote }}
+            - name: INVENTARIO_BACKOFFICE_BOOTSTRAP_MFA_ENFORCED
+              value: {{ ternary "true" "false" .Values.backofficeUser.mfaEnforced | quote }}
+            - name: INVENTARIO_BACKOFFICE_BOOTSTRAP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: BACKOFFICE_USER_PASSWORD
+                  optional: true
+            {{- end }}
             - name: SEED_DATABASE
               value: {{ ternary "true" "false" .Values.setupJob.initData.seedDatabase | quote }}
             # SETUP_SKIP_SEED_ON_UPGRADE: in non-argocdMode this was driven by
