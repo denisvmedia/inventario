@@ -78,6 +78,21 @@ type BootstrapRequest struct {
 	Role     models.BackofficeRole
 	Password string // optional; auto-generated when empty
 	Force    bool   // allow creating an additional user when the table is non-empty
+	// Ensure relaxes the fresh-deployment refusal for non-interactive
+	// provisioning (the Helm init-data Job, #1967). When an operator already
+	// exists under a DIFFERENT email than this request's, the default behaviour
+	// is to refuse unless Force is passed (so an interactive operator can't
+	// silently accumulate a sprawl of back-office users). A provisioning Job,
+	// however, only wants to guarantee "at least one operator exists" and must
+	// NOT red-line just because the existing operator was seeded with a
+	// different email. With Ensure=true that case is treated as a success no-op:
+	// the existing operator is reported back (BootstrapResult.EnsuredExisting)
+	// and no second row is created. Ensure is strictly additive — it never
+	// creates an extra operator and never weakens the interactive Force gate;
+	// it only converts the count>0/!Force refusal into a benign exit-0 for
+	// callers that opt in. Distinct from Force: Force ADDS another operator,
+	// Ensure leaves the existing one untouched. See BootstrapResult.
+	Ensure bool
 	// MFAEnforced controls the new operator's MFAEnforced column. nil keeps
 	// the secure default (true): the operator must enrol TOTP via
 	// `inventario backoffice mfa setup` before the login handler will issue a
@@ -94,6 +109,15 @@ type BootstrapResult struct {
 	User              *models.BackofficeUser
 	GeneratedPassword string // populated only when the caller did NOT supply Password
 	AlreadyExisted    bool   // true when an existing user with the same email was found (idempotent re-run)
+	// EnsuredExisting is true when Ensure=true short-circuited the count>0/!Force
+	// refusal: a back-office operator already exists (under any email) and the
+	// caller only wanted to guarantee one exists, so nothing was created. User
+	// carries the existing operator that satisfied the guarantee when one could
+	// be fetched; it MAY be nil if the operator could not be re-listed (e.g. a
+	// concurrent delete between the count and the list), so the CLI must NOT
+	// dereference User on this branch. Distinct from AlreadyExisted, which means
+	// the SAME email was already present (an idempotent same-email re-run).
+	EnsuredExisting bool
 }
 
 // Bootstrap creates the first (or, with --force, an additional) back-
@@ -104,8 +128,14 @@ type BootstrapResult struct {
 //     this to "ℹ️  user already exists" + exit 0 so re-running the
 //     command is safe.
 //   - Else, if at least one back-office user already exists AND the
-//     caller did not pass Force, refuse with a fail-closed error. The
-//     CLI surfaces this with a hint to pass --force.
+//     caller did not pass Force:
+//   - With Ensure=true, return EnsuredExisting=true with no error and
+//     no mutation. A provisioning Job (#1967) only wants "an operator
+//     exists"; it must not red-line because the existing operator was
+//     seeded with a different email. The CLI maps this to an
+//     informational "operator already exists; nothing to do" + exit 0.
+//   - Without Ensure, refuse with a fail-closed error. The CLI surfaces
+//     this with a hint to pass --force (interactive safety net).
 //   - Else, generate (or accept) a password, bcrypt it at DefaultCost
 //     (matching models.User.SetPassword), and insert the row.
 //
@@ -146,16 +176,10 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 		return nil, errxtrace.Wrap("failed to check existing backoffice user", lookupErr)
 	}
 
-	// 2. Force gate. Counting is cheap on a tiny table; doing it under a
-	// transaction is overkill for a CLI run that has no concurrent writer.
-	if !req.Force {
-		count, countErr := s.factorySet.BackofficeUserRegistry.Count(ctx)
-		if countErr != nil {
-			return nil, errxtrace.Wrap("failed to count existing backoffice users", countErr)
-		}
-		if count > 0 {
-			return nil, fmt.Errorf("a backoffice user already exists; pass --force to add another (current count: %d)", count)
-		}
+	// 2. Force gate. A non-nil result (or error) short-circuits Bootstrap;
+	// a nil/nil pair means "proceed to create".
+	if gateResult, gateErr := s.applyForceGate(ctx, req); gateErr != nil || gateResult != nil {
+		return gateResult, gateErr
 	}
 
 	// 3. Password: explicit or generated. Generated passwords are
@@ -219,6 +243,64 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 		User:              created,
 		GeneratedPassword: generated,
 	}, nil
+}
+
+// applyForceGate enforces the fresh-deployment refusal that protects against
+// silently accumulating back-office operators. It is reached only after the
+// same-email idempotency check has missed, so any existing row is necessarily a
+// DIFFERENT operator. The return contract is:
+//
+//   - (nil, nil)    → proceed to create (Force, or an empty table).
+//   - (result, nil) → short-circuit Bootstrap with this result. The only such
+//     case is the Ensure-mode no-op (EnsuredExisting), which never creates a
+//     second row.
+//   - (nil, err)    → short-circuit with an error: a Count failure, or the
+//     interactive count>0/!Force/!Ensure refusal.
+//
+// Extracted from Bootstrap to keep that function under the gocyclo budget; the
+// branching here is the gate's entire decision table.
+func (s *Service) applyForceGate(ctx context.Context, req BootstrapRequest) (*BootstrapResult, error) {
+	if req.Force {
+		return nil, nil
+	}
+
+	// Counting is cheap on a tiny table; a transaction is overkill for a CLI run
+	// that has no concurrent writer.
+	count, countErr := s.factorySet.BackofficeUserRegistry.Count(ctx)
+	if countErr != nil {
+		return nil, errxtrace.Wrap("failed to count existing backoffice users", countErr)
+	}
+	if count == 0 {
+		return nil, nil
+	}
+
+	// An operator already exists under a different email.
+	if req.Ensure {
+		// Ensure mode (provisioning Jobs, #1967): the caller only wants to
+		// guarantee an operator exists. Treat as a benign no-op instead of the
+		// interactive fail-closed refusal — never create a second row.
+		return &BootstrapResult{
+			User:            firstExistingOperator(ctx, s.factorySet.BackofficeUserRegistry),
+			EnsuredExisting: true,
+		}, nil
+	}
+	return nil, fmt.Errorf("a backoffice user already exists; pass --force to add another (current count: %d)", count)
+}
+
+// firstExistingOperator returns one existing back-office operator for the
+// Ensure-mode no-op return, or nil if none can be fetched. It is best-effort:
+// the EnsuredExisting branch is reached only after Count reported > 0, but a
+// concurrent delete (or a List error) can still leave the list empty, so the
+// caller must treat a nil result as "exists but unidentified" rather than a
+// contradiction. Errors are swallowed deliberately — the guarantee ("an
+// operator exists") was already satisfied by the count; failing to also name it
+// must not turn a successful no-op into a CLI failure.
+func firstExistingOperator(ctx context.Context, reg registry.BackofficeUserRegistry) *models.BackofficeUser {
+	users, err := reg.List(ctx)
+	if err != nil || len(users) == 0 {
+		return nil
+	}
+	return users[0]
 }
 
 // resolveMFAEnforced collapses the optional MFAEnforced override into a

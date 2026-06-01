@@ -178,6 +178,83 @@ func TestBootstrap_ForceAllowsSecond(t *testing.T) {
 	c.Assert(users, qt.HasLen, 2)
 }
 
+// TestBootstrap_EnsureNoOpOnDifferentEmail pins the #1967 self-heal: when an
+// operator ALREADY exists under a different email, --ensure makes the second
+// invocation a benign no-op (exit 0, no new row) instead of the count>0
+// refusal. This is what stops the Helm init-data Job from red-lining ArgoCD on
+// master/longevity, where the live operator's email differs from the chart's.
+func TestBootstrap_EnsureNoOpOnDifferentEmail(t *testing.T) {
+	c := qt.New(t)
+	fs := setupMemoryAsPostgres(c)
+
+	_, err := runBootstrap(c, "postgres://test",
+		"--email=existing@example.com",
+		"--name=Existing Op",
+	)
+	c.Assert(err, qt.IsNil)
+
+	out, err := runBootstrap(c, "postgres://test",
+		"--email=operator@inventario.example",
+		"--name=Chart Operator",
+		"--ensure",
+	)
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Contains, "nothing to do")
+
+	// No second operator was created — the existing one is untouched.
+	users, err := fs.BackofficeUserRegistry.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(users, qt.HasLen, 1)
+	c.Assert(users[0].Email, qt.Equals, "existing@example.com")
+}
+
+// TestBootstrap_EnsureCreatesOnFreshInstall pins that --ensure does NOT regress
+// PR previews: a fresh install (count=0) still CREATES the operator. --ensure
+// only relaxes the count>0 refusal, never the create path.
+func TestBootstrap_EnsureCreatesOnFreshInstall(t *testing.T) {
+	c := qt.New(t)
+	fs := setupMemoryAsPostgres(c)
+
+	out, err := runBootstrap(c, "postgres://test",
+		"--email=operator@inventario.example",
+		"--name=Chart Operator",
+		"--ensure",
+	)
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Contains, "Created back-office user")
+
+	users, err := fs.BackofficeUserRegistry.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(users, qt.HasLen, 1)
+	c.Assert(users[0].Email, qt.Equals, "operator@inventario.example")
+}
+
+// TestBootstrap_EnsureSameEmailStillIdempotent pins that --ensure leaves the
+// existing same-email idempotency intact: a same-email re-run still reports
+// "already exists" (not the ensure no-op message) and stays a single row.
+func TestBootstrap_EnsureSameEmailStillIdempotent(t *testing.T) {
+	c := qt.New(t)
+	fs := setupMemoryAsPostgres(c)
+
+	_, err := runBootstrap(c, "postgres://test",
+		"--email=admin@example.com",
+		"--name=Ops Admin",
+	)
+	c.Assert(err, qt.IsNil)
+
+	out, err := runBootstrap(c, "postgres://test",
+		"--email=admin@example.com",
+		"--name=Ops Admin",
+		"--ensure",
+	)
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Contains, "already exists")
+
+	users, err := fs.BackofficeUserRegistry.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(users, qt.HasLen, 1)
+}
+
 // TestBootstrap_RejectsMemoryDSN pins the persistence guard: a
 // memory:// DSN is rejected by the shared DatabaseConfig.Validate at
 // the database-config layer (cmd/inventario/shared/database.go: "only

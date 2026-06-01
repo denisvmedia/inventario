@@ -28,6 +28,13 @@ type Config struct {
 	Role     string `yaml:"role" env:"ROLE"`
 	Password string `yaml:"password" env:"PASSWORD"`
 	Force    bool   `yaml:"force" env:"FORCE"`
+	// Ensure relaxes the "a backoffice user already exists" refusal for
+	// non-interactive provisioning (the Helm init-data Job, #1967): when an
+	// operator already exists under a DIFFERENT email, --ensure makes the
+	// command a benign no-op (exit 0) instead of exiting 1. It NEVER creates a
+	// second operator (that's --force) and never weakens the interactive
+	// safety net — it is strictly opt-in. See services/backoffice.BootstrapRequest.
+	Ensure bool `yaml:"ensure" env:"ENSURE"`
 	// MFAEnforced is a *bool so an OMITTED value (nil) stays distinct from an
 	// explicit false. nil flows to the service, which applies the secure
 	// default of true (see services/backoffice.resolveMFAEnforced): the
@@ -41,7 +48,19 @@ type Config struct {
 	// partially-populated config section insecurely false. The pointer makes the
 	// unset/true/false states explicit; demo/preview pass --mfa-enforced=false
 	// to provision a password-only operator (issue #1967).
-	MFAEnforced *bool `yaml:"mfa-enforced" env:"MFA_ENFORCED"`
+	//
+	// NOTE: there is intentionally NO `env:` tag here. cleanenv (the env reader
+	// behind shared.ReadSection) has no case for pointer kinds in its
+	// parseValue switch, so a `*bool` falls through to the default arm and
+	// returns `unsupported type .` — a logged-and-swallowed error
+	// (TryReadSection is non-fatal) that spammed every Helm Job run. Nothing
+	// relies on the Go-side env binding: the Helm Jobs read
+	// INVENTARIO_BACKOFFICE_BOOTSTRAP_MFA_ENFORCED in shell and forward it as
+	// the --mfa-enforced CLI flag (job-init-data.yaml / job-setup.yaml), and the
+	// flag path (Flags().Changed) already gives flag > config/env > default. The
+	// yaml tag is kept so a config.yaml `backoffice.bootstrap.mfa-enforced` key
+	// still works; only the dead, error-spamming env binding is dropped.
+	MFAEnforced *bool `yaml:"mfa-enforced"`
 }
 
 // Command is the cobra wrapper around `backoffice bootstrap`.
@@ -81,6 +100,11 @@ IDEMPOTENCY:
     exits 0 (safe to call from provisioning scripts).
   • Re-running with a different --email refuses unless --force is
     passed, so a deployment can't accidentally accumulate operators.
+  • For non-interactive provisioning that only needs to guarantee an
+    operator exists (the Helm init-data Job, issue #1967), pass --ensure:
+    when any operator already exists it prints "nothing to do" and exits 0
+    instead of refusing. --ensure NEVER creates a second operator (that is
+    --force) — it only converts the refusal into a benign no-op.
 
 PASSWORD:
 
@@ -126,6 +150,7 @@ func (c *Command) registerFlags() {
 	c.Cmd().Flags().StringVar(&c.config.Role, "role", c.config.Role, "Back-office role: platform_admin (default) or support_agent")
 	c.Cmd().Flags().StringVar(&c.config.Password, "password", c.config.Password, "Password (auto-generated if omitted)")
 	c.Cmd().Flags().BoolVar(&c.config.Force, "force", c.config.Force, "Allow adding a second+ back-office user when one already exists")
+	c.Cmd().Flags().BoolVar(&c.config.Ensure, "ensure", c.config.Ensure, "Non-interactive provisioning (#1967): when any operator already exists, exit 0 without creating another instead of refusing. Does NOT add a second (use --force)")
 	c.Cmd().Flags().BoolVar(&c.mfaEnforcedFlag, "mfa-enforced", true, "Require TOTP enrollment before the operator can sign in (default true; set --mfa-enforced=false for demo/preview where password-only login is wanted)")
 }
 
@@ -187,6 +212,7 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 		Role:        role,
 		Password:    cfg.Password,
 		Force:       cfg.Force,
+		Ensure:      cfg.Ensure,
 		MFAEnforced: mfaEnforced,
 	})
 	if err != nil {
@@ -196,6 +222,19 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 	if result.AlreadyExisted {
 		fmt.Fprintf(out, "ℹ️  Back-office user %s (%s) already exists; no changes made.\n",
 			result.User.Name, result.User.Email)
+		return nil
+	}
+
+	// --ensure no-op: an operator already exists under a different email and
+	// the caller only wanted to guarantee one exists. result.User MAY be nil
+	// here (best-effort fetch), so never dereference it on this branch.
+	if result.EnsuredExisting {
+		if result.User != nil {
+			fmt.Fprintf(out, "ℹ️  A back-office operator already exists (%s); --ensure: nothing to do.\n",
+				result.User.Email)
+		} else {
+			fmt.Fprintln(out, "ℹ️  A back-office operator already exists; --ensure: nothing to do.")
+		}
 		return nil
 	}
 

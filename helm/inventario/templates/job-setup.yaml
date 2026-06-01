@@ -237,9 +237,14 @@ spec:
 
               # Auto-provision the back-office (platform-operator) identity for
               # /backoffice/login when enabled (#1967). Demo/preview only —
-              # gated by backofficeUser.enabled. Idempotent on email: a re-run
-              # prints "already exists" and exits 0. The bootstrap command
-              # reuses the INVENTARIO_DB_DSN exported above (migrator DSN).
+              # gated by backofficeUser.enabled. --ensure makes this a no-op
+              # (exit 0) whenever ANY operator already exists, including one
+              # seeded with a different email than this chart passes: a fresh
+              # install (count=0) still CREATES the operator, while an
+              # already-bootstrapped env (master/longevity) reports "nothing to
+              # do" instead of failing the Job (which would red ArgoCD Degraded).
+              # The bootstrap command reuses the INVENTARIO_DB_DSN exported above
+              # (migrator DSN).
               if [ "${BACKOFFICE_USER_ENABLED:-false}" = "true" ]; then
                 if [ -z "${INVENTARIO_BACKOFFICE_BOOTSTRAP_PASSWORD:-}" ]; then
                   echo "backofficeUser.enabled=true but BACKOFFICE_USER_PASSWORD is empty; refusing to provision an operator with an uncapturable auto-generated password (set setupJob.initData.backofficeUserPassword for PR previews, or the BACKOFFICE_USER_PASSWORD key in secrets.existingSecret / the sops bundle for master+longevity)"
@@ -252,7 +257,8 @@ spec:
                     --name="$INVENTARIO_BACKOFFICE_BOOTSTRAP_NAME" \
                     --role="$INVENTARIO_BACKOFFICE_BOOTSTRAP_ROLE" \
                     --password="$INVENTARIO_BACKOFFICE_BOOTSTRAP_PASSWORD" \
-                    --mfa-enforced="$INVENTARIO_BACKOFFICE_BOOTSTRAP_MFA_ENFORCED"; then
+                    --mfa-enforced="$INVENTARIO_BACKOFFICE_BOOTSTRAP_MFA_ENFORCED" \
+                    --ensure; then
                     break
                   fi
                   echo "Back-office bootstrap attempt $k failed, retrying in 2 seconds..."
