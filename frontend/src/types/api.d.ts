@@ -3850,19 +3850,7 @@ export type paths = {
                 };
                 cookie?: never;
             };
-            requestBody: {
-                content: {
-                    "multipart/form-data": {
-                        /**
-                         * Format: binary
-                         * @description Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts).
-                         */
-                        photos: string;
-                        /** @description Optional free-form hint (brand, category guess) */
-                        hint?: string;
-                    };
-                };
-            };
+            requestBody: components["requestBodies"]["postG_groupslug_commoditiesScan"];
             responses: {
                 /** @description OK */
                 200: {
@@ -8853,6 +8841,108 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/public/commodities/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run an AI vision scan on uploaded photos (public)
+         * @description Anonymous variant of the photo scan for the landing-page CTA (#1988). Unauthenticated, IP + global-daily rate limited, gated behind a deployment feature flag. Returns field guesses only and persists nothing.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: components["requestBodies"]["postG_groupslug_commoditiesScan"];
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityScanResponse"];
+                    };
+                };
+                /** @description Photo too large */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unsupported MIME type */
+                415: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Too many photos / no photos */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Rate limited */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Provider unavailable / parse error */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Provider disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Provider timed out */
+                504: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/register": {
         parameters: {
             query?: never;
@@ -9550,6 +9640,14 @@ export type components = {
              *     the affordance and the /auth/magic-link routes return 404.
              */
             magic_link_login?: boolean;
+            /**
+             * @description PublicScan mirrors Params.PublicScanEnabled. The entry point is the
+             *     anonymous landing-page "add your first item" CTA (#1988), so — like
+             *     MagicLinkLogin — it is read pre-login on this public surface. When
+             *     false the FE hides the CTA and the POST /public/commodities/scan
+             *     route is not mounted (404).
+             */
+            public_scan?: boolean;
         };
         "apiserver.FeedbackRequest": {
             /**
@@ -12379,6 +12477,19 @@ export type components = {
         "jsonapi.AreaRequest": {
             content: {
                 "application/vnd.api+json": components["schemas"]["jsonapi.AreaRequest"];
+            };
+        };
+        postG_groupslug_commoditiesScan: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts).
+                     */
+                    photos: string;
+                    /** @description Optional free-form hint (brand, category guess) */
+                    hint?: string;
+                };
             };
         };
         /** @description Commodity object */

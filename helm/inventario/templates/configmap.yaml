@@ -67,4 +67,7 @@ data:
   INVENTARIO_RUN_AI_VISION_MAX_PHOTOS: {{ .Values.aivision.maxPhotos | int64 | quote }}
   INVENTARIO_RUN_AI_VISION_MAX_PHOTO_BYTES: {{ .Values.aivision.maxPhotoBytes | int64 | quote }}
   INVENTARIO_RUN_AI_VISION_RATE_LIMIT_PER_HOUR: {{ .Values.aivision.rateLimitPerHour | int64 | quote }}
+  # Public, unauthenticated photo-scan endpoint (#1988). Default false; spends
+  # real vendor tokens with no auth wall — opt in deliberately.
+  INVENTARIO_RUN_PUBLIC_AI_VISION_SCAN_ENABLED: {{ .Values.aivision.publicScanEnabled | quote }}
   TZ: {{ .Values.app.tz | quote }}

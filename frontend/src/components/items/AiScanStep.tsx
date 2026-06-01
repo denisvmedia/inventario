@@ -108,6 +108,11 @@ interface AiScanStepProps {
   // Called when the user clicks "Fill manually" (offer/review/error)
   // — caller advances to Basics without any prefill.
   onSkip: () => void
+  // Anonymous landing-page flow (#1988). When true the scan POSTs to the
+  // public, unauthenticated /public/commodities/scan endpoint (group
+  // rewrite skipped) instead of the group-scoped one. Same response
+  // shape; the review/accept UI is unchanged.
+  anonymous?: boolean
 }
 
 // AiScanStep ports the full mock AI phase, with the dropzone wired
@@ -115,7 +120,13 @@ interface AiScanStepProps {
 // the `useScanCommodityPhotos` mutation. The state machine lives
 // here, not in CommodityFormDialog, so a future redesign that moves
 // the AI surface to a separate route can lift this component as-is.
-export function AiScanStep({ slug, defaultCurrency, onAccept, onSkip }: AiScanStepProps) {
+export function AiScanStep({
+  slug,
+  defaultCurrency,
+  onAccept,
+  onSkip,
+  anonymous = false,
+}: AiScanStepProps) {
   const { t } = useTranslation()
   const [photos, setPhotos] = useState<StagedPhoto[]>([])
   const [stagingError, setStagingError] = useState<string | null>(null)
@@ -125,7 +136,7 @@ export function AiScanStep({ slug, defaultCurrency, onAccept, onSkip }: AiScanSt
   const [errorCode, setErrorCode] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  const scan = useScanCommodityPhotos(slug)
+  const scan = useScanCommodityPhotos(slug, anonymous)
 
   // Known-currency set is intentionally narrow: just the tenant's
   // default currency. We deliberately do NOT fetch the full

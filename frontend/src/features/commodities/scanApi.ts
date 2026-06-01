@@ -89,13 +89,23 @@ interface ScanCommodityPhotosOptions {
   // doesn't surface a hint input — the param exists so future "tell
   // the AI what this is" affordances don't need a fresh signature.
   hint?: string
+  // Anonymous landing-page flow (#1988). When true the request targets
+  // the PUBLIC, unauthenticated `/public/commodities/scan` endpoint
+  // instead of the group-scoped `/commodities/scan`, and we opt out of
+  // the http client's `/g/{slug}/` rewrite (there is no active group
+  // before login). The BE returns the identical scan-result shape, so
+  // `normalizeScanResponse` handles both paths unchanged. The public
+  // route is gated behind the `public_scan` feature flag — when off it
+  // 404s, which the typed error banner surfaces.
+  anonymous?: boolean
 }
 
-// scanCommodityPhotos issues a multipart POST to
-// /g/{slug}/commodities/scan with the picked images. The group slug
-// is resolved by the shared http wrapper from the active GroupContext;
-// callers don't have to pass it explicitly. Throws an HttpError on
-// any non-2xx so the CommodityFormDialog can route through
+// scanCommodityPhotos issues a multipart POST with the picked images.
+// In the authenticated flow it hits /g/{slug}/commodities/scan (the
+// group slug is resolved by the shared http wrapper from the active
+// GroupContext). In the anonymous flow (#1988) it hits the public
+// /public/commodities/scan with the group rewrite skipped. Throws an
+// HttpError on any non-2xx so the CommodityFormDialog can route through
 // classifyServerError / getServerErrorCode.
 export async function scanCommodityPhotos(opts: ScanCommodityPhotosOptions): Promise<ScanResult> {
   const form = new FormData()
@@ -109,8 +119,12 @@ export async function scanCommodityPhotos(opts: ScanCommodityPhotosOptions): Pro
   if (opts.hint?.trim()) {
     form.append("hint", opts.hint.trim())
   }
-  const body = await http.post<ScanResponseEnvelope>(`/commodities/scan`, form, {
+  const path = opts.anonymous ? `/public/commodities/scan` : `/commodities/scan`
+  const body = await http.post<ScanResponseEnvelope>(path, form, {
     signal: opts.signal,
+    // The public path is un-prefixed (no /g/{slug}/); skip the rewrite so
+    // the request lands on /api/v1/public/commodities/scan verbatim.
+    skipGroupRewrite: opts.anonymous,
   })
   return normalizeScanResponse(body)
 }
