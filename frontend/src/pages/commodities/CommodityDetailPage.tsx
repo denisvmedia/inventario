@@ -493,6 +493,11 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             same edit dialog the main Edit button gates on the lock, so
             hiding it keeps the banner from being a lock-bypass path. */}
         <AssignLocationBanner
+          // Key by commodity id so the banner remounts when the user
+          // navigates between items on the same CommodityDetailContent
+          // instance — its in-session dismiss is per-item ("returns on the
+          // next mount"), not sticky across commodities.
+          key={id}
           show={!commodity.area_id && (locations.data?.length ?? 0) > 0 && !migrationLock.locked}
           onAssign={() => setEditOpen(true)}
         />
