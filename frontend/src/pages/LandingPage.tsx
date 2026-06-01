@@ -37,6 +37,21 @@ export function LandingPage() {
   const navigate = useNavigate()
   const publicScanEnabled = useFeatureFlag("public_scan")
   const [dialogOpen, setDialogOpen] = useState(false)
+  // Snapshot of `public_scan` taken when the dialog OPENS, not read live.
+  // `useFeatureFlag` returns the `false` fallback until the boot fetch
+  // resolves, so a quick click can open the dialog in manual mode and then
+  // see the flag flip false→true. Feeding that live value to the dialog
+  // would change its `initialStep` mid-session, re-firing the form's
+  // open-reset effect and clobbering in-progress input. Freezing the value
+  // at open time pins the entry step for the whole session.
+  const [dialogAiScan, setDialogAiScan] = useState(false)
+
+  function openAddDialog() {
+    // Coerce the `boolean | undefined` flag (undefined while the boot fetch
+    // is in flight) to a concrete boolean for the snapshot.
+    setDialogAiScan(publicScanEnabled === true)
+    setDialogOpen(true)
+  }
 
   function goToLogin() {
     navigate(`/login?redirect=${encodeURIComponent("/")}`)
@@ -87,7 +102,7 @@ export function LandingPage() {
                   : "landing:cards.addItem.descriptionManual"
               )}
               icon={publicScanEnabled ? Sparkles : Package}
-              onClick={() => setDialogOpen(true)}
+              onClick={openAddDialog}
               testId="landing-add-item"
             />
             <LandingCard
@@ -115,7 +130,7 @@ export function LandingPage() {
       <AnonymousCommodityDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        aiScanEnabled={publicScanEnabled}
+        aiScanEnabled={dialogAiScan}
       />
     </div>
   )

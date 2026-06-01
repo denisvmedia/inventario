@@ -63,7 +63,7 @@ describe("<LandingPage />", () => {
     mockFlags(false)
     renderLanding()
     await screen.findByTestId("landing-page")
-    // Add the item is the primary CTA and must always be present —
+    // Adding an item is the primary CTA and must always be present —
     // public_scan off only drops the AI accelerator, not the card.
     const add = await screen.findByTestId("landing-add-item")
     expect(add).toBeInTheDocument()
