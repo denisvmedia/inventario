@@ -153,6 +153,26 @@ async function waitForStep(
   });
 }
 
+// selectLocationArea drives the Location → Area paired selects when they
+// are present. The Area trigger is `disabled` until a Location is chosen,
+// so Location goes first. When the caller supplied `locationName`, drive
+// the Location combobox by name; otherwise auto-pick the first option
+// (every fixture only creates one location). #1987 removed this picker
+// from the *create* dialog — items are created unassigned and filed
+// afterwards — so this no-ops in create mode: the `count() === 0` guard
+// keeps create-mode callers from stalling on a trigger that never mounts.
+// In edit mode the picker is still present and this assigns it.
+async function selectLocationArea(page: Page, c: TestCommodity) {
+  if (!c.areaName) return;
+  if ((await page.locator("#commodity-location").count()) === 0) return;
+  if (c.locationName) {
+    await selectByPartialOptionText(page, "commodity-location", c.locationName);
+  } else {
+    await pickFirstSelectOption(page, "commodity-location");
+  }
+  await selectByPartialOptionText(page, "commodity-area", c.areaName);
+}
+
 async function fillBasicsStep(page: Page, c: TestCommodity) {
   await page.fill("#commodity-name", c.name);
   await page.fill("#commodity-short-name", c.shortName);
@@ -160,25 +180,7 @@ async function fillBasicsStep(page: Page, c: TestCommodity) {
   if (c.type) {
     await selectByPartialOptionText(page, "commodity-type", c.type);
   }
-  // PR #1621 split Location/Area: the Area select is `disabled` until
-  // a Location is chosen, so picking an area without first picking a
-  // location stalls the helper on a permanently-not-enabled trigger.
-  // When the caller supplied `locationName`, drive the Location
-  // combobox by name. Otherwise auto-pick the first available option
-  // — every existing test only ever creates one location for its own
-  // fixture, so the first option IS the location they want.
-  if (c.areaName) {
-    if (c.locationName) {
-      await selectByPartialOptionText(
-        page,
-        "commodity-location",
-        c.locationName,
-      );
-    } else {
-      await pickFirstSelectOption(page, "commodity-location");
-    }
-    await selectByPartialOptionText(page, "commodity-area", c.areaName);
-  }
+  await selectLocationArea(page, c);
   // PR #1621 moved Product URLs onto the Basics step (a UrlList of
   // single-input rows, NOT a ChipInput). Each row gets
   // `data-testid="commodity-urls-row-N"`. The first row is always
@@ -425,7 +427,48 @@ export async function createCommodity(
   await page.waitForLoadState("networkidle");
   await recorder.takeScreenshot("commodity-create-05-created");
 
+  // The create dialog no longer assigns a location (#1987): the item was
+  // created unassigned. When the test wants it filed under an area, assign
+  // it now via the edit dialog (which still hosts the Location/Area picker)
+  // so downstream "commodity appears under <location>" assertions hold.
+  if (testCommodity.areaName) {
+    await assignCommodityLocation(page, recorder, testCommodity);
+  }
+
   return page.url();
+}
+
+// assignCommodityLocation files an already-created commodity under a
+// location/area via the edit dialog — the post-create counterpart to the
+// location picker the create dialog dropped (#1987). It opens edit, selects
+// Location → Area, then advances through the remaining (already-valid)
+// steps without re-filling and submits.
+async function assignCommodityLocation(
+  page: Page,
+  recorder: TestRecorder,
+  c: TestCommodity,
+) {
+  await page.click('[data-testid="commodity-detail-edit"]');
+  await page.waitForSelector('[data-testid="commodity-form-dialog"]');
+  await waitForStep(page, "basics");
+  await selectLocationArea(page, c);
+  await recorder.takeScreenshot("commodity-create-06-assign-location");
+  await gotoNext(page);
+  await waitForStep(page, "purchase");
+  await gotoNext(page);
+  await waitForStep(page, "warranty");
+  await gotoNext(page);
+  await waitForStep(page, "extras");
+  await gotoNext(page);
+  await page.waitForSelector('[data-testid="commodity-form-files-step"]', {
+    state: "visible",
+    timeout: 5000,
+  });
+  await page.click('[data-testid="commodity-form-submit"]');
+  await page
+    .locator('[data-testid="commodity-form-dialog"]')
+    .waitFor({ state: "hidden", timeout: 30000 });
+  await page.waitForLoadState("networkidle");
 }
 
 export async function verifyCommodityDetails(
