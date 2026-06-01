@@ -26,6 +26,7 @@ import {
 } from './includes/commodities.js';
 import { deleteCommodityViaAPI, extractApiAuth } from './includes/commodities-api.js';
 import { TEST_CREDENTIALS } from './includes/auth.js';
+import { SEEDED_TEST_USERS } from './includes/user-isolation-auth.js';
 
 const MARKER_KEY = 'inventario_pending_first_item';
 const DRAFT_KEY = 'commodity-draft:anon:create';
@@ -119,44 +120,46 @@ test.describe('Anonymous first-item journey (#1988)', () => {
     const detail = new URL(page.url()).pathname.match(
       /\/g\/([^/]+)\/commodities\/([0-9a-fA-F-]{36})/,
     );
+    // waitForURL(DETAIL_URL) just passed, so the match is guaranteed — assert
+    // it (rather than `if (detail)`) so a future URL-shape change fails loudly
+    // here instead of silently skipping the isolation probe + cleanup below.
+    expect(detail, 'replay should land on /g/<slug>/commodities/<id>').not.toBeNull();
+    const slug = decodeURIComponent(detail![1]);
+    const id = detail![2];
     await verifyCommodityDetails(page, commodity);
 
     // 7. After a successful replay the marker + anonymous draft are cleared.
     expect(await page.evaluate((k) => localStorage.getItem(k), MARKER_KEY)).toBeNull();
     expect(await page.evaluate((k) => localStorage.getItem(k), DRAFT_KEY)).toBeNull();
 
-    if (detail) {
-      const slug = decodeURIComponent(detail[1]);
-      const id = detail[2];
-
-      // 8. Tenant/group isolation (AGENTS.md "multi-tenant isolation
-      //    testing"): a different seeded user — user2, who is NOT a member
-      //    of the owner's group — must not be able to read the replayed
-      //    item. The generic case lives in group-data-isolation.spec.ts;
-      //    this keeps the assertion attached to the #1988 replay path, which
-      //    lands a real row inside the owner's RLS boundary.
-      const otherLogin = await request.post('/api/v1/auth/login', {
-        data: { email: 'user2@test-org.com', password: 'TestPassword123' },
-      });
-      expect(otherLogin.ok()).toBeTruthy();
-      const otherToken = (await otherLogin.json()).access_token as string;
-      const probe = await request.get(
-        `/api/v1/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`,
-        {
-          headers: {
-            Accept: 'application/vnd.api+json',
-            Authorization: `Bearer ${otherToken}`,
-          },
+    // 8. Tenant/group isolation (AGENTS.md "multi-tenant isolation testing"):
+    //    a different seeded user — SEEDED_TEST_USERS[1] (user2), NOT a member
+    //    of the owner's group — must not be able to read the replayed item.
+    //    The generic case lives in group-data-isolation.spec.ts; this keeps
+    //    the assertion attached to the #1988 replay path, which lands a real
+    //    row inside the owner's RLS boundary.
+    const otherUser = SEEDED_TEST_USERS[1];
+    const otherLogin = await request.post('/api/v1/auth/login', {
+      data: { email: otherUser.email, password: otherUser.password },
+    });
+    expect(otherLogin.ok()).toBeTruthy();
+    const otherToken = (await otherLogin.json()).access_token as string;
+    const probe = await request.get(
+      `/api/v1/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`,
+      {
+        headers: {
+          Accept: 'application/vnd.api+json',
+          Authorization: `Bearer ${otherToken}`,
         },
-      );
-      expect([403, 404]).toContain(probe.status());
+      },
+    );
+    expect([403, 404]).toContain(probe.status());
 
-      // Cleanup: the replay created a REAL commodity in the shared seeded
-      // backend. Delete it (as the owner) so it can't perturb later specs
-      // (counts / ordering) or make local re-runs noisier. Best-effort —
-      // a failed delete must not fail an otherwise-green test.
-      const auth = await extractApiAuth(page);
-      await deleteCommodityViaAPI(request, auth, slug, id).catch(() => {});
-    }
+    // Cleanup: the replay created a REAL commodity in the shared seeded
+    // backend. Delete it (as the owner) so it can't perturb later specs
+    // (counts / ordering) or make local re-runs noisier. Best-effort —
+    // a failed delete must not fail an otherwise-green test.
+    const auth = await extractApiAuth(page);
+    await deleteCommodityViaAPI(request, auth, slug, id).catch(() => {});
   });
 });
