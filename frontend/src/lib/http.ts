@@ -173,6 +173,38 @@ let impersonationEndInFlight: Promise<void> | null = null
 // recognise (and skip recovery for) the `end` call itself.
 const IMPERSONATION_END_PATH = "/admin/impersonation/end"
 
+// The /admin/impersonation/current probe — paired with the `end` path below
+// as the two impersonation self-service endpoints (see usesImpersonationCredential).
+const IMPERSONATION_CURRENT_PATH = "/admin/impersonation/current"
+
+// usesImpersonationCredential reports whether a request must be credentialed
+// from the TENANT plane (the impersonation access token) rather than the
+// back-office plane, despite living under /admin/* (which isBackofficePath
+// otherwise routes to the back-office token).
+//
+// The two impersonation self-service endpoints are reachable from INSIDE an
+// impersonated tenant session, where the live credential is the imp token (a
+// tenant JWT carrying `imp=true`) that startImpersonation parked in tenant
+// storage — NOT the operator's back-office token, which also still sits in
+// back-office storage. The BE keys BOTH endpoints off that `imp=true` claim:
+//   - GET  /admin/impersonation/current reports active=true ONLY for the imp
+//     token; RequireBackofficeAuthOrImpersonating dispatches a back-office
+//     token to its own branch, where currentImpersonation returns active=false
+//     (so the banner would never render — the #1968 bug),
+//   - POST /admin/impersonation/end self-validates the imp token off the
+//     Authorization header and 401s a back-office token outright.
+// So while a session is active these must carry the tenant token + tenant
+// CSRF. The persisted return slot is the "session active" signal — the same
+// one handle401 uses to route impersonation auto-expiry recovery, and the
+// same credential pair (tenant access + tenant CSRF) recoverFromImpersonationExpiry
+// sends on its manual `end` fetch.
+function usesImpersonationCredential(path: string): boolean {
+  return (
+    (path === IMPERSONATION_CURRENT_PATH || path === IMPERSONATION_END_PATH) &&
+    getImpersonationReturn() !== null
+  )
+}
+
 function applyGroupRewrite(path: string): string {
   const slug = getCurrentGroupSlug()
   if (!slug) {
@@ -218,7 +250,12 @@ function buildHeaders(method: HttpMethod, path: string, init: HttpRequestInit): 
     // arrives at the BE empty.
     headers.set("Content-Type", "application/vnd.api+json")
   }
-  const backoffice = isBackofficePath(path)
+  // While an impersonation session is active the two impersonation
+  // self-service endpoints are credentialed from the tenant plane (the imp
+  // token), not the back-office plane — see usesImpersonationCredential. This
+  // flips both the Authorization bearer and the CSRF token below to the
+  // tenant pair for those requests.
+  const backoffice = isBackofficePath(path) && !usesImpersonationCredential(path)
   const accessToken = backoffice ? getBackofficeAccessToken() : getAccessToken()
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`)

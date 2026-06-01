@@ -402,6 +402,16 @@ export async function updateAdminGroupMemberRole(
 // returns `{ active: false }` with no other fields when no session is in
 // progress; the banner uses `active` as its sole render gate.
 //
+// Credential plane (#1968): the BE reports `active: true` ONLY when the
+// request carries the impersonation token (the tenant JWT with `imp=true`) —
+// a back-office operator token is dispatched to the plain back-office branch
+// and reports `active: false`. The http client normally routes every /admin/*
+// path to the back-office token, so inside an impersonated session it would
+// probe with the wrong plane and the banner would never render. The http
+// layer therefore credentials this path (and `end`) from the TENANT plane
+// while an impersonation return slot is set — see `usesImpersonationCredential`
+// in lib/http.ts. No flag is needed here: the routing is keyed off the slot.
+//
 // The endpoint sits on `RequireBackofficeAuthOrImpersonating` (#1785 Phase
 // 5), so a plain tenant token — the vast majority of authenticated callers
 // — gets a 401, NOT a 403. That 401 is a definitive "you are not signed
