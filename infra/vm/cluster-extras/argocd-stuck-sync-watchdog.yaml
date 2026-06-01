@@ -126,7 +126,10 @@ data:
     CA="$SA/ca.crt"
     THRESHOLD="${WEDGE_THRESHOLD_SECONDS:-600}"
     NS_PREFIX="${PREVIEW_NS_PREFIX:-inv-vcl01-}"
-    ARGO_NS="${ARGOCD_NAMESPACE:-argocd}"
+    # Hardcoded, NOT an env knob: the ServiceAccount/Role/RoleBinding in this
+    # manifest are bound to the `argocd` namespace, so overriding this would
+    # just RBAC-fail the application patch. ArgoCD runs in `argocd` here.
+    ARGO_NS="argocd"
 
     api_get() {
         curl -sS --cacert "$CA" -H "Authorization: Bearer $TOKEN" "$API$1"
@@ -154,6 +157,14 @@ data:
         echo "No sync operations Running > ${THRESHOLD}s under '${NS_PREFIX}*'. Nothing to do."
         exit 0
     fi
+
+    # The `while` below is the right side of a pipe, so it runs in a SUBSHELL
+    # and can't set a shell flag the parent sees. Record a failed terminate in
+    # a marker file and check it after the loop to FAIL the Job — so a
+    # persistent RBAC/API problem surfaces as a failed CronJob run instead of a
+    # silent no-op.
+    FAILMARK=/tmp/patch_failed
+    rm -f "$FAILMARK"
 
     printf '%s\n' "$candidates" | while IFS="$(printf '\t')" read -r name ns; do
         [ -n "$name" ] && [ -n "$ns" ] || continue
@@ -189,8 +200,15 @@ data:
             echo "  terminate-op accepted (HTTP $code); selfHeal will re-sync at the current head."
         else
             echo "  WARN: terminate-op patch returned HTTP $code: $(cat /tmp/patch.out 2>/dev/null)" >&2
+            touch "$FAILMARK"
         fi
     done
+
+    if [ -f "$FAILMARK" ]; then
+        rm -f "$FAILMARK"
+        echo "One or more terminate-op patches failed (see WARN above) — failing the Job to surface it." >&2
+        exit 1
+    fi
 ---
 apiVersion: batch/v1
 kind: CronJob
