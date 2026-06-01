@@ -8,7 +8,7 @@
 // prefix in GROUP_SCOPED_PREFIXES).
 import { http, HttpError } from "@/lib/http"
 import {
-  clearImpersonationReturn,
+  clearAuth,
   getImpersonationReturn,
   setAccessToken,
   setCsrfToken,
@@ -491,16 +491,23 @@ export interface EndImpersonationResult {
 // cookie is non-refreshable).
 //
 // The token swap writes the operator's back-office tokens through the
-// back-office storage keys (NOT the tenant ones); the impersonation access
-// token that was previously sitting in tenant storage stays there but is
-// no longer used because the next /admin/* request reads the back-office
-// token via the plane-aware http client. The page hard-redirects to
-// /admin/users/<targetUserId> (or /admin/tenants) immediately after, which
-// rebuilds every cache from scratch.
+// back-office storage keys (NOT the tenant ones), and `clearAuth()` tears
+// down the impersonated TENANT session: the imp token sitting in tenant
+// storage is now blacklisted server-side, and although the next /admin/*
+// request correctly reads the back-office token, the GLOBAL tenant
+// AuthProvider still boots on the /admin/* page we hard-redirect to and
+// would probe /auth/me with that stale token — a user-initiated 401 that
+// the http client turns into a tenant /login "session expired" bounce,
+// hijacking the intended return to the admin panel (#1968). Clearing it
+// makes the boot probe a no-op (the query is `enabled: !!getAccessToken()`)
+// so the operator lands cleanly on /admin/users/<targetUserId>. Nothing of
+// value is lost: startImpersonation already overwrote any prior tenant
+// session with the imp token at start, and the operator lives on the
+// back-office plane now.
 //
-// The token swap, the return-target capture, and `clearImpersonationReturn`
-// all happen here, inside the mutationFn — so they are atomic with respect
-// to React Query's call-site `onSuccess` callbacks (which are skipped if the
+// The token swap, the return-target capture, and the tenant teardown all
+// happen here, inside the mutationFn — so they are atomic with respect to
+// React Query's call-site `onSuccess` callbacks (which are skipped if the
 // caller component unmounts before the mutation settles). A missed callback
 // can therefore never leave the admin live under the wrong identity or
 // orphan the return-slot.
@@ -519,9 +526,9 @@ export async function endImpersonation(): Promise<EndImpersonationResult> {
   // BackofficeLoginResponse has no `csrf_token` field on the wire; the BE
   // rotates CSRF via the X-CSRF-Token response header which the http
   // client picks up and persists to back-office storage automatically.
-  // Capture the return target, then clear the slot atomically with the
-  // token swap above — see the function comment.
+  // Capture the return target BEFORE tearing down the tenant session
+  // (clearAuth also clears the return slot) — see the function comment.
   const targetUserId = getImpersonationReturn()?.targetUserId ?? null
-  clearImpersonationReturn()
+  clearAuth()
   return { targetUserId }
 }

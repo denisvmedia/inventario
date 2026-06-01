@@ -684,13 +684,15 @@ describe("impersonation auto-expiry (#1757)", () => {
     expect(endCalls).toBe(1)
     expect(refreshCalls).toBe(0)
     // The operator's restored BACK-OFFICE tokens land in back-office
-    // storage (Phase 5/6 #1785) — the expired impersonation token stays
-    // in tenant storage but is no longer used because the page is about
-    // to hard-redirect anyway. The return-slot was cleared and the
-    // browser hard-redirected back to the impersonated user's admin
-    // detail page.
+    // storage (Phase 5/6 #1785). The stale impersonation TENANT session is
+    // torn down (#1968): leaving the now-blacklisted imp token in tenant
+    // storage made the /admin/* page we redirect to boot the global tenant
+    // AuthProvider into a /auth/me 401 → tenant /login "session expired"
+    // bounce, hijacking the intended return to the admin panel. The
+    // return-slot is cleared and the browser hard-redirects to the
+    // impersonated user's admin detail page.
     expect(getBackofficeAccessToken()).toBe("admin-token")
-    expect(getAccessToken()).toBe("expired-impersonation-token")
+    expect(getAccessToken()).toBeNull()
     expect(getImpersonationReturn()).toBeNull()
     expect(redirect).toHaveBeenCalledWith("/admin/users/t1")
   })

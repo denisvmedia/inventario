@@ -14,7 +14,6 @@
 // refresh endpoint without callers having to think about it.
 import {
   clearAuth,
-  clearImpersonationReturn,
   getAccessToken,
   getCsrfToken,
   getImpersonationReturn,
@@ -413,11 +412,14 @@ interface ImpersonationEndResponse {
 // now a BackofficeLoginResponse: a fresh BACK-OFFICE access token + the
 // rotated CSRF in the X-CSRF-Token header. We write through the
 // back-office storage keys (not the tenant ones) so the next /admin/*
-// request lands with the right credentials. The stale impersonation
-// token in tenant storage is left in place; the next tenant request
-// either gets re-issued through the tenant refresh path or 401s into a
-// /login redirect — neither matters here, because the page is about to
-// hard-redirect anyway.
+// request lands with the right credentials. We then clear the stale
+// impersonated TENANT session (clearAuth, in the success branch below):
+// the /admin/* page we hard-redirect to still boots the GLOBAL tenant
+// AuthProvider, which would probe /auth/me with the now-blacklisted imp
+// token — a user-initiated 401 that turns into a tenant /login "session
+// expired" bounce, hijacking the intended return to the admin panel
+// (#1968). Clearing it makes that boot probe a no-op so the operator lands
+// on /admin/users/<target>.
 //
 // On failure the operator session is unrecoverable, so we clear BOTH
 // planes and bounce to /backoffice/login. Either way this throws — the
@@ -484,10 +486,11 @@ async function recoverFromImpersonationExpiry(url: string): Promise<never> {
       setBackofficeAccessToken(payload.access_token)
       const newCsrf = response.headers.get("X-CSRF-Token") ?? response.headers.get("x-csrf-token")
       if (newCsrf) setBackofficeCsrfToken(newCsrf)
-      // Read the return target BEFORE clearing the slot. With no stored
-      // target, fall back to the admin landing route.
+      // Read the return target BEFORE tearing down the tenant session
+      // (clearAuth also clears the return slot). With no stored target,
+      // fall back to the admin landing route.
       const targetUserId = getImpersonationReturn()?.targetUserId
-      clearImpersonationReturn()
+      clearAuth()
       hardRedirect(
         targetUserId ? `/admin/users/${encodeURIComponent(targetUserId)}` : "/admin/tenants"
       )
