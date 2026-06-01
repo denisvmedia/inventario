@@ -17,7 +17,6 @@ const NAME_TOO_LONG = "commodities:validation.nameTooLong"
 const SHORT_NAME_REQUIRED = "commodities:validation.shortNameRequired"
 const SHORT_NAME_TOO_LONG = "commodities:validation.shortNameTooLong"
 const TYPE_REQUIRED = "commodities:validation.typeRequired"
-const AREA_REQUIRED = "commodities:validation.areaRequired"
 const STATUS_REQUIRED = "commodities:validation.statusRequired"
 const COUNT_MIN = "commodities:validation.countMin"
 const CURRENCY_REQUIRED = "commodities:validation.currencyRequired"
@@ -114,7 +113,10 @@ const baseCommoditySchema = z
     // unconditional in models.Commodity.ValidateWithContext).
     short_name: z.string().trim().min(1, SHORT_NAME_REQUIRED).max(20, SHORT_NAME_TOO_LONG),
     type: z.string().min(1, TYPE_REQUIRED),
-    area_id: z.string().min(1, AREA_REQUIRED),
+    // Area is optional (#1987): the create dialog no longer asks for a
+    // location, and an item can be left unassigned (#1986). Edit mode
+    // still exposes the picker but never requires it.
+    area_id: z.string(),
     status: z.string().min(1, STATUS_REQUIRED),
     count: z.string().refine((v) => /^\d+$/.test(v) && Number(v) >= 1, { message: COUNT_MIN }),
     original_price: optionalNumberString,
