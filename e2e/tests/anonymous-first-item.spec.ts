@@ -139,11 +139,17 @@ test.describe('Anonymous first-item journey (#1988)', () => {
     //    the assertion attached to the #1988 replay path, which lands a real
     //    row inside the owner's RLS boundary.
     const otherUser = SEEDED_TEST_USERS[1];
+    // Guard that the probe genuinely uses a different identity than the owner
+    // (TEST_CREDENTIALS === SEEDED_TEST_USERS[0]) — a same-user probe would
+    // return 200 and silently invalidate the isolation assertion.
+    expect(otherUser.email).not.toBe(TEST_CREDENTIALS.email);
     const otherLogin = await request.post('/api/v1/auth/login', {
       data: { email: otherUser.email, password: otherUser.password },
     });
     expect(otherLogin.ok()).toBeTruthy();
     const otherToken = (await otherLogin.json()).access_token as string;
+    // Fail fast if the login-response token contract ever changes.
+    expect(otherToken).toBeTruthy();
     const probe = await request.get(
       `/api/v1/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`,
       {
