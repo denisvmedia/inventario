@@ -444,13 +444,21 @@ export async function createCommodity(
 // button, does NOT skip an AI step, and does NOT assert any post-submit URL —
 // the caller owns the entry surface (e.g. the anonymous landing dialog, whose
 // submit redirects to /login rather than to a detail page) and whatever
-// navigation the submit triggers. Pass a commodity with no chip fields
-// (tags / extra serials / part numbers) to avoid the webkit Enter-leak quirk
-// that can submit the form early from the Extras step.
+// navigation the submit triggers.
+//
+// It mirrors createCommodity's webkit Enter-leak mitigation, but in a
+// flow-agnostic way: createCommodity detects an early submit by the detail
+// URL appearing, which only fits the authenticated create. Here we key off
+// the dialog unmounting instead, so the helper is robust whether the submit
+// lands on a detail page (authenticated) or bounces to /login (anonymous) —
+// callers no longer have to avoid chip fields for stability.
 export async function fillCommodityWizardAndSubmit(
   page: Page,
   c: TestCommodity,
 ): Promise<void> {
+  const dialog = page.locator('[data-testid="commodity-form-dialog"]');
+  const dialogStillOpen = () => dialog.isVisible().catch(() => false);
+
   await waitForStep(page, "basics");
   await fillBasicsStep(page, c);
   await gotoNext(page);
@@ -465,10 +473,24 @@ export async function fillCommodityWizardAndSubmit(
 
   await waitForStep(page, "extras");
   await fillExtrasStep(page, c);
-  await gotoNext(page);
 
-  await waitForStep(page, "files");
-  await page.click('[data-testid="commodity-form-submit"]');
+  // A webkit chip-input Enter-leak on the Extras step can submit the form
+  // early, unmounting the dialog before we reach Files. Only advance/submit
+  // while the dialog is still mounted; treat an already-closed dialog as an
+  // early submit and fall through.
+  if (await dialogStillOpen()) {
+    await gotoNext(page);
+  }
+  await Promise.race([
+    page.waitForSelector('[data-testid="commodity-form-files-step"]', {
+      state: "visible",
+      timeout: 10000,
+    }),
+    dialog.waitFor({ state: "hidden", timeout: 10000 }),
+  ]);
+  if (await dialogStillOpen()) {
+    await page.click('[data-testid="commodity-form-submit"]');
+  }
 }
 
 // assignCommodityLocation files an already-created commodity under a

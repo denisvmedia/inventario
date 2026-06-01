@@ -24,6 +24,7 @@ import {
   verifyCommodityDetails,
   type TestCommodity,
 } from './includes/commodities.js';
+import { deleteCommodityViaAPI, extractApiAuth } from './includes/commodities-api.js';
 import { TEST_CREDENTIALS } from './includes/auth.js';
 
 const MARKER_KEY = 'inventario_pending_first_item';
@@ -31,30 +32,25 @@ const DRAFT_KEY = 'commodity-draft:anon:create';
 const DETAIL_URL = /\/g\/[^/]+\/commodities\/[0-9a-fA-F-]{36}/;
 
 // Stub /feature-flags so the landing Add card renders without touching the
-// backend's PUBLIC_AI_VISION_SCAN_ENABLED config. route.fetch() pulls the
-// real envelope first and only flips public_scan, so any other (or future)
-// flags keep their real values.
+// backend's PUBLIC_AI_VISION_SCAN_ENABLED config. We pass the REAL upstream
+// response through (status + headers via `response`) and only flip
+// public_scan in the body — so any other (or future) flags keep their real
+// values, AND a broken /feature-flags still surfaces: a non-200 upstream
+// leaves the flag false, the Add card stays hidden, and the test fails,
+// rather than being masked by a synthetic 200.
 async function enablePublicScanFlag(page: import('@playwright/test').Page) {
   await page.route('**/api/v1/feature-flags', async (route) => {
-    let body: Record<string, unknown>;
-    try {
-      const res = await route.fetch();
-      body = (await res.json()) as Record<string, unknown>;
-    } catch {
-      body = { currency_migration: false, magic_link_login: false };
-    }
+    const response = await route.fetch();
+    const body = (await response.json()) as Record<string, unknown>;
     body.public_scan = true;
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(body),
-    });
+    await route.fulfill({ response, json: body });
   });
 }
 
 test.describe('Anonymous first-item journey (#1988)', () => {
   test('logged-out → fill → login → item replayed into the group, nothing lost', async ({
     page,
+    request,
   }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     // Currency is the seeded e2e group's currency (CZK) on purpose: the
@@ -120,10 +116,27 @@ test.describe('Anonymous first-item journey (#1988)', () => {
 
     // 6. Land on the new item's detail page with the entered values intact.
     await page.waitForURL(DETAIL_URL, { timeout: 30000 });
+    const detail = new URL(page.url()).pathname.match(
+      /\/g\/([^/]+)\/commodities\/([0-9a-fA-F-]{36})/,
+    );
     await verifyCommodityDetails(page, commodity);
 
     // 7. After a successful replay the marker + anonymous draft are cleared.
     expect(await page.evaluate((k) => localStorage.getItem(k), MARKER_KEY)).toBeNull();
     expect(await page.evaluate((k) => localStorage.getItem(k), DRAFT_KEY)).toBeNull();
+
+    // Cleanup: the replay created a REAL commodity in the shared seeded
+    // backend. Delete it via the API so it can't perturb later specs
+    // (counts / ordering) or make local re-runs noisier. Best-effort —
+    // a failed delete must not fail an otherwise-green test.
+    if (detail) {
+      const auth = await extractApiAuth(page);
+      await deleteCommodityViaAPI(
+        request,
+        auth,
+        decodeURIComponent(detail[1]),
+        detail[2],
+      ).catch(() => {});
+    }
   });
 });
