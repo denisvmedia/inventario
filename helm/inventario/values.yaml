@@ -547,6 +547,7 @@ secrets:
   #   INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY (required when aivision.provider=anthropic)
   #   INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY    (required when aivision.provider=openai)
   #   SETUP_ADMIN_PASSWORD                       (required by job-setup if setupJob.enabled)
+  #   BACKOFFICE_USER_PASSWORD                   (required by setup/init-data Job when backofficeUser.enabled; maps to setupJob.initData.backofficeUserPassword; min 8 chars + upper + lower + digit)
   #   SETUP_SUPERUSER_DSN                        (optional; used when setupJob.bootstrap.superuserDsn is managed outside the chart)
   #   AWS_ACCESS_KEY_ID                          (required for S3/MinIO upload)
   #   AWS_SECRET_ACCESS_KEY                      (required for S3/MinIO upload)

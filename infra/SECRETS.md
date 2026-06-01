@@ -404,6 +404,10 @@ chmod 600 infra/vm/secrets/secrets.local.yaml
 #    master + longevity, optional),
 #    tailscale.{auth_key, oauth_client_id, oauth_client_secret, tailnet_name},
 #    github.{app_id, app_installation_id, app_private_key, url}.
+#    Fill backoffice.password (step 4 above) ONLY for the demo/preview
+#    /backoffice/login operator on master + longevity (8+ chars + upper +
+#    lower + digit); leave it empty to skip the back-office operator there
+#    (per-PR previews inline their own via setupJob.initData.backofficeUserPassword).
 #    Fill anthropic.api_key (step 7 above) ONLY to turn the AI-vision feature
 #    on for master + longevity — and mind the boot-ordering hazard noted there.
 #    Fill the velero.* block (step 6 above) ONLY if you want the daily R2
