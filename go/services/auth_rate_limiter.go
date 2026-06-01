@@ -46,6 +46,29 @@ const (
 	impersonationAttemptsLimit  = 10
 	impersonationAttemptsWindow = time.Hour
 
+	// public AI photo-scan throttling (#1988). The endpoint is
+	// unauthenticated — the anonymous "add your first item" landing CTA —
+	// so there is no user to key on; we key per-IP. Every call spends real
+	// vendor tokens with no auth wall, so the per-IP allowance is small and
+	// the window is an hour: enough for a curious visitor to scan a couple
+	// of photos, tight enough that a single source can't run up the bill.
+	publicScanAttemptsLimit  = 3
+	publicScanAttemptsWindow = time.Hour
+
+	// public AI photo-scan GLOBAL daily cap (#1988). A second, deployment-
+	// wide ceiling that backstops the per-IP limit: a botnet spreading
+	// requests across thousands of IPs would each stay under the per-IP
+	// allowance, so this single shared counter bounds the total spend per
+	// day regardless of source. Conservative by default because the floor
+	// for abuse is "real money to the vendor"; operators who want a larger
+	// public allowance raise it explicitly.
+	publicScanGlobalCapLimit  = 200
+	publicScanGlobalCapWindow = 24 * time.Hour
+	// publicScanGlobalCapKey is the constant rate-limit key for the global
+	// daily cap. It is deliberately not derived from any request input so
+	// every public scan, from any IP, increments the same counter.
+	publicScanGlobalCapKey = "global"
+
 	failedLoginLockoutThreshold = 5
 	failedLoginWindow           = 15 * time.Minute
 	accountLockoutDuration      = 15 * time.Minute
@@ -86,6 +109,19 @@ type AuthRateLimiter interface {
 	// RequireSystemAdmin, so `adminUserID` is the natural rate-limit
 	// key — see the impersonationAttemptsLimit comment for the rationale.
 	CheckImpersonationAttempt(ctx context.Context, adminUserID string) (RateLimitResult, error)
+
+	// CheckPublicScanAttempt throttles the unauthenticated public AI
+	// photo-scan endpoint (#1988) on a per-IP basis — the endpoint has no
+	// user to key on. See the publicScanAttemptsLimit comment for the
+	// rationale behind the conservative allowance.
+	CheckPublicScanAttempt(ctx context.Context, ip string) (RateLimitResult, error)
+
+	// CheckPublicScanGlobalCap enforces a single deployment-wide daily
+	// ceiling on the public AI photo-scan endpoint (#1988). It is keyed on
+	// a constant, so every public scan from any IP shares one counter —
+	// the backstop that bounds total vendor spend even when an attacker
+	// spreads requests across many IPs.
+	CheckPublicScanGlobalCap(ctx context.Context) (RateLimitResult, error)
 
 	IsAccountLocked(ctx context.Context, email string) (locked bool, resetAt time.Time, err error)
 	RecordFailedLogin(ctx context.Context, email string) (locked bool, resetAt time.Time, err error)
@@ -182,6 +218,16 @@ func (l *RedisAuthRateLimiter) CheckFeedbackAttempt(ctx context.Context, userID 
 func (l *RedisAuthRateLimiter) CheckImpersonationAttempt(ctx context.Context, adminUserID string) (RateLimitResult, error) {
 	key := fmt.Sprintf("rate:admin:impersonate:user:%s", hashKeyPart(adminUserID))
 	return l.checkRate(ctx, key, impersonationAttemptsLimit, impersonationAttemptsWindow)
+}
+
+func (l *RedisAuthRateLimiter) CheckPublicScanAttempt(ctx context.Context, ip string) (RateLimitResult, error) {
+	key := fmt.Sprintf("rate:public-scan:ip:%s", hashKeyPart(ip))
+	return l.checkRate(ctx, key, publicScanAttemptsLimit, publicScanAttemptsWindow)
+}
+
+func (l *RedisAuthRateLimiter) CheckPublicScanGlobalCap(ctx context.Context) (RateLimitResult, error) {
+	key := fmt.Sprintf("rate:public-scan:%s", publicScanGlobalCapKey)
+	return l.checkRate(ctx, key, publicScanGlobalCapLimit, publicScanGlobalCapWindow)
 }
 
 func (l *RedisAuthRateLimiter) checkRate(ctx context.Context, key string, limit int, window time.Duration) (RateLimitResult, error) {
@@ -356,6 +402,16 @@ func (l *InMemoryAuthRateLimiter) CheckImpersonationAttempt(_ context.Context, a
 	return l.checkRate(key, impersonationAttemptsLimit, impersonationAttemptsWindow), nil
 }
 
+func (l *InMemoryAuthRateLimiter) CheckPublicScanAttempt(_ context.Context, ip string) (RateLimitResult, error) {
+	key := fmt.Sprintf("rate:public-scan:ip:%s", hashKeyPart(ip))
+	return l.checkRate(key, publicScanAttemptsLimit, publicScanAttemptsWindow), nil
+}
+
+func (l *InMemoryAuthRateLimiter) CheckPublicScanGlobalCap(_ context.Context) (RateLimitResult, error) {
+	key := fmt.Sprintf("rate:public-scan:%s", publicScanGlobalCapKey)
+	return l.checkRate(key, publicScanGlobalCapLimit, publicScanGlobalCapWindow), nil
+}
+
 func (l *InMemoryAuthRateLimiter) checkRate(key string, limit int, window time.Duration) RateLimitResult {
 	now := l.now()
 	cutoff := now.Add(-window)
@@ -504,6 +560,14 @@ func (NoOpAuthRateLimiter) CheckFeedbackAttempt(_ context.Context, _ string) (Ra
 
 func (NoOpAuthRateLimiter) CheckImpersonationAttempt(_ context.Context, _ string) (RateLimitResult, error) {
 	return RateLimitResult{Allowed: true, Limit: impersonationAttemptsLimit, Remaining: impersonationAttemptsLimit, ResetAt: time.Now().Add(impersonationAttemptsWindow)}, nil
+}
+
+func (NoOpAuthRateLimiter) CheckPublicScanAttempt(_ context.Context, _ string) (RateLimitResult, error) {
+	return RateLimitResult{Allowed: true, Limit: publicScanAttemptsLimit, Remaining: publicScanAttemptsLimit, ResetAt: time.Now().Add(publicScanAttemptsWindow)}, nil
+}
+
+func (NoOpAuthRateLimiter) CheckPublicScanGlobalCap(_ context.Context) (RateLimitResult, error) {
+	return RateLimitResult{Allowed: true, Limit: publicScanGlobalCapLimit, Remaining: publicScanGlobalCapLimit, ResetAt: time.Now().Add(publicScanGlobalCapWindow)}, nil
 }
 
 func (NoOpAuthRateLimiter) IsAccountLocked(_ context.Context, _ string) (bool, time.Time, error) {

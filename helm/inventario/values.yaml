@@ -506,6 +506,15 @@ aivision:
   # Env: INVENTARIO_RUN_AI_VISION_RATE_LIMIT_PER_HOUR
   rateLimitPerHour: 30
 
+  # Enable the UNAUTHENTICATED public photo-scan endpoint (#1988) that backs
+  # the landing-page "add your first item" CTA. Default false: every call
+  # spends real vendor tokens with no auth wall, so opt in deliberately. No
+  # effect unless `provider` above is also set to a real provider. Abuse is
+  # bounded by a per-IP sliding window + a single global daily cap (constants
+  # in the app); the per-call maxPhotos/maxPhotoBytes caps apply too.
+  # Env: INVENTARIO_RUN_PUBLIC_AI_VISION_SCAN_ENABLED
+  publicScanEnabled: false
+
 # ============================================================
 # Extra envFrom sources appended verbatim to every app container's
 # `envFrom` (combined, apiserver, and worker Deployments). Each entry is a

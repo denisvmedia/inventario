@@ -420,6 +420,67 @@ func MagicLinkRequestRateLimitMiddleware(limiter services.AuthRateLimiter) func(
 	}
 }
 
+// PublicScanRateLimitMiddleware throttles the unauthenticated public AI
+// photo-scan endpoint (#1988). Unlike the auth limiters above, it applies
+// TWO checks in sequence:
+//
+//  1. A single deployment-wide daily cap (CheckPublicScanGlobalCap). This
+//     is checked FIRST so a burst that has already exhausted the global
+//     budget is rejected before it can consume per-IP allowances — and so
+//     a botnet spreading requests across many IPs still hits one shared
+//     ceiling that bounds total vendor spend.
+//  2. A per-IP sliding window (CheckPublicScanAttempt), keyed on
+//     remoteAddrIP so a forged X-Forwarded-For can't move the bucket.
+//
+// On either rejection it returns 429 + Retry-After. Consistent with every
+// other limiter in this package, it fails open on a backend error: the
+// feature flag + the per-call spend caps are the load-bearing guards, and
+// a limiter outage must not take the endpoint down hard.
+func PublicScanRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if limiter == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// 1) Global daily cap. Fail-open on backend error.
+			globalRes, err := limiter.CheckPublicScanGlobalCap(r.Context())
+			if err != nil {
+				slog.Error("Public-scan global rate limiter error", "error", err)
+			} else if !globalRes.Allowed {
+				retryAfter := max(int(time.Until(globalRes.ResetAt).Seconds()), 0)
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				slog.Warn("Public-scan global daily cap exceeded", "retry_after_seconds", retryAfter)
+				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+				return
+			}
+
+			// 2) Per-IP sliding window. RemoteAddr-only, ignoring proxy
+			// headers, so the key can't be spoofed.
+			ip := remoteAddrIP(r)
+			res, err := limiter.CheckPublicScanAttempt(r.Context(), ip)
+			if err != nil {
+				slog.Error("Public-scan rate limiter error", "error", err, "ip", ip)
+				next.ServeHTTP(w, r)
+				return
+			}
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", res.Limit))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", res.Remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", res.ResetAt.Unix()))
+			if !res.Allowed {
+				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				slog.Warn("Public-scan per-IP rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
+				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // remoteAddrIP extracts the host from r.RemoteAddr, ignoring all proxy headers.
 // This is intentional for rate limiting: proxy headers like X-Forwarded-For can be
 // forged by the client and must not be used to determine the key to rate-limit on.

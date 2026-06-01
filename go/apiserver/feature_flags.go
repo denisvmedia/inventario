@@ -35,6 +35,13 @@ type FeatureFlags struct {
 	// rather than the auth-gated /system endpoint. When false the FE hides
 	// the affordance and the /auth/magic-link routes return 404.
 	MagicLinkLogin bool `json:"magic_link_login"`
+
+	// PublicScan mirrors Params.PublicScanEnabled. The entry point is the
+	// anonymous landing-page "add your first item" CTA (#1988), so — like
+	// MagicLinkLogin — it is read pre-login on this public surface. When
+	// false the FE hides the CTA and the POST /public/commodities/scan
+	// route is not mounted (404).
+	PublicScan bool `json:"public_scan"`
 }
 
 // FeatureFlagsHandler returns a constant-shaped feature-flag payload
@@ -53,6 +60,7 @@ func FeatureFlagsHandler(params Params) func(r chi.Router) {
 	flags := FeatureFlags{
 		CurrencyMigration: params.FeatureCurrencyMigration,
 		MagicLinkLogin:    params.MagicLinkLoginEnabled,
+		PublicScan:        params.PublicScanEnabled,
 	}
 	return func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, _ *http.Request) {

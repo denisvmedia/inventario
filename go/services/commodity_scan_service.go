@@ -369,60 +369,151 @@ func (s *CommodityScanService) Scan(ctx context.Context, tenantID, userID string
 	return result, nil
 }
 
-// validateInput runs the per-photo guards and records the relevant
-// audit row + sentinel on rejection.
-func (s *CommodityScanService) validateInput(ctx context.Context, tenantID, userID string, in ScanInput, totalBytes int) error {
-	if len(in.Photos) == 0 {
-		s.writeAudit(ctx, models.CommodityScanAudit{
-			TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
-			Provider:                s.providerName(),
-			Model:                   s.providerModel(),
-			Status:                  models.CommodityScanStatusValidation,
-			ErrorCode:               "commodity_scan.no_photos",
+// ScanAnonymous runs the same vision pipeline as Scan but with NO
+// identity and NO persistence: it writes no audit row and consults no
+// per-user rate limiter. It backs the public, unauthenticated landing-page
+// "add your first item" CTA (#1988), where there is no tenant/user to
+// attribute a row to and the abuse controls live entirely in the HTTP
+// layer (per-IP + global daily cap middleware) plus the feature flag.
+//
+// The MaxPhotos / MaxPhotoBytes / Timeout caps and the provider-disabled
+// short-circuit are still enforced — they are server-side spend guards,
+// not identity-scoped. Validation reuses the pure validatePhotos helper so
+// the rejection sentinels (and therefore the handler's JSON:API mapping)
+// are identical to the authenticated path.
+//
+// Returns suggestions only; it never creates a commodity or any DB row.
+func (s *CommodityScanService) ScanAnonymous(ctx context.Context, in ScanInput) (*aivision.ScanResult, error) {
+	// Provider-disabled short circuit. No audit row to write here — the
+	// anonymous path is audit-free by design.
+	if s.provider == nil {
+		return nil, errxtrace.Classify(ErrScanProviderDisabled)
+	}
+
+	if err := s.validatePhotos(in); err != nil {
+		return nil, err
+	}
+
+	callCtx := ctx
+	if s.cfg.Timeout > 0 {
+		var cancel context.CancelFunc
+		callCtx, cancel = context.WithTimeout(ctx, s.cfg.Timeout)
+		defer cancel()
+	}
+
+	photos := make([]aivision.PhotoInput, 0, len(in.Photos))
+	for _, p := range in.Photos {
+		photos = append(photos, aivision.PhotoInput{
+			Filename:    p.Filename,
+			ContentType: p.ContentType,
+			Data:        p.Data,
 		})
+	}
+
+	result, providerErr := s.provider.Scan(callCtx, aivision.ScanRequest{
+		Photos:                photos,
+		HintFromUser:          in.HintFromUser,
+		PreferredCurrencyCode: in.PreferredCurrencyCode,
+	})
+	if providerErr != nil {
+		return nil, classifyProviderErr(providerErr)
+	}
+	if result == nil {
+		return nil, errxtrace.Classify(ErrScanProviderError)
+	}
+	return result, nil
+}
+
+// classifyProviderErr maps a provider-layer error to the matching scan
+// sentinel. Shared between the authenticated path (which also writes an
+// audit row before returning) and ScanAnonymous (which doesn't), so the
+// upstream-error → sentinel mapping stays in one place.
+func classifyProviderErr(providerErr error) error {
+	switch {
+	case errors.Is(providerErr, aivision.ErrProviderTimeout):
+		return errxtrace.Classify(ErrScanProviderTimeout)
+	case errors.Is(providerErr, aivision.ErrProviderAuth):
+		return errxtrace.Classify(ErrScanProviderMisconfigured)
+	case errors.Is(providerErr, aivision.ErrProviderUnavailable):
+		return errxtrace.Classify(ErrScanProviderUnavailable)
+	default:
+		return errxtrace.Classify(ErrScanProviderError)
+	}
+}
+
+// validatePhotos runs the per-photo guards and returns the matching
+// sentinel on rejection. It is pure — no context, no audit, no identity —
+// so both the authenticated Scan path (which still writes an audit row on
+// failure, via validateInput) and the anonymous ScanAnonymous path (which
+// writes nothing) can share the exact same validation rules. The returned
+// error is one of the declared ErrScan* sentinels (already classified with
+// a stacktrace) so callers can route it to the shared handler mapping
+// verbatim.
+func (s *CommodityScanService) validatePhotos(in ScanInput) error {
+	if len(in.Photos) == 0 {
 		return errxtrace.Classify(ErrScanNoPhotos)
 	}
 
 	if s.cfg.MaxPhotos > 0 && len(in.Photos) > s.cfg.MaxPhotos {
-		s.writeAudit(ctx, models.CommodityScanAudit{
-			TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
-			Provider:                s.providerName(),
-			Model:                   s.providerModel(),
-			PhotoCount:              clampInt16(len(in.Photos)),
-			TotalPhotoBytes:         clampInt32(totalBytes),
-			Status:                  models.CommodityScanStatusValidation,
-			ErrorCode:               "commodity_scan.too_many_photos",
-		})
 		return errxtrace.Classify(ErrScanTooManyPhotos)
 	}
 
 	for _, p := range in.Photos {
 		if !AllowedMIMETypes[p.ContentType] {
-			s.writeAudit(ctx, models.CommodityScanAudit{
-				TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
-				Provider:                s.providerName(),
-				Model:                   s.providerModel(),
-				PhotoCount:              clampInt16(len(in.Photos)),
-				TotalPhotoBytes:         clampInt32(totalBytes),
-				Status:                  models.CommodityScanStatusValidation,
-				ErrorCode:               "commodity_scan.unsupported_mime",
-			})
 			return errxtrace.Classify(ErrScanUnsupportedMIME)
 		}
 		if s.cfg.MaxPhotoBytes > 0 && len(p.Data) > s.cfg.MaxPhotoBytes {
-			s.writeAudit(ctx, models.CommodityScanAudit{
-				TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
-				Provider:                s.providerName(),
-				Model:                   s.providerModel(),
-				PhotoCount:              clampInt16(len(in.Photos)),
-				TotalPhotoBytes:         clampInt32(totalBytes),
-				Status:                  models.CommodityScanStatusValidation,
-				ErrorCode:               "commodity_scan.photo_too_large",
-			})
 			return errxtrace.Classify(ErrScanPhotoTooLarge)
 		}
 	}
 	return nil
+}
+
+// errorCodeForScanSentinel maps a validation sentinel to the JSON:API
+// error code recorded in the audit row. Used by validateInput so the
+// audit-on-failure write stays in lock-step with validatePhotos.
+func errorCodeForScanSentinel(err error) string {
+	switch {
+	case errors.Is(err, ErrScanNoPhotos):
+		return "commodity_scan.no_photos"
+	case errors.Is(err, ErrScanTooManyPhotos):
+		return "commodity_scan.too_many_photos"
+	case errors.Is(err, ErrScanUnsupportedMIME):
+		return "commodity_scan.unsupported_mime"
+	case errors.Is(err, ErrScanPhotoTooLarge):
+		return "commodity_scan.photo_too_large"
+	default:
+		return "commodity_scan.validation"
+	}
+}
+
+// validateInput runs the shared per-photo guards (validatePhotos) and,
+// on rejection, records the matching audit row with the right error code
+// before returning the sentinel. This keeps the authenticated path's
+// audit-on-every-outcome invariant intact while the validation rules
+// themselves live in the pure validatePhotos helper.
+func (s *CommodityScanService) validateInput(ctx context.Context, tenantID, userID string, in ScanInput, totalBytes int) error {
+	err := s.validatePhotos(in)
+	if err == nil {
+		return nil
+	}
+
+	audit := models.CommodityScanAudit{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
+		Provider:                s.providerName(),
+		Model:                   s.providerModel(),
+		Status:                  models.CommodityScanStatusValidation,
+		ErrorCode:               errorCodeForScanSentinel(err),
+	}
+	// The no-photos row carries no count/bytes (there's nothing to
+	// count); every other validation row records what the caller sent so
+	// the dashboard can see the offending magnitude.
+	if !errors.Is(err, ErrScanNoPhotos) {
+		audit.PhotoCount = clampInt16(len(in.Photos))
+		audit.TotalPhotoBytes = clampInt32(totalBytes)
+	}
+	s.writeAudit(ctx, audit)
+	return err
 }
 
 // checkRateLimit counts recent audit rows and rejects when the per-user

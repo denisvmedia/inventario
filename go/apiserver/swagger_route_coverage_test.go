@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/denisvmedia/inventario/apiserver"
+	"github.com/denisvmedia/inventario/services"
 )
 
 // TestSwaggerRouteCoverage walks the chi router that APIServer returns and
@@ -26,6 +27,13 @@ func TestSwaggerRouteCoverage(t *testing.T) {
 	t.Parallel()
 
 	params, _, _ := newParams()
+	// Mount every conditionally-gated route so the bidirectional check sees
+	// the same surface the swagger annotations document. The public scan
+	// endpoint (#1988) is only mounted when PublicScanEnabled is true AND a
+	// scan service is wired; without both, its documented operation would
+	// be (incorrectly) reported as stale.
+	params.PublicScanEnabled = true
+	params.CommodityScanService = services.NewCommodityScanService(nil, params.FactorySet.CommodityScanAuditRegistry, services.CommodityScanConfig{})
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 	router, ok := handler.(chi.Router)
 	if !ok {

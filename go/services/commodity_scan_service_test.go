@@ -10,6 +10,7 @@ import (
 
 	"github.com/denisvmedia/inventario/internal/aivision"
 	"github.com/denisvmedia/inventario/internal/aivision/mock"
+	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -189,4 +190,112 @@ func TestCommodityScanService_MissingIdentity(t *testing.T) {
 
 	_, err = svc.Scan(context.Background(), "tenant-1", "", newScanInput(jpegPhoto("a.jpg", 64)))
 	c.Assert(err, qt.ErrorIs, services.ErrScanIdentityMissing)
+}
+
+// recordingAuditRegistry wraps the memory audit registry and counts
+// Record calls so the anonymous-path tests can prove ScanAnonymous never
+// persists a row.
+type recordingAuditRegistry struct {
+	*memory.CommodityScanAuditRegistry
+	records int
+}
+
+func newRecordingAuditRegistry() *recordingAuditRegistry {
+	return &recordingAuditRegistry{CommodityScanAuditRegistry: memory.NewCommodityScanAuditRegistry()}
+}
+
+func (r *recordingAuditRegistry) Record(ctx context.Context, audit models.CommodityScanAudit) (*models.CommodityScanAudit, error) {
+	r.records++
+	return r.CommodityScanAuditRegistry.Record(ctx, audit)
+}
+
+func TestCommodityScanService_ScanAnonymous_HappyPath_NoAudit(t *testing.T) {
+	c := qt.New(t)
+
+	audit := newRecordingAuditRegistry()
+	svc := services.NewCommodityScanService(mock.New(), audit, services.CommodityScanConfig{
+		MaxPhotos:        5,
+		MaxPhotoBytes:    1024,
+		RateLimitPerHour: 1, // present but irrelevant — anonymous skips the per-user limiter
+	})
+
+	result, err := svc.ScanAnonymous(context.Background(), newScanInput(jpegPhoto("a.jpg", 128)))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.IsNotNil)
+
+	// The anonymous path must persist NOTHING: no audit row, regardless
+	// of how many times it is invoked (the per-user rate limit doesn't
+	// apply either, so a second call still succeeds).
+	c.Assert(audit.records, qt.Equals, 0)
+
+	_, err = svc.ScanAnonymous(context.Background(), newScanInput(jpegPhoto("b.jpg", 128)))
+	c.Assert(err, qt.IsNil)
+	c.Assert(audit.records, qt.Equals, 0)
+}
+
+func TestCommodityScanService_ScanAnonymous_ProviderDisabled(t *testing.T) {
+	c := qt.New(t)
+
+	audit := newRecordingAuditRegistry()
+	svc := services.NewCommodityScanService(nil, audit, services.CommodityScanConfig{})
+
+	_, err := svc.ScanAnonymous(context.Background(), newScanInput(jpegPhoto("a.jpg", 64)))
+	c.Assert(err, qt.ErrorIs, services.ErrScanProviderDisabled)
+	c.Assert(audit.records, qt.Equals, 0)
+}
+
+func TestCommodityScanService_ScanAnonymous_NoPhotos(t *testing.T) {
+	c := qt.New(t)
+	svc := services.NewCommodityScanService(mock.New(), memory.NewCommodityScanAuditRegistry(), services.CommodityScanConfig{})
+
+	_, err := svc.ScanAnonymous(context.Background(), services.ScanInput{})
+	c.Assert(err, qt.ErrorIs, services.ErrScanNoPhotos)
+}
+
+func TestCommodityScanService_ScanAnonymous_TooManyPhotos(t *testing.T) {
+	c := qt.New(t)
+	svc := services.NewCommodityScanService(mock.New(), memory.NewCommodityScanAuditRegistry(), services.CommodityScanConfig{
+		MaxPhotos: 1,
+	})
+
+	_, err := svc.ScanAnonymous(context.Background(), newScanInput(jpegPhoto("a.jpg", 64), jpegPhoto("b.jpg", 64)))
+	c.Assert(err, qt.ErrorIs, services.ErrScanTooManyPhotos)
+}
+
+func TestCommodityScanService_ScanAnonymous_PhotoTooLarge(t *testing.T) {
+	c := qt.New(t)
+	svc := services.NewCommodityScanService(mock.New(), memory.NewCommodityScanAuditRegistry(), services.CommodityScanConfig{
+		MaxPhotos:     5,
+		MaxPhotoBytes: 128,
+	})
+
+	_, err := svc.ScanAnonymous(context.Background(), newScanInput(jpegPhoto("a.jpg", 1024)))
+	c.Assert(err, qt.ErrorIs, services.ErrScanPhotoTooLarge)
+}
+
+func TestCommodityScanService_ScanAnonymous_UnsupportedMIME(t *testing.T) {
+	c := qt.New(t)
+	svc := services.NewCommodityScanService(mock.New(), memory.NewCommodityScanAuditRegistry(), services.CommodityScanConfig{
+		MaxPhotos: 5,
+	})
+
+	in := services.ScanInput{
+		Photos: []services.ScanPhotoInput{
+			{ContentType: "application/octet-stream", Data: []byte("x")},
+		},
+	}
+	_, err := svc.ScanAnonymous(context.Background(), in)
+	c.Assert(err, qt.ErrorIs, services.ErrScanUnsupportedMIME)
+}
+
+func TestCommodityScanService_ScanAnonymous_ProviderTimeout(t *testing.T) {
+	c := qt.New(t)
+	provider := mock.New(mock.WithDefaultError(aivision.ErrProviderTimeout))
+	svc := services.NewCommodityScanService(provider, memory.NewCommodityScanAuditRegistry(), services.CommodityScanConfig{
+		MaxPhotos:     5,
+		MaxPhotoBytes: 1024,
+	})
+
+	_, err := svc.ScanAnonymous(context.Background(), newScanInput(jpegPhoto("a.jpg", 64)))
+	c.Assert(err, qt.ErrorIs, services.ErrScanProviderTimeout)
 }

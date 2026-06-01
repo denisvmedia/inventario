@@ -302,6 +302,15 @@ func wireCommodityScan(cfg *Config, params *apiserver.Params) error {
 	// hostile multipart part is rejected before io.ReadAll allocates
 	// more than (cap+1) bytes.
 	params.CommodityScanMaxPhotoBytes = cfg.AIVisionMaxPhotoBytes
+
+	// Effective gate for the public, unauthenticated scan endpoint (#1988):
+	// the config opt-in AND a real provider. With no provider the endpoint
+	// would only ever 503, so mounting an anonymous route in that state is
+	// pointless; gate it off and warn so a misconfigured opt-in is visible.
+	params.PublicScanEnabled = cfg.PublicAIVisionScanEnabled && provider != nil
+	if cfg.PublicAIVisionScanEnabled && provider == nil {
+		slog.Warn("Public AI photo-scan is enabled but no AI vision provider is configured; the endpoint is inert. Set --ai-vision-provider to a real provider or set --public-ai-vision-scan-enabled=false to silence this warning.")
+	}
 	return nil
 }
 
