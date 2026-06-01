@@ -125,18 +125,38 @@ test.describe('Anonymous first-item journey (#1988)', () => {
     expect(await page.evaluate((k) => localStorage.getItem(k), MARKER_KEY)).toBeNull();
     expect(await page.evaluate((k) => localStorage.getItem(k), DRAFT_KEY)).toBeNull();
 
-    // Cleanup: the replay created a REAL commodity in the shared seeded
-    // backend. Delete it via the API so it can't perturb later specs
-    // (counts / ordering) or make local re-runs noisier. Best-effort —
-    // a failed delete must not fail an otherwise-green test.
     if (detail) {
+      const slug = decodeURIComponent(detail[1]);
+      const id = detail[2];
+
+      // 8. Tenant/group isolation (AGENTS.md "multi-tenant isolation
+      //    testing"): a different seeded user — user2, who is NOT a member
+      //    of the owner's group — must not be able to read the replayed
+      //    item. The generic case lives in group-data-isolation.spec.ts;
+      //    this keeps the assertion attached to the #1988 replay path, which
+      //    lands a real row inside the owner's RLS boundary.
+      const otherLogin = await request.post('/api/v1/auth/login', {
+        data: { email: 'user2@test-org.com', password: 'TestPassword123' },
+      });
+      expect(otherLogin.ok()).toBeTruthy();
+      const otherToken = (await otherLogin.json()).access_token as string;
+      const probe = await request.get(
+        `/api/v1/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`,
+        {
+          headers: {
+            Accept: 'application/vnd.api+json',
+            Authorization: `Bearer ${otherToken}`,
+          },
+        },
+      );
+      expect([403, 404]).toContain(probe.status());
+
+      // Cleanup: the replay created a REAL commodity in the shared seeded
+      // backend. Delete it (as the owner) so it can't perturb later specs
+      // (counts / ordering) or make local re-runs noisier. Best-effort —
+      // a failed delete must not fail an otherwise-green test.
       const auth = await extractApiAuth(page);
-      await deleteCommodityViaAPI(
-        request,
-        auth,
-        decodeURIComponent(detail[1]),
-        detail[2],
-      ).catch(() => {});
+      await deleteCommodityViaAPI(request, auth, slug, id).catch(() => {});
     }
   });
 });
