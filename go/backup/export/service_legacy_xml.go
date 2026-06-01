@@ -481,7 +481,10 @@ func (s *ExportService) streamCommodities(ctx context.Context, writer io.Writer,
 	}
 
 	for _, commodity := range commodities {
-		areaUUID := areaUUIDMap[commodity.AreaID] // Resolve area DB ID → immutable UUID
+		// Area is optional (issue #1986). Deref-or-empty: a nil/empty area
+		// resolves to "" (legacy XML round-trip of unassigned items is best
+		// effort on this deprecated, default-off path — see the file note).
+		areaUUID := areaUUIDMap[derefAreaID(commodity.AreaID)] // Resolve area DB ID → immutable UUID
 		// Single token-stream path. The previous `if export.IncludeFileData`
 		// branch picked between this and `convertCommodityToXML`; both
 		// produce identical output now that legacy attachment streaming is
@@ -670,7 +673,8 @@ func (s *ExportService) streamSelectedCommodities(ctx context.Context, encoder *
 			continue // Skip items that can't be found
 		}
 
-		areaUUID := areaUUIDMap[commodity.AreaID] // Resolve area DB ID → immutable UUID
+		// Area is optional (issue #1986). Deref-or-empty (deprecated path).
+		areaUUID := areaUUIDMap[derefAreaID(commodity.AreaID)] // Resolve area DB ID → immutable UUID
 		// Single token-stream path. The previous `if export.IncludeFileData`
 		// branch picked between this and `convertCommodityToXML`; both
 		// produce identical output now that legacy attachment streaming is
@@ -1439,4 +1443,15 @@ func inSelectedScope(file *models.FileEntity, scope *selectedFileScope) bool {
 		return slices.Contains(scope.Locations, file.LinkedEntityID)
 	}
 	return false
+}
+
+// derefAreaID returns the commodity's area UUID, or "" when the commodity has no
+// area (issue #1986). Used by the deprecated XML exporter to keep the area map
+// lookup compiling against the now-nullable model field; unassigned commodities
+// resolve to an empty areaId on this best-effort legacy path.
+func derefAreaID(areaID *string) string {
+	if areaID == nil {
+		return ""
+	}
+	return *areaID
 }

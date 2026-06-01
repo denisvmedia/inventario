@@ -41,7 +41,7 @@ func TestCommodity_Issue1554_CreateRejectsBundleWithWarranty(t *testing.T) {
 			Attributes: &models.Commodity{
 				Name:                   "12 light bulbs",
 				ShortName:              "bulbs",
-				AreaID:                 area.ID,
+				AreaID:                 new(area.ID),
 				Type:                   models.CommodityTypeOther,
 				Status:                 models.CommodityStatusInUse,
 				Count:                  12,
@@ -136,7 +136,7 @@ func TestCommodity_Issue1554_BumpRejectsWithOpenLoan(t *testing.T) {
 	commodity := must.Must(registrySet.CommodityRegistry.Create(context.Background(), models.Commodity{
 		Name:                  "Single laptop",
 		ShortName:             "laptop",
-		AreaID:                area.ID,
+		AreaID:                new(area.ID),
 		Type:                  models.CommodityTypeElectronics,
 		Status:                models.CommodityStatusInUse,
 		Count:                 1,
@@ -165,7 +165,7 @@ func TestCommodity_Issue1554_BumpRejectsWithOpenLoan(t *testing.T) {
 			Attributes: models.WithID(commodity.ID, &models.Commodity{
 				Name:                   "Single laptop",
 				ShortName:              "laptop",
-				AreaID:                 area.ID,
+				AreaID:                 new(area.ID),
 				Type:                   models.CommodityTypeElectronics,
 				Status:                 models.CommodityStatusInUse,
 				Count:                  5,

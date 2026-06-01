@@ -60,7 +60,7 @@ func setupValuesTestData(c *qt.C) (*registry.FactorySet, *models.User) {
 		Name:                   "Test Commodity",
 		ShortName:              "TC",
 		Type:                   models.CommodityTypeElectronics,
-		AreaID:                 area.ID,
+		AreaID:                 new(area.ID),
 		Count:                  2,
 		OriginalPrice:          decimal.NewFromFloat(100.00),
 		OriginalPriceCurrency:  "USD",

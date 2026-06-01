@@ -176,8 +176,13 @@ func (v *Valuator) CalculateTotalValueByLocation() (map[string]decimal.Decimal, 
 
 		// Note: The price already represents the total value for all items in the lot
 
-		// Get the location ID for this commodity
-		locationID, ok := areaToLocation[commodity.AreaID]
+		// Get the location ID for this commodity. Area is optional
+		// (issue #1986): an unassigned commodity has no location to
+		// attribute its value to, so skip it.
+		if commodity.AreaID == nil {
+			continue
+		}
+		locationID, ok := areaToLocation[*commodity.AreaID]
 		if !ok {
 			// Skip commodities with no valid location
 			continue
@@ -232,11 +237,15 @@ func (v *Valuator) CalculateTotalValueByArea() (map[string]decimal.Decimal, erro
 
 		// Note: The price already represents the total value for all items in the lot
 
-		// Add to the area total
-		if _, ok := areaTotals[commodity.AreaID]; !ok {
-			areaTotals[commodity.AreaID] = decimal.NewFromInt(0)
+		// Add to the area total. Area is optional (issue #1986): an
+		// unassigned commodity has no area bucket, so skip it.
+		if commodity.AreaID == nil {
+			continue
 		}
-		areaTotals[commodity.AreaID] = areaTotals[commodity.AreaID].Add(value)
+		if _, ok := areaTotals[*commodity.AreaID]; !ok {
+			areaTotals[*commodity.AreaID] = decimal.NewFromInt(0)
+		}
+		areaTotals[*commodity.AreaID] = areaTotals[*commodity.AreaID].Add(value)
 	}
 
 	return areaTotals, nil

@@ -138,7 +138,7 @@ func TestTenantAwareModels_TenantID(t *testing.T) {
 			Name:      "Test Commodity",
 			ShortName: "Test",
 			Type:      models.CommodityTypeElectronics,
-			AreaID:    "area-123",
+			AreaID:    new("area-123"),
 			Status:    models.CommodityStatusInUse,
 			Count:     1,
 		}

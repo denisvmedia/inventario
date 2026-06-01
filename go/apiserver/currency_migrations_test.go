@@ -303,7 +303,7 @@ func TestCurrencyMigrations_Start_StateDriftRejectedOn409(t *testing.T) {
 		Name:                  "Drift test",
 		Type:                  models.CommodityTypeWhiteGoods,
 		Status:                models.CommodityStatusInUse,
-		AreaID:                areas[0].ID,
+		AreaID:                new(areas[0].ID),
 		Count:                 1,
 		OriginalPrice:         decimal.RequireFromString("100"),
 		OriginalPriceCurrency: models.Currency("USD"),

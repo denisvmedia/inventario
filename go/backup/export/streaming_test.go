@@ -3,6 +3,7 @@
 package export
 
 import (
+	"github.com/go-extras/go-kit/ptr"
 	"bytes"
 	"context"
 	"encoding/xml"
@@ -25,7 +26,7 @@ func TestStreamCommodityDirectly(t *testing.T) {
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{EntityID: models.EntityID{ID: "test-commodity-1"}, TenantID: "default-tenant"},
 		Name:                     "Test Commodity",
 		Type:                     models.CommodityTypeElectronics,
-		AreaID:                   "test-area-1",
+		AreaID:                   new("test-area-1"),
 		Count:                    1,
 		Status:                   models.CommodityStatusInUse,
 		Draft:                    false,
@@ -37,7 +38,7 @@ func TestStreamCommodityDirectly(t *testing.T) {
 	encoder := xml.NewEncoder(&buf)
 	encoder.Indent("", "  ")
 
-	err := service.streamCommodityDirectly(ctx, encoder, commodity, commodity.AreaID)
+	err := service.streamCommodityDirectly(ctx, encoder, commodity, ptr.From(commodity.AreaID))
 	c.Assert(err, qt.IsNil)
 
 	err = encoder.Flush()
@@ -111,7 +112,7 @@ func TestEncodeCommodityMetadata(t *testing.T) {
 		Name:                     "Test Commodity",
 		ShortName:                "TC1",
 		Type:                     models.CommodityTypeElectronics,
-		AreaID:                   "test-area-1",
+		AreaID:                   new("test-area-1"),
 		Count:                    5,
 		SerialNumber:             "SN123456",
 		Status:                   models.CommodityStatusInUse,
@@ -126,7 +127,7 @@ func TestEncodeCommodityMetadata(t *testing.T) {
 	encoder := xml.NewEncoder(&buf)
 	encoder.Indent("", "  ")
 
-	err := service.encodeCommodityMetadata(ctx, encoder, commodity, commodity.AreaID)
+	err := service.encodeCommodityMetadata(ctx, encoder, commodity, ptr.From(commodity.AreaID))
 	c.Assert(err, qt.IsNil)
 
 	err = encoder.Flush()

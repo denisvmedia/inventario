@@ -118,7 +118,7 @@ func TestListGroupLoans_BatchedCommodityFetch(t *testing.T) {
 		return must.Must(registrySet.CommodityRegistry.Create(context.Background(), models.Commodity{
 			Name:                  name,
 			ShortName:             name,
-			AreaID:                area.ID,
+			AreaID:                new(area.ID),
 			Status:                models.CommodityStatusInUse,
 			Type:                  models.CommodityTypeElectronics,
 			Count:                 1,

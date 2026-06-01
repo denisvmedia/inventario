@@ -268,7 +268,7 @@ func TestRestore_MergeAddSkipsTagAutoCreate(t *testing.T) {
 				CreatedByUserID: user.ID,
 			},
 			Name:   "Pre-existing " + uuid,
-			AreaID: createdArea.ID,
+			AreaID: new(createdArea.ID),
 		}))
 	}
 

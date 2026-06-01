@@ -153,7 +153,7 @@ func TestWarrantyReminderService_RemindOnce_TickClock(t *testing.T) {
 	// reminder fires.
 	d := models.Date(expiresInDays(now, 65))
 	out, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID:            areaID,
+		AreaID:            new(areaID),
 		Name:              "fridge",
 		ShortName:         "fridge",
 		Type:              models.CommodityTypeWhiteGoods,
@@ -217,7 +217,7 @@ func TestWarrantyReminderService_RemindOnce_EnqueueFailureRetries(t *testing.T) 
 	now := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 	d := models.Date(now.AddDate(0, 0, 30).Format("2006-01-02"))
 	_, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID:            areaID,
+		AreaID:            new(areaID),
 		Name:              "kettle",
 		ShortName:         "kettle",
 		Type:              models.CommodityTypeOther,
@@ -261,7 +261,7 @@ func TestWarrantyReminderService_RemindOnce_SkipsBundle(t *testing.T) {
 	now := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 	d := models.Date(now.AddDate(0, 0, 30).Format("2006-01-02"))
 	_, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID:            areaID,
+		AreaID:            new(areaID),
 		Name:              "12 light bulbs",
 		ShortName:         "bulbs",
 		Type:              models.CommodityTypeOther,
@@ -289,7 +289,7 @@ func TestWarrantyReminderService_RemindOnce_NoExpiryDate(t *testing.T) {
 	ctx, regSet, areaID, factorySet := newWarrantyServiceFixture(c)
 
 	_, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID:    areaID,
+		AreaID:    new(areaID),
 		Name:      "no-warranty",
 		ShortName: "no-warranty",
 		Type:      models.CommodityTypeOther,
@@ -320,7 +320,7 @@ func TestWarrantyReminderService_RemindOnce_OptOutSkipsRecipient(t *testing.T) {
 	now := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 	d := models.Date(now.AddDate(0, 0, 30).Format("2006-01-02"))
 	_, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID:            areaID,
+		AreaID:            new(areaID),
 		Name:              "fridge",
 		ShortName:         "fridge",
 		Type:              models.CommodityTypeWhiteGoods,

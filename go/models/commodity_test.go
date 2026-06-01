@@ -133,7 +133,7 @@ func TestCommodity_ValidateWithContext_HappyPaths(t *testing.T) {
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "USD",
@@ -152,7 +152,7 @@ func TestCommodity_ValidateWithContext_HappyPaths(t *testing.T) {
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "EUR",
@@ -171,11 +171,52 @@ func TestCommodity_ValidateWithContext_HappyPaths(t *testing.T) {
 				Name:                  "Draft Commodity",
 				ShortName:             "DC",
 				Type:                  models.CommodityTypeElectronics,
-				AreaID:                "area1",
+				AreaID:                new("area1"),
 				Count:                 1,
 				Status:                models.CommodityStatusInUse,
 				OriginalPriceCurrency: "USD", // Need to set a valid currency
 				Draft:                 true,
+			},
+			ctxFunc: func(ctx context.Context) context.Context {
+				return validationctx.WithGroupCurrency(ctx, "USD")
+			},
+		},
+		{
+			// Issue #1986: area is optional — a nil AreaID (no area) validates.
+			name: "Valid unassigned commodity (nil area)",
+			commodity: models.Commodity{
+				Name:                   "Unassigned Commodity",
+				ShortName:              "UC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 nil,
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "USD",
+				ConvertedOriginalPrice: decimal.Zero,
+				CurrentPrice:           decimal.NewFromFloat(90.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
+			},
+			ctxFunc: func(ctx context.Context) context.Context {
+				return validationctx.WithGroupCurrency(ctx, "USD")
+			},
+		},
+		{
+			// Issue #1986: an empty-string AreaID is also "no area" and validates
+			// (the model no longer enforces NotEmpty on the field).
+			name: "Valid unassigned commodity (empty area)",
+			commodity: models.Commodity{
+				Name:                   "Unassigned Commodity",
+				ShortName:              "UC",
+				Type:                   models.CommodityTypeElectronics,
+				AreaID:                 new(""),
+				Count:                  1,
+				OriginalPrice:          decimal.NewFromFloat(100.00),
+				OriginalPriceCurrency:  "USD",
+				ConvertedOriginalPrice: decimal.Zero,
+				CurrentPrice:           decimal.NewFromFloat(90.00),
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2023-01-01"),
 			},
 			ctxFunc: func(ctx context.Context) context.Context {
 				return validationctx.WithGroupCurrency(ctx, "USD")
@@ -200,7 +241,7 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 		Name:                   "Test Commodity",
 		ShortName:              "TC",
 		Type:                   models.CommodityTypeElectronics,
-		AreaID:                 "area1",
+		AreaID:                 new("area1"),
 		Count:                  1,
 		OriginalPrice:          decimal.NewFromFloat(100.00),
 		OriginalPriceCurrency:  "USD",
@@ -242,16 +283,6 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 				return validationctx.WithGroupCurrency(ctx, "USD")
 			},
 			errorContains: "short_name: cannot be blank",
-		},
-		{
-			name: "Missing area ID",
-			modifyCommodity: func(c *models.Commodity) {
-				c.AreaID = ""
-			},
-			modifyContext: func(ctx context.Context) context.Context {
-				return validationctx.WithGroupCurrency(ctx, "USD")
-			},
-			errorContains: "area_id: cannot be blank",
 		},
 		{
 			name: "Invalid count",
@@ -346,7 +377,7 @@ func TestCommodity_ValidateWithContext_PriceValidation_HappyPath(t *testing.T) {
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "USD",
@@ -363,7 +394,7 @@ func TestCommodity_ValidateWithContext_PriceValidation_HappyPath(t *testing.T) {
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "EUR",
@@ -380,7 +411,7 @@ func TestCommodity_ValidateWithContext_PriceValidation_HappyPath(t *testing.T) {
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "EUR",
@@ -403,7 +434,7 @@ func TestCommodity_ValidateWithContext_PriceValidation_HappyPath(t *testing.T) {
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "USD",
@@ -440,7 +471,7 @@ func TestCommodity_ValidateWithContext_PriceValidation_UnhappyPaths(t *testing.T
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "USD",
@@ -458,7 +489,7 @@ func TestCommodity_ValidateWithContext_PriceValidation_UnhappyPaths(t *testing.T
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "EUR",
@@ -496,7 +527,7 @@ func TestCommodity_ValidateWithContext_NegativePrices(t *testing.T) {
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(-100.00),
 				OriginalPriceCurrency:  "USD",
@@ -514,7 +545,7 @@ func TestCommodity_ValidateWithContext_NegativePrices(t *testing.T) {
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "USD",
@@ -532,7 +563,7 @@ func TestCommodity_ValidateWithContext_NegativePrices(t *testing.T) {
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "USD",
@@ -577,7 +608,7 @@ func TestCommodity_ValidateWithContext_NameLength(t *testing.T) {
 				Name:                   longName,
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "USD",
@@ -594,7 +625,7 @@ func TestCommodity_ValidateWithContext_NameLength(t *testing.T) {
 				Name:                   "Test Commodity",
 				ShortName:              longShortName,
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "area1",
+				AreaID:                 new("area1"),
 				Count:                  1,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "USD",
@@ -632,7 +663,7 @@ func TestCommodity_JSONMarshaling(t *testing.T) {
 		Name:                   "Test Commodity",
 		ShortName:              "TC",
 		Type:                   models.CommodityTypeElectronics,
-		AreaID:                 "area1",
+		AreaID:                 new("area1"),
 		Count:                  2,
 		OriginalPrice:          decimal.NewFromFloat(100.00),
 		OriginalPriceCurrency:  "USD",
@@ -665,7 +696,8 @@ func TestCommodity_JSONMarshaling(t *testing.T) {
 	c.Assert(newCommodity.Name, qt.Equals, commodity.Name)
 	c.Assert(newCommodity.ShortName, qt.Equals, commodity.ShortName)
 	c.Assert(newCommodity.Type, qt.Equals, commodity.Type)
-	c.Assert(newCommodity.AreaID, qt.Equals, commodity.AreaID)
+	// AreaID is a *string (issue #1986); compare values across the JSON round-trip.
+	c.Assert(newCommodity.AreaID, qt.DeepEquals, commodity.AreaID)
 	c.Assert(newCommodity.Count, qt.Equals, commodity.Count)
 	c.Assert(newCommodity.OriginalPrice.Equal(commodity.OriginalPrice), qt.IsTrue)
 	c.Assert(newCommodity.OriginalPriceCurrency, qt.Equals, commodity.OriginalPriceCurrency)
@@ -715,7 +747,7 @@ func TestCommodity_ValidateWithContext_QuantityForbidsWarranty(t *testing.T) {
 		Name:                   "Pack of bulbs",
 		ShortName:              "bulbs",
 		Type:                   models.CommodityTypeOther,
-		AreaID:                 "area1",
+		AreaID:                 new("area1"),
 		Count:                  12,
 		OriginalPrice:          decimal.NewFromFloat(20.00),
 		OriginalPriceCurrency:  "USD",
@@ -755,4 +787,29 @@ func TestCommodity_ValidateWithContext_QuantityForbidsWarranty(t *testing.T) {
 		err := commodity.ValidateWithContext(ctx)
 		c.Assert(err, qt.IsNil)
 	})
+}
+
+func TestCommodity_NormalizeAreaID(t *testing.T) {
+	testCases := []struct {
+		name string
+		in   *string
+		want *string
+	}{
+		{"empty string collapses to nil", new(""), nil},
+		{"nil stays nil", nil, nil},
+		{"real id preserved", new("area-1"), new("area-1")},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			commodity := models.Commodity{AreaID: tc.in}
+			commodity.NormalizeAreaID()
+			if tc.want == nil {
+				c.Assert(commodity.AreaID, qt.IsNil)
+			} else {
+				c.Assert(commodity.AreaID, qt.IsNotNil)
+				c.Assert(*commodity.AreaID, qt.Equals, *tc.want)
+			}
+		})
+	}
 }

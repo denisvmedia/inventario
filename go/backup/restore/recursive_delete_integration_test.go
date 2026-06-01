@@ -70,7 +70,7 @@ func TestRestoreService_ClearExistingData_RecursiveDelete(t *testing.T) {
 			CreatedByUserID: "test-user-id",
 		},
 		Name:   "Existing Commodity",
-		AreaID: createdArea.ID,
+		AreaID: new(createdArea.ID),
 	}
 	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
@@ -183,7 +183,7 @@ func TestRestoreService_ClearExistingData_MultipleLocations(t *testing.T) {
 					CreatedByUserID: "test-user-id",
 				},
 				Name:   "Commodity " + string(rune('A'+i)) + string(rune('1'+j)),
-				AreaID: createdArea.ID,
+				AreaID: new(createdArea.ID),
 			}
 			_, err = registrySet.CommodityRegistry.Create(ctx, commodity)
 			c.Assert(err, qt.IsNil)

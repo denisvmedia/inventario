@@ -147,6 +147,12 @@ type CommodityListOptions struct {
 	// AreaID, when non-empty, restricts to a single area. Use "" to
 	// disable the filter (rather than a sentinel like "*").
 	AreaID string
+	// Unassigned, when true and AreaID is empty, restricts the result to
+	// commodities that have no area (area_id IS NULL) — the "unassigned"
+	// bucket (issue #1986). Ignored when AreaID is set: an explicit area
+	// filter always wins, so passing both is the same as filtering by
+	// AreaID alone.
+	Unassigned bool
 	// Search runs a case-insensitive substring match against the Name
 	// and ShortName fields. Empty = no search.
 	Search string

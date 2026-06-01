@@ -249,6 +249,7 @@
     "lentOut": "Lent out",
     "status": "Status",
     "type": "Type",
+    "unassigned": "No location",
     "warranty": "Warranty"
   },
   "form": {

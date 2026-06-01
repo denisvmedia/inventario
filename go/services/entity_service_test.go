@@ -55,7 +55,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 				// Create commodity
 				commodity, _ := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 					Name:   "Test Commodity",
-					AreaID: area.ID,
+					AreaID: new(area.ID),
 				})
 
 				// Create linked files
@@ -96,7 +96,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 				// Create commodity without files
 				commodity, _ := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 					Name:   "Test Commodity",
-					AreaID: area.ID,
+					AreaID: new(area.ID),
 				})
 
 				return commodity.ID, []string{}
@@ -168,11 +168,11 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 				// Create commodities
 				commodity1, _ := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 					Name:   "Test Commodity 1",
-					AreaID: area.ID,
+					AreaID: new(area.ID),
 				})
 				commodity2, _ := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 					Name:   "Test Commodity 2",
-					AreaID: area.ID,
+					AreaID: new(area.ID),
 				})
 
 				// Create linked files
@@ -288,11 +288,11 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 				// Create commodities
 				commodity1, _ := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 					Name:   "Test Commodity 1",
-					AreaID: area1.ID,
+					AreaID: new(area1.ID),
 				})
 				commodity2, _ := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
 					Name:   "Test Commodity 2",
-					AreaID: area2.ID,
+					AreaID: new(area2.ID),
 				})
 
 				// Create linked files

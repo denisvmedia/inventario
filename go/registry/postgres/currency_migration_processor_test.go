@@ -49,7 +49,7 @@ func TestCurrencyMigrationProcessor_HappyPath_SmallGroup(t *testing.T) {
 		Name:                   "Second Commodity",
 		ShortName:              "SC",
 		Type:                   models.CommodityTypeElectronics,
-		AreaID:                 area.ID,
+		AreaID:                 new(area.ID),
 		Count:                  1,
 		OriginalPrice:          decimal.NewFromFloat(50.00),
 		OriginalPriceCurrency:  "USD",

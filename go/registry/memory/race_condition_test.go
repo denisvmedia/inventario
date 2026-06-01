@@ -65,7 +65,7 @@ func TestMemoryRegistryUserContextRaceCondition(t *testing.T) {
 				CreatedByUserID: u1.ID,
 			},
 			Name:   "Test Commodity",
-			AreaID: "area-1",
+			AreaID: new("area-1"),
 		}
 
 		// User1 creates the commodity
@@ -251,7 +251,7 @@ func TestE2EScenarioSimulation(t *testing.T) {
 			CreatedByUserID: u.ID,
 		},
 		Name:   "Test Commodity",
-		AreaID: "area-1",
+		AreaID: new("area-1"),
 	}
 
 	// Step 1: Create commodity

@@ -133,7 +133,7 @@ func seedTagCommodity(c *qt.C, set *registry.Set, ctx context.Context, areaID, n
 		Name:                   name,
 		ShortName:              name,
 		Type:                   models.CommodityTypeOther,
-		AreaID:                 areaID,
+		AreaID:                 new(areaID),
 		Count:                  1,
 		OriginalPrice:          decimal.NewFromFloat(100.00),
 		OriginalPriceCurrency:  "USD",
