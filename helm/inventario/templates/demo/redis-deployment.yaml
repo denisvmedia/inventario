@@ -8,12 +8,26 @@ metadata:
     app.kubernetes.io/component: demo-redis
 spec:
   replicas: 1
+  {{- /*
+    recreateOnDeploy (master only): demo Redis is ALWAYS emptyDir (--save "",
+    --appendonly no — there is no demo.redis.persistence option), so the
+    image-tag-keyed annotation below recreates the pod every master merge and
+    its strategy flips to Recreate to avoid a two-pod overlap during the roll.
+    Redis carries only ephemeral rate-limit / blacklist / CSRF state, so wiping
+    it on master is harmless; the helper is a no-op unless recreateOnDeploy=true.
+  */}}
+  {{- include "inventario.demoRecreateStrategy" . | nindent 2 }}
   selector:
     matchLabels:
       {{- include "inventario.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: demo-redis
   template:
     metadata:
+      {{- $recreate := include "inventario.demoRecreatePodAnnotations" (dict "root" $ "store" "redis" "persistenceEnabled" false) }}
+      {{- if $recreate }}
+      annotations:
+        {{- $recreate | nindent 8 }}
+      {{- end }}
       labels:
         {{- include "inventario.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: demo-redis

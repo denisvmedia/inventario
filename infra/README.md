@@ -510,6 +510,30 @@ next 60 s poll → pods roll. No manual `rollout restart` needed. The
 `inv-vcl01-longevity` ApplicationSet reads the same pin file (it tracks
 master too).
 
+**Disposable master vs durable longevity.** Both envs run off the *same*
+master image pin, but they are deliberately opposite in data lifecycle:
+
+- `inv-vcl01-master` is **disposable** — its demo Postgres/MinIO/Redis use
+  `emptyDir`, and the master ApplicationSet sets `demo.recreateOnDeploy: true`.
+  That makes the chart stamp an `image-tag-keyed` pod annotation
+  (`checksum/recreate-on-deploy: sha-<7>`) on each demo deployment. Because the
+  pin flips the tag every merge, the demo pod template changes → the pod (and
+  its `emptyDir`) is recreated → the DB/bucket is wiped → the wave -5 setup Job
+  + wave +5 init-data Job re-migrate, re-seed, and (idempotently, via #2001's
+  `backoffice bootstrap --ensure`) re-create the sops operator on a clean store.
+  This is what makes master genuinely *reset each merge* — without it the demo
+  pods survive app redeploys (only the app Deployment + Jobs roll) and stale
+  rows accumulate. The `Recreate` Deployment strategy tears the old
+  data-bearing pod down before the new one starts, so the Service never routes
+  to stale data mid-roll.
+- `inv-vcl01-longevity` is **durable** — `longevity-base.values.yaml` turns on
+  `demo.postgresql.persistence.enabled` / `demo.minio.persistence.enabled`
+  (PVC-backed, Velero-backed). It leaves `demo.recreateOnDeploy` at its `false`
+  default, so the annotation is never emitted and its pods are *not* roll-wiped.
+  As a hard guard, the chart **fails to render** if `recreateOnDeploy` is ever
+  combined with demo persistence, so an accidental enable on longevity can never
+  silently wipe its backed-up data.
+
 To check which commit is currently deployed:
 
 ```bash
@@ -603,6 +627,11 @@ with kubectl" is self-correcting; no manual re-sync needed.
 ---
 
 ## 5. Troubleshooting
+
+> For a fast, copy-pasteable command reference (inspecting ArgoCD, reading
+> crash-looping pod logs, the `master-pin` flow, safe secret/DB inspection),
+> see the [**troubleshooting cheat-sheet**](./CHEATSHEET.md). The sections
+> below are the longer scenario walkthroughs.
 
 ### Preview not appearing after labeling
 

@@ -24,6 +24,20 @@ spec:
       app.kubernetes.io/component: demo-minio
   template:
     metadata:
+      {{- /*
+        recreateOnDeploy (master only): an image-tag-keyed annotation that
+        changes every master merge so this pod (and its emptyDir bucket) is
+        recreated — wiping demo objects so master is fresh each merge. Emits
+        nothing unless demo.recreateOnDeploy=true, and FAILS rendering if
+        persistence is on (PVC-backed longevity must never be roll-wiped). See
+        _helpers.tpl. spec.strategy is already Recreate above (single-writer
+        emptyDir; the wave -6 bucket-create Job re-creates the bucket).
+      */}}
+      {{- $recreate := include "inventario.demoRecreatePodAnnotations" (dict "root" $ "store" "minio" "persistenceEnabled" .Values.demo.minio.persistence.enabled) }}
+      {{- if $recreate }}
+      annotations:
+        {{- $recreate | nindent 8 }}
+      {{- end }}
       labels:
         {{- include "inventario.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: demo-minio

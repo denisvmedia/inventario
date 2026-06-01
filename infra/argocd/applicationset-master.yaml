@@ -140,6 +140,21 @@ spec:
                 # on top of the global budget. (The FE Add-Item CTA shows
                 # regardless of this flag — it only adds the AI accelerator.)
                 publicScanEnabled: true
+              # Disposable-master reset (the whole point of this env): wipe the
+              # emptyDir-backed demo Postgres / MinIO / Redis on every master
+              # merge so master starts FRESH each time. master's image tag is the
+              # per-commit `sha-<7>`, so the chart's image-tag-keyed pod
+              # annotation changes every merge → the demo pods are recreated →
+              # their emptyDir is wiped → the setup (wave -5) + init-data (wave
+              # +5) Jobs re-migrate, re-seed, and re-create the sops operator on
+              # the clean store. This is why stale rows (e.g. an old back-office
+              # operator) no longer linger on master. Complements #2001 (#2001
+              # made bootstrap idempotent so the re-create is a clean `--ensure`).
+              # ⚠️ master ONLY — preview-base/longevity keep it false; the chart
+              # FAILS to render if combined with demo persistence (PVC), so it
+              # can never roll-wipe the durable, Velero-backed longevity data.
+              demo:
+                recreateOnDeploy: true
               ingress:
                 annotations:
                   tailscale.com/hostname: inv-vcl01-master

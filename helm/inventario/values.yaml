@@ -904,6 +904,26 @@ containerSecurityContext:
 # You do NOT need to set the matching secrets.* fields manually.
 # ============================================================
 demo:
+  # Recreate (WIPE) the emptyDir-backed demo Postgres / MinIO / Redis pods on
+  # every deploy, so the demo dataset is FRESH each time.
+  #
+  # When true, each demo deployment template gets a pod-template annotation
+  # (`checksum/recreate-on-deploy`) keyed to the resolved app image tag. On the
+  # master preview that tag is the per-commit `sha-<7>`, so it changes every
+  # merge → the pod template changes → the pod is recreated → its emptyDir is
+  # WIPED → the wave -5 setup Job + wave +5 init-data Job re-migrate, re-seed,
+  # and (via #2001's idempotent `--ensure`) re-create the sops operator on the
+  # clean store. The demo Deployment strategy is `Recreate` so the old
+  # data-bearing pod is torn down before the new one starts (no mid-roll Service
+  # hit on stale data).
+  #
+  # ⚠️  This WIPES demo data on every deploy. Intended ONLY for the disposable
+  # master env (inv-vcl01-master). NEVER enable it where demo persistence (PVC)
+  # is on — doing so is a hard render error: the chart FAILS `helm template`
+  # rather than risk roll-wiping a PVC-backed store (the durable, Velero-backed
+  # longevity env). NEVER enable in production. PR previews leave it false.
+  recreateOnDeploy: false
+
   postgresql:
     # Enable an in-cluster PostgreSQL instance
     enabled: false
