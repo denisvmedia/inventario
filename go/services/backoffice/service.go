@@ -78,6 +78,15 @@ type BootstrapRequest struct {
 	Role     models.BackofficeRole
 	Password string // optional; auto-generated when empty
 	Force    bool   // allow creating an additional user when the table is non-empty
+	// MFAEnforced controls the new operator's MFAEnforced column. nil keeps
+	// the secure default (true): the operator must enrol TOTP via
+	// `inventario backoffice mfa setup` before the login handler will issue a
+	// session token (a no-secret MFAEnforced=true row gets the 501
+	// fail-closed response). Demo/preview auto-provisioning passes a non-nil
+	// false so the seeded operator can sign in with password only — there is
+	// no interactive terminal on a Helm Job to copy a TOTP enrolment URL, and
+	// forcing MFA there reproduces the demo lockout #1967 warns about.
+	MFAEnforced *bool
 }
 
 // BootstrapResult captures the outcome of a Bootstrap call.
@@ -178,15 +187,7 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 		PasswordHash: string(hash),
 		Role:         role,
 		IsActive:     true,
-		// MFAEnforced defaults to true in Phase 4: every freshly
-		// bootstrapped operator must run `inventario backoffice mfa setup`
-		// before they can sign in. The login flow returns 501 with
-		// `backoffice.mfa_not_implemented` while MFAEnforced=true but no
-		// secret row exists; the operator's first sign-in only succeeds
-		// after the CLI enrols them. This matches the schema default
-		// (also flipped to true at this commit) so the data state and
-		// the security promise stay in sync.
-		MFAEnforced: true,
+		MFAEnforced:  resolveMFAEnforced(req.MFAEnforced),
 	}
 
 	// Run the model's full validation (length caps, EmailPattern match)
@@ -218,6 +219,20 @@ func (s *Service) Bootstrap(ctx context.Context, req BootstrapRequest) (*Bootstr
 		User:              created,
 		GeneratedPassword: generated,
 	}, nil
+}
+
+// resolveMFAEnforced collapses the optional MFAEnforced override into a
+// concrete column value. nil keeps the secure default (true): a freshly
+// bootstrapped operator must run `inventario backoffice mfa setup` before they
+// can sign in — the login flow returns 501 (`backoffice.mfa_not_implemented`)
+// while MFAEnforced=true but no secret row exists, matching the schema default.
+// A non-nil false (demo/preview auto-provisioning) provisions a password-only
+// operator that can sign in without TOTP enrolment — see BootstrapRequest.
+func resolveMFAEnforced(override *bool) bool {
+	if override != nil {
+		return *override
+	}
+	return true
 }
 
 // nowInUTC returns the current time in UTC. Tiny helper so MFA code

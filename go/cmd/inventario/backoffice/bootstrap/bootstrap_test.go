@@ -246,3 +246,46 @@ func TestBootstrap_RejectsMalformedEmail(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "validation failed")
 }
+
+// TestBootstrap_MFADefaultsEnforced pins the secure default: with no
+// --mfa-enforced flag (and no config/env override) the seeded operator is
+// created MFA-enforced. Guards against the regression PR #1994 review flagged —
+// a plain bool / env-default could let an omitted value silently land as false.
+func TestBootstrap_MFADefaultsEnforced(t *testing.T) {
+	c := qt.New(t)
+	fs := setupMemoryAsPostgres(c)
+
+	_, err := runBootstrap(c, "postgres://test",
+		"--email=admin@example.com",
+		"--name=Ops Admin",
+	)
+	c.Assert(err, qt.IsNil)
+
+	users, err := fs.BackofficeUserRegistry.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(users, qt.HasLen, 1)
+	c.Assert(users[0].MFAEnforced, qt.IsTrue,
+		qt.Commentf("omitting --mfa-enforced must keep the secure default (MFA enforced)"))
+}
+
+// TestBootstrap_MFADisabledByFlag pins the demo/preview opt-out: an explicit
+// --mfa-enforced=false provisions a password-only operator (MFAEnforced=false),
+// so a Helm Job — which has no interactive terminal for TOTP enrolment — can
+// seed an operator that can actually sign in at /backoffice/login (issue #1967).
+func TestBootstrap_MFADisabledByFlag(t *testing.T) {
+	c := qt.New(t)
+	fs := setupMemoryAsPostgres(c)
+
+	_, err := runBootstrap(c, "postgres://test",
+		"--email=admin@example.com",
+		"--name=Ops Admin",
+		"--mfa-enforced=false",
+	)
+	c.Assert(err, qt.IsNil)
+
+	users, err := fs.BackofficeUserRegistry.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(users, qt.HasLen, 1)
+	c.Assert(users[0].MFAEnforced, qt.IsFalse,
+		qt.Commentf("--mfa-enforced=false must provision a password-only operator"))
+}

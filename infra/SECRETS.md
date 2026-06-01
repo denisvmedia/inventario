@@ -227,6 +227,25 @@ openssl rand -base64 24
 
 Stash both for "Filling the bundle".
 
+The `backoffice.password` field seeds the back-office (platform-operator)
+login for `/backoffice/login` on the demo/preview envs (#1967), in the same
+flow as `admin.password`: `apply-secrets.sh` writes it into the
+`inventario-admin` Secret under key `BACKOFFICE_USER_PASSWORD`, and the chart's
+setup / init-data Job reads it via `secretKeyRef` to run
+`inventario backoffice bootstrap --password` (idempotent on email) when
+`backofficeUser.enabled=true` — which `preview-base.values.yaml` sets on master
++ longevity, with `mfaEnforced=false` so the operator can sign in password-only
+(a Helm Job can't complete interactive TOTP enrollment, and an MFA-enforced
+operator with no secret row fails closed with HTTP 501 at login). Same
+complexity rule as the admin password (min 8 chars + upper + lower + digit).
+Per-PR previews inline a dev value (`setupJob.initData.backofficeUserPassword`)
+in `applicationset-pr.yaml` instead. Leave `backoffice.password` empty only if
+you do NOT want a back-office operator on these envs — the Job's bootstrap step
+then fails loudly until it is set. Production never enables `backofficeUser`, so
+the field is inert there (operators are created by hand so the one-time password
+is never stored, and MFA is enrolled out-of-band via
+`inventario backoffice mfa setup`).
+
 ### 4b. Generate the stable signing keys (recommended for master + longevity)
 
 Three runtime keys pin the apiserver's signing material on the persistent envs.
@@ -385,6 +404,10 @@ chmod 600 infra/vm/secrets/secrets.local.yaml
 #    master + longevity, optional),
 #    tailscale.{auth_key, oauth_client_id, oauth_client_secret, tailnet_name},
 #    github.{app_id, app_installation_id, app_private_key, url}.
+#    Fill backoffice.password (step 4 above) ONLY for the demo/preview
+#    /backoffice/login operator on master + longevity (8+ chars + upper +
+#    lower + digit); leave it empty to skip the back-office operator there
+#    (per-PR previews inline their own via setupJob.initData.backofficeUserPassword).
 #    Fill anthropic.api_key (step 7 above) ONLY to turn the AI-vision feature
 #    on for master + longevity — and mind the boot-ordering hazard noted there.
 #    Fill the velero.* block (step 6 above) ONLY if you want the daily R2

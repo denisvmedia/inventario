@@ -97,6 +97,19 @@ remote_apply() {
 # script ensures the missing field is surfaced loudly to bootstrap.sh
 # (which runs under `set -e` and will halt the whole bootstrap).
 ADMIN_PASSWORD=$(lookup "admin.password")
+# Optional back-office (platform-operator) password for the demo/preview envs
+# (#1967). When present it is injected into the inventario-admin Secret below as
+# BACKOFFICE_USER_PASSWORD so the chart's setup/init-data Job can run
+# `inventario backoffice bootstrap --password` (the Job references it via
+# secretKeyRef when backofficeUser.enabled=true, which preview-base sets on
+# master + longevity). Absent it, warn (don't fail) — the persistent envs ran
+# without a back-office operator for a long time, so this stays best-effort; the
+# bootstrap step's secretKeyRef then points at a missing key and that init
+# container fails loudly in the Job logs (it does not block the app Deployment).
+BACKOFFICE_USER_PASSWORD=$(lookup "backoffice.password")
+if [ -z "$BACKOFFICE_USER_PASSWORD" ]; then
+    warn "backoffice.password missing in secrets bundle; inv-vcl01-master/longevity layer backofficeUser.enabled=true (preview-base, #1967), so their setup Job's 'inventario backoffice bootstrap' step will fail until BACKOFFICE_USER_PASSWORD is present. Set backoffice.password (8+ chars, upper, lower, digit) to auto-provision the /backoffice/login operator."
+fi
 # Optional runtime JWT signing key for the persistent envs (master + longevity).
 # When present it is injected into the inventario-admin Secret below as
 # INVENTARIO_RUN_JWT_SECRET so the apiserver stops minting a fresh random secret
@@ -184,6 +197,12 @@ stringData:
   SETUP_ADMIN_PASSWORD: |-
 $(printf '%s' "$ADMIN_PASSWORD" | sed 's/^/    /')
 EOF
+            if [ -n "$BACKOFFICE_USER_PASSWORD" ]; then
+                cat <<EOF
+  BACKOFFICE_USER_PASSWORD: |-
+$(printf '%s' "$BACKOFFICE_USER_PASSWORD" | sed 's/^/    /')
+EOF
+            fi
             if [ -n "$JWT_SECRET" ]; then
                 cat <<EOF
   INVENTARIO_RUN_JWT_SECRET: |-
