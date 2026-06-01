@@ -61,8 +61,13 @@ metadata:
   name: argocd-stuck-sync-watchdog
   namespace: argocd
 rules:
+  # The Application CRD ships subresources:{} (no /status subresource), so
+  # terminating an op is a patch of `status` on the MAIN `applications`
+  # resource — exactly what `argocd app terminate-op` does server-side.
+  # (If a future ArgoCD ever enables the status subresource, add
+  # `applications/status` here and target it in watchdog.sh.)
   - apiGroups: ["argoproj.io"]
-    resources: ["applications", "applications/status"]
+    resources: ["applications"]
     verbs: ["get", "list", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -129,14 +134,21 @@ data:
 
     # Candidate apps: operation Running, started older than THRESHOLD seconds,
     # destination namespace under the preview prefix. Emit "name<TAB>namespace".
-    candidates="$(api_get "/apis/argoproj.io/v1alpha1/namespaces/$ARGO_NS/applications" \
+    #
+    # Wrapped in `( ... ) 2>/dev/null || echo ''` so a transient apiserver error
+    # (curl has no --fail, so a 4xx/5xx error body would make jq exit non-zero)
+    # can't abort the whole run under `set -eu` — on a blip we simply do nothing
+    # this cycle and the next CronJob tick retries, rather than fail-open silently.
+    # `try fromdateiso8601 catch empty` likewise drops a malformed startedAt for
+    # one app instead of aborting the stream for all of them.
+    candidates="$( (api_get "/apis/argoproj.io/v1alpha1/namespaces/$ARGO_NS/applications" \
         | jq -r --argjson thr "$THRESHOLD" --arg pfx "$NS_PREFIX" '
             .items[]
             | select(.status.operationState.phase == "Running")
             | select((.spec.destination.namespace // "") | startswith($pfx))
-            | select(((.status.operationState.startedAt // empty) | fromdateiso8601) < (now - $thr))
+            | select(((.status.operationState.startedAt // empty) | (try fromdateiso8601 catch empty)) < (now - $thr))
             | "\(.metadata.name)\t\(.spec.destination.namespace)"
-        ')"
+        ') 2>/dev/null || echo '' )"
 
     if [ -z "$candidates" ]; then
         echo "No sync operations Running > ${THRESHOLD}s under '${NS_PREFIX}*'. Nothing to do."
@@ -163,18 +175,21 @@ data:
 
         echo "app=$name ns=$ns: op Running > ${THRESHOLD}s with ${stuck} image-pull-stuck pod(s) -> terminating the wedged sync op."
         body='{"status":{"operationState":{"phase":"Terminating"}}}'
-        base="/apis/argoproj.io/v1alpha1/namespaces/$ARGO_NS/applications/$name"
-        # The stock ArgoCD Application CRD has no /status subresource, so the
-        # merge-patch on the main resource updates status. Try the subresource
-        # endpoint too in case an install enabled it; whichever isn't backed
-        # returns a harmless 404/no-op.
-        for ep in "$base" "$base/status"; do
-            code="$(curl -sS -o /tmp/patch.out -w '%{http_code}' --cacert "$CA" \
-                -H "Authorization: Bearer $TOKEN" \
-                -H "Content-Type: application/merge-patch+json" \
-                -X PATCH "$API$ep" -d "$body" || echo 000)"
-            echo "  PATCH ${ep##*/v1alpha1} -> HTTP ${code}"
-        done
+        # Patch `status` on the MAIN resource (the CRD has no /status
+        # subresource — see the Role). The controller honors
+        # operationState.phase=Terminating and, with selfHeal on, re-syncs at
+        # the current head. `|| echo 000` keeps a transient PATCH failure from
+        # aborting the run; a non-2xx just gets retried next tick.
+        code="$(curl -sS -o /tmp/patch.out -w '%{http_code}' --cacert "$CA" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/merge-patch+json" \
+            -X PATCH "$API/apis/argoproj.io/v1alpha1/namespaces/$ARGO_NS/applications/$name" \
+            -d "$body" || echo 000)"
+        if [ "$code" = "200" ] || [ "$code" = "201" ]; then
+            echo "  terminate-op accepted (HTTP $code); selfHeal will re-sync at the current head."
+        else
+            echo "  WARN: terminate-op patch returned HTTP $code: $(cat /tmp/patch.out 2>/dev/null)" >&2
+        fi
     done
 ---
 apiVersion: batch/v1
