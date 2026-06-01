@@ -152,6 +152,10 @@ type StepKey = "ai" | FormStepKey
 // #1398/#1399.
 const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
   ai: [],
+  // area_id stays in the Basics set so a server-side area_id error (only
+  // reachable in edit mode now) still maps back to Basics via the 422
+  // handler — but it never blocks Next: area is optional (#1986/#1987) so
+  // its schema is a bare z.string() that always passes step validation.
   basics: ["name", "short_name", "urls", "type", "area_id", "status", "count", "draft"],
   purchase: [
     "purchase_date",
@@ -827,6 +831,7 @@ export function CommodityFormDialog({
                 areas={areas}
                 locations={locations}
                 showStatus={mode === "edit"}
+                showLocationPicker={mode === "edit"}
               />
             ) : null}
             {step === "purchase" ? (
@@ -1001,8 +1006,18 @@ function FieldLabel({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RHF types thread generics through every helper; concrete types here are noisy.
 function BasicsStep(props: any) {
   const { t } = useTranslation()
-  const { register, control, errors, watch, setValue, trigger, areas, locations, showStatus } =
-    props
+  const {
+    register,
+    control,
+    errors,
+    watch,
+    setValue,
+    trigger,
+    areas,
+    locations,
+    showStatus,
+    showLocationPicker,
+  } = props
   // Mock AddItemDialog L1074-L1091: Location and Area are paired
   // selects. The form schema only carries `area_id` (the BE resolves
   // location via the area), so the location_id lives in local UI
@@ -1176,73 +1191,88 @@ function BasicsStep(props: any) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5">
-          <FieldLabel htmlFor="commodity-location" required>
-            {t("commodities:fields.location")}
-          </FieldLabel>
-          <Select value={selectedLocationId || undefined} onValueChange={handleLocationChange}>
-            <SelectTrigger id="commodity-location" className="w-full" aria-required>
-              <SelectValue placeholder={t("commodities:fields.locationPlaceholder")} />
-            </SelectTrigger>
-            <SelectContent>
-              {visibleLocations.map((l) => (
-                <SelectItem key={l.id} value={l.id ?? ""}>
-                  {l.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <FieldLabel htmlFor="commodity-area" required>
-            {t("commodities:fields.area")}
-          </FieldLabel>
-          <Controller
-            control={control}
-            name="area_id"
-            render={({ field }) => (
-              <Select
-                // Re-key on selectedLocationId so a location swap
-                // remounts the Select with a clean Radix internal
-                // state — without this, Radix keeps the previously-
-                // selected label visible in the trigger even though
-                // the controlled value has been reset to "" and the
-                // option is no longer in the list, leaving the field
-                // looking blank rather than restoring the
-                // "Pick an area" placeholder.
-                key={selectedLocationId || "no-location"}
-                value={field.value || undefined}
-                onValueChange={field.onChange}
-                disabled={!selectedLocationId}
-              >
-                <SelectTrigger
-                  id="commodity-area"
-                  className="w-full"
-                  aria-required
-                  aria-invalid={!!errors.area_id}
+      {/* Location/Area picker — edit mode only (#1987). The create
+          dialog no longer asks for a location; items can be created
+          unassigned and a location offered afterwards via a banner.
+          In edit mode the picker also lets the user un-assign (Clear)
+          since area is now optional (#1986). */}
+      {showLocationPicker ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <FieldLabel htmlFor="commodity-location">
+                {t("commodities:fields.location")}
+              </FieldLabel>
+              {selectedLocationId ? (
+                <button
+                  type="button"
+                  onClick={() => handleLocationChange("")}
+                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  <SelectValue
-                    placeholder={
-                      selectedLocationId
-                        ? t("commodities:fields.areaPlaceholder")
-                        : t("commodities:fields.areaPlaceholderNoLocation")
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {visibleAreas.map((a) => (
-                    <SelectItem key={a.id} value={a.id ?? ""}>
-                      {a.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-          <FieldError error={errors.area_id} />
+                  {t("commodities:fields.clearLocation")}
+                </button>
+              ) : null}
+            </div>
+            <Select value={selectedLocationId || undefined} onValueChange={handleLocationChange}>
+              <SelectTrigger id="commodity-location" className="w-full">
+                <SelectValue placeholder={t("commodities:fields.locationPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                {visibleLocations.map((l) => (
+                  <SelectItem key={l.id} value={l.id ?? ""}>
+                    {l.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <FieldLabel htmlFor="commodity-area">{t("commodities:fields.area")}</FieldLabel>
+            <Controller
+              control={control}
+              name="area_id"
+              render={({ field }) => (
+                <Select
+                  // Re-key on selectedLocationId so a location swap
+                  // remounts the Select with a clean Radix internal
+                  // state — without this, Radix keeps the previously-
+                  // selected label visible in the trigger even though
+                  // the controlled value has been reset to "" and the
+                  // option is no longer in the list, leaving the field
+                  // looking blank rather than restoring the
+                  // "Pick an area" placeholder.
+                  key={selectedLocationId || "no-location"}
+                  value={field.value || undefined}
+                  onValueChange={field.onChange}
+                  disabled={!selectedLocationId}
+                >
+                  <SelectTrigger
+                    id="commodity-area"
+                    className="w-full"
+                    aria-invalid={!!errors.area_id}
+                  >
+                    <SelectValue
+                      placeholder={
+                        selectedLocationId
+                          ? t("commodities:fields.areaPlaceholder")
+                          : t("commodities:fields.areaPlaceholderNoLocation")
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {visibleAreas.map((a) => (
+                      <SelectItem key={a.id} value={a.id ?? ""}>
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            <FieldError error={errors.area_id} />
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {showStatus ? (
         <div className="flex flex-col gap-1.5">
@@ -2468,7 +2498,10 @@ function toRequest(
     name: values.name.trim(),
     short_name: values.short_name.trim(),
     type: values.type as CommodityTypeValue,
-    area_id: values.area_id,
+    // Omit when empty so the BE creates/leaves the item unassigned
+    // (#1986) rather than rejecting "" as a missing area FK. An explicit
+    // clear in edit mode (area_id = "") therefore un-assigns the item.
+    area_id: values.area_id || undefined,
     status: values.status as CommodityStatusValue,
     count: Number(values.count),
     original_price: original,

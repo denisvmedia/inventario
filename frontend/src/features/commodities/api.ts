@@ -227,11 +227,11 @@ export async function getCommodity(
 
 // CreateCommodityRequest mirrors the BE's CommodityRequest envelope's
 // `attributes` shape. Optional fields can be omitted; required ones
-// (name, type, area_id, status) match the model's NOT NULL columns.
+// (name, type, status, count) match the model's NOT NULL columns.
+// area_id is optional (#1986/#1987): an item may be created unassigned.
 export type CreateCommodityRequest = Partial<Commodity> & {
   name: string
   type: string
-  area_id: string
   status: string
   count: number
 }
