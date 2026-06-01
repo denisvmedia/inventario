@@ -47,8 +47,11 @@ export function LandingPage() {
   const [dialogAiScan, setDialogAiScan] = useState(false)
 
   function openAddDialog() {
-    // Coerce the `boolean | undefined` flag (undefined while the boot fetch
-    // is in flight) to a concrete boolean for the snapshot.
+    // `useFeatureFlag` is typed `boolean | undefined` — `public_scan` is an
+    // optional OpenAPI field, so it's `undefined` when the flags response
+    // omits it (the `false` fallback only applies while the query has no
+    // data). `=== true` is required to store it in this boolean state, not
+    // cosmetic: dropping it fails `tsc`.
     setDialogAiScan(publicScanEnabled === true)
     setDialogOpen(true)
   }
