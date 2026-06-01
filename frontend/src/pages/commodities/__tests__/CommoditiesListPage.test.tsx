@@ -400,6 +400,42 @@ describe("<CommoditiesListPage />", () => {
     })
   })
 
+  it("toggles the No-location chip and round-trips unassigned=true to the BE (#1986)", async () => {
+    const user = userEvent.setup()
+    const queries: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).search)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList()
+    await screen.findByTestId("commodity-card")
+    const chip = screen.getByTestId("commodities-filter-unassigned")
+    expect(chip).toHaveAttribute("aria-pressed", "false")
+
+    await user.click(chip)
+    await waitFor(() => {
+      expect(chip).toHaveAttribute("aria-pressed", "true")
+    })
+    await waitFor(() => {
+      expect(queries.some((q) => /[?&]unassigned=true\b/.test(q))).toBe(true)
+    })
+
+    // Clear-filters surfaces because `unassigned` flips hasFilters on;
+    // clicking it un-presses the chip and drops the param entirely.
+    await user.click(screen.getByTestId("commodities-clear-filters"))
+    await waitFor(() => {
+      expect(chip).toHaveAttribute("aria-pressed", "false")
+    })
+    await waitFor(() => {
+      const tail = queries[queries.length - 1] ?? ""
+      expect(/[?&]unassigned=/.test(tail)).toBe(false)
+    })
+  })
+
   it("clears all active filters via Clear filters", async () => {
     const user = userEvent.setup()
     server.use(

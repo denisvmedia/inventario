@@ -362,7 +362,7 @@ func createTestCommodity(c *qt.C, registrySet *registry.Set, areaID string) *mod
 		Name:                   "Test Commodity",
 		ShortName:              "TC",
 		Type:                   models.CommodityTypeElectronics,
-		AreaID:                 areaID,
+		AreaID:                 new(areaID),
 		Count:                  1,
 		OriginalPrice:          decimal.NewFromFloat(100.00),
 		OriginalPriceCurrency:  "USD",

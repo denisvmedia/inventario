@@ -6,6 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"github.com/go-extras/go-kit/ptr"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
@@ -102,7 +103,7 @@ func TestCommodityRegistry_Create_AreaNotFound(t *testing.T) {
 
 	// Create a test commodity with an invalid area ID
 	commodity := models.Commodity{
-		AreaID:    "invalid",
+		AreaID:    new("invalid"),
 		Name:      "test",
 		Status:    models.CommodityStatusInUse,
 		Type:      models.CommodityTypeEquipment,
@@ -182,7 +183,7 @@ func TestCommodityRegistry_List_SortedByPurchaseDate(t *testing.T) {
 
 	for _, tc := range testCases {
 		_, err = registrySet.CommodityRegistry.Create(ctx, models.Commodity{
-			AreaID:       area.ID,
+			AreaID:       new(area.ID),
 			Name:         tc.name,
 			ShortName:    tc.name,
 			Status:       models.CommodityStatusInUse,
@@ -237,7 +238,7 @@ func TestCommodityRegistry_GetMany_BatchFetch(t *testing.T) {
 
 	mkCommodity := func(name string) *models.Commodity {
 		created, cerr := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
-			AreaID:    area.ID,
+			AreaID:    new(area.ID),
 			Name:      name,
 			ShortName: name,
 			Status:    models.CommodityStatusInUse,
@@ -328,7 +329,7 @@ func TestCommodityRegistry_GetMany_GroupScoped(t *testing.T) {
 	areaA, err := regA.AreaRegistry.Create(ctxA, models.Area{Name: "AreaA", LocationID: locA.ID})
 	c.Assert(err, qt.IsNil)
 	mineA, err := regA.CommodityRegistry.Create(ctxA, models.Commodity{
-		AreaID: areaA.ID, Name: "a-only", ShortName: "ao",
+		AreaID: new(areaA.ID), Name: "a-only", ShortName: "ao",
 		Status: models.CommodityStatusInUse, Type: models.CommodityTypeElectronics, Count: 1,
 	})
 	c.Assert(err, qt.IsNil)
@@ -338,6 +339,99 @@ func TestCommodityRegistry_GetMany_GroupScoped(t *testing.T) {
 	got, gerr := regB.CommodityRegistry.GetMany(ctxB, []string{mineA.ID})
 	c.Assert(gerr, qt.IsNil)
 	c.Assert(got, qt.HasLen, 0)
+}
+
+// TestCommodityRegistry_Create_NilArea verifies a commodity can be created with
+// no area (issue #1986): the row persists with a nil AreaID and the area
+// registry is not touched.
+func TestCommodityRegistry_Create_NilArea(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+	u := must.Must(factorySet.CreateServiceRegistrySet().UserRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-123"},
+			TenantID: "test-tenant-id",
+		},
+		Email: "test@example.com",
+		Name:  "Test User",
+	}))
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	created, err := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:      "no-area",
+		ShortName: "na",
+		Status:    models.CommodityStatusInUse,
+		Type:      models.CommodityTypeElectronics,
+		Count:     1,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(created.AreaID, qt.IsNil)
+}
+
+// TestCommodityRegistry_Update_UnassignArea verifies that updating a commodity to
+// clear its area (A → nil) succeeds and persists a nil AreaID — the un-assign
+// path of issue #1986.
+func TestCommodityRegistry_Update_UnassignArea(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	r, created := getCommodityRegistry(c)
+	c.Assert(created.AreaID, qt.IsNotNil) // fixture filed it under Area 1
+
+	created.AreaID = nil
+	updated, err := r.Update(ctx, *created)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updated.AreaID, qt.IsNil)
+
+	got := must.Must(r.Get(ctx, created.ID))
+	c.Assert(got.AreaID, qt.IsNil)
+}
+
+// TestCommodityRegistry_ListPaginated_Unassigned verifies the Unassigned filter
+// (issue #1986) returns only area-less commodities, and that an explicit AreaID
+// filter wins over Unassigned.
+func TestCommodityRegistry_ListPaginated_Unassigned(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+	u := must.Must(factorySet.CreateServiceRegistrySet().UserRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-123"},
+			TenantID: "test-tenant-id",
+		},
+		Email: "test@example.com",
+		Name:  "Test User",
+	}))
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	loc := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: loc.ID}))
+
+	filed := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		AreaID: new(area.ID), Name: "filed", ShortName: "f",
+		Status: models.CommodityStatusInUse, Type: models.CommodityTypeElectronics, Count: 1,
+	}))
+	loose := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name: "loose", ShortName: "l",
+		Status: models.CommodityStatusInUse, Type: models.CommodityTypeElectronics, Count: 1,
+	}))
+
+	// Unassigned=true returns only the area-less commodity.
+	got, total, err := registrySet.CommodityRegistry.ListPaginated(ctx, 0, 100, registry.CommodityListOptions{Unassigned: true})
+	c.Assert(err, qt.IsNil)
+	c.Assert(total, qt.Equals, 1)
+	c.Assert(got, qt.HasLen, 1)
+	c.Assert(got[0].ID, qt.Equals, loose.ID)
+
+	// An explicit AreaID filter wins over Unassigned (both set).
+	got, total, err = registrySet.CommodityRegistry.ListPaginated(ctx, 0, 100, registry.CommodityListOptions{AreaID: area.ID, Unassigned: true})
+	c.Assert(err, qt.IsNil)
+	c.Assert(total, qt.Equals, 1)
+	c.Assert(got, qt.HasLen, 1)
+	c.Assert(got[0].ID, qt.Equals, filed.ID)
 }
 
 func getCommodityRegistry(c *qt.C) (*memory.CommodityRegistry, *models.Commodity) {
@@ -372,7 +466,7 @@ func getCommodityRegistry(c *qt.C) (*memory.CommodityRegistry, *models.Commodity
 	c.Assert(err, qt.IsNil)
 
 	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID:    area1.ID,
+		AreaID:    new(area1.ID),
 		Name:      "commodity1",
 		ShortName: "commodity1",
 		Status:    models.CommodityStatusInUse,
@@ -386,7 +480,7 @@ func getCommodityRegistry(c *qt.C) (*memory.CommodityRegistry, *models.Commodity
 	c.Assert(createdCommodity.ID, qt.Not(qt.Equals), "")
 	c.Assert(createdCommodity.ID, qt.HasLen, 36)
 	c.Assert(createdCommodity.Name, qt.Equals, "commodity1")
-	c.Assert(createdCommodity.AreaID, qt.Equals, area1.ID)
+	c.Assert(ptr.From(createdCommodity.AreaID), qt.Equals, area1.ID)
 
 	return registrySet.CommodityRegistry.(*memory.CommodityRegistry), createdCommodity
 }

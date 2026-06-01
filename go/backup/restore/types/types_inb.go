@@ -21,6 +21,11 @@ import (
 // in sync with backup/export.INBManifestName.
 const INBManifestMember = "manifest.json"
 
+// INBUnassignedMember is the inner-tar member name of the area-less ("unassigned")
+// commodities document (issue #1986). Kept in sync with
+// backup/export.INBUnassignedName. Absent from archives with no unassigned items.
+const INBUnassignedMember = "unassigned-commodities.json"
+
 // INBManifest is the decoded manifest.json. Restore only reads the statistics
 // and the location index; the signature block is informational (verification
 // uses the server's own key, never this).
@@ -32,7 +37,12 @@ type INBManifest struct {
 	Compression string           `json:"compression"`
 	Signature   INBSignatureInfo `json:"signature"`
 	Locations   []INBManifestLoc `json:"locations"`
-	Statistics  INBManifestStats `json:"statistics"`
+	// UnassignedFile names the area-less commodities member (issue #1986), or ""
+	// when the archive carries none. Informational here — restore dispatches by
+	// member name (handleMember), so older archives without this field and the
+	// member round-trip unchanged.
+	UnassignedFile string           `json:"unassignedFile,omitempty"`
+	Statistics     INBManifestStats `json:"statistics"`
 }
 
 // INBSignatureInfo is the informational signature descriptor.
@@ -65,6 +75,13 @@ type INBManifestStats struct {
 type INBLocationDoc struct {
 	Location    INBLocation    `json:"location"`
 	Areas       []INBArea      `json:"areas"`
+	Commodities []INBCommodity `json:"commodities"`
+}
+
+// INBUnassignedDoc is the decoded area-less commodities document (issue #1986):
+// a flat list of commodities whose AreaID is "" (mapped to a nil model AreaID by
+// ConvertToCommodity). Mirrors backup/export.INBUnassignedDoc.
+type INBUnassignedDoc struct {
 	Commodities []INBCommodity `json:"commodities"`
 }
 
@@ -177,10 +194,11 @@ func (a *INBArea) ConvertToArea() *models.Area {
 }
 
 // ConvertToCommodity converts an INBCommodity to a models.Commodity. AreaID is
-// left as the source UUID; the caller resolves it to the destination DB ID. A
-// malformed numeric field surfaces an error (tagged with the field name and the
-// commodity UUID) rather than being silently coerced to zero, so a corrupt
-// archive fails the restore instead of restoring wrong data.
+// left as the source UUID (mapped at the boundary: "" → nil for an area-less
+// commodity, issue #1986; non-empty → a set pointer the caller then resolves to
+// the destination DB ID). A malformed numeric field surfaces an error (tagged
+// with the field name and the commodity UUID) rather than being silently coerced
+// to zero, so a corrupt archive fails the restore instead of restoring wrong data.
 func (c *INBCommodity) ConvertToCommodity() (*models.Commodity, error) {
 	originalPrice, err := parseDecimal(c.OriginalPrice)
 	if err != nil {
@@ -198,7 +216,7 @@ func (c *INBCommodity) ConvertToCommodity() (*models.Commodity, error) {
 		Name:                  c.Name,
 		ShortName:             c.ShortName,
 		Type:                  models.CommodityType(c.Type),
-		AreaID:                c.AreaID,
+		AreaID:                inbAreaIDPtr(c.AreaID),
 		Count:                 c.Count,
 		OriginalPrice:         originalPrice,
 		OriginalPriceCurrency: models.Currency(c.OriginalPriceCurrency),
@@ -329,6 +347,17 @@ func (r *INBFileRef) ConvertToFileEntity(linkedDBID, bucket, blobKey string) (*m
 			MIMEType:     r.MimeType,
 		},
 	}, nil
+}
+
+// inbAreaIDPtr maps the wire AreaID to the model's nullable *string (issue
+// #1986): "" (an area-less commodity) becomes nil, a UUID becomes a set pointer
+// the caller resolves to the destination DB ID. The processor mirrors this at
+// the model level (nil → unassigned path, set → area-mapped path).
+func inbAreaIDPtr(areaUUID string) *string {
+	if areaUUID == "" {
+		return nil
+	}
+	return &areaUUID
 }
 
 // parseDecimal parses a decimal price string. An absent value (empty string) is

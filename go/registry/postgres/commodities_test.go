@@ -4,10 +4,12 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 )
 
 func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
@@ -88,7 +90,7 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 			// Create test hierarchy
 			location := createTestLocation(c, registrySet)
 			area := createTestArea(c, registrySet, location.GetID())
-			tc.commodity.AreaID = area.GetID()
+			tc.commodity.AreaID = new(area.GetID())
 
 			// Create commodity
 			result, err := registrySet.CommodityRegistry.Create(ctx, tc.commodity)
@@ -98,7 +100,9 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 			c.Assert(result.Name, qt.Equals, tc.commodity.Name)
 			c.Assert(result.ShortName, qt.Equals, tc.commodity.ShortName)
 			c.Assert(result.Type, qt.Equals, tc.commodity.Type)
-			c.Assert(result.AreaID, qt.Equals, tc.commodity.AreaID)
+			// AreaID is now a *string (issue #1986); compare the pointed-to
+			// value, not pointer identity (the DB scan returns a fresh pointer).
+			c.Assert(result.AreaID, qt.DeepEquals, tc.commodity.AreaID)
 			c.Assert(result.Count, qt.Equals, tc.commodity.Count)
 			c.Assert(result.Status, qt.Equals, tc.commodity.Status)
 			c.Assert(result.Draft, qt.Equals, tc.commodity.Draft)
@@ -107,83 +111,26 @@ func TestCommodityRegistry_Create_HappyPath(t *testing.T) {
 }
 
 func TestCommodityRegistry_Create_UnhappyPath(t *testing.T) {
+	// The commodity registry's Create enforces referential integrity (the
+	// area must exist when set) but does NOT run model field validation —
+	// that lives at the model layer (models/commodity_test.go) and the API
+	// handler. Before area became optional (#1986), empty-name /
+	// empty-short-name / zero-count cases here only "failed" as a side
+	// effect of their zero-value (empty) area_id tripping the existence
+	// check; with area optional those rows now insert successfully, so the
+	// sole genuinely registry-rejected case is a non-existent area.
 	testCases := []struct {
 		name      string
 		commodity models.Commodity
 	}{
-		{
-			name: "empty name",
-			commodity: models.Commodity{
-				Name:                   "",
-				ShortName:              "TC",
-				Type:                   models.CommodityTypeElectronics,
-				Count:                  1,
-				OriginalPrice:          decimal.NewFromFloat(100.00),
-				OriginalPriceCurrency:  "USD",
-				ConvertedOriginalPrice: decimal.Zero,
-				CurrentPrice:           decimal.NewFromFloat(90.00),
-				Status:                 models.CommodityStatusInUse,
-				PurchaseDate:           models.ToPDate("2023-01-01"),
-				Draft:                  false,
-			},
-		},
-		{
-			name: "empty short name",
-			commodity: models.Commodity{
-				Name:                   "Test Commodity",
-				ShortName:              "",
-				Type:                   models.CommodityTypeElectronics,
-				Count:                  1,
-				OriginalPrice:          decimal.NewFromFloat(100.00),
-				OriginalPriceCurrency:  "USD",
-				ConvertedOriginalPrice: decimal.Zero,
-				CurrentPrice:           decimal.NewFromFloat(90.00),
-				Status:                 models.CommodityStatusInUse,
-				PurchaseDate:           models.ToPDate("2023-01-01"),
-				Draft:                  false,
-			},
-		},
-		{
-			name: "empty area ID",
-			commodity: models.Commodity{
-				Name:                   "Test Commodity",
-				ShortName:              "TC",
-				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "",
-				Count:                  1,
-				OriginalPrice:          decimal.NewFromFloat(100.00),
-				OriginalPriceCurrency:  "USD",
-				ConvertedOriginalPrice: decimal.Zero,
-				CurrentPrice:           decimal.NewFromFloat(90.00),
-				Status:                 models.CommodityStatusInUse,
-				PurchaseDate:           models.ToPDate("2023-01-01"),
-				Draft:                  false,
-			},
-		},
 		{
 			name: "non-existent area",
 			commodity: models.Commodity{
 				Name:                   "Test Commodity",
 				ShortName:              "TC",
 				Type:                   models.CommodityTypeElectronics,
-				AreaID:                 "non-existent-area",
+				AreaID:                 new("non-existent-area"),
 				Count:                  1,
-				OriginalPrice:          decimal.NewFromFloat(100.00),
-				OriginalPriceCurrency:  "USD",
-				ConvertedOriginalPrice: decimal.Zero,
-				CurrentPrice:           decimal.NewFromFloat(90.00),
-				Status:                 models.CommodityStatusInUse,
-				PurchaseDate:           models.ToPDate("2023-01-01"),
-				Draft:                  false,
-			},
-		},
-		{
-			name: "zero count",
-			commodity: models.Commodity{
-				Name:                   "Test Commodity",
-				ShortName:              "TC",
-				Type:                   models.CommodityTypeElectronics,
-				Count:                  0,
 				OriginalPrice:          decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:  "USD",
 				ConvertedOriginalPrice: decimal.Zero,
@@ -208,11 +155,12 @@ func TestCommodityRegistry_Create_UnhappyPath(t *testing.T) {
 			registrySet, cleanup := setupTestRegistrySet(t)
 			defer cleanup()
 
-			// For valid area ID tests, create test hierarchy
-			if tc.commodity.AreaID != "" && tc.commodity.AreaID != "non-existent-area" {
+			// For valid area ID tests, create test hierarchy. AreaID is now a
+			// *string (issue #1986) — guard the nil case before dereferencing.
+			if tc.commodity.AreaID != nil && *tc.commodity.AreaID != "" && *tc.commodity.AreaID != "non-existent-area" {
 				location := createTestLocation(c, registrySet)
 				area := createTestArea(c, registrySet, location.GetID())
-				tc.commodity.AreaID = area.GetID()
+				tc.commodity.AreaID = new(area.GetID())
 			}
 
 			// Attempt to create invalid commodity
@@ -250,7 +198,8 @@ func TestCommodityRegistry_Get_HappyPath(t *testing.T) {
 	c.Assert(result.Name, qt.Equals, created.Name)
 	c.Assert(result.ShortName, qt.Equals, created.ShortName)
 	c.Assert(result.Type, qt.Equals, created.Type)
-	c.Assert(result.AreaID, qt.Equals, created.AreaID)
+	// AreaID is a *string (issue #1986); compare values, not pointer identity.
+	c.Assert(result.AreaID, qt.DeepEquals, created.AreaID)
 	c.Assert(result.Count, qt.Equals, created.Count)
 	c.Assert(result.Status, qt.Equals, created.Status)
 }
@@ -344,7 +293,7 @@ func TestCommodityRegistry_List_SortedByPurchaseDate(t *testing.T) {
 			Name:                     name,
 			ShortName:                name,
 			Type:                     models.CommodityTypeElectronics,
-			AreaID:                   area.GetID(),
+			AreaID:                   new(area.GetID()),
 			Count:                    1,
 			OriginalPrice:            decimal.NewFromFloat(10),
 			OriginalPriceCurrency:    "USD",
@@ -409,7 +358,8 @@ func TestCommodityRegistry_Update_HappyPath(t *testing.T) {
 	c.Assert(result.Name, qt.Equals, "Updated Commodity")
 	c.Assert(result.ShortName, qt.Equals, "UC")
 	c.Assert(result.Comments, qt.Equals, "Updated comments")
-	c.Assert(result.AreaID, qt.Equals, created.AreaID)
+	// AreaID is a *string (issue #1986); compare values, not pointer identity.
+	c.Assert(result.AreaID, qt.DeepEquals, created.AreaID)
 
 	// Verify the update persisted
 	retrieved, err := registrySet.CommodityRegistry.Get(ctx, created.ID)
@@ -417,6 +367,128 @@ func TestCommodityRegistry_Update_HappyPath(t *testing.T) {
 	c.Assert(retrieved.Name, qt.Equals, "Updated Commodity")
 	c.Assert(retrieved.ShortName, qt.Equals, "UC")
 	c.Assert(retrieved.Comments, qt.Equals, "Updated comments")
+}
+
+// TestCommodityRegistry_Create_NilArea verifies a commodity can be created with
+// no area (issue #1986): the existence check is skipped and the row persists
+// with a nil AreaID.
+func TestCommodityRegistry_Create_NilArea(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	users := must.Must(registrySet.UserRegistry.List(ctx))
+	c.Assert(users, qt.Not(qt.HasLen), 0)
+	seededUser := users[0]
+
+	created, err := registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        seededUser.TenantID,
+			CreatedByUserID: seededUser.ID,
+		},
+		Name:                   "Unassigned",
+		ShortName:              "UA",
+		Type:                   models.CommodityTypeElectronics,
+		Count:                  1,
+		OriginalPrice:          decimal.NewFromFloat(100.00),
+		OriginalPriceCurrency:  "USD",
+		ConvertedOriginalPrice: decimal.Zero,
+		CurrentPrice:           decimal.NewFromFloat(90.00),
+		Status:                 models.CommodityStatusInUse,
+		PurchaseDate:           models.ToPDate("2023-01-01"),
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(created.AreaID, qt.IsNil)
+
+	retrieved := must.Must(registrySet.CommodityRegistry.Get(ctx, created.ID))
+	c.Assert(retrieved.AreaID, qt.IsNil)
+}
+
+// TestCommodityRegistry_Update_UnassignArea verifies the un-assign path (issue
+// #1986): updating an area-bound commodity to a nil AreaID clears the column.
+func TestCommodityRegistry_Update_UnassignArea(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
+	created := createTestCommodity(c, registrySet, area.GetID())
+	c.Assert(created.AreaID, qt.IsNotNil)
+
+	created.AreaID = nil
+	result, err := registrySet.CommodityRegistry.Update(ctx, *created)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.AreaID, qt.IsNil)
+
+	retrieved := must.Must(registrySet.CommodityRegistry.Get(ctx, created.ID))
+	c.Assert(retrieved.AreaID, qt.IsNil)
+}
+
+// TestCommodityRegistry_ListPaginated_Unassigned verifies the Unassigned filter
+// (issue #1986) selects only area-less rows (area_id IS NULL), and that an
+// explicit AreaID filter wins over Unassigned.
+func TestCommodityRegistry_ListPaginated_Unassigned(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
+	filed := createTestCommodity(c, registrySet, area.GetID())
+
+	users := must.Must(registrySet.UserRegistry.List(ctx))
+	seededUser := users[0]
+	loose := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        seededUser.TenantID,
+			CreatedByUserID: seededUser.ID,
+		},
+		Name:                   "Loose",
+		ShortName:              "LO",
+		Type:                   models.CommodityTypeElectronics,
+		Count:                  1,
+		OriginalPrice:          decimal.NewFromFloat(100.00),
+		OriginalPriceCurrency:  "USD",
+		ConvertedOriginalPrice: decimal.Zero,
+		CurrentPrice:           decimal.NewFromFloat(90.00),
+		Status:                 models.CommodityStatusInUse,
+		PurchaseDate:           models.ToPDate("2023-01-01"),
+	}))
+
+	got, total, err := registrySet.CommodityRegistry.ListPaginated(ctx, 0, 100, registry.CommodityListOptions{Unassigned: true})
+	c.Assert(err, qt.IsNil)
+	c.Assert(total, qt.Equals, 1)
+	c.Assert(got, qt.HasLen, 1)
+	c.Assert(got[0].ID, qt.Equals, loose.ID)
+
+	// AreaID wins over Unassigned when both are set.
+	got, total, err = registrySet.CommodityRegistry.ListPaginated(ctx, 0, 100, registry.CommodityListOptions{AreaID: area.GetID(), Unassigned: true})
+	c.Assert(err, qt.IsNil)
+	c.Assert(total, qt.Equals, 1)
+	c.Assert(got, qt.HasLen, 1)
+	c.Assert(got[0].ID, qt.Equals, filed.ID)
 }
 
 func TestCommodityRegistry_Update_UnhappyPath(t *testing.T) {
@@ -434,7 +506,7 @@ func TestCommodityRegistry_Update_UnhappyPath(t *testing.T) {
 				Name:                     "Test Commodity",
 				ShortName:                "TC",
 				Type:                     models.CommodityTypeElectronics,
-				AreaID:                   "some-area-id",
+				AreaID:                   new("some-area-id"),
 				Count:                    1,
 				OriginalPrice:            decimal.NewFromFloat(100.00),
 				OriginalPriceCurrency:    "USD",

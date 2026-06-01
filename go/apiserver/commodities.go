@@ -40,6 +40,7 @@ type commoditiesAPI struct {
 // @Param type query []string false "Filter by commodity type; repeat to OR" collectionFormat(multi)
 // @Param status query []string false "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Filter by exact area ID"
+// @Param unassigned query bool false "Only commodities with no area (ignored when area_id is set)"
 // @Param q query string false "Case-insensitive substring match on name + short_name"
 // @Param include_inactive query bool false "Include drafts and non-in_use commodities (default false hides them)"
 // @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
@@ -184,6 +185,11 @@ func parseCommodityListOptions(q url.Values) registry.CommodityListOptions {
 		// filter — empty/missing leaves opts.LentOut nil (no filter).
 		b := v == "1" || strings.EqualFold(v, "true")
 		opts.LentOut = &b
+	}
+	if v := strings.TrimSpace(q.Get("unassigned")); v != "" {
+		// Restrict to area-less commodities (issue #1986). Ignored when
+		// area_id is set — see CommodityListOptions.Unassigned.
+		opts.Unassigned = v == "1" || strings.EqualFold(v, "true")
 	}
 	return opts
 }
@@ -812,7 +818,11 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 			continue
 		}
 		before := *commodity
-		commodity.AreaID = input.Data.Attributes.AreaID
+		// BulkMove always targets a concrete area (required & non-empty,
+		// validated at jsonapi/bulk.go). AreaID is now a *string on the
+		// model, so take the address of the wire value.
+		aid := input.Data.Attributes.AreaID
+		commodity.AreaID = &aid
 		updated, err := registrySet.CommodityRegistry.Update(r.Context(), *commodity)
 		if err != nil {
 			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})

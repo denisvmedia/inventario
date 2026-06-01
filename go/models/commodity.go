@@ -116,8 +116,14 @@ type Commodity struct {
 	ShortName string `json:"short_name" db:"short_name"`
 	//migrator:schema:field name="type" type="TEXT" not_null="true"
 	Type CommodityType `json:"type" db:"type"`
-	//migrator:schema:field name="area_id" type="TEXT" not_null="true" foreign="areas(id)" foreign_key_name="fk_commodity_area"
-	AreaID string `json:"area_id" db:"area_id"`
+	// AreaID is the area the commodity is filed under. Nullable (issue
+	// #1986): a commodity may be created with no area and later
+	// un-assigned. Mirrors CoverFileID's nullable-FK pointer style. No
+	// on_delete clause — area deletion is handled at the service layer
+	// (EntityService.DeleteAreaRecursive cascades to the area's
+	// commodities), unchanged by this issue.
+	//migrator:schema:field name="area_id" type="TEXT" foreign="areas(id)" foreign_key_name="fk_commodity_area"
+	AreaID *string `json:"area_id,omitempty" db:"area_id"`
 	//migrator:schema:field name="count" type="INTEGER" not_null="true" default="1"
 	Count int `json:"count" db:"count"`
 	//migrator:schema:field name="original_price" type="DECIMAL(15,2)"
@@ -332,6 +338,17 @@ func (*Commodity) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 
+// NormalizeAreaID collapses an explicit empty area to nil so "" and a nil
+// pointer both mean "unassigned" (issue #1986). Without it, a payload with
+// `"area_id": ""` would persist as an empty string that the `area_id IS NULL`
+// filter misses and that matches no real area. Registries call this before
+// persisting so a stored area_id is always either NULL or a real area id.
+func (a *Commodity) NormalizeAreaID() {
+	if a.AreaID != nil && *a.AreaID == "" {
+		a.AreaID = nil
+	}
+}
+
 func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 	groupCurrency, err := validationctx.GroupCurrencyFromContext(ctx)
 	if errors.Is(err, validationctx.ErrGroupCurrencyNotSet) {
@@ -358,7 +375,6 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&a.Name, rules.NotEmpty, validation.Length(1, 255)),
 		validation.Field(&a.ShortName, rules.NotEmpty, validation.Length(1, 20)),
 		validation.Field(&a.Type, rules.NotEmpty),
-		validation.Field(&a.AreaID, rules.NotEmpty),
 		validation.Field(&a.Status, rules.NotEmpty),
 		validation.Field(&a.PurchaseDate, whenNotDraft.WithRules(rules.NotEmpty)),
 		validation.Field(&a.Count, validation.Required, validation.Min(1)),

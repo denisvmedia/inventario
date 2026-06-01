@@ -448,7 +448,10 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 	if err != nil {
 		return errxtrace.Wrap("failed to convert commodity", err, errx.Attrs("original_commodity_id", xmlCommodity.ID))
 	}
-	commodity.AreaID = actualAreaID
+	// Area is now a nullable *string (issue #1986). The legacy XML path always
+	// resolves a concrete, non-empty area above (it predates unassigned
+	// commodities), so take the address of the resolved value.
+	commodity.AreaID = &actualAreaID
 
 	if groupCurrency, gcErr := validationctx.GroupCurrencyFromContext(ctx); gcErr == nil && string(commodity.OriginalPriceCurrency) == groupCurrency {
 		commodity.ConvertedOriginalPrice = decimal.Zero

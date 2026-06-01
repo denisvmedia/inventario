@@ -76,7 +76,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			RegisteredDate:         models.ToPDate("2023-01-02"),
 			LastModifiedDate:       models.ToPDate("2023-01-03"),
 			Draft:                  false,
-			AreaID:                 createdArea1.ID,
+			AreaID:                 new(createdArea1.ID),
 		}
 		userAwareCommodityRegistry1 := registrySet.CommodityRegistry
 		_, err = userAwareCommodityRegistry1.Create(ctx1, commodity1)
@@ -155,7 +155,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 			// Note: ID will be generated server-side for security
 			Name:                   "Original Name",
 			ShortName:              "ON",
-			AreaID:                 createdArea1.ID,
+			AreaID:                 new(createdArea1.ID),
 			Type:                   models.CommodityTypeElectronics,
 			Count:                  1,
 			OriginalPrice:          decimal.NewFromFloat(100.00),
@@ -283,7 +283,7 @@ func TestUserIsolation_ComprehensiveScenarios(t *testing.T) {
 					},
 					Name:                   fmt.Sprintf("User%d Commodity %d", userIndex+1, i),
 					ShortName:              fmt.Sprintf("U%dC%d", userIndex+1, i),
-					AreaID:                 areas[userIndex].ID,
+					AreaID:                 new(areas[userIndex].ID),
 					Type:                   models.CommodityTypeElectronics,
 					Count:                  1,
 					OriginalPrice:          decimal.NewFromFloat(100.00),

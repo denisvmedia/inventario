@@ -2731,6 +2731,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "boolean",
+                        "description": "Only commodities with no area (ignored when area_id is set)",
+                        "name": "unassigned",
+                        "in": "query"
+                    },
+                    {
                         "type": "string",
                         "description": "Case-insensitive substring match on name + short_name",
                         "name": "q",
@@ -12635,6 +12641,7 @@ const docTemplate = `{
                     "readOnly": true
                 },
                 "area_id": {
+                    "description": "AreaID is the area the commodity is filed under. Nullable (issue\n#1986): a commodity may be created with no area and later\nun-assigned. Mirrors CoverFileID's nullable-FK pointer style. No\non_delete clause — area deletion is handled at the service layer\n(EntityService.DeleteAreaRecursive cascades to the area's\ncommodities), unchanged by this issue.",
                     "type": "string"
                 },
                 "comments": {

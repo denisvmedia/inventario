@@ -67,10 +67,10 @@ func (s *CommodityEventService) EmitUpdated(ctx context.Context, before, after *
 		emittedSpecific = true
 	}
 
-	if before.AreaID != after.AreaID {
+	if !ptrEq(before.AreaID, after.AreaID) {
 		s.emit(ctx, after.ID, models.CommodityEventKindMoved,
-			models.CommodityEventPayload{"area_id": before.AreaID},
-			models.CommodityEventPayload{"area_id": after.AreaID},
+			models.CommodityEventPayload{"area_id": ptrString(before.AreaID)},
+			models.CommodityEventPayload{"area_id": ptrString(after.AreaID)},
 		)
 		emittedSpecific = true
 	}
@@ -292,7 +292,7 @@ func genericUpdateChanged(before, after *models.Commodity) bool {
 func snapshotCreated(c *models.Commodity) models.CommodityEventPayload {
 	return models.CommodityEventPayload{
 		"name":     c.Name,
-		"area_id":  c.AreaID,
+		"area_id":  ptrString(c.AreaID),
 		"status":   string(c.Status),
 		"type":     string(c.Type),
 		"draft":    c.Draft,

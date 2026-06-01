@@ -109,7 +109,7 @@ func TestMaintenanceReminderService_RemindOnce_TickClock(t *testing.T) {
 
 	now := time.Date(2026, 5, 17, 12, 0, 0, 0, time.UTC)
 	commodity, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID:    areaID,
+		AreaID:    new(areaID),
 		Name:      "espresso machine",
 		ShortName: "espresso",
 		Type:      models.CommodityTypeWhiteGoods,
@@ -164,7 +164,7 @@ func TestMaintenanceReminderService_OverdueOnce(t *testing.T) {
 
 	now := time.Date(2026, 5, 17, 12, 0, 0, 0, time.UTC)
 	commodity, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID: areaID, Name: "kettle", ShortName: "kettle",
+		AreaID: new(areaID), Name: "kettle", ShortName: "kettle",
 		Type: models.CommodityTypeWhiteGoods, Status: models.CommodityStatusInUse, Count: 1,
 	})
 	c.Assert(err, qt.IsNil)
@@ -205,7 +205,7 @@ func TestMaintenanceReminderService_DisabledSchedule(t *testing.T) {
 
 	now := time.Date(2026, 5, 17, 12, 0, 0, 0, time.UTC)
 	commodity, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID: areaID, Name: "boiler", ShortName: "boiler",
+		AreaID: new(areaID), Name: "boiler", ShortName: "boiler",
 		Type: models.CommodityTypeWhiteGoods, Status: models.CommodityStatusInUse, Count: 1,
 	})
 	c.Assert(err, qt.IsNil)
@@ -236,7 +236,7 @@ func TestMaintenanceScheduleService_MarkDoneAdvances(t *testing.T) {
 
 	now := time.Date(2026, 5, 17, 12, 0, 0, 0, time.UTC)
 	commodity, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID: areaID, Name: "fridge", ShortName: "fridge",
+		AreaID: new(areaID), Name: "fridge", ShortName: "fridge",
 		Type: models.CommodityTypeWhiteGoods, Status: models.CommodityStatusInUse, Count: 1,
 	})
 	c.Assert(err, qt.IsNil)
@@ -267,7 +267,7 @@ func TestMaintenanceScheduleService_MarkDoneClearsReminders(t *testing.T) {
 
 	now := time.Date(2026, 5, 17, 12, 0, 0, 0, time.UTC)
 	commodity, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID: areaID, Name: "espresso", ShortName: "espresso",
+		AreaID: new(areaID), Name: "espresso", ShortName: "espresso",
 		Type: models.CommodityTypeWhiteGoods, Status: models.CommodityStatusInUse, Count: 1,
 	})
 	c.Assert(err, qt.IsNil)
@@ -307,7 +307,7 @@ func TestMaintenanceScheduleService_CreateDefaultsNextDueAt(t *testing.T) {
 
 	now := time.Date(2026, 5, 17, 12, 0, 0, 0, time.UTC)
 	commodity, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID: areaID, Name: "vacuum", ShortName: "vacuum",
+		AreaID: new(areaID), Name: "vacuum", ShortName: "vacuum",
 		Type: models.CommodityTypeWhiteGoods, Status: models.CommodityStatusInUse, Count: 1,
 	})
 	c.Assert(err, qt.IsNil)

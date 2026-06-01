@@ -292,7 +292,7 @@ func (xc *XMLCommodity) ConvertToCommodity() (*models.Commodity, error) {
 		},
 		Name:      xc.CommodityName,
 		ShortName: xc.ShortName,
-		AreaID:    xc.AreaID,
+		AreaID:    xmlAreaIDPtr(xc.AreaID),
 		Count:     xc.Count,
 		Status:    models.CommodityStatus(xc.Status),
 		Comments:  xc.Comments,
@@ -366,6 +366,17 @@ func (xc *XMLCommodity) ConvertToCommodity() (*models.Commodity, error) {
 	}
 
 	return commodity, nil
+}
+
+// xmlAreaIDPtr maps the XML DTO's string AreaID to the model's nullable *string
+// (issue #1986): "" → nil (an area-less commodity), a value → a set pointer. The
+// legacy XML restore later overwrites this with the ID-mapped destination area,
+// but the conversion itself must produce a valid *string in the default build.
+func xmlAreaIDPtr(areaID string) *string {
+	if areaID == "" {
+		return nil
+	}
+	return &areaID
 }
 
 // ConvertToFile converts XMLFile to models.File

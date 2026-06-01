@@ -307,6 +307,10 @@ func (w *inbWalker) handleMember(hdr *tar.Header, r io.Reader) error {
 		return err
 	case strings.HasPrefix(hdr.Name, "files/"):
 		return w.handleFileMember(hdr, r)
+	case hdr.Name == types.INBUnassignedMember:
+		// Area-less commodities document (issue #1986) — must be matched
+		// before the generic ".json" case since it also ends in ".json".
+		return w.handleUnassignedMember(hdr, r)
 	case strings.HasSuffix(hdr.Name, ".json"):
 		return w.handleLocationMember(hdr, r)
 	default:
@@ -378,6 +382,40 @@ func (w *inbWalker) applyLocationDoc(doc *types.INBLocationDoc) error {
 	return nil
 }
 
+// handleUnassignedMember decodes the area-less commodities document (issue
+// #1986) and recreates each commodity with a nil area. The same per-member size
+// cap as location documents applies (a flat commodity list, no file bytes).
+func (w *inbWalker) handleUnassignedMember(hdr *tar.Header, r io.Reader) error {
+	if hdr.Size < 0 || hdr.Size > maxLocationDocBytes {
+		return errx.Classify(ErrLocationDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxLocationDocBytes))
+	}
+	data, err := io.ReadAll(io.LimitReader(r, hdr.Size))
+	if err != nil {
+		return errxtrace.Wrap("failed to read unassigned member", err, errx.Attrs("member", hdr.Name))
+	}
+	var doc types.INBUnassignedDoc
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return errxtrace.Wrap("failed to decode unassigned document", err, errx.Attrs("member", hdr.Name))
+	}
+	return w.applyUnassignedDoc(&doc)
+}
+
+// applyUnassignedDoc recreates the area-less commodities (issue #1986). Per-item
+// errors are tolerated-and-counted exactly like the location-member commodity
+// loop; a malformed field aborts the whole restore.
+func (w *inbWalker) applyUnassignedDoc(doc *types.INBUnassignedDoc) error {
+	for i := range doc.Commodities {
+		if err := w.applyUnassignedCommodity(&doc.Commodities[i]); err != nil {
+			if errors.Is(err, ErrMalformedEntity) {
+				return err
+			}
+			w.stats.ErrorCount++
+			w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("failed to process commodity: %v", err))
+		}
+	}
+	return nil
+}
+
 // applyArea recreates one area, resolving its parent location UUID → DB ID.
 func (w *inbWalker) applyArea(a *types.INBArea) error {
 	l := w.proc
@@ -394,14 +432,30 @@ func (w *inbWalker) applyArea(a *types.INBArea) error {
 	return l.applyStrategyForAreaModel(w.ctx, area, existingArea, a.ID, w.stats, w.existing, w.idMapping, w.options)
 }
 
-// applyCommodity recreates one commodity (resolving its area UUID → DB ID) and
-// registers its file references for the later file members.
+// applyCommodity recreates one area-bound commodity (resolving its area UUID →
+// DB ID) and registers its file references for the later file members.
 func (w *inbWalker) applyCommodity(c *types.INBCommodity) error {
-	l := w.proc
 	actualAreaID, ok := w.idMapping.Areas[c.AreaID]
 	if !ok || actualAreaID == "" {
 		return fmt.Errorf("commodity %s references unmapped area %s", c.ID, c.AreaID)
 	}
+	return w.applyCommodityModel(c, &actualAreaID)
+}
+
+// applyUnassignedCommodity recreates one area-less ("unassigned") commodity
+// (issue #1986) and registers its file references. No area is resolved or
+// created — the row is persisted with a nil AreaID, and no synthetic
+// location/area is fabricated in the restored data.
+func (w *inbWalker) applyUnassignedCommodity(c *types.INBCommodity) error {
+	return w.applyCommodityModel(c, nil)
+}
+
+// applyCommodityModel is the shared restore body for a commodity. actualAreaID is
+// the resolved destination area DB ID for an area-bound commodity, or nil for an
+// area-less one (issue #1986). It builds, validates, and persists the row,
+// queues the cover-photo patch, and registers the commodity's file references.
+func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *string) error {
+	l := w.proc
 	commodity, err := c.ConvertToCommodity()
 	if err != nil {
 		// A malformed numeric field corrupts the restored value — abort the
@@ -412,6 +466,8 @@ func (w *inbWalker) applyCommodity(c *types.INBCommodity) error {
 			ErrMalformedEntity,
 		)
 	}
+	// Area is optional (issue #1986): a nil actualAreaID leaves the row
+	// area-less; otherwise pin it to the resolved destination area DB ID.
 	commodity.AreaID = actualAreaID
 
 	// Mirror the XML restore: when the commodity's original currency matches the

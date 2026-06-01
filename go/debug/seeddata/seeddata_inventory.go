@@ -668,7 +668,7 @@ func buildCommodity(spec commoditySpec, areaID string, user *models.User, group 
 		Name:                  spec.Name,
 		ShortName:             spec.ShortName,
 		Type:                  spec.Type,
-		AreaID:                areaID,
+		AreaID:                &areaID,
 		Count:                 spec.Count,
 		OriginalPrice:         decimal.NewFromFloat(spec.OriginalPrice),
 		OriginalPriceCurrency: models.Currency(spec.OriginalPriceCurrency),

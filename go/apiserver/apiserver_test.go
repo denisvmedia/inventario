@@ -168,7 +168,7 @@ func populateCommodityTestData(ctx context.Context, commodityRegistry registry.C
 	must.Must(commodityRegistry.Create(ctx, models.Commodity{
 		Name:                  "Commodity 1",
 		ShortName:             "C1",
-		AreaID:                areas[0].ID,
+		AreaID:                new(areas[0].ID),
 		Type:                  models.CommodityTypeFurniture,
 		Status:                models.CommodityStatusInUse,
 		Count:                 10,
@@ -179,7 +179,7 @@ func populateCommodityTestData(ctx context.Context, commodityRegistry registry.C
 	must.Must(commodityRegistry.Create(ctx, models.Commodity{
 		Name:                  "Commodity 2",
 		ShortName:             "C2",
-		AreaID:                areas[0].ID,
+		AreaID:                new(areas[0].ID),
 		Status:                models.CommodityStatusInUse,
 		Type:                  models.CommodityTypeElectronics,
 		Count:                 5,

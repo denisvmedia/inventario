@@ -124,7 +124,7 @@ func TestUserIsolation_Commodities(t *testing.T) {
 		},
 		Name:                   "User1 Commodity",
 		ShortName:              "UC1",
-		AreaID:                 createdArea1.ID,
+		AreaID:                 new(createdArea1.ID),
 		Type:                   models.CommodityTypeElectronics,
 		Count:                  1,
 		OriginalPrice:          decimal.NewFromFloat(100.00),

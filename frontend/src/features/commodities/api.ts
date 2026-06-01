@@ -119,6 +119,10 @@ export interface ListCommoditiesOptions {
   // currently on an open loan, false = only items NOT currently lent.
   // The toolbar chip toggles between undefined and true.
   lentOut?: boolean
+  // Unassigned filter (#1986). undefined = no filter, true = only items
+  // with no area ("no location"). The toolbar chip toggles between
+  // undefined and true; ignored by the BE when areaId is also set.
+  unassigned?: boolean
   signal?: AbortSignal
 }
 
@@ -160,6 +164,9 @@ export async function listCommodities(
   if (options.lentOut !== undefined) {
     params.set("lent_out", options.lentOut ? "true" : "false")
   }
+  // One-way toggle: only emit when on (zero value = no filter), matching
+  // the BE's `unassigned` parser.
+  if (options.unassigned) params.set("unassigned", "true")
   const qs = params.toString()
   const path = qs ? `/commodities?${qs}` : "/commodities"
   const body = await http.get<CommoditiesListResponse>(path, { signal: options.signal })

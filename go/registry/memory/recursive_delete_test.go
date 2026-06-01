@@ -72,7 +72,7 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 			CreatedByUserID: userID,
 		},
 		Name:   "Test Commodity",
-		AreaID: createdArea.ID,
+		AreaID: new(createdArea.ID),
 	}
 	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)
@@ -150,7 +150,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 
 	commodity := models.Commodity{
 		Name:   "Test Commodity",
-		AreaID: createdArea.ID,
+		AreaID: new(createdArea.ID),
 	}
 	createdCommodity, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 	c.Assert(err, qt.IsNil)

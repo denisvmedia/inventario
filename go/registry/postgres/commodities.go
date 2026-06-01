@@ -109,11 +109,19 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 		commodity.AcquisitionCurrency = nil
 	}
 
+	// Normalize an explicit empty area to nil so "" and NULL both mean
+	// "unassigned" (#1986): a stored "" would miss the `area_id IS NULL`
+	// filter and match no real area.
+	commodity.NormalizeAreaID()
+
 	reg := r.newSQLRegistry()
 
 	createdCommodity, err := reg.Create(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx) error {
-		if _, err := r.getArea(ctx, tx, commodity.AreaID); err != nil {
-			return err
+		// Area is optional (issue #1986): only verify it exists when set.
+		if commodity.AreaID != nil && *commodity.AreaID != "" {
+			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {
+				return err
+			}
 		}
 		// Auto-create / row-lock referenced tag rows inside this same tx
 		// so a concurrent DeleteTag(force=true) on one of these slugs
@@ -335,6 +343,68 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 // EXISTS subquery stays correct under a TableNames override (schema
 // prefix, sharded suffix, test overrides) instead of hard-coding the
 // default identifiers.
+// commodityAreaCond builds the AreaID / Unassigned WHERE predicate (issue
+// #1986). An explicit AreaID yields a `area_id = $idx` clause with an arg
+// (hasArg=true); Unassigned alone yields `area_id IS NULL` with no arg
+// (hasArg=false); neither yields an empty cond. AreaID wins when both are set.
+func commodityAreaCond(opts registry.CommodityListOptions, idx int) (cond string, arg any, hasArg bool) {
+	switch {
+	case opts.AreaID != "":
+		return fmt.Sprintf("area_id = $%d", idx), opts.AreaID, true
+	case opts.Unassigned:
+		return "area_id IS NULL", nil, false
+	default:
+		return "", nil, false
+	}
+}
+
+// buildWarrantyStatusCond builds the computed-warranty-status disjunction for the
+// WHERE clause, starting placeholders at startIdx. Returns the parenthesized
+// condition (empty when no statuses are requested), the ordered args it consumed,
+// and the next free placeholder index. Each status maps to a closed-form
+// predicate on warranty_expires_at; multiple statuses are OR-ed, then AND-ed into
+// the surrounding WHERE. Every non-`none` predicate guards against
+// an empty `warranty_expires_at` alongside the NULL check — empty strings reach the
+// column via the PDate zero value and would otherwise satisfy `expired`'s `<`
+// test (an empty string sorts below any ISO date), surfacing "no warranty" rows.
+func buildWarrantyStatusCond(opts registry.CommodityListOptions, startIdx int) (string, []any, int) {
+	if len(opts.WarrantyStatuses) == 0 {
+		return "", nil, startIdx
+	}
+	now := opts.WarrantyNow
+	if now.IsZero() {
+		now = time.Now()
+	}
+	today := now.UTC().Format("2006-01-02")
+	cutoff := now.UTC().AddDate(0, 0, models.WarrantyExpiringWindowDays).Format("2006-01-02")
+
+	idx := startIdx
+	var args []any
+	var disj []string
+	for _, s := range opts.WarrantyStatuses {
+		switch s {
+		case registry.WarrantyStatusFilterNone:
+			disj = append(disj, "(warranty_expires_at IS NULL OR warranty_expires_at = '')")
+		case registry.WarrantyStatusFilterExpired:
+			disj = append(disj, fmt.Sprintf("(warranty_expires_at IS NOT NULL AND warranty_expires_at <> '' AND warranty_expires_at < $%d)", idx))
+			args = append(args, today)
+			idx++
+		case registry.WarrantyStatusFilterExpiring:
+			disj = append(disj, fmt.Sprintf("(warranty_expires_at <> '' AND warranty_expires_at >= $%d AND warranty_expires_at <= $%d)", idx, idx+1))
+			args = append(args, today, cutoff)
+			idx += 2
+		case registry.WarrantyStatusFilterActive:
+			disj = append(disj, fmt.Sprintf("(warranty_expires_at <> '' AND warranty_expires_at > $%d)", idx))
+			args = append(args, cutoff)
+			idx++
+		}
+	}
+	if len(disj) == 0 {
+		return "", nil, startIdx
+	}
+	return "(" + strings.Join(disj, " OR ") + ")", args, idx
+}
+
 func buildCommodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansTable string) (string, []any) {
 	var conds []string
 	var args []any
@@ -373,10 +443,12 @@ func buildCommodityWhere(opts registry.CommodityListOptions, commoditiesTable, l
 		}
 		conds = append(conds, fmt.Sprintf("status IN (%s)", strings.Join(placeholders, ", ")))
 	}
-	if opts.AreaID != "" {
-		conds = append(conds, fmt.Sprintf("area_id = $%d", idx))
-		args = append(args, opts.AreaID)
-		idx++
+	if cond, arg, hasArg := commodityAreaCond(opts, idx); cond != "" {
+		conds = append(conds, cond)
+		if hasArg {
+			args = append(args, arg)
+			idx++
+		}
 	}
 	if q := strings.TrimSpace(opts.Search); q != "" {
 		// LOWER() + LIKE rather than ILIKE so the existing functional
@@ -388,45 +460,10 @@ func buildCommodityWhere(opts registry.CommodityListOptions, commoditiesTable, l
 		idx++
 	}
 
-	if len(opts.WarrantyStatuses) > 0 {
-		now := opts.WarrantyNow
-		if now.IsZero() {
-			now = time.Now()
-		}
-		today := now.UTC().Format("2006-01-02")
-		cutoff := now.UTC().AddDate(0, 0, models.WarrantyExpiringWindowDays).Format("2006-01-02")
-		// Each status maps to a closed-form predicate on warranty_expires_at.
-		// Multiple statuses are OR-ed together, then the whole disjunction
-		// joins the surrounding WHERE with AND. Date strings are zero-padded
-		// ISO so lexicographic comparison matches chronological order.
-		//
-		// Every non-`none` predicate guards against `warranty_expires_at = ''`
-		// alongside the NULL check — empty strings reach the column via the
-		// PDate zero value and would otherwise satisfy `expired`'s `<` test
-		// (because '' is lexicographically less than any ISO date), which
-		// would surface "no warranty" rows under the Expired tab.
-		var disj []string
-		for _, s := range opts.WarrantyStatuses {
-			switch s {
-			case registry.WarrantyStatusFilterNone:
-				disj = append(disj, "(warranty_expires_at IS NULL OR warranty_expires_at = '')")
-			case registry.WarrantyStatusFilterExpired:
-				disj = append(disj, fmt.Sprintf("(warranty_expires_at IS NOT NULL AND warranty_expires_at <> '' AND warranty_expires_at < $%d)", idx))
-				args = append(args, today)
-				idx++
-			case registry.WarrantyStatusFilterExpiring:
-				disj = append(disj, fmt.Sprintf("(warranty_expires_at <> '' AND warranty_expires_at >= $%d AND warranty_expires_at <= $%d)", idx, idx+1))
-				args = append(args, today, cutoff)
-				idx += 2
-			case registry.WarrantyStatusFilterActive:
-				disj = append(disj, fmt.Sprintf("(warranty_expires_at <> '' AND warranty_expires_at > $%d)", idx))
-				args = append(args, cutoff)
-				idx++
-			}
-		}
-		if len(disj) > 0 {
-			conds = append(conds, "("+strings.Join(disj, " OR ")+")")
-		}
+	if cond, wargs, nextIdx := buildWarrantyStatusCond(opts, idx); cond != "" {
+		conds = append(conds, cond)
+		args = append(args, wargs...)
+		idx = nextIdx
 	}
 	if opts.WarrantyExpiresBefore != "" {
 		// Same empty-string defense as the warranty-status branches —
@@ -533,11 +570,18 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		commodity.AcquisitionCurrency = clonePtrCurrency(existing.AcquisitionCurrency)
 	}
 
+	// Normalize an explicit empty area to nil (#1986) — un-assigning via an
+	// empty string persists as NULL, consistent with the IS NULL filter.
+	commodity.NormalizeAreaID()
+
 	reg := r.newSQLRegistry()
 
 	err := reg.Update(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, dbCommodity models.Commodity) error {
-		if _, err := r.getArea(ctx, tx, commodity.AreaID); err != nil {
-			return err
+		// Area is optional (issue #1986): only verify it exists when set.
+		if commodity.AreaID != nil && *commodity.AreaID != "" {
+			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {
+				return err
+			}
 		}
 		// Same orphan-prevention as in Create — an Update that adds new
 		// tag slugs needs to grab the per-(group, slug) lock + upsert the

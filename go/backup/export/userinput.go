@@ -141,7 +141,11 @@ func enrichSelectedItemsWithNames(ctx context.Context, registrySet *registry.Set
 				name = "[Deleted Commodity " + item.ID + "]"
 			} else {
 				name = commodity.Name
-				areaID = commodity.AreaID // Store the relationship
+				// Area is optional (issue #1986): deref-or-empty for the
+				// string-typed SelectedItem.AreaID; "" means unassigned.
+				if commodity.AreaID != nil {
+					areaID = *commodity.AreaID // Store the relationship
+				}
 			}
 		default:
 			name = "[Unknown Item " + item.ID + "]"

@@ -10,6 +10,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"github.com/go-extras/go-kit/ptr"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/apiserver"
@@ -43,7 +44,7 @@ func TestCommoditiesList(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.name"), expectedCommodities[0].Name)
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.short_name"), expectedCommodities[0].ShortName)
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.type"), string(expectedCommodities[0].Type))
-	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.area_id"), expectedCommodities[0].AreaID)
+	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.area_id"), ptr.From(expectedCommodities[0].AreaID))
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.count"), float64(expectedCommodities[0].Count))
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.original_price"), expectedCommodities[0].OriginalPrice.String())
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.original_price_currency"), string(expectedCommodities[0].OriginalPriceCurrency))
@@ -88,7 +89,7 @@ func TestCommodityGet(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.short_name"), commodity.ShortName)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.urls"), nil)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.type"), string(commodity.Type))
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.area_id"), commodity.AreaID)
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.area_id"), ptr.From(commodity.AreaID))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(commodity.Count))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price"), commodity.OriginalPrice.String())
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price_currency"), string(commodity.OriginalPriceCurrency))
@@ -104,6 +105,40 @@ func TestCommodityGet(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.last_modified_date"), commodity.LastModifiedDate)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.comments"), commodity.Comments)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.draft"), commodity.Draft)
+}
+
+func TestCommoditiesList_UnassignedFilter(t *testing.T) {
+	// Issue #1986: ?unassigned=true returns only commodities with no area.
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+
+	loose := must.Must(registrySet.CommodityRegistry.Create(context.Background(), models.Commodity{
+		Name:                   "Loose Item",
+		ShortName:              "LI",
+		Type:                   models.CommodityTypeElectronics,
+		Count:                  1,
+		OriginalPrice:          must.Must(decimal.NewFromString("10.00")),
+		OriginalPriceCurrency:  models.Currency("USD"),
+		ConvertedOriginalPrice: must.Must(decimal.NewFromString("0")),
+		CurrentPrice:           must.Must(decimal.NewFromString("8.00")),
+		Status:                 models.CommodityStatusInUse,
+		PurchaseDate:           models.ToPDate("2023-01-01"),
+	}))
+
+	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/commodities?unassigned=true", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+
+	rr := httptest.NewRecorder()
+	handler := apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false})
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	body := rr.Body.Bytes()
+	c.Check(body, checkers.JSONPathMatches("$.data", qt.HasLen), 1)
+	c.Check(body, checkers.JSONPathEquals("$.data[0].id"), loose.ID)
 }
 
 func TestCommodityCreate(t *testing.T) {
@@ -125,7 +160,7 @@ func TestCommodityCreate(t *testing.T) {
 			Attributes: &models.Commodity{
 				Name:                   "New Commodity in Area 2",
 				ShortName:              "NewCom2",
-				AreaID:                 area.ID,
+				AreaID:                 new(area.ID),
 				Type:                   models.CommodityTypeElectronics,
 				OriginalPrice:          must.Must(decimal.NewFromString("1000.00")),
 				OriginalPriceCurrency:  models.Currency("USD"),
@@ -242,7 +277,7 @@ func TestCommodityUpdate(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.short_name"), "UC")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.urls"), nil)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.type"), string(models.CommodityTypeFurniture))
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.area_id"), commodity.AreaID)
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.area_id"), ptr.From(commodity.AreaID))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(commodity.Count))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price"), "2000")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price_currency"), "USD")
@@ -316,7 +351,7 @@ func TestCommodityBulkMove(t *testing.T) {
 	// Create a fresh destination area in the same location so the move is valid.
 	destArea, err := registrySet.AreaRegistry.Create(context.Background(), models.Area{
 		Name:       "Bulk Move Destination",
-		LocationID: must.Must(registrySet.AreaRegistry.Get(context.Background(), target.AreaID)).LocationID,
+		LocationID: must.Must(registrySet.AreaRegistry.Get(context.Background(), ptr.From(target.AreaID))).LocationID,
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -335,7 +370,7 @@ func TestCommodityBulkMove(t *testing.T) {
 	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.succeeded[0]"), target.ID)
 
 	updated := must.Must(registrySet.CommodityRegistry.Get(context.Background(), target.ID))
-	c.Check(updated.AreaID, qt.Equals, destArea.ID)
+	c.Check(ptr.From(updated.AreaID), qt.Equals, destArea.ID)
 }
 
 func TestCommodityDelete_MissingCommodity(t *testing.T) {
@@ -375,7 +410,7 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 			Attributes: models.WithID(wrongCommodityID, &models.Commodity{
 				Name:                   "Updated Commodity",
 				ShortName:              "UC",
-				AreaID:                 wrongAreaID,
+				AreaID:                 new(wrongAreaID),
 				Type:                   models.CommodityTypeFurniture,
 				OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
 				OriginalPriceCurrency:  models.Currency("USD"),

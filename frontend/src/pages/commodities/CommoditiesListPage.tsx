@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   List,
   ListFilter,
+  MapPinOff,
   Plus,
   Search,
   X,
@@ -121,6 +122,7 @@ export function CommoditiesListPage() {
   const areaId = searchParams.get("area") ?? ""
   const warrantyFilter = searchParams.getAll("warranty") as CommodityWarrantyStatus[]
   const lentOutOnly = searchParams.get("lent_out") === "1"
+  const unassignedOnly = searchParams.get("unassigned") === "1"
   const includeInactive = searchParams.get("inactive") === "1"
   const sortRaw = searchParams.get("sort") ?? "name"
   const sortDesc = sortRaw.startsWith("-")
@@ -205,6 +207,8 @@ export function CommoditiesListPage() {
       // Sending false would also be valid (only NOT-lent items) but the
       // toolbar deliberately doesn't expose that for now.
       lentOut: lentOutOnly ? true : undefined,
+      // Single-state chip: only ever send true (area-less items only).
+      unassigned: unassignedOnly ? true : undefined,
       sort: validSort,
       sortDesc,
     },
@@ -232,7 +236,17 @@ export function CommoditiesListPage() {
     // Clear page-local selection on filter/page change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(new Set())
-  }, [page, search, typesKey, statusesKey, areaId, includeInactive, lentOutOnly, sortRaw])
+  }, [
+    page,
+    search,
+    typesKey,
+    statusesKey,
+    areaId,
+    includeInactive,
+    lentOutOnly,
+    unassignedOnly,
+    sortRaw,
+  ])
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -366,6 +380,7 @@ export function CommoditiesListPage() {
       p.delete("area")
       p.delete("warranty")
       p.delete("lent_out")
+      p.delete("unassigned")
       p.delete("inactive")
       p.delete("q")
     })
@@ -381,6 +396,12 @@ export function CommoditiesListPage() {
     updateParams((p) => {
       if (lentOutOnly) p.delete("lent_out")
       else p.set("lent_out", "1")
+    })
+  }
+  function toggleUnassigned() {
+    updateParams((p) => {
+      if (unassignedOnly) p.delete("unassigned")
+      else p.set("unassigned", "1")
     })
   }
   function setViewMode(mode: ViewMode) {
@@ -427,6 +448,7 @@ export function CommoditiesListPage() {
     areaId !== "" ||
     warrantyFilter.length > 0 ||
     lentOutOnly ||
+    unassignedOnly ||
     search !== "" ||
     includeInactive
 
@@ -532,6 +554,7 @@ export function CommoditiesListPage() {
           areaId={areaId}
           warrantyFilter={warrantyFilter}
           lentOutOnly={lentOutOnly}
+          unassignedOnly={unassignedOnly}
           includeInactive={includeInactive}
           sort={validSort}
           sortDesc={sortDesc}
@@ -543,6 +566,7 @@ export function CommoditiesListPage() {
           onSetArea={setAreaFilter}
           onToggleWarranty={toggleWarranty}
           onToggleLentOut={toggleLentOut}
+          onToggleUnassigned={toggleUnassigned}
           onSetSort={setSort}
           onToggleInactive={toggleInactive}
           onClearFilters={clearFilters}
@@ -678,6 +702,7 @@ interface ToolbarProps {
   areaId: string
   warrantyFilter: CommodityWarrantyStatus[]
   lentOutOnly: boolean
+  unassignedOnly: boolean
   includeInactive: boolean
   sort: CommoditySortOption
   sortDesc: boolean
@@ -689,6 +714,7 @@ interface ToolbarProps {
   onSetArea: (id: string) => void
   onToggleWarranty: (s: CommodityWarrantyStatus) => void
   onToggleLentOut: () => void
+  onToggleUnassigned: () => void
   onSetSort: (f: CommoditySortOption) => void
   onToggleInactive: () => void
   onClearFilters: () => void
@@ -857,6 +883,19 @@ function Toolbar(props: ToolbarProps) {
       >
         <ListFilter className="size-3.5" aria-hidden="true" />
         {t("commodities:filter.lentOut")}
+      </Button>
+
+      <Button
+        type="button"
+        variant={props.unassignedOnly ? "default" : "outline"}
+        size="sm"
+        className="gap-1.5"
+        onClick={props.onToggleUnassigned}
+        aria-pressed={props.unassignedOnly}
+        data-testid="commodities-filter-unassigned"
+      >
+        <MapPinOff className="size-3.5" aria-hidden="true" />
+        {t("commodities:filter.unassigned")}
       </Button>
 
       <DropdownMenu>

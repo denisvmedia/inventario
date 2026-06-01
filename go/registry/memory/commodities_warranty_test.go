@@ -29,7 +29,7 @@ func TestCommodityRegistry_ListPaginated_WarrantyFilter(t *testing.T) {
 	mk := func(name string, expires *string) *models.Commodity {
 		c.Helper()
 		commodity := models.Commodity{
-			AreaID:    areaID,
+			AreaID:    new(areaID),
 			Name:      name,
 			ShortName: name,
 			Status:    models.CommodityStatusInUse,
@@ -135,7 +135,7 @@ func TestCommodityRegistry_ListPaginated_WarrantyFilter_EmptyStringNotExpired(t 
 	emptyDate := ""
 	d := models.Date(emptyDate)
 	_, err := regSet.CommodityRegistry.Create(ctx, models.Commodity{
-		AreaID:            areaID,
+		AreaID:            new(areaID),
 		Name:              "empty-warranty",
 		ShortName:         "empty",
 		Status:            models.CommodityStatusInUse,

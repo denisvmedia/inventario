@@ -215,7 +215,7 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 			Attributes: &models.Commodity{
 				Name:                   "New Commodity in Area 2",
 				ShortName:              "NewCom2",
-				AreaID:                 createdArea.ID,
+				AreaID:                 new(createdArea.ID),
 				Type:                   models.CommodityTypeElectronics,
 				OriginalPrice:          must.Must(decimal.NewFromString("1000.00")),
 				OriginalPriceCurrency:  models.Currency("USD"),
