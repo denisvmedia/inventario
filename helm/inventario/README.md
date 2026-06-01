@@ -272,6 +272,7 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `setupJob.initData.adminEmail` | `admin@example.com` | Set the initial admin login name. |
 | `setupJob.initData.adminPassword` | `""` | Required on first install unless provided by `secrets.existingSecret`. |
 | `setupJob.initData.seedDatabase` | `false` | Enable only for demo/sample data seeding. |
+| `demo.recreateOnDeploy` | `false` | Wipe the emptyDir-backed demo Postgres/MinIO/Redis on every deploy by keying a pod-template annotation to the resolved app image tag (so a changing `sha-<7>` tag rolls the pod → fresh DB/bucket → setup + init-data Jobs re-seed). For the disposable master env ONLY. **Hard render error if combined with demo persistence** — it can never roll-wipe a PVC-backed (longevity) store. NEVER enable in production; PR previews leave it `false`. |
 | `demo.postgresql.enabled` | `false` | Turn on in-cluster demo PostgreSQL. |
 | `demo.redis.enabled` | `false` | Turn on in-cluster demo Redis. |
 | `demo.minio.enabled` | `false` | Turn on in-cluster demo MinIO and S3-style uploads. |
