@@ -557,6 +557,7 @@ secrets:
   #   INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY    (required when aivision.provider=openai)
   #   SETUP_ADMIN_PASSWORD                       (required by job-setup if setupJob.enabled)
   #   BACKOFFICE_USER_PASSWORD                   (required by setup/init-data Job when backofficeUser.enabled; maps to setupJob.initData.backofficeUserPassword; min 8 chars + upper + lower + digit)
+  #   BACKOFFICE_USER_EMAIL                      (optional; when backofficeUser.enabled, overrides backofficeUser.email so the operator login identity comes from the Secret/sops bundle instead of the overlay; falls back to backofficeUser.email when absent)
   #   SETUP_SUPERUSER_DSN                        (optional; used when setupJob.bootstrap.superuserDsn is managed outside the chart)
   #   AWS_ACCESS_KEY_ID                          (required for S3/MinIO upload)
   #   AWS_SECRET_ACCESS_KEY                      (required for S3/MinIO upload)
@@ -772,7 +773,12 @@ setupJob:
 # ============================================================
 backofficeUser:
   enabled: false
-  # Operator login email + display name (non-secret; passed as --email/--name).
+  # Operator login email + display name (passed as --email/--name). The email
+  # here is the DEFAULT/fallback: when the Job's Secret carries a
+  # BACKOFFICE_USER_EMAIL key (apply-secrets.sh sources it from the sops bundle's
+  # backoffice.email on master/longevity), the Job PREFERS that so the real
+  # operator address can stay out of the overlay/git. PR previews have no such
+  # key and use this value as-is.
   email: "operator@example.com"
   name: "Platform Operator"
   # Role: platform_admin (full mutation rights) or support_agent.

@@ -110,6 +110,18 @@ BACKOFFICE_USER_PASSWORD=$(lookup "backoffice.password")
 if [ -z "$BACKOFFICE_USER_PASSWORD" ]; then
     warn "backoffice.password missing in secrets bundle; inv-vcl01-master/longevity layer backofficeUser.enabled=true (preview-base, #1967), so their setup Job's 'inventario backoffice bootstrap' step will fail until BACKOFFICE_USER_PASSWORD is present. Set backoffice.password (8+ chars, upper, lower, digit) to auto-provision the /backoffice/login operator."
 fi
+# Optional back-office operator EMAIL for the demo/preview envs (#1967). When
+# present it is injected into the inventario-admin Secret below as
+# BACKOFFICE_USER_EMAIL; the chart's Job prefers it over the hardcoded
+# backofficeUser.email so the /backoffice/login identity is the sops-defined one
+# (and the real address never has to live in the public overlay). Absent it the
+# Job falls back to the chart value (operator@inventario.example), so this is a
+# soft note, not a hard warning — but the login email then won't match the
+# bundle.
+BACKOFFICE_USER_EMAIL=$(lookup "backoffice.email")
+if [ -n "$BACKOFFICE_USER_PASSWORD" ] && [ -z "$BACKOFFICE_USER_EMAIL" ]; then
+    note "backoffice.email not set in the bundle; inv-vcl01-master/longevity will provision the operator under the chart default backofficeUser.email (operator@inventario.example) rather than a sops-defined address. Set backoffice.email to control the /backoffice/login identity."
+fi
 # Optional runtime JWT signing key for the persistent envs (master + longevity).
 # When present it is injected into the inventario-admin Secret below as
 # INVENTARIO_RUN_JWT_SECRET so the apiserver stops minting a fresh random secret
@@ -201,6 +213,12 @@ EOF
                 cat <<EOF
   BACKOFFICE_USER_PASSWORD: |-
 $(printf '%s' "$BACKOFFICE_USER_PASSWORD" | sed 's/^/    /')
+EOF
+            fi
+            if [ -n "$BACKOFFICE_USER_EMAIL" ]; then
+                cat <<EOF
+  BACKOFFICE_USER_EMAIL: |-
+$(printf '%s' "$BACKOFFICE_USER_EMAIL" | sed 's/^/    /')
 EOF
             fi
             if [ -n "$JWT_SECRET" ]; then
