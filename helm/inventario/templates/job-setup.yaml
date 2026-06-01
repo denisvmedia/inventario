@@ -250,10 +250,16 @@ spec:
                   echo "backofficeUser.enabled=true but BACKOFFICE_USER_PASSWORD is empty; refusing to provision an operator with an uncapturable auto-generated password (set setupJob.initData.backofficeUserPassword for PR previews, or the BACKOFFICE_USER_PASSWORD key in secrets.existingSecret / the sops bundle for master+longevity)"
                   exit 1
                 fi
+                # Operator identity: prefer the sops-sourced BACKOFFICE_USER_EMAIL
+                # (apply-secrets.sh materializes it into inventario-admin from the
+                # bundle's backoffice.email on master/longevity) so /backoffice/login
+                # uses the bundle-defined address; fall back to the chart's
+                # backofficeUser.email when the Secret key is absent (PR previews). (#1967)
+                bo_email="${BACKOFFICE_USER_EMAIL:-$INVENTARIO_BACKOFFICE_BOOTSTRAP_EMAIL}"
                 k=1
                 while [ "$k" -le 15 ]; do
                   if inventario backoffice bootstrap \
-                    --email="$INVENTARIO_BACKOFFICE_BOOTSTRAP_EMAIL" \
+                    --email="$bo_email" \
                     --name="$INVENTARIO_BACKOFFICE_BOOTSTRAP_NAME" \
                     --role="$INVENTARIO_BACKOFFICE_BOOTSTRAP_ROLE" \
                     --password="$INVENTARIO_BACKOFFICE_BOOTSTRAP_PASSWORD" \
@@ -383,6 +389,17 @@ spec:
             {{- if .Values.backofficeUser.enabled }}
             - name: INVENTARIO_BACKOFFICE_BOOTSTRAP_EMAIL
               value: {{ .Values.backofficeUser.email | quote }}
+            # Optional sops-sourced override of the operator email. apply-secrets.sh
+            # materializes BACKOFFICE_USER_EMAIL into the existing Secret from the
+            # bundle's backoffice.email on master/longevity; the shell step above
+            # prefers it over INVENTARIO_BACKOFFICE_BOOTSTRAP_EMAIL. optional:true so
+            # PR previews (no such key) transparently fall back to the value. (#1967)
+            - name: BACKOFFICE_USER_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: BACKOFFICE_USER_EMAIL
+                  optional: true
             - name: INVENTARIO_BACKOFFICE_BOOTSTRAP_NAME
               value: {{ .Values.backofficeUser.name | quote }}
             - name: INVENTARIO_BACKOFFICE_BOOTSTRAP_ROLE
