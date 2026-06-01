@@ -148,9 +148,23 @@ export function FirstItemResolver() {
     if (!pending) return
     if (startedRef.current) return
     if (groupsLoading) return
-    if (groupsError || !groups) return
+    // Mark started synchronously (before any microtask) so two rapid effect
+    // runs can't both launch the replay. Every state transition happens inside
+    // the async IIFE below — one microtask later — to satisfy the
+    // no-synchronous-setState-in-effect rule.
     startedRef.current = true
     void (async () => {
+      if (groupsError || !groups) {
+        // The groups fetch failed, but the marker was already consumed (lazy
+        // initializer). Leaving the user on the spinner would mean a refresh
+        // drops the only handoff pointer while the draft/files still exist —
+        // data effectively lost. Re-stash and surface the retry UI instead;
+        // Retry resets startedRef so this effect can run again on recovery.
+        savePendingFirstItem(pending)
+        setErrorMessage(t("landing:resolver.errorGeneric"))
+        setPhase("error")
+        return
+      }
       if (groups.length > 1) {
         setPhase("picking")
         return

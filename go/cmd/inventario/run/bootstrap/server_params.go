@@ -311,6 +311,16 @@ func wireCommodityScan(cfg *Config, params *apiserver.Params) error {
 	if cfg.PublicAIVisionScanEnabled && provider == nil {
 		slog.Warn("Public AI photo-scan is enabled but no AI vision provider is configured; the endpoint is inert. Set --ai-vision-provider to a real provider or set --public-ai-vision-scan-enabled=false to silence this warning.")
 	}
+	// Dedicated limiter for the public scan's per-IP + global-daily caps,
+	// constructed independently of the auth limiter so --no-auth-rate-limit
+	// (a test-only switch) can't strip the cost/abuse backstop from an
+	// endpoint that spends real vendor tokens. Shares the auth limiter's
+	// backend (Redis or in-memory) but the keys are disjoint ("global" +
+	// per-IP scan keys), so there is no cross-talk with login throttling.
+	// Only built when the route will actually mount.
+	if params.PublicScanEnabled {
+		params.PublicScanRateLimiter = services.NewAuthRateLimiter(cfg.AuthRateLimitRedisURL)
+	}
 	return nil
 }
 

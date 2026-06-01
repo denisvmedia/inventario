@@ -425,9 +425,11 @@ func (s *CommodityScanService) ScanAnonymous(ctx context.Context, in ScanInput) 
 }
 
 // classifyProviderErr maps a provider-layer error to the matching scan
-// sentinel. Shared between the authenticated path (which also writes an
-// audit row before returning) and ScanAnonymous (which doesn't), so the
-// upstream-error → sentinel mapping stays in one place.
+// sentinel. ScanAnonymous calls it directly (it writes no audit row). The
+// authenticated Scan keeps its own inline switch because each case also
+// writes a per-case audit row (distinct Status + ErrorCode) before returning
+// the same sentinel; the two switches are deliberately kept in lock-step so
+// the anonymous and authenticated paths classify provider errors identically.
 func classifyProviderErr(providerErr error) error {
 	switch {
 	case errors.Is(providerErr, aivision.ErrProviderTimeout):

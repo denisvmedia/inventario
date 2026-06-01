@@ -57,12 +57,30 @@ const LANG_TO_CURRENCY: Record<string, string> = {
 
 const FALLBACK = "USD"
 
+// The base language (no region) the app has actually resolved to. i18next
+// reads its persisted language from localStorage before falling back to the
+// browser, so a non-default value here reflects a deliberate user switch.
+function appLanguage(): string | undefined {
+  const l = i18next.resolvedLanguage || i18next.language
+  return l ? l.split("-")[0].toLowerCase() : undefined
+}
+
 function browserLocale(): string {
   if (typeof navigator !== "undefined" && navigator.language) return navigator.language
   return i18next.resolvedLanguage || i18next.language || "en"
 }
 
 export function inferDefaultCurrency(): string {
+  // A deliberately-chosen non-English UI language wins: English is the
+  // default/fallback, so a resolved "cs"/"ru" means the user explicitly
+  // switched and a CZK/RUB seed is what they expect — even on an en-* browser
+  // (the case CodeRabbit flagged). We do NOT short-circuit on "en" because
+  // that's the default: there, the browser locale's region is the richer
+  // signal (en-GB → GBP, en-US → USD) than the bare language.
+  const appLang = appLanguage()
+  if (appLang && appLang !== "en" && LANG_TO_CURRENCY[appLang]) {
+    return LANG_TO_CURRENCY[appLang]
+  }
   const locale = browserLocale()
   const parts = locale.split("-")
   // "cs-CZ" → region "CZ"; a bare "cs" has no region segment.

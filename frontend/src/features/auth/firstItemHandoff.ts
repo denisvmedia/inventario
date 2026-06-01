@@ -56,7 +56,21 @@ export function peekPendingFirstItem(): PendingFirstItem | null {
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as PendingFirstItem
-    if (!parsed || typeof parsed.draftKey !== "string" || !parsed.draftKey) return null
+    // Validate the full shape, not just draftKey: a malformed/partial marker
+    // (hand-edited storage, a schema change between releases) must not leak
+    // into the resolver, which seeds a group currency from `currency` and may
+    // reason about `savedAt`.
+    if (
+      !parsed ||
+      typeof parsed.draftKey !== "string" ||
+      !parsed.draftKey ||
+      typeof parsed.currency !== "string" ||
+      !parsed.currency ||
+      typeof parsed.savedAt !== "number" ||
+      !Number.isFinite(parsed.savedAt)
+    ) {
+      return null
+    }
     return parsed
   } catch {
     return null

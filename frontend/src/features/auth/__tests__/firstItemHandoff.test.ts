@@ -68,4 +68,25 @@ describe("firstItemHandoff", () => {
     )
     expect(peekPendingFirstItem()).toBeNull()
   })
+
+  it("rejects a marker missing or empty currency", () => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ draftKey: "k", savedAt: 1 }))
+    expect(peekPendingFirstItem()).toBeNull()
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ draftKey: "k", currency: "", savedAt: 1 })
+    )
+    expect(peekPendingFirstItem()).toBeNull()
+  })
+
+  it("rejects a marker with a non-finite or non-numeric savedAt", () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ draftKey: "k", currency: "USD", savedAt: "soon" })
+    )
+    expect(peekPendingFirstItem()).toBeNull()
+    // JSON can't hold Infinity, but a hand-built string can.
+    window.localStorage.setItem(STORAGE_KEY, '{"draftKey":"k","currency":"USD","savedAt":null}')
+    expect(peekPendingFirstItem()).toBeNull()
+  })
 })
