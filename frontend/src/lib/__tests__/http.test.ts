@@ -13,6 +13,7 @@ import {
   clearBackofficeAuth,
   getBackofficeAccessToken,
   setBackofficeAccessToken,
+  setBackofficeCsrfToken,
 } from "@/features/backoffice/auth/storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 import {
@@ -295,6 +296,83 @@ describe("auth + CSRF headers", () => {
     )
     await http.get("/auth/me", { authCheck: "user-initiated" })
     expect(header).toBe("user-initiated")
+  })
+})
+
+// #1968: the two impersonation self-service endpoints live under /admin/*
+// (so isBackofficePath would route them to the back-office token), but inside
+// an active impersonation session the live credential is the imp token parked
+// in TENANT storage. The BE reports active=true / accepts `end` ONLY for that
+// imp token — a back-office token is dispatched to the plain back-office
+// branch (active=false) or rejected (401). The http client therefore flips
+// these two paths to the tenant plane while a return slot is set.
+describe("impersonation credential plane (#1968)", () => {
+  it("GET /admin/impersonation/current uses the tenant imp token when a return slot is set", async () => {
+    // Both planes hold a token — the imp token (tenant) is the live identity,
+    // the operator's back-office token still sits in back-office storage.
+    setAccessToken("imp-token")
+    setBackofficeAccessToken("operator-token")
+    setImpersonationReturn({ targetUserId: "t1" })
+    let auth: string | null = null
+    server.use(
+      msw.get(api("/admin/impersonation/current"), ({ request }) => {
+        auth = request.headers.get("authorization")
+        return HttpResponse.json({ active: true })
+      })
+    )
+    await http.get("/admin/impersonation/current")
+    expect(auth).toBe("Bearer imp-token")
+  })
+
+  it("POST /admin/impersonation/end uses the tenant imp token + tenant CSRF when a return slot is set", async () => {
+    setAccessToken("imp-token")
+    setCsrfToken("tenant-csrf")
+    setBackofficeAccessToken("operator-token")
+    setBackofficeCsrfToken("operator-csrf")
+    setImpersonationReturn({ targetUserId: "t1" })
+    let auth: string | null = null
+    let csrf: string | null = null
+    server.use(
+      msw.post(api("/admin/impersonation/end"), ({ request }) => {
+        auth = request.headers.get("authorization")
+        csrf = request.headers.get("x-csrf-token")
+        return HttpResponse.json({ access_token: "back-to-operator" })
+      })
+    )
+    await http.post("/admin/impersonation/end", undefined, { skipAuthRefresh: true })
+    expect(auth).toBe("Bearer imp-token")
+    expect(csrf).toBe("tenant-csrf")
+  })
+
+  it("GET /admin/impersonation/current uses the back-office token when NO return slot is set (operator browsing admin)", async () => {
+    // No impersonation session — an operator probing from the admin shell.
+    setBackofficeAccessToken("operator-token")
+    let auth: string | null = null
+    server.use(
+      msw.get(api("/admin/impersonation/current"), ({ request }) => {
+        auth = request.headers.get("authorization")
+        return HttpResponse.json({ active: false })
+      })
+    )
+    await http.get("/admin/impersonation/current")
+    expect(auth).toBe("Bearer operator-token")
+  })
+
+  it("other /admin/* paths still use the back-office token even during an impersonation session", async () => {
+    // The slot-based override is scoped to the two impersonation endpoints —
+    // any other /admin/* request stays on the back-office plane.
+    setAccessToken("imp-token")
+    setBackofficeAccessToken("operator-token")
+    setImpersonationReturn({ targetUserId: "t1" })
+    let auth: string | null = null
+    server.use(
+      msw.get(api("/admin/tenants"), ({ request }) => {
+        auth = request.headers.get("authorization")
+        return HttpResponse.json({ data: [], meta: {} })
+      })
+    )
+    await http.get("/admin/tenants")
+    expect(auth).toBe("Bearer operator-token")
   })
 })
 
@@ -606,13 +684,15 @@ describe("impersonation auto-expiry (#1757)", () => {
     expect(endCalls).toBe(1)
     expect(refreshCalls).toBe(0)
     // The operator's restored BACK-OFFICE tokens land in back-office
-    // storage (Phase 5/6 #1785) — the expired impersonation token stays
-    // in tenant storage but is no longer used because the page is about
-    // to hard-redirect anyway. The return-slot was cleared and the
-    // browser hard-redirected back to the impersonated user's admin
-    // detail page.
+    // storage (Phase 5/6 #1785). The stale impersonation TENANT session is
+    // torn down (#1968): leaving the now-blacklisted imp token in tenant
+    // storage made the /admin/* page we redirect to boot the global tenant
+    // AuthProvider into a /auth/me 401 → tenant /login "session expired"
+    // bounce, hijacking the intended return to the admin panel. The
+    // return-slot is cleared and the browser hard-redirects to the
+    // impersonated user's admin detail page.
     expect(getBackofficeAccessToken()).toBe("admin-token")
-    expect(getAccessToken()).toBe("expired-impersonation-token")
+    expect(getAccessToken()).toBeNull()
     expect(getImpersonationReturn()).toBeNull()
     expect(redirect).toHaveBeenCalledWith("/admin/users/t1")
   })

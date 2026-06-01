@@ -12,6 +12,7 @@ import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import {
   clearAuth,
+  getAccessToken,
   getImpersonationReturn,
   setAccessToken,
   setImpersonationReturn,
@@ -196,6 +197,10 @@ describe("ImpersonationBanner", () => {
     await waitFor(() => expect(endCalls).toBe(1))
     await waitFor(() => expect(redirect).toHaveBeenCalledWith("/admin/users/t1"))
     expect(getImpersonationReturn()).toBeNull()
+    // #1968: the stale impersonated tenant session is torn down so the
+    // /admin/* page we redirect to doesn't boot the tenant AuthProvider into
+    // a /auth/me 401 → tenant /login bounce that would hijack the admin return.
+    expect(getAccessToken()).toBeNull()
   })
 
   it("on End failure: clears auth and redirects to /backoffice/login with the session_expired reason", async () => {
