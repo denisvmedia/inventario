@@ -2,6 +2,7 @@
   "cards": {
     "addItem": {
       "description": "Snap a photo and let AI fill in the details — no account needed to start.",
+      "descriptionManual": "Add your first item in seconds — no account needed to start.",
       "title": "Add New Item"
     },
     "browse": {

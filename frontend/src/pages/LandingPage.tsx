@@ -21,12 +21,17 @@ import { cn } from "@/lib/utils"
 // from the mock's onboarding/empty-state surfaces. The page renders its
 // own full-screen layout because it sits OUTSIDE the authenticated Shell.
 //
-// The "Add New Item" card is gated on the `public_scan` feature flag: the
-// public scan endpoint is mounted only when the flag is on, so when it's
-// off we hide the Add card entirely rather than offer a CTA the backend
-// would 404. "Browse My Items" and the ghost login link both route to
-// /login?redirect=/ so a returning user lands back on "/" (RootGate then
-// resolves them to their dashboard).
+// The "Add New Item" card is ALWAYS shown — adding your first item is the
+// page's primary CTA (#1988) and must never disappear (the regression that
+// motivated this change: with public_scan off the page degenerated to a
+// browse-only dead-end). The `public_scan` feature flag only gates the AI
+// photo-scan *accelerator*, not the ability to add an item: when the flag
+// is off the dialog opens directly on manual entry (no scan endpoint is
+// offered, so nothing 404s) and the card copy drops the "let AI fill it in"
+// promise. The post-save hand-off (stash draft → login → replay) is
+// identical either way. "Browse My Items" and the ghost login link both
+// route to /login?redirect=/ so a returning user lands back on "/" (RootGate
+// then resolves them to their dashboard).
 export function LandingPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -68,19 +73,23 @@ export function LandingPage() {
             </p>
           </div>
 
-          {/* Two-up only when the Add card is present; with public_scan
-              off (the default) the lone Browse card fills the row rather
-              than floating in a half-width column. */}
-          <div className={cn("grid grid-cols-1 gap-4", publicScanEnabled && "sm:grid-cols-2")}>
-            {publicScanEnabled ? (
-              <LandingCard
-                title={t("landing:cards.addItem.title")}
-                description={t("landing:cards.addItem.description")}
-                icon={Sparkles}
-                onClick={() => setDialogOpen(true)}
-                testId="landing-add-item"
-              />
-            ) : null}
+          {/* Add + Browse are both always present, so the grid is always
+              two-up on ≥sm. The Add card's icon + copy reflect whether the
+              AI scan accelerator is available (public_scan): Sparkles +
+              "let AI fill it in" when on, a plain Package + manual-entry
+              copy when off. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <LandingCard
+              title={t("landing:cards.addItem.title")}
+              description={t(
+                publicScanEnabled
+                  ? "landing:cards.addItem.description"
+                  : "landing:cards.addItem.descriptionManual"
+              )}
+              icon={publicScanEnabled ? Sparkles : Package}
+              onClick={() => setDialogOpen(true)}
+              testId="landing-add-item"
+            />
             <LandingCard
               title={t("landing:cards.browse.title")}
               description={t("landing:cards.browse.description")}
@@ -103,9 +112,11 @@ export function LandingPage() {
         </div>
       </main>
 
-      {publicScanEnabled ? (
-        <AnonymousCommodityDialog open={dialogOpen} onOpenChange={setDialogOpen} />
-      ) : null}
+      <AnonymousCommodityDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        aiScanEnabled={publicScanEnabled}
+      />
     </div>
   )
 }

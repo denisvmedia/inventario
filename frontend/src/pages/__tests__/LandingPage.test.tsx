@@ -59,22 +59,26 @@ describe("<LandingPage />", () => {
     expect(screen.getByTestId("landing-login-link")).toBeInTheDocument()
   })
 
-  it("hides the Add card when public_scan is off", async () => {
+  it("shows the Add card (manual copy) when public_scan is off", async () => {
     mockFlags(false)
     renderLanding()
     await screen.findByTestId("landing-page")
-    // Flag query resolves async; assert the Add card never appears.
-    await waitFor(() => {
-      expect(screen.getByTestId("landing-browse")).toBeInTheDocument()
-    })
-    expect(screen.queryByTestId("landing-add-item")).not.toBeInTheDocument()
+    // Add the item is the primary CTA and must always be present —
+    // public_scan off only drops the AI accelerator, not the card.
+    const add = await screen.findByTestId("landing-add-item")
+    expect(add).toBeInTheDocument()
+    // Copy reflects manual entry rather than promising AI fill-in.
+    expect(add).toHaveTextContent("Add your first item in seconds")
+    expect(add).not.toHaveTextContent("let AI fill in")
   })
 
-  it("shows the Add card when public_scan is on", async () => {
+  it("shows the Add card (AI copy) when public_scan is on", async () => {
     mockFlags(true)
     renderLanding()
     await screen.findByTestId("landing-page")
-    expect(await screen.findByTestId("landing-add-item")).toBeInTheDocument()
+    const add = await screen.findByTestId("landing-add-item")
+    expect(add).toBeInTheDocument()
+    expect(add).toHaveTextContent("let AI fill in the details")
   })
 
   it("Browse card navigates to /login?redirect=/", async () => {

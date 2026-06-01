@@ -19,14 +19,24 @@ const WELCOME_PATH = "/welcome"
 interface AnonymousCommodityDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  // Mirrors the `public_scan` deployment flag. When false the wrapped
+  // form skips the AI photo-scan step and opens directly on manual
+  // entry — the public scan endpoint is unmounted (404) in that posture,
+  // so offering the scan UI would only dead-end. The rest of the
+  // hand-off (stash draft → login → replay) is unaffected. Defaults to
+  // false so a caller that forgets to pass it degrades safely to manual.
+  aiScanEnabled?: boolean
 }
 
 // AnonymousCommodityDialog wraps the create-mode CommodityFormDialog for
 // the unauthenticated landing-page "add your first item" CTA (#1988).
 //
-// It renders the same multi-step form (incl. the public AI scan via
-// `anonymous`), but its `onSubmit` is a PURE HAND-OFF, not a POST: there
-// is no group, no auth, and nothing to persist to the BE yet. On submit
+// It renders the same multi-step form (the public AI scan step via
+// `anonymous` is included only when `aiScanEnabled` — i.e. the
+// `public_scan` deployment flag — is on; otherwise the form opens
+// straight on manual entry), but its `onSubmit` is a PURE HAND-OFF, not
+// a POST: there is no group, no auth, and nothing to persist to the BE
+// yet. On submit
 // we
 //   1. write the validated values into the fixed anonymous draft key
 //      (belt-and-suspenders over the dialog's own rAF-debounced
@@ -42,7 +52,11 @@ interface AnonymousCommodityDialogProps {
 // no group to read one from; `areas`/`locations` are empty (the create
 // dialog no longer asks for a location — #1987 — so the anonymous user
 // never needs one).
-export function AnonymousCommodityDialog({ open, onOpenChange }: AnonymousCommodityDialogProps) {
+export function AnonymousCommodityDialog({
+  open,
+  onOpenChange,
+  aiScanEnabled = false,
+}: AnonymousCommodityDialogProps) {
   const navigate = useNavigate()
   const defaultCurrency = inferDefaultCurrency()
 
@@ -109,6 +123,7 @@ export function AnonymousCommodityDialog({ open, onOpenChange }: AnonymousCommod
       onOpenChange={onOpenChange}
       mode="create"
       anonymous
+      enableAiScan={aiScanEnabled}
       areas={[]}
       locations={[]}
       defaultCurrency={defaultCurrency}
