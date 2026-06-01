@@ -152,10 +152,11 @@ type StepKey = "ai" | FormStepKey
 // #1398/#1399.
 const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
   ai: [],
-  // area_id is intentionally absent: the create dialog no longer asks
-  // for a location (#1987) and area is optional (#1986). Edit mode shows
-  // the picker but it never blocks step validation.
-  basics: ["name", "short_name", "urls", "type", "status", "count", "draft"],
+  // area_id stays in the Basics set so a server-side area_id error (only
+  // reachable in edit mode now) still maps back to Basics via the 422
+  // handler — but it never blocks Next: area is optional (#1986/#1987) so
+  // its schema is a bare z.string() that always passes step validation.
+  basics: ["name", "short_name", "urls", "type", "area_id", "status", "count", "draft"],
   purchase: [
     "purchase_date",
     "original_price",
@@ -1245,7 +1246,11 @@ function BasicsStep(props: any) {
                   onValueChange={field.onChange}
                   disabled={!selectedLocationId}
                 >
-                  <SelectTrigger id="commodity-area" className="w-full">
+                  <SelectTrigger
+                    id="commodity-area"
+                    className="w-full"
+                    aria-invalid={!!errors.area_id}
+                  >
                     <SelectValue
                       placeholder={
                         selectedLocationId
@@ -1264,6 +1269,7 @@ function BasicsStep(props: any) {
                 </Select>
               )}
             />
+            <FieldError error={errors.area_id} />
           </div>
         </div>
       ) : null}

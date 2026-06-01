@@ -488,10 +488,12 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
         ) : null}
         {/* Non-blocking nudge to file an unassigned item under a
             location (#1987). Shows only when the item has no area and
-            the group actually has locations to choose from. The CTA
-            opens the edit dialog, which hosts the location/area picker. */}
+            the group actually has locations to choose from. Hidden while
+            a currency migration holds the group lock — its CTA opens the
+            same edit dialog the main Edit button gates on the lock, so
+            hiding it keeps the banner from being a lock-bypass path. */}
         <AssignLocationBanner
-          show={!commodity.area_id && (locations.data?.length ?? 0) > 0}
+          show={!commodity.area_id && (locations.data?.length ?? 0) > 0 && !migrationLock.locked}
           onAssign={() => setEditOpen(true)}
         />
         {/* The Sheet variant renders its own X close button (top-right
