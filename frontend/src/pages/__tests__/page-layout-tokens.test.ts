@@ -59,6 +59,10 @@ const SPECIAL_PURPOSE_PAGES = new Set<string>([
   "Placeholder.tsx",
   "UnexpectedErrorPage.tsx",
   "RootRedirect.tsx",
+  // Anonymous first-item flow (#1988): a full-screen centered hero CTA and a
+  // transient post-login replay spinner — bespoke layouts, no <Page> wrapper.
+  "LandingPage.tsx",
+  "FirstItemResolver.tsx",
   "admin/AdminForbiddenPage.tsx",
   // Auth pages — own card-centered layout.
   "auth/ForgotPasswordPage.tsx",
