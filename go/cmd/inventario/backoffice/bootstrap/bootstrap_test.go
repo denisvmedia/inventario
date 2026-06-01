@@ -48,8 +48,10 @@ func setupMemoryAsPostgres(c *qt.C) *registry.FactorySet {
 }
 
 // runBootstrap is a one-liner around the cobra command — captures
-// stdout for assertion and returns the run error.
-func runBootstrap(c *qt.C, dsn string, args ...string) (string, error) {
+// stdout for assertion and returns the run error. The *qt.C parameter is
+// accepted for call-site symmetry with the other helpers but intentionally
+// unused (callers own their assertions).
+func runBootstrap(_ *qt.C, dsn string, args ...string) (string, error) {
 	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
 	cmd := bootstrap.New(dbConfig).Cmd()
 
