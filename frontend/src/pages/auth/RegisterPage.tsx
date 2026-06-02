@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowRight, CheckCircle2, Mail, Package, User } from "lucide-react"
+import { ArrowRight, CheckCircle2, Mail, User } from "lucide-react"
 
 import { AuthLayout } from "@/components/auth/AuthLayout"
 import { OAuthRow } from "@/components/auth/OAuthRow"
@@ -18,6 +18,7 @@ import { useAcceptInvite } from "@/features/invite/hooks"
 import { useLogin, useRegister } from "@/features/auth/hooks"
 import { consumePendingInvite, peekPendingInvite } from "@/features/auth/inviteHandoff"
 import { peekPendingFirstItem } from "@/features/auth/firstItemHandoff"
+import { PendingFirstItemBanner } from "@/components/auth/PendingFirstItemBanner"
 import { registerSchema, type RegisterInput } from "@/features/auth/schemas"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -173,12 +174,7 @@ export function RegisterPage() {
           </Alert>
         ) : null}
 
-        {pendingFirstItem ? (
-          <Alert data-testid="pending-first-item-banner">
-            <Package aria-hidden="true" />
-            <AlertDescription>{t("auth:firstItem.banner")}</AlertDescription>
-          </Alert>
-        ) : null}
+        {pendingFirstItem ? <PendingFirstItemBanner /> : null}
 
         <form
           className="register-form-content space-y-4"

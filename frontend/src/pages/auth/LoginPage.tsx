@@ -3,12 +3,13 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom"
-import { ArrowRight, Link2, Mail, Package, Sparkles } from "lucide-react"
+import { ArrowRight, Link2, Mail, Sparkles } from "lucide-react"
 
 import { AuthLayout } from "@/components/auth/AuthLayout"
 import { MFAChallenge } from "@/components/auth/MFAChallenge"
 import { OAuthRow } from "@/components/auth/OAuthRow"
 import { PasswordInput } from "@/components/auth/PasswordInput"
+import { PendingFirstItemBanner } from "@/components/auth/PendingFirstItemBanner"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -295,12 +296,7 @@ export function LoginPage() {
           </Alert>
         ) : null}
 
-        {pendingFirstItem ? (
-          <Alert data-testid="pending-first-item-banner">
-            <Package aria-hidden="true" />
-            <AlertDescription>{t("auth:firstItem.banner")}</AlertDescription>
-          </Alert>
-        ) : null}
+        {pendingFirstItem ? <PendingFirstItemBanner /> : null}
 
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <div className="space-y-1.5">
