@@ -1,9 +1,14 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { ArrowRight, Package, Sparkles } from "lucide-react"
 
 import { AnonymousCommodityDialog } from "@/components/items/AnonymousCommodityDialog"
+import {
+  ResumeFirstItemPill,
+  anonDraftHasContent,
+  RESUME_FIRST_ITEM_PARAM,
+} from "@/components/items/ResumeFirstItemPill"
 import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { cn } from "@/lib/utils"
@@ -21,17 +26,67 @@ import { cn } from "@/lib/utils"
 // from the mock's onboarding/empty-state surfaces. The page renders its
 // own full-screen layout because it sits OUTSIDE the authenticated Shell.
 //
-// The "Add New Item" card is gated on the `public_scan` feature flag: the
-// public scan endpoint is mounted only when the flag is on, so when it's
-// off we hide the Add card entirely rather than offer a CTA the backend
-// would 404. "Browse My Items" and the ghost login link both route to
-// /login?redirect=/ so a returning user lands back on "/" (RootGate then
-// resolves them to their dashboard).
+// The "Add New Item" card is ALWAYS shown — adding your first item is the
+// page's primary CTA (#1988) and must never disappear (the regression that
+// motivated this change: with public_scan off the page degenerated to a
+// browse-only dead-end). The `public_scan` feature flag only gates the AI
+// photo-scan *accelerator*, not the ability to add an item: when the flag
+// is off the dialog opens directly on manual entry (no scan endpoint is
+// offered, so nothing 404s) and the card copy drops the "let AI fill it in"
+// promise. The post-save hand-off (stash draft → login → replay) is
+// identical either way. "Browse My Items" and the ghost login link both
+// route to /login?redirect=/ so a returning user lands back on "/" (RootGate
+// then resolves them to their dashboard).
 export function LandingPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const publicScanEnabled = useFeatureFlag("public_scan")
-  const [dialogOpen, setDialogOpen] = useState(false)
+  // Arriving with ?addFirstItem=1 (the auth-page resume pill) auto-opens the
+  // dialog so the visitor lands straight back in their drafted item.
+  const resumeRequested = searchParams.get(RESUME_FIRST_ITEM_PARAM) === "1"
+  const [dialogOpen, setDialogOpen] = useState(resumeRequested)
+  // Snapshot of `public_scan` taken when the dialog OPENS, not read live.
+  // `useFeatureFlag` returns the `false` fallback until the boot fetch
+  // resolves, so a quick click can open the dialog in manual mode and then
+  // see the flag flip false→true. Feeding that live value to the dialog
+  // would change its `initialStep` mid-session, re-firing the form's
+  // open-reset effect and clobbering in-progress input. Freezing the value
+  // at open time pins the entry step for the whole session.
+  const [dialogAiScan, setDialogAiScan] = useState(false)
+  // Whether an in-progress anonymous draft exists, driving the floating
+  // "continue your item" pill. localStorage isn't reactive, so we read it
+  // once at mount (lazy initializer) and re-read on every dialog close —
+  // the only moments the draft content can change from this page.
+  const [hasDraft, setHasDraft] = useState(() => anonDraftHasContent())
+
+  function handleDialogOpenChange(open: boolean) {
+    setDialogOpen(open)
+    if (!open) {
+      setHasDraft(anonDraftHasContent())
+      // Drop ?addFirstItem=1 once handled so a refresh / back doesn't
+      // re-pop the dialog the user just closed.
+      if (resumeRequested) navigate("/", { replace: true })
+    }
+  }
+
+  function openAddDialog() {
+    // `useFeatureFlag` is typed `boolean | undefined` — `public_scan` is an
+    // optional OpenAPI field, so it's `undefined` when the flags response
+    // omits it (the `false` fallback only applies while the query has no
+    // data). `=== true` is required to store it in this boolean state, not
+    // cosmetic: dropping it fails `tsc`.
+    setDialogAiScan(publicScanEnabled === true)
+    setDialogOpen(true)
+  }
+
+  // Resuming an existing draft opens straight on the form (manual entry,
+  // dialogAiScan left false) rather than the AI offer — the visitor is
+  // continuing what they typed, not starting fresh from a photo.
+  function resumeAddDialog() {
+    setDialogAiScan(false)
+    setDialogOpen(true)
+  }
 
   function goToLogin() {
     navigate(`/login?redirect=${encodeURIComponent("/")}`)
@@ -68,19 +123,23 @@ export function LandingPage() {
             </p>
           </div>
 
-          {/* Two-up only when the Add card is present; with public_scan
-              off (the default) the lone Browse card fills the row rather
-              than floating in a half-width column. */}
-          <div className={cn("grid grid-cols-1 gap-4", publicScanEnabled && "sm:grid-cols-2")}>
-            {publicScanEnabled ? (
-              <LandingCard
-                title={t("landing:cards.addItem.title")}
-                description={t("landing:cards.addItem.description")}
-                icon={Sparkles}
-                onClick={() => setDialogOpen(true)}
-                testId="landing-add-item"
-              />
-            ) : null}
+          {/* Add + Browse are both always present, so the grid is always
+              two-up on ≥sm. The Add card's icon + copy reflect whether the
+              AI scan accelerator is available (public_scan): Sparkles +
+              "let AI fill it in" when on, a plain Package + manual-entry
+              copy when off. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <LandingCard
+              title={t("landing:cards.addItem.title")}
+              description={t(
+                publicScanEnabled
+                  ? "landing:cards.addItem.description"
+                  : "landing:cards.addItem.descriptionManual"
+              )}
+              icon={publicScanEnabled ? Sparkles : Package}
+              onClick={openAddDialog}
+              testId="landing-add-item"
+            />
             <LandingCard
               title={t("landing:cards.browse.title")}
               description={t("landing:cards.browse.description")}
@@ -103,9 +162,17 @@ export function LandingPage() {
         </div>
       </main>
 
-      {publicScanEnabled ? (
-        <AnonymousCommodityDialog open={dialogOpen} onOpenChange={setDialogOpen} />
-      ) : null}
+      {/* Floating "continue your item" pill. Surfaces when the visitor
+          started an item and closed the dialog without finishing — their
+          entry is auto-saved, so this lets them pick it straight back up.
+          Hidden while the dialog is open (it would sit under the modal). */}
+      {hasDraft && !dialogOpen ? <ResumeFirstItemPill onResume={resumeAddDialog} /> : null}
+
+      <AnonymousCommodityDialog
+        open={dialogOpen}
+        onOpenChange={handleDialogOpenChange}
+        aiScanEnabled={dialogAiScan}
+      />
     </div>
   )
 }

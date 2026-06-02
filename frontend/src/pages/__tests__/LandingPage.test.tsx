@@ -5,6 +5,7 @@ import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { LandingPage } from "@/pages/LandingPage"
+import { ANON_DRAFT_KEY } from "@/components/items/AnonymousCommodityDialog"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -31,9 +32,9 @@ function mockFlags(publicScan: boolean) {
   )
 }
 
-function renderLanding() {
+function renderLanding(initialPath = "/") {
   return renderWithProviders({
-    initialPath: "/",
+    initialPath,
     routes: (
       <>
         <Route path="/" element={<LandingPage />} />
@@ -59,22 +60,26 @@ describe("<LandingPage />", () => {
     expect(screen.getByTestId("landing-login-link")).toBeInTheDocument()
   })
 
-  it("hides the Add card when public_scan is off", async () => {
+  it("shows the Add card (manual copy) when public_scan is off", async () => {
     mockFlags(false)
     renderLanding()
     await screen.findByTestId("landing-page")
-    // Flag query resolves async; assert the Add card never appears.
-    await waitFor(() => {
-      expect(screen.getByTestId("landing-browse")).toBeInTheDocument()
-    })
-    expect(screen.queryByTestId("landing-add-item")).not.toBeInTheDocument()
+    // Adding an item is the primary CTA and must always be present —
+    // public_scan off only drops the AI accelerator, not the card.
+    const add = await screen.findByTestId("landing-add-item")
+    expect(add).toBeInTheDocument()
+    // Copy reflects manual entry rather than promising AI fill-in.
+    expect(add).toHaveTextContent("Add your first item in seconds")
+    expect(add).not.toHaveTextContent("let AI fill in")
   })
 
-  it("shows the Add card when public_scan is on", async () => {
+  it("shows the Add card (AI copy) when public_scan is on", async () => {
     mockFlags(true)
     renderLanding()
     await screen.findByTestId("landing-page")
-    expect(await screen.findByTestId("landing-add-item")).toBeInTheDocument()
+    const add = await screen.findByTestId("landing-add-item")
+    expect(add).toBeInTheDocument()
+    expect(add).toHaveTextContent("let AI fill in the details")
   })
 
   it("Browse card navigates to /login?redirect=/", async () => {
@@ -97,5 +102,45 @@ describe("<LandingPage />", () => {
       expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/login")
     })
     expect(screen.getByTestId("loc").getAttribute("data-search")).toBe("?redirect=%2F")
+  })
+
+  it("hides the resume badge when there is no in-progress draft", async () => {
+    mockFlags(false)
+    renderLanding()
+    await screen.findByTestId("landing-page")
+    expect(screen.queryByTestId("resume-first-item-pill")).not.toBeInTheDocument()
+  })
+
+  it("ignores a content-less draft (defaults only) for the resume badge", async () => {
+    mockFlags(false)
+    // The dialog auto-saves defaults on open; an identity-field-less draft
+    // must not surface the "continue" affordance.
+    window.localStorage.setItem(ANON_DRAFT_KEY, JSON.stringify({ count: "1", draft: true }))
+    renderLanding()
+    await screen.findByTestId("landing-page")
+    expect(screen.queryByTestId("resume-first-item-pill")).not.toBeInTheDocument()
+  })
+
+  it("shows the resume badge for a draft with content and reopens the dialog", async () => {
+    mockFlags(false)
+    window.localStorage.setItem(ANON_DRAFT_KEY, JSON.stringify({ name: "Camera" }))
+    const user = userEvent.setup()
+    renderLanding()
+    const badge = await screen.findByTestId("resume-first-item-pill")
+    await user.click(badge)
+    // public_scan off ⇒ the dialog opens straight on the Basics step
+    // (the footer Next button is only present off the AI surface).
+    expect(await screen.findByTestId("commodity-form-next")).toBeInTheDocument()
+  })
+
+  it("auto-opens the dialog when arriving with ?addFirstItem=1 (resume from auth)", async () => {
+    mockFlags(false)
+    window.localStorage.setItem(ANON_DRAFT_KEY, JSON.stringify({ name: "Camera" }))
+    renderLanding("/?addFirstItem=1")
+    // Dialog opens directly on the form to continue editing (no AI offer),
+    // signalled by the footer Next button.
+    expect(await screen.findByTestId("commodity-form-next")).toBeInTheDocument()
+    // ...and the floating pill is hidden while the dialog is open.
+    expect(screen.queryByTestId("resume-first-item-pill")).not.toBeInTheDocument()
   })
 })

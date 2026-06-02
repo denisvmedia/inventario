@@ -2,12 +2,16 @@
   "cards": {
     "addItem": {
       "description": "Snap a photo and let AI fill in the details — no account needed to start.",
+      "descriptionManual": "Add your first item in seconds — no account needed to start.",
       "title": "Add New Item"
     },
     "browse": {
       "description": "Log in to see and manage everything you own.",
       "title": "Browse My Items"
     }
+  },
+  "draft": {
+    "resume": "Continue your item"
   },
   "hero": {
     "subtitle": "Track your belongings, their warranties and values in one place.",

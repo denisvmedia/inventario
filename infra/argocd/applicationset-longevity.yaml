@@ -93,6 +93,15 @@ spec:
               # CrashLoops. Flip to `none`/`mock` to defer the key.
               aivision:
                 provider: anthropic
+                # Public, unauthenticated landing-page photo-scan (#1988).
+                # Backs the anonymous "add your first item" CTA so a logged-
+                # out demo visitor can scan a photo before signing up. Safe to
+                # enable here: this persistent demo is tailnet-gated and the
+                # public endpoint carries its own per-IP + global-daily rate
+                # limiter on top of the global budget. (The FE Add-Item CTA
+                # shows regardless of this flag — it only adds the AI
+                # accelerator.)
+                publicScanEnabled: true
               ingress:
                 annotations:
                   tailscale.com/hostname: inv-vcl01-longevity

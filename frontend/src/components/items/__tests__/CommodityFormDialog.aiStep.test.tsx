@@ -68,6 +68,28 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     )
   })
 
+  it("skips the AI step and opens on Basics when enableAiScan is false", async () => {
+    withGroupSlug()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="create"
+          enableAiScan={false}
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+        />
+      ),
+    })
+    // No AI offer surface — create mode lands directly on a form step
+    // (signalled by the footer Next button, which the AI step hides).
+    expect(await screen.findByTestId("commodity-form-next")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-form-ai-step")).not.toBeInTheDocument()
+  })
+
   it("renders the offer phase by default with no thumbnails", async () => {
     renderDialog()
     expect(await screen.findByTestId("commodity-form-ai-step")).toHaveAttribute(
