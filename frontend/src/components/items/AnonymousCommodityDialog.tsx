@@ -19,14 +19,24 @@ const WELCOME_PATH = "/welcome"
 interface AnonymousCommodityDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  // Mirrors the `public_scan` deployment flag. When false the wrapped
+  // form skips the AI photo-scan step and opens directly on manual
+  // entry — the public scan endpoint is unmounted (404) in that posture,
+  // so offering the scan UI would only dead-end. The rest of the
+  // hand-off (stash draft → login → replay) is unaffected. Defaults to
+  // false so a caller that forgets to pass it degrades safely to manual.
+  aiScanEnabled?: boolean
 }
 
 // AnonymousCommodityDialog wraps the create-mode CommodityFormDialog for
 // the unauthenticated landing-page "add your first item" CTA (#1988).
 //
-// It renders the same multi-step form (incl. the public AI scan via
-// `anonymous`), but its `onSubmit` is a PURE HAND-OFF, not a POST: there
-// is no group, no auth, and nothing to persist to the BE yet. On submit
+// It renders the same multi-step form (the public AI scan step via
+// `anonymous` is included only when `aiScanEnabled` — i.e. the
+// `public_scan` deployment flag — is on; otherwise the form opens
+// straight on manual entry), but its `onSubmit` is a PURE HAND-OFF, not
+// a POST: there is no group, no auth, and nothing to persist to the BE
+// yet. On submit
 // we
 //   1. write the validated values into the fixed anonymous draft key
 //      (belt-and-suspenders over the dialog's own rAF-debounced
@@ -42,7 +52,11 @@ interface AnonymousCommodityDialogProps {
 // no group to read one from; `areas`/`locations` are empty (the create
 // dialog no longer asks for a location — #1987 — so the anonymous user
 // never needs one).
-export function AnonymousCommodityDialog({ open, onOpenChange }: AnonymousCommodityDialogProps) {
+export function AnonymousCommodityDialog({
+  open,
+  onOpenChange,
+  aiScanEnabled = false,
+}: AnonymousCommodityDialogProps) {
   const navigate = useNavigate()
   const defaultCurrency = inferDefaultCurrency()
 
@@ -103,16 +117,39 @@ export function AnonymousCommodityDialog({ open, onOpenChange }: AnonymousCommod
     navigate(`/login?redirect=${encodeURIComponent(WELCOME_PATH)}`)
   }
 
+  // "Save as draft" from the dismiss-confirm. Unlike an authenticated user,
+  // an anonymous visitor has nowhere to persist a draft except their own
+  // account — so saving a (possibly partial) draft hands off to login just
+  // like a full submit: the dialog has already written the form-shaped draft
+  // under ANON_DRAFT_KEY, so we only set the pending-first-item marker and
+  // route to login. Currency is the locale default (the resolver re-derives
+  // it from the real group on replay, so a partial draft with no price is
+  // fine). Without this the user would land back on the bare landing page
+  // with no obvious way to actually keep what they typed.
+  function handleSaveDraft() {
+    savePendingFirstItem({
+      draftKey: ANON_DRAFT_KEY,
+      currency: defaultCurrency,
+      savedAt: Date.now(),
+    })
+    navigate(`/login?redirect=${encodeURIComponent(WELCOME_PATH)}`)
+  }
+
   return (
     <CommodityFormDialog
       open={open}
       onOpenChange={onOpenChange}
       mode="create"
       anonymous
+      enableAiScan={aiScanEnabled}
+      // Start as a draft so the first-time visitor only needs name +
+      // short name + type; everything else (price, date, …) is optional.
+      defaultDraft
       areas={[]}
       locations={[]}
       defaultCurrency={defaultCurrency}
       onSubmit={handleSubmit}
+      onSaveDraft={handleSaveDraft}
       draftKey={ANON_DRAFT_KEY}
     />
   )

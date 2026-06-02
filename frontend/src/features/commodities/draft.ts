@@ -69,12 +69,18 @@ export function clearDraft(key: string): void {
 
 // buildDefaults populates the form with safe initial values. For edit
 // mode it carries the existing record; for create mode the only
-// pre-populated bits are the count (1), status (in_use), draft (false),
-// and the group currency. Everything else stays empty so the
-// user fills it in.
+// pre-populated bits are the count (1), status (in_use), draft, and the
+// group currency. Everything else stays empty so the user fills it in.
+//
+// `defaultDraft` seeds the `draft` toggle for a brand-new item (it has
+// no effect in edit mode, where the record's own `draft` wins). The
+// anonymous landing flow (#1988) passes `true` so a first-time visitor
+// only has to enter name/short_name/type — price/date become optional —
+// keeping the "add your first item" path as short as possible.
 export function buildDefaults(
   initial: Commodity | undefined,
-  currency: string
+  currency: string,
+  defaultDraft = false
 ): CommodityFormInput {
   // `urls` is typed as `string` by openapi-typescript because the BE
   // model uses `swaggertype:"string"` on a JSONB column; at runtime it's
@@ -103,7 +109,7 @@ export function buildDefaults(
     purchase_date: (initial?.purchase_date as string) ?? "",
     urls,
     comments: initial?.comments ?? "",
-    draft: initial?.draft ?? false,
+    draft: initial?.draft ?? defaultDraft,
     warranty_expires_at: (initial?.warranty_expires_at as string) ?? "",
     warranty_notes: initial?.warranty_notes ?? "",
   }

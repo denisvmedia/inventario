@@ -17,6 +17,12 @@ import { Label } from "@/components/ui/label"
 import { useAcceptInvite } from "@/features/invite/hooks"
 import { useLogin, useRegister } from "@/features/auth/hooks"
 import { consumePendingInvite, peekPendingInvite } from "@/features/auth/inviteHandoff"
+import { peekPendingFirstItem } from "@/features/auth/firstItemHandoff"
+import { PendingFirstItemDrawer } from "@/components/auth/PendingFirstItemDrawer"
+import {
+  ResumeFirstItemPill,
+  RESUME_FIRST_ITEM_PARAM,
+} from "@/components/items/ResumeFirstItemPill"
 import { registerSchema, type RegisterInput } from "@/features/auth/schemas"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -32,6 +38,10 @@ export function RegisterPage() {
   const acceptInviteMutation = useAcceptInvite()
 
   const [pendingInvite] = useState(() => peekPendingInvite())
+  // Anonymous first-item handoff (#1988): reassure a visitor who drafted an
+  // item on the landing page that it's safe and will be added after they
+  // finish signing up (the replay runs at /welcome once they're logged in).
+  const [pendingFirstItem] = useState(() => peekPendingFirstItem())
   const [serverError, setServerError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [autoAcceptError, setAutoAcceptError] = useState<string | null>(null)
@@ -166,6 +176,11 @@ export function RegisterPage() {
               })}
             </AlertDescription>
           </Alert>
+        ) : null}
+
+        {pendingFirstItem ? <PendingFirstItemDrawer /> : null}
+        {pendingFirstItem ? (
+          <ResumeFirstItemPill onResume={() => navigate(`/?${RESUME_FIRST_ITEM_PARAM}=1`)} />
         ) : null}
 
         <form

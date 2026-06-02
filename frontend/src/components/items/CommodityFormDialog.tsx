@@ -132,6 +132,32 @@ interface CommodityFormDialogProps {
   //       no entered data is lost before the user has an account.
   // Defaults to false so every authenticated caller is unchanged.
   anonymous?: boolean
+  // Gates the AI photo-scan entry step in create mode (#1988 follow-up).
+  // When false, create mode opens directly on Basics (manual entry) and
+  // the "ai" surface never mounts — used by the anonymous landing flow
+  // when the `public_scan` deployment flag is off, so the "add your first
+  // item" CTA still works without offering a scan endpoint that would
+  // 404. Defaults to true: every authenticated caller keeps the AI offer
+  // (its own /commodities/scan endpoint degrades to a typed 503 banner
+  // when no vision provider is configured, which the step already
+  // handles).
+  enableAiScan?: boolean
+  // Seeds the `draft` toggle for a NEW item (ignored in edit mode, where
+  // the record's own value wins). The anonymous landing flow (#1988)
+  // passes true so a first-time visitor only fills name/short_name/type
+  // — price/date/etc. relax to optional. Defaults false: authenticated
+  // create keeps a full (non-draft) item by default.
+  defaultDraft?: boolean
+  // Anonymous flow (#1988): invoked when the user picks "Save as draft" in
+  // the dismiss-confirm instead of completing the wizard. The draft has
+  // already been written to localStorage; the wrapper uses this to set the
+  // pending-first-item marker and route to login (same hand-off as a full
+  // submit), so an anonymous "save as draft" still ends up on the login
+  // page rather than silently back on the landing surface. When provided
+  // (anonymous only) it OWNS closing/navigation — the dialog won't also call
+  // onOpenChange. Defaults undefined: authenticated save-as-draft just
+  // persists locally and closes.
+  onSaveDraft?: () => void
 }
 
 // Files step model lives in features/commodities/draft.ts as
@@ -203,13 +229,19 @@ export function CommodityFormDialog({
   isPending,
   draftKey,
   anonymous = false,
+  enableAiScan = true,
+  defaultDraft = false,
+  onSaveDraft,
 }: CommodityFormDialogProps) {
   const { t } = useTranslation()
   // Create mode opens on the AI offer surface; edit mode jumps
   // straight to Basics (no scanner needed when the row already
   // exists). The numbered stepper iterates `FORM_STEPS` only — AI
   // is an alternative entry path, not part of the linear sequence.
-  const initialStep: StepKey = mode === "create" ? "ai" : "basics"
+  // When `enableAiScan` is off (anonymous flow with public_scan
+  // disabled) create mode also opens on Basics — the scan surface
+  // would only 404, so we skip straight to manual entry.
+  const initialStep: StepKey = mode === "create" && enableAiScan ? "ai" : "basics"
   const [step, setStep] = useState<StepKey>(initialStep)
   // Tracks which form steps the user has already landed on, so the
   // segmented stepper bar lets them click back-and-forth between
@@ -265,8 +297,8 @@ export function CommodityFormDialog({
   const persistDrafts = mode === "create" && !!draftKey
 
   const defaults = useMemo<CommodityFormInput>(
-    () => buildDefaults(initialValues, defaultCurrency),
-    [initialValues, defaultCurrency]
+    () => buildDefaults(initialValues, defaultCurrency, defaultDraft),
+    [initialValues, defaultCurrency, defaultDraft]
   )
 
   // Schema closes over group currency: when the purchase currency
@@ -436,11 +468,20 @@ export function CommodityFormDialog({
 
   function confirmCloseSaveDraft() {
     // Auto-save effect already wrote the latest values to localStorage;
-    // nothing to do here besides closing.
+    // re-write defensively so the final keystroke can't be stranded.
     if (persistDrafts && draftKey) {
       writeDraft(draftKey, getValues())
     }
     setCloseConfirmOpen(false)
+    // Anonymous flow (#1988): a "save as draft" can't persist server-side
+    // without an account, so hand off to login (set the marker + navigate)
+    // exactly like a full submit — otherwise the user is dumped back on the
+    // landing page with no path to actually keep their item. The wrapper
+    // owns the navigation, so we DON'T also call onOpenChange here.
+    if (onSaveDraft) {
+      onSaveDraft()
+      return
+    }
     onOpenChange(false)
   }
 

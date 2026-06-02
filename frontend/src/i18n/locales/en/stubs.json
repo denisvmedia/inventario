@@ -82,10 +82,6 @@
       "description": "Upload a photo to personalize your profile.",
       "title": "Profile photo"
     },
-    "twoFactor": {
-      "description": "Add an authenticator-app code on top of your password.",
-      "title": "Two-factor authentication"
-    },
     "warranties": {
       "description": "Track per-item warranty terms, expiry, and renewals.",
       "title": "Warranties"

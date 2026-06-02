@@ -9,7 +9,11 @@ import { AuthLayout } from "@/components/auth/AuthLayout"
 import { MFAChallenge } from "@/components/auth/MFAChallenge"
 import { OAuthRow } from "@/components/auth/OAuthRow"
 import { PasswordInput } from "@/components/auth/PasswordInput"
-import { TwoFactorStub } from "@/components/auth/TwoFactorStub"
+import { PendingFirstItemDrawer } from "@/components/auth/PendingFirstItemDrawer"
+import {
+  ResumeFirstItemPill,
+  RESUME_FIRST_ITEM_PARAM,
+} from "@/components/items/ResumeFirstItemPill"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -49,6 +53,12 @@ export function LoginPage() {
   const magicLinkEnabled = useFeatureFlag("magic_link_login")
 
   const [pendingInvite] = useState(() => peekPendingInvite())
+  // Anonymous first-item handoff (#1988): when the visitor drafted an item
+  // on the landing page before logging in, reassure them their entry is
+  // safe and will be added after sign-in (the actual replay happens at
+  // /welcome via finalizeLogin → FirstItemResolver). Peek once at mount —
+  // the resolver owns consumption.
+  const [pendingFirstItem] = useState(() => peekPendingFirstItem())
   const [serverError, setServerError] = useState<string | null>(null)
   // mfaChallenge holds the step-1 → step-2 handoff. When non-null,
   // <MFAChallenge> takes over the page and the password form is hidden.
@@ -290,6 +300,11 @@ export function LoginPage() {
           </Alert>
         ) : null}
 
+        {pendingFirstItem ? <PendingFirstItemDrawer /> : null}
+        {pendingFirstItem ? (
+          <ResumeFirstItemPill onResume={() => navigate(`/?${RESUME_FIRST_ITEM_PARAM}=1`)} />
+        ) : null}
+
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <div className="space-y-1.5">
             <Label htmlFor="login-email">{t("auth:fields.email")}</Label>
@@ -375,7 +390,6 @@ export function LoginPage() {
         </form>
 
         <OAuthRow />
-        <TwoFactorStub />
 
         <p className="text-center text-sm text-muted-foreground">
           {t("auth:login.dontHaveAccount")}{" "}

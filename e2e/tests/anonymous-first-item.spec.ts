@@ -98,6 +98,12 @@ test.describe('Anonymous first-item journey (#1988)', () => {
 
     // 4. Log in. LoginPage sees the marker and routes to /welcome instead of
     //    the dashboard (peek, not consume — the resolver owns consumption).
+    //    The first-item reassurance drawer (#1988) auto-opens over the form on
+    //    arrival; dismiss it ("Got it") first — its modal overlay otherwise
+    //    intercepts the form clicks (this mirrors the real visitor flow). Wait
+    //    for it to fully close so its exit animation can't race the form.
+    await page.getByTestId('pending-first-item-drawer-ok').click();
+    await page.getByTestId('pending-first-item-drawer').waitFor({ state: 'hidden' });
     await page.getByTestId('email').fill(TEST_CREDENTIALS.email);
     await page.getByTestId('password').fill(TEST_CREDENTIALS.password);
     await page.getByTestId('login-button').click();
