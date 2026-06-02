@@ -131,27 +131,36 @@ data:
     # just RBAC-fail the application patch. ArgoCD runs in `argocd` here.
     ARGO_NS="argocd"
 
+    # --fail makes a non-2xx (apiserver unreachable / RBAC denied) a non-zero
+    # curl exit, so callers can tell a real API failure from a valid-but-empty
+    # result instead of mistaking an error body for data.
     api_get() {
-        curl -sS --cacert "$CA" -H "Authorization: Bearer $TOKEN" "$API$1"
+        curl -sS --fail --cacert "$CA" -H "Authorization: Bearer $TOKEN" "$API$1"
     }
+
+    # Fetch the Application list. A fetch/RBAC failure must FAIL the run LOUDLY
+    # (ERROR + exit 1 -> failed CronJob), never be swallowed into a false
+    # "nothing to do" — otherwise the watchdog could silently stop working
+    # exactly when the cluster is unhealthy. (`if !` keeps `set -e` from
+    # aborting without our message.)
+    if ! apps_json="$(api_get "/apis/argoproj.io/v1alpha1/namespaces/$ARGO_NS/applications")"; then
+        echo "ERROR: failed to list Applications in '$ARGO_NS' (apiserver unreachable or RBAC denied) — failing the run." >&2
+        exit 1
+    fi
 
     # Candidate apps: operation Running, started older than THRESHOLD seconds,
     # destination namespace under the preview prefix. Emit "name<TAB>namespace".
-    #
-    # Wrapped in `( ... ) 2>/dev/null || echo ''` so a transient apiserver error
-    # (curl has no --fail, so a 4xx/5xx error body would make jq exit non-zero)
-    # can't abort the whole run under `set -eu` — on a blip we simply do nothing
-    # this cycle and the next CronJob tick retries, rather than fail-open silently.
-    # `try fromdateiso8601 catch empty` likewise drops a malformed startedAt for
-    # one app instead of aborting the stream for all of them.
-    candidates="$( (api_get "/apis/argoproj.io/v1alpha1/namespaces/$ARGO_NS/applications" \
-        | jq -r --argjson thr "$THRESHOLD" --arg pfx "$NS_PREFIX" '
-            .items[]
-            | select(.status.operationState.phase == "Running")
-            | select((.spec.destination.namespace // "") | startswith($pfx))
-            | select(((.status.operationState.startedAt // empty) | (try fromdateiso8601 catch empty)) < (now - $thr))
-            | "\(.metadata.name)\t\(.spec.destination.namespace)"
-        ') 2>/dev/null || echo '' )"
+    # `try fromdateiso8601 catch empty` drops a malformed startedAt for one app
+    # instead of aborting the stream for all of them. (A jq failure on the
+    # already-fetched JSON is a genuine anomaly and is left to abort the run
+    # under `set -e` — a failed CronJob, i.e. loud, not silent.)
+    candidates="$(printf '%s' "$apps_json" | jq -r --argjson thr "$THRESHOLD" --arg pfx "$NS_PREFIX" '
+        .items[]
+        | select(.status.operationState.phase == "Running")
+        | select((.spec.destination.namespace // "") | startswith($pfx))
+        | select(((.status.operationState.startedAt // empty) | (try fromdateiso8601 catch empty)) < (now - $thr))
+        | "\(.metadata.name)\t\(.spec.destination.namespace)"
+    ')"
 
     if [ -z "$candidates" ]; then
         echo "No sync operations Running > ${THRESHOLD}s under '${NS_PREFIX}*'. Nothing to do."
