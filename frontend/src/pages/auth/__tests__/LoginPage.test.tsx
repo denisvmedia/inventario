@@ -216,6 +216,27 @@ describe("<LoginPage />", () => {
     expect(screen.queryByTestId("pending-first-item-drawer")).not.toBeInTheDocument()
   })
 
+  it("offers a resume pill that routes back to the drafted item (#1988)", async () => {
+    savePendingFirstItem({ draftKey: "commodity-draft:anon:create", currency: "USD", savedAt: 1 })
+    // The reassurance drawer is modal (vaul sets pointer-events:none on the
+    // rest of the page), so disable the pointer-events guard — we're asserting
+    // the pill's navigation wiring, not the modal's dismiss interaction.
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    renderLogin()
+    const pill = await screen.findByTestId("resume-first-item-pill")
+    await user.click(pill)
+    await waitFor(() => {
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/")
+    })
+    expect(screen.getByTestId("loc").getAttribute("data-search")).toBe("?addFirstItem=1")
+  })
+
+  it("omits the resume pill when no draft is pending", async () => {
+    renderLogin()
+    await screen.findByTestId("login-page")
+    expect(screen.queryByTestId("resume-first-item-pill")).not.toBeInTheDocument()
+  })
+
   it("has no axe violations on the form", async () => {
     const { container } = renderLogin()
     expect(await axe(container)).toHaveNoViolations()

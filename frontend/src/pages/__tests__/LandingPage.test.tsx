@@ -32,9 +32,9 @@ function mockFlags(publicScan: boolean) {
   )
 }
 
-function renderLanding() {
+function renderLanding(initialPath = "/") {
   return renderWithProviders({
-    initialPath: "/",
+    initialPath,
     routes: (
       <>
         <Route path="/" element={<LandingPage />} />
@@ -108,7 +108,7 @@ describe("<LandingPage />", () => {
     mockFlags(false)
     renderLanding()
     await screen.findByTestId("landing-page")
-    expect(screen.queryByTestId("landing-resume-draft")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("resume-first-item-pill")).not.toBeInTheDocument()
   })
 
   it("ignores a content-less draft (defaults only) for the resume badge", async () => {
@@ -118,7 +118,7 @@ describe("<LandingPage />", () => {
     window.localStorage.setItem(ANON_DRAFT_KEY, JSON.stringify({ count: "1", draft: true }))
     renderLanding()
     await screen.findByTestId("landing-page")
-    expect(screen.queryByTestId("landing-resume-draft")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("resume-first-item-pill")).not.toBeInTheDocument()
   })
 
   it("shows the resume badge for a draft with content and reopens the dialog", async () => {
@@ -126,10 +126,21 @@ describe("<LandingPage />", () => {
     window.localStorage.setItem(ANON_DRAFT_KEY, JSON.stringify({ name: "Camera" }))
     const user = userEvent.setup()
     renderLanding()
-    const badge = await screen.findByTestId("landing-resume-draft")
+    const badge = await screen.findByTestId("resume-first-item-pill")
     await user.click(badge)
     // public_scan off ⇒ the dialog opens straight on the Basics step
     // (the footer Next button is only present off the AI surface).
     expect(await screen.findByTestId("commodity-form-next")).toBeInTheDocument()
+  })
+
+  it("auto-opens the dialog when arriving with ?addFirstItem=1 (resume from auth)", async () => {
+    mockFlags(false)
+    window.localStorage.setItem(ANON_DRAFT_KEY, JSON.stringify({ name: "Camera" }))
+    renderLanding("/?addFirstItem=1")
+    // Dialog opens directly on the form to continue editing (no AI offer),
+    // signalled by the footer Next button.
+    expect(await screen.findByTestId("commodity-form-next")).toBeInTheDocument()
+    // ...and the floating pill is hidden while the dialog is open.
+    expect(screen.queryByTestId("resume-first-item-pill")).not.toBeInTheDocument()
   })
 })

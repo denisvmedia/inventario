@@ -10,6 +10,10 @@ import { MFAChallenge } from "@/components/auth/MFAChallenge"
 import { OAuthRow } from "@/components/auth/OAuthRow"
 import { PasswordInput } from "@/components/auth/PasswordInput"
 import { PendingFirstItemDrawer } from "@/components/auth/PendingFirstItemDrawer"
+import {
+  ResumeFirstItemPill,
+  RESUME_FIRST_ITEM_PARAM,
+} from "@/components/items/ResumeFirstItemPill"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -297,6 +301,9 @@ export function LoginPage() {
         ) : null}
 
         {pendingFirstItem ? <PendingFirstItemDrawer /> : null}
+        {pendingFirstItem ? (
+          <ResumeFirstItemPill onResume={() => navigate(`/?${RESUME_FIRST_ITEM_PARAM}=1`)} />
+        ) : null}
 
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <div className="space-y-1.5">

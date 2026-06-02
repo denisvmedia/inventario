@@ -19,6 +19,10 @@ import { useLogin, useRegister } from "@/features/auth/hooks"
 import { consumePendingInvite, peekPendingInvite } from "@/features/auth/inviteHandoff"
 import { peekPendingFirstItem } from "@/features/auth/firstItemHandoff"
 import { PendingFirstItemDrawer } from "@/components/auth/PendingFirstItemDrawer"
+import {
+  ResumeFirstItemPill,
+  RESUME_FIRST_ITEM_PARAM,
+} from "@/components/items/ResumeFirstItemPill"
 import { registerSchema, type RegisterInput } from "@/features/auth/schemas"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -175,6 +179,9 @@ export function RegisterPage() {
         ) : null}
 
         {pendingFirstItem ? <PendingFirstItemDrawer /> : null}
+        {pendingFirstItem ? (
+          <ResumeFirstItemPill onResume={() => navigate(`/?${RESUME_FIRST_ITEM_PARAM}=1`)} />
+        ) : null}
 
         <form
           className="register-form-content space-y-4"

@@ -1,28 +1,17 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useNavigate } from "react-router-dom"
-import { ArrowRight, Package, PencilLine, Sparkles } from "lucide-react"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import { ArrowRight, Package, Sparkles } from "lucide-react"
 
+import { AnonymousCommodityDialog } from "@/components/items/AnonymousCommodityDialog"
 import {
-  AnonymousCommodityDialog,
-  ANON_DRAFT_KEY,
-} from "@/components/items/AnonymousCommodityDialog"
-import { readDraft } from "@/features/commodities/draft"
+  ResumeFirstItemPill,
+  anonDraftHasContent,
+  RESUME_FIRST_ITEM_PARAM,
+} from "@/components/items/ResumeFirstItemPill"
 import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { cn } from "@/lib/utils"
-
-// anonDraftHasContent reports whether the landing draft holds something
-// worth resuming. The dialog auto-saves on open (defaults only — count 1,
-// currency, draft toggle), so "a key exists" isn't enough; we require one
-// of the user-entered identity fields to be non-empty before surfacing the
-// floating "continue" affordance.
-function anonDraftHasContent(): boolean {
-  const draft = readDraft(ANON_DRAFT_KEY)
-  if (!draft) return false
-  const filled = (v: unknown) => typeof v === "string" && v.trim() !== ""
-  return filled(draft.name) || filled(draft.short_name) || filled(draft.type)
-}
 
 // LandingPage is the public, unauthenticated "/" surface (#1988): an
 // anonymous visitor can start adding their first item (snap a photo, let
@@ -51,8 +40,12 @@ function anonDraftHasContent(): boolean {
 export function LandingPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const publicScanEnabled = useFeatureFlag("public_scan")
-  const [dialogOpen, setDialogOpen] = useState(false)
+  // Arriving with ?addFirstItem=1 (the auth-page resume pill) auto-opens the
+  // dialog so the visitor lands straight back in their drafted item.
+  const resumeRequested = searchParams.get(RESUME_FIRST_ITEM_PARAM) === "1"
+  const [dialogOpen, setDialogOpen] = useState(resumeRequested)
   // Snapshot of `public_scan` taken when the dialog OPENS, not read live.
   // `useFeatureFlag` returns the `false` fallback until the boot fetch
   // resolves, so a quick click can open the dialog in manual mode and then
@@ -69,7 +62,12 @@ export function LandingPage() {
 
   function handleDialogOpenChange(open: boolean) {
     setDialogOpen(open)
-    if (!open) setHasDraft(anonDraftHasContent())
+    if (!open) {
+      setHasDraft(anonDraftHasContent())
+      // Drop ?addFirstItem=1 once handled so a refresh / back doesn't
+      // re-pop the dialog the user just closed.
+      if (resumeRequested) navigate("/", { replace: true })
+    }
   }
 
   function openAddDialog() {
@@ -79,6 +77,14 @@ export function LandingPage() {
     // data). `=== true` is required to store it in this boolean state, not
     // cosmetic: dropping it fails `tsc`.
     setDialogAiScan(publicScanEnabled === true)
+    setDialogOpen(true)
+  }
+
+  // Resuming an existing draft opens straight on the form (manual entry,
+  // dialogAiScan left false) rather than the AI offer — the visitor is
+  // continuing what they typed, not starting fresh from a photo.
+  function resumeAddDialog() {
+    setDialogAiScan(false)
     setDialogOpen(true)
   }
 
@@ -160,22 +166,7 @@ export function LandingPage() {
           started an item and closed the dialog without finishing — their
           entry is auto-saved, so this lets them pick it straight back up.
           Hidden while the dialog is open (it would sit under the modal). */}
-      {hasDraft && !dialogOpen ? (
-        <button
-          type="button"
-          onClick={openAddDialog}
-          data-testid="landing-resume-draft"
-          className={cn(
-            "fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-border",
-            "bg-card px-4 py-2.5 text-sm font-medium shadow-lg transition-colors",
-            "hover:border-primary/40 hover:bg-muted/30",
-            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          )}
-        >
-          <PencilLine className="size-4 text-primary" aria-hidden="true" />
-          {t("landing:draft.resume")}
-        </button>
-      ) : null}
+      {hasDraft && !dialogOpen ? <ResumeFirstItemPill onResume={resumeAddDialog} /> : null}
 
       <AnonymousCommodityDialog
         open={dialogOpen}
