@@ -117,6 +117,24 @@ export function AnonymousCommodityDialog({
     navigate(`/login?redirect=${encodeURIComponent(WELCOME_PATH)}`)
   }
 
+  // "Save as draft" from the dismiss-confirm. Unlike an authenticated user,
+  // an anonymous visitor has nowhere to persist a draft except their own
+  // account — so saving a (possibly partial) draft hands off to login just
+  // like a full submit: the dialog has already written the form-shaped draft
+  // under ANON_DRAFT_KEY, so we only set the pending-first-item marker and
+  // route to login. Currency is the locale default (the resolver re-derives
+  // it from the real group on replay, so a partial draft with no price is
+  // fine). Without this the user would land back on the bare landing page
+  // with no obvious way to actually keep what they typed.
+  function handleSaveDraft() {
+    savePendingFirstItem({
+      draftKey: ANON_DRAFT_KEY,
+      currency: defaultCurrency,
+      savedAt: Date.now(),
+    })
+    navigate(`/login?redirect=${encodeURIComponent(WELCOME_PATH)}`)
+  }
+
   return (
     <CommodityFormDialog
       open={open}
@@ -131,6 +149,7 @@ export function AnonymousCommodityDialog({
       locations={[]}
       defaultCurrency={defaultCurrency}
       onSubmit={handleSubmit}
+      onSaveDraft={handleSaveDraft}
       draftKey={ANON_DRAFT_KEY}
     />
   )

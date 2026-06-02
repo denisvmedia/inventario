@@ -148,6 +148,16 @@ interface CommodityFormDialogProps {
   // — price/date/etc. relax to optional. Defaults false: authenticated
   // create keeps a full (non-draft) item by default.
   defaultDraft?: boolean
+  // Anonymous flow (#1988): invoked when the user picks "Save as draft" in
+  // the dismiss-confirm instead of completing the wizard. The draft has
+  // already been written to localStorage; the wrapper uses this to set the
+  // pending-first-item marker and route to login (same hand-off as a full
+  // submit), so an anonymous "save as draft" still ends up on the login
+  // page rather than silently back on the landing surface. When provided
+  // (anonymous only) it OWNS closing/navigation — the dialog won't also call
+  // onOpenChange. Defaults undefined: authenticated save-as-draft just
+  // persists locally and closes.
+  onSaveDraft?: () => void
 }
 
 // Files step model lives in features/commodities/draft.ts as
@@ -221,6 +231,7 @@ export function CommodityFormDialog({
   anonymous = false,
   enableAiScan = true,
   defaultDraft = false,
+  onSaveDraft,
 }: CommodityFormDialogProps) {
   const { t } = useTranslation()
   // Create mode opens on the AI offer surface; edit mode jumps
@@ -457,11 +468,20 @@ export function CommodityFormDialog({
 
   function confirmCloseSaveDraft() {
     // Auto-save effect already wrote the latest values to localStorage;
-    // nothing to do here besides closing.
+    // re-write defensively so the final keystroke can't be stranded.
     if (persistDrafts && draftKey) {
       writeDraft(draftKey, getValues())
     }
     setCloseConfirmOpen(false)
+    // Anonymous flow (#1988): a "save as draft" can't persist server-side
+    // without an account, so hand off to login (set the marker + navigate)
+    // exactly like a full submit — otherwise the user is dumped back on the
+    // landing page with no path to actually keep their item. The wrapper
+    // owns the navigation, so we DON'T also call onOpenChange here.
+    if (onSaveDraft) {
+      onSaveDraft()
+      return
+    }
     onOpenChange(false)
   }
 
