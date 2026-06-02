@@ -142,6 +142,12 @@ interface CommodityFormDialogProps {
   // when no vision provider is configured, which the step already
   // handles).
   enableAiScan?: boolean
+  // Seeds the `draft` toggle for a NEW item (ignored in edit mode, where
+  // the record's own value wins). The anonymous landing flow (#1988)
+  // passes true so a first-time visitor only fills name/short_name/type
+  // — price/date/etc. relax to optional. Defaults false: authenticated
+  // create keeps a full (non-draft) item by default.
+  defaultDraft?: boolean
 }
 
 // Files step model lives in features/commodities/draft.ts as
@@ -214,6 +220,7 @@ export function CommodityFormDialog({
   draftKey,
   anonymous = false,
   enableAiScan = true,
+  defaultDraft = false,
 }: CommodityFormDialogProps) {
   const { t } = useTranslation()
   // Create mode opens on the AI offer surface; edit mode jumps
@@ -279,8 +286,8 @@ export function CommodityFormDialog({
   const persistDrafts = mode === "create" && !!draftKey
 
   const defaults = useMemo<CommodityFormInput>(
-    () => buildDefaults(initialValues, defaultCurrency),
-    [initialValues, defaultCurrency]
+    () => buildDefaults(initialValues, defaultCurrency, defaultDraft),
+    [initialValues, defaultCurrency, defaultDraft]
   )
 
   // Schema closes over group currency: when the purchase currency

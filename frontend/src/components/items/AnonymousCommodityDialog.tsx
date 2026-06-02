@@ -124,6 +124,9 @@ export function AnonymousCommodityDialog({
       mode="create"
       anonymous
       enableAiScan={aiScanEnabled}
+      // Start as a draft so the first-time visitor only needs name +
+      // short name + type; everything else (price, date, …) is optional.
+      defaultDraft
       areas={[]}
       locations={[]}
       defaultCurrency={defaultCurrency}

@@ -5,6 +5,7 @@ import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { LandingPage } from "@/pages/LandingPage"
+import { ANON_DRAFT_KEY } from "@/components/items/AnonymousCommodityDialog"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -101,5 +102,34 @@ describe("<LandingPage />", () => {
       expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/login")
     })
     expect(screen.getByTestId("loc").getAttribute("data-search")).toBe("?redirect=%2F")
+  })
+
+  it("hides the resume badge when there is no in-progress draft", async () => {
+    mockFlags(false)
+    renderLanding()
+    await screen.findByTestId("landing-page")
+    expect(screen.queryByTestId("landing-resume-draft")).not.toBeInTheDocument()
+  })
+
+  it("ignores a content-less draft (defaults only) for the resume badge", async () => {
+    mockFlags(false)
+    // The dialog auto-saves defaults on open; an identity-field-less draft
+    // must not surface the "continue" affordance.
+    window.localStorage.setItem(ANON_DRAFT_KEY, JSON.stringify({ count: "1", draft: true }))
+    renderLanding()
+    await screen.findByTestId("landing-page")
+    expect(screen.queryByTestId("landing-resume-draft")).not.toBeInTheDocument()
+  })
+
+  it("shows the resume badge for a draft with content and reopens the dialog", async () => {
+    mockFlags(false)
+    window.localStorage.setItem(ANON_DRAFT_KEY, JSON.stringify({ name: "Camera" }))
+    const user = userEvent.setup()
+    renderLanding()
+    const badge = await screen.findByTestId("landing-resume-draft")
+    await user.click(badge)
+    // public_scan off ⇒ the dialog opens straight on the Basics step
+    // (the footer Next button is only present off the AI surface).
+    expect(await screen.findByTestId("commodity-form-next")).toBeInTheDocument()
   })
 })

@@ -6,11 +6,11 @@ import { ComingSoonBanner } from "@/components/coming-soon"
 
 describe("<ComingSoonBanner />", () => {
   it("renders the surface title, description, and tracker link", () => {
-    render(<ComingSoonBanner surface="twoFactor" />)
-    expect(screen.getByText(/two-factor/i)).toBeInTheDocument()
-    expect(screen.getByText(/authenticator-app/i)).toBeInTheDocument()
+    render(<ComingSoonBanner surface="profilePhoto" />)
+    expect(screen.getByText(/profile photo/i)).toBeInTheDocument()
+    expect(screen.getByText(/personalize/i)).toBeInTheDocument()
     const link = screen.getByRole("link")
-    expect(link).toHaveAttribute("href", "https://github.com/denisvmedia/inventario/issues/1380")
+    expect(link).toHaveAttribute("href", "https://github.com/denisvmedia/inventario/issues/1382")
     expect(link).toHaveAttribute("target", "_blank")
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"))
   })
@@ -20,9 +20,9 @@ describe("<ComingSoonBanner />", () => {
     expect(screen.getByTestId("coming-soon-banner-connectedAccounts")).toBeInTheDocument()
   })
 
-  it("accepts a testId override (used by TwoFactorStub for back-compat)", () => {
-    render(<ComingSoonBanner surface="twoFactor" testId="two-factor-stub" />)
-    expect(screen.getByTestId("two-factor-stub")).toBeInTheDocument()
+  it("accepts a testId override", () => {
+    render(<ComingSoonBanner surface="profilePhoto" testId="custom-stub" />)
+    expect(screen.getByTestId("custom-stub")).toBeInTheDocument()
   })
 
   it("exposes no actionable controls (per #1417 acceptance criteria)", () => {

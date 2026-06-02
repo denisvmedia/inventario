@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowRight, CheckCircle2, Mail, User } from "lucide-react"
+import { ArrowRight, CheckCircle2, Mail, Package, User } from "lucide-react"
 
 import { AuthLayout } from "@/components/auth/AuthLayout"
 import { OAuthRow } from "@/components/auth/OAuthRow"
@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { useAcceptInvite } from "@/features/invite/hooks"
 import { useLogin, useRegister } from "@/features/auth/hooks"
 import { consumePendingInvite, peekPendingInvite } from "@/features/auth/inviteHandoff"
+import { peekPendingFirstItem } from "@/features/auth/firstItemHandoff"
 import { registerSchema, type RegisterInput } from "@/features/auth/schemas"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -32,6 +33,10 @@ export function RegisterPage() {
   const acceptInviteMutation = useAcceptInvite()
 
   const [pendingInvite] = useState(() => peekPendingInvite())
+  // Anonymous first-item handoff (#1988): reassure a visitor who drafted an
+  // item on the landing page that it's safe and will be added after they
+  // finish signing up (the replay runs at /welcome once they're logged in).
+  const [pendingFirstItem] = useState(() => peekPendingFirstItem())
   const [serverError, setServerError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [autoAcceptError, setAutoAcceptError] = useState<string | null>(null)
@@ -165,6 +170,13 @@ export function RegisterPage() {
                 name: pendingInvite.groupName ?? "",
               })}
             </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {pendingFirstItem ? (
+          <Alert data-testid="pending-first-item-banner">
+            <Package aria-hidden="true" />
+            <AlertDescription>{t("auth:firstItem.banner")}</AlertDescription>
           </Alert>
         ) : null}
 

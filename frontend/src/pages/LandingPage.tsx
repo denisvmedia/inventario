@@ -1,12 +1,28 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
-import { ArrowRight, Package, Sparkles } from "lucide-react"
+import { ArrowRight, Package, PencilLine, Sparkles } from "lucide-react"
 
-import { AnonymousCommodityDialog } from "@/components/items/AnonymousCommodityDialog"
+import {
+  AnonymousCommodityDialog,
+  ANON_DRAFT_KEY,
+} from "@/components/items/AnonymousCommodityDialog"
+import { readDraft } from "@/features/commodities/draft"
 import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { cn } from "@/lib/utils"
+
+// anonDraftHasContent reports whether the landing draft holds something
+// worth resuming. The dialog auto-saves on open (defaults only — count 1,
+// currency, draft toggle), so "a key exists" isn't enough; we require one
+// of the user-entered identity fields to be non-empty before surfacing the
+// floating "continue" affordance.
+function anonDraftHasContent(): boolean {
+  const draft = readDraft(ANON_DRAFT_KEY)
+  if (!draft) return false
+  const filled = (v: unknown) => typeof v === "string" && v.trim() !== ""
+  return filled(draft.name) || filled(draft.short_name) || filled(draft.type)
+}
 
 // LandingPage is the public, unauthenticated "/" surface (#1988): an
 // anonymous visitor can start adding their first item (snap a photo, let
@@ -45,6 +61,16 @@ export function LandingPage() {
   // open-reset effect and clobbering in-progress input. Freezing the value
   // at open time pins the entry step for the whole session.
   const [dialogAiScan, setDialogAiScan] = useState(false)
+  // Whether an in-progress anonymous draft exists, driving the floating
+  // "continue your item" pill. localStorage isn't reactive, so we read it
+  // once at mount (lazy initializer) and re-read on every dialog close —
+  // the only moments the draft content can change from this page.
+  const [hasDraft, setHasDraft] = useState(() => anonDraftHasContent())
+
+  function handleDialogOpenChange(open: boolean) {
+    setDialogOpen(open)
+    if (!open) setHasDraft(anonDraftHasContent())
+  }
 
   function openAddDialog() {
     // `useFeatureFlag` is typed `boolean | undefined` — `public_scan` is an
@@ -130,9 +156,30 @@ export function LandingPage() {
         </div>
       </main>
 
+      {/* Floating "continue your item" pill. Surfaces when the visitor
+          started an item and closed the dialog without finishing — their
+          entry is auto-saved, so this lets them pick it straight back up.
+          Hidden while the dialog is open (it would sit under the modal). */}
+      {hasDraft && !dialogOpen ? (
+        <button
+          type="button"
+          onClick={openAddDialog}
+          data-testid="landing-resume-draft"
+          className={cn(
+            "fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-border",
+            "bg-card px-4 py-2.5 text-sm font-medium shadow-lg transition-colors",
+            "hover:border-primary/40 hover:bg-muted/30",
+            "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          )}
+        >
+          <PencilLine className="size-4 text-primary" aria-hidden="true" />
+          {t("landing:draft.resume")}
+        </button>
+      ) : null}
+
       <AnonymousCommodityDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={handleDialogOpenChange}
         aiScanEnabled={dialogAiScan}
       />
     </div>

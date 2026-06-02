@@ -13,6 +13,7 @@ import { clearAuth, getAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { clearPendingInvite, savePendingInvite } from "@/features/auth/inviteHandoff"
+import { clearPendingFirstItem, savePendingFirstItem } from "@/features/auth/firstItemHandoff"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
@@ -43,6 +44,7 @@ function renderLogin(initial = "/login") {
 beforeEach(() => {
   clearAuth()
   clearPendingInvite()
+  clearPendingFirstItem()
   __resetGroupContextForTests()
   __resetHttpForTests()
   // OAuthRow (#1394) probes /auth/oauth/providers on mount. Tests that
@@ -197,6 +199,18 @@ describe("<LoginPage />", () => {
     await user.click(screen.getByTestId("login-button"))
     await waitFor(() => expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/"))
     expect(acceptCalls).toBe(1)
+  })
+
+  it("shows the first-item reassurance banner when a draft is pending (#1988)", async () => {
+    savePendingFirstItem({ draftKey: "commodity-draft:anon:create", currency: "USD", savedAt: 1 })
+    renderLogin()
+    expect(await screen.findByTestId("pending-first-item-banner")).toBeInTheDocument()
+  })
+
+  it("omits the first-item banner when no draft is pending", async () => {
+    renderLogin()
+    await screen.findByTestId("login-page")
+    expect(screen.queryByTestId("pending-first-item-banner")).not.toBeInTheDocument()
   })
 
   it("has no axe violations on the form", async () => {

@@ -19,7 +19,6 @@ import {
   Link2,
   Monitor,
   ScrollText,
-  Shield,
   ShieldCheck,
   Sparkles,
   User,
@@ -48,7 +47,6 @@ export const SURFACES = {
   whatsNew: { icon: Sparkles, tracker: 1386, kind: "page" },
 
   // Inline-only stubs (used inside other pages once those pages land).
-  twoFactor: { icon: Shield, tracker: 1380, kind: "inline" },
   oauth: { icon: Database, tracker: 1394, kind: "inline" },
   loginHistory: { icon: ScrollText, tracker: 1379, kind: "both" },
   activeSessions: { icon: Monitor, tracker: 1378, kind: "inline" },

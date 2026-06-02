@@ -10,6 +10,9 @@
       "title": "Browse My Items"
     }
   },
+  "draft": {
+    "resume": "Continue your item"
+  },
   "hero": {
     "subtitle": "Track your belongings, their warranties and values in one place.",
     "title": "Everything you own, organized"

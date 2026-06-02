@@ -101,6 +101,13 @@ spec:
               # with canned data.
               aivision:
                 provider: anthropic
+                # Public, unauthenticated landing-page photo-scan (#1988) so
+                # reviewers can exercise the anonymous "add your first item"
+                # AI flow on a preview. Safe here: previews are tailnet-gated
+                # and the public endpoint has its own per-IP + global-daily
+                # rate limiter on top of the global budget. (The FE Add-Item
+                # CTA shows regardless — this only adds the AI accelerator.)
+                publicScanEnabled: true
               extraEnvFrom:
                 - secretRef:
                     name: inventario-ai-vision
