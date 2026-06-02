@@ -18,7 +18,7 @@ import { useAcceptInvite } from "@/features/invite/hooks"
 import { useLogin, useRegister } from "@/features/auth/hooks"
 import { consumePendingInvite, peekPendingInvite } from "@/features/auth/inviteHandoff"
 import { peekPendingFirstItem } from "@/features/auth/firstItemHandoff"
-import { PendingFirstItemBanner } from "@/components/auth/PendingFirstItemBanner"
+import { PendingFirstItemDrawer } from "@/components/auth/PendingFirstItemDrawer"
 import { registerSchema, type RegisterInput } from "@/features/auth/schemas"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -174,7 +174,7 @@ export function RegisterPage() {
           </Alert>
         ) : null}
 
-        {pendingFirstItem ? <PendingFirstItemBanner /> : null}
+        {pendingFirstItem ? <PendingFirstItemDrawer /> : null}
 
         <form
           className="register-form-content space-y-4"

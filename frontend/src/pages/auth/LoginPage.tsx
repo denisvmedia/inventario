@@ -9,7 +9,7 @@ import { AuthLayout } from "@/components/auth/AuthLayout"
 import { MFAChallenge } from "@/components/auth/MFAChallenge"
 import { OAuthRow } from "@/components/auth/OAuthRow"
 import { PasswordInput } from "@/components/auth/PasswordInput"
-import { PendingFirstItemBanner } from "@/components/auth/PendingFirstItemBanner"
+import { PendingFirstItemDrawer } from "@/components/auth/PendingFirstItemDrawer"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -296,7 +296,7 @@ export function LoginPage() {
           </Alert>
         ) : null}
 
-        {pendingFirstItem ? <PendingFirstItemBanner /> : null}
+        {pendingFirstItem ? <PendingFirstItemDrawer /> : null}
 
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <div className="space-y-1.5">

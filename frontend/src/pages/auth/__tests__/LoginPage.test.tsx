@@ -201,16 +201,19 @@ describe("<LoginPage />", () => {
     expect(acceptCalls).toBe(1)
   })
 
-  it("shows the first-item reassurance banner when a draft is pending (#1988)", async () => {
+  it("opens the first-item reassurance drawer when a draft is pending (#1988)", async () => {
     savePendingFirstItem({ draftKey: "commodity-draft:anon:create", currency: "USD", savedAt: 1 })
     renderLogin()
-    expect(await screen.findByTestId("pending-first-item-banner")).toBeInTheDocument()
+    const drawer = await screen.findByTestId("pending-first-item-drawer")
+    expect(drawer).toBeInTheDocument()
+    expect(drawer).toHaveTextContent("Your item is saved")
+    expect(screen.getByTestId("pending-first-item-drawer-ok")).toBeInTheDocument()
   })
 
-  it("omits the first-item banner when no draft is pending", async () => {
+  it("omits the first-item drawer when no draft is pending", async () => {
     renderLogin()
     await screen.findByTestId("login-page")
-    expect(screen.queryByTestId("pending-first-item-banner")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("pending-first-item-drawer")).not.toBeInTheDocument()
   })
 
   it("has no axe violations on the form", async () => {
