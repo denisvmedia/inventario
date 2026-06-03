@@ -240,6 +240,10 @@ func wireCommodityScan(cfg *Config, params *apiserver.Params) error {
 		return err
 	}
 
+	if cfg.AIVisionMaxTokens < 0 {
+		return errors.New("AI_VISION_MAX_TOKENS must not be negative")
+	}
+
 	provider, err := aivision.NewProvider(aivision.ProviderConfig{
 		Name:             strings.TrimSpace(cfg.AIVisionProvider),
 		AnthropicAPIKey:  cfg.AIVisionAnthropicAPIKey,
