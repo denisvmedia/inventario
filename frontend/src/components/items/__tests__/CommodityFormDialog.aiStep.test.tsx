@@ -20,6 +20,13 @@ function makeImage(name = "photo.jpg", type = "image/jpeg"): File {
   return new File([new Uint8Array([0xff, 0xd8, 0xff])], name, { type })
 }
 
+// Helper: build a PDF File (#1983) so the document-staging path can be
+// asserted. The "%PDF" magic bytes keep any content sniffing happy;
+// jsdom never reads the contents.
+function makePdf(name = "receipt.pdf"): File {
+  return new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], name, { type: "application/pdf" })
+}
+
 // Helper: install the active group slug so `useScanCommodityPhotos`
 // hits the right /g/<slug>/commodities/scan route inside the http
 // wrapper's group-rewrite logic.
@@ -62,9 +69,7 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     // first render — each test can still override with a tighter
     // handler via `server.use(...)`.
     server.use(
-      http.get(apiUrl(`/g/${SLUG}/currencies`), () =>
-        HttpResponse.json(["USD", "EUR", "GBP", "CZK"])
-      )
+      http.get(apiUrl(`/currencies`), () => HttpResponse.json(["USD", "EUR", "GBP", "CZK"]))
     )
   })
 
@@ -90,6 +95,80 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     expect(screen.queryByTestId("commodity-form-ai-step")).not.toBeInTheDocument()
   })
 
+  it("rewinds from Basics back to the AI scan step via Back", async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    // "Fill manually" hands off from the AI offer to Basics.
+    await user.click(await screen.findByTestId("commodity-form-ai-fill-manually"))
+    expect(await screen.findByLabelText(/^Name$/i)).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-form-ai-step")).not.toBeInTheDocument()
+    // Back on the first form step rewinds to the AI offer surface
+    // instead of being a dead no-op (the AI step is the create-mode
+    // entry, so it's a place the user can return to).
+    await user.click(screen.getByRole("button", { name: /^back$/i }))
+    expect(await screen.findByTestId("commodity-form-ai-step")).toHaveAttribute(
+      "data-ai-phase",
+      "offer"
+    )
+    expect(screen.queryByLabelText(/^Name$/i)).not.toBeInTheDocument()
+  })
+
+  it("keeps Back disabled on Basics when the AI step is unavailable", async () => {
+    withGroupSlug()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="create"
+          enableAiScan={false}
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+        />
+      ),
+    })
+    // Lands straight on Basics with no scanner to rewind to, so Back has
+    // nothing to do and stays disabled.
+    expect(await screen.findByTestId("commodity-form-next")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^back$/i })).toBeDisabled()
+  })
+
+  it("keeps Back active on Basics in edit mode (rewinds to AI scan)", async () => {
+    withGroupSlug()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="edit"
+          initialValues={{
+            id: "c1",
+            name: "Draft item",
+            short_name: "Draft",
+            type: "electronics",
+            area_id: "a1",
+            status: "in_use",
+            count: 1,
+          }}
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+        />
+      ),
+    })
+    // Edit opens on Basics. Back is active because AI vision is enabled and
+    // rewinds to the AI scan surface — so a reopened draft can be finished
+    // with a scan (the previous create-only gate left Back dead here).
+    const back = await screen.findByRole("button", { name: /^back$/i })
+    expect(back).toBeEnabled()
+    const user = userEvent.setup()
+    await user.click(back)
+    expect(await screen.findByTestId("commodity-form-ai-step")).toBeInTheDocument()
+  })
+
   it("renders the offer phase by default with no thumbnails", async () => {
     renderDialog()
     expect(await screen.findByTestId("commodity-form-ai-step")).toHaveAttribute(
@@ -107,6 +186,19 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     const input = await screen.findByTestId("commodity-form-ai-file-input")
     await user.upload(input, makeImage("alpha.jpg"))
     expect(await screen.findByTestId("commodity-form-ai-thumb")).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-form-ai-scan")).toBeEnabled()
+  })
+
+  it("stages a PDF document with a document tile and enables Scan", async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    const input = await screen.findByTestId("commodity-form-ai-file-input")
+    await user.upload(input, makePdf("receipt.pdf"))
+    // A PDF can't render as an <img> thumbnail, so it stages as a
+    // document tile carrying the filename — but it still counts as a
+    // scannable source, so the Scan button enables (#1983 Part B).
+    const tile = await screen.findByTestId("commodity-form-ai-thumb-pdf")
+    expect(tile).toHaveTextContent("receipt.pdf")
     expect(screen.getByTestId("commodity-form-ai-scan")).toBeEnabled()
   })
 
@@ -186,6 +278,156 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     expect(nameInput.value).toBe("Sony WH-1000XM5")
   })
 
+  it("accepts a server-supported non-default currency (CZK) guessed from the scan", async () => {
+    // defaultCurrency is USD; the /currencies mock (beforeEach) includes CZK.
+    // A Czech-invoice guess must therefore be pre-fillable — not dropped as
+    // "unsupported" just because it isn't the group default.
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: {
+          original_price: { value: 1290, confidence: 0.9 },
+          original_price_currency: { value: "CZK", confidence: 0.9 },
+        },
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(
+      await screen.findByTestId("commodity-form-ai-file-input"),
+      makePdf("invoice.pdf")
+    )
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    const row = screen.getByTestId("commodity-form-ai-row-original_price_currency")
+    // Once /currencies resolves, CZK is recognised: no "won't be pre-filled"
+    // note, and the row stays default-checked so the value carries over.
+    await waitFor(() =>
+      expect(within(row).queryByText(/won't be pre-filled/i)).not.toBeInTheDocument()
+    )
+    expect(
+      screen.getByTestId("commodity-form-ai-row-original_price_currency-check")
+    ).toHaveAttribute("data-state", "checked")
+  })
+
+  it("renders a warranty_expires_at review row from the scan", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: {
+          warranty_expires_at: { value: "2027-05-01", confidence: 0.7 },
+        },
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(
+      await screen.findByTestId("commodity-form-ai-file-input"),
+      makePdf("manual.pdf")
+    )
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    expect(screen.getByTestId("commodity-form-ai-row-warranty_expires_at-value")).toHaveTextContent(
+      "2027-05-01"
+    )
+  })
+
+  it("renders a tags review row from the scan", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { tags: { value: ["coffee", "kitchen"], confidence: 0.7 } },
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), makePdf("x.pdf"))
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    expect(screen.getByTestId("commodity-form-ai-row-tags-value")).toHaveTextContent(
+      "coffee, kitchen"
+    )
+  })
+
+  it("surfaces the multiple_items warning when the document has several products", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { name: { value: "First Item", confidence: 0.9 } },
+        warnings: [{ code: "multiple_items" }],
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(
+      await screen.findByTestId("commodity-form-ai-file-input"),
+      makePdf("receipt.pdf")
+    )
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    // The field-less warning is localized in the global review banner.
+    expect(screen.getByText(/more than one item/i)).toBeInTheDocument()
+  })
+
+  it("truncates an over-long short_name guess to the 40-char form limit", async () => {
+    const long = "X".repeat(60)
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { short_name: { value: long, confidence: 0.9 } },
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), makePdf("x.pdf"))
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    await user.click(screen.getByTestId("commodity-form-ai-use-values"))
+    const shortInput = (await screen.findByLabelText(/^Short name$/i)) as HTMLInputElement
+    expect(shortInput.value).toHaveLength(40)
+  })
+
+  it("shows a chooser for a multi-item scan and the pick drives the review", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { name: { value: "Coffee Machine", confidence: 0.9 } },
+        items: [
+          { fields: { name: { value: "Coffee Machine", confidence: 0.9 } } },
+          { fields: { name: { value: "Milk Frother", confidence: 0.8 } } },
+        ],
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(
+      await screen.findByTestId("commodity-form-ai-file-input"),
+      makePdf("receipt.pdf")
+    )
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    // Two candidates → the chooser, not review.
+    await screen.findByTestId("commodity-form-ai-choose")
+    expect(screen.getByTestId("commodity-form-ai-step")).toHaveAttribute("data-ai-phase", "choose")
+    expect(screen.getByTestId("commodity-form-ai-choose-item-0")).toHaveTextContent(
+      "Coffee Machine"
+    )
+    expect(screen.getByTestId("commodity-form-ai-choose-item-1")).toHaveTextContent("Milk Frother")
+    // Pick the second → review pre-fills that item's fields.
+    await user.click(screen.getByTestId("commodity-form-ai-choose-item-1"))
+    await screen.findByTestId("commodity-form-ai-review")
+    expect(screen.getByTestId("commodity-form-ai-row-name-value")).toHaveTextContent("Milk Frother")
+  })
+
+  it("skips the chooser when only one item is detected", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { name: { value: "Solo Item", confidence: 0.9 } },
+        items: [{ fields: { name: { value: "Solo Item", confidence: 0.9 } } }],
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), makePdf("x.pdf"))
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    // One item → straight to review, no chooser.
+    await screen.findByTestId("commodity-form-ai-review")
+    expect(screen.queryByTestId("commodity-form-ai-choose")).not.toBeInTheDocument()
+  })
+
   it("renders the rate-limited banner on 429 and keeps Fill manually usable", async () => {
     server.use(
       ...commodityScanHandlers.error(SLUG, 429, "commodity_scan.rate_limited", "slow down")
@@ -202,6 +444,19 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     // Fill manually still routes to Basics — typed errors don't block the manual path.
     await user.click(screen.getByTestId("commodity-form-ai-fill-manually"))
     await waitFor(() => expect(screen.getByLabelText(/^Name$/i)).toBeInTheDocument())
+  })
+
+  it("shows a retry hint instead of an empty review when nothing is extracted", async () => {
+    server.use(...commodityScanHandlers.ok(SLUG, { fields: {} }))
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), makePdf("x.pdf"))
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    // Stays on the offer with a hint, not a green-but-empty review.
+    expect(await screen.findByTestId("commodity-form-ai-staging-error")).toHaveTextContent(
+      /couldn't read any details/i
+    )
+    expect(screen.queryByTestId("commodity-form-ai-review")).not.toBeInTheDocument()
   })
 
   it("renders the provider-disabled banner on 503", async () => {

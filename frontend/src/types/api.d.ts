@@ -3837,8 +3837,8 @@ export type paths = {
         get?: never;
         put?: never;
         /**
-         * Run an AI vision scan on uploaded photos
-         * @description Extract structured commodity field guesses from 1..N product photos. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.
+         * Run an AI vision scan on uploaded photos or documents
+         * @description Extract structured commodity field guesses from 1..N product photos or PDF documents. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.
          */
         post: {
             parameters: {
@@ -3861,7 +3861,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.CommodityScanResponse"];
                     };
                 };
-                /** @description Photo too large */
+                /** @description File too large */
                 413: {
                     headers: {
                         [name: string]: unknown;
@@ -3879,7 +3879,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Too many photos / no photos */
+                /** @description Too many files / no files */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -8851,7 +8851,7 @@ export type paths = {
         get?: never;
         put?: never;
         /**
-         * Run an AI vision scan on uploaded photos (public)
+         * Run an AI vision scan on uploaded photos or documents (public)
          * @description Anonymous variant of the photo scan for the landing-page CTA (#1988). Unauthenticated, IP + global-daily rate limited, gated behind a deployment feature flag. Returns field guesses only and persists nothing.
          */
         post: {
@@ -8872,7 +8872,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.CommodityScanResponse"];
                     };
                 };
-                /** @description Photo too large */
+                /** @description File too large */
                 413: {
                     headers: {
                         [name: string]: unknown;
@@ -8890,7 +8890,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Too many photos / no photos */
+                /** @description Too many files / no files */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -10441,6 +10441,12 @@ export type components = {
             fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
+            /**
+             * @description Items is present only when the source described more than one
+             *     distinct product; one entry per product, most prominent first. The
+             *     FE renders a chooser. Empty/absent for a single product.
+             */
+            items?: components["schemas"]["jsonapi.CommodityScanItem"][];
             latency_ms?: number;
             used_tokens?: number;
             warnings?: components["schemas"]["jsonapi.CommodityScanWarning"][];
@@ -10449,6 +10455,11 @@ export type components = {
             confidence?: number;
             /** @description Value is polymorphic — see the type-level doc comment. */
             value?: Record<string, never>;
+        };
+        "jsonapi.CommodityScanItem": {
+            fields?: {
+                [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
+            };
         };
         "jsonapi.CommodityScanResource": {
             attributes?: components["schemas"]["jsonapi.CommodityScanAttributes"];
@@ -10466,7 +10477,7 @@ export type components = {
              * @example low_confidence
              * @enum {string}
              */
-            code?: "low_confidence" | "unreadable_serial" | "ambiguous_price" | "currency_inferred" | "no_photo_text";
+            code?: "low_confidence" | "unreadable_serial" | "ambiguous_price" | "currency_inferred" | "no_photo_text" | "multiple_items";
             detail?: string;
             field?: string;
         };
@@ -12473,23 +12484,23 @@ export type components = {
     responses: never;
     parameters: never;
     requestBodies: {
-        /** @description Area object */
-        "jsonapi.AreaRequest": {
-            content: {
-                "application/vnd.api+json": components["schemas"]["jsonapi.AreaRequest"];
-            };
-        };
         postG_groupslug_commoditiesScan: {
             content: {
                 "multipart/form-data": {
                     /**
                      * Format: binary
-                     * @description Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts).
+                     * @description Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple `photos` parts).
                      */
                     photos: string;
                     /** @description Optional free-form hint (brand, category guess) */
                     hint?: string;
                 };
+            };
+        };
+        /** @description Area object */
+        "jsonapi.AreaRequest": {
+            content: {
+                "application/vnd.api+json": components["schemas"]["jsonapi.AreaRequest"];
             };
         };
         /** @description Commodity object */

@@ -175,3 +175,42 @@ func TestOpenAIProvider_MarshalTestPayload(t *testing.T) {
 	c.Assert(string(body), qt.Contains, "json_schema")
 	c.Assert(string(body), qt.Contains, "image_url")
 }
+
+func TestOpenAIProvider_PDFFileBlock(t *testing.T) {
+	c := qt.New(t)
+
+	provider, err := openai.New(openai.Config{APIKey: "sk-test"})
+	c.Assert(err, qt.IsNil)
+
+	body, err := provider.MarshalTestPayload(aivision.ScanRequest{
+		Photos: []aivision.PhotoInput{
+			{Filename: "receipt.pdf", ContentType: "application/pdf", Data: []byte("%PDF-1.7")},
+		},
+	})
+	c.Assert(err, qt.IsNil)
+
+	// A PDF (#1983) rides in a "file" content part carrying a base64
+	// data: URL plus the original filename — not an image_url part.
+	c.Assert(string(body), qt.Contains, `"type":"file"`)
+	c.Assert(string(body), qt.Contains, `"file_data":"data:application/pdf;base64,`)
+	c.Assert(string(body), qt.Contains, `"filename":"receipt.pdf"`)
+	c.Assert(string(body), qt.Not(qt.Contains), "image_url")
+}
+
+func TestOpenAIProvider_PDFFileBlock_DefaultFilename(t *testing.T) {
+	c := qt.New(t)
+
+	provider, err := openai.New(openai.Config{APIKey: "sk-test"})
+	c.Assert(err, qt.IsNil)
+
+	// A multipart part may arrive without a filename; the provider must
+	// still send a non-empty name (the API requires one alongside inline
+	// file_data).
+	body, err := provider.MarshalTestPayload(aivision.ScanRequest{
+		Photos: []aivision.PhotoInput{
+			{ContentType: "application/pdf", Data: []byte("%PDF-1.7")},
+		},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(string(body), qt.Contains, `"filename":"document.pdf"`)
+}

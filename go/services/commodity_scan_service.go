@@ -135,7 +135,7 @@ type CommodityScanConfig struct {
 	Timeout time.Duration
 }
 
-// AllowedMIMETypes is the closed list of image MIME types accepted by
+// AllowedMIMETypes is the closed list of source MIME types accepted by
 // CommodityScanService. The set matches what every supported provider
 // can handle — HEIC/HEIF are included because phones still upload them
 // even when "share as JPEG" is the default.
@@ -145,13 +145,21 @@ type CommodityScanConfig struct {
 // canonical "image/jpeg". Accepting it here is a one-line ergonomic
 // fix that avoids surprising the FE with a 415 on perfectly valid JPEG
 // bytes; the providers normalise the byte stream anyway.
+//
+// "application/pdf" (#1983 Part B) lets a user prefill from a document —
+// a receipt, invoice, or manual — not just a product photo. Both real
+// providers (Anthropic Messages, OpenAI Chat Completions) accept PDFs
+// natively as a document/file content block, so the bytes flow through
+// the same pipeline; only the per-vendor content-block shape differs
+// (see each provider's buildPayload).
 var AllowedMIMETypes = map[string]bool{
-	"image/jpeg": true,
-	"image/jpg":  true, // noncanonical alias some browsers emit for JPEGs
-	"image/png":  true,
-	"image/webp": true,
-	"image/heic": true,
-	"image/heif": true,
+	"image/jpeg":          true,
+	"image/jpg":           true, // noncanonical alias some browsers emit for JPEGs
+	"image/png":           true,
+	"image/webp":          true,
+	"image/heic":          true,
+	"image/heif":          true,
+	aivision.PDFMediaType: true, // receipts / invoices / manuals (#1983)
 }
 
 // CommodityScanService coordinates the photo-scan flow: rate limit, →

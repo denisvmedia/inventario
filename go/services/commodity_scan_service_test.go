@@ -31,6 +31,16 @@ func jpegPhoto(name string, bytes int) services.ScanPhotoInput {
 	}
 }
 
+func pdfDoc(name string, bytes int) services.ScanPhotoInput {
+	data := make([]byte, bytes)
+	copy(data, []byte("%PDF-1.7\n"))
+	return services.ScanPhotoInput{
+		Filename:    name,
+		ContentType: aivision.PDFMediaType,
+		Data:        data,
+	}
+}
+
 func TestCommodityScanService_HappyPath_AuditWritten(t *testing.T) {
 	c := qt.New(t)
 
@@ -113,6 +123,27 @@ func TestCommodityScanService_UnsupportedMIME(t *testing.T) {
 	}
 	_, err := svc.Scan(context.Background(), "tenant-1", "user-1", in)
 	c.Assert(err, qt.ErrorIs, services.ErrScanUnsupportedMIME)
+}
+
+func TestCommodityScanService_AcceptsPDF(t *testing.T) {
+	c := qt.New(t)
+
+	audit := memory.NewCommodityScanAuditRegistry()
+	svc := services.NewCommodityScanService(mock.New(), audit, services.CommodityScanConfig{
+		MaxPhotos:     5,
+		MaxPhotoBytes: 1024,
+	})
+
+	// A PDF receipt/invoice is a valid scan source (#1983 Part B): it must
+	// pass validation, reach the provider, and write the usual audit row —
+	// not be rejected as an unsupported MIME type.
+	result, err := svc.Scan(context.Background(), "tenant-1", "user-1", newScanInput(pdfDoc("receipt.pdf", 256)))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.IsNotNil)
+
+	count, err := audit.CountRecentForUser(context.Background(), "tenant-1", "user-1", time.Now().Add(-1*time.Hour))
+	c.Assert(err, qt.IsNil)
+	c.Assert(count, qt.Equals, 1)
 }
 
 func TestCommodityScanService_RateLimited(t *testing.T) {

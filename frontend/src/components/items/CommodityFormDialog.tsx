@@ -241,6 +241,16 @@ export function CommodityFormDialog({
   // When `enableAiScan` is off (anonymous flow with public_scan
   // disabled) create mode also opens on Basics — the scan surface
   // would only 404, so we skip straight to manual entry.
+  //
+  // `aiStepAvailable` means "the AI scan surface is reachable in this
+  // dialog instance" — i.e. AI vision is enabled. It gates the Basics-step
+  // Back button, which rewinds to the scanner, in ANY mode: this is the
+  // requested behaviour so that reopening a saved draft for editing can
+  // still jump to AI scan to finish filling it. Only the OPENING step stays
+  // create-only — edit mode opens on Basics (don't force the scanner when a
+  // row already exists). (Copilot flagged this vs the original PR text; the
+  // edit-mode rewind is intentional and the PR description was updated.)
+  const aiStepAvailable = enableAiScan
   const initialStep: StepKey = mode === "create" && enableAiScan ? "ai" : "basics"
   const [step, setStep] = useState<StepKey>(initialStep)
   // Tracks which form steps the user has already landed on, so the
@@ -442,9 +452,15 @@ export function CommodityFormDialog({
   }
   function prevStep() {
     if (step === "ai") return
+    if (step === "basics") {
+      // Back from the first form step rewinds to the AI scan entry when
+      // it's available (AI enabled), so a user who picked "Fill manually"
+      // can re-open the scanner. Without the AI surface, Basics is the
+      // first screen and Back is a no-op.
+      if (aiStepAvailable) setStep("ai")
+      return
+    }
     const idx = FORM_STEPS.indexOf(step)
-    // Prev is disabled on Basics (idx === 0) — the AI surface is an
-    // alternative entry, not a previous step the user can rewind to.
     if (idx > 0) setStep(FORM_STEPS[idx - 1])
   }
 
@@ -610,6 +626,9 @@ export function CommodityFormDialog({
     if (values.type !== undefined) apply("type", values.type)
     if (values.serial_number !== undefined) apply("serial_number", values.serial_number)
     if (values.purchase_date !== undefined) apply("purchase_date", values.purchase_date)
+    if (values.warranty_expires_at !== undefined) {
+      apply("warranty_expires_at", values.warranty_expires_at)
+    }
     if (values.original_price !== undefined) apply("original_price", values.original_price)
     if (values.original_price_currency !== undefined) {
       apply("original_price_currency", values.original_price_currency)
@@ -624,6 +643,7 @@ export function CommodityFormDialog({
       apply("urls", values.urls)
     }
     if (values.comments !== undefined) apply("comments", values.comments)
+    if (values.tags !== undefined) apply("tags", values.tags)
     setStep("basics")
   }
 
@@ -930,7 +950,7 @@ export function CommodityFormDialog({
           // AI-step footer: only the Cancel/close affordance lives in
           // the dialog chrome. The four-phase state machine (offer /
           // scanning / review / error) owns its own primary actions
-          // inline — "Scan photos" / "Use these values" / "Re-take" /
+          // inline — "Scan files" / "Use these values" / "Start over" /
           // "Fill manually" / "Cancel scan" — so the footer stays
           // tight and never wrestles with phase-specific buttons.
           <DialogFooter className="gap-2">
@@ -953,7 +973,10 @@ export function CommodityFormDialog({
               type="button"
               variant="outline"
               onClick={prevStep}
-              disabled={formStepIndex <= 0 || isPending}
+              // Enabled on Basics too when the AI scan surface exists —
+              // Back there rewinds to the scanner (see prevStep). Without
+              // it, Basics is the first screen so Back stays disabled.
+              disabled={isPending || (formStepIndex <= 0 && !aiStepAvailable)}
             >
               <ChevronLeft className="size-4" aria-hidden="true" />
               {t("commodities:form.back")}

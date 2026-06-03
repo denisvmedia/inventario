@@ -1,11 +1,17 @@
 # AI vision photo-scan
 
-The Add-Item dialog can prefill the form from one or more product photos: the
-user uploads photos, the backend asks a vision model to extract structured
-fields (name, type, price, currency, serial number, URLs, purchase date,
-comments), and the user reviews/accepts per-field before saving.
+The Add-Item dialog can prefill the form from one or more product photos **or
+PDF documents** (a receipt, invoice, or manual): the user uploads the sources,
+the backend asks a vision model to extract structured fields (name, short name, type, price,
+currency, serial number, URLs, purchase date, warranty expiry date, comments, tags), and the
+user reviews/accepts per-field before saving. A multi-product receipt/invoice returns one such
+field set per product (`items`), and the dialog lets the user pick which to add. When a
+receipt/invoice is supplied the model reads the price, currency, and purchase date and puts the
+seller/vendor name into `comments` (there is no dedicated seller field).
 
-Tracked under #1720 (feature) and #1976 (deploy/config wiring).
+Tracked under #1720 (feature), #1976 (deploy/config wiring), and #1983 Part B
+(accept PDFs as a prefill source — `application/pdf` joins the MIME allowlist and
+each provider sends a PDF as a document/file content block instead of an image).
 
 This doc is the operator + developer guide for **turning the feature on**. The
 application code (backend + frontend) already ships; only configuration selects
@@ -60,10 +66,11 @@ All settings read from the `run` config section, i.e. the env var name is the
 | `AI_VISION_OPENAI_API_KEY` | `""` | Required when provider=`openai` |
 | `AI_VISION_OPENAI_MODEL` | `gpt-4o` | |
 | `AI_VISION_OPENAI_BASE_URL` | `""` | Empty = public `api.openai.com` |
-| `AI_VISION_TIMEOUT` | `20s` | Per-call upstream deadline |
+| `AI_VISION_TIMEOUT` | `60s` | Per-call upstream deadline. A PDF + multi-product invoice extraction can take 20–45s; the provider HTTP client cap sits above this (90s). |
 | `AI_VISION_MAX_PHOTOS` | `5` | Per scan request |
 | `AI_VISION_MAX_PHOTO_BYTES` | `10485760` | 10 MiB per photo |
 | `AI_VISION_RATE_LIMIT_PER_HOUR` | `30` | Per-user; `0` disables |
+| `AI_VISION_MAX_TOKENS` | `4096` | Cap on the model's structured output. Must hold a multi-line invoice (each product ≈10 fields); too low truncates the JSON and a multi-product scan returns empty/partial. `0` = provider default (4096). |
 | `PUBLIC_AI_VISION_SCAN_ENABLED` | `false` | **Opt-in.** Enable the unauthenticated `POST /public/commodities/scan` endpoint (#1988). No effect unless a real provider is also configured. |
 
 > ⚠️ **The public endpoint has no auth wall.** Every anonymous call spends

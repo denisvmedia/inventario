@@ -29,7 +29,13 @@ export interface ScanFieldGuess<T extends ScanFieldValue = ScanFieldValue> {
 }
 
 export interface ScanWarning {
-  code: "low_confidence" | "unreadable_serial" | "ambiguous_price" | "currency_inferred" | string
+  code:
+    | "low_confidence"
+    | "unreadable_serial"
+    | "ambiguous_price"
+    | "currency_inferred"
+    | "multiple_items"
+    | string
   field?: string
   detail?: string
 }
@@ -48,7 +54,9 @@ export type ScanFieldName =
   | "serial_number"
   | "urls"
   | "purchase_date"
+  | "warranty_expires_at"
   | "comments"
+  | "tags"
 
 export interface ScanResultFields {
   name?: ScanFieldGuess<string>
@@ -59,13 +67,29 @@ export interface ScanResultFields {
   serial_number?: ScanFieldGuess<string>
   urls?: ScanFieldGuess<string[]>
   purchase_date?: ScanFieldGuess<string>
+  warranty_expires_at?: ScanFieldGuess<string>
   comments?: ScanFieldGuess<string>
+  tags?: ScanFieldGuess<string[]>
+}
+
+// One candidate product in a multi-product scan; same field shape as the
+// top-level result so the review UI consumes a chosen item unchanged.
+export interface ScanItem {
+  fields: ScanResultFields
 }
 
 export interface ScanResult {
   fields: ScanResultFields
+  // Present (length > 1) only when the BE detected more than one distinct
+  // product; the dialog then renders a chooser so the user picks which to
+  // pre-fill. Empty for the common single-item case (review uses `fields`).
+  items: ScanItem[]
   warnings: ScanWarning[]
 }
+
+// Raw per-field map as it arrives on the wire (value is polymorphic per
+// the OpenAPI spec; narrowed in assignField).
+type RawFieldMap = Partial<Record<ScanFieldName, { value?: unknown; confidence?: number } | null>>
 
 // On-the-wire JSON:API envelope. Kept loose because the only contract
 // the FE relies on is the `data.attributes` shape; everything else
@@ -75,7 +99,8 @@ interface ScanResponseEnvelope {
     type?: string
     id?: string
     attributes?: {
-      fields?: Partial<Record<ScanFieldName, { value?: unknown; confidence?: number } | null>>
+      fields?: RawFieldMap
+      items?: Array<{ fields?: RawFieldMap } | null> | null
       warnings?: ScanWarning[] | null
     }
   }
@@ -137,25 +162,36 @@ export async function scanCommodityPhotos(opts: ScanCommodityPhotosOptions): Pro
 // without round-tripping through `http`.
 export function normalizeScanResponse(env: ScanResponseEnvelope): ScanResult {
   const attrs = env.data?.attributes
-  const rawFields = attrs?.fields ?? {}
+  const fields = normalizeFields(attrs?.fields)
+  // Multi-item list (#1983): normalize each candidate's fields and drop any
+  // that came back empty so a stray {} never renders a blank choice.
+  const rawItems = Array.isArray(attrs?.items) ? attrs.items : []
+  const items: ScanItem[] = rawItems
+    .map((it) => ({ fields: normalizeFields(it?.fields) }))
+    .filter((it) => Object.keys(it.fields).length > 0)
+  return {
+    fields,
+    items,
+    warnings: Array.isArray(attrs?.warnings) ? attrs.warnings : [],
+  }
+}
+
+// normalizeFields converts a raw BE field map into ScanResultFields,
+// dropping null/undefined values. Shared by the primary `fields` and each
+// item in a multi-product scan. Type-narrowing happens in assignField; the
+// BE schema guarantees the per-field value shape (string | number | string[]).
+function normalizeFields(rawFields: RawFieldMap | undefined): ScanResultFields {
   const fields: ScanResultFields = {}
-  for (const key of Object.keys(rawFields) as ScanFieldName[]) {
-    const guess = rawFields[key]
+  const raw = rawFields ?? {}
+  for (const key of Object.keys(raw) as ScanFieldName[]) {
+    const guess = raw[key]
     if (!guess) continue
     const value = guess.value
     if (value === null || value === undefined) continue
     const confidence = typeof guess.confidence === "number" ? guess.confidence : 0
-    // Type-narrowing happens at the read sites; keeping `value` as
-    // `unknown` here would force every consumer through a `String(...)`
-    // dance. The BE schema guarantees the shape per-field so a
-    // structural cast is safe — `value` is one of string | number |
-    // string[] per the OpenAPI spec.
     assignField(fields, key, value, confidence)
   }
-  return {
-    fields,
-    warnings: Array.isArray(attrs?.warnings) ? attrs.warnings : [],
-  }
+  return fields
 }
 
 function assignField(
@@ -171,6 +207,7 @@ function assignField(
     case "original_price_currency":
     case "serial_number":
     case "purchase_date":
+    case "warranty_expires_at":
     case "comments":
       if (typeof value === "string") {
         out[key] = { value, confidence }
@@ -191,6 +228,7 @@ function assignField(
       }
       break
     case "urls":
+    case "tags":
       if (Array.isArray(value)) {
         const strs = value.filter((u): u is string => typeof u === "string" && u.trim() !== "")
         if (strs.length > 0) out[key] = { value: strs, confidence }

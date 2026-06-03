@@ -7,6 +7,7 @@ package mock
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/denisvmedia/inventario/internal/aivision"
@@ -83,7 +84,7 @@ func (*Provider) Model() string { return "mock" }
 // next call's result. Deep-copying keeps the mock's behaviour identical
 // to a real provider (which always allocates a fresh struct off the
 // wire) and avoids action-at-a-distance test failures.
-func (p *Provider) Scan(ctx context.Context, _ aivision.ScanRequest) (*aivision.ScanResult, error) {
+func (p *Provider) Scan(ctx context.Context, req aivision.ScanRequest) (*aivision.ScanResult, error) {
 	if override, ok := overrideFromContext(ctx); ok {
 		if override.err != nil {
 			return nil, override.err
@@ -94,27 +95,52 @@ func (p *Provider) Scan(ctx context.Context, _ aivision.ScanRequest) (*aivision.
 	if p.defaultErr != nil {
 		return nil, p.defaultErr
 	}
+	// Simulate a multi-line invoice when the filename looks like one, so the
+	// item-chooser flow is exercisable end-to-end with the deterministic
+	// mock provider (preview stacks / e2e) without a real vendor. We key off
+	// the FILENAME, not the MIME type: an invoice may be a PDF, a scan, an
+	// export, or a photo (jpg/png/heic). Anything else returns the
+	// single-item default.
+	if looksLikeInvoice(req.Photos) {
+		result := cloneScanResult(MultiItemResult())
+		return &result, nil
+	}
 	result := cloneScanResult(p.defaultResult)
 	return &result, nil
 }
 
-// cloneScanResult returns a deep copy of src. Fields (a map) and
-// Warnings (a slice) are reallocated; FieldGuess.Value is left as-is
-// because the concrete types we return are all immutable (string,
-// float64, []string with its own allocated backing array — see the
-// per-field clone for the slice case).
+// looksLikeInvoice is the mock's filename heuristic for "this is a multi-line
+// receipt/invoice" — format-agnostic on purpose (an invoice can be a PDF, a
+// scan, an export, or a photo). Name a file invoice.* / receipt.* / bill.* /
+// faktura.* / paragon.* / uctenka.* to demo the chooser. Real providers
+// decide from the actual content, not the name.
+func looksLikeInvoice(photos []aivision.PhotoInput) bool {
+	keywords := []string{"invoice", "receipt", "bill", "faktura", "paragon", "uctenka", "účtenka"}
+	for _, ph := range photos {
+		name := strings.ToLower(ph.Filename)
+		for _, kw := range keywords {
+			if strings.Contains(name, kw) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// cloneScanResult returns a deep copy of src. Fields/Items (maps + slice)
+// are reallocated; FieldGuess.Value is cloned per cloneFieldValue. Deep-
+// copying keeps the mock identical to a real provider (fresh struct off
+// the wire) and avoids action-at-a-distance across calls.
 func cloneScanResult(src aivision.ScanResult) aivision.ScanResult {
 	dst := aivision.ScanResult{
 		UsedTokens: src.UsedTokens,
 		LatencyMS:  src.LatencyMS,
+		Fields:     cloneFieldMap(src.Fields),
 	}
-	if src.Fields != nil {
-		dst.Fields = make(map[string]aivision.FieldGuess, len(src.Fields))
-		for k, v := range src.Fields {
-			dst.Fields[k] = aivision.FieldGuess{
-				Value:      cloneFieldValue(v.Value),
-				Confidence: v.Confidence,
-			}
+	if src.Items != nil {
+		dst.Items = make([]aivision.ScanItem, len(src.Items))
+		for i, it := range src.Items {
+			dst.Items[i] = aivision.ScanItem{Fields: cloneFieldMap(it.Fields)}
 		}
 	}
 	if src.Warnings != nil {
@@ -124,9 +150,21 @@ func cloneScanResult(src aivision.ScanResult) aivision.ScanResult {
 	return dst
 }
 
-// cloneFieldValue defensively copies the few slice-typed values we know
-// about (currently only []string for the urls field). Scalar types pass
-// through unchanged.
+// cloneFieldMap deep-copies a canonical field map (nil stays nil). Shared
+// by the primary Fields and each item's Fields.
+func cloneFieldMap(src map[string]aivision.FieldGuess) map[string]aivision.FieldGuess {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]aivision.FieldGuess, len(src))
+	for k, v := range src {
+		dst[k] = aivision.FieldGuess{Value: cloneFieldValue(v.Value), Confidence: v.Confidence}
+	}
+	return dst
+}
+
+// cloneFieldValue defensively copies the slice-typed values we know about
+// (the []string fields: urls and tags). Scalar types pass through unchanged.
 func cloneFieldValue(v any) any {
 	if v == nil {
 		return nil
@@ -181,11 +219,51 @@ func DefaultResult() aivision.ScanResult {
 			// Fixed purchase date keeps the canned result deterministic
 			// across runs — using time.Now() made every test/screenshot
 			// snapshot drift day-to-day.
-			aivision.FieldNamePurchaseDate: {Value: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02"), Confidence: 0.50},
-			aivision.FieldNameComments:     {Value: "Black over-ear wireless headphones with active noise cancellation.", Confidence: 0.65},
+			aivision.FieldNamePurchaseDate:      {Value: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02"), Confidence: 0.50},
+			aivision.FieldNameWarrantyExpiresAt: {Value: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02"), Confidence: 0.45},
+			aivision.FieldNameComments:          {Value: "Black over-ear wireless headphones with active noise cancellation.", Confidence: 0.65},
+			aivision.FieldNameTags:              {Value: []string{"audio", "headphones", "wireless"}, Confidence: 0.60},
 		},
 		Warnings: []aivision.Warning{
 			{Code: "low_confidence", Field: aivision.FieldNamePurchaseDate, Detail: "purchase date inferred from packaging design only"},
+		},
+		UsedTokens: 0,
+		LatencyMS:  1,
+	}
+}
+
+// MultiItemResult is the canned result the mock returns when the uploaded
+// filename looks like a receipt/invoice — a stand-in for a multi-line invoice
+// (two purchased products), so the item-chooser flow is demonstrable with the deterministic provider.
+// Per the real-provider contract, Fields mirrors the first (most prominent)
+// item. Dates are fixed so screenshots/e2e stay deterministic.
+func MultiItemResult() aivision.ScanResult {
+	purchased := time.Date(2024, 3, 14, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	espresso := map[string]aivision.FieldGuess{
+		aivision.FieldNameName:                  {Value: "Espresso Machine", Confidence: 0.93},
+		aivision.FieldNameShortName:             {Value: "Espresso", Confidence: 0.80},
+		aivision.FieldNameType:                  {Value: "white_goods", Confidence: 0.88},
+		aivision.FieldNameOriginalPrice:         {Value: 449.00, Confidence: 0.90},
+		aivision.FieldNameOriginalPriceCurrency: {Value: "EUR", Confidence: 0.90},
+		aivision.FieldNamePurchaseDate:          {Value: purchased, Confidence: 0.85},
+		aivision.FieldNameComments:              {Value: "Purchased from Sample Store s.r.o.", Confidence: 0.70},
+		aivision.FieldNameTags:                  {Value: []string{"coffee", "kitchen", "appliance"}, Confidence: 0.60},
+	}
+	frother := map[string]aivision.FieldGuess{
+		aivision.FieldNameName:                  {Value: "Milk Frother", Confidence: 0.86},
+		aivision.FieldNameShortName:             {Value: "Frother", Confidence: 0.75},
+		aivision.FieldNameType:                  {Value: "electronics", Confidence: 0.80},
+		aivision.FieldNameOriginalPrice:         {Value: 39.90, Confidence: 0.88},
+		aivision.FieldNameOriginalPriceCurrency: {Value: "EUR", Confidence: 0.90},
+		aivision.FieldNamePurchaseDate:          {Value: purchased, Confidence: 0.85},
+		aivision.FieldNameComments:              {Value: "Purchased from Sample Store s.r.o.", Confidence: 0.70},
+		aivision.FieldNameTags:                  {Value: []string{"coffee", "kitchen"}, Confidence: 0.60},
+	}
+	return aivision.ScanResult{
+		Fields: espresso,
+		Items: []aivision.ScanItem{
+			{Fields: espresso},
+			{Fields: frother},
 		},
 		UsedTokens: 0,
 		LatencyMS:  1,

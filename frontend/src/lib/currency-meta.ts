@@ -55,3 +55,10 @@ export function currencyMeta(code: string): CurrencyMeta {
   const upper = code.trim().toUpperCase()
   return BY_CODE.get(upper) ?? { code: upper, symbol: upper, name: upper }
 }
+
+// KNOWN_CURRENCY_CODES is the curated subset of ISO 4217 codes the FE always
+// knows synchronously (the BE's /api/v1/currencies returns the full ISO list,
+// but that's an async fetch). Use this where a value needs an immediate "is
+// this a real, common currency" check without waiting on — or depending on —
+// the network (e.g. accepting an AI-guessed currency like CZK for prefill).
+export const KNOWN_CURRENCY_CODES: readonly string[] = ENTRIES.map((e) => e.code)
