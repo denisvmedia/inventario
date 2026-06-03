@@ -135,7 +135,7 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     expect(screen.getByRole("button", { name: /^back$/i })).toBeDisabled()
   })
 
-  it("keeps Back disabled on Basics in edit mode (no AI rewind)", async () => {
+  it("keeps Back active on Basics in edit mode (rewinds to AI scan)", async () => {
     withGroupSlug()
     renderWithProviders({
       children: (
