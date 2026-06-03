@@ -108,17 +108,17 @@ func CommodityScanPublic(scanService *services.CommodityScanService, maxFormByte
 // CommodityScanService.ScanAnonymous and reuses the same body/photo
 // readers and the shared renderScanError → mapCommodityScanError mapping.
 //
-// @Summary Run an AI vision scan on uploaded photos (public)
+// @Summary Run an AI vision scan on uploaded photos or documents (public)
 // @Description Anonymous variant of the photo scan for the landing-page CTA (#1988). Unauthenticated, IP + global-daily rate limited, gated behind a deployment feature flag. Returns field guesses only and persists nothing.
 // @Tags commodities
 // @Accept multipart/form-data
 // @Produce json-api
-// @Param photos formData file true "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts)."
+// @Param photos formData file true "Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple `photos` parts)."
 // @Param hint formData string false "Optional free-form hint (brand, category guess)"
 // @Success 200 {object} jsonapi.CommodityScanResponse "OK"
-// @Failure 413 {object} jsonapi.Errors "Photo too large"
+// @Failure 413 {object} jsonapi.Errors "File too large"
 // @Failure 415 {object} jsonapi.Errors "Unsupported MIME type"
-// @Failure 422 {object} jsonapi.Errors "Too many photos / no photos"
+// @Failure 422 {object} jsonapi.Errors "Too many files / no files"
 // @Failure 429 {object} jsonapi.Errors "Rate limited"
 // @Failure 502 {object} jsonapi.Errors "Provider unavailable / parse error"
 // @Failure 503 {object} jsonapi.Errors "Provider disabled"
@@ -181,18 +181,18 @@ func (api *commodityScanAPI) handlePublicScan(w http.ResponseWriter, r *http.Req
 // validates the basics, and delegates to CommodityScanService.Scan,
 // then renders a JSON:API response with type "commodity_scan".
 //
-// @Summary Run an AI vision scan on uploaded photos
-// @Description Extract structured commodity field guesses from 1..N product photos. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.
+// @Summary Run an AI vision scan on uploaded photos or documents
+// @Description Extract structured commodity field guesses from 1..N product photos or PDF documents. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.
 // @Tags commodities
 // @Accept multipart/form-data
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
-// @Param photos formData file true "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts)."
+// @Param photos formData file true "Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple `photos` parts)."
 // @Param hint formData string false "Optional free-form hint (brand, category guess)"
 // @Success 200 {object} jsonapi.CommodityScanResponse "OK"
-// @Failure 413 {object} jsonapi.Errors "Photo too large"
+// @Failure 413 {object} jsonapi.Errors "File too large"
 // @Failure 415 {object} jsonapi.Errors "Unsupported MIME type"
-// @Failure 422 {object} jsonapi.Errors "Too many photos / no photos"
+// @Failure 422 {object} jsonapi.Errors "Too many files / no files"
 // @Failure 429 {object} jsonapi.Errors "Rate limited"
 // @Failure 502 {object} jsonapi.Errors "Provider unavailable / parse error"
 // @Failure 503 {object} jsonapi.Errors "Provider disabled"
@@ -511,12 +511,19 @@ type commodityScanResource struct {
 }
 
 // commodityScanResultDT is the wire shape. Each field carries an
-// optional value + confidence; absent fields mean "no signal".
+// optional value + confidence; absent fields mean "no signal". Items is
+// present only for a multi-product scan (the FE renders a chooser).
 type commodityScanResultDT struct {
 	Fields     map[string]commodityScanFieldDT `json:"fields"`
+	Items      []commodityScanItemDT           `json:"items,omitempty"`
 	Warnings   []aivision.Warning              `json:"warnings,omitempty"`
 	UsedTokens int                             `json:"used_tokens,omitempty"`
 	LatencyMS  int64                           `json:"latency_ms,omitempty"`
+}
+
+// commodityScanItemDT is one candidate product in a multi-product scan.
+type commodityScanItemDT struct {
+	Fields map[string]commodityScanFieldDT `json:"fields"`
 }
 
 type commodityScanFieldDT struct {
@@ -524,19 +531,30 @@ type commodityScanFieldDT struct {
 	Confidence float64         `json:"confidence"`
 }
 
-func newCommodityScanResponse(r *aivision.ScanResult) *commodityScanResponse {
-	dt := commodityScanResultDT{
-		Fields:     make(map[string]commodityScanFieldDT, len(r.Fields)),
-		Warnings:   r.Warnings,
-		UsedTokens: r.UsedTokens,
-		LatencyMS:  r.LatencyMS,
-	}
-	for name, g := range r.Fields {
+// marshalScanFields converts the provider's FieldGuess map into the wire
+// field map, dropping any value that fails to marshal. Shared by the
+// primary fields and each item's fields.
+func marshalScanFields(fields map[string]aivision.FieldGuess) map[string]commodityScanFieldDT {
+	out := make(map[string]commodityScanFieldDT, len(fields))
+	for name, g := range fields {
 		raw, err := json.Marshal(g.Value)
 		if err != nil {
 			continue
 		}
-		dt.Fields[name] = commodityScanFieldDT{Value: raw, Confidence: g.Confidence}
+		out[name] = commodityScanFieldDT{Value: raw, Confidence: g.Confidence}
+	}
+	return out
+}
+
+func newCommodityScanResponse(r *aivision.ScanResult) *commodityScanResponse {
+	dt := commodityScanResultDT{
+		Fields:     marshalScanFields(r.Fields),
+		Warnings:   r.Warnings,
+		UsedTokens: r.UsedTokens,
+		LatencyMS:  r.LatencyMS,
+	}
+	for _, it := range r.Items {
+		dt.Items = append(dt.Items, commodityScanItemDT{Fields: marshalScanFields(it.Fields)})
 	}
 	return &commodityScanResponse{
 		Data:       commodityScanResource{Type: "commodity_scan", Attributes: dt},

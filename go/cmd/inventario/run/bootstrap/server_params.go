@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"math"
+	"net/http"
 	"strings"
 	"time"
 
@@ -239,6 +240,10 @@ func wireCommodityScan(cfg *Config, params *apiserver.Params) error {
 		return err
 	}
 
+	if cfg.AIVisionMaxTokens < 0 {
+		return errors.New("AI_VISION_MAX_TOKENS must not be negative")
+	}
+
 	provider, err := aivision.NewProvider(aivision.ProviderConfig{
 		Name:             strings.TrimSpace(cfg.AIVisionProvider),
 		AnthropicAPIKey:  cfg.AIVisionAnthropicAPIKey,
@@ -247,6 +252,12 @@ func wireCommodityScan(cfg *Config, params *apiserver.Params) error {
 		OpenAIAPIKey:     cfg.AIVisionOpenAIAPIKey,
 		OpenAIModel:      cfg.AIVisionOpenAIModel,
 		OpenAIBaseURL:    cfg.AIVisionOpenAIBaseURL,
+		MaxTokens:        cfg.AIVisionMaxTokens,
+		// Derive the HTTP-client cap from the configured per-call deadline so
+		// the context (AI_VISION_TIMEOUT) is always the binding timeout — even
+		// when an operator raises it above the provider's fixed 90s fallback.
+		// +30s slack keeps the client a safety net strictly above the context.
+		HTTPClient: &http.Client{Timeout: timeout + 30*time.Second},
 	})
 	switch {
 	case err == nil:

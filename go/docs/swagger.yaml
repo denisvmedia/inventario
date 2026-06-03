@@ -1465,6 +1465,14 @@ definitions:
         additionalProperties:
           $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
         type: object
+      items:
+        description: |-
+          Items is present only when the source described more than one
+          distinct product; one entry per product, most prominent first. The
+          FE renders a chooser. Empty/absent for a single product.
+        items:
+          $ref: '#/definitions/jsonapi.CommodityScanItem'
+        type: array
       latency_ms:
         type: integer
       used_tokens:
@@ -1480,6 +1488,13 @@ definitions:
         type: number
       value:
         description: Value is polymorphic — see the type-level doc comment.
+        type: object
+    type: object
+  jsonapi.CommodityScanItem:
+    properties:
+      fields:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
         type: object
     type: object
   jsonapi.CommodityScanResource:
@@ -1506,6 +1521,7 @@ definitions:
         - ambiguous_price
         - currency_inferred
         - no_photo_text
+        - multiple_items
         example: low_confidence
         type: string
       detail:
@@ -7364,17 +7380,17 @@ paths:
     post:
       consumes:
       - multipart/form-data
-      description: Extract structured commodity field guesses from 1..N product photos.
-        The handler does not persist any commodity — it only returns structured suggestions
-        for the Add Item dialog to pre-fill.
+      description: Extract structured commodity field guesses from 1..N product photos
+        or PDF documents. The handler does not persist any commodity — it only returns
+        structured suggestions for the Add Item dialog to pre-fill.
       parameters:
       - description: Group slug
         in: path
         name: groupSlug
         required: true
         type: string
-      - description: Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the
-          form field to upload up to 5 photos in a single request (multipart/form-data
+      - description: Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif
+          or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data
           with multiple `photos` parts).
         in: formData
         name: photos
@@ -7392,7 +7408,7 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.CommodityScanResponse'
         "413":
-          description: Photo too large
+          description: File too large
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "415":
@@ -7400,7 +7416,7 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
-          description: Too many photos / no photos
+          description: Too many files / no files
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "429":
@@ -7419,7 +7435,7 @@ paths:
           description: Provider timed out
           schema:
             $ref: '#/definitions/jsonapi.Errors'
-      summary: Run an AI vision scan on uploaded photos
+      summary: Run an AI vision scan on uploaded photos or documents
       tags:
       - commodities
   /g/{groupSlug}/commodities/values:
@@ -9839,8 +9855,8 @@ paths:
         Unauthenticated, IP + global-daily rate limited, gated behind a deployment
         feature flag. Returns field guesses only and persists nothing.
       parameters:
-      - description: Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the
-          form field to upload up to 5 photos in a single request (multipart/form-data
+      - description: Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif
+          or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data
           with multiple `photos` parts).
         in: formData
         name: photos
@@ -9858,7 +9874,7 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.CommodityScanResponse'
         "413":
-          description: Photo too large
+          description: File too large
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "415":
@@ -9866,7 +9882,7 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
-          description: Too many photos / no photos
+          description: Too many files / no files
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "429":
@@ -9885,7 +9901,7 @@ paths:
           description: Provider timed out
           schema:
             $ref: '#/definitions/jsonapi.Errors'
-      summary: Run an AI vision scan on uploaded photos (public)
+      summary: Run an AI vision scan on uploaded photos or documents (public)
       tags:
       - commodities
   /register:

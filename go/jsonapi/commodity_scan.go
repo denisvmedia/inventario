@@ -17,12 +17,24 @@ type CommodityScanResource struct {
 // CommodityScanAttributes is the result body. fields is keyed by
 // canonical field name (name, short_name, type, original_price,
 // original_price_currency, serial_number, urls, purchase_date,
-// comments); warnings is the optional non-fatal note list.
+// warranty_expires_at, comments, tags); items carries one such field set
+// per product on a multi-product scan; warnings is the optional non-fatal
+// note list.
 type CommodityScanAttributes struct {
-	Fields     map[string]CommodityScanFieldGuess `json:"fields"`
-	Warnings   []CommodityScanWarning             `json:"warnings,omitempty"`
-	UsedTokens int                                `json:"used_tokens,omitempty"`
-	LatencyMS  int64                              `json:"latency_ms,omitempty"`
+	Fields map[string]CommodityScanFieldGuess `json:"fields"`
+	// Items is present only when the source described more than one
+	// distinct product; one entry per product, most prominent first. The
+	// FE renders a chooser. Empty/absent for a single product.
+	Items      []CommodityScanItem    `json:"items,omitempty"`
+	Warnings   []CommodityScanWarning `json:"warnings,omitempty"`
+	UsedTokens int                    `json:"used_tokens,omitempty"`
+	LatencyMS  int64                  `json:"latency_ms,omitempty"`
+}
+
+// CommodityScanItem is one candidate product in a multi-product scan; its
+// fields mirror CommodityScanAttributes.Fields.
+type CommodityScanItem struct {
+	Fields map[string]CommodityScanFieldGuess `json:"fields"`
 }
 
 // CommodityScanFieldGuess is the per-field extraction value plus a
@@ -37,9 +49,10 @@ type CommodityScanAttributes struct {
 // override (the value is not always an object, and not always strings):
 //
 //   - name, short_name, type, serial_number, comments,
-//     original_price_currency, purchase_date (YYYY-MM-DD): string
+//     original_price_currency, purchase_date,
+//     warranty_expires_at (both YYYY-MM-DD): string
 //   - original_price: number (decimal)
-//   - urls: string[]
+//   - urls, tags: string[]
 type CommodityScanFieldGuess struct {
 	// Value is polymorphic — see the type-level doc comment.
 	Value      any     `json:"value" swaggertype:"object"`
@@ -49,7 +62,7 @@ type CommodityScanFieldGuess struct {
 // CommodityScanWarning is a non-fatal note attached to a scan
 // response. code is a stable identifier the FE branches on.
 type CommodityScanWarning struct {
-	Code   string `json:"code" example:"low_confidence" enums:"low_confidence,unreadable_serial,ambiguous_price,currency_inferred,no_photo_text"`
+	Code   string `json:"code" example:"low_confidence" enums:"low_confidence,unreadable_serial,ambiguous_price,currency_inferred,no_photo_text,multiple_items"`
 	Field  string `json:"field,omitempty"`
 	Detail string `json:"detail,omitempty"`
 }

@@ -1,7 +1,7 @@
 // AI vision scan step for the Add Item dialog (#1720). Replaces the
 // inert offer-only stub with a four-phase state machine:
 //
-//   offer    → user drops/picks 1..5 photos, clicks "Scan photos"
+//   offer    → user drops/picks 1..5 photos or PDFs, clicks "Scan files"
 //   scanning → mutation in flight; user can Cancel via AbortController
 //   review   → per-field checkboxes + confidence chips + warnings;
 //              "Use these values" prefills the wizard and advances
@@ -14,34 +14,50 @@
 // header + grid pattern is preserved; the design deviation tracker
 // note line is removed (the feature ships now).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
-import { AlertCircle, Camera, CheckCircle2, Plus, ScanText, Sparkles, X } from "lucide-react"
+import {
+  AlertCircle,
+  Camera,
+  CheckCircle2,
+  FileText,
+  Layers,
+  Plus,
+  ScanText,
+  Sparkles,
+  X,
+} from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
-import { currencyMeta } from "@/lib/currency-meta"
+import { currencyMeta, KNOWN_CURRENCY_CODES } from "@/lib/currency-meta"
 import {
   classifyServerError,
   getServerErrorCode,
   type ClassifiedServerError,
 } from "@/lib/server-error"
+import { http } from "@/lib/http"
 import { cn } from "@/lib/utils"
 import { COMMODITY_TYPES, type CommodityTypeValue } from "@/features/commodities/constants"
 import { useScanCommodityPhotos } from "@/features/commodities/scanHooks"
 import type {
   ScanFieldGuess,
   ScanFieldName,
+  ScanItem,
   ScanResult,
+  ScanResultFields,
   ScanWarning,
 } from "@/features/commodities/scanApi"
 
-// Mirrors `media.go` MIME allow-list on the BE. The `<input accept>`
+// Mirrors `services.AllowedMIMETypes` on the BE. The `<input accept>`
 // attribute is a hint the browser may honour loosely (HEIC files on
 // Android Chrome come back with empty MIME types), so we re-check at
-// staging time and reject anything unrecognised inline.
+// staging time and reject anything unrecognised inline. `application/pdf`
+// (#1983) lets the user prefill from a receipt / invoice / manual, not
+// just a product photo.
 const ACCEPTED_MIME = new Set([
   "image/jpeg",
   "image/jpg",
@@ -49,14 +65,30 @@ const ACCEPTED_MIME = new Set([
   "image/webp",
   "image/heic",
   "image/heif",
+  "application/pdf",
 ])
-const ACCEPTED_EXT = /\.(jpe?g|png|webp|heic|heif)$/i
+const ACCEPTED_EXT = /\.(jpe?g|png|webp|heic|heif|pdf)$/i
 // Hard cap (mirrors BE) — additional rejections fire from the BE side.
 const MAX_PHOTOS = 5
+
+// Mirrors the commodity form's short_name limit (schemas.ts + the Go model's
+// validation.Length(1, 40)). An AI-guessed short_name longer than this is
+// truncated on accept so it never trips the Basics-step validator.
+const SHORT_NAME_MAX_LEN = 40
+
+// isPdfFile reports whether a staged file is a PDF document rather than an
+// image. PDFs can't be rendered as an <img> thumbnail, so the staged tile
+// shows a document icon + filename instead. The MIME check is primary; the
+// extension fallback covers browsers that hand back an empty `type`.
+function isPdfFile(file: File): boolean {
+  return file.type.toLowerCase() === "application/pdf" || /\.pdf$/i.test(file.name)
+}
 
 interface StagedPhoto {
   id: string
   file: File
+  // Object-URL preview for image thumbnails. Empty for PDFs — they render
+  // as a document tile, so no bitmap URL is created (and nothing to revoke).
   preview: string
 }
 
@@ -84,7 +116,9 @@ export interface ScanAcceptedValues {
   serial_number?: string
   urls?: string[]
   purchase_date?: string
+  warranty_expires_at?: string
   comments?: string
+  tags?: string[]
 }
 
 interface AiScanStepProps {
@@ -131,6 +165,10 @@ export function AiScanStep({
   const [photos, setPhotos] = useState<StagedPhoto[]>([])
   const [stagingError, setStagingError] = useState<string | null>(null)
   const [result, setResult] = useState<ScanResult | null>(null)
+  // When the scan returns more than one candidate product, the user picks
+  // one in the "choose" phase; its fields land here and drive the review.
+  // Null = single-item scan (review reads result.fields) or not yet chosen.
+  const [selectedItemFields, setSelectedItemFields] = useState<ScanResultFields | null>(null)
   const [acceptedFields, setAcceptedFields] = useState<Set<ScanFieldName>>(new Set())
   const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
   const [errorCode, setErrorCode] = useState<string | null>(null)
@@ -138,19 +176,17 @@ export function AiScanStep({
 
   const scan = useScanCommodityPhotos(slug, anonymous)
 
-  // Known-currency set is intentionally narrow: just the tenant's
-  // default currency. We deliberately do NOT fetch the full
-  // /currencies list from inside the AI step — adding a network query
-  // to the AI-step mount path makes every unrelated wizard test that
-  // walks past this step trip the global MSW "unhandled request"
-  // guard, and the actual product value of a wider validator here is
-  // small (the CurrencyCombobox on the Basics step is the
-  // authoritative picker; if the AI guessed a non-default ISO the
-  // worst case is the picker stays on the default and the user picks
-  // again). When that needs to change, fetch via a lazy mutation
-  // gated on `photos.length > 0` so the query never fires until the
-  // user actually engages the AI flow.
-  const knownCurrencies = useMemo(() => [defaultCurrency], [defaultCurrency])
+  // /currencies is a PUBLIC, group-agnostic endpoint returning the full ISO
+  // list; the lazy query extends the accepted set to long-tail codes once it
+  // loads (and works in the anonymous flow too — no auth/group needed).
+  // `enabled` gates it on a staged file so it never fires on the AI-step mount
+  // path (no MSW unhandled-request churn on the "Fill manually" walk-through).
+  const currenciesQuery = useQuery<string[]>({
+    queryKey: ["currencies"],
+    queryFn: ({ signal }) => http.get<string[]>("/currencies", { signal }),
+    enabled: photos.length > 0,
+    staleTime: 5 * 60 * 1000,
+  })
 
   // Revoke object-URLs on unmount. We stash the live list of previews
   // in a ref so the cleanup only fires once at unmount — a `[photos]`
@@ -169,12 +205,19 @@ export function AiScanStep({
     }
   }, [])
 
-  // Compute which currencies the BE accepts as a lowercased set so
-  // the case-insensitive match below stays O(1).
-  const currencySet = useMemo(
-    () => new Set(knownCurrencies.map((c) => c.trim().toUpperCase())),
-    [knownCurrencies]
-  )
+  // The set of currency codes an AI guess may pre-fill (uppercased for O(1)
+  // case-insensitive match): the FE's curated KNOWN_CURRENCY_CODES (covers
+  // CZK + every common code, checked SYNCHRONOUSLY so a valid guess is never
+  // dropped while waiting on — or if we never get — the network) ∪ the tenant
+  // default ∪ the full ISO list from /currencies once it resolves.
+  const currencySet = useMemo(() => {
+    const set = new Set<string>(KNOWN_CURRENCY_CODES)
+    if (defaultCurrency.trim() !== "") set.add(defaultCurrency.trim().toUpperCase())
+    for (const c of currenciesQuery.data ?? []) {
+      if (typeof c === "string" && c.trim() !== "") set.add(c.trim().toUpperCase())
+    }
+    return set
+  }, [currenciesQuery.data, defaultCurrency])
 
   const handleFiles = useCallback(
     (files: File[]) => {
@@ -199,7 +242,9 @@ export function AiScanStep({
               ? crypto.randomUUID()
               : `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
           file,
-          preview: URL.createObjectURL(file),
+          // No object URL for PDFs — they render as a document tile, not
+          // an <img>, so there's no bitmap to create or revoke.
+          preview: isPdfFile(file) ? "" : URL.createObjectURL(file),
         })
       }
       setPhotos((prev) => {
@@ -245,17 +290,23 @@ export function AiScanStep({
         photos: photos.map((p) => p.file),
         signal: ac.signal,
       })
-      setResult(r)
-      // Default-accept every field with confidence ≥ 0.3 (the
-      // low-confidence threshold for the chip styling — anything below
-      // is the model essentially guessing). Users can re-check
-      // individually in the review phase before applying.
-      const defaults = new Set<ScanFieldName>()
-      for (const key of Object.keys(r.fields) as ScanFieldName[]) {
-        const guess = r.fields[key]
-        if (guess && guess.confidence >= 0.3) defaults.add(key)
+      // Nothing usable came back (an unreadable document, or a model
+      // truncation). Don't drop the user into a green-but-empty "review" —
+      // keep them on the offer with a retry hint.
+      if (Object.keys(r.fields).length === 0 && r.items.length === 0) {
+        setStagingError(t("commodities:form.step.ai.errors.noDetails"))
+        return
       }
-      setAcceptedFields(defaults)
+      setResult(r)
+      setSelectedItemFields(null)
+      // More than one distinct product → the user chooses which to fill
+      // first (no default-accept until they pick). A single product →
+      // straight to review with confident fields pre-checked.
+      if (r.items.length > 1) {
+        setAcceptedFields(new Set())
+      } else {
+        setAcceptedFields(defaultAcceptedFor(r.fields))
+      }
     } catch (err) {
       // AbortError fires when the user clicks Cancel — silently roll
       // back to the offer phase instead of rendering a scary banner.
@@ -275,22 +326,45 @@ export function AiScanStep({
     scan.reset()
   }
 
+  // chooseItem promotes one candidate (from a multi-product scan) into the
+  // review phase: its fields become the active set and the confident ones
+  // are pre-checked.
+  function chooseItem(index: number) {
+    if (!result) return
+    const item = result.items[index]
+    if (!item) return
+    setSelectedItemFields(item.fields)
+    setAcceptedFields(defaultAcceptedFor(item.fields))
+  }
+
   function applyAccepted() {
     if (!result) return
+    // The active item: the user's pick from a multi-product scan, or the
+    // single primary result otherwise.
+    const fields = selectedItemFields ?? result.fields
     const out: ScanAcceptedValues = {}
     let droppedCurrency: string | null = null
-    for (const key of Object.keys(result.fields) as ScanFieldName[]) {
+    for (const key of Object.keys(fields) as ScanFieldName[]) {
       if (!acceptedFields.has(key)) continue
-      const guess = result.fields[key]
+      const guess = fields[key]
       if (!guess) continue
       const value = guess.value
       switch (key) {
         case "name":
-        case "short_name":
         case "serial_number":
         case "comments":
         case "purchase_date":
+        case "warranty_expires_at":
           if (typeof value === "string" && value.trim() !== "") out[key] = value
+          break
+        case "short_name":
+          if (typeof value === "string" && value.trim() !== "") {
+            // Cap at the form's 40-char limit (SHORT_NAME_MAX_LEN) so an
+            // over-long AI guess pre-fills truncated instead of failing
+            // validation on the Basics step. The prompt already steers the
+            // model to ≤40; this is the defensive backstop.
+            out.short_name = value.trim().slice(0, SHORT_NAME_MAX_LEN)
+          }
           break
         case "type":
           if (typeof value === "string" && isKnownType(value)) {
@@ -324,6 +398,22 @@ export function AiScanStep({
             if (cleaned.length > 0) out.urls = cleaned
           }
           break
+        case "tags":
+          if (Array.isArray(value)) {
+            // Trim + drop empties + de-dupe case-insensitively so the form's
+            // tag chips stay clean.
+            const seen = new Set<string>()
+            const cleaned: string[] = []
+            for (const raw of value) {
+              if (typeof raw !== "string") continue
+              const tag = raw.trim()
+              if (tag === "" || seen.has(tag.toLowerCase())) continue
+              seen.add(tag.toLowerCase())
+              cleaned.push(tag)
+            }
+            if (cleaned.length > 0) out.tags = cleaned
+          }
+          break
       }
     }
     // Pass-through if no checked fields produced a value — the
@@ -335,12 +425,14 @@ export function AiScanStep({
     // (also relevant for the implicit revocation cleanup).
     clearPhotos()
     setResult(null)
+    setSelectedItemFields(null)
     setAcceptedFields(new Set())
   }
 
   function retakePhotos() {
     clearPhotos()
     setResult(null)
+    setSelectedItemFields(null)
     setAcceptedFields(new Set())
     setServerError(null)
     setErrorCode(null)
@@ -355,10 +447,15 @@ export function AiScanStep({
     })
   }
 
-  const phase: "offer" | "scanning" | "review" | "error" = (() => {
+  // A multi-product scan inserts a "choose" phase between scanning and
+  // review; a single-product scan (or once an item is chosen) goes straight
+  // to review, per the design.
+  const needsChoice = !!result && result.items.length > 1 && selectedItemFields === null
+  const phase: "offer" | "scanning" | "choose" | "review" | "error" = (() => {
     if (scan.isPending) return "scanning"
-    if (result) return "review"
     if (serverError) return "error"
+    if (needsChoice) return "choose"
+    if (result) return "review"
     return "offer"
   })()
 
@@ -370,9 +467,12 @@ export function AiScanStep({
     >
       {phase === "scanning" ? (
         <ScanningPanel onCancel={cancelScan} />
+      ) : phase === "choose" && result ? (
+        <ChoosePanel items={result.items} onChoose={chooseItem} onSkip={onSkip} />
       ) : phase === "review" && result ? (
         <ReviewPanel
-          result={result}
+          fields={selectedItemFields ?? result.fields}
+          warnings={result.warnings}
           acceptedFields={acceptedFields}
           onToggleField={toggleField}
           onAccept={applyAccepted}
@@ -509,11 +609,24 @@ function OfferPanel({
             <div className="flex flex-wrap justify-center gap-2 px-3">
               {photos.map((p) => (
                 <div key={p.id} className="group relative" data-testid="commodity-form-ai-thumb">
-                  <img
-                    src={p.preview}
-                    alt={p.file.name}
-                    className="size-14 rounded-lg border border-border object-cover"
-                  />
+                  {isPdfFile(p.file) ? (
+                    <div
+                      className="flex size-14 flex-col items-center justify-center gap-0.5 rounded-lg border border-border bg-muted/40 px-1"
+                      title={p.file.name}
+                      data-testid="commodity-form-ai-thumb-pdf"
+                    >
+                      <FileText aria-hidden="true" className="size-5 text-muted-foreground" />
+                      <span className="w-full truncate text-center text-[8px] leading-tight text-muted-foreground">
+                        {p.file.name}
+                      </span>
+                    </div>
+                  ) : (
+                    <img
+                      src={p.preview}
+                      alt={p.file.name}
+                      className="size-14 rounded-lg border border-border object-cover"
+                    />
+                  )}
                   <button
                     type="button"
                     aria-label={t("commodities:form.step.ai.offer.staged.remove")}
@@ -560,7 +673,7 @@ function OfferPanel({
             id="ai-photo-input"
             type="file"
             multiple
-            accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
+            accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,application/pdf,.pdf"
             className="sr-only"
             data-testid="commodity-form-ai-file-input"
             onClick={(e) => e.stopPropagation()}
@@ -631,8 +744,16 @@ function ScanningPanel({ onCancel }: { onCancel: () => void }) {
           {t("commodities:form.step.ai.scanning.subtitle")}
         </p>
       </div>
-      <div className="h-1.5 w-full max-w-48 overflow-hidden rounded-full bg-muted">
-        <div className="h-full w-2/3 animate-pulse rounded-full bg-amber-500" />
+      <div
+        className="h-1.5 w-full max-w-48 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label={t("commodities:form.step.ai.scanning.title")}
+        data-testid="commodity-form-ai-scanning-bar"
+      >
+        {/* Indeterminate: a partial bar slides across the track (the scan
+            duration is unknown), so the user sees work is ongoing rather
+            than a static fill stuck partway. */}
+        <div className="ai-scan-bar h-full w-2/5 rounded-full bg-amber-500" />
       </div>
       <Button
         type="button"
@@ -647,10 +768,95 @@ function ScanningPanel({ onCancel }: { onCancel: () => void }) {
   )
 }
 
+// ---- Choose phase (multi-item) --------------------------------------
+
+interface ChoosePanelProps {
+  items: ScanItem[]
+  onChoose: (index: number) => void
+  onSkip: () => void
+}
+
+// ChoosePanel lists every candidate product the scan found so the user
+// picks which one to pre-fill (shown only when there's more than one — a
+// single item goes straight to review).
+function ChoosePanel({ items, onChoose, onSkip }: ChoosePanelProps) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col gap-3" data-testid="commodity-form-ai-choose">
+      <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+        <Layers aria-hidden="true" className="size-4 shrink-0 text-primary" />
+        <p className="text-sm font-medium">{t("commodities:form.step.ai.choose.title")}</p>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("commodities:form.step.ai.choose.subtitle")}
+      </p>
+      <div className="flex flex-col gap-2">
+        {items.map((item, i) => {
+          const summary = chooseItemSummary(item)
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onChoose(i)}
+              data-testid={`commodity-form-ai-choose-item-${i}`}
+              className="flex flex-col items-start gap-0.5 rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <p className="text-sm font-medium">
+                {chooseItemTitle(item) ??
+                  t("commodities:form.step.ai.choose.itemFallback", { index: i + 1 })}
+              </p>
+              {summary ? <p className="text-xs text-muted-foreground">{summary}</p> : null}
+            </button>
+          )
+        })}
+      </div>
+      <div className="flex">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onSkip}
+          data-testid="commodity-form-ai-fill-manually"
+        >
+          {t("commodities:form.fillManually")}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// chooseItemTitle prefers the model's name, then short_name; null when
+// neither is present (the caller renders a numbered fallback).
+function chooseItemTitle(item: ScanItem): string | null {
+  const name = item.fields.name?.value
+  if (typeof name === "string" && name.trim() !== "") return name
+  const short = item.fields.short_name?.value
+  if (typeof short === "string" && short.trim() !== "") return short
+  return null
+}
+
+// chooseItemSummary builds a one-line "type · price · serial" summary so
+// the user can tell similar candidates apart. Empty when nothing useful.
+function chooseItemSummary(item: ScanItem): string {
+  const parts: string[] = []
+  const type = item.fields.type?.value
+  if (typeof type === "string" && type.trim() !== "") parts.push(type)
+  const price = item.fields.original_price?.value
+  if (typeof price === "number" && Number.isFinite(price)) {
+    const currency = item.fields.original_price_currency?.value
+    parts.push(typeof currency === "string" && currency ? `${price} ${currency}` : String(price))
+  }
+  const serial = item.fields.serial_number?.value
+  if (typeof serial === "string" && serial.trim() !== "") parts.push(serial)
+  return parts.join(" · ")
+}
+
 // ---- Review phase ---------------------------------------------------
 
 interface ReviewPanelProps {
-  result: ScanResult
+  // Active item's fields (the chosen candidate, or the single primary).
+  fields: ScanResultFields
+  warnings: ScanWarning[]
   acceptedFields: Set<ScanFieldName>
   onToggleField: (key: ScanFieldName, next: boolean) => void
   onAccept: () => void
@@ -660,7 +866,8 @@ interface ReviewPanelProps {
 }
 
 function ReviewPanel({
-  result,
+  fields,
+  warnings,
   acceptedFields,
   onToggleField,
   onAccept,
@@ -675,7 +882,7 @@ function ReviewPanel({
   const warningsByField = useMemo(() => {
     const map = new Map<string, ScanWarning[]>()
     const global: ScanWarning[] = []
-    for (const w of result.warnings) {
+    for (const w of warnings) {
       if (w.field) {
         const list = map.get(w.field) ?? []
         list.push(w)
@@ -685,7 +892,7 @@ function ReviewPanel({
       }
     }
     return { map, global }
-  }, [result.warnings])
+  }, [warnings])
 
   const fieldOrder: ScanFieldName[] = [
     "name",
@@ -693,9 +900,11 @@ function ReviewPanel({
     "type",
     "serial_number",
     "purchase_date",
+    "warranty_expires_at",
     "original_price",
     "original_price_currency",
     "urls",
+    "tags",
     "comments",
   ]
 
@@ -720,7 +929,7 @@ function ReviewPanel({
           <AlertDescription>
             {warningsByField.global.map((w, i) => (
               <p key={i} className="text-xs">
-                {w.detail ?? w.code}
+                {warningMessage(w, t)}
               </p>
             ))}
           </AlertDescription>
@@ -729,9 +938,9 @@ function ReviewPanel({
 
       <div className="flex flex-col gap-2">
         {fieldOrder.map((key) => {
-          const guess = result.fields[key]
+          const guess = fields[key]
           if (!guess) return null
-          const warnings = warningsByField.map.get(key) ?? []
+          const rowWarnings = warningsByField.map.get(key) ?? []
           const currencyUnknown =
             key === "original_price_currency" &&
             typeof guess.value === "string" &&
@@ -743,7 +952,7 @@ function ReviewPanel({
               guess={guess}
               checked={acceptedFields.has(key)}
               onToggle={(next) => onToggleField(key, next)}
-              warnings={warnings}
+              warnings={rowWarnings}
               currencyUnknown={currencyUnknown}
             />
           )
@@ -893,8 +1102,12 @@ function fieldLabelKey(field: ScanFieldName): string {
       return "originalPriceHelp"
     case "urls":
       return "urls"
+    case "warranty_expires_at":
+      return "warrantyExpiresAt"
     case "comments":
       return "comments"
+    case "tags":
+      return "tags"
   }
 }
 
@@ -926,9 +1139,23 @@ function warningTitle(code: string, t: (k: string) => string): string {
       return t("commodities:form.step.ai.review.warning.ambiguousPrice")
     case "currency_inferred":
       return t("commodities:form.step.ai.review.warning.currencyInferred")
+    case "multiple_items":
+      return t("commodities:form.step.ai.review.warning.multipleItems")
     default:
       return code
   }
+}
+
+// warningMessage renders a global (field-less) warning. Known codes get a
+// localized message; everything else falls back to the provider's English
+// detail (or the bare code). `multiple_items` (#1983) is the one the user
+// most needs to read — the document had several products and only the most
+// prominent one was pre-filled.
+function warningMessage(w: ScanWarning, t: (k: string) => string): string {
+  if (w.code === "multiple_items") {
+    return t("commodities:form.step.ai.review.warning.multipleItems")
+  }
+  return w.detail ?? w.code
 }
 
 function errorCodeTitle(code: string | null, t: (k: string) => string): string | null {
@@ -954,4 +1181,16 @@ function errorCodeTitle(code: string | null, t: (k: string) => string): string |
 
 function isKnownType(value: string): value is CommodityTypeValue {
   return (COMMODITY_TYPES as readonly string[]).includes(value)
+}
+
+// defaultAcceptedFor pre-checks every field the model is reasonably sure
+// about (confidence ≥ 0.3 — below that it's essentially guessing). Used
+// both for a single-item scan and after the user picks a candidate.
+function defaultAcceptedFor(fields: ScanResultFields): Set<ScanFieldName> {
+  const defaults = new Set<ScanFieldName>()
+  for (const key of Object.keys(fields) as ScanFieldName[]) {
+    const guess = fields[key]
+    if (guess && guess.confidence >= 0.3) defaults.add(key)
+  }
+  return defaults
 }

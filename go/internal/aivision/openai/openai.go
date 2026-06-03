@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -37,6 +38,12 @@ const (
 // DefaultModel is the model used when no override is supplied via Config.
 // Operators may override via AI_VISION_OPENAI_MODEL.
 const DefaultModel = "gpt-4o"
+
+// DefaultMaxTokens is the output-budget cap used when Config.MaxTokens is
+// unset. A multi-line invoice (one ~10-field product per line) easily blows
+// past the old 1024 cap and the JSON is truncated; 4096 holds well over a
+// dozen products. It is only a ceiling — the model stops once done.
+const DefaultMaxTokens = 4096
 
 // Config carries the runtime knobs. APIKey is required; Model defaults
 // to DefaultModel; BaseURL defaults to the public API; HTTPClient
@@ -75,11 +82,14 @@ func New(cfg Config) (*Provider, error) {
 	}
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
+		// Must exceed the service-layer per-call deadline (AI_VISION_TIMEOUT,
+		// default 60s) so that context deadline is the binding one rather than
+		// this client cap.
+		httpClient = &http.Client{Timeout: 90 * time.Second}
 	}
 	maxTokens := cfg.MaxTokens
 	if maxTokens <= 0 {
-		maxTokens = 1024
+		maxTokens = DefaultMaxTokens
 	}
 	return &Provider{
 		apiKey:     cfg.APIKey,
@@ -171,10 +181,20 @@ type contentBlock struct {
 	Type     string         `json:"type"`
 	Text     string         `json:"text,omitempty"`
 	ImageURL *imageURLBlock `json:"image_url,omitempty"`
+	File     *fileBlock     `json:"file,omitempty"`
 }
 
 type imageURLBlock struct {
 	URL string `json:"url"`
+}
+
+// fileBlock is the "file" content part used to pass a PDF document inline
+// (#1983 Part B). FileData is a base64 data: URL just like image_url's URL;
+// Filename is required by the API for inline file_data, so the provider
+// always sends a non-empty name (see pdfFilename).
+type fileBlock struct {
+	Filename string `json:"filename"`
+	FileData string `json:"file_data"`
 }
 
 type responseFormat struct {
@@ -215,6 +235,19 @@ func (p *Provider) buildPayload(req aivision.ScanRequest) *openaiRequest {
 		Text: aivision.UserPromptHeader(req),
 	})
 	for _, photo := range req.Photos {
+		// A PDF rides in a "file" content part (inline base64 data URL);
+		// an image rides in an "image_url" part. Both encode the bytes as
+		// the same data: URL — only the wrapping part differs.
+		if photo.IsPDF() {
+			content = append(content, contentBlock{
+				Type: "file",
+				File: &fileBlock{
+					Filename: pdfFilename(photo.Filename),
+					FileData: dataURL(photo.ContentType, photo.Data),
+				},
+			})
+			continue
+		}
 		content = append(content, contentBlock{
 			Type: "image_url",
 			ImageURL: &imageURLBlock{
@@ -279,9 +312,21 @@ func parseResponse(body []byte) (*aivision.ScanResult, error) {
 	return result, nil
 }
 
-// dataURL encodes raw image bytes as the data:URL form image_url expects.
+// dataURL encodes raw bytes as the data:URL form image_url / file_data
+// expect.
 func dataURL(contentType string, data []byte) string {
 	return fmt.Sprintf("data:%s;base64,%s", contentType, base64.StdEncoding.EncodeToString(data))
+}
+
+// pdfFilename returns a non-empty filename for a PDF file part. The
+// upstream API wants a name alongside inline file_data; the original
+// upload may not carry one (a multipart part without a filename, or the
+// anonymous path), so fall back to a stable default.
+func pdfFilename(name string) string {
+	if strings.TrimSpace(name) == "" {
+		return "document.pdf"
+	}
+	return name
 }
 
 // Compile-time check that the constructor result satisfies the

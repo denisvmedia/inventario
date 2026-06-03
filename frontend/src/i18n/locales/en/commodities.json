@@ -224,7 +224,7 @@
     "serialNumberHelp": "Found on device label or packaging",
     "serialNumberPlaceholder": "e.g. SN-MEL-2022-00412",
     "shortName": "Short name",
-    "shortNameHelp": "1–20 chars, used in compact lists and labels",
+    "shortNameHelp": "1–40 chars, used in compact lists and labels",
     "shortNamePlaceholder": "e.g. Dishwasher",
     "status": "Status",
     "tags": "Tags",
@@ -275,19 +275,25 @@
     "serverError": "Something went wrong. Please try again.",
     "step": {
       "ai": {
-        "description": "Photograph the item and its label — AI will pre-fill the form for you.",
+        "choose": {
+          "itemFallback": "Item {{index}}",
+          "subtitle": "We found more than one product. Pick the one to add — you can add the others separately afterwards.",
+          "title": "Choose which item to add"
+        },
+        "description": "Photograph the item and its label, or add a receipt or invoice PDF — AI will pre-fill the form for you.",
         "dropzone": {
-          "hint": "JPG, PNG, HEIC — up to 5 photos",
-          "primary": "Drop photos here or browse"
+          "hint": "JPG, PNG, WEBP, HEIC/HEIF or PDF — up to 5 files",
+          "primary": "Drop photos or PDFs here or browse"
         },
         "errors": {
-          "photoTooLarge": "One of the photos is too large to scan. Try a smaller file.",
+          "noDetails": "We couldn't read any details from that. Try a clearer photo or a different document.",
+          "photoTooLarge": "One of the files is too large to scan. Try a smaller file.",
           "providerDisabled": {
             "detail": "AI vision isn't enabled on this server right now. Use Fill manually to continue.",
             "title": "AI vision is unavailable"
           },
           "providerError": {
-            "title": "AI vision couldn't process those photos"
+            "title": "AI vision couldn't process those files"
           },
           "providerTimeout": {
             "title": "AI vision took too long to respond"
@@ -296,8 +302,8 @@
             "detail": "Too many scan requests. Try again in a moment.",
             "title": "Hold on — too many scans"
           },
-          "tooManyPhotos": "You can attach up to 5 photos per scan.",
-          "unsupportedMime": "Only JPG, PNG, WEBP, HEIC, and HEIF photos can be scanned."
+          "tooManyPhotos": "You can attach up to 5 files per scan.",
+          "unsupportedMime": "Only JPG, PNG, WEBP, HEIC, HEIF photos and PDF documents can be scanned."
         },
         "fullItem": {
           "description": "Photograph the whole item clearly so AI can identify it",
@@ -309,12 +315,12 @@
         },
         "offer": {
           "dropzone": {
-            "activeHint": "Release to add photos"
+            "activeHint": "Release to add files"
           },
           "staged": {
             "remove": "Remove",
-            "title_one": "{{count}} photo staged",
-            "title_other": "{{count}} photos staged"
+            "title_one": "{{count}} file staged",
+            "title_other": "{{count}} files staged"
           }
         },
         "review": {
@@ -324,7 +330,7 @@
             "medium": "{{percent}}% likely"
           },
           "currencyInferred": "Currency wasn't on the server's supported list — it won't be pre-filled.",
-          "retake": "Re-take photos",
+          "retake": "Start over",
           "subtitle": "Untick anything that looks wrong before we prefill the form.",
           "title": "Review extracted details",
           "useValues": "Use these values",
@@ -332,15 +338,16 @@
             "ambiguousPrice": "Price looks ambiguous",
             "currencyInferred": "Currency was inferred",
             "lowConfidence": "Low confidence",
+            "multipleItems": "This looks like more than one item — we pre-filled the most prominent one. Add the others separately after saving.",
             "unreadableSerial": "Serial number was hard to read"
           }
         },
         "scanning": {
           "cancel": "Cancel",
           "subtitle": "AI is reading the label and identifying the item.",
-          "title": "Scanning your photos…"
+          "title": "Scanning your files…"
         },
-        "scanPhotos": "Scan photos",
+        "scanPhotos": "Scan files",
         "title": "Fill with AI"
       },
       "basics": {
@@ -469,7 +476,7 @@
     "purchaseDateRequired": "Purchase date is required for non-draft items.",
     "quantityForbidsWarranty": "Items with quantity greater than 1 don't support warranty tracking. Split into separate items for per-unit tracking.",
     "shortNameRequired": "Short name is required.",
-    "shortNameTooLong": "Short name must be 20 characters or fewer.",
+    "shortNameTooLong": "Short name must be 40 characters or fewer.",
     "statusRequired": "Pick a status.",
     "typeRequired": "Pick a type.",
     "urlInvalid": "Enter a valid URL (e.g. https://example.com)."

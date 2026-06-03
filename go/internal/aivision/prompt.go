@@ -9,11 +9,25 @@ import (
 // SystemPrompt is the role/system instruction sent to every vendor. It
 // is intentionally short — vendors trim very long system prompts and a
 // concise instruction reduces token spend on every call.
-const SystemPrompt = `You are an assistant that extracts structured product information from photos of physical items.
-You will receive 1 to 5 photos of a single product (front, back, label, packaging, etc.).
-Return ONE JSON object that matches the requested schema EXACTLY. Do not include any prose, markdown, or extra keys.
-For each field, ALWAYS include a "confidence" score between 0.0 and 1.0 reflecting how sure you are.
-Omit fields you have NO evidence for rather than guessing — null/empty is preferred over hallucinated values.`
+const SystemPrompt = "You are an assistant that extracts structured product information from photos and documents of physical items.\n" +
+	"You will receive 1 to 5 inputs — photos and/or PDFs. They may show a product (front, back, label, packaging, etc.) " +
+	"or a purchase document such as a receipt, invoice, or product manual. A receipt/invoice may itself be a PDF, a scan, " +
+	"an export, or a photo (jpg/png/heic) — handle it the same regardless of format.\n" +
+	"Return \"items\": a JSON array with ONE entry per distinct purchased product, most prominent / most expensive first. " +
+	"Each entry is that product's field object directly (name, short_name, type, original_price, original_price_currency, etc.).\n" +
+	"A single product → a one-element array. A receipt or invoice that lists SEVERAL products → one entry for EACH " +
+	"product line. Do NOT collapse them into one and do NOT pick just one — enumerate EVERY product on the document.\n" +
+	"EXCLUDE non-product lines: subtotals, taxes/VAT, shipping/postage, discounts, vouchers, fees, deposits, and totals.\n" +
+	"For each product, from a receipt/invoice read its own purchase price, currency, and purchase date; " +
+	"put the seller/vendor/store name (there is no dedicated seller field) into \"comments\".\n" +
+	"Classify \"type\" as EXACTLY one of the allowed values in the schema enum; omit it if none clearly fits.\n" +
+	"Keep \"short_name\" a concise label of at most 40 characters.\n" +
+	"Suggest 2–5 short, lowercase \"tags\" describing each product (brand, category, material, colour).\n" +
+	"If a warranty period or expiry is shown, set \"warranty_expires_at\" to the warranty END date (YYYY-MM-DD); " +
+	"if only a duration like \"2 years\" is given and the purchase date is known, add the duration to the purchase date.\n" +
+	"Return ONE JSON object that matches the requested schema EXACTLY. Do not include any prose, markdown, or extra keys.\n" +
+	"For each field, ALWAYS include a \"confidence\" score between 0.0 and 1.0 reflecting how sure you are.\n" +
+	"Omit fields you have NO evidence for rather than guessing — null/empty is preferred over hallucinated values."
 
 // UserPromptHeader is the literal text prepended to the multimodal user
 // turn. It tells the model what task to perform; the actual schema is
@@ -21,7 +35,7 @@ Omit fields you have NO evidence for rather than guessing — null/empty is pref
 // tool-use schema, OpenAI response_format json_schema).
 func UserPromptHeader(req ScanRequest) string {
 	var b strings.Builder
-	b.WriteString("Extract the product information from the attached photo(s).\n")
+	b.WriteString("Extract the product information from the attached photo(s) and/or document(s).\n")
 	if req.PreferredCurrencyCode != "" {
 		fmt.Fprintf(&b, "If a price is visible without a clear currency symbol, prefer currency code %q.\n", req.PreferredCurrencyCode)
 	}
@@ -68,17 +82,54 @@ func ResponseSchema() map[string]any {
 		"required":             []string{"value", "confidence"},
 		"additionalProperties": false,
 	}
+	// fieldGuessStringMax mirrors fieldGuessString but caps the value
+	// length, steering the model toward the form's limit (the FE still
+	// truncates defensively). Used for short_name (40 chars).
+	fieldGuessStringMax := func(maxLen int) map[string]any {
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"value":      map[string]any{"type": "string", "maxLength": maxLen},
+				"confidence": map[string]any{"type": "number", "minimum": 0, "maximum": 1},
+			},
+			"required":             []string{"value", "confidence"},
+			"additionalProperties": false,
+		}
+	}
+	// fieldGuessEnum constrains the value to a closed set of strings so the
+	// model's "type" guess stays inside the categories the FE's isKnownType
+	// accepts — otherwise a valid-but-free-form guess (e.g. "laptop") is
+	// silently dropped instead of pre-filling.
+	fieldGuessEnum := func(values []string) map[string]any {
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"value":      map[string]any{"type": "string", "enum": values},
+				"confidence": map[string]any{"type": "number", "minimum": 0, "maximum": 1},
+			},
+			"required":             []string{"value", "confidence"},
+			"additionalProperties": false,
+		}
+	}
+
+	// commodityTypes mirrors models.CommodityType* and the FE COMMODITY_TYPES
+	// constant. Hardcoded so this vendor-neutral leaf package stays free of a
+	// domain-model dependency; the FE's isKnownType is the authoritative gate,
+	// so any drift only costs a dropped type guess, never a bad write.
+	commodityTypes := []string{"white_goods", "electronics", "equipment", "furniture", "clothes", "other"}
 
 	fields := map[string]any{
 		FieldNameName:                  fieldGuessString,
-		FieldNameShortName:             fieldGuessString,
-		FieldNameType:                  fieldGuessString,
+		FieldNameShortName:             fieldGuessStringMax(40),
+		FieldNameType:                  fieldGuessEnum(commodityTypes),
 		FieldNameOriginalPrice:         fieldGuessNumber,
 		FieldNameOriginalPriceCurrency: fieldGuessString,
 		FieldNameSerialNumber:          fieldGuessString,
 		FieldNameURLs:                  fieldGuessStringArray,
 		FieldNamePurchaseDate:          fieldGuessString,
+		FieldNameWarrantyExpiresAt:     fieldGuessString,
 		FieldNameComments:              fieldGuessString,
+		FieldNameTags:                  fieldGuessStringArray,
 	}
 
 	warningSchema := map[string]any{
@@ -92,6 +143,7 @@ func ResponseSchema() map[string]any {
 					"ambiguous_price",
 					"currency_inferred",
 					"no_photo_text",
+					"multiple_items",
 				},
 			},
 			"field":  map[string]any{"type": "string"},
@@ -101,20 +153,39 @@ func ResponseSchema() map[string]any {
 		"additionalProperties": false,
 	}
 
+	fieldsObject := map[string]any{
+		"type":                 "object",
+		"properties":           fields,
+		"additionalProperties": false,
+	}
+
+	// items is the REQUIRED primary output: a list of products. Making the
+	// model produce a list (rather than a single `fields` object) is what
+	// reliably gets every line of a multi-product invoice enumerated instead
+	// of the model picking just one. A single product is simply a 1-element
+	// array. The service derives the single-item `fields` from items[0].
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"fields": map[string]any{
-				"type":                 "object",
-				"properties":           fields,
-				"additionalProperties": false,
+			"items": map[string]any{
+				"type":     "array",
+				"minItems": 1,
+				"description": "ONE entry per distinct purchased product (most prominent / most expensive first). " +
+					"A single product is a one-element array; a multi-line receipt or invoice has one entry for EACH " +
+					"product line — never collapse them and never return just one. " +
+					"Exclude tax/subtotal/shipping/discount/total lines. Each entry is the product's field object.",
+				// Each item IS the field object directly (flat) — one nesting
+				// level, which the model follows far more reliably than a
+				// wrapper object. ToScanResult also accepts the legacy
+				// {"fields": {...}} shape defensively.
+				"items": fieldsObject,
 			},
 			"warnings": map[string]any{
 				"type":  "array",
 				"items": warningSchema,
 			},
 		},
-		"required":             []string{"fields"},
+		"required":             []string{"items"},
 		"additionalProperties": false,
 	}
 }
@@ -131,7 +202,33 @@ func ResponseSchemaJSON() ([]byte, error) {
 // converts to the public ScanResult type.
 type rawScanResponse struct {
 	Fields   map[string]rawFieldGuess `json:"fields"`
+	Items    []json.RawMessage        `json:"items"`
 	Warnings []Warning                `json:"warnings"`
+}
+
+// decodeRawItem decodes one entry of the items[] array into a field map. It
+// accepts BOTH shapes so model variance can't blank the result:
+//   - flat: the entry IS the field map (the schema we now request),
+//     e.g. {"name": {...}, "type": {...}}
+//   - nested: a {"fields": {...}} wrapper (legacy / some responses)
+//
+// Whichever yields a non-empty field map wins (flat is tried first).
+func decodeRawItem(raw json.RawMessage) map[string]FieldGuess {
+	var flat map[string]rawFieldGuess
+	if err := json.Unmarshal(raw, &flat); err == nil {
+		if f, _ := decodeFieldMap(flat); len(f) > 0 {
+			return f
+		}
+	}
+	var nested struct {
+		Fields map[string]rawFieldGuess `json:"fields"`
+	}
+	if err := json.Unmarshal(raw, &nested); err == nil && len(nested.Fields) > 0 {
+		if f, _ := decodeFieldMap(nested.Fields); len(f) > 0 {
+			return f
+		}
+	}
+	return nil
 }
 
 // rawFieldGuess uses json.RawMessage on Value so the same schema can
@@ -155,31 +252,66 @@ func ToScanResult(body []byte) (*ScanResult, error) {
 	}
 
 	out := &ScanResult{
-		Fields:   make(map[string]FieldGuess, len(raw.Fields)),
 		Warnings: append([]Warning(nil), raw.Warnings...),
 	}
 
+	// items is the model's primary output now (one entry per product). Decode
+	// each, dropping empties so a stray {} never renders a blank choice.
+	var products []ScanItem
+	for _, it := range raw.Items {
+		itemFields := decodeRawItem(it)
+		if len(itemFields) == 0 {
+			continue
+		}
+		products = append(products, ScanItem{Fields: itemFields})
+	}
+
+	// Primary single-item view: prefer an explicit top-level `fields`
+	// (back-compat with older single-product responses and provider tests),
+	// otherwise the first product. Type-mismatch warnings surface for the
+	// primary only.
+	primary, primaryWarnings := decodeFieldMap(raw.Fields)
+	switch {
+	case len(primary) > 0:
+		out.Fields = primary
+		out.Warnings = append(out.Warnings, primaryWarnings...)
+	case len(products) > 0:
+		out.Fields = products[0].Fields
+	}
+
+	// Expose Items to the FE only when there's an actual choice to make.
+	if len(products) > 1 {
+		out.Items = products
+	}
+
+	return out, nil
+}
+
+// decodeFieldMap converts a raw vendor field map into the public FieldGuess
+// map, dropping unknown keys and type-mismatched values. It returns the
+// decoded fields plus a (possibly empty) list of "low_confidence" warnings
+// for values whose type didn't match the field's expected shape. Shared by
+// the primary `fields` and each `items[].fields`.
+func decodeFieldMap(raw map[string]rawFieldGuess) (map[string]FieldGuess, []Warning) {
+	out := make(map[string]FieldGuess, len(raw))
+	var warnings []Warning
 	for _, name := range AllFieldNames {
-		rg, ok := raw.Fields[name]
+		rg, ok := raw[name]
 		if !ok {
 			continue
 		}
 		val, ok := decodeFieldValue(name, rg.Value)
 		if !ok {
-			// Field came back but in the wrong shape. Surface as a
-			// warning so the FE can still render the rest of the
-			// extraction; drop the unparseable value.
-			out.Warnings = append(out.Warnings, Warning{
+			warnings = append(warnings, Warning{
 				Code:   "low_confidence",
 				Field:  name,
 				Detail: "field value did not match expected type",
 			})
 			continue
 		}
-		out.Fields[name] = FieldGuess{Value: val, Confidence: rg.Confidence}
+		out[name] = FieldGuess{Value: val, Confidence: rg.Confidence}
 	}
-
-	return out, nil
+	return out, warnings
 }
 
 // decodeFieldValue maps the JSON-typed raw value to the Go concrete
@@ -193,7 +325,7 @@ func decodeFieldValue(name string, raw json.RawMessage) (any, bool) {
 			return nil, false
 		}
 		return n, true
-	case FieldNameURLs:
+	case FieldNameURLs, FieldNameTags:
 		var s []string
 		if err := json.Unmarshal(raw, &s); err != nil {
 			return nil, false

@@ -55,20 +55,34 @@ type Provider interface {
 	Scan(ctx context.Context, req ScanRequest) (*ScanResult, error)
 }
 
-// PhotoInput is a single user-uploaded image handed to the provider as
-// raw bytes plus its (already-detected) MIME type. The service guarantees
-// MIME and size pre-checks; providers may still reject content the
-// upstream vendor declines (e.g. some vendors reject HEIC).
+// PhotoInput is a single user-uploaded source handed to the provider as
+// raw bytes plus its (already-detected) MIME type. Despite the name it
+// carries either a product image OR a PDF document (a receipt, invoice,
+// or manual — #1983 Part B); IsPDF distinguishes the two so each provider
+// can pick the right content-block shape. The service guarantees MIME and
+// size pre-checks; providers may still reject content the upstream vendor
+// declines (e.g. some vendors reject HEIC).
 type PhotoInput struct {
 	// Filename is the original filename for diagnostics; never used as
-	// a security boundary.
+	// a security boundary. Some vendors (OpenAI) require it on a PDF
+	// content part, so it is forwarded verbatim for documents.
 	Filename string
 	// ContentType is the detected MIME type (image/jpeg, image/png,
-	// image/webp, image/heic, image/heif).
+	// image/webp, image/heic, image/heif, or application/pdf).
 	ContentType string
-	// Data is the raw image bytes.
+	// Data is the raw image or PDF bytes.
 	Data []byte
 }
+
+// PDFMediaType is the canonical MIME type for the document (non-image)
+// inputs the scan pipeline accepts. Declared here, next to PhotoInput, so
+// the providers and the service-layer allowlist agree on a single string.
+const PDFMediaType = "application/pdf"
+
+// IsPDF reports whether this input is a PDF document rather than an image.
+// Providers branch on it to emit a document/file content block instead of
+// an image block.
+func (p PhotoInput) IsPDF() bool { return p.ContentType == PDFMediaType }
 
 // ScanRequest is the structured input to Provider.Scan. All fields apart
 // from Photos are optional hints that improve prompt quality without
@@ -96,8 +110,8 @@ type ScanRequest struct {
 //     original_price_currency: string
 //   - original_price: float64 (decimal as string is also accepted by
 //     callers, which coerce it to a number)
-//   - urls: []string
-//   - purchase_date: string in YYYY-MM-DD form
+//   - urls, tags: []string
+//   - purchase_date, warranty_expires_at: string in YYYY-MM-DD form
 type FieldGuess struct {
 	Value      any     `json:"value"`
 	Confidence float64 `json:"confidence"`
@@ -110,7 +124,9 @@ type FieldGuess struct {
 type Warning struct {
 	// Code is a stable identifier the FE branches on. Known values:
 	// "low_confidence", "unreadable_serial", "ambiguous_price",
-	// "currency_inferred", "no_photo_text".
+	// "currency_inferred", "no_photo_text", "multiple_items" (the source
+	// describes more than one distinct product; only the most prominent
+	// one was extracted).
 	Code string `json:"code"`
 	// Field is the affected ScanResult.Fields key, or "" when the
 	// warning is global.
@@ -128,8 +144,17 @@ type Warning struct {
 type ScanResult struct {
 	// Fields is keyed by canonical field name. The provider populates
 	// only fields it has evidence for; absent keys mean "no signal" and
-	// the FE leaves the form input blank.
+	// the FE leaves the form input blank. When Items carries more than
+	// one candidate, Fields mirrors the most prominent one (Items[0]) so
+	// single-item consumers keep working unchanged.
 	Fields map[string]FieldGuess `json:"fields"`
+	// Items is populated ONLY when the source describes more than one
+	// distinct product (a multi-line receipt, a photo of several items):
+	// one entry per product, most prominent first. The FE renders a
+	// chooser so the user picks which one to pre-fill. Empty/absent for
+	// the common single-product case (the FE goes straight to review off
+	// Fields).
+	Items []ScanItem `json:"items,omitempty"`
 	// Warnings is the non-fatal note list. nil and empty are
 	// equivalent.
 	Warnings []Warning `json:"warnings,omitempty"`
@@ -140,6 +165,15 @@ type ScanResult struct {
 	// LatencyMS is the wall-clock duration of the upstream call,
 	// measured server-side, used for audit and observability.
 	LatencyMS int64 `json:"latency_ms,omitempty"`
+}
+
+// ScanItem is one candidate product in a multi-product scan. It carries
+// the same canonical Fields map as the single-item ScanResult.Fields, so
+// the FE renders/accepts a chosen item with the exact same machinery.
+type ScanItem struct {
+	// Fields is keyed by canonical field name; same shape and semantics
+	// as ScanResult.Fields.
+	Fields map[string]FieldGuess `json:"fields"`
 }
 
 // Sentinel errors returned by Provider implementations and the registry
@@ -198,7 +232,9 @@ const (
 	FieldNameSerialNumber          FieldName = "serial_number"
 	FieldNameURLs                  FieldName = "urls"
 	FieldNamePurchaseDate          FieldName = "purchase_date"
+	FieldNameWarrantyExpiresAt     FieldName = "warranty_expires_at"
 	FieldNameComments              FieldName = "comments"
+	FieldNameTags                  FieldName = "tags"
 )
 
 // AllFieldNames is the closed set used by tests and by the prompt
@@ -212,5 +248,7 @@ var AllFieldNames = []FieldName{
 	FieldNameSerialNumber,
 	FieldNameURLs,
 	FieldNamePurchaseDate,
+	FieldNameWarrantyExpiresAt,
 	FieldNameComments,
+	FieldNameTags,
 }

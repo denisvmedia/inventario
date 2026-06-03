@@ -2928,7 +2928,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/scan": {
             "post": {
-                "description": "Extract structured commodity field guesses from 1..N product photos. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.",
+                "description": "Extract structured commodity field guesses from 1..N product photos or PDF documents. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -2938,7 +2938,7 @@ const docTemplate = `{
                 "tags": [
                     "commodities"
                 ],
-                "summary": "Run an AI vision scan on uploaded photos",
+                "summary": "Run an AI vision scan on uploaded photos or documents",
                 "parameters": [
                     {
                         "type": "string",
@@ -2949,7 +2949,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "file",
-                        "description": "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple ` + "`" + `photos` + "`" + ` parts).",
+                        "description": "Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple ` + "`" + `photos` + "`" + ` parts).",
                         "name": "photos",
                         "in": "formData",
                         "required": true
@@ -2969,7 +2969,7 @@ const docTemplate = `{
                         }
                     },
                     "413": {
-                        "description": "Photo too large",
+                        "description": "File too large",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -2981,7 +2981,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Too many photos / no photos",
+                        "description": "Too many files / no files",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7724,11 +7724,11 @@ const docTemplate = `{
                 "tags": [
                     "commodities"
                 ],
-                "summary": "Run an AI vision scan on uploaded photos (public)",
+                "summary": "Run an AI vision scan on uploaded photos or documents (public)",
                 "parameters": [
                     {
                         "type": "file",
-                        "description": "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple ` + "`" + `photos` + "`" + ` parts).",
+                        "description": "Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple ` + "`" + `photos` + "`" + ` parts).",
                         "name": "photos",
                         "in": "formData",
                         "required": true
@@ -7748,7 +7748,7 @@ const docTemplate = `{
                         }
                     },
                     "413": {
-                        "description": "Photo too large",
+                        "description": "File too large",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7760,7 +7760,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Too many photos / no photos",
+                        "description": "Too many files / no files",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -10249,6 +10249,13 @@ const docTemplate = `{
                         "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
                     }
                 },
+                "items": {
+                    "description": "Items is present only when the source described more than one\ndistinct product; one entry per product, most prominent first. The\nFE renders a chooser. Empty/absent for a single product.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanItem"
+                    }
+                },
                 "latency_ms": {
                     "type": "integer"
                 },
@@ -10272,6 +10279,17 @@ const docTemplate = `{
                 "value": {
                     "description": "Value is polymorphic — see the type-level doc comment.",
                     "type": "object"
+                }
+            }
+        },
+        "jsonapi.CommodityScanItem": {
+            "type": "object",
+            "properties": {
+                "fields": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
+                    }
                 }
             }
         },
@@ -10308,7 +10326,8 @@ const docTemplate = `{
                         "unreadable_serial",
                         "ambiguous_price",
                         "currency_inferred",
-                        "no_photo_text"
+                        "no_photo_text",
+                        "multiple_items"
                     ],
                     "example": "low_confidence"
                 },

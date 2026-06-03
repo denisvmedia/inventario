@@ -70,6 +70,35 @@ func TestMockProvider_WithDefaultError(t *testing.T) {
 	c.Assert(err, qt.ErrorIs, wanted)
 }
 
+func TestMockProvider_InvoiceFilenameReturnsMultipleItems(t *testing.T) {
+	c := qt.New(t)
+	provider := mock.New()
+
+	// An invoice can be a photo/scan, not only a PDF — the mock keys off the
+	// filename, so a JPG named like an invoice yields the multi-item result.
+	result, err := provider.Scan(context.Background(), aivision.ScanRequest{
+		Photos: []aivision.PhotoInput{
+			{Filename: "invoice-scan.jpg", ContentType: "image/jpeg", Data: []byte("x")},
+		},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(result.Items) >= 2, qt.IsTrue)
+	// Fields mirrors the first (most prominent) item, per the provider contract.
+	c.Assert(result.Fields[aivision.FieldNameName].Value, qt.Equals, result.Items[0].Fields[aivision.FieldNameName].Value)
+}
+
+func TestMockProvider_PlainPhotoStaysSingleItem(t *testing.T) {
+	c := qt.New(t)
+	provider := mock.New()
+	result, err := provider.Scan(context.Background(), aivision.ScanRequest{
+		Photos: []aivision.PhotoInput{
+			{Filename: "photo.jpg", ContentType: "image/jpeg", Data: []byte("x")},
+		},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.Items, qt.HasLen, 0)
+}
+
 func TestMockProvider_WithDefaultResult(t *testing.T) {
 	c := qt.New(t)
 	custom := aivision.ScanResult{
