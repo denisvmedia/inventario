@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -171,10 +172,20 @@ type contentBlock struct {
 	Type     string         `json:"type"`
 	Text     string         `json:"text,omitempty"`
 	ImageURL *imageURLBlock `json:"image_url,omitempty"`
+	File     *fileBlock     `json:"file,omitempty"`
 }
 
 type imageURLBlock struct {
 	URL string `json:"url"`
+}
+
+// fileBlock is the "file" content part used to pass a PDF document inline
+// (#1983 Part B). FileData is a base64 data: URL just like image_url's URL;
+// Filename is required by the API for inline file_data, so the provider
+// always sends a non-empty name (see pdfFilename).
+type fileBlock struct {
+	Filename string `json:"filename"`
+	FileData string `json:"file_data"`
 }
 
 type responseFormat struct {
@@ -215,6 +226,19 @@ func (p *Provider) buildPayload(req aivision.ScanRequest) *openaiRequest {
 		Text: aivision.UserPromptHeader(req),
 	})
 	for _, photo := range req.Photos {
+		// A PDF rides in a "file" content part (inline base64 data URL);
+		// an image rides in an "image_url" part. Both encode the bytes as
+		// the same data: URL — only the wrapping part differs.
+		if photo.IsPDF() {
+			content = append(content, contentBlock{
+				Type: "file",
+				File: &fileBlock{
+					Filename: pdfFilename(photo.Filename),
+					FileData: dataURL(photo.ContentType, photo.Data),
+				},
+			})
+			continue
+		}
 		content = append(content, contentBlock{
 			Type: "image_url",
 			ImageURL: &imageURLBlock{
@@ -279,9 +303,21 @@ func parseResponse(body []byte) (*aivision.ScanResult, error) {
 	return result, nil
 }
 
-// dataURL encodes raw image bytes as the data:URL form image_url expects.
+// dataURL encodes raw bytes as the data:URL form image_url / file_data
+// expect.
 func dataURL(contentType string, data []byte) string {
 	return fmt.Sprintf("data:%s;base64,%s", contentType, base64.StdEncoding.EncodeToString(data))
+}
+
+// pdfFilename returns a non-empty filename for a PDF file part. The
+// upstream API wants a name alongside inline file_data; the original
+// upload may not carry one (a multipart part without a filename, or the
+// anonymous path), so fall back to a stable default.
+func pdfFilename(name string) string {
+	if strings.TrimSpace(name) == "" {
+		return "document.pdf"
+	}
+	return name
 }
 
 // Compile-time check that the constructor result satisfies the

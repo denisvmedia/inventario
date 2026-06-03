@@ -179,12 +179,16 @@ type messagePayload struct {
 }
 
 type contentBlock struct {
-	Type   string            `json:"type"`
-	Text   string            `json:"text,omitempty"`
-	Source *imageSourceBlock `json:"source,omitempty"`
+	Type   string       `json:"type"`
+	Text   string       `json:"text,omitempty"`
+	Source *sourceBlock `json:"source,omitempty"`
 }
 
-type imageSourceBlock struct {
+// sourceBlock is the base64 payload carried by both an "image" and a
+// "document" content block — Anthropic uses the identical
+// {type,media_type,data} shape for each, only the parent block's Type
+// differs (image vs document, #1983 Part B).
+type sourceBlock struct {
 	Type      string `json:"type"`
 	MediaType string `json:"media_type"`
 	Data      string `json:"data"`
@@ -221,9 +225,16 @@ type anthropicUsage struct {
 func (p *Provider) buildPayload(req aivision.ScanRequest) *anthropicRequest {
 	content := make([]contentBlock, 0, len(req.Photos)+1)
 	for _, photo := range req.Photos {
+		// A PDF rides in a "document" block; an image rides in an
+		// "image" block. The base64 source payload is byte-identical
+		// either way (see sourceBlock).
+		blockType := "image"
+		if photo.IsPDF() {
+			blockType = "document"
+		}
 		content = append(content, contentBlock{
-			Type: "image",
-			Source: &imageSourceBlock{
+			Type: blockType,
+			Source: &sourceBlock{
 				Type:      "base64",
 				MediaType: photo.ContentType,
 				Data:      base64.StdEncoding.EncodeToString(photo.Data),
@@ -245,7 +256,7 @@ func (p *Provider) buildPayload(req aivision.ScanRequest) *anthropicRequest {
 		Tools: []toolDeclaration{
 			{
 				Name:        toolName,
-				Description: "Record the structured product extraction the assistant inferred from the photos.",
+				Description: "Record the structured product extraction the assistant inferred from the photos or documents.",
 				InputSchema: aivision.ResponseSchema(),
 			},
 		},

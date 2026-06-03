@@ -241,7 +241,14 @@ export function CommodityFormDialog({
   // When `enableAiScan` is off (anonymous flow with public_scan
   // disabled) create mode also opens on Basics — the scan surface
   // would only 404, so we skip straight to manual entry.
-  const initialStep: StepKey = mode === "create" && enableAiScan ? "ai" : "basics"
+  //
+  // `aiStepAvailable` is the single source of truth for "the AI scan
+  // surface exists in this dialog instance": create mode with the scan
+  // entry enabled. It gates both the opening step AND the Back button on
+  // Basics, which rewinds to the scanner when AI is on (instead of being
+  // a dead no-op on the first form step).
+  const aiStepAvailable = mode === "create" && enableAiScan
+  const initialStep: StepKey = aiStepAvailable ? "ai" : "basics"
   const [step, setStep] = useState<StepKey>(initialStep)
   // Tracks which form steps the user has already landed on, so the
   // segmented stepper bar lets them click back-and-forth between
@@ -442,9 +449,15 @@ export function CommodityFormDialog({
   }
   function prevStep() {
     if (step === "ai") return
+    if (step === "basics") {
+      // Back from the first form step rewinds to the AI scan entry when
+      // it's available (create mode + AI enabled), so a user who picked
+      // "Fill manually" can re-open the scanner. Without the AI surface
+      // Basics is the first screen and Back is a no-op.
+      if (aiStepAvailable) setStep("ai")
+      return
+    }
     const idx = FORM_STEPS.indexOf(step)
-    // Prev is disabled on Basics (idx === 0) — the AI surface is an
-    // alternative entry, not a previous step the user can rewind to.
     if (idx > 0) setStep(FORM_STEPS[idx - 1])
   }
 
@@ -953,7 +966,10 @@ export function CommodityFormDialog({
               type="button"
               variant="outline"
               onClick={prevStep}
-              disabled={formStepIndex <= 0 || isPending}
+              // Enabled on Basics too when the AI scan surface exists —
+              // Back there rewinds to the scanner (see prevStep). Without
+              // it, Basics is the first screen so Back stays disabled.
+              disabled={isPending || (formStepIndex <= 0 && !aiStepAvailable)}
             >
               <ChevronLeft className="size-4" aria-hidden="true" />
               {t("commodities:form.back")}

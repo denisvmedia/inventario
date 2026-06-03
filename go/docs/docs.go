@@ -2949,7 +2949,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "file",
-                        "description": "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple ` + "`" + `photos` + "`" + ` parts).",
+                        "description": "Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple ` + "`" + `photos` + "`" + ` parts).",
                         "name": "photos",
                         "in": "formData",
                         "required": true
@@ -7728,7 +7728,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "file",
-                        "description": "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple ` + "`" + `photos` + "`" + ` parts).",
+                        "description": "Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple ` + "`" + `photos` + "`" + ` parts).",
                         "name": "photos",
                         "in": "formData",
                         "required": true

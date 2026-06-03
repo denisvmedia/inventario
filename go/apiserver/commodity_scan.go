@@ -113,7 +113,7 @@ func CommodityScanPublic(scanService *services.CommodityScanService, maxFormByte
 // @Tags commodities
 // @Accept multipart/form-data
 // @Produce json-api
-// @Param photos formData file true "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts)."
+// @Param photos formData file true "Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple `photos` parts)."
 // @Param hint formData string false "Optional free-form hint (brand, category guess)"
 // @Success 200 {object} jsonapi.CommodityScanResponse "OK"
 // @Failure 413 {object} jsonapi.Errors "Photo too large"
@@ -187,7 +187,7 @@ func (api *commodityScanAPI) handlePublicScan(w http.ResponseWriter, r *http.Req
 // @Accept multipart/form-data
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
-// @Param photos formData file true "Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts)."
+// @Param photos formData file true "Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple `photos` parts)."
 // @Param hint formData string false "Optional free-form hint (brand, category guess)"
 // @Success 200 {object} jsonapi.CommodityScanResponse "OK"
 // @Failure 413 {object} jsonapi.Errors "Photo too large"

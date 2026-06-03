@@ -199,3 +199,24 @@ func TestAnthropicProvider_MarshalTestPayload(t *testing.T) {
 	c.Assert(string(body), qt.Contains, "record_product_extraction")
 	c.Assert(string(body), qt.Contains, "tool_choice")
 }
+
+func TestAnthropicProvider_PDFDocumentBlock(t *testing.T) {
+	c := qt.New(t)
+
+	provider, err := anthropic.New(anthropic.Config{APIKey: "sk-test"})
+	c.Assert(err, qt.IsNil)
+
+	body, err := provider.MarshalTestPayload(aivision.ScanRequest{
+		Photos: []aivision.PhotoInput{
+			{Filename: "receipt.pdf", ContentType: "application/pdf", Data: []byte("%PDF-1.7")},
+		},
+	})
+	c.Assert(err, qt.IsNil)
+
+	// A PDF (#1983) rides in a "document" content block whose base64
+	// source carries the application/pdf media_type — never an "image"
+	// block, which the upstream API rejects for non-image media types.
+	c.Assert(string(body), qt.Contains, `"type":"document"`)
+	c.Assert(string(body), qt.Contains, `"media_type":"application/pdf"`)
+	c.Assert(string(body), qt.Not(qt.Contains), `"type":"image"`)
+}

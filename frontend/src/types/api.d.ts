@@ -12473,23 +12473,23 @@ export type components = {
     responses: never;
     parameters: never;
     requestBodies: {
-        /** @description Area object */
-        "jsonapi.AreaRequest": {
-            content: {
-                "application/vnd.api+json": components["schemas"]["jsonapi.AreaRequest"];
-            };
-        };
         postG_groupslug_commoditiesScan: {
             content: {
                 "multipart/form-data": {
                     /**
                      * Format: binary
-                     * @description Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the form field to upload up to 5 photos in a single request (multipart/form-data with multiple `photos` parts).
+                     * @description Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple `photos` parts).
                      */
                     photos: string;
                     /** @description Optional free-form hint (brand, category guess) */
                     hint?: string;
                 };
+            };
+        };
+        /** @description Area object */
+        "jsonapi.AreaRequest": {
+            content: {
+                "application/vnd.api+json": components["schemas"]["jsonapi.AreaRequest"];
             };
         };
         /** @description Commodity object */

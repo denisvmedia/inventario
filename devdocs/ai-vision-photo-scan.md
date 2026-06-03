@@ -1,11 +1,16 @@
 # AI vision photo-scan
 
-The Add-Item dialog can prefill the form from one or more product photos: the
-user uploads photos, the backend asks a vision model to extract structured
-fields (name, type, price, currency, serial number, URLs, purchase date,
-comments), and the user reviews/accepts per-field before saving.
+The Add-Item dialog can prefill the form from one or more product photos **or
+PDF documents** (a receipt, invoice, or manual): the user uploads the sources,
+the backend asks a vision model to extract structured fields (name, type, price,
+currency, serial number, URLs, purchase date, comments), and the user
+reviews/accepts per-field before saving. When a receipt/invoice PDF is supplied
+the model is prompted to read the price, currency, and purchase date and to put
+the seller/vendor name into `comments` (there is no dedicated seller field).
 
-Tracked under #1720 (feature) and #1976 (deploy/config wiring).
+Tracked under #1720 (feature), #1976 (deploy/config wiring), and #1983 Part B
+(accept PDFs as a prefill source — `application/pdf` joins the MIME allowlist and
+each provider sends a PDF as a document/file content block instead of an image).
 
 This doc is the operator + developer guide for **turning the feature on**. The
 application code (backend + frontend) already ships; only configuration selects

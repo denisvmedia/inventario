@@ -15,7 +15,16 @@
 // note line is removed (the feature ships now).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertCircle, Camera, CheckCircle2, Plus, ScanText, Sparkles, X } from "lucide-react"
+import {
+  AlertCircle,
+  Camera,
+  CheckCircle2,
+  FileText,
+  Plus,
+  ScanText,
+  Sparkles,
+  X,
+} from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -38,10 +47,12 @@ import type {
   ScanWarning,
 } from "@/features/commodities/scanApi"
 
-// Mirrors `media.go` MIME allow-list on the BE. The `<input accept>`
+// Mirrors `services.AllowedMIMETypes` on the BE. The `<input accept>`
 // attribute is a hint the browser may honour loosely (HEIC files on
 // Android Chrome come back with empty MIME types), so we re-check at
-// staging time and reject anything unrecognised inline.
+// staging time and reject anything unrecognised inline. `application/pdf`
+// (#1983) lets the user prefill from a receipt / invoice / manual, not
+// just a product photo.
 const ACCEPTED_MIME = new Set([
   "image/jpeg",
   "image/jpg",
@@ -49,14 +60,25 @@ const ACCEPTED_MIME = new Set([
   "image/webp",
   "image/heic",
   "image/heif",
+  "application/pdf",
 ])
-const ACCEPTED_EXT = /\.(jpe?g|png|webp|heic|heif)$/i
+const ACCEPTED_EXT = /\.(jpe?g|png|webp|heic|heif|pdf)$/i
 // Hard cap (mirrors BE) — additional rejections fire from the BE side.
 const MAX_PHOTOS = 5
+
+// isPdfFile reports whether a staged file is a PDF document rather than an
+// image. PDFs can't be rendered as an <img> thumbnail, so the staged tile
+// shows a document icon + filename instead. The MIME check is primary; the
+// extension fallback covers browsers that hand back an empty `type`.
+function isPdfFile(file: File): boolean {
+  return file.type.toLowerCase() === "application/pdf" || /\.pdf$/i.test(file.name)
+}
 
 interface StagedPhoto {
   id: string
   file: File
+  // Object-URL preview for image thumbnails. Empty for PDFs — they render
+  // as a document tile, so no bitmap URL is created (and nothing to revoke).
   preview: string
 }
 
@@ -199,7 +221,9 @@ export function AiScanStep({
               ? crypto.randomUUID()
               : `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
           file,
-          preview: URL.createObjectURL(file),
+          // No object URL for PDFs — they render as a document tile, not
+          // an <img>, so there's no bitmap to create or revoke.
+          preview: isPdfFile(file) ? "" : URL.createObjectURL(file),
         })
       }
       setPhotos((prev) => {
@@ -509,11 +533,24 @@ function OfferPanel({
             <div className="flex flex-wrap justify-center gap-2 px-3">
               {photos.map((p) => (
                 <div key={p.id} className="group relative" data-testid="commodity-form-ai-thumb">
-                  <img
-                    src={p.preview}
-                    alt={p.file.name}
-                    className="size-14 rounded-lg border border-border object-cover"
-                  />
+                  {isPdfFile(p.file) ? (
+                    <div
+                      className="flex size-14 flex-col items-center justify-center gap-0.5 rounded-lg border border-border bg-muted/40 px-1"
+                      title={p.file.name}
+                      data-testid="commodity-form-ai-thumb-pdf"
+                    >
+                      <FileText aria-hidden="true" className="size-5 text-muted-foreground" />
+                      <span className="w-full truncate text-center text-[8px] leading-tight text-muted-foreground">
+                        {p.file.name}
+                      </span>
+                    </div>
+                  ) : (
+                    <img
+                      src={p.preview}
+                      alt={p.file.name}
+                      className="size-14 rounded-lg border border-border object-cover"
+                    />
+                  )}
                   <button
                     type="button"
                     aria-label={t("commodities:form.step.ai.offer.staged.remove")}
@@ -560,7 +597,7 @@ function OfferPanel({
             id="ai-photo-input"
             type="file"
             multiple
-            accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
+            accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,application/pdf,.pdf"
             className="sr-only"
             data-testid="commodity-form-ai-file-input"
             onClick={(e) => e.stopPropagation()}

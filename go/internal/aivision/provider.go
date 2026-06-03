@@ -55,20 +55,34 @@ type Provider interface {
 	Scan(ctx context.Context, req ScanRequest) (*ScanResult, error)
 }
 
-// PhotoInput is a single user-uploaded image handed to the provider as
-// raw bytes plus its (already-detected) MIME type. The service guarantees
-// MIME and size pre-checks; providers may still reject content the
-// upstream vendor declines (e.g. some vendors reject HEIC).
+// PhotoInput is a single user-uploaded source handed to the provider as
+// raw bytes plus its (already-detected) MIME type. Despite the name it
+// carries either a product image OR a PDF document (a receipt, invoice,
+// or manual — #1983 Part B); IsPDF distinguishes the two so each provider
+// can pick the right content-block shape. The service guarantees MIME and
+// size pre-checks; providers may still reject content the upstream vendor
+// declines (e.g. some vendors reject HEIC).
 type PhotoInput struct {
 	// Filename is the original filename for diagnostics; never used as
-	// a security boundary.
+	// a security boundary. Some vendors (OpenAI) require it on a PDF
+	// content part, so it is forwarded verbatim for documents.
 	Filename string
 	// ContentType is the detected MIME type (image/jpeg, image/png,
-	// image/webp, image/heic, image/heif).
+	// image/webp, image/heic, image/heif, or application/pdf).
 	ContentType string
-	// Data is the raw image bytes.
+	// Data is the raw image or PDF bytes.
 	Data []byte
 }
+
+// PDFMediaType is the canonical MIME type for the document (non-image)
+// inputs the scan pipeline accepts. Declared here, next to PhotoInput, so
+// the providers and the service-layer allowlist agree on a single string.
+const PDFMediaType = "application/pdf"
+
+// IsPDF reports whether this input is a PDF document rather than an image.
+// Providers branch on it to emit a document/file content block instead of
+// an image block.
+func (p PhotoInput) IsPDF() bool { return p.ContentType == PDFMediaType }
 
 // ScanRequest is the structured input to Provider.Scan. All fields apart
 // from Photos are optional hints that improve prompt quality without

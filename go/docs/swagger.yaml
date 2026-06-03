@@ -7373,8 +7373,8 @@ paths:
         name: groupSlug
         required: true
         type: string
-      - description: Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the
-          form field to upload up to 5 photos in a single request (multipart/form-data
+      - description: Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif
+          or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data
           with multiple `photos` parts).
         in: formData
         name: photos
@@ -9839,8 +9839,8 @@ paths:
         Unauthenticated, IP + global-daily rate limited, gated behind a deployment
         feature flag. Returns field guesses only and persists nothing.
       parameters:
-      - description: Product photo(s); image/jpeg|jpg|png|webp|heic|heif. Repeat the
-          form field to upload up to 5 photos in a single request (multipart/form-data
+      - description: Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif
+          or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data
           with multiple `photos` parts).
         in: formData
         name: photos

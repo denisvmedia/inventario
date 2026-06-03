@@ -9,8 +9,9 @@ import (
 // SystemPrompt is the role/system instruction sent to every vendor. It
 // is intentionally short — vendors trim very long system prompts and a
 // concise instruction reduces token spend on every call.
-const SystemPrompt = `You are an assistant that extracts structured product information from photos of physical items.
-You will receive 1 to 5 photos of a single product (front, back, label, packaging, etc.).
+const SystemPrompt = `You are an assistant that extracts structured product information from photos and documents of a physical item.
+You will receive 1 to 5 inputs describing a single product: photos (front, back, label, packaging, etc.) and/or PDF documents such as a receipt, invoice, or product manual.
+From a receipt or invoice, read the purchase price, currency, and purchase date; put the seller/vendor/store name (there is no dedicated seller field) into "comments".
 Return ONE JSON object that matches the requested schema EXACTLY. Do not include any prose, markdown, or extra keys.
 For each field, ALWAYS include a "confidence" score between 0.0 and 1.0 reflecting how sure you are.
 Omit fields you have NO evidence for rather than guessing — null/empty is preferred over hallucinated values.`
@@ -21,7 +22,7 @@ Omit fields you have NO evidence for rather than guessing — null/empty is pref
 // tool-use schema, OpenAI response_format json_schema).
 func UserPromptHeader(req ScanRequest) string {
 	var b strings.Builder
-	b.WriteString("Extract the product information from the attached photo(s).\n")
+	b.WriteString("Extract the product information from the attached photo(s) and/or document(s).\n")
 	if req.PreferredCurrencyCode != "" {
 		fmt.Fprintf(&b, "If a price is visible without a clear currency symbol, prefer currency code %q.\n", req.PreferredCurrencyCode)
 	}

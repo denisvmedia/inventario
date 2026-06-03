@@ -20,6 +20,13 @@ function makeImage(name = "photo.jpg", type = "image/jpeg"): File {
   return new File([new Uint8Array([0xff, 0xd8, 0xff])], name, { type })
 }
 
+// Helper: build a PDF File (#1983) so the document-staging path can be
+// asserted. The "%PDF" magic bytes keep any content sniffing happy;
+// jsdom never reads the contents.
+function makePdf(name = "receipt.pdf"): File {
+  return new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], name, { type: "application/pdf" })
+}
+
 // Helper: install the active group slug so `useScanCommodityPhotos`
 // hits the right /g/<slug>/commodities/scan route inside the http
 // wrapper's group-rewrite logic.
@@ -90,6 +97,46 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     expect(screen.queryByTestId("commodity-form-ai-step")).not.toBeInTheDocument()
   })
 
+  it("rewinds from Basics back to the AI scan step via Back", async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    // "Fill manually" hands off from the AI offer to Basics.
+    await user.click(await screen.findByTestId("commodity-form-ai-fill-manually"))
+    expect(await screen.findByLabelText(/^Name$/i)).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-form-ai-step")).not.toBeInTheDocument()
+    // Back on the first form step rewinds to the AI offer surface
+    // instead of being a dead no-op (the AI step is the create-mode
+    // entry, so it's a place the user can return to).
+    await user.click(screen.getByRole("button", { name: /^back$/i }))
+    expect(await screen.findByTestId("commodity-form-ai-step")).toHaveAttribute(
+      "data-ai-phase",
+      "offer"
+    )
+    expect(screen.queryByLabelText(/^Name$/i)).not.toBeInTheDocument()
+  })
+
+  it("keeps Back disabled on Basics when the AI step is unavailable", async () => {
+    withGroupSlug()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="create"
+          enableAiScan={false}
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+        />
+      ),
+    })
+    // Lands straight on Basics with no scanner to rewind to, so Back has
+    // nothing to do and stays disabled.
+    expect(await screen.findByTestId("commodity-form-next")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^back$/i })).toBeDisabled()
+  })
+
   it("renders the offer phase by default with no thumbnails", async () => {
     renderDialog()
     expect(await screen.findByTestId("commodity-form-ai-step")).toHaveAttribute(
@@ -107,6 +154,19 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     const input = await screen.findByTestId("commodity-form-ai-file-input")
     await user.upload(input, makeImage("alpha.jpg"))
     expect(await screen.findByTestId("commodity-form-ai-thumb")).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-form-ai-scan")).toBeEnabled()
+  })
+
+  it("stages a PDF document with a document tile and enables Scan", async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    const input = await screen.findByTestId("commodity-form-ai-file-input")
+    await user.upload(input, makePdf("receipt.pdf"))
+    // A PDF can't render as an <img> thumbnail, so it stages as a
+    // document tile carrying the filename — but it still counts as a
+    // scannable source, so the Scan button enables (#1983 Part B).
+    const tile = await screen.findByTestId("commodity-form-ai-thumb-pdf")
+    expect(tile).toHaveTextContent("receipt.pdf")
     expect(screen.getByTestId("commodity-form-ai-scan")).toBeEnabled()
   })
 

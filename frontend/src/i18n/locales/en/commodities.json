@@ -275,10 +275,10 @@
     "serverError": "Something went wrong. Please try again.",
     "step": {
       "ai": {
-        "description": "Photograph the item and its label — AI will pre-fill the form for you.",
+        "description": "Photograph the item and its label, or add a receipt or invoice PDF — AI will pre-fill the form for you.",
         "dropzone": {
-          "hint": "JPG, PNG, HEIC — up to 5 photos",
-          "primary": "Drop photos here or browse"
+          "hint": "JPG, PNG, HEIC or PDF — up to 5 files",
+          "primary": "Drop photos or PDFs here or browse"
         },
         "errors": {
           "photoTooLarge": "One of the photos is too large to scan. Try a smaller file.",
@@ -296,8 +296,8 @@
             "detail": "Too many scan requests. Try again in a moment.",
             "title": "Hold on — too many scans"
           },
-          "tooManyPhotos": "You can attach up to 5 photos per scan.",
-          "unsupportedMime": "Only JPG, PNG, WEBP, HEIC, and HEIF photos can be scanned."
+          "tooManyPhotos": "You can attach up to 5 files per scan.",
+          "unsupportedMime": "Only JPG, PNG, WEBP, HEIC, HEIF photos and PDF documents can be scanned."
         },
         "fullItem": {
           "description": "Photograph the whole item clearly so AI can identify it",
