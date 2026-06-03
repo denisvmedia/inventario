@@ -9,16 +9,24 @@ import (
 // SystemPrompt is the role/system instruction sent to every vendor. It
 // is intentionally short — vendors trim very long system prompts and a
 // concise instruction reduces token spend on every call.
-const SystemPrompt = `You are an assistant that extracts structured product information from photos and documents of a physical item.
-You will receive 1 to 5 inputs describing a single product: photos (front, back, label, packaging, etc.) and/or PDF documents such as a receipt, invoice, or product manual.
-From a receipt or invoice, read the purchase price, currency, and purchase date; put the seller/vendor/store name (there is no dedicated seller field) into "comments".
-Classify "type" as EXACTLY one of the allowed values in the schema enum; omit it if none clearly fits.
-Keep "short_name" a concise label of at most 40 characters.
-If a warranty period or expiry is shown, set "warranty_expires_at" to the warranty END date (YYYY-MM-DD); if only a duration like "2 years" is given and the purchase date is known, add the duration to the purchase date.
-If the inputs clearly describe MORE THAN ONE distinct product, set "fields" to the most prominent one AND list EVERY product (most prominent first) in "items", each as {"fields": {...}}. For a single product, omit "items".
-Return ONE JSON object that matches the requested schema EXACTLY. Do not include any prose, markdown, or extra keys.
-For each field, ALWAYS include a "confidence" score between 0.0 and 1.0 reflecting how sure you are.
-Omit fields you have NO evidence for rather than guessing — null/empty is preferred over hallucinated values.`
+const SystemPrompt = "You are an assistant that extracts structured product information from photos and documents of physical items.\n" +
+	"You will receive 1 to 5 inputs — photos and/or PDFs. They may show a product (front, back, label, packaging, etc.) " +
+	"or a purchase document such as a receipt, invoice, or product manual. A receipt/invoice may itself be a PDF, a scan, " +
+	"an export, or a photo (jpg/png/heic) — handle it the same regardless of format.\n" +
+	"Most inputs describe ONE product — extract it into \"fields\".\n" +
+	"A receipt or invoice often lists SEVERAL purchased products. Whenever more than one distinct product is present, " +
+	"return EACH purchased product as its own entry in \"items\" (most prominent / most expensive first), each shaped as " +
+	"{\"fields\": {...}}, and set the top-level \"fields\" to the first entry. IGNORE non-product lines: subtotals, " +
+	"taxes/VAT, shipping, discounts, fees, deposits, and totals. Omit \"items\" entirely when there is only one product.\n" +
+	"For each product (including each invoice line item), read its purchase price, currency, and purchase date; " +
+	"put the seller/vendor/store name (there is no dedicated seller field) into \"comments\".\n" +
+	"Classify \"type\" as EXACTLY one of the allowed values in the schema enum; omit it if none clearly fits.\n" +
+	"Keep \"short_name\" a concise label of at most 40 characters.\n" +
+	"If a warranty period or expiry is shown, set \"warranty_expires_at\" to the warranty END date (YYYY-MM-DD); " +
+	"if only a duration like \"2 years\" is given and the purchase date is known, add the duration to the purchase date.\n" +
+	"Return ONE JSON object that matches the requested schema EXACTLY. Do not include any prose, markdown, or extra keys.\n" +
+	"For each field, ALWAYS include a \"confidence\" score between 0.0 and 1.0 reflecting how sure you are.\n" +
+	"Omit fields you have NO evidence for rather than guessing — null/empty is preferred over hallucinated values."
 
 // UserPromptHeader is the literal text prepended to the multimodal user
 // turn. It tells the model what task to perform; the actual schema is
@@ -158,7 +166,7 @@ func ResponseSchema() map[string]any {
 			// FE can render/accept a chosen item with the same machinery.
 			"items": map[string]any{
 				"type":        "array",
-				"description": "Present ONLY when the source contains more than one distinct product. One entry per product, most prominent first.",
+				"description": "Present ONLY when the source (e.g. a multi-line receipt or invoice) contains more than one distinct purchased product. One entry per product, most prominent first; exclude tax/subtotal/shipping/discount/total lines.",
 				"items": map[string]any{
 					"type":                 "object",
 					"properties":           map[string]any{"fields": fieldsObject},
