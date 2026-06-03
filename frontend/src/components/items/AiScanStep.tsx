@@ -720,8 +720,16 @@ function ScanningPanel({ onCancel }: { onCancel: () => void }) {
           {t("commodities:form.step.ai.scanning.subtitle")}
         </p>
       </div>
-      <div className="h-1.5 w-full max-w-48 overflow-hidden rounded-full bg-muted">
-        <div className="h-full w-2/3 animate-pulse rounded-full bg-amber-500" />
+      <div
+        className="h-1.5 w-full max-w-48 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label={t("commodities:form.step.ai.scanning.title")}
+        data-testid="commodity-form-ai-scanning-bar"
+      >
+        {/* Indeterminate: a partial bar slides across the track (the scan
+            duration is unknown), so the user sees work is ongoing rather
+            than a static fill stuck partway. */}
+        <div className="ai-scan-bar h-full w-2/5 rounded-full bg-amber-500" />
       </div>
       <Button
         type="button"

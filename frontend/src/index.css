@@ -247,3 +247,24 @@
     background: white !important;
   }
 }
+
+/* Indeterminate progress bar for the AI-scan "scanning" phase. The scan
+   duration is unknown (one upstream model call), so we can't show a real
+   0–100% — a partial bar slides across the track to signal ongoing work.
+   Honours prefers-reduced-motion. */
+@keyframes ai-scan-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+.ai-scan-bar {
+  animation: ai-scan-bar 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-scan-bar {
+    animation: none;
+  }
+}
