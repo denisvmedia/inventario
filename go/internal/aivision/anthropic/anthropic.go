@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -39,6 +40,15 @@ const (
 // DefaultModel is the model used when no override is supplied via Config.
 // Operators may override via AI_VISION_ANTHROPIC_MODEL.
 const DefaultModel = "claude-sonnet-4-6"
+
+// DefaultMaxTokens is the output-budget cap used when Config.MaxTokens is
+// unset. It must comfortably hold a multi-line invoice: each product carries
+// ~10 fields, so a handful of products already exceeds the old 1024 cap and
+// the tool-use JSON gets truncated mid-array (→ an empty/partial extraction).
+// 4096 holds well over a dozen products; operators raise it via
+// AI_VISION_MAX_TOKENS for unusually long receipts. It is only a ceiling —
+// the model stops once the products are emitted, so small scans don't pay.
+const DefaultMaxTokens = 4096
 
 // Config carries the runtime knobs. APIKey is required; Model defaults
 // to DefaultModel; BaseURL defaults to the public API; HTTPClient
@@ -84,7 +94,7 @@ func New(cfg Config) (*Provider, error) {
 	}
 	maxTokens := cfg.MaxTokens
 	if maxTokens <= 0 {
-		maxTokens = 1024
+		maxTokens = DefaultMaxTokens
 	}
 	return &Provider{
 		apiKey:     cfg.APIKey,
@@ -206,10 +216,12 @@ type toolChoicePayload struct {
 }
 
 // anthropicResponse is the slice of the upstream response shape we read.
-// We only need usage + content[].input on the tool_use block.
+// We only need usage + content[].input on the tool_use block, plus
+// stop_reason to detect a max_tokens truncation.
 type anthropicResponse struct {
-	Content []anthropicResponseBlock `json:"content"`
-	Usage   *anthropicUsage          `json:"usage,omitempty"`
+	Content    []anthropicResponseBlock `json:"content"`
+	Usage      *anthropicUsage          `json:"usage,omitempty"`
+	StopReason string                   `json:"stop_reason"`
 }
 
 type anthropicResponseBlock struct {
@@ -270,6 +282,14 @@ func parseResponse(body []byte) (*aivision.ScanResult, error) {
 	var resp anthropicResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, errxtrace.Classify(aivision.ErrProviderBadResponse)
+	}
+	// max_tokens truncates the tool-use JSON mid-array, yielding an empty or
+	// partial extraction (the classic "single product works, a multi-line
+	// invoice comes back blank"). Log it loudly so the fix is obvious: raise
+	// AI_VISION_MAX_TOKENS.
+	if resp.StopReason == "max_tokens" {
+		slog.Warn("aivision anthropic response hit max_tokens; extraction may be truncated — raise AI_VISION_MAX_TOKENS",
+			"stop_reason", resp.StopReason)
 	}
 	for _, block := range resp.Content {
 		if block.Type != "tool_use" || len(block.Input) == 0 {

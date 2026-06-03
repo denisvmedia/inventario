@@ -247,6 +247,7 @@ func wireCommodityScan(cfg *Config, params *apiserver.Params) error {
 		OpenAIAPIKey:     cfg.AIVisionOpenAIAPIKey,
 		OpenAIModel:      cfg.AIVisionOpenAIModel,
 		OpenAIBaseURL:    cfg.AIVisionOpenAIBaseURL,
+		MaxTokens:        cfg.AIVisionMaxTokens,
 	})
 	switch {
 	case err == nil:

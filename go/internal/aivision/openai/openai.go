@@ -39,6 +39,12 @@ const (
 // Operators may override via AI_VISION_OPENAI_MODEL.
 const DefaultModel = "gpt-4o"
 
+// DefaultMaxTokens is the output-budget cap used when Config.MaxTokens is
+// unset. A multi-line invoice (one ~10-field product per line) easily blows
+// past the old 1024 cap and the JSON is truncated; 4096 holds well over a
+// dozen products. It is only a ceiling — the model stops once done.
+const DefaultMaxTokens = 4096
+
 // Config carries the runtime knobs. APIKey is required; Model defaults
 // to DefaultModel; BaseURL defaults to the public API; HTTPClient
 // defaults to a 30s-timeout client (separate from the per-call context
@@ -80,7 +86,7 @@ func New(cfg Config) (*Provider, error) {
 	}
 	maxTokens := cfg.MaxTokens
 	if maxTokens <= 0 {
-		maxTokens = 1024
+		maxTokens = DefaultMaxTokens
 	}
 	return &Provider{
 		apiKey:     cfg.APIKey,

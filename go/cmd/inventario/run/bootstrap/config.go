@@ -114,6 +114,12 @@ type Config struct {
 	AIVisionMaxPhotos        int    `yaml:"ai_vision_max_photos" env:"AI_VISION_MAX_PHOTOS" env-default:"5"`
 	AIVisionMaxPhotoBytes    int    `yaml:"ai_vision_max_photo_bytes" env:"AI_VISION_MAX_PHOTO_BYTES" env-default:"10485760"`
 	AIVisionRateLimitPerHour int    `yaml:"ai_vision_rate_limit_per_hour" env:"AI_VISION_RATE_LIMIT_PER_HOUR" env-default:"30"`
+	// AIVisionMaxTokens caps the model's structured output. It must hold a
+	// multi-line invoice (each product is ~10 fields), or the JSON truncates
+	// and a multi-product scan comes back empty/partial. Zero falls back to
+	// the provider default (4096). It is only a ceiling — small scans don't
+	// pay for the headroom.
+	AIVisionMaxTokens int `yaml:"ai_vision_max_tokens" env:"AI_VISION_MAX_TOKENS" env-default:"4096"`
 
 	// PublicAIVisionScanEnabled gates the unauthenticated public photo-scan
 	// endpoint (#1988) that backs the landing-page "add your first item"

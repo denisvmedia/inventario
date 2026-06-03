@@ -446,6 +446,19 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     await waitFor(() => expect(screen.getByLabelText(/^Name$/i)).toBeInTheDocument())
   })
 
+  it("shows a retry hint instead of an empty review when nothing is extracted", async () => {
+    server.use(...commodityScanHandlers.ok(SLUG, { fields: {} }))
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), makePdf("x.pdf"))
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    // Stays on the offer with a hint, not a green-but-empty review.
+    expect(await screen.findByTestId("commodity-form-ai-staging-error")).toHaveTextContent(
+      /couldn't read any details/i
+    )
+    expect(screen.queryByTestId("commodity-form-ai-review")).not.toBeInTheDocument()
+  })
+
   it("renders the provider-disabled banner on 503", async () => {
     server.use(
       ...commodityScanHandlers.error(SLUG, 503, "commodity_scan.provider_disabled", "provider off")

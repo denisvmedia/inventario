@@ -286,6 +286,7 @@
           "primary": "Drop photos or PDFs here or browse"
         },
         "errors": {
+          "noDetails": "We couldn't read any details from that. Try a clearer photo or a different document.",
           "photoTooLarge": "One of the files is too large to scan. Try a smaller file.",
           "providerDisabled": {
             "detail": "AI vision isn't enabled on this server right now. Use Fill manually to continue.",

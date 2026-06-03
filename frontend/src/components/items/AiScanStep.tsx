@@ -290,6 +290,13 @@ export function AiScanStep({
         photos: photos.map((p) => p.file),
         signal: ac.signal,
       })
+      // Nothing usable came back (an unreadable document, or a model
+      // truncation). Don't drop the user into a green-but-empty "review" —
+      // keep them on the offer with a retry hint.
+      if (Object.keys(r.fields).length === 0 && r.items.length === 0) {
+        setStagingError(t("commodities:form.step.ai.errors.noDetails"))
+        return
+      }
       setResult(r)
       setSelectedItemFields(null)
       // More than one distinct product → the user chooses which to fill

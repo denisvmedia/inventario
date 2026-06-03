@@ -69,6 +69,7 @@ All settings read from the `run` config section, i.e. the env var name is the
 | `AI_VISION_MAX_PHOTOS` | `5` | Per scan request |
 | `AI_VISION_MAX_PHOTO_BYTES` | `10485760` | 10 MiB per photo |
 | `AI_VISION_RATE_LIMIT_PER_HOUR` | `30` | Per-user; `0` disables |
+| `AI_VISION_MAX_TOKENS` | `4096` | Cap on the model's structured output. Must hold a multi-line invoice (each product ≈10 fields); too low truncates the JSON and a multi-product scan returns empty/partial. `0` = provider default (4096). |
 | `PUBLIC_AI_VISION_SCAN_ENABLED` | `false` | **Opt-in.** Enable the unauthenticated `POST /public/commodities/scan` endpoint (#1988). No effect unless a real provider is also configured. |
 
 > ⚠️ **The public endpoint has no auth wall.** Every anonymous call spends
