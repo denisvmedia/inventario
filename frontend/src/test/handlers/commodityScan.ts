@@ -32,7 +32,9 @@ export function ok(slug: string, attrs: OkAttributes) {
           type: "commodity_scan",
           attributes: {
             fields: attrs.fields,
-            items: attrs.items ?? [],
+            // Omit items for the single-item case, mirroring the BE's
+            // `omitempty` (and the slow() helper).
+            ...(attrs.items ? { items: attrs.items } : {}),
             warnings: attrs.warnings ?? [],
           },
         },
