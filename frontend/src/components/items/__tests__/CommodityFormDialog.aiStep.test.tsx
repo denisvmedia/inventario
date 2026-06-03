@@ -69,9 +69,7 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     // first render — each test can still override with a tighter
     // handler via `server.use(...)`.
     server.use(
-      http.get(apiUrl(`/g/${SLUG}/currencies`), () =>
-        HttpResponse.json(["USD", "EUR", "GBP", "CZK"])
-      )
+      http.get(apiUrl(`/currencies`), () => HttpResponse.json(["USD", "EUR", "GBP", "CZK"]))
     )
   })
 
@@ -244,6 +242,37 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     await user.click(screen.getByTestId("commodity-form-ai-use-values"))
     const nameInput = (await screen.findByLabelText(/^Name$/i)) as HTMLInputElement
     expect(nameInput.value).toBe("Sony WH-1000XM5")
+  })
+
+  it("accepts a server-supported non-default currency (CZK) guessed from the scan", async () => {
+    // defaultCurrency is USD; the /currencies mock (beforeEach) includes CZK.
+    // A Czech-invoice guess must therefore be pre-fillable — not dropped as
+    // "unsupported" just because it isn't the group default.
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: {
+          original_price: { value: 1290, confidence: 0.9 },
+          original_price_currency: { value: "CZK", confidence: 0.9 },
+        },
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(
+      await screen.findByTestId("commodity-form-ai-file-input"),
+      makePdf("invoice.pdf")
+    )
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    const row = screen.getByTestId("commodity-form-ai-row-original_price_currency")
+    // Once /currencies resolves, CZK is recognised: no "won't be pre-filled"
+    // note, and the row stays default-checked so the value carries over.
+    await waitFor(() =>
+      expect(within(row).queryByText(/won't be pre-filled/i)).not.toBeInTheDocument()
+    )
+    expect(
+      screen.getByTestId("commodity-form-ai-row-original_price_currency-check")
+    ).toHaveAttribute("data-state", "checked")
   })
 
   it("renders the rate-limited banner on 429 and keeps Fill manually usable", async () => {

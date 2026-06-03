@@ -14,6 +14,7 @@
 // header + grid pattern is preserved; the design deviation tracker
 // note line is removed (the feature ships now).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 import {
   AlertCircle,
@@ -37,6 +38,7 @@ import {
   getServerErrorCode,
   type ClassifiedServerError,
 } from "@/lib/server-error"
+import { http } from "@/lib/http"
 import { cn } from "@/lib/utils"
 import { COMMODITY_TYPES, type CommodityTypeValue } from "@/features/commodities/constants"
 import { useScanCommodityPhotos } from "@/features/commodities/scanHooks"
@@ -160,19 +162,30 @@ export function AiScanStep({
 
   const scan = useScanCommodityPhotos(slug, anonymous)
 
-  // Known-currency set is intentionally narrow: just the tenant's
-  // default currency. We deliberately do NOT fetch the full
-  // /currencies list from inside the AI step — adding a network query
-  // to the AI-step mount path makes every unrelated wizard test that
-  // walks past this step trip the global MSW "unhandled request"
-  // guard, and the actual product value of a wider validator here is
-  // small (the CurrencyCombobox on the Basics step is the
-  // authoritative picker; if the AI guessed a non-default ISO the
-  // worst case is the picker stays on the default and the user picks
-  // again). When that needs to change, fetch via a lazy mutation
-  // gated on `photos.length > 0` so the query never fires until the
-  // user actually engages the AI flow.
-  const knownCurrencies = useMemo(() => [defaultCurrency], [defaultCurrency])
+  // Validate a model-guessed currency against the server's REAL supported
+  // list (the same `/currencies` endpoint + ["currencies"] cache key the
+  // CurrencyCombobox uses), not just the tenant default. The old behaviour
+  // accepted a guess only when it equalled the default and dropped every
+  // other valid ISO — so scanning a CZK invoice under a USD/EUR group
+  // showed "not on the supported list" even though CZK is fully supported.
+  //
+  // The query is LAZY (`enabled` only once a file is staged) so it never
+  // fires on the AI-step mount path — unrelated wizard tests that walk
+  // straight to "Fill manually" don't trip the MSW unhandled-request guard.
+  // It's skipped entirely in the anonymous landing flow, where there is no
+  // group/auth to resolve `/currencies` against; there (and while the query
+  // is still loading) we fall back to the tenant default so the set is never
+  // empty.
+  const currenciesQuery = useQuery<string[]>({
+    queryKey: ["currencies"],
+    queryFn: ({ signal }) => http.get<string[]>("/currencies", { signal }),
+    enabled: !anonymous && photos.length > 0,
+    staleTime: 5 * 60 * 1000,
+  })
+  const knownCurrencies = useMemo(() => {
+    const supported = currenciesQuery.data
+    return supported && supported.length > 0 ? supported : [defaultCurrency]
+  }, [currenciesQuery.data, defaultCurrency])
 
   // Revoke object-URLs on unmount. We stash the live list of previews
   // in a ref so the cleanup only fires once at unmount — a `[photos]`
