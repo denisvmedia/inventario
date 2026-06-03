@@ -2,8 +2,8 @@
 
 The Add-Item dialog can prefill the form from one or more product photos **or
 PDF documents** (a receipt, invoice, or manual): the user uploads the sources,
-the backend asks a vision model to extract structured fields (name, type, price,
-currency, serial number, URLs, purchase date, comments), and the user
+the backend asks a vision model to extract structured fields (name, short name, type, price,
+currency, serial number, URLs, purchase date, warranty expiry date, comments), and the user
 reviews/accepts per-field before saving. When a receipt/invoice PDF is supplied
 the model is prompted to read the price, currency, and purchase date and to put
 the seller/vendor name into `comments` (there is no dedicated seller field).
