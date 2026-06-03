@@ -33,7 +33,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
-import { currencyMeta } from "@/lib/currency-meta"
+import { currencyMeta, KNOWN_CURRENCY_CODES } from "@/lib/currency-meta"
 import {
   classifyServerError,
   getServerErrorCode,
@@ -175,30 +175,17 @@ export function AiScanStep({
 
   const scan = useScanCommodityPhotos(slug, anonymous)
 
-  // Validate a model-guessed currency against the server's REAL supported
-  // list (the same `/currencies` endpoint + ["currencies"] cache key the
-  // CurrencyCombobox uses), not just the tenant default. The old behaviour
-  // accepted a guess only when it equalled the default and dropped every
-  // other valid ISO — so scanning a CZK invoice under a USD/EUR group
-  // showed "not on the supported list" even though CZK is fully supported.
-  //
-  // The query is LAZY (`enabled` only once a file is staged) so it never
-  // fires on the AI-step mount path — unrelated wizard tests that walk
-  // straight to "Fill manually" don't trip the MSW unhandled-request guard.
-  // It's skipped entirely in the anonymous landing flow, where there is no
-  // group/auth to resolve `/currencies` against; there (and while the query
-  // is still loading) we fall back to the tenant default so the set is never
-  // empty.
+  // /currencies is a PUBLIC, group-agnostic endpoint returning the full ISO
+  // list; the lazy query extends the accepted set to long-tail codes once it
+  // loads (and works in the anonymous flow too — no auth/group needed).
+  // `enabled` gates it on a staged file so it never fires on the AI-step mount
+  // path (no MSW unhandled-request churn on the "Fill manually" walk-through).
   const currenciesQuery = useQuery<string[]>({
     queryKey: ["currencies"],
     queryFn: ({ signal }) => http.get<string[]>("/currencies", { signal }),
-    enabled: !anonymous && photos.length > 0,
+    enabled: photos.length > 0,
     staleTime: 5 * 60 * 1000,
   })
-  const knownCurrencies = useMemo(() => {
-    const supported = currenciesQuery.data
-    return supported && supported.length > 0 ? supported : [defaultCurrency]
-  }, [currenciesQuery.data, defaultCurrency])
 
   // Revoke object-URLs on unmount. We stash the live list of previews
   // in a ref so the cleanup only fires once at unmount — a `[photos]`
@@ -217,12 +204,19 @@ export function AiScanStep({
     }
   }, [])
 
-  // Compute which currencies the BE accepts as a lowercased set so
-  // the case-insensitive match below stays O(1).
-  const currencySet = useMemo(
-    () => new Set(knownCurrencies.map((c) => c.trim().toUpperCase())),
-    [knownCurrencies]
-  )
+  // The set of currency codes an AI guess may pre-fill (uppercased for O(1)
+  // case-insensitive match): the FE's curated KNOWN_CURRENCY_CODES (covers
+  // CZK + every common code, checked SYNCHRONOUSLY so a valid guess is never
+  // dropped while waiting on — or if we never get — the network) ∪ the tenant
+  // default ∪ the full ISO list from /currencies once it resolves.
+  const currencySet = useMemo(() => {
+    const set = new Set<string>(KNOWN_CURRENCY_CODES)
+    if (defaultCurrency.trim() !== "") set.add(defaultCurrency.trim().toUpperCase())
+    for (const c of currenciesQuery.data ?? []) {
+      if (typeof c === "string" && c.trim() !== "") set.add(c.trim().toUpperCase())
+    }
+    return set
+  }, [currenciesQuery.data, defaultCurrency])
 
   const handleFiles = useCallback(
     (files: File[]) => {
