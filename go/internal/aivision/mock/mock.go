@@ -232,9 +232,9 @@ func DefaultResult() aivision.ScanResult {
 	}
 }
 
-// MultiItemResult is the canned result the mock returns when a PDF is
-// supplied — a stand-in for a multi-line invoice (two purchased products),
-// so the item-chooser flow is demonstrable with the deterministic provider.
+// MultiItemResult is the canned result the mock returns when the uploaded
+// filename looks like a receipt/invoice — a stand-in for a multi-line invoice
+// (two purchased products), so the item-chooser flow is demonstrable with the deterministic provider.
 // Per the real-provider contract, Fields mirrors the first (most prominent)
 // item. Dates are fixed so screenshots/e2e stay deterministic.
 func MultiItemResult() aivision.ScanResult {

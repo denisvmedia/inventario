@@ -454,9 +454,9 @@ export function CommodityFormDialog({
     if (step === "ai") return
     if (step === "basics") {
       // Back from the first form step rewinds to the AI scan entry when
-      // it's available (create mode + AI enabled), so a user who picked
-      // "Fill manually" can re-open the scanner. Without the AI surface
-      // Basics is the first screen and Back is a no-op.
+      // it's available (AI enabled), so a user who picked "Fill manually"
+      // can re-open the scanner. Without the AI surface, Basics is the
+      // first screen and Back is a no-op.
       if (aiStepAvailable) setStep("ai")
       return
     }
