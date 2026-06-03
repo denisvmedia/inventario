@@ -135,6 +135,40 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     expect(screen.getByRole("button", { name: /^back$/i })).toBeDisabled()
   })
 
+  it("keeps Back active on Basics in edit mode so a draft can jump to AI scan", async () => {
+    withGroupSlug()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="edit"
+          initialValues={{
+            id: "c1",
+            name: "Draft item",
+            short_name: "Draft",
+            type: "electronics",
+            area_id: "a1",
+            status: "in_use",
+            count: 1,
+          }}
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+        />
+      ),
+    })
+    // Edit opens on Basics. Back is active because AI vision is enabled and
+    // rewinds to the AI scan surface — so a reopened draft can be finished
+    // with a scan (the previous create-only gate left Back dead here).
+    const back = await screen.findByRole("button", { name: /^back$/i })
+    expect(back).toBeEnabled()
+    const user = userEvent.setup()
+    await user.click(back)
+    expect(await screen.findByTestId("commodity-form-ai-step")).toBeInTheDocument()
+  })
+
   it("renders the offer phase by default with no thumbnails", async () => {
     renderDialog()
     expect(await screen.findByTestId("commodity-form-ai-step")).toHaveAttribute(
@@ -330,6 +364,52 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     await user.click(screen.getByTestId("commodity-form-ai-use-values"))
     const shortInput = (await screen.findByLabelText(/^Short name$/i)) as HTMLInputElement
     expect(shortInput.value).toHaveLength(40)
+  })
+
+  it("shows a chooser for a multi-item scan and the pick drives the review", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { name: { value: "Coffee Machine", confidence: 0.9 } },
+        items: [
+          { fields: { name: { value: "Coffee Machine", confidence: 0.9 } } },
+          { fields: { name: { value: "Milk Frother", confidence: 0.8 } } },
+        ],
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(
+      await screen.findByTestId("commodity-form-ai-file-input"),
+      makePdf("receipt.pdf")
+    )
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    // Two candidates → the chooser, not review.
+    await screen.findByTestId("commodity-form-ai-choose")
+    expect(screen.getByTestId("commodity-form-ai-step")).toHaveAttribute("data-ai-phase", "choose")
+    expect(screen.getByTestId("commodity-form-ai-choose-item-0")).toHaveTextContent(
+      "Coffee Machine"
+    )
+    expect(screen.getByTestId("commodity-form-ai-choose-item-1")).toHaveTextContent("Milk Frother")
+    // Pick the second → review pre-fills that item's fields.
+    await user.click(screen.getByTestId("commodity-form-ai-choose-item-1"))
+    await screen.findByTestId("commodity-form-ai-review")
+    expect(screen.getByTestId("commodity-form-ai-row-name-value")).toHaveTextContent("Milk Frother")
+  })
+
+  it("skips the chooser when only one item is detected", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { name: { value: "Solo Item", confidence: 0.9 } },
+        items: [{ fields: { name: { value: "Solo Item", confidence: 0.9 } } }],
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), makePdf("x.pdf"))
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    // One item → straight to review, no chooser.
+    await screen.findByTestId("commodity-form-ai-review")
+    expect(screen.queryByTestId("commodity-form-ai-choose")).not.toBeInTheDocument()
   })
 
   it("renders the rate-limited banner on 429 and keeps Fill manually usable", async () => {

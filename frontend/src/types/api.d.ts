@@ -10441,6 +10441,12 @@ export type components = {
             fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
+            /**
+             * @description Items is present only when the source described more than one
+             *     distinct product; one entry per product, most prominent first. The
+             *     FE renders a chooser. Empty/absent for a single product.
+             */
+            items?: components["schemas"]["jsonapi.CommodityScanItem"][];
             latency_ms?: number;
             used_tokens?: number;
             warnings?: components["schemas"]["jsonapi.CommodityScanWarning"][];
@@ -10449,6 +10455,11 @@ export type components = {
             confidence?: number;
             /** @description Value is polymorphic — see the type-level doc comment. */
             value?: Record<string, never>;
+        };
+        "jsonapi.CommodityScanItem": {
+            fields?: {
+                [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
+            };
         };
         "jsonapi.CommodityScanResource": {
             attributes?: components["schemas"]["jsonapi.CommodityScanAttributes"];
@@ -10466,7 +10477,7 @@ export type components = {
              * @example low_confidence
              * @enum {string}
              */
-            code?: "low_confidence" | "unreadable_serial" | "ambiguous_price" | "currency_inferred" | "no_photo_text";
+            code?: "low_confidence" | "unreadable_serial" | "ambiguous_price" | "currency_inferred" | "no_photo_text" | "multiple_items";
             detail?: string;
             field?: string;
         };

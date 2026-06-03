@@ -275,6 +275,11 @@
     "serverError": "Something went wrong. Please try again.",
     "step": {
       "ai": {
+        "choose": {
+          "itemFallback": "Item {{index}}",
+          "subtitle": "We found more than one product. Pick the one to add — you can add the others separately afterwards.",
+          "title": "Choose which item to add"
+        },
         "description": "Photograph the item and its label, or add a receipt or invoice PDF — AI will pre-fill the form for you.",
         "dropzone": {
           "hint": "JPG, PNG, HEIC or PDF — up to 5 files",

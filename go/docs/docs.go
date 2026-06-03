@@ -10249,6 +10249,13 @@ const docTemplate = `{
                         "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
                     }
                 },
+                "items": {
+                    "description": "Items is present only when the source described more than one\ndistinct product; one entry per product, most prominent first. The\nFE renders a chooser. Empty/absent for a single product.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanItem"
+                    }
+                },
                 "latency_ms": {
                     "type": "integer"
                 },
@@ -10272,6 +10279,17 @@ const docTemplate = `{
                 "value": {
                     "description": "Value is polymorphic — see the type-level doc comment.",
                     "type": "object"
+                }
+            }
+        },
+        "jsonapi.CommodityScanItem": {
+            "type": "object",
+            "properties": {
+                "fields": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
+                    }
                 }
             }
         },
@@ -10308,7 +10326,8 @@ const docTemplate = `{
                         "unreadable_serial",
                         "ambiguous_price",
                         "currency_inferred",
-                        "no_photo_text"
+                        "no_photo_text",
+                        "multiple_items"
                     ],
                     "example": "low_confidence"
                 },

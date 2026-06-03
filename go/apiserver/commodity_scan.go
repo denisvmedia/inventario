@@ -511,12 +511,19 @@ type commodityScanResource struct {
 }
 
 // commodityScanResultDT is the wire shape. Each field carries an
-// optional value + confidence; absent fields mean "no signal".
+// optional value + confidence; absent fields mean "no signal". Items is
+// present only for a multi-product scan (the FE renders a chooser).
 type commodityScanResultDT struct {
 	Fields     map[string]commodityScanFieldDT `json:"fields"`
+	Items      []commodityScanItemDT           `json:"items,omitempty"`
 	Warnings   []aivision.Warning              `json:"warnings,omitempty"`
 	UsedTokens int                             `json:"used_tokens,omitempty"`
 	LatencyMS  int64                           `json:"latency_ms,omitempty"`
+}
+
+// commodityScanItemDT is one candidate product in a multi-product scan.
+type commodityScanItemDT struct {
+	Fields map[string]commodityScanFieldDT `json:"fields"`
 }
 
 type commodityScanFieldDT struct {
@@ -524,19 +531,30 @@ type commodityScanFieldDT struct {
 	Confidence float64         `json:"confidence"`
 }
 
-func newCommodityScanResponse(r *aivision.ScanResult) *commodityScanResponse {
-	dt := commodityScanResultDT{
-		Fields:     make(map[string]commodityScanFieldDT, len(r.Fields)),
-		Warnings:   r.Warnings,
-		UsedTokens: r.UsedTokens,
-		LatencyMS:  r.LatencyMS,
-	}
-	for name, g := range r.Fields {
+// marshalScanFields converts the provider's FieldGuess map into the wire
+// field map, dropping any value that fails to marshal. Shared by the
+// primary fields and each item's fields.
+func marshalScanFields(fields map[string]aivision.FieldGuess) map[string]commodityScanFieldDT {
+	out := make(map[string]commodityScanFieldDT, len(fields))
+	for name, g := range fields {
 		raw, err := json.Marshal(g.Value)
 		if err != nil {
 			continue
 		}
-		dt.Fields[name] = commodityScanFieldDT{Value: raw, Confidence: g.Confidence}
+		out[name] = commodityScanFieldDT{Value: raw, Confidence: g.Confidence}
+	}
+	return out
+}
+
+func newCommodityScanResponse(r *aivision.ScanResult) *commodityScanResponse {
+	dt := commodityScanResultDT{
+		Fields:     marshalScanFields(r.Fields),
+		Warnings:   r.Warnings,
+		UsedTokens: r.UsedTokens,
+		LatencyMS:  r.LatencyMS,
+	}
+	for _, it := range r.Items {
+		dt.Items = append(dt.Items, commodityScanItemDT{Fields: marshalScanFields(it.Fields)})
 	}
 	return &commodityScanResponse{
 		Data:       commodityScanResource{Type: "commodity_scan", Attributes: dt},

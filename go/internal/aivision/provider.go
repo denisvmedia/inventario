@@ -144,8 +144,17 @@ type Warning struct {
 type ScanResult struct {
 	// Fields is keyed by canonical field name. The provider populates
 	// only fields it has evidence for; absent keys mean "no signal" and
-	// the FE leaves the form input blank.
+	// the FE leaves the form input blank. When Items carries more than
+	// one candidate, Fields mirrors the most prominent one (Items[0]) so
+	// single-item consumers keep working unchanged.
 	Fields map[string]FieldGuess `json:"fields"`
+	// Items is populated ONLY when the source describes more than one
+	// distinct product (a multi-line receipt, a photo of several items):
+	// one entry per product, most prominent first. The FE renders a
+	// chooser so the user picks which one to pre-fill. Empty/absent for
+	// the common single-product case (the FE goes straight to review off
+	// Fields).
+	Items []ScanItem `json:"items,omitempty"`
 	// Warnings is the non-fatal note list. nil and empty are
 	// equivalent.
 	Warnings []Warning `json:"warnings,omitempty"`
@@ -156,6 +165,15 @@ type ScanResult struct {
 	// LatencyMS is the wall-clock duration of the upstream call,
 	// measured server-side, used for audit and observability.
 	LatencyMS int64 `json:"latency_ms,omitempty"`
+}
+
+// ScanItem is one candidate product in a multi-product scan. It carries
+// the same canonical Fields map as the single-item ScanResult.Fields, so
+// the FE renders/accepts a chosen item with the exact same machinery.
+type ScanItem struct {
+	// Fields is keyed by canonical field name; same shape and semantics
+	// as ScanResult.Fields.
+	Fields map[string]FieldGuess `json:"fields"`
 }
 
 // Sentinel errors returned by Provider implementations and the registry

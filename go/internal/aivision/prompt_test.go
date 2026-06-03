@@ -40,4 +40,46 @@ func TestResponseSchema_TypeEnumWarrantyShortNameMultiItem(t *testing.T) {
 	// "multiple_items" is an allowed warning code.
 	codeEnum := props["warnings"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["code"].(map[string]any)["enum"].([]string)
 	c.Assert(codeEnum, qt.Contains, "multiple_items")
+
+	// items[] is an array whose entries carry the same `fields` object.
+	items := props["items"].(map[string]any)
+	c.Assert(items["type"], qt.Equals, "array")
+	itemEntry := items["items"].(map[string]any)
+	_, hasItemFields := itemEntry["properties"].(map[string]any)["fields"]
+	c.Assert(hasItemFields, qt.IsTrue)
+}
+
+func TestToScanResult_MultiItem(t *testing.T) {
+	c := qt.New(t)
+	body := []byte(`{
+		"fields": { "name": {"value":"Primary","confidence":0.9} },
+		"items": [
+			{ "fields": { "name": {"value":"Primary","confidence":0.9}, "original_price": {"value":10.5,"confidence":0.8} } },
+			{ "fields": { "name": {"value":"Second","confidence":0.7} } }
+		]
+	}`)
+	res, err := aivision.ToScanResult(body)
+	c.Assert(err, qt.IsNil)
+	c.Assert(res.Fields["name"].Value, qt.Equals, "Primary")
+	c.Assert(res.Items, qt.HasLen, 2)
+	c.Assert(res.Items[0].Fields["original_price"].Value, qt.Equals, 10.5)
+	c.Assert(res.Items[1].Fields["name"].Value, qt.Equals, "Second")
+}
+
+func TestToScanResult_SingleItem_NoItems(t *testing.T) {
+	c := qt.New(t)
+	res, err := aivision.ToScanResult([]byte(`{"fields":{"name":{"value":"Only","confidence":0.9}}}`))
+	c.Assert(err, qt.IsNil)
+	c.Assert(res.Items, qt.HasLen, 0)
+	c.Assert(res.Fields["name"].Value, qt.Equals, "Only")
+}
+
+func TestToScanResult_ItemsOnly_MirrorsPrimary(t *testing.T) {
+	c := qt.New(t)
+	// Model left `fields` empty but populated `items` — Fields mirrors the
+	// first item so single-item consumers still see a primary extraction.
+	res, err := aivision.ToScanResult([]byte(`{"fields":{},"items":[{"fields":{"name":{"value":"A","confidence":0.9}}}]}`))
+	c.Assert(err, qt.IsNil)
+	c.Assert(res.Fields["name"].Value, qt.Equals, "A")
+	c.Assert(res.Items, qt.HasLen, 1)
 }

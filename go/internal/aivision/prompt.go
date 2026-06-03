@@ -15,7 +15,7 @@ From a receipt or invoice, read the purchase price, currency, and purchase date;
 Classify "type" as EXACTLY one of the allowed values in the schema enum; omit it if none clearly fits.
 Keep "short_name" a concise label of at most 40 characters.
 If a warranty period or expiry is shown, set "warranty_expires_at" to the warranty END date (YYYY-MM-DD); if only a duration like "2 years" is given and the purchase date is known, add the duration to the purchase date.
-If the inputs clearly describe MORE THAN ONE distinct product, extract only the single most prominent item and add a warning {"code":"multiple_items"}.
+If the inputs clearly describe MORE THAN ONE distinct product, set "fields" to the most prominent one AND list EVERY product (most prominent first) in "items", each as {"fields": {...}}. For a single product, omit "items".
 Return ONE JSON object that matches the requested schema EXACTLY. Do not include any prose, markdown, or extra keys.
 For each field, ALWAYS include a "confidence" score between 0.0 and 1.0 reflecting how sure you are.
 Omit fields you have NO evidence for rather than guessing — null/empty is preferred over hallucinated values.`
@@ -143,13 +143,28 @@ func ResponseSchema() map[string]any {
 		"additionalProperties": false,
 	}
 
+	fieldsObject := map[string]any{
+		"type":                 "object",
+		"properties":           fields,
+		"additionalProperties": false,
+	}
+
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"fields": map[string]any{
-				"type":                 "object",
-				"properties":           fields,
-				"additionalProperties": false,
+			"fields": fieldsObject,
+			// items is present ONLY when the source describes more than one
+			// distinct product; each entry mirrors the `fields` shape so the
+			// FE can render/accept a chosen item with the same machinery.
+			"items": map[string]any{
+				"type":        "array",
+				"description": "Present ONLY when the source contains more than one distinct product. One entry per product, most prominent first.",
+				"items": map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{"fields": fieldsObject},
+					"required":             []string{"fields"},
+					"additionalProperties": false,
+				},
 			},
 			"warnings": map[string]any{
 				"type":  "array",
@@ -173,7 +188,13 @@ func ResponseSchemaJSON() ([]byte, error) {
 // converts to the public ScanResult type.
 type rawScanResponse struct {
 	Fields   map[string]rawFieldGuess `json:"fields"`
+	Items    []rawScanItem            `json:"items"`
 	Warnings []Warning                `json:"warnings"`
+}
+
+// rawScanItem mirrors one entry of the optional multi-item array.
+type rawScanItem struct {
+	Fields map[string]rawFieldGuess `json:"fields"`
 }
 
 // rawFieldGuess uses json.RawMessage on Value so the same schema can
@@ -197,31 +218,59 @@ func ToScanResult(body []byte) (*ScanResult, error) {
 	}
 
 	out := &ScanResult{
-		Fields:   make(map[string]FieldGuess, len(raw.Fields)),
 		Warnings: append([]Warning(nil), raw.Warnings...),
 	}
 
+	fields, fieldWarnings := decodeFieldMap(raw.Fields)
+	out.Fields = fields
+	out.Warnings = append(out.Warnings, fieldWarnings...)
+
+	// Optional multi-item list. Per-item type mismatches are dropped
+	// silently (the primary fields already surfaced any warning); empty
+	// items are skipped so a stray {} doesn't render a blank choice.
+	for _, it := range raw.Items {
+		itemFields, _ := decodeFieldMap(it.Fields)
+		if len(itemFields) == 0 {
+			continue
+		}
+		out.Items = append(out.Items, ScanItem{Fields: itemFields})
+	}
+
+	// Defensive: if the model only populated items and left fields empty,
+	// mirror the most prominent item so single-item consumers (and the
+	// audit ResultJSON) still see a primary extraction.
+	if len(out.Fields) == 0 && len(out.Items) > 0 {
+		out.Fields = out.Items[0].Fields
+	}
+
+	return out, nil
+}
+
+// decodeFieldMap converts a raw vendor field map into the public FieldGuess
+// map, dropping unknown keys and type-mismatched values. It returns the
+// decoded fields plus a (possibly empty) list of "low_confidence" warnings
+// for values whose type didn't match the field's expected shape. Shared by
+// the primary `fields` and each `items[].fields`.
+func decodeFieldMap(raw map[string]rawFieldGuess) (map[string]FieldGuess, []Warning) {
+	out := make(map[string]FieldGuess, len(raw))
+	var warnings []Warning
 	for _, name := range AllFieldNames {
-		rg, ok := raw.Fields[name]
+		rg, ok := raw[name]
 		if !ok {
 			continue
 		}
 		val, ok := decodeFieldValue(name, rg.Value)
 		if !ok {
-			// Field came back but in the wrong shape. Surface as a
-			// warning so the FE can still render the rest of the
-			// extraction; drop the unparseable value.
-			out.Warnings = append(out.Warnings, Warning{
+			warnings = append(warnings, Warning{
 				Code:   "low_confidence",
 				Field:  name,
 				Detail: "field value did not match expected type",
 			})
 			continue
 		}
-		out.Fields[name] = FieldGuess{Value: val, Confidence: rg.Confidence}
+		out[name] = FieldGuess{Value: val, Confidence: rg.Confidence}
 	}
-
-	return out, nil
+	return out, warnings
 }
 
 // decodeFieldValue maps the JSON-typed raw value to the Go concrete

@@ -1465,6 +1465,14 @@ definitions:
         additionalProperties:
           $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
         type: object
+      items:
+        description: |-
+          Items is present only when the source described more than one
+          distinct product; one entry per product, most prominent first. The
+          FE renders a chooser. Empty/absent for a single product.
+        items:
+          $ref: '#/definitions/jsonapi.CommodityScanItem'
+        type: array
       latency_ms:
         type: integer
       used_tokens:
@@ -1480,6 +1488,13 @@ definitions:
         type: number
       value:
         description: Value is polymorphic — see the type-level doc comment.
+        type: object
+    type: object
+  jsonapi.CommodityScanItem:
+    properties:
+      fields:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
         type: object
     type: object
   jsonapi.CommodityScanResource:
@@ -1506,6 +1521,7 @@ definitions:
         - ambiguous_price
         - currency_inferred
         - no_photo_text
+        - multiple_items
         example: low_confidence
         type: string
       detail:

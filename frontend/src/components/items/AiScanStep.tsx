@@ -21,6 +21,7 @@ import {
   Camera,
   CheckCircle2,
   FileText,
+  Layers,
   Plus,
   ScanText,
   Sparkles,
@@ -45,7 +46,9 @@ import { useScanCommodityPhotos } from "@/features/commodities/scanHooks"
 import type {
   ScanFieldGuess,
   ScanFieldName,
+  ScanItem,
   ScanResult,
+  ScanResultFields,
   ScanWarning,
 } from "@/features/commodities/scanApi"
 
@@ -161,6 +164,10 @@ export function AiScanStep({
   const [photos, setPhotos] = useState<StagedPhoto[]>([])
   const [stagingError, setStagingError] = useState<string | null>(null)
   const [result, setResult] = useState<ScanResult | null>(null)
+  // When the scan returns more than one candidate product, the user picks
+  // one in the "choose" phase; its fields land here and drive the review.
+  // Null = single-item scan (review reads result.fields) or not yet chosen.
+  const [selectedItemFields, setSelectedItemFields] = useState<ScanResultFields | null>(null)
   const [acceptedFields, setAcceptedFields] = useState<Set<ScanFieldName>>(new Set())
   const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
   const [errorCode, setErrorCode] = useState<string | null>(null)
@@ -289,16 +296,15 @@ export function AiScanStep({
         signal: ac.signal,
       })
       setResult(r)
-      // Default-accept every field with confidence ≥ 0.3 (the
-      // low-confidence threshold for the chip styling — anything below
-      // is the model essentially guessing). Users can re-check
-      // individually in the review phase before applying.
-      const defaults = new Set<ScanFieldName>()
-      for (const key of Object.keys(r.fields) as ScanFieldName[]) {
-        const guess = r.fields[key]
-        if (guess && guess.confidence >= 0.3) defaults.add(key)
+      setSelectedItemFields(null)
+      // More than one distinct product → the user chooses which to fill
+      // first (no default-accept until they pick). A single product →
+      // straight to review with confident fields pre-checked.
+      if (r.items.length > 1) {
+        setAcceptedFields(new Set())
+      } else {
+        setAcceptedFields(defaultAcceptedFor(r.fields))
       }
-      setAcceptedFields(defaults)
     } catch (err) {
       // AbortError fires when the user clicks Cancel — silently roll
       // back to the offer phase instead of rendering a scary banner.
@@ -318,13 +324,27 @@ export function AiScanStep({
     scan.reset()
   }
 
+  // chooseItem promotes one candidate (from a multi-product scan) into the
+  // review phase: its fields become the active set and the confident ones
+  // are pre-checked.
+  function chooseItem(index: number) {
+    if (!result) return
+    const item = result.items[index]
+    if (!item) return
+    setSelectedItemFields(item.fields)
+    setAcceptedFields(defaultAcceptedFor(item.fields))
+  }
+
   function applyAccepted() {
     if (!result) return
+    // The active item: the user's pick from a multi-product scan, or the
+    // single primary result otherwise.
+    const fields = selectedItemFields ?? result.fields
     const out: ScanAcceptedValues = {}
     let droppedCurrency: string | null = null
-    for (const key of Object.keys(result.fields) as ScanFieldName[]) {
+    for (const key of Object.keys(fields) as ScanFieldName[]) {
       if (!acceptedFields.has(key)) continue
-      const guess = result.fields[key]
+      const guess = fields[key]
       if (!guess) continue
       const value = guess.value
       switch (key) {
@@ -387,12 +407,14 @@ export function AiScanStep({
     // (also relevant for the implicit revocation cleanup).
     clearPhotos()
     setResult(null)
+    setSelectedItemFields(null)
     setAcceptedFields(new Set())
   }
 
   function retakePhotos() {
     clearPhotos()
     setResult(null)
+    setSelectedItemFields(null)
     setAcceptedFields(new Set())
     setServerError(null)
     setErrorCode(null)
@@ -407,10 +429,15 @@ export function AiScanStep({
     })
   }
 
-  const phase: "offer" | "scanning" | "review" | "error" = (() => {
+  // A multi-product scan inserts a "choose" phase between scanning and
+  // review; a single-product scan (or once an item is chosen) goes straight
+  // to review, per the design.
+  const needsChoice = !!result && result.items.length > 1 && selectedItemFields === null
+  const phase: "offer" | "scanning" | "choose" | "review" | "error" = (() => {
     if (scan.isPending) return "scanning"
-    if (result) return "review"
     if (serverError) return "error"
+    if (needsChoice) return "choose"
+    if (result) return "review"
     return "offer"
   })()
 
@@ -422,9 +449,12 @@ export function AiScanStep({
     >
       {phase === "scanning" ? (
         <ScanningPanel onCancel={cancelScan} />
+      ) : phase === "choose" && result ? (
+        <ChoosePanel items={result.items} onChoose={chooseItem} onSkip={onSkip} />
       ) : phase === "review" && result ? (
         <ReviewPanel
-          result={result}
+          fields={selectedItemFields ?? result.fields}
+          warnings={result.warnings}
           acceptedFields={acceptedFields}
           onToggleField={toggleField}
           onAccept={applyAccepted}
@@ -712,10 +742,95 @@ function ScanningPanel({ onCancel }: { onCancel: () => void }) {
   )
 }
 
+// ---- Choose phase (multi-item) --------------------------------------
+
+interface ChoosePanelProps {
+  items: ScanItem[]
+  onChoose: (index: number) => void
+  onSkip: () => void
+}
+
+// ChoosePanel lists every candidate product the scan found so the user
+// picks which one to pre-fill (shown only when there's more than one — a
+// single item goes straight to review).
+function ChoosePanel({ items, onChoose, onSkip }: ChoosePanelProps) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col gap-3" data-testid="commodity-form-ai-choose">
+      <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+        <Layers aria-hidden="true" className="size-4 shrink-0 text-primary" />
+        <p className="text-sm font-medium">{t("commodities:form.step.ai.choose.title")}</p>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("commodities:form.step.ai.choose.subtitle")}
+      </p>
+      <div className="flex flex-col gap-2">
+        {items.map((item, i) => {
+          const summary = chooseItemSummary(item)
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onChoose(i)}
+              data-testid={`commodity-form-ai-choose-item-${i}`}
+              className="flex flex-col items-start gap-0.5 rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <p className="text-sm font-medium">
+                {chooseItemTitle(item) ??
+                  t("commodities:form.step.ai.choose.itemFallback", { index: i + 1 })}
+              </p>
+              {summary ? <p className="text-xs text-muted-foreground">{summary}</p> : null}
+            </button>
+          )
+        })}
+      </div>
+      <div className="flex">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onSkip}
+          data-testid="commodity-form-ai-fill-manually"
+        >
+          {t("commodities:form.fillManually")}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// chooseItemTitle prefers the model's name, then short_name; null when
+// neither is present (the caller renders a numbered fallback).
+function chooseItemTitle(item: ScanItem): string | null {
+  const name = item.fields.name?.value
+  if (typeof name === "string" && name.trim() !== "") return name
+  const short = item.fields.short_name?.value
+  if (typeof short === "string" && short.trim() !== "") return short
+  return null
+}
+
+// chooseItemSummary builds a one-line "type · price · serial" summary so
+// the user can tell similar candidates apart. Empty when nothing useful.
+function chooseItemSummary(item: ScanItem): string {
+  const parts: string[] = []
+  const type = item.fields.type?.value
+  if (typeof type === "string" && type.trim() !== "") parts.push(type)
+  const price = item.fields.original_price?.value
+  if (typeof price === "number" && Number.isFinite(price)) {
+    const currency = item.fields.original_price_currency?.value
+    parts.push(typeof currency === "string" && currency ? `${price} ${currency}` : String(price))
+  }
+  const serial = item.fields.serial_number?.value
+  if (typeof serial === "string" && serial.trim() !== "") parts.push(serial)
+  return parts.join(" · ")
+}
+
 // ---- Review phase ---------------------------------------------------
 
 interface ReviewPanelProps {
-  result: ScanResult
+  // Active item's fields (the chosen candidate, or the single primary).
+  fields: ScanResultFields
+  warnings: ScanWarning[]
   acceptedFields: Set<ScanFieldName>
   onToggleField: (key: ScanFieldName, next: boolean) => void
   onAccept: () => void
@@ -725,7 +840,8 @@ interface ReviewPanelProps {
 }
 
 function ReviewPanel({
-  result,
+  fields,
+  warnings,
   acceptedFields,
   onToggleField,
   onAccept,
@@ -740,7 +856,7 @@ function ReviewPanel({
   const warningsByField = useMemo(() => {
     const map = new Map<string, ScanWarning[]>()
     const global: ScanWarning[] = []
-    for (const w of result.warnings) {
+    for (const w of warnings) {
       if (w.field) {
         const list = map.get(w.field) ?? []
         list.push(w)
@@ -750,7 +866,7 @@ function ReviewPanel({
       }
     }
     return { map, global }
-  }, [result.warnings])
+  }, [warnings])
 
   const fieldOrder: ScanFieldName[] = [
     "name",
@@ -795,9 +911,9 @@ function ReviewPanel({
 
       <div className="flex flex-col gap-2">
         {fieldOrder.map((key) => {
-          const guess = result.fields[key]
+          const guess = fields[key]
           if (!guess) return null
-          const warnings = warningsByField.map.get(key) ?? []
+          const rowWarnings = warningsByField.map.get(key) ?? []
           const currencyUnknown =
             key === "original_price_currency" &&
             typeof guess.value === "string" &&
@@ -809,7 +925,7 @@ function ReviewPanel({
               guess={guess}
               checked={acceptedFields.has(key)}
               onToggle={(next) => onToggleField(key, next)}
-              warnings={warnings}
+              warnings={rowWarnings}
               currencyUnknown={currencyUnknown}
             />
           )
@@ -1036,4 +1152,16 @@ function errorCodeTitle(code: string | null, t: (k: string) => string): string |
 
 function isKnownType(value: string): value is CommodityTypeValue {
   return (COMMODITY_TYPES as readonly string[]).includes(value)
+}
+
+// defaultAcceptedFor pre-checks every field the model is reasonably sure
+// about (confidence ≥ 0.3 — below that it's essentially guessing). Used
+// both for a single-item scan and after the user picks a candidate.
+function defaultAcceptedFor(fields: ScanResultFields): Set<ScanFieldName> {
+  const defaults = new Set<ScanFieldName>()
+  for (const key of Object.keys(fields) as ScanFieldName[]) {
+    const guess = fields[key]
+    if (guess && guess.confidence >= 0.3) defaults.add(key)
+  }
+  return defaults
 }
