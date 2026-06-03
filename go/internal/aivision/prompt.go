@@ -13,16 +13,16 @@ const SystemPrompt = "You are an assistant that extracts structured product info
 	"You will receive 1 to 5 inputs — photos and/or PDFs. They may show a product (front, back, label, packaging, etc.) " +
 	"or a purchase document such as a receipt, invoice, or product manual. A receipt/invoice may itself be a PDF, a scan, " +
 	"an export, or a photo (jpg/png/heic) — handle it the same regardless of format.\n" +
-	"Most inputs describe ONE product — extract it into \"fields\".\n" +
-	"A receipt or invoice often lists SEVERAL purchased products. Whenever more than one distinct product is present, " +
-	"return EACH purchased product as its own entry in \"items\" (most prominent / most expensive first), each shaped as " +
-	"{\"fields\": {...}}, and set the top-level \"fields\" to the first entry. IGNORE non-product lines: subtotals, " +
-	"taxes/VAT, shipping, discounts, fees, deposits, and totals. Omit \"items\" entirely when there is only one product.\n" +
-	"For each product (including each invoice line item), read its purchase price, currency, and purchase date; " +
+	"Return \"items\": a JSON array with ONE entry per distinct purchased product, most prominent / most expensive first, " +
+	"each shaped as {\"fields\": {...}}.\n" +
+	"A single product → a one-element array. A receipt or invoice that lists SEVERAL products → one entry for EACH " +
+	"product line. Do NOT collapse them into one and do NOT pick just one — enumerate EVERY product on the document.\n" +
+	"EXCLUDE non-product lines: subtotals, taxes/VAT, shipping/postage, discounts, vouchers, fees, deposits, and totals.\n" +
+	"For each product, from a receipt/invoice read its own purchase price, currency, and purchase date; " +
 	"put the seller/vendor/store name (there is no dedicated seller field) into \"comments\".\n" +
 	"Classify \"type\" as EXACTLY one of the allowed values in the schema enum; omit it if none clearly fits.\n" +
 	"Keep \"short_name\" a concise label of at most 40 characters.\n" +
-	"Suggest 2–5 short, lowercase \"tags\" describing the product (brand, category, material, colour).\n" +
+	"Suggest 2–5 short, lowercase \"tags\" describing each product (brand, category, material, colour).\n" +
 	"If a warranty period or expiry is shown, set \"warranty_expires_at\" to the warranty END date (YYYY-MM-DD); " +
 	"if only a duration like \"2 years\" is given and the purchase date is known, add the duration to the purchase date.\n" +
 	"Return ONE JSON object that matches the requested schema EXACTLY. Do not include any prose, markdown, or extra keys.\n" +
@@ -159,16 +159,21 @@ func ResponseSchema() map[string]any {
 		"additionalProperties": false,
 	}
 
+	// items is the REQUIRED primary output: a list of products. Making the
+	// model produce a list (rather than a single `fields` object) is what
+	// reliably gets every line of a multi-product invoice enumerated instead
+	// of the model picking just one. A single product is simply a 1-element
+	// array. The service derives the single-item `fields` from items[0].
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"fields": fieldsObject,
-			// items is present ONLY when the source describes more than one
-			// distinct product; each entry mirrors the `fields` shape so the
-			// FE can render/accept a chosen item with the same machinery.
 			"items": map[string]any{
-				"type":        "array",
-				"description": "Present ONLY when the source (e.g. a multi-line receipt or invoice) contains more than one distinct purchased product. One entry per product, most prominent first; exclude tax/subtotal/shipping/discount/total lines.",
+				"type":     "array",
+				"minItems": 1,
+				"description": "ONE entry per distinct purchased product (most prominent / most expensive first). " +
+					"A single product is a one-element array; a multi-line receipt or invoice has one entry for EACH " +
+					"product line — never collapse them and never return just one. " +
+					"Exclude tax/subtotal/shipping/discount/total lines.",
 				"items": map[string]any{
 					"type":                 "object",
 					"properties":           map[string]any{"fields": fieldsObject},
@@ -181,7 +186,7 @@ func ResponseSchema() map[string]any {
 				"items": warningSchema,
 			},
 		},
-		"required":             []string{"fields"},
+		"required":             []string{"items"},
 		"additionalProperties": false,
 	}
 }
@@ -231,26 +236,33 @@ func ToScanResult(body []byte) (*ScanResult, error) {
 		Warnings: append([]Warning(nil), raw.Warnings...),
 	}
 
-	fields, fieldWarnings := decodeFieldMap(raw.Fields)
-	out.Fields = fields
-	out.Warnings = append(out.Warnings, fieldWarnings...)
-
-	// Optional multi-item list. Per-item type mismatches are dropped
-	// silently (the primary fields already surfaced any warning); empty
-	// items are skipped so a stray {} doesn't render a blank choice.
+	// items is the model's primary output now (one entry per product). Decode
+	// each, dropping empties so a stray {} never renders a blank choice.
+	var products []ScanItem
 	for _, it := range raw.Items {
 		itemFields, _ := decodeFieldMap(it.Fields)
 		if len(itemFields) == 0 {
 			continue
 		}
-		out.Items = append(out.Items, ScanItem{Fields: itemFields})
+		products = append(products, ScanItem{Fields: itemFields})
 	}
 
-	// Defensive: if the model only populated items and left fields empty,
-	// mirror the most prominent item so single-item consumers (and the
-	// audit ResultJSON) still see a primary extraction.
-	if len(out.Fields) == 0 && len(out.Items) > 0 {
-		out.Fields = out.Items[0].Fields
+	// Primary single-item view: prefer an explicit top-level `fields`
+	// (back-compat with older single-product responses and provider tests),
+	// otherwise the first product. Type-mismatch warnings surface for the
+	// primary only.
+	primary, primaryWarnings := decodeFieldMap(raw.Fields)
+	switch {
+	case len(primary) > 0:
+		out.Fields = primary
+		out.Warnings = append(out.Warnings, primaryWarnings...)
+	case len(products) > 0:
+		out.Fields = products[0].Fields
+	}
+
+	// Expose Items to the FE only when there's an actual choice to make.
+	if len(products) > 1 {
+		out.Items = products
 	}
 
 	return out, nil

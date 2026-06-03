@@ -17,7 +17,17 @@ func TestResponseSchema_TypeEnumWarrantyShortNameMultiItem(t *testing.T) {
 	schema := aivision.ResponseSchema()
 
 	props := schema["properties"].(map[string]any)
-	fields := props["fields"].(map[string]any)["properties"].(map[string]any)
+
+	// items[] is the REQUIRED primary output — a list of products. Making the
+	// model produce a list is what gets every invoice line enumerated.
+	items := props["items"].(map[string]any)
+	c.Assert(items["type"], qt.Equals, "array")
+	c.Assert(items["minItems"], qt.Equals, 1)
+	c.Assert(schema["required"], qt.DeepEquals, []string{"items"})
+
+	// Each item carries the shared `fields` object — where the per-field
+	// constraints (type enum, short_name cap, warranty) live.
+	fields := items["items"].(map[string]any)["properties"].(map[string]any)["fields"].(map[string]any)["properties"].(map[string]any)
 
 	fieldValue := func(name string) map[string]any {
 		return fields[name].(map[string]any)["properties"].(map[string]any)["value"].(map[string]any)
@@ -33,20 +43,15 @@ func TestResponseSchema_TypeEnumWarrantyShortNameMultiItem(t *testing.T) {
 	// "short_name" carries the 40-char cap that mirrors the form limit.
 	c.Assert(fieldValue(aivision.FieldNameShortName)["maxLength"], qt.Equals, 40)
 
-	// "warranty_expires_at" is part of the extracted set.
+	// "warranty_expires_at" and "tags" are part of the extracted set.
 	_, hasWarranty := fields[aivision.FieldNameWarrantyExpiresAt]
 	c.Assert(hasWarranty, qt.IsTrue)
+	_, hasTags := fields[aivision.FieldNameTags]
+	c.Assert(hasTags, qt.IsTrue)
 
 	// "multiple_items" is an allowed warning code.
 	codeEnum := props["warnings"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["code"].(map[string]any)["enum"].([]string)
 	c.Assert(codeEnum, qt.Contains, "multiple_items")
-
-	// items[] is an array whose entries carry the same `fields` object.
-	items := props["items"].(map[string]any)
-	c.Assert(items["type"], qt.Equals, "array")
-	itemEntry := items["items"].(map[string]any)
-	_, hasItemFields := itemEntry["properties"].(map[string]any)["fields"]
-	c.Assert(hasItemFields, qt.IsTrue)
 }
 
 func TestToScanResult_MultiItem(t *testing.T) {
@@ -74,12 +79,26 @@ func TestToScanResult_SingleItem_NoItems(t *testing.T) {
 	c.Assert(res.Fields["name"].Value, qt.Equals, "Only")
 }
 
-func TestToScanResult_ItemsOnly_MirrorsPrimary(t *testing.T) {
+func TestToScanResult_ItemsOnly_SingleProduct(t *testing.T) {
 	c := qt.New(t)
-	// Model left `fields` empty but populated `items` — Fields mirrors the
-	// first item so single-item consumers still see a primary extraction.
-	res, err := aivision.ToScanResult([]byte(`{"fields":{},"items":[{"fields":{"name":{"value":"A","confidence":0.9}}}]}`))
+	// New contract: the model returns only `items`. A single product → Fields
+	// mirrors items[0] and Items stays empty (no chooser for one product).
+	res, err := aivision.ToScanResult([]byte(`{"items":[{"fields":{"name":{"value":"A","confidence":0.9}}}]}`))
 	c.Assert(err, qt.IsNil)
 	c.Assert(res.Fields["name"].Value, qt.Equals, "A")
-	c.Assert(res.Items, qt.HasLen, 1)
+	c.Assert(res.Items, qt.HasLen, 0)
+}
+
+func TestToScanResult_ItemsOnly_MultiProduct(t *testing.T) {
+	c := qt.New(t)
+	// New contract, multi-product invoice: only `items`, several entries.
+	res, err := aivision.ToScanResult([]byte(`{"items":[
+		{"fields":{"name":{"value":"Pampers","confidence":0.9}}},
+		{"fields":{"name":{"value":"Calculator","confidence":0.8}}},
+		{"fields":{"name":{"value":"Cleaner","confidence":0.7}}}
+	]}`))
+	c.Assert(err, qt.IsNil)
+	c.Assert(res.Items, qt.HasLen, 3)
+	c.Assert(res.Fields["name"].Value, qt.Equals, "Pampers")
+	c.Assert(res.Items[1].Fields["name"].Value, qt.Equals, "Calculator")
 }
