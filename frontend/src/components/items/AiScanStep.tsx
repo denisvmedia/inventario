@@ -1,7 +1,7 @@
 // AI vision scan step for the Add Item dialog (#1720). Replaces the
 // inert offer-only stub with a four-phase state machine:
 //
-//   offer    → user drops/picks 1..5 photos, clicks "Scan photos"
+//   offer    → user drops/picks 1..5 photos or PDFs, clicks "Scan files"
 //   scanning → mutation in flight; user can Cancel via AbortController
 //   review   → per-field checkboxes + confidence chips + warnings;
 //              "Use these values" prefills the wizard and advances

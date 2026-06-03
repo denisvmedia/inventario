@@ -108,7 +108,7 @@ func CommodityScanPublic(scanService *services.CommodityScanService, maxFormByte
 // CommodityScanService.ScanAnonymous and reuses the same body/photo
 // readers and the shared renderScanError → mapCommodityScanError mapping.
 //
-// @Summary Run an AI vision scan on uploaded photos (public)
+// @Summary Run an AI vision scan on uploaded photos or documents (public)
 // @Description Anonymous variant of the photo scan for the landing-page CTA (#1988). Unauthenticated, IP + global-daily rate limited, gated behind a deployment feature flag. Returns field guesses only and persists nothing.
 // @Tags commodities
 // @Accept multipart/form-data
@@ -116,9 +116,9 @@ func CommodityScanPublic(scanService *services.CommodityScanService, maxFormByte
 // @Param photos formData file true "Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple `photos` parts)."
 // @Param hint formData string false "Optional free-form hint (brand, category guess)"
 // @Success 200 {object} jsonapi.CommodityScanResponse "OK"
-// @Failure 413 {object} jsonapi.Errors "Photo too large"
+// @Failure 413 {object} jsonapi.Errors "File too large"
 // @Failure 415 {object} jsonapi.Errors "Unsupported MIME type"
-// @Failure 422 {object} jsonapi.Errors "Too many photos / no photos"
+// @Failure 422 {object} jsonapi.Errors "Too many files / no files"
 // @Failure 429 {object} jsonapi.Errors "Rate limited"
 // @Failure 502 {object} jsonapi.Errors "Provider unavailable / parse error"
 // @Failure 503 {object} jsonapi.Errors "Provider disabled"
@@ -181,8 +181,8 @@ func (api *commodityScanAPI) handlePublicScan(w http.ResponseWriter, r *http.Req
 // validates the basics, and delegates to CommodityScanService.Scan,
 // then renders a JSON:API response with type "commodity_scan".
 //
-// @Summary Run an AI vision scan on uploaded photos
-// @Description Extract structured commodity field guesses from 1..N product photos. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.
+// @Summary Run an AI vision scan on uploaded photos or documents
+// @Description Extract structured commodity field guesses from 1..N product photos or PDF documents. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.
 // @Tags commodities
 // @Accept multipart/form-data
 // @Produce json-api
@@ -190,9 +190,9 @@ func (api *commodityScanAPI) handlePublicScan(w http.ResponseWriter, r *http.Req
 // @Param photos formData file true "Product photo(s) or PDF document(s); image/jpeg|jpg|png|webp|heic|heif or application/pdf. Repeat the field to upload up to 5 files (multipart/form-data with multiple `photos` parts)."
 // @Param hint formData string false "Optional free-form hint (brand, category guess)"
 // @Success 200 {object} jsonapi.CommodityScanResponse "OK"
-// @Failure 413 {object} jsonapi.Errors "Photo too large"
+// @Failure 413 {object} jsonapi.Errors "File too large"
 // @Failure 415 {object} jsonapi.Errors "Unsupported MIME type"
-// @Failure 422 {object} jsonapi.Errors "Too many photos / no photos"
+// @Failure 422 {object} jsonapi.Errors "Too many files / no files"
 // @Failure 429 {object} jsonapi.Errors "Rate limited"
 // @Failure 502 {object} jsonapi.Errors "Provider unavailable / parse error"
 // @Failure 503 {object} jsonapi.Errors "Provider disabled"

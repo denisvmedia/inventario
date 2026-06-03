@@ -7364,9 +7364,9 @@ paths:
     post:
       consumes:
       - multipart/form-data
-      description: Extract structured commodity field guesses from 1..N product photos.
-        The handler does not persist any commodity — it only returns structured suggestions
-        for the Add Item dialog to pre-fill.
+      description: Extract structured commodity field guesses from 1..N product photos
+        or PDF documents. The handler does not persist any commodity — it only returns
+        structured suggestions for the Add Item dialog to pre-fill.
       parameters:
       - description: Group slug
         in: path
@@ -7392,7 +7392,7 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.CommodityScanResponse'
         "413":
-          description: Photo too large
+          description: File too large
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "415":
@@ -7400,7 +7400,7 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
-          description: Too many photos / no photos
+          description: Too many files / no files
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "429":
@@ -7419,7 +7419,7 @@ paths:
           description: Provider timed out
           schema:
             $ref: '#/definitions/jsonapi.Errors'
-      summary: Run an AI vision scan on uploaded photos
+      summary: Run an AI vision scan on uploaded photos or documents
       tags:
       - commodities
   /g/{groupSlug}/commodities/values:
@@ -9858,7 +9858,7 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.CommodityScanResponse'
         "413":
-          description: Photo too large
+          description: File too large
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "415":
@@ -9866,7 +9866,7 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
-          description: Too many photos / no photos
+          description: Too many files / no files
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "429":
@@ -9885,7 +9885,7 @@ paths:
           description: Provider timed out
           schema:
             $ref: '#/definitions/jsonapi.Errors'
-      summary: Run an AI vision scan on uploaded photos (public)
+      summary: Run an AI vision scan on uploaded photos or documents (public)
       tags:
       - commodities
   /register:

@@ -3837,8 +3837,8 @@ export type paths = {
         get?: never;
         put?: never;
         /**
-         * Run an AI vision scan on uploaded photos
-         * @description Extract structured commodity field guesses from 1..N product photos. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.
+         * Run an AI vision scan on uploaded photos or documents
+         * @description Extract structured commodity field guesses from 1..N product photos or PDF documents. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.
          */
         post: {
             parameters: {
@@ -3861,7 +3861,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.CommodityScanResponse"];
                     };
                 };
-                /** @description Photo too large */
+                /** @description File too large */
                 413: {
                     headers: {
                         [name: string]: unknown;
@@ -3879,7 +3879,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Too many photos / no photos */
+                /** @description Too many files / no files */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -8851,7 +8851,7 @@ export type paths = {
         get?: never;
         put?: never;
         /**
-         * Run an AI vision scan on uploaded photos (public)
+         * Run an AI vision scan on uploaded photos or documents (public)
          * @description Anonymous variant of the photo scan for the landing-page CTA (#1988). Unauthenticated, IP + global-daily rate limited, gated behind a deployment feature flag. Returns field guesses only and persists nothing.
          */
         post: {
@@ -8872,7 +8872,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.CommodityScanResponse"];
                     };
                 };
-                /** @description Photo too large */
+                /** @description File too large */
                 413: {
                     headers: {
                         [name: string]: unknown;
@@ -8890,7 +8890,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Too many photos / no photos */
+                /** @description Too many files / no files */
                 422: {
                     headers: {
                         [name: string]: unknown;

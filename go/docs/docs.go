@@ -2928,7 +2928,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/scan": {
             "post": {
-                "description": "Extract structured commodity field guesses from 1..N product photos. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.",
+                "description": "Extract structured commodity field guesses from 1..N product photos or PDF documents. The handler does not persist any commodity — it only returns structured suggestions for the Add Item dialog to pre-fill.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -2938,7 +2938,7 @@ const docTemplate = `{
                 "tags": [
                     "commodities"
                 ],
-                "summary": "Run an AI vision scan on uploaded photos",
+                "summary": "Run an AI vision scan on uploaded photos or documents",
                 "parameters": [
                     {
                         "type": "string",
@@ -2969,7 +2969,7 @@ const docTemplate = `{
                         }
                     },
                     "413": {
-                        "description": "Photo too large",
+                        "description": "File too large",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -2981,7 +2981,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Too many photos / no photos",
+                        "description": "Too many files / no files",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7724,7 +7724,7 @@ const docTemplate = `{
                 "tags": [
                     "commodities"
                 ],
-                "summary": "Run an AI vision scan on uploaded photos (public)",
+                "summary": "Run an AI vision scan on uploaded photos or documents (public)",
                 "parameters": [
                     {
                         "type": "file",
@@ -7748,7 +7748,7 @@ const docTemplate = `{
                         }
                     },
                     "413": {
-                        "description": "Photo too large",
+                        "description": "File too large",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7760,7 +7760,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Too many photos / no photos",
+                        "description": "Too many files / no files",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

@@ -153,13 +153,13 @@ type CommodityScanConfig struct {
 // the same pipeline; only the per-vendor content-block shape differs
 // (see each provider's buildPayload).
 var AllowedMIMETypes = map[string]bool{
-	"image/jpeg":      true,
-	"image/jpg":       true, // noncanonical alias some browsers emit for JPEGs
-	"image/png":       true,
-	"image/webp":      true,
-	"image/heic":      true,
-	"image/heif":      true,
-	"application/pdf": true, // receipts / invoices / manuals (#1983)
+	"image/jpeg":          true,
+	"image/jpg":           true, // noncanonical alias some browsers emit for JPEGs
+	"image/png":           true,
+	"image/webp":          true,
+	"image/heic":          true,
+	"image/heif":          true,
+	aivision.PDFMediaType: true, // receipts / invoices / manuals (#1983)
 }
 
 // CommodityScanService coordinates the photo-scan flow: rate limit, →

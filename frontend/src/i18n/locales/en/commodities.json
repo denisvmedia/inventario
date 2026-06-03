@@ -281,13 +281,13 @@
           "primary": "Drop photos or PDFs here or browse"
         },
         "errors": {
-          "photoTooLarge": "One of the photos is too large to scan. Try a smaller file.",
+          "photoTooLarge": "One of the files is too large to scan. Try a smaller file.",
           "providerDisabled": {
             "detail": "AI vision isn't enabled on this server right now. Use Fill manually to continue.",
             "title": "AI vision is unavailable"
           },
           "providerError": {
-            "title": "AI vision couldn't process those photos"
+            "title": "AI vision couldn't process those files"
           },
           "providerTimeout": {
             "title": "AI vision took too long to respond"
@@ -309,12 +309,12 @@
         },
         "offer": {
           "dropzone": {
-            "activeHint": "Release to add photos"
+            "activeHint": "Release to add files"
           },
           "staged": {
             "remove": "Remove",
-            "title_one": "{{count}} photo staged",
-            "title_other": "{{count}} photos staged"
+            "title_one": "{{count}} file staged",
+            "title_other": "{{count}} files staged"
           }
         },
         "review": {
@@ -324,7 +324,7 @@
             "medium": "{{percent}}% likely"
           },
           "currencyInferred": "Currency wasn't on the server's supported list — it won't be pre-filled.",
-          "retake": "Re-take photos",
+          "retake": "Start over",
           "subtitle": "Untick anything that looks wrong before we prefill the form.",
           "title": "Review extracted details",
           "useValues": "Use these values",
@@ -338,9 +338,9 @@
         "scanning": {
           "cancel": "Cancel",
           "subtitle": "AI is reading the label and identifying the item.",
-          "title": "Scanning your photos…"
+          "title": "Scanning your files…"
         },
-        "scanPhotos": "Scan photos",
+        "scanPhotos": "Scan files",
         "title": "Fill with AI"
       },
       "basics": {

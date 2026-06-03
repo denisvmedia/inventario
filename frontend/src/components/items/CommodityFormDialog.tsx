@@ -943,7 +943,7 @@ export function CommodityFormDialog({
           // AI-step footer: only the Cancel/close affordance lives in
           // the dialog chrome. The four-phase state machine (offer /
           // scanning / review / error) owns its own primary actions
-          // inline — "Scan photos" / "Use these values" / "Re-take" /
+          // inline — "Scan files" / "Use these values" / "Start over" /
           // "Fill manually" / "Cancel scan" — so the footer stays
           // tight and never wrestles with phase-specific buttons.
           <DialogFooter className="gap-2">
