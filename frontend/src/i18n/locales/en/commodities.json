@@ -282,7 +282,7 @@
         },
         "description": "Photograph the item and its label, or add a receipt or invoice PDF — AI will pre-fill the form for you.",
         "dropzone": {
-          "hint": "JPG, PNG, HEIC or PDF — up to 5 files",
+          "hint": "JPG, PNG, WEBP, HEIC/HEIF or PDF — up to 5 files",
           "primary": "Drop photos or PDFs here or browse"
         },
         "errors": {
