@@ -25,9 +25,9 @@ func TestResponseSchema_TypeEnumWarrantyShortNameMultiItem(t *testing.T) {
 	c.Assert(items["minItems"], qt.Equals, 1)
 	c.Assert(schema["required"], qt.DeepEquals, []string{"items"})
 
-	// Each item carries the shared `fields` object — where the per-field
+	// Each item IS the field object directly (flat) — where the per-field
 	// constraints (type enum, short_name cap, warranty) live.
-	fields := items["items"].(map[string]any)["properties"].(map[string]any)["fields"].(map[string]any)["properties"].(map[string]any)
+	fields := items["items"].(map[string]any)["properties"].(map[string]any)
 
 	fieldValue := func(name string) map[string]any {
 		return fields[name].(map[string]any)["properties"].(map[string]any)["value"].(map[string]any)
@@ -100,5 +100,21 @@ func TestToScanResult_ItemsOnly_MultiProduct(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(res.Items, qt.HasLen, 3)
 	c.Assert(res.Fields["name"].Value, qt.Equals, "Pampers")
+	c.Assert(res.Items[1].Fields["name"].Value, qt.Equals, "Calculator")
+}
+
+func TestToScanResult_FlatItems(t *testing.T) {
+	c := qt.New(t)
+	// The schema we now request: each item IS the field map (no `fields`
+	// wrapper). This is the shape that was blanking the review before the
+	// parser learned to accept it.
+	res, err := aivision.ToScanResult([]byte(`{"items":[
+		{"name":{"value":"Pampers","confidence":0.9},"original_price":{"value":434,"confidence":0.9}},
+		{"name":{"value":"Calculator","confidence":0.8}}
+	]}`))
+	c.Assert(err, qt.IsNil)
+	c.Assert(res.Items, qt.HasLen, 2)
+	c.Assert(res.Fields["name"].Value, qt.Equals, "Pampers")
+	c.Assert(res.Items[0].Fields["original_price"].Value, qt.Equals, float64(434))
 	c.Assert(res.Items[1].Fields["name"].Value, qt.Equals, "Calculator")
 }

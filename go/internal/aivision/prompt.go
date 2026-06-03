@@ -13,8 +13,8 @@ const SystemPrompt = "You are an assistant that extracts structured product info
 	"You will receive 1 to 5 inputs — photos and/or PDFs. They may show a product (front, back, label, packaging, etc.) " +
 	"or a purchase document such as a receipt, invoice, or product manual. A receipt/invoice may itself be a PDF, a scan, " +
 	"an export, or a photo (jpg/png/heic) — handle it the same regardless of format.\n" +
-	"Return \"items\": a JSON array with ONE entry per distinct purchased product, most prominent / most expensive first, " +
-	"each shaped as {\"fields\": {...}}.\n" +
+	"Return \"items\": a JSON array with ONE entry per distinct purchased product, most prominent / most expensive first. " +
+	"Each entry is that product's field object directly (name, short_name, type, original_price, original_price_currency, etc.).\n" +
 	"A single product → a one-element array. A receipt or invoice that lists SEVERAL products → one entry for EACH " +
 	"product line. Do NOT collapse them into one and do NOT pick just one — enumerate EVERY product on the document.\n" +
 	"EXCLUDE non-product lines: subtotals, taxes/VAT, shipping/postage, discounts, vouchers, fees, deposits, and totals.\n" +
@@ -173,13 +173,12 @@ func ResponseSchema() map[string]any {
 				"description": "ONE entry per distinct purchased product (most prominent / most expensive first). " +
 					"A single product is a one-element array; a multi-line receipt or invoice has one entry for EACH " +
 					"product line — never collapse them and never return just one. " +
-					"Exclude tax/subtotal/shipping/discount/total lines.",
-				"items": map[string]any{
-					"type":                 "object",
-					"properties":           map[string]any{"fields": fieldsObject},
-					"required":             []string{"fields"},
-					"additionalProperties": false,
-				},
+					"Exclude tax/subtotal/shipping/discount/total lines. Each entry is the product's field object.",
+				// Each item IS the field object directly (flat) — one nesting
+				// level, which the model follows far more reliably than a
+				// wrapper object. ToScanResult also accepts the legacy
+				// {"fields": {...}} shape defensively.
+				"items": fieldsObject,
 			},
 			"warnings": map[string]any{
 				"type":  "array",
@@ -203,13 +202,33 @@ func ResponseSchemaJSON() ([]byte, error) {
 // converts to the public ScanResult type.
 type rawScanResponse struct {
 	Fields   map[string]rawFieldGuess `json:"fields"`
-	Items    []rawScanItem            `json:"items"`
+	Items    []json.RawMessage        `json:"items"`
 	Warnings []Warning                `json:"warnings"`
 }
 
-// rawScanItem mirrors one entry of the optional multi-item array.
-type rawScanItem struct {
-	Fields map[string]rawFieldGuess `json:"fields"`
+// decodeRawItem decodes one entry of the items[] array into a field map. It
+// accepts BOTH shapes so model variance can't blank the result:
+//   - flat: the entry IS the field map (the schema we now request),
+//     e.g. {"name": {...}, "type": {...}}
+//   - nested: a {"fields": {...}} wrapper (legacy / some responses)
+//
+// Whichever yields a non-empty field map wins (flat is tried first).
+func decodeRawItem(raw json.RawMessage) map[string]FieldGuess {
+	var flat map[string]rawFieldGuess
+	if err := json.Unmarshal(raw, &flat); err == nil {
+		if f, _ := decodeFieldMap(flat); len(f) > 0 {
+			return f
+		}
+	}
+	var nested struct {
+		Fields map[string]rawFieldGuess `json:"fields"`
+	}
+	if err := json.Unmarshal(raw, &nested); err == nil && len(nested.Fields) > 0 {
+		if f, _ := decodeFieldMap(nested.Fields); len(f) > 0 {
+			return f
+		}
+	}
+	return nil
 }
 
 // rawFieldGuess uses json.RawMessage on Value so the same schema can
@@ -240,7 +259,7 @@ func ToScanResult(body []byte) (*ScanResult, error) {
 	// each, dropping empties so a stray {} never renders a blank choice.
 	var products []ScanItem
 	for _, it := range raw.Items {
-		itemFields, _ := decodeFieldMap(it.Fields)
+		itemFields := decodeRawItem(it)
 		if len(itemFields) == 0 {
 			continue
 		}
