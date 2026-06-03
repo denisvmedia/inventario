@@ -82,7 +82,10 @@ func New(cfg Config) (*Provider, error) {
 	}
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
+		// Must exceed the service-layer per-call deadline (AI_VISION_TIMEOUT,
+		// default 60s) so that context deadline is the binding one rather than
+		// this client cap.
+		httpClient = &http.Client{Timeout: 90 * time.Second}
 	}
 	maxTokens := cfg.MaxTokens
 	if maxTokens <= 0 {

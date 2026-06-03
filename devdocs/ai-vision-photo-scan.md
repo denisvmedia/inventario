@@ -66,7 +66,7 @@ All settings read from the `run` config section, i.e. the env var name is the
 | `AI_VISION_OPENAI_API_KEY` | `""` | Required when provider=`openai` |
 | `AI_VISION_OPENAI_MODEL` | `gpt-4o` | |
 | `AI_VISION_OPENAI_BASE_URL` | `""` | Empty = public `api.openai.com` |
-| `AI_VISION_TIMEOUT` | `20s` | Per-call upstream deadline |
+| `AI_VISION_TIMEOUT` | `60s` | Per-call upstream deadline. A PDF + multi-product invoice extraction can take 20–45s; the provider HTTP client cap sits above this (90s). |
 | `AI_VISION_MAX_PHOTOS` | `5` | Per scan request |
 | `AI_VISION_MAX_PHOTO_BYTES` | `10485760` | 10 MiB per photo |
 | `AI_VISION_RATE_LIMIT_PER_HOUR` | `30` | Per-user; `0` disables |

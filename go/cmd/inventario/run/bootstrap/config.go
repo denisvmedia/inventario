@@ -110,7 +110,7 @@ type Config struct {
 	AIVisionOpenAIAPIKey     string `yaml:"ai_vision_openai_api_key" env:"AI_VISION_OPENAI_API_KEY" env-default:""`
 	AIVisionOpenAIModel      string `yaml:"ai_vision_openai_model" env:"AI_VISION_OPENAI_MODEL" env-default:"gpt-4o"`
 	AIVisionOpenAIBaseURL    string `yaml:"ai_vision_openai_base_url" env:"AI_VISION_OPENAI_BASE_URL" env-default:""`
-	AIVisionTimeout          string `yaml:"ai_vision_timeout" env:"AI_VISION_TIMEOUT" env-default:"20s"`
+	AIVisionTimeout          string `yaml:"ai_vision_timeout" env:"AI_VISION_TIMEOUT" env-default:"60s"`
 	AIVisionMaxPhotos        int    `yaml:"ai_vision_max_photos" env:"AI_VISION_MAX_PHOTOS" env-default:"5"`
 	AIVisionMaxPhotoBytes    int    `yaml:"ai_vision_max_photo_bytes" env:"AI_VISION_MAX_PHOTO_BYTES" env-default:"10485760"`
 	AIVisionRateLimitPerHour int    `yaml:"ai_vision_rate_limit_per_hour" env:"AI_VISION_RATE_LIMIT_PER_HOUR" env-default:"30"`
@@ -242,8 +242,10 @@ func (c *Config) SetDefaults() {
 	}
 	if c.AIVisionTimeout == "" {
 		// #1720: matches AI_VISION_TIMEOUT env-default. Empty values
-		// come from YAML configs that omit the key entirely.
-		c.AIVisionTimeout = "20s"
+		// come from YAML configs that omit the key entirely. 60s leaves
+		// room for a PDF + a multi-product invoice extraction (20s timed
+		// those out at the 504 boundary).
+		c.AIVisionTimeout = "60s"
 	}
 	if c.AIVisionProvider == "" {
 		c.AIVisionProvider = "none"
