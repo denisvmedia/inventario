@@ -181,8 +181,9 @@ func DefaultResult() aivision.ScanResult {
 			// Fixed purchase date keeps the canned result deterministic
 			// across runs — using time.Now() made every test/screenshot
 			// snapshot drift day-to-day.
-			aivision.FieldNamePurchaseDate: {Value: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02"), Confidence: 0.50},
-			aivision.FieldNameComments:     {Value: "Black over-ear wireless headphones with active noise cancellation.", Confidence: 0.65},
+			aivision.FieldNamePurchaseDate:      {Value: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02"), Confidence: 0.50},
+			aivision.FieldNameWarrantyExpiresAt: {Value: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02"), Confidence: 0.45},
+			aivision.FieldNameComments:          {Value: "Black over-ear wireless headphones with active noise cancellation.", Confidence: 0.65},
 		},
 		Warnings: []aivision.Warning{
 			{Code: "low_confidence", Field: aivision.FieldNamePurchaseDate, Detail: "purchase date inferred from packaging design only"},

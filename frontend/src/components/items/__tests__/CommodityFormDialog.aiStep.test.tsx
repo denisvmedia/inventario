@@ -275,6 +275,63 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     ).toHaveAttribute("data-state", "checked")
   })
 
+  it("renders a warranty_expires_at review row from the scan", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: {
+          warranty_expires_at: { value: "2027-05-01", confidence: 0.7 },
+        },
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(
+      await screen.findByTestId("commodity-form-ai-file-input"),
+      makePdf("manual.pdf")
+    )
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    expect(screen.getByTestId("commodity-form-ai-row-warranty_expires_at-value")).toHaveTextContent(
+      "2027-05-01"
+    )
+  })
+
+  it("surfaces the multiple_items warning when the document has several products", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { name: { value: "First Item", confidence: 0.9 } },
+        warnings: [{ code: "multiple_items" }],
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(
+      await screen.findByTestId("commodity-form-ai-file-input"),
+      makePdf("receipt.pdf")
+    )
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    // The field-less warning is localized in the global review banner.
+    expect(screen.getByText(/more than one item/i)).toBeInTheDocument()
+  })
+
+  it("truncates an over-long short_name guess to the 40-char form limit", async () => {
+    const long = "X".repeat(60)
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { short_name: { value: long, confidence: 0.9 } },
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), makePdf("x.pdf"))
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    await user.click(screen.getByTestId("commodity-form-ai-use-values"))
+    const shortInput = (await screen.findByLabelText(/^Short name$/i)) as HTMLInputElement
+    expect(shortInput.value).toHaveLength(40)
+  })
+
   it("renders the rate-limited banner on 429 and keeps Fill manually usable", async () => {
     server.use(
       ...commodityScanHandlers.error(SLUG, 429, "commodity_scan.rate_limited", "slow down")

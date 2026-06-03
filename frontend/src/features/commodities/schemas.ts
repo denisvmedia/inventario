@@ -111,7 +111,7 @@ const baseCommoditySchema = z
     name: z.string().trim().min(1, NAME_REQUIRED).max(200, NAME_TOO_LONG),
     // BE always requires `short_name` regardless of draft (rules.NotEmpty
     // unconditional in models.Commodity.ValidateWithContext).
-    short_name: z.string().trim().min(1, SHORT_NAME_REQUIRED).max(20, SHORT_NAME_TOO_LONG),
+    short_name: z.string().trim().min(1, SHORT_NAME_REQUIRED).max(40, SHORT_NAME_TOO_LONG),
     type: z.string().min(1, TYPE_REQUIRED),
     // Area is optional (#1987): the create dialog no longer asks for a
     // location, and an item can be left unassigned (#1986). Edit mode

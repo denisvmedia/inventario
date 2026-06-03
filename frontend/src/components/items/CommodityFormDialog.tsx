@@ -623,6 +623,9 @@ export function CommodityFormDialog({
     if (values.type !== undefined) apply("type", values.type)
     if (values.serial_number !== undefined) apply("serial_number", values.serial_number)
     if (values.purchase_date !== undefined) apply("purchase_date", values.purchase_date)
+    if (values.warranty_expires_at !== undefined) {
+      apply("warranty_expires_at", values.warranty_expires_at)
+    }
     if (values.original_price !== undefined) apply("original_price", values.original_price)
     if (values.original_price_currency !== undefined) {
       apply("original_price_currency", values.original_price_currency)

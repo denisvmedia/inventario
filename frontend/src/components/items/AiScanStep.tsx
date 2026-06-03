@@ -68,6 +68,11 @@ const ACCEPTED_EXT = /\.(jpe?g|png|webp|heic|heif|pdf)$/i
 // Hard cap (mirrors BE) — additional rejections fire from the BE side.
 const MAX_PHOTOS = 5
 
+// Mirrors the commodity form's short_name limit (schemas.ts + the Go model's
+// validation.Length(1, 40)). An AI-guessed short_name longer than this is
+// truncated on accept so it never trips the Basics-step validator.
+const SHORT_NAME_MAX_LEN = 40
+
 // isPdfFile reports whether a staged file is a PDF document rather than an
 // image. PDFs can't be rendered as an <img> thumbnail, so the staged tile
 // shows a document icon + filename instead. The MIME check is primary; the
@@ -108,6 +113,7 @@ export interface ScanAcceptedValues {
   serial_number?: string
   urls?: string[]
   purchase_date?: string
+  warranty_expires_at?: string
   comments?: string
 }
 
@@ -323,11 +329,20 @@ export function AiScanStep({
       const value = guess.value
       switch (key) {
         case "name":
-        case "short_name":
         case "serial_number":
         case "comments":
         case "purchase_date":
+        case "warranty_expires_at":
           if (typeof value === "string" && value.trim() !== "") out[key] = value
+          break
+        case "short_name":
+          if (typeof value === "string" && value.trim() !== "") {
+            // Cap at the form's 40-char limit (SHORT_NAME_MAX_LEN) so an
+            // over-long AI guess pre-fills truncated instead of failing
+            // validation on the Basics step. The prompt already steers the
+            // model to ≤40; this is the defensive backstop.
+            out.short_name = value.trim().slice(0, SHORT_NAME_MAX_LEN)
+          }
           break
         case "type":
           if (typeof value === "string" && isKnownType(value)) {
@@ -743,6 +758,7 @@ function ReviewPanel({
     "type",
     "serial_number",
     "purchase_date",
+    "warranty_expires_at",
     "original_price",
     "original_price_currency",
     "urls",
@@ -770,7 +786,7 @@ function ReviewPanel({
           <AlertDescription>
             {warningsByField.global.map((w, i) => (
               <p key={i} className="text-xs">
-                {w.detail ?? w.code}
+                {warningMessage(w, t)}
               </p>
             ))}
           </AlertDescription>
@@ -943,6 +959,8 @@ function fieldLabelKey(field: ScanFieldName): string {
       return "originalPriceHelp"
     case "urls":
       return "urls"
+    case "warranty_expires_at":
+      return "warrantyExpiresAt"
     case "comments":
       return "comments"
   }
@@ -976,9 +994,23 @@ function warningTitle(code: string, t: (k: string) => string): string {
       return t("commodities:form.step.ai.review.warning.ambiguousPrice")
     case "currency_inferred":
       return t("commodities:form.step.ai.review.warning.currencyInferred")
+    case "multiple_items":
+      return t("commodities:form.step.ai.review.warning.multipleItems")
     default:
       return code
   }
+}
+
+// warningMessage renders a global (field-less) warning. Known codes get a
+// localized message; everything else falls back to the provider's English
+// detail (or the bare code). `multiple_items` (#1983) is the one the user
+// most needs to read — the document had several products and only the most
+// prominent one was pre-filled.
+function warningMessage(w: ScanWarning, t: (k: string) => string): string {
+  if (w.code === "multiple_items") {
+    return t("commodities:form.step.ai.review.warning.multipleItems")
+  }
+  return w.detail ?? w.code
 }
 
 function errorCodeTitle(code: string | null, t: (k: string) => string): string | null {

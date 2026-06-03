@@ -111,7 +111,7 @@ type ScanRequest struct {
 //   - original_price: float64 (decimal as string is also accepted by
 //     callers, which coerce it to a number)
 //   - urls: []string
-//   - purchase_date: string in YYYY-MM-DD form
+//   - purchase_date, warranty_expires_at: string in YYYY-MM-DD form
 type FieldGuess struct {
 	Value      any     `json:"value"`
 	Confidence float64 `json:"confidence"`
@@ -124,7 +124,9 @@ type FieldGuess struct {
 type Warning struct {
 	// Code is a stable identifier the FE branches on. Known values:
 	// "low_confidence", "unreadable_serial", "ambiguous_price",
-	// "currency_inferred", "no_photo_text".
+	// "currency_inferred", "no_photo_text", "multiple_items" (the source
+	// describes more than one distinct product; only the most prominent
+	// one was extracted).
 	Code string `json:"code"`
 	// Field is the affected ScanResult.Fields key, or "" when the
 	// warning is global.
@@ -212,6 +214,7 @@ const (
 	FieldNameSerialNumber          FieldName = "serial_number"
 	FieldNameURLs                  FieldName = "urls"
 	FieldNamePurchaseDate          FieldName = "purchase_date"
+	FieldNameWarrantyExpiresAt     FieldName = "warranty_expires_at"
 	FieldNameComments              FieldName = "comments"
 )
 
@@ -226,5 +229,6 @@ var AllFieldNames = []FieldName{
 	FieldNameSerialNumber,
 	FieldNameURLs,
 	FieldNamePurchaseDate,
+	FieldNameWarrantyExpiresAt,
 	FieldNameComments,
 }

@@ -12,6 +12,10 @@ import (
 const SystemPrompt = `You are an assistant that extracts structured product information from photos and documents of a physical item.
 You will receive 1 to 5 inputs describing a single product: photos (front, back, label, packaging, etc.) and/or PDF documents such as a receipt, invoice, or product manual.
 From a receipt or invoice, read the purchase price, currency, and purchase date; put the seller/vendor/store name (there is no dedicated seller field) into "comments".
+Classify "type" as EXACTLY one of the allowed values in the schema enum; omit it if none clearly fits.
+Keep "short_name" a concise label of at most 40 characters.
+If a warranty period or expiry is shown, set "warranty_expires_at" to the warranty END date (YYYY-MM-DD); if only a duration like "2 years" is given and the purchase date is known, add the duration to the purchase date.
+If the inputs clearly describe MORE THAN ONE distinct product, extract only the single most prominent item and add a warning {"code":"multiple_items"}.
 Return ONE JSON object that matches the requested schema EXACTLY. Do not include any prose, markdown, or extra keys.
 For each field, ALWAYS include a "confidence" score between 0.0 and 1.0 reflecting how sure you are.
 Omit fields you have NO evidence for rather than guessing — null/empty is preferred over hallucinated values.`
@@ -69,16 +73,52 @@ func ResponseSchema() map[string]any {
 		"required":             []string{"value", "confidence"},
 		"additionalProperties": false,
 	}
+	// fieldGuessStringMax mirrors fieldGuessString but caps the value
+	// length, steering the model toward the form's limit (the FE still
+	// truncates defensively). Used for short_name (40 chars).
+	fieldGuessStringMax := func(maxLen int) map[string]any {
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"value":      map[string]any{"type": "string", "maxLength": maxLen},
+				"confidence": map[string]any{"type": "number", "minimum": 0, "maximum": 1},
+			},
+			"required":             []string{"value", "confidence"},
+			"additionalProperties": false,
+		}
+	}
+	// fieldGuessEnum constrains the value to a closed set of strings so the
+	// model's "type" guess stays inside the categories the FE's isKnownType
+	// accepts — otherwise a valid-but-free-form guess (e.g. "laptop") is
+	// silently dropped instead of pre-filling.
+	fieldGuessEnum := func(values []string) map[string]any {
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"value":      map[string]any{"type": "string", "enum": values},
+				"confidence": map[string]any{"type": "number", "minimum": 0, "maximum": 1},
+			},
+			"required":             []string{"value", "confidence"},
+			"additionalProperties": false,
+		}
+	}
+
+	// commodityTypes mirrors models.CommodityType* and the FE COMMODITY_TYPES
+	// constant. Hardcoded so this vendor-neutral leaf package stays free of a
+	// domain-model dependency; the FE's isKnownType is the authoritative gate,
+	// so any drift only costs a dropped type guess, never a bad write.
+	commodityTypes := []string{"white_goods", "electronics", "equipment", "furniture", "clothes", "other"}
 
 	fields := map[string]any{
 		FieldNameName:                  fieldGuessString,
-		FieldNameShortName:             fieldGuessString,
-		FieldNameType:                  fieldGuessString,
+		FieldNameShortName:             fieldGuessStringMax(40),
+		FieldNameType:                  fieldGuessEnum(commodityTypes),
 		FieldNameOriginalPrice:         fieldGuessNumber,
 		FieldNameOriginalPriceCurrency: fieldGuessString,
 		FieldNameSerialNumber:          fieldGuessString,
 		FieldNameURLs:                  fieldGuessStringArray,
 		FieldNamePurchaseDate:          fieldGuessString,
+		FieldNameWarrantyExpiresAt:     fieldGuessString,
 		FieldNameComments:              fieldGuessString,
 	}
 
@@ -93,6 +133,7 @@ func ResponseSchema() map[string]any {
 					"ambiguous_price",
 					"currency_inferred",
 					"no_photo_text",
+					"multiple_items",
 				},
 			},
 			"field":  map[string]any{"type": "string"},

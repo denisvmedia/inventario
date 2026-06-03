@@ -224,7 +224,7 @@
     "serialNumberHelp": "Found on device label or packaging",
     "serialNumberPlaceholder": "e.g. SN-MEL-2022-00412",
     "shortName": "Short name",
-    "shortNameHelp": "1–20 chars, used in compact lists and labels",
+    "shortNameHelp": "1–40 chars, used in compact lists and labels",
     "shortNamePlaceholder": "e.g. Dishwasher",
     "status": "Status",
     "tags": "Tags",
@@ -332,6 +332,7 @@
             "ambiguousPrice": "Price looks ambiguous",
             "currencyInferred": "Currency was inferred",
             "lowConfidence": "Low confidence",
+            "multipleItems": "This looks like more than one item — we pre-filled the most prominent one. Add the others separately after saving.",
             "unreadableSerial": "Serial number was hard to read"
           }
         },
@@ -469,7 +470,7 @@
     "purchaseDateRequired": "Purchase date is required for non-draft items.",
     "quantityForbidsWarranty": "Items with quantity greater than 1 don't support warranty tracking. Split into separate items for per-unit tracking.",
     "shortNameRequired": "Short name is required.",
-    "shortNameTooLong": "Short name must be 20 characters or fewer.",
+    "shortNameTooLong": "Short name must be 40 characters or fewer.",
     "statusRequired": "Pick a status.",
     "typeRequired": "Pick a type.",
     "urlInvalid": "Enter a valid URL (e.g. https://example.com)."

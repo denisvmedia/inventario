@@ -373,7 +373,7 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 
 	fields = append(fields,
 		validation.Field(&a.Name, rules.NotEmpty, validation.Length(1, 255)),
-		validation.Field(&a.ShortName, rules.NotEmpty, validation.Length(1, 20)),
+		validation.Field(&a.ShortName, rules.NotEmpty, validation.Length(1, 40)),
 		validation.Field(&a.Type, rules.NotEmpty),
 		validation.Field(&a.Status, rules.NotEmpty),
 		validation.Field(&a.PurchaseDate, whenNotDraft.WithRules(rules.NotEmpty)),

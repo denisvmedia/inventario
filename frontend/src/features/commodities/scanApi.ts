@@ -29,7 +29,13 @@ export interface ScanFieldGuess<T extends ScanFieldValue = ScanFieldValue> {
 }
 
 export interface ScanWarning {
-  code: "low_confidence" | "unreadable_serial" | "ambiguous_price" | "currency_inferred" | string
+  code:
+    | "low_confidence"
+    | "unreadable_serial"
+    | "ambiguous_price"
+    | "currency_inferred"
+    | "multiple_items"
+    | string
   field?: string
   detail?: string
 }
@@ -48,6 +54,7 @@ export type ScanFieldName =
   | "serial_number"
   | "urls"
   | "purchase_date"
+  | "warranty_expires_at"
   | "comments"
 
 export interface ScanResultFields {
@@ -59,6 +66,7 @@ export interface ScanResultFields {
   serial_number?: ScanFieldGuess<string>
   urls?: ScanFieldGuess<string[]>
   purchase_date?: ScanFieldGuess<string>
+  warranty_expires_at?: ScanFieldGuess<string>
   comments?: ScanFieldGuess<string>
 }
 
@@ -171,6 +179,7 @@ function assignField(
     case "original_price_currency":
     case "serial_number":
     case "purchase_date":
+    case "warranty_expires_at":
     case "comments":
       if (typeof value === "string") {
         out[key] = { value, confidence }

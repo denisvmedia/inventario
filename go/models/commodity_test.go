@@ -595,7 +595,7 @@ func TestCommodity_ValidateWithContext_NameLength(t *testing.T) {
 
 	// Create a very long name
 	longName := strings.Repeat("a", 256)
-	longShortName := strings.Repeat("a", 30)
+	longShortName := strings.Repeat("a", 41)
 
 	testCases := []struct {
 		name          string
@@ -634,7 +634,7 @@ func TestCommodity_ValidateWithContext_NameLength(t *testing.T) {
 				Status:                 models.CommodityStatusInUse,
 				PurchaseDate:           models.ToPDate("2023-01-01"),
 			},
-			errorContains: "the length must be between 1 and 20",
+			errorContains: "the length must be between 1 and 40",
 		},
 	}
 
