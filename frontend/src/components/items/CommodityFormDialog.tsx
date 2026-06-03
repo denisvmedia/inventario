@@ -642,6 +642,7 @@ export function CommodityFormDialog({
       apply("urls", values.urls)
     }
     if (values.comments !== undefined) apply("comments", values.comments)
+    if (values.tags !== undefined) apply("tags", values.tags)
     setStep("basics")
   }
 

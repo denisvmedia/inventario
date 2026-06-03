@@ -22,6 +22,7 @@ const SystemPrompt = "You are an assistant that extracts structured product info
 	"put the seller/vendor/store name (there is no dedicated seller field) into \"comments\".\n" +
 	"Classify \"type\" as EXACTLY one of the allowed values in the schema enum; omit it if none clearly fits.\n" +
 	"Keep \"short_name\" a concise label of at most 40 characters.\n" +
+	"Suggest 2–5 short, lowercase \"tags\" describing the product (brand, category, material, colour).\n" +
 	"If a warranty period or expiry is shown, set \"warranty_expires_at\" to the warranty END date (YYYY-MM-DD); " +
 	"if only a duration like \"2 years\" is given and the purchase date is known, add the duration to the purchase date.\n" +
 	"Return ONE JSON object that matches the requested schema EXACTLY. Do not include any prose, markdown, or extra keys.\n" +
@@ -128,6 +129,7 @@ func ResponseSchema() map[string]any {
 		FieldNamePurchaseDate:          fieldGuessString,
 		FieldNameWarrantyExpiresAt:     fieldGuessString,
 		FieldNameComments:              fieldGuessString,
+		FieldNameTags:                  fieldGuessStringArray,
 	}
 
 	warningSchema := map[string]any{
@@ -292,7 +294,7 @@ func decodeFieldValue(name string, raw json.RawMessage) (any, bool) {
 			return nil, false
 		}
 		return n, true
-	case FieldNameURLs:
+	case FieldNameURLs, FieldNameTags:
 		var s []string
 		if err := json.Unmarshal(raw, &s); err != nil {
 			return nil, false

@@ -118,6 +118,7 @@ export interface ScanAcceptedValues {
   purchase_date?: string
   warranty_expires_at?: string
   comments?: string
+  tags?: string[]
 }
 
 interface AiScanStepProps {
@@ -388,6 +389,22 @@ export function AiScanStep({
           if (Array.isArray(value)) {
             const cleaned = value.filter((u) => typeof u === "string" && u.trim() !== "")
             if (cleaned.length > 0) out.urls = cleaned
+          }
+          break
+        case "tags":
+          if (Array.isArray(value)) {
+            // Trim + drop empties + de-dupe case-insensitively so the form's
+            // tag chips stay clean.
+            const seen = new Set<string>()
+            const cleaned: string[] = []
+            for (const raw of value) {
+              if (typeof raw !== "string") continue
+              const tag = raw.trim()
+              if (tag === "" || seen.has(tag.toLowerCase())) continue
+              seen.add(tag.toLowerCase())
+              cleaned.push(tag)
+            }
+            if (cleaned.length > 0) out.tags = cleaned
           }
           break
       }
@@ -880,6 +897,7 @@ function ReviewPanel({
     "original_price",
     "original_price_currency",
     "urls",
+    "tags",
     "comments",
   ]
 
@@ -1081,6 +1099,8 @@ function fieldLabelKey(field: ScanFieldName): string {
       return "warrantyExpiresAt"
     case "comments":
       return "comments"
+    case "tags":
+      return "tags"
   }
 }
 

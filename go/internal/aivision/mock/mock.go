@@ -223,6 +223,7 @@ func DefaultResult() aivision.ScanResult {
 			aivision.FieldNamePurchaseDate:      {Value: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02"), Confidence: 0.50},
 			aivision.FieldNameWarrantyExpiresAt: {Value: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02"), Confidence: 0.45},
 			aivision.FieldNameComments:          {Value: "Black over-ear wireless headphones with active noise cancellation.", Confidence: 0.65},
+			aivision.FieldNameTags:              {Value: []string{"audio", "headphones", "wireless"}, Confidence: 0.60},
 		},
 		Warnings: []aivision.Warning{
 			{Code: "low_confidence", Field: aivision.FieldNamePurchaseDate, Detail: "purchase date inferred from packaging design only"},
@@ -247,6 +248,7 @@ func MultiItemResult() aivision.ScanResult {
 		aivision.FieldNameOriginalPriceCurrency: {Value: "EUR", Confidence: 0.90},
 		aivision.FieldNamePurchaseDate:          {Value: purchased, Confidence: 0.85},
 		aivision.FieldNameComments:              {Value: "Purchased from Sample Store s.r.o.", Confidence: 0.70},
+		aivision.FieldNameTags:                  {Value: []string{"coffee", "kitchen", "appliance"}, Confidence: 0.60},
 	}
 	frother := map[string]aivision.FieldGuess{
 		aivision.FieldNameName:                  {Value: "Milk Frother", Confidence: 0.86},
@@ -256,6 +258,7 @@ func MultiItemResult() aivision.ScanResult {
 		aivision.FieldNameOriginalPriceCurrency: {Value: "EUR", Confidence: 0.90},
 		aivision.FieldNamePurchaseDate:          {Value: purchased, Confidence: 0.85},
 		aivision.FieldNameComments:              {Value: "Purchased from Sample Store s.r.o.", Confidence: 0.70},
+		aivision.FieldNameTags:                  {Value: []string{"coffee", "kitchen"}, Confidence: 0.60},
 	}
 	return aivision.ScanResult{
 		Fields: espresso,

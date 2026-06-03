@@ -110,7 +110,7 @@ type ScanRequest struct {
 //     original_price_currency: string
 //   - original_price: float64 (decimal as string is also accepted by
 //     callers, which coerce it to a number)
-//   - urls: []string
+//   - urls, tags: []string
 //   - purchase_date, warranty_expires_at: string in YYYY-MM-DD form
 type FieldGuess struct {
 	Value      any     `json:"value"`
@@ -234,6 +234,7 @@ const (
 	FieldNamePurchaseDate          FieldName = "purchase_date"
 	FieldNameWarrantyExpiresAt     FieldName = "warranty_expires_at"
 	FieldNameComments              FieldName = "comments"
+	FieldNameTags                  FieldName = "tags"
 )
 
 // AllFieldNames is the closed set used by tests and by the prompt
@@ -249,4 +250,5 @@ var AllFieldNames = []FieldName{
 	FieldNamePurchaseDate,
 	FieldNameWarrantyExpiresAt,
 	FieldNameComments,
+	FieldNameTags,
 }

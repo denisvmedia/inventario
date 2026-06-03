@@ -56,6 +56,7 @@ export type ScanFieldName =
   | "purchase_date"
   | "warranty_expires_at"
   | "comments"
+  | "tags"
 
 export interface ScanResultFields {
   name?: ScanFieldGuess<string>
@@ -68,6 +69,7 @@ export interface ScanResultFields {
   purchase_date?: ScanFieldGuess<string>
   warranty_expires_at?: ScanFieldGuess<string>
   comments?: ScanFieldGuess<string>
+  tags?: ScanFieldGuess<string[]>
 }
 
 // One candidate product in a multi-product scan; same field shape as the
@@ -226,6 +228,7 @@ function assignField(
       }
       break
     case "urls":
+    case "tags":
       if (Array.isArray(value)) {
         const strs = value.filter((u): u is string => typeof u === "string" && u.trim() !== "")
         if (strs.length > 0) out[key] = { value: strs, confidence }

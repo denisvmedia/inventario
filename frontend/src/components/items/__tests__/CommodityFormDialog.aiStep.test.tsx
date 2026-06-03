@@ -330,6 +330,22 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     )
   })
 
+  it("renders a tags review row from the scan", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { tags: { value: ["coffee", "kitchen"], confidence: 0.7 } },
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), makePdf("x.pdf"))
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    expect(screen.getByTestId("commodity-form-ai-row-tags-value")).toHaveTextContent(
+      "coffee, kitchen"
+    )
+  })
+
   it("surfaces the multiple_items warning when the document has several products", async () => {
     server.use(
       ...commodityScanHandlers.ok(SLUG, {

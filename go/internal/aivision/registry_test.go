@@ -82,7 +82,7 @@ func TestAllFieldNames_Closed(t *testing.T) {
 
 	expected := []string{
 		"name", "short_name", "type", "original_price", "original_price_currency",
-		"serial_number", "urls", "purchase_date", "warranty_expires_at", "comments",
+		"serial_number", "urls", "purchase_date", "warranty_expires_at", "comments", "tags",
 	}
 	c.Assert(aivision.AllFieldNames, qt.DeepEquals, expected)
 }
