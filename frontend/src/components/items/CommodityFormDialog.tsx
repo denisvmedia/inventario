@@ -243,10 +243,14 @@ export function CommodityFormDialog({
   // would only 404, so we skip straight to manual entry.
   //
   // `aiStepAvailable` means "the AI scan surface is reachable in this
-  // dialog instance" — i.e. create mode with AI vision enabled. It gates the
-  // Basics-step Back button, which rewinds to the scanner. Without the AI
-  // surface Basics is the first screen and Back is a no-op.
-  const aiStepAvailable = mode === "create" && enableAiScan
+  // dialog instance" — i.e. AI vision is enabled. It gates the Basics-step
+  // Back button, which rewinds to the scanner, in ANY mode: this is the
+  // requested behaviour so that reopening a saved draft for editing can
+  // still jump to AI scan to finish filling it. Only the OPENING step stays
+  // create-only — edit mode opens on Basics (don't force the scanner when a
+  // row already exists). (Copilot flagged this vs the original PR text; the
+  // edit-mode rewind is intentional and the PR description was updated.)
+  const aiStepAvailable = enableAiScan
   const initialStep: StepKey = mode === "create" && enableAiScan ? "ai" : "basics"
   const [step, setStep] = useState<StepKey>(initialStep)
   // Tracks which form steps the user has already landed on, so the

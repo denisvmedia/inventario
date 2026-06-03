@@ -36,7 +36,7 @@ func pdfDoc(name string, bytes int) services.ScanPhotoInput {
 	copy(data, []byte("%PDF-1.7\n"))
 	return services.ScanPhotoInput{
 		Filename:    name,
-		ContentType: "application/pdf",
+		ContentType: aivision.PDFMediaType,
 		Data:        data,
 	}
 }

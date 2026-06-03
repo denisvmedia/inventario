@@ -163,9 +163,8 @@ func cloneFieldMap(src map[string]aivision.FieldGuess) map[string]aivision.Field
 	return dst
 }
 
-// cloneFieldValue defensively copies the few slice-typed values we know
-// about (currently only []string for the urls field). Scalar types pass
-// through unchanged.
+// cloneFieldValue defensively copies the slice-typed values we know about
+// (the []string fields: urls and tags). Scalar types pass through unchanged.
 func cloneFieldValue(v any) any {
 	if v == nil {
 		return nil

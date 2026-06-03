@@ -17,7 +17,9 @@ type CommodityScanResource struct {
 // CommodityScanAttributes is the result body. fields is keyed by
 // canonical field name (name, short_name, type, original_price,
 // original_price_currency, serial_number, urls, purchase_date,
-// comments); warnings is the optional non-fatal note list.
+// warranty_expires_at, comments, tags); items carries one such field set
+// per product on a multi-product scan; warnings is the optional non-fatal
+// note list.
 type CommodityScanAttributes struct {
 	Fields map[string]CommodityScanFieldGuess `json:"fields"`
 	// Items is present only when the source described more than one
@@ -47,9 +49,10 @@ type CommodityScanItem struct {
 // override (the value is not always an object, and not always strings):
 //
 //   - name, short_name, type, serial_number, comments,
-//     original_price_currency, purchase_date (YYYY-MM-DD): string
+//     original_price_currency, purchase_date,
+//     warranty_expires_at (both YYYY-MM-DD): string
 //   - original_price: number (decimal)
-//   - urls: string[]
+//   - urls, tags: string[]
 type CommodityScanFieldGuess struct {
 	// Value is polymorphic — see the type-level doc comment.
 	Value      any     `json:"value" swaggertype:"object"`
