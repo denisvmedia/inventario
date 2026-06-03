@@ -517,20 +517,3 @@ Usage (caller passes a dict so the helper knows which store's persistence to che
 checksum/recreate-on-deploy: {{ $imageTag | quote }}
 {{- end -}}
 {{- end -}}
-
-{{/*
-demoRecreateStrategy — Deployment .spec.strategy for an emptyDir demo datastore.
-
-When recreateOnDeploy is on we WANT `Recreate`: a RollingUpdate would briefly run
-the old (data-bearing) pod alongside the new empty one, and the Service could route
-to the stale pod mid-roll. `Recreate` tears the old pod down first, so the wipe is
-clean. Postgres/MinIO already pin `Recreate` unconditionally (single-writer
-emptyDir); this helper exists so Redis (no strategy block) also flips to Recreate
-when it is being roll-wiped, and to keep the intent self-documenting.
-*/}}
-{{- define "inventario.demoRecreateStrategy" -}}
-{{- if .Values.demo.recreateOnDeploy -}}
-strategy:
-  type: Recreate
-{{- end -}}
-{{- end -}}

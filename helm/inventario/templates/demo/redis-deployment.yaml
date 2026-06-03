@@ -11,12 +11,19 @@ spec:
   {{- /*
     recreateOnDeploy (master only): demo Redis is ALWAYS emptyDir (--save "",
     --appendonly no — there is no demo.redis.persistence option), so the
-    image-tag-keyed annotation below recreates the pod every master merge and
-    its strategy flips to Recreate to avoid a two-pod overlap during the roll.
-    Redis carries only ephemeral rate-limit / blacklist / CSRF state, so wiping
-    it on master is harmless; the helper is a no-op unless recreateOnDeploy=true.
+    image-tag-keyed annotation on the pod template below recreates the pod every
+    master merge, wiping it. Redis holds only ephemeral rate-limit / blacklist /
+    CSRF state, so a brief two-pod overlap during the roll (and the wipe itself)
+    is harmless — it keeps the default RollingUpdate strategy.
+
+    It deliberately does NOT pin `type: Recreate`: this Deployment originally
+    shipped with no `spec.strategy`, so the live object carries K8s's defaulted
+    `rollingUpdate`. Switching such an object to `type: Recreate` leaves that
+    defaulted `rollingUpdate` behind, which the API rejects ("may not be
+    specified when strategy type is 'Recreate'") and fails every master sync.
+    Postgres/MinIO can pin Recreate only because they shipped that way from the
+    start (no defaulted rollingUpdate to collide with).
   */}}
-  {{- include "inventario.demoRecreateStrategy" . | nindent 2 }}
   selector:
     matchLabels:
       {{- include "inventario.selectorLabels" . | nindent 6 }}
