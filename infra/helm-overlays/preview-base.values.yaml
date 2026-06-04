@@ -26,6 +26,16 @@ image:
   # is IfNotPresent (right for immutable sha tags), and the master
   # Application explicitly overrides to Always for the moving tag.
 
+# Reveal frontend crash details (error message + stack + component stack) on
+# the "Something went wrong" screen for these tailnet-gated demo/preview envs,
+# so an intermittent render crash is debuggable without a logged-in browser
+# session. Production never layers this overlay, so it stays OFF there (the
+# chart default is false). Maps to INVENTARIO_DEBUG_UI via the app ConfigMap
+# (templates/configmap.yaml). A developer can also force it per-browser with
+# `?debug=1` regardless of this flag. (#1965)
+app:
+  debugUI: true
+
 # Combined-mode Deployment — API + workers in one pod. Single replica works
 # for ephemeral previews where state lives in demo.* sidecars.
 run:

@@ -150,14 +150,17 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       await expect(cardA).toBeVisible({ timeout: 15000 })
       await expect(cardB).toBeVisible()
 
-      // Toggle the per-card checkbox on each row. Reka's CheckboxRoot
-      // is a `<button role="checkbox">` and Playwright's actionability
-      // gate flakes on overlay-positioned checkboxes — `dispatchEvent`
-      // fires the synthetic event without the visibility heuristic.
+      // Toggle the per-card checkbox on each row with a REAL click.
+      // The checkbox carries `relative z-10` so it sits above the
+      // card-wide overlay link (#1965); a real `.click()` therefore
+      // lands on the checkbox (not the overlay) and selects the row.
+      // (Before the #1965 fix this needed `dispatchEvent('click')` to
+      // bypass the actionability gate — which also masked the bug that
+      // a real user's click hit the overlay and opened the sheet.)
       for (const card of [cardA, cardB]) {
         const cb = card.locator('[data-testid="commodity-select"]')
         await cb.scrollIntoViewIfNeeded()
-        await cb.dispatchEvent('click')
+        await cb.click()
       }
 
       const bar = page.locator('[data-testid="commodities-bulk-bar"]')
@@ -323,10 +326,13 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       await expect(cardA).toBeVisible({ timeout: 15000 })
       await expect(cardB).toBeVisible()
 
+      // Real `.click()` — the checkbox sits above the overlay link
+      // (`relative z-10`, #1965), so the click selects rather than
+      // navigating to the detail sheet.
       for (const card of [cardA, cardB]) {
         const cb = card.locator('[data-testid="commodity-select"]')
         await cb.scrollIntoViewIfNeeded()
-        await cb.dispatchEvent('click')
+        await cb.click()
       }
 
       const bar = page.locator('[data-testid="commodities-bulk-bar"]')
@@ -594,6 +600,114 @@ test.describe('Commodities — bulk + filter round-trips', () => {
       await expect(page).toHaveURL(new RegExp(`/commodities/${seeded[0].id}(?:$|[?#])`), {
         timeout: 15000,
       })
+    } finally {
+      await cleanup()
+    }
+  })
+
+  // #1965 regression — the per-card selection checkbox sits beneath a
+  // card-wide overlay <Link>. Before the fix a REAL click on the
+  // checkbox landed on the overlay and opened the detail sheet instead
+  // of selecting the row (only `dispatchEvent`, which skips hit-testing,
+  // could toggle it — masking the bug). With `relative z-10` the
+  // checkbox is the top hit target, so a genuine `.click()` selects and
+  // never navigates. Both tests use a real `.click()` (NOT dispatchEvent)
+  // and guard that the sheet stayed closed and the URL never left the list.
+  test('grid: a real click on the card checkbox selects the row, not opens the sheet (#1965)', async ({
+    page,
+    request,
+  }) => {
+    const { auth, group } = await resolveContext(page, request)
+    const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const seeded: { id: string; name: string }[] = []
+    const cleanup = async () => {
+      for (const row of seeded) {
+        await deleteCommodityViaAPI(request, auth, group.slug, row.id).catch(() => {})
+      }
+    }
+
+    try {
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Checkbox Select ${suffix}`, areaId, type: 'electronics' },
+          group.groupCurrency,
+        ),
+      )
+      await gotoCommoditiesScoped(page, group, suffix)
+
+      const card = page.locator(`[data-commodity-id="${seeded[0].id}"]`)
+      await expect(card).toBeVisible({ timeout: 15000 })
+      const sheet = page.getByTestId('commodity-detail-sheet')
+      const listPath = new URL(page.url()).pathname
+
+      // REAL click — exercises the browser's actual hit-testing. If the
+      // overlay link still covered the checkbox this would either error
+      // ("intercepts pointer events") or open the sheet.
+      const cb = card.locator('[data-testid="commodity-select"]')
+      await cb.scrollIntoViewIfNeeded()
+      await cb.click()
+
+      const bar = page.getByTestId('commodities-bulk-bar')
+      await expect(bar).toBeVisible()
+      await expect(bar).toContainText(/1 item selected/i)
+      await expect(sheet).toBeHidden()
+      expect(new URL(page.url()).pathname, 'must stay on the list, not drill into the detail').toBe(
+        listPath,
+      )
+    } finally {
+      await cleanup()
+    }
+  })
+
+  test('list: a real click on the row checkbox selects the row, not opens the sheet (#1965)', async ({
+    page,
+    request,
+  }) => {
+    const { auth, group } = await resolveContext(page, request)
+    const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const seeded: { id: string; name: string }[] = []
+    const cleanup = async () => {
+      for (const row of seeded) {
+        await deleteCommodityViaAPI(request, auth, group.slug, row.id).catch(() => {})
+      }
+    }
+
+    try {
+      seeded.push(
+        await createCommodityViaAPI(
+          request,
+          auth,
+          group.slug,
+          { name: `Row Select ${suffix}`, areaId, type: 'electronics' },
+          group.groupCurrency,
+        ),
+      )
+      await gotoCommoditiesScoped(page, group, suffix)
+      // Flip to the list/table view so the row-checkbox variant is exercised.
+      await page.getByTestId('commodities-view-list').click()
+      await expect(page.getByTestId('commodities-table')).toBeVisible()
+
+      const row = page.locator(`[data-commodity-id="${seeded[0].id}"]`)
+      await expect(row).toBeVisible({ timeout: 15000 })
+      const sheet = page.getByTestId('commodity-detail-sheet')
+      const listPath = new URL(page.url()).pathname
+
+      const cb = row.locator('[data-testid="commodity-row-select"]')
+      await cb.scrollIntoViewIfNeeded()
+      await cb.click()
+
+      const bar = page.getByTestId('commodities-bulk-bar')
+      await expect(bar).toBeVisible()
+      await expect(bar).toContainText(/1 item selected/i)
+      await expect(sheet).toBeHidden()
+      expect(new URL(page.url()).pathname, 'must stay on the list, not drill into the detail').toBe(
+        listPath,
+      )
     } finally {
       await cleanup()
     }

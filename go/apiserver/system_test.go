@@ -19,6 +19,9 @@ import (
 
 func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	c := qt.New(t)
+	// Hermetic default: ignore any INVENTARIO_DEBUG_UI inherited from the
+	// CI / developer shell so the `Debug == false` assertion is deterministic.
+	t.Setenv("INVENTARIO_DEBUG_UI", "")
 
 	// Create test factory set
 	factorySet := memory.NewFactorySet()
@@ -83,6 +86,53 @@ func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	c.Assert(systemInfo.NumGoroutines, qt.Not(qt.Equals), 0)
 	c.Assert(systemInfo.Uptime, qt.Not(qt.Equals), "")
 	c.Assert(systemInfo.MemoryUsage, qt.Not(qt.Equals), "")
+	// INVENTARIO_DEBUG_UI is unset here, so the crash-screen debug flag
+	// defaults off (production-safe default).
+	c.Assert(systemInfo.Debug, qt.IsFalse)
+}
+
+// TestSystemAPI_GetSystemInfo_DebugUIEnv verifies INVENTARIO_DEBUG_UI flips
+// the `debug` field the frontend reads to reveal crash details (#1965). The
+// flag is resolved when the /system route is mounted, so the env must be set
+// before apiserver.APIServer constructs the handler.
+func TestSystemAPI_GetSystemInfo_DebugUIEnv(t *testing.T) {
+	c := qt.New(t)
+	t.Setenv("INVENTARIO_DEBUG_UI", "true")
+
+	factorySet := memory.NewFactorySet()
+	createdTenant, err := factorySet.TenantRegistry.Create(c.Context(), models.Tenant{
+		Name:      "Test Tenant",
+		Status:    models.TenantStatusActive,
+		IsDefault: true,
+	})
+	c.Assert(err, qt.IsNil)
+	testUser, err := factorySet.UserRegistry.Create(c.Context(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: createdTenant.ID},
+		Email:               "debug@example.com",
+		Name:                "Debug User",
+		IsActive:            true,
+	})
+	c.Assert(err, qt.IsNil)
+
+	params := apiserver.Params{
+		FactorySet:     factorySet,
+		UploadLocation: "file:///tmp/uploads?create_dir=1",
+		DebugInfo:      debug.NewInfo("memory://", "file:///tmp/uploads?create_dir=1"),
+		StartTime:      time.Now(),
+		JWTSecret:      testJWTSecret,
+	}
+	server := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	req := httptest.NewRequest("GET", "/api/v1/system", nil)
+	req.Header.Set("Accept", "application/json")
+	addTestUserAuthHeader(req, testUser.ID)
+	w := httptest.NewRecorder()
+	server.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusOK)
+	var systemInfo apiserver.SystemInfo
+	c.Assert(json.Unmarshal(w.Body.Bytes(), &systemInfo), qt.IsNil)
+	c.Assert(systemInfo.Debug, qt.IsTrue)
 }
 
 func TestSystemAPI_GetSystemInfoWithSettings(t *testing.T) {

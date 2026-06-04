@@ -8962,6 +8962,10 @@ const docTemplate = `{
                     "description": "System information",
                     "type": "string"
                 },
+                "debug": {
+                    "description": "Debug reflects INVENTARIO_DEBUG_UI. When true the frontend shows\ncrash details (error message + stack) on its error screen. Off by\ndefault so production never exposes a stack trace to end users.",
+                    "type": "boolean"
+                },
                 "file_storage_backend": {
                     "type": "string"
                 },
