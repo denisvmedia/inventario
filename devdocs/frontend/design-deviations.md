@@ -35,6 +35,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-06-04 — Commodity detail SHEET drops the in-sheet tab strip; full detail behind a "View full details" CTA
+
+- **Issue/PR**: #1965 / PR #2011
+- **Mock**: [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) (line ~768) renders the slide-over item detail with a tab strip inside the panel — the mock had **4** tabs (Details / Warranty / Files + one more) sitting comfortably in the overlay.
+- **Reality**: In **sheet** mode only (`variant="sheet"` in `frontend/src/pages/commodities/CommodityDetailPage.tsx`), the tab strip and the six non-Details tab bodies are no longer rendered. The sheet now shows a slim quick-peek: the existing header + status pills + action row (Edit / Insurance / Delete), the `DetailsTab` fields rendered directly (no tab strip, and the `CommodityHistoryTimeline` is dropped to keep the peek short), and a prominent outline "View full details" button (`data-testid="commodity-detail-view-full"`, `Maximize2` icon). That button navigates via `useNavigate()` to the **bare** detail href `/g/<slug>/commodities/<id>` with **no** `state.background`, so the router (`app/router.tsx`) mounts the full-page `CommodityDetailPage` with all 7 tabs. **Page** mode (`variant="page"`) is untouched — all 7 tabs stay exactly as before.
+- **Why**: The app grew from the mock's 4 tabs to **7** (Details / Warranty / Files / Lend / Service / Supplies / Maintenance). Seven triggers overflow the narrow `sm:max-w-lg` Sheet — the right-hand tabs clip past the panel edge and become unclickable (the #1965 symptom). Rather than horizontally scroll or shrink the strip, the owner's preferred direction is to make the sheet a fast quick-peek and route users to the full tabbed page for everything beyond the Details fields, mirroring `FileDetailSheet`'s "open in new tab" affordance.
+- **Approved by**: user (explicit) — issue #1965, owner-preferred direction stated in the task.
+- **Reversion plan**: Reconcile if the upstream mock adopts a 7-tab overlay (e.g. a scrollable/segmented tab strip that fits the narrow panel). At that point restore `{<Tabs … variant="sheet" />}` + the per-tab body chain in sheet mode and drop the "View full details" button + its i18n key.
+
 #### 2026-05-16 — Commodity-type marker is a Lucide icon, not an emoji
 
 - **Issue/PR**: #1392 / PR (pending)

@@ -170,6 +170,7 @@
       "salePrice": "Sale price: {{value}}",
       "statusDate": "Date: {{date}}"
     },
+    "viewFullDetails": "View full details",
     "warranty": {
       "daysRemaining_one": "{{count}} day remaining",
       "daysRemaining_other": "{{count}} days remaining",

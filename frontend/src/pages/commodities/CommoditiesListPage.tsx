@@ -1236,11 +1236,15 @@ function CommodityGridCard({
       data-testid="commodity-card"
       data-commodity-id={id}
     >
-      {/* Card-wide click target. The overlay sits underneath the
-          content in z-stacking; inert columns below carry
-          `pointer-events-none` so clicks fall through to it, while
-          interactive children (the Checkbox) re-enable pointer
-          events. Pattern lifted from LocationsListPage / #1638. */}
+      {/* Card-wide click target: an absolute overlay <Link>. Because it
+          is a *positioned* sibling, it paints ON TOP of the (static)
+          card content — so inert columns carry `pointer-events-none` to
+          let clicks fall through to it. Interactive children (the
+          Checkbox) must therefore BOTH re-enable pointer events
+          (`pointer-events-auto`) AND lift themselves above the overlay
+          (`relative z-10`); without the z-lift the link sits over the
+          checkbox and steals its click, opening the detail sheet
+          instead of toggling selection (#1965). Pattern: LocationsListPage / #1638. */}
       <Link
         to={detailHref}
         aria-label={row.name ?? ""}
@@ -1256,7 +1260,7 @@ function CommodityGridCard({
               onCheckedChange={() => onToggleSelected(id)}
               aria-label={`select ${row.name ?? ""}`}
               data-testid="commodity-select"
-              className="pointer-events-auto"
+              className="relative z-10 pointer-events-auto"
             />
             <CommodityThumb
               cover={row.cover}
@@ -1403,9 +1407,12 @@ function CommoditiesTable({
                   row.draft && "opacity-70"
                 )}
               >
-                {/* Whole-row click target — same overlay pattern as
-                    the grid card. Inert columns get pointer-events-
-                    none, the Checkbox re-enables them. */}
+                {/* Whole-row click target — same overlay pattern as the
+                    grid card: the absolute <Link> paints over the static
+                    columns, so inert columns get `pointer-events-none`
+                    and the Checkbox needs `relative z-10 pointer-events-auto`
+                    to sit above the overlay (else the row link steals the
+                    checkbox click and opens the sheet — #1965). */}
                 <Link
                   to={detailHref}
                   aria-label={row.name ?? ""}
@@ -1417,7 +1424,8 @@ function CommoditiesTable({
                   checked={selected.has(id)}
                   onCheckedChange={() => onToggleSelected(id)}
                   aria-label={`select ${row.name ?? ""}`}
-                  className="pointer-events-auto"
+                  data-testid="commodity-row-select"
+                  className="relative z-10 pointer-events-auto"
                 />
                 <div className="pointer-events-none">
                   <CommodityThumb

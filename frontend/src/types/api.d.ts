@@ -9858,6 +9858,12 @@ export type components = {
             commit?: string;
             /** @description System information */
             database_backend?: string;
+            /**
+             * @description Debug reflects INVENTARIO_DEBUG_UI. When true the frontend shows
+             *     crash details (error message + stack) on its error screen. Off by
+             *     default so production never exposes a stack trace to end users.
+             */
+            debug?: boolean;
             file_storage_backend?: string;
             go_version?: string;
             memory_usage?: string;

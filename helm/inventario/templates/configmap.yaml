@@ -7,6 +7,10 @@ metadata:
     app.kubernetes.io/component: config
 data:
   INVENTARIO_RUN_ADDR: {{ .Values.app.addr | quote }}
+  # Frontend crash-screen debug panel toggle. Read by the app via
+  # os.Getenv("INVENTARIO_DEBUG_UI") (NOT an INVENTARIO_RUN_ config key).
+  # Off by default; the preview/demo overlay sets app.debugUI=true.
+  INVENTARIO_DEBUG_UI: {{ .Values.app.debugUI | default false | quote }}
   INVENTARIO_RUN_UPLOAD_LOCATION: {{ include "inventario.uploadLocation" . | quote }}
   INVENTARIO_RUN_FILE_URL_EXPIRATION: {{ .Values.app.fileUrlExpiration | quote }}
   INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS: {{ .Values.app.maxConcurrentExports | quote }}

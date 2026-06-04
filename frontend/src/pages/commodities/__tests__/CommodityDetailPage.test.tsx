@@ -562,16 +562,66 @@ describe("<CommodityDetailSheet /> (#1546 modal-routes overlay)", () => {
     expect(screen.getByRole("heading", { name: /macbook pro 16/i, level: 1 })).toBeInTheDocument()
   })
 
-  it("supports the same `?tab=warranty` deep-link as the page variant", async () => {
+  it("renders a slim Details quick-peek (no tab strip) plus a View-full-details CTA (#1965)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
       ...commodityHandlers.detail(SLUG, ID, commodityFixture)
     )
+    // The 7-tab strip overflows the narrow Sheet, so #1965 drops it
+    // in sheet mode: the sheet now shows only the Details fields plus
+    // a "View full details" CTA into the full-page tabbed view. A
+    // `?tab=warranty` deep-link no longer surfaces Warranty content
+    // inside the sheet (that path resolves on the full page).
     renderSheet({ search: "?tab=warranty" })
-    // Warranty tab content is what the dashboard expiring-row +
-    // warranty-list deep-links target — it must work in sheet mode.
-    expect(await screen.findByTestId("commodity-detail-warranty")).toBeInTheDocument()
+    // Details quick-peek is present…
+    expect(await screen.findByTestId("commodity-detail-details")).toBeInTheDocument()
+    // …the View-full-details CTA is visible…
+    expect(screen.getByTestId("commodity-detail-view-full")).toBeInTheDocument()
+    // …and the tab strip + the (clipped) Warranty tab body are gone.
+    expect(screen.queryByTestId("commodity-detail-tabs")).toBeNull()
+    expect(screen.queryByTestId("commodity-detail-warranty")).toBeNull()
+  })
+
+  it("View full details navigates to the bare detail URL (no background → full page mounts) (#1965)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    // Mount a single route that mirrors app/router.tsx's selection:
+    // render the Sheet while `state.background` is set, else the full
+    // Page. Clicking "View full details" navigates to the bare detail
+    // href with NO background, so the page variant mounts.
+    function DetailRouteSwitch() {
+      const location = useLocation()
+      const background = (location.state as { background?: unknown } | null)?.background
+      return (
+        <GroupProvider>
+          <ConfirmProvider>
+            {background ? <CommodityDetailSheet /> : <CommodityDetailPage />}
+          </ConfirmProvider>
+        </GroupProvider>
+      )
+    }
+    renderWithProviders({
+      initialEntries: [
+        {
+          pathname: `/g/${SLUG}/commodities/${ID}`,
+          state: { background: { pathname: `/g/${SLUG}/commodities` } },
+        },
+      ],
+      routes: <Route path="/g/:groupSlug/commodities/:id" element={<DetailRouteSwitch />} />,
+    })
+    // Starts in the sheet overlay.
+    expect(await screen.findByTestId("sheet-commodity-detail")).toBeInTheDocument()
+    await user.click(screen.getByTestId("commodity-detail-view-full"))
+    // After navigation the background is gone, so the full-page
+    // variant mounts (all 7 tabs, with the tab strip).
+    expect(await screen.findByTestId("page-commodity-detail")).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-detail-tabs")).toBeInTheDocument()
+    expect(screen.queryByTestId("sheet-commodity-detail")).toBeNull()
   })
 
   it("navigates back to the backdrop URL when the user closes the sheet (Escape)", async () => {
