@@ -734,7 +734,10 @@ function Grid({ rows, onPreview, currency, slug }: RowListProps) {
   const { t } = useTranslation()
   if (!slug) return null
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="area-detail-items-grid">
+    <div
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+      data-testid="area-detail-items-grid"
+    >
       {rows
         .filter((row): row is Commodity & { id: string } => Boolean(row.id))
         .map((row) => {
@@ -847,7 +850,7 @@ function ItemsLoading({ viewMode }: { viewMode: ViewMode }) {
   }
   return (
     <div
-      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
       data-testid="area-detail-items-loading"
     >
       {Array.from({ length: 6 }).map((_, i) => (

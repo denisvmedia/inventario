@@ -18,6 +18,7 @@ import {
   FileText,
   Hash,
   MapPin,
+  Maximize2,
   Package,
   Paperclip,
   Pencil,
@@ -379,6 +380,15 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const purchaseCurrency = commodity.original_price_currency ?? groupCurrency
   const currency = groupCurrency // for the (deprecated) edit-dialog default
   const listHref = slug ? `/g/${encodeURIComponent(slug)}/commodities` : "#"
+  // Bare full-page detail href (no `state.background`). The sheet's
+  // "View full details" CTA navigates here so the router mounts the
+  // full-page <CommodityDetailPage> (all 7 tabs) rather than re-opening
+  // the slim sheet overlay — see app/router.tsx. `null` until we have a
+  // real id so the CTA hides on the (unreachable) sheet-without-id case.
+  const detailHref =
+    slug && commodity.id
+      ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodity.id)}`
+      : null
   const printHref =
     slug && commodity.id
       ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodity.id)}/print`
@@ -784,13 +794,52 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           </div>
         ) : null}
 
-        <Tabs value={tab} onChange={setTab} fileCount={fileCount} variant={variant} />
+        {/* The 7-tab strip overflows the narrow `sm:max-w-lg` Sheet,
+            so in sheet mode it's dropped entirely (#1965). The mock
+            only ever had 4 tabs; the app grew to 7 (Details / Warranty
+            / Files / Lend / Service / Supplies / Maintenance) and the
+            right-hand tabs clip past the panel edge. Page mode keeps
+            the full strip untouched. */}
+        {isSheet ? null : (
+          <Tabs value={tab} onChange={setTab} fileCount={fileCount} variant={variant} />
+        )}
 
         {/* Tab content gets `mt-4` in sheet mode to mirror the
             mock's `<TabsContent className="mt-4 space-y-0">`. Page
             mode keeps its parent `gap-6` flow. */}
         <div className={isSheet ? "mt-4" : ""}>
-          {tab === "details" ? (
+          {isSheet ? (
+            // Sheet = slim quick-peek: just the Details fields plus a
+            // CTA into the full tabbed page. We deliberately skip the
+            // `CommodityHistoryTimeline` here (page-only) so the peek
+            // stays short. The "View full details" button navigates to
+            // the BARE detail href with NO `state.background` so the
+            // router mounts the full-page <CommodityDetailPage> (all 7
+            // tabs) instead of re-opening this sheet — see app/router.tsx.
+            <>
+              <DetailsTab
+                commodity={commodity}
+                groupCurrency={groupCurrency}
+                purchaseCurrency={purchaseCurrency}
+                areaName={areaName(commodity.area_id)}
+                areaLabel={areaLabel(commodity.area_id)}
+                variant={variant}
+              />
+              {detailHref ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 w-full gap-1.5"
+                  data-testid="commodity-detail-view-full"
+                  onClick={() => navigate(detailHref)}
+                >
+                  <Maximize2 className="size-3.5" aria-hidden="true" />
+                  {t("commodities:detail.viewFullDetails")}
+                </Button>
+              ) : null}
+            </>
+          ) : tab === "details" ? (
             <>
               <DetailsTab
                 commodity={commodity}

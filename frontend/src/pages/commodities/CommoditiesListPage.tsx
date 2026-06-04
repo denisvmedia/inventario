@@ -1069,7 +1069,10 @@ function ListLoading({ viewMode }: { viewMode: ViewMode }) {
     )
   }
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="commodities-loading">
+    <div
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+      data-testid="commodities-loading"
+    >
       {Array.from({ length: 6 }).map((_, i) => (
         <Card key={i}>
           <CardHeader>
@@ -1162,7 +1165,10 @@ function CommoditiesGrid({
   serviceCounts,
 }: CommoditiesGridProps) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="commodities-grid">
+    <div
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+      data-testid="commodities-grid"
+    >
       {rows.map((row) => (
         <CommodityGridCard
           key={row.id}
