@@ -578,6 +578,12 @@ definitions:
       database_backend:
         description: System information
         type: string
+      debug:
+        description: |-
+          Debug reflects INVENTARIO_DEBUG_UI. When true the frontend shows
+          crash details (error message + stack) on its error screen. Off by
+          default so production never exposes a stack trace to end users.
+        type: boolean
       file_storage_backend:
         type: string
       go_version:

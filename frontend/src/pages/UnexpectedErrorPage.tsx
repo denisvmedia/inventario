@@ -4,6 +4,8 @@ import type { ErrorInfo } from "react"
 
 import { Button } from "@/components/ui/button"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { useSystemInfo } from "@/features/system/hooks"
+import { isUiDebugOverrideEnabled } from "@/lib/ui-debug"
 
 interface UnexpectedErrorPageProps {
   error: Error
@@ -13,12 +15,20 @@ interface UnexpectedErrorPageProps {
 
 // Full-screen error surface rendered by RootErrorBoundary when a
 // render-time exception escapes a route. Stays inside our design
-// language (status-* / destructive tokens, no raw colors) and shows
-// a dev-only details panel with stack + component stack so the dev
-// console isn't the only place to see what blew up.
+// language (status-* / destructive tokens, no raw colors) and shows a
+// details panel with stack + component stack so the browser console
+// isn't the only place to see what blew up. The panel is gated so real
+// production users never see a stack trace — it shows only when (#1965):
+//   - this is a local vite dev build (`import.meta.env.DEV`), OR
+//   - the backend reports debug mode on (`system.debug`, driven by
+//     INVENTARIO_DEBUG_UI — preview / demo deploys set it), OR
+//   - the developer opted in for this browser via `?debug=1`.
+// `useSystemInfo` is already primed on authed pages (CommitBadge fetches
+// it), so reading it here is normally a cache hit.
 export function UnexpectedErrorPage({ error, errorInfo, onReset }: UnexpectedErrorPageProps) {
   const { t } = useTranslation()
-  const isDev = import.meta.env.DEV
+  const { data: system } = useSystemInfo()
+  const showDetails = import.meta.env.DEV || system?.debug === true || isUiDebugOverrideEnabled()
   return (
     <>
       <RouteTitle title={t("errors:unexpected.documentTitle")} />
@@ -45,8 +55,11 @@ export function UnexpectedErrorPage({ error, errorInfo, onReset }: UnexpectedErr
               {t("errors:unexpected.retry")}
             </Button>
           </div>
-          {isDev ? (
-            <div className="w-full overflow-hidden rounded-xl border border-destructive/20 bg-destructive/5 text-left">
+          {showDetails ? (
+            <div
+              className="w-full overflow-hidden rounded-xl border border-destructive/20 bg-destructive/5 text-left"
+              data-testid="unexpected-error-details"
+            >
               <div className="border-b border-destructive/20 px-4 py-2.5">
                 <p className="text-xs font-semibold uppercase tracking-widest text-destructive">
                   {t("errors:unexpected.devDetails")}

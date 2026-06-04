@@ -323,6 +323,14 @@ app:
   # Env: INVENTARIO_RUN_ADDR
   addr: ":3333"
 
+  # Reveal crash details (error message + stack) on the frontend's
+  # "Something went wrong" screen. OFF by default so production never
+  # exposes a stack trace to end users; the preview/demo overlay
+  # (infra/helm-overlays/preview-base.values.yaml) flips it on. Read as
+  # INVENTARIO_DEBUG_UI (NOT under the INVENTARIO_RUN_ prefix).
+  # Env: INVENTARIO_DEBUG_UI
+  debugUI: false
+
   # File upload storage location. Supports:
   #   file:///app/uploads?create_dir=1  (local; requires persistence.enabled=true)
   #   s3://bucket?region=us-east-1      (AWS S3 or S3-compatible)

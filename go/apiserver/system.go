@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +19,12 @@ import (
 type systemAPI struct {
 	debugInfo *debug.Info
 	startTime time.Time
+	// debugUI mirrors INVENTARIO_DEBUG_UI: when true, the frontend's
+	// crash screen reveals the error message + stack instead of the
+	// generic "something went wrong" copy. Set it on non-production
+	// deploys (preview / demo / dev); leave it unset in production so a
+	// render crash never leaks a stack trace to real users (#1965).
+	debugUI bool
 }
 
 // SystemInfo contains comprehensive system information
@@ -38,6 +46,11 @@ type SystemInfo struct {
 	MemoryUsage   string `json:"memory_usage"`
 	NumGoroutines int    `json:"num_goroutines"`
 	NumCPU        int    `json:"num_cpu"`
+
+	// Debug reflects INVENTARIO_DEBUG_UI. When true the frontend shows
+	// crash details (error message + stack) on its error screen. Off by
+	// default so production never exposes a stack trace to end users.
+	Debug bool `json:"debug"`
 
 	// Settings information
 	Settings models.SettingsObject `json:"settings"`
@@ -99,6 +112,9 @@ func (api *systemAPI) getSystemInfo(w http.ResponseWriter, r *http.Request) { //
 		NumGoroutines: runtime.NumGoroutine(),
 		NumCPU:        runtime.NumCPU(),
 
+		// Debug UI toggle (INVENTARIO_DEBUG_UI), resolved once at startup.
+		Debug: api.debugUI,
+
 		// Settings
 		Settings: settings,
 	}
@@ -145,9 +161,22 @@ func System(debugInfo *debug.Info, startTime time.Time) func(r chi.Router) {
 	api := &systemAPI{
 		debugInfo: debugInfo,
 		startTime: startTime,
+		debugUI:   debugUIEnabled(),
 	}
 
 	return func(r chi.Router) {
 		r.Get("/", api.getSystemInfo) // GET /system
+	}
+}
+
+// debugUIEnabled reports whether INVENTARIO_DEBUG_UI is set to a truthy
+// value (1/true/yes/on, case-insensitive). Resolved once when the route
+// is mounted — the flag is immutable for the lifetime of a process.
+func debugUIEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("INVENTARIO_DEBUG_UI"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
 	}
 }
