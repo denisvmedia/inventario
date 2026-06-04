@@ -324,10 +324,13 @@ app:
   addr: ":3333"
 
   # Reveal crash details (error message + stack) on the frontend's
-  # "Something went wrong" screen. OFF by default so production never
-  # exposes a stack trace to end users; the preview/demo overlay
-  # (infra/helm-overlays/preview-base.values.yaml) flips it on. Read as
-  # INVENTARIO_DEBUG_UI (NOT under the INVENTARIO_RUN_ prefix).
+  # "Something went wrong" screen. OFF by default; the preview/demo overlay
+  # (infra/helm-overlays/preview-base.values.yaml) flips it on. Note: a
+  # developer can also reveal the panel per-browser via a `?debug=1` URL
+  # override regardless of this flag (low-risk, opt-in — see
+  # frontend/src/lib/ui-debug.ts), so this is "off by default", not a hard
+  # guarantee that a stack is never shown. Read as INVENTARIO_DEBUG_UI
+  # (NOT under the INVENTARIO_RUN_ prefix).
   # Env: INVENTARIO_DEBUG_UI
   debugUI: false
 

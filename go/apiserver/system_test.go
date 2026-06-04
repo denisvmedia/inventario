@@ -19,6 +19,9 @@ import (
 
 func TestSystemAPI_GetSystemInfo(t *testing.T) {
 	c := qt.New(t)
+	// Hermetic default: ignore any INVENTARIO_DEBUG_UI inherited from the
+	// CI / developer shell so the `Debug == false` assertion is deterministic.
+	t.Setenv("INVENTARIO_DEBUG_UI", "")
 
 	// Create test factory set
 	factorySet := memory.NewFactorySet()

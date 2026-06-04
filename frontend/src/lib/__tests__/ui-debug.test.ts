@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { isUiDebugOverrideEnabled } from "@/lib/ui-debug"
 
 const KEY = "inventario:debug-ui"
 
 afterEach(() => {
+  vi.restoreAllMocks()
   window.localStorage.clear()
   window.history.replaceState({}, "", "/")
 })
@@ -37,5 +38,15 @@ describe("isUiDebugOverrideEnabled", () => {
     window.history.replaceState({}, "", "/?debug=0")
     expect(isUiDebugOverrideEnabled()).toBe(false)
     expect(window.localStorage.getItem(KEY)).toBeNull()
+  })
+
+  it("honours ?debug=1 even when localStorage.setItem throws (persistence is best-effort)", () => {
+    window.history.replaceState({}, "", "/?debug=1")
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("quota exceeded")
+    })
+    // The URL-derived decision must still win — a storage failure must not
+    // flip the override off for this load.
+    expect(isUiDebugOverrideEnabled()).toBe(true)
   })
 })

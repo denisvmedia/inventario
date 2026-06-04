@@ -17,12 +17,14 @@ interface UnexpectedErrorPageProps {
 // render-time exception escapes a route. Stays inside our design
 // language (status-* / destructive tokens, no raw colors) and shows a
 // details panel with stack + component stack so the browser console
-// isn't the only place to see what blew up. The panel is gated so real
-// production users never see a stack trace — it shows only when (#1965):
+// isn't the only place to see what blew up. The panel is OFF for
+// production users by default — it shows only when (#1965):
 //   - this is a local vite dev build (`import.meta.env.DEV`), OR
 //   - the backend reports debug mode on (`system.debug`, driven by
 //     INVENTARIO_DEBUG_UI — preview / demo deploys set it), OR
-//   - the developer opted in for this browser via `?debug=1`.
+//   - the viewer deliberately opted in for their own browser via
+//     `?debug=1` (a low-risk, per-browser escape hatch that works in any
+//     env — see lib/ui-debug for the security rationale).
 // `useSystemInfo` is already primed on authed pages (CommitBadge fetches
 // it), so reading it here is normally a cache hit.
 export function UnexpectedErrorPage({ error, errorInfo, onReset }: UnexpectedErrorPageProps) {
