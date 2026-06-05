@@ -3,9 +3,14 @@ import * as React from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 
+// Mirror the wrapped Checkbox's API instead of narrowing to a bare
+// toggle, so a caller can read the new checked value (or surface an
+// indeterminate "some selected" state) without fighting the type.
+type CheckboxControl = React.ComponentProps<typeof Checkbox>
+
 interface BulkActionBarSelectAll {
-  checked: boolean
-  onCheckedChange: () => void
+  checked: CheckboxControl["checked"]
+  onCheckedChange: NonNullable<CheckboxControl["onCheckedChange"]>
   label: string
   "data-testid"?: string
 }
@@ -39,6 +44,7 @@ export function BulkActionBar({
 }: BulkActionBarProps) {
   return (
     <div
+      {...props}
       role="region"
       aria-label={regionLabel ?? (typeof label === "string" ? label : undefined)}
       className={cn(
@@ -47,7 +53,6 @@ export function BulkActionBar({
         "animate-in slide-in-from-bottom-4 fade-in-0 duration-200",
         className
       )}
-      {...props}
     >
       <div className="flex items-center gap-3">
         {selectAll ? (
