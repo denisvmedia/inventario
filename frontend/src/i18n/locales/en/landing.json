@@ -1,13 +1,13 @@
 {
   "cards": {
     "addItem": {
-      "description": "Snap a photo and let AI fill in the details — no account needed to start.",
-      "descriptionManual": "Add your first item in seconds — no account needed to start.",
-      "title": "Add New Item"
+      "description": "Snap a photo and let AI fill in the details — create your free account to save it.",
+      "descriptionManual": "Add your first item in seconds — create your free account to save it.",
+      "title": "Add your first item"
     },
-    "browse": {
-      "description": "Log in to see and manage everything you own.",
-      "title": "Browse My Items"
+    "login": {
+      "description": "Already have an account? Log in to see and manage everything you own.",
+      "title": "I already have an account"
     }
   },
   "draft": {
@@ -17,7 +17,7 @@
     "subtitle": "Track your belongings, their warranties and values in one place.",
     "title": "Everything you own, organized"
   },
-  "loginCta": "Log in to dashboard…",
+  "registerCta": "New here? Create an account",
   "resolver": {
     "defaultGroupName": "Main",
     "errorGeneric": "Something went wrong while adding your item. Your draft is safe — try again.",

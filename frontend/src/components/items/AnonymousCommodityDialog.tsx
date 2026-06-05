@@ -12,8 +12,10 @@ import { inferDefaultCurrency } from "@/lib/currency-default"
 // the resolver can find the stashed values + IndexedDB pending files.
 export const ANON_DRAFT_KEY = "commodity-draft:anon:create"
 
-// Where the resolver replays the stash. The login page bounces here
-// after auth when peekPendingFirstItem() is set.
+// Where the resolver replays the stash. The hand-off sends the visitor to
+// /register first (the anonymous fill is new-user onboarding); the marker
+// survives the register → verify-email → sign-in round-trip, and the LOGIN
+// page is what finally bounces here once peekPendingFirstItem() is set.
 const WELCOME_PATH = "/welcome"
 
 interface AnonymousCommodityDialogProps {
@@ -43,10 +45,13 @@ interface AnonymousCommodityDialogProps {
 //      auto-save — guarantees the final keystroke is captured), then
 //   2. set the pending-first-item marker (draftKey + inferred currency),
 //      then
-//   3. redirect to /login?redirect=/welcome.
-// After login, FirstItemResolver reads the marker, POSTs the stashed
-// commodity into the resolved group, uploads its IndexedDB pending
-// files, and clears everything. No entered data is ever lost.
+//   3. redirect to /register?redirect=/welcome — the anonymous fill is
+//      framed as new-user onboarding, so it hands off to account creation.
+// After the visitor creates an account, verifies their email, and signs
+// in, FirstItemResolver reads the marker, auto-creates a group seeded with
+// the item's own currency (when they have none), POSTs the stashed
+// commodity into it, uploads its IndexedDB pending files, and clears
+// everything. No entered data is ever lost.
 //
 // `defaultCurrency` is inferred from the browser locale because there's
 // no group to read one from; `areas`/`locations` are empty (the create
@@ -64,8 +69,8 @@ export function AnonymousCommodityDialog({
   // POST it — the form-shaped draft is already in localStorage via the
   // dialog's auto-save, so we just persist the request's currency into the
   // pending-first-item marker (so the auto-created "Main" group, when the
-  // user has zero groups, is seeded coherently) and redirect to login. The
-  // dialog's anonymous branch bails before any upload/clear/navigate,
+  // user has zero groups, is seeded coherently) and redirect to register.
+  // The dialog's anonymous branch bails before any upload/clear/navigate,
   // leaving the redirect to us.
   async function handleSubmit(values: CreateCommodityRequest) {
     // The dialog already mirrors form state to localStorage under
@@ -114,15 +119,15 @@ export function AnonymousCommodityDialog({
       currency: values.original_price_currency || defaultCurrency,
       savedAt: Date.now(),
     })
-    navigate(`/login?redirect=${encodeURIComponent(WELCOME_PATH)}`)
+    navigate(`/register?redirect=${encodeURIComponent(WELCOME_PATH)}`)
   }
 
   // "Save as draft" from the dismiss-confirm. Unlike an authenticated user,
   // an anonymous visitor has nowhere to persist a draft except their own
-  // account — so saving a (possibly partial) draft hands off to login just
-  // like a full submit: the dialog has already written the form-shaped draft
-  // under ANON_DRAFT_KEY, so we only set the pending-first-item marker and
-  // route to login. Currency is the locale default (the resolver re-derives
+  // account — so saving a (possibly partial) draft hands off to register
+  // just like a full submit: the dialog has already written the form-shaped
+  // draft under ANON_DRAFT_KEY, so we only set the pending-first-item marker
+  // and route to register. Currency is the locale default (the resolver re-derives
   // it from the real group on replay, so a partial draft with no price is
   // fine). Without this the user would land back on the bare landing page
   // with no obvious way to actually keep what they typed.
@@ -132,7 +137,7 @@ export function AnonymousCommodityDialog({
       currency: defaultCurrency,
       savedAt: Date.now(),
     })
-    navigate(`/login?redirect=${encodeURIComponent(WELCOME_PATH)}`)
+    navigate(`/register?redirect=${encodeURIComponent(WELCOME_PATH)}`)
   }
 
   return (

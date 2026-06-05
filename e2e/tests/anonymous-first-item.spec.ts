@@ -2,8 +2,12 @@
  * Anonymous "add your first item before login" journey (#1988).
  *
  * Exercises the no-data-loss guarantee end-to-end: a logged-out visitor
- * fills the create form on the public landing page, is sent to log in, and
- * after auth the drafted item is replayed into their group with nothing lost.
+ * fills the create form on the public landing page, is sent to REGISTER (the
+ * anonymous fill is framed as new-user onboarding), and after auth the
+ * drafted item is replayed into their group with nothing lost. A real new
+ * user would register + verify their email before signing in; this spec
+ * reuses an already-seeded account to exercise the replay mechanism itself,
+ * relying on the pending-first-item marker surviving the navigation to /login.
  *
  * The landing "Add New Item" card is gated on the `public_scan` feature flag
  * (the public AI-scan endpoint is mounted only when the operator opts in).
@@ -89,19 +93,24 @@ test.describe('Anonymous first-item journey (#1988)', () => {
 
     // 3. Fill the wizard and submit. The anonymous submit is a pure hand-off:
     //    it stashes the draft + the pending-first-item marker and redirects to
-    //    login — it does NOT POST, so we land back on /login, not a detail page.
+    //    REGISTER (the fill is new-user onboarding) — it does NOT POST, so we
+    //    land on /register, not a detail page.
     await fillCommodityWizardAndSubmit(page, commodity);
-    await page.waitForURL(/\/login(\?.*)?$/, { timeout: 15000 });
+    await page.waitForURL(/\/register(\?.*)?$/, { timeout: 15000 });
 
     // The hand-off marker is set before the redirect.
     expect(await page.evaluate((k) => localStorage.getItem(k), MARKER_KEY)).not.toBeNull();
 
-    // 4. Log in. LoginPage sees the marker and routes to /welcome instead of
-    //    the dashboard (peek, not consume — the resolver owns consumption).
-    //    The first-item reassurance drawer (#1988) auto-opens over the form on
-    //    arrival; dismiss it ("Got it") first — its modal overlay otherwise
-    //    intercepts the form clicks (this mirrors the real visitor flow). Wait
-    //    for it to fully close so its exit animation can't race the form.
+    // 4. A brand-new visitor would register + verify their email before
+    //    signing in; this spec reuses a seeded account, so we head straight to
+    //    /login. The pending-first-item marker lives in localStorage and
+    //    survives the navigation. LoginPage sees it and routes to /welcome
+    //    instead of the dashboard (peek, not consume — the resolver owns
+    //    consumption). The first-item reassurance drawer (#1988) auto-opens
+    //    over the form on arrival; dismiss it ("Got it") first — its modal
+    //    overlay otherwise intercepts the form clicks. Wait for it to fully
+    //    close so its exit animation can't race the form.
+    await page.goto('/login');
     await page.getByTestId('pending-first-item-drawer-ok').click();
     await page.getByTestId('pending-first-item-drawer').waitFor({ state: 'hidden' });
     await page.getByTestId('email').fill(TEST_CREDENTIALS.email);
