@@ -191,6 +191,10 @@ describe("<CommodityDetailPage />", () => {
     const dialog = await screen.findByTestId("files-upload-dialog")
     expect(dialog).toBeInTheDocument()
     expect(dialog).toHaveTextContent(/MacBook Pro 16/)
+    // …and it switches the underlying tab to Files (#2012) so the newly
+    // uploaded receipt is visible once the dialog closes — the Files tab
+    // content mounts behind the modal.
+    expect(await screen.findByTestId("commodity-detail-files")).toBeInTheDocument()
   })
 
   it("preselects the Warranty tab when the URL has ?tab=warranty (#1529)", async () => {
