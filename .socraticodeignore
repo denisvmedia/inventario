@@ -1,0 +1,15 @@
+# SocratiCode-specific ignores (gitignore syntax).
+#
+# Exclude git worktrees from indexing and the dependency graph. Each worktree
+# under .claude/worktrees/ is a full copy of the repo, so without this rule the
+# graph balloons ~17x (one node per copy) and fragments — `codebase_impact` /
+# graph queries on a real file return nothing because data is split across
+# per-worktree path namespaces.
+#
+# Note: the global core.excludesFile (~/.config/git/ignore) that hides these from
+# `git` is NOT read by SocratiCode — only repo-root/nested .gitignore and this
+# file are. So the rule must live here even though git already ignores it.
+#
+# Scope: only the per-worktree copies are dropped. The canonical design-mocks/
+# at the repo root stays fully indexed.
+.claude/worktrees/
