@@ -15,11 +15,12 @@ import {
   MapPinOff,
   Plus,
   Search,
-  X,
+  Trash2,
 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { BulkActionBar } from "@/components/ui/bulk-action-bar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -439,6 +440,10 @@ export function CommoditiesListPage() {
   const serviceCounts = serviceCountsQuery.data ?? {}
   const total = list.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
+  // Select-all reflects the visible (post-warranty-filter) page only, so
+  // the bulk bar's checkbox never silently queues rows the user can't
+  // see. Mirrors the table-header checkbox state.
+  const allRowsSelected = rows.length > 0 && rows.every((r) => selected.has(r.id ?? ""))
   const isLoading = list.isLoading
   const isError = list.isError
   const isEmpty = !isLoading && !isError && rows.length === 0
@@ -575,13 +580,40 @@ export function CommoditiesListPage() {
 
         {selected.size > 0 ? (
           <BulkActionBar
-            count={selected.size}
-            onClear={() => setSelected(new Set())}
-            onDelete={handleBulkDelete}
-            onMove={() => setMoveOpen(true)}
-            isDeleting={bulkDelete.isPending}
-            locked={migrationLock.locked}
-          />
+            label={t("commodities:bulk.selected", { count: selected.size })}
+            regionLabel={t("commodities:bulk.regionLabel")}
+            selectAll={{
+              checked: allRowsSelected,
+              onCheckedChange: () => toggleSelectAll(rows),
+              label: t("commodities:list.selectAll"),
+              "data-testid": "commodities-select-all",
+            }}
+            data-testid="commodities-bulk-bar"
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMoveOpen(true)}
+              disabled={migrationLock.locked}
+              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              aria-disabled={migrationLock.locked || undefined}
+              data-testid="commodities-bulk-move"
+            >
+              {t("commodities:bulk.moveButton")}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleBulkDelete}
+              disabled={bulkDelete.isPending || migrationLock.locked}
+              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              aria-disabled={migrationLock.locked || undefined}
+              data-testid="commodities-bulk-delete"
+            >
+              <Trash2 className="mr-2 size-4" aria-hidden="true" />
+              {t("commodities:bulk.deleteButton")}
+            </Button>
+          </BulkActionBar>
         ) : null}
 
         {isError ? (
@@ -980,66 +1012,6 @@ function Toolbar(props: ToolbarProps) {
           <List className="size-4" aria-hidden="true" />
         </Button>
       </div>
-    </div>
-  )
-}
-
-// ---- Bulk action bar ----------------------------------------------------
-
-interface BulkActionBarProps {
-  count: number
-  onClear: () => void
-  onDelete: () => void
-  onMove: () => void
-  isDeleting: boolean
-  locked?: boolean
-}
-
-function BulkActionBar({
-  count,
-  onClear,
-  onDelete,
-  onMove,
-  isDeleting,
-  locked,
-}: BulkActionBarProps) {
-  const { t } = useTranslation()
-  const lockTitle = locked ? t("errors:lockedDuringMigration") : undefined
-  return (
-    <div
-      className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2"
-      role="region"
-      aria-label={t("commodities:bulk.regionLabel")}
-      data-testid="commodities-bulk-bar"
-    >
-      <span className="text-sm font-medium">{t("commodities:bulk.selected", { count })}</span>
-      <Separator orientation="vertical" className="h-4" />
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onMove}
-        disabled={locked}
-        title={lockTitle}
-        aria-disabled={locked || undefined}
-        data-testid="commodities-bulk-move"
-      >
-        {t("commodities:bulk.moveButton")}
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onDelete}
-        disabled={isDeleting || locked}
-        title={lockTitle}
-        aria-disabled={locked || undefined}
-        data-testid="commodities-bulk-delete"
-      >
-        {t("commodities:bulk.deleteButton")}
-      </Button>
-      <Button variant="ghost" size="sm" onClick={onClear} className="ml-auto gap-1">
-        <X className="size-3.5" aria-hidden="true" />
-        {t("common:actions.cancel")}
-      </Button>
     </div>
   )
 }

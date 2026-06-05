@@ -128,7 +128,7 @@ export function FileCard({
       data-category={file.category}
       data-mime-group={visual.group}
       className={cn(
-        "group relative flex h-full flex-col overflow-hidden focus-within:ring-2 focus-within:ring-ring",
+        "group relative flex h-full cursor-pointer flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md focus-within:ring-2 focus-within:ring-ring",
         selected && "ring-2 ring-primary"
       )}
     >
