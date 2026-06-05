@@ -1,8 +1,9 @@
 /**
  * E2E for the in-app feedback dialog (#1387).
  *
- * Drives the full flow: open Settings → Help, click the "Send feedback"
- * row, fill in the form, submit, and assert the success toast.
+ * Drives the full flow: open Settings → Help, click the "Contact
+ * support / share feedback" row, fill in the form, submit, and assert
+ * the success toast.
  *
  * The backend defaults to the stub email service in the e2e harness so
  * the POST /api/v1/feedback request goes all the way through the
@@ -21,7 +22,8 @@ test.describe('Send feedback dialog (#1387)', () => {
     await page.locator('[data-testid="settings-nav-help"]').click();
     await expect(page.locator('[data-testid="section-help"]')).toBeVisible();
 
-    // Click the "Send feedback" row — it opens the FeedbackDialog.
+    // Click the "Contact support / share feedback" row — it opens the
+    // FeedbackDialog.
     await page.locator('[data-testid="help-row-feedback"]').click();
     const dialog = page.locator('[data-testid="feedback-dialog"]');
     await expect(dialog).toBeVisible();

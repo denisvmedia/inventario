@@ -364,13 +364,31 @@ describe("<SettingsPage />", () => {
     })
   })
 
-  it("help section adds a Contact support row and a version badge on What's new", async () => {
+  it("help section shows the merged support/feedback row and a version badge on What's new", async () => {
     server.use(...baseHandlers)
     const user = userEvent.setup()
     renderSettings()
     await user.click(await screen.findByTestId("settings-nav-help"))
-    expect(screen.getByTestId("help-row-contactSupport")).toBeInTheDocument()
+    // #1387 folded the static "Contact support" mailto row into the
+    // feedback entry point — the dialog's "Question" type doubles as
+    // the support channel, so there's a single row now.
+    expect(screen.queryByTestId("help-row-contactSupport")).not.toBeInTheDocument()
+    const feedbackRow = screen.getByTestId("help-row-feedback")
+    expect(feedbackRow).toHaveTextContent("Contact support / share feedback")
     expect(screen.getByTestId("help-row-whatsNew-badge")).toBeInTheDocument()
+  })
+
+  it("merged support/feedback row opens the FeedbackDialog in place (#1387)", async () => {
+    server.use(...baseHandlers)
+    const user = userEvent.setup()
+    renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-help"))
+    const row = screen.getByTestId("help-row-feedback")
+    // It's a click-to-open trigger, not a navigation link.
+    expect(row.tagName).toBe("BUTTON")
+    expect(screen.queryByTestId("feedback-dialog")).not.toBeInTheDocument()
+    await user.click(row)
+    expect(await screen.findByTestId("feedback-dialog")).toBeVisible()
   })
 
   it("Keyboard shortcuts row opens the cheat-sheet dialog in place (#1385)", async () => {
