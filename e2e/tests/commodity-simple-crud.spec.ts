@@ -53,8 +53,6 @@ function makeTestData() {
       type: 'Electronics',
       count: 2,
       originalPrice: 200,
-      originalPriceCurrency: 'CZK',
-      purchaseDate: new Date().toISOString().split('T')[0],
       serialNumber: `Updated-SN-${suffix}`,
       extraSerialNumbers: [`Updated-ESN-${suffix}`],
       partNumbers: [`Updated-PN-${suffix}`, `Additional-PN-${suffix}`],

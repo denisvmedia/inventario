@@ -232,8 +232,11 @@ test.describe.serial('AI vision scan flow', () => {
     await page
       .locator('[data-testid="commodity-form-ai-file-input"]')
       .setInputFiles(['fixtures/files/image.jpg', 'fixtures/files/invoice.pdf']);
-    await expect(page.locator('[data-testid="commodity-form-ai-thumb"]')).toHaveCount(1);
-    await expect(page.locator('[data-testid="commodity-form-ai-pdf"]')).toHaveCount(1);
+    // Both files stage as a tile under the shared `commodity-form-ai-thumb`
+    // wrapper (image AND PDF), so the total is 2; the PDF additionally
+    // carries the `-pdf` document-tile testid, so exactly one of them is a PDF.
+    await expect(page.locator('[data-testid="commodity-form-ai-thumb"]')).toHaveCount(2);
+    await expect(page.locator('[data-testid="commodity-form-ai-thumb-pdf"]')).toHaveCount(1);
 
     await page.locator('[data-testid="commodity-form-ai-scan"]').click();
     await page.locator('[data-testid="commodity-form-ai-review"]').waitFor();
