@@ -34,6 +34,10 @@ func TestSwaggerRouteCoverage(t *testing.T) {
 	// be (incorrectly) reported as stale.
 	params.PublicScanEnabled = true
 	params.CommodityScanService = services.NewCommodityScanService(nil, params.FactorySet.CommodityScanAuditRegistry, services.CommodityScanConfig{})
+	// /seed is gated off by default (#2039) but documented via its
+	// @Router annotation, so mount it here too or its operation reads as
+	// stale.
+	params.SeedEndpointEnabled = true
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
 	router, ok := handler.(chi.Router)
 	if !ok {

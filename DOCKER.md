@@ -18,9 +18,14 @@ This document describes how to run Inventario using Docker and Docker Compose wi
    Open your browser and navigate to http://localhost:3333
 
 4. **Seed the database** (optional):
-   ```bash
-   curl -X POST http://localhost:3333/api/v1/seed
-   ```
+
+   The compose stack seeds automatically: the `inventario-init-data` service
+   boots a throwaway server with the seed route enabled and POSTs `/seed`
+   when `SEED_DATABASE=true` (the default in `.env.example`). The long-running
+   `inventario` service deliberately does NOT expose `/api/v1/seed` — that
+   route runs a privileged, RLS-bypassing operation and is off by default
+   (#2039). To re-seed manually, set `SEED_DATABASE=true` and recreate the
+   `inventario-init-data` service rather than curling the app service.
 
 ## Configuration
 
@@ -105,8 +110,10 @@ docker-compose exec -T postgres psql -U inventario -d inventario < backup.sql
 # Execute commands in the application container
 docker-compose exec inventario ./inventario --help
 
-# Seed the database
-docker-compose exec inventario curl -X POST http://localhost:3333/api/v1/seed
+# Seed the database (handled automatically by the inventario-init-data
+# service; the long-running inventario service does NOT expose /api/v1/seed —
+# it is off by default, #2039). Re-seed by recreating inventario-init-data
+# with SEED_DATABASE=true.
 
 # Run database migrations
 docker-compose exec inventario ./inventario migrate

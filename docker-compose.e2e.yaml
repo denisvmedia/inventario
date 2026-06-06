@@ -44,6 +44,10 @@ services:
       # admin. OFF by default in the binary — /api/v1/seed is
       # unauthenticated, so this must never be set in a real deployment.
       INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE: "true"
+      # Mount /api/v1/seed on the init-data seed server (#2039). The base
+      # compose already sets this on inventario-init-data; repeated here so
+      # the e2e seed path is self-documenting and survives any base change.
+      INVENTARIO_RUN_ENABLE_SEED_ENDPOINT: "true"
 
   inventario:
     image: ${INVENTARIO_IMAGE:?INVENTARIO_IMAGE must be set}

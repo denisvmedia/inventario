@@ -70,7 +70,7 @@ The system implements enterprise-grade multi-tenancy with:
   4. Review the generated SQL, run `go test ./schema/migrations/...` locally, then commit both files.
   If the generator output looks wrong, fix the **model annotations** and regenerate — don't edit the SQL by hand.
   **Hand-written migrations exception.** Some changes can't be expressed via model annotations (data backfills, view refactors, multi-step `ALTER`s, one-off custom DDL). In those rare cases — **STOP and ask the user for explicit permission before writing SQL by hand**. Do not improvise. The user will tell you whether to handcraft the migration or land it as a follow-up using a different approach (e.g. a runtime backfill worker). The CI check still has to pass afterward, so the user's approval includes the trade-off of suppressing drift detection for that specific file.
-- `curl http://localhost:3333/api/v1/seed` - Seed the database with test data
+- `curl http://localhost:3333/api/v1/seed` - Seed the database with test data (the route is gated off by default since #2039; run the server with `--enable-seed-endpoint` / `INVENTARIO_RUN_ENABLE_SEED_ENDPOINT=true` first)
 - `./inventario tenants create` - Create tenants for initial setup
 - `./inventario tenants list` - List all tenants with filtering
 - `./inventario tenants get <id-or-slug>` - Get detailed tenant information

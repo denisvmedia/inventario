@@ -15,6 +15,48 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
+// seedURL is the public, gated seed endpoint path (#2039).
+const seedURL = "/api/v1/seed"
+
+func postSeed(handler http.Handler) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, seedURL, strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	return rr
+}
+
+// TestSeed_FlagOff_NotMounted is the #2039 regression: /seed runs a
+// privileged, RLS-bypassing service operation, so it stays absent (404) when
+// SeedEndpointEnabled is false — the production default.
+func TestSeed_FlagOff_NotMounted(t *testing.T) {
+	c := qt.New(t)
+
+	params, _, _ := newParams()
+	params.SeedEndpointEnabled = false // explicit: route must not be mounted
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	rr := postSeed(handler)
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+}
+
+// TestSeed_FlagOn_Mounted asserts the route is reachable and seeds when the
+// operator opts in via SeedEndpointEnabled (dev / e2e / init-data Job).
+func TestSeed_FlagOn_Mounted(t *testing.T) {
+	c := qt.New(t)
+
+	params, _, _ := newParams()
+	params.SeedEndpointEnabled = true
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	rr := postSeed(handler)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+
+	var resp apiserver.SeedResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &resp), qt.IsNil)
+	c.Assert(resp.Status, qt.Equals, "success")
+}
+
 func TestSeed_FirstCallReportsFreshSeed(t *testing.T) {
 	c := qt.New(t)
 

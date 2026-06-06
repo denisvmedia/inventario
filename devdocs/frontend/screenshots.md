@@ -46,8 +46,13 @@ for screenshots.
   --addr=":3333" \
   --db-dsn="memory://" \
   --no-auth-rate-limit \
-  --no-global-rate-limit
+  --no-global-rate-limit \
+  --enable-seed-endpoint
 ```
+
+`--enable-seed-endpoint` mounts the public `POST /api/v1/seed` route the next
+step curls. It is OFF by default — the route runs a privileged, RLS-bypassing
+operation — and must never be enabled in a real deployment (#2039).
 
 `memory://` means data lives in process memory and goes away on restart —
 fine for screenshots, useless for anything else. Drop the rate-limit
