@@ -160,13 +160,23 @@ describe("<FeedbackDialog />", () => {
         // Small delay so the in-flight (disabled) → settled (enabled)
         // transition on the submit button is observable below.
         await delay(30)
+        // Mirror the real jsonapi.Errors payload the BE emits for the
+        // errx sentinel (see apiserver/feedback.go): `status` is a text
+        // label, `error` is an errormarshal object, and `code` carries
+        // the dotted product code lib/http.ts keys off.
         return HttpResponse.json(
           {
             errors: [
               {
-                status: "503",
+                status: "Service Unavailable",
+                error: {
+                  error: {
+                    message: "feedback is not configured on this deployment",
+                    sentinels: ["feedback is not configured on this deployment"],
+                  },
+                  type: "*errx.sentinel",
+                },
                 code: "feedback.not_configured",
-                error: "feedback is not configured on this deployment",
               },
             ],
           },

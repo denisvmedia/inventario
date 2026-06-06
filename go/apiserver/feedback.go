@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/go-extras/errx"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/errormarshal"
@@ -58,7 +59,10 @@ const feedbackMaxRequestBodyBytes = feedbackMaxMessageBytes +
 const feedbackNotConfiguredCode = "feedback.not_configured"
 
 // errFeedbackNotConfigured is the sentinel surfaced by the 503 above.
-var errFeedbackNotConfigured = errors.New("feedback is not configured on this deployment")
+// errx.NewSentinel (not errors.New) keeps it consistent with the other
+// feature-level sentinels — e.g. aivision.ErrProviderDisabled — so it
+// classifies/wraps and asserts via errors.Is the same way across packages.
+var errFeedbackNotConfigured = errx.NewSentinel("feedback is not configured on this deployment")
 
 // FeedbackParams wires the dependencies of the /api/v1/feedback route.
 //
