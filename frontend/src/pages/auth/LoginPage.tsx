@@ -116,7 +116,17 @@ export function LoginPage() {
   // after the hooks above to keep the Rules-of-Hooks call order stable.
   // sanitizeRedirectPath rejects absolute / protocol-relative URLs so a
   // crafted ?redirect= query can't open-redirect off the app.
-  if (isAuthenticated) {
+  //
+  // Gate on !loginMutation.isSuccess so a JUST-completed form login does NOT
+  // also redirect through this guard: finalizeLogin() is the sole post-login
+  // navigator. Without the gate, a successful login re-renders with
+  // isAuthenticated=true and this guard races finalizeLogin — and when the
+  // page was reached WITHOUT a ?redirect (the #1988 first-item hand-off now
+  // arrives via /register → verify-email → /login, dropping the query), the
+  // guard would send the user to "/" and interrupt FirstItemResolver
+  // mid-replay. Deferring to finalizeLogin keeps its marker → /welcome route
+  // authoritative.
+  if (isAuthenticated && !loginMutation.isSuccess) {
     return <Navigate to={sanitizeRedirectPath(params.get("redirect"))} replace />
   }
 

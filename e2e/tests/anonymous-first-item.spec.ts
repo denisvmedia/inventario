@@ -9,14 +9,16 @@
  * reuses an already-seeded account to exercise the replay mechanism itself,
  * relying on the pending-first-item marker surviving the navigation to /login.
  *
- * The landing "Add New Item" card is gated on the `public_scan` feature flag
- * (the public AI-scan endpoint is mounted only when the operator opts in).
- * Rather than coordinate that backend env across the whole e2e job matrix —
- * the same call ai-scan.spec.ts made for the mock provider — we stub
- * GET /api/v1/feature-flags to report `public_scan: true`. The AI scan itself
- * is skipped via "Fill manually", so the flow has NO dependency on the scan
- * endpoint; the post-login replay POSTs to the REAL backend, so the item is
- * genuinely created and verified.
+ * The landing "Add your first item" card is ALWAYS shown; the `public_scan`
+ * feature flag only controls whether the AI photo-scan *step* renders inside
+ * the create dialog (the public AI-scan endpoint is mounted only when the
+ * operator opts in). This test drives that AI step (step 2 dismisses it via
+ * "Fill manually"), so — rather than coordinate that backend env across the
+ * whole e2e job matrix, the same call ai-scan.spec.ts made for the mock
+ * provider — we stub GET /api/v1/feature-flags to report `public_scan: true`
+ * so the AI step is present to dismiss. The scan itself never runs, so the
+ * flow has NO dependency on the scan endpoint; the post-login replay POSTs to
+ * the REAL backend, so the item is genuinely created and verified.
  *
  * Plain @playwright/test (no app-fixture) so the page starts logged OUT —
  * RootGate only renders the landing surface for an anonymous visitor.
