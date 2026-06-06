@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useGroupServices } from "@/features/services/hooks"
@@ -72,10 +72,8 @@ export function ServicesListPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="sr-only">{t("services:list.title")}</CardTitle>
-        </CardHeader>
         <CardContent>
+          <h2 className="sr-only">{t("services:list.title")}</h2>
           {list.isLoading ? (
             <div className="flex flex-col gap-2" data-testid="in-service-loading">
               <Skeleton className="h-10" />
@@ -87,92 +85,94 @@ export function ServicesListPage() {
               {t("services:list.empty")}
             </p>
           ) : (
-            <table className="w-full text-sm" data-testid="in-service-table">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-2 py-2 font-medium">{t("services:list.headerItem")}</th>
-                  <th className="px-2 py-2 font-medium">{t("services:list.headerProvider")}</th>
-                  <th className="px-2 py-2 font-medium">{t("services:list.headerReason")}</th>
-                  <th className="px-2 py-2 font-medium">{t("services:list.headerSentAt")}</th>
-                  <th className="px-2 py-2 font-medium">
-                    {t("services:list.headerExpectedReturnAt")}
-                  </th>
-                  <th className="px-2 py-2 font-medium">{t("services:list.headerCost")}</th>
-                  <th className="px-2 py-2 font-medium">{t("services:list.headerStatus")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(list.data?.services ?? []).map(({ service, commodity }) => {
-                  const overdueDays = daysOverdue(service)
-                  const open = isOpen(service)
-                  return (
-                    <tr
-                      key={service.id}
-                      className="border-t border-border"
-                      data-testid={`in-service-row-${service.id}`}
-                    >
-                      <td className="px-2 py-2">
-                        {commodity ? (
-                          <Link
-                            to={`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodity.id)}`}
-                            className="font-medium hover:underline"
-                          >
-                            {commodity.name}
-                          </Link>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-2">
-                        <span>{service.provider_name}</span>
-                        {service.provider_contact ? (
-                          <span className="ml-1 text-muted-foreground">
-                            ({service.provider_contact})
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-2 py-2 text-muted-foreground">
-                        {service.reason ? service.reason : "—"}
-                      </td>
-                      <td className="px-2 py-2 text-muted-foreground">
-                        {service.sent_at ? formatDate(service.sent_at as string) : ""}
-                      </td>
-                      <td className="px-2 py-2 text-muted-foreground">
-                        {service.expected_return_at
-                          ? formatDate(service.expected_return_at as string)
-                          : "—"}
-                      </td>
-                      <td className="px-2 py-2 text-muted-foreground">
-                        {service.cost_amount && service.cost_currency ? (
-                          <>
-                            {service.cost_amount} {service.cost_currency}
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="px-2 py-2">
-                        {!open ? (
-                          <Badge variant="secondary">
-                            {t("services:list.returnedStatus", {
-                              date: service.returned_at
-                                ? formatDate(service.returned_at as string)
-                                : "",
-                            })}
-                          </Badge>
-                        ) : overdueDays > 0 ? (
-                          <Badge variant="destructive">
-                            {t("services:list.overdueStatus", { count: overdueDays })}
-                          </Badge>
-                        ) : (
-                          <Badge>{t("services:list.openStatus")}</Badge>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="in-service-table">
+                <thead className="whitespace-nowrap text-left text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-2 py-2 font-medium">{t("services:list.headerItem")}</th>
+                    <th className="px-2 py-2 font-medium">{t("services:list.headerProvider")}</th>
+                    <th className="px-2 py-2 font-medium">{t("services:list.headerReason")}</th>
+                    <th className="px-2 py-2 font-medium">{t("services:list.headerSentAt")}</th>
+                    <th className="px-2 py-2 font-medium">
+                      {t("services:list.headerExpectedReturnAt")}
+                    </th>
+                    <th className="px-2 py-2 font-medium">{t("services:list.headerCost")}</th>
+                    <th className="px-2 py-2 font-medium">{t("services:list.headerStatus")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(list.data?.services ?? []).map(({ service, commodity }) => {
+                    const overdueDays = daysOverdue(service)
+                    const open = isOpen(service)
+                    return (
+                      <tr
+                        key={service.id}
+                        className="border-t border-border"
+                        data-testid={`in-service-row-${service.id}`}
+                      >
+                        <td className="px-2 py-2">
+                          {commodity ? (
+                            <Link
+                              to={`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodity.id)}`}
+                              className="font-medium hover:underline"
+                            >
+                              {commodity.name}
+                            </Link>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2">
+                          <span>{service.provider_name}</span>
+                          {service.provider_contact ? (
+                            <span className="ml-1 text-muted-foreground">
+                              ({service.provider_contact})
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-2 py-2 text-muted-foreground">
+                          {service.reason ? service.reason : "—"}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 text-muted-foreground">
+                          {service.sent_at ? formatDate(service.sent_at as string) : ""}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 text-muted-foreground">
+                          {service.expected_return_at
+                            ? formatDate(service.expected_return_at as string)
+                            : "—"}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 text-muted-foreground">
+                          {service.cost_amount && service.cost_currency ? (
+                            <>
+                              {service.cost_amount} {service.cost_currency}
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="px-2 py-2">
+                          {!open ? (
+                            <Badge variant="secondary">
+                              {t("services:list.returnedStatus", {
+                                date: service.returned_at
+                                  ? formatDate(service.returned_at as string)
+                                  : "",
+                              })}
+                            </Badge>
+                          ) : overdueDays > 0 ? (
+                            <Badge variant="destructive">
+                              {t("services:list.overdueStatus", { count: overdueDays })}
+                            </Badge>
+                          ) : (
+                            <Badge>{t("services:list.openStatus")}</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>
