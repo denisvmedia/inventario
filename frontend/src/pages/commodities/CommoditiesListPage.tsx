@@ -233,6 +233,7 @@ export function CommoditiesListPage() {
   // bulk action would surprise them.
   const typesKey = types.join(",")
   const statusesKey = statuses.join(",")
+  const warrantyKey = warrantyFilter.join(",")
   useEffect(() => {
     // Clear page-local selection on filter/page change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -247,6 +248,7 @@ export function CommoditiesListPage() {
     lentOutOnly,
     unassignedOnly,
     sortRaw,
+    warrantyKey,
   ])
 
   function toggleSelected(id: string) {
@@ -615,7 +617,14 @@ export function CommoditiesListPage() {
               }}
               aria-disabled={migrationLock.locked || undefined}
               title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-              className={migrationLock.locked ? "cursor-not-allowed opacity-50" : undefined}
+              // Neutralize the hover bg too: Button's `disabled:` styles
+              // don't apply under `aria-disabled`, so without this the
+              // locked button would still light up on hover.
+              className={
+                migrationLock.locked
+                  ? "cursor-not-allowed opacity-50 hover:bg-background hover:text-foreground"
+                  : undefined
+              }
               data-testid="commodities-bulk-move"
             >
               {t("commodities:bulk.moveButton")}
@@ -632,7 +641,13 @@ export function CommoditiesListPage() {
               disabled={bulkDelete.isPending}
               aria-disabled={migrationLock.locked || undefined}
               title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-              className={migrationLock.locked ? "cursor-not-allowed opacity-50" : undefined}
+              // Neutralize the hover bg under `aria-disabled` (Button's
+              // `disabled:` styles only key off the real attribute).
+              className={
+                migrationLock.locked
+                  ? "cursor-not-allowed opacity-50 hover:bg-destructive hover:text-white"
+                  : undefined
+              }
               data-testid="commodities-bulk-delete"
             >
               <Trash2 className="mr-2 size-4" aria-hidden="true" />

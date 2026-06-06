@@ -128,7 +128,7 @@ export function FileCard({
       data-category={file.category}
       data-mime-group={visual.group}
       className={cn(
-        "group relative flex h-full cursor-pointer flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md focus-within:ring-2 focus-within:ring-ring [&_button]:cursor-pointer",
+        "group relative flex h-full cursor-pointer flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md focus-within:ring-2 focus-within:ring-ring",
         selected && "ring-2 ring-primary"
       )}
     >
@@ -170,7 +170,7 @@ export function FileCard({
         onClick={() => onOpen(file.id)}
         aria-label={t("files:list.openDetail", { title, defaultValue: `Open ${title}` })}
         data-testid={`file-card-open-${file.id}`}
-        className="flex flex-1 flex-col text-left focus-visible:outline-none"
+        className="flex flex-1 cursor-pointer flex-col text-left focus-visible:outline-none"
       >
         <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
           {renderImage ? (
