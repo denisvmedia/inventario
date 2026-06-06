@@ -19,6 +19,13 @@ import { expect } from '@playwright/test';
 import { createLocation, deleteLocation } from './includes/locations.js';
 import { createArea, deleteArea } from './includes/areas.js';
 import { navigateTo, TO_COMMODITIES, TO_LOCATIONS } from './includes/navigate.js';
+import {
+  BACK_TO_COMMODITIES,
+  deleteCommodity,
+  fillCommodityWizardAndSubmit,
+  type TestCommodity,
+} from './includes/commodities.js';
+import { expectCommodityFilesCount } from './includes/uploads.js';
 
 function makeTestData() {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -176,5 +183,84 @@ test.describe.serial('AI vision scan flow', () => {
     await navigateTo(page, recorder, TO_LOCATIONS);
     await deleteArea(page, recorder, area.name, location.name);
     await deleteLocation(page, recorder, location.name);
+  });
+
+  test('attach path: scanned image + PDF end up on the created commodity (#1983 Part A)', async ({
+    page,
+    recorder,
+  }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const commodity: TestCommodity = {
+      name: `AI Attach Item ${suffix}`,
+      shortName: `AIAttach-${suffix.slice(-6)}`,
+      type: 'electronics',
+      count: 1,
+      // Non-draft create needs a purchase date + original price. Use the
+      // e2e group's own currency (CZK) so original===group and the
+      // converted-price field stays hidden (no foreign-currency branch).
+      originalPrice: 100,
+      originalPriceCurrency: 'CZK',
+      currentPrice: 100,
+      purchaseDate: '2024-01-15',
+    };
+
+    // Stub the scan so the review phase lands with at least one field —
+    // the actual prefill is overwritten by fillCommodityWizardAndSubmit;
+    // what we're exercising here is that the *source files* survive accept.
+    await page.route(SCAN_URL_GLOB, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/vnd.api+json',
+        body: JSON.stringify({
+          data: {
+            type: 'commodity_scan',
+            attributes: {
+              fields: { name: { value: 'Scanned Stub', confidence: 0.95 } },
+              warnings: [],
+            },
+          },
+        }),
+      })
+    );
+
+    await navigateTo(page, recorder, TO_COMMODITIES);
+    await page.locator('[data-testid="commodities-add-button"]').first().click();
+    await page.locator('[data-testid="commodity-form-ai-step"]').waitFor();
+
+    // Feed the AI step one photo + one PDF (a receipt). Both are scan
+    // sources; after accept they must be retained and attached.
+    await page
+      .locator('[data-testid="commodity-form-ai-file-input"]')
+      .setInputFiles(['fixtures/files/image.jpg', 'fixtures/files/invoice.pdf']);
+    // Both files stage as a tile under the shared `commodity-form-ai-thumb`
+    // wrapper (image AND PDF), so the total is 2; the PDF additionally
+    // carries the `-pdf` document-tile testid, so exactly one of them is a PDF.
+    await expect(page.locator('[data-testid="commodity-form-ai-thumb"]')).toHaveCount(2);
+    await expect(page.locator('[data-testid="commodity-form-ai-thumb-pdf"]')).toHaveCount(1);
+
+    await page.locator('[data-testid="commodity-form-ai-scan"]').click();
+    await page.locator('[data-testid="commodity-form-ai-review"]').waitFor();
+    // The review phase tells the user the scanned files will be kept.
+    await expect(
+      page.locator('[data-testid="commodity-form-ai-attach-note"]')
+    ).toBeVisible();
+    await page.locator('[data-testid="commodity-form-ai-use-values"]').click();
+
+    // Finish the wizard (Basics → … → Files) and submit. The two scanned
+    // files ride along in the Files step's pending queue.
+    await fillCommodityWizardAndSubmit(page, commodity);
+    await page.waitForSelector('[data-testid="page-commodity-detail"]');
+    await page.waitForLoadState('networkidle');
+
+    // Open the Files tab and assert both source files were attached with the
+    // right categorisation: the photo as an image, the PDF as a document.
+    await page.getByTestId('commodity-detail-tab-files').click();
+    await expect(page.getByTestId('commodity-detail-files')).toBeVisible();
+    await expectCommodityFilesCount(page, 2);
+    await expect(page.getByTestId('commodity-files-chip-images-count')).toHaveText('1');
+    await expect(page.getByTestId('commodity-files-chip-documents-count')).toHaveText('1');
+
+    // Cleanup — deleting the commodity cascades to its two attached files.
+    await deleteCommodity(page, recorder, commodity.name, BACK_TO_COMMODITIES);
   });
 });
