@@ -46,7 +46,13 @@ they reach `/api/v1/admin/*`.
   `ensureSystemAdminUser` fixture, which is gated behind the
   `INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE` opt-in (off by default) — so
   the unauthenticated `/api/v1/seed` endpoint cannot mint a
-  cross-tenant admin in a production deployment.
+  cross-tenant admin in a production deployment. Defence in depth
+  (#2039): the `/api/v1/seed` route itself is now off by default and is
+  only mounted when `INVENTARIO_RUN_ENABLE_SEED_ENDPOINT=true`
+  (`--enable-seed-endpoint`), set only on the throwaway init-data /
+  e2e seed servers — production app servers do not expose it at all,
+  so an anonymous caller gets a 404 rather than reaching the
+  privileged, RLS-bypassing seed path.
 - The JWT `is_system_admin` claim is signed (HS256) with the server
   secret; a tampered claim fails signature verification. The claim is
   an advisory FE hint only — backend authorization always re-queries

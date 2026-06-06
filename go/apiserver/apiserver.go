@@ -260,6 +260,16 @@ type Params struct {
 	// AuthRateLimiter so existing callers/tests keep working.
 	PublicScanRateLimiter services.AuthRateLimiter
 
+	// SeedEndpointEnabled gates the PUBLIC, UNAUTHENTICATED POST /seed
+	// endpoint (#2039). Default FALSE: Seed runs a privileged,
+	// RLS-bypassing service-registry operation (debug/seeddata), so an
+	// anonymous caller could pollute the production tenant. It must be
+	// opted into explicitly and MUST stay off in production. When false
+	// the POST /api/v1/seed route is NOT mounted (404). It is enabled only
+	// where seeding is intended: dev / e2e stacks and the throwaway
+	// localhost server the Helm init-data Job boots to curl /seed.
+	SeedEndpointEnabled bool
+
 	// OAuthRegistry holds the third-party sign-in providers enabled in
 	// this deployment (#1394). Empty means OAuth is unconfigured — the
 	// /auth/oauth/providers endpoint surfaces an empty list and start /
@@ -558,9 +568,17 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 					CommodityScanPublic(params.CommodityScanService, params.CommodityScanMaxBodyBytes, params.CommodityScanMaxPhotoBytes),
 				)
 			}
-			// Seed endpoint is public for e2e testing and development.
-			// Seed uses a service registry set since it's a privileged operation in dev/test.
-			r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet, params.UploadLocation))
+			// Seed endpoint (#2039). Mounted ONLY when the operator opts in
+			// via SeedEndpointEnabled — otherwise the route stays absent
+			// (404). Seed uses a SERVICE registry set, so it is a privileged,
+			// RLS-bypassing operation with no auth wall: leaving it public by
+			// default lets an anonymous caller pollute the production tenant.
+			// It is enabled only where seeding is intended (dev / e2e stacks
+			// and the throwaway localhost server the Helm init-data Job boots);
+			// production app servers leave it off.
+			if params.SeedEndpointEnabled {
+				r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet, params.UploadLocation))
+			}
 		})
 
 		// Create user aware middlewares for protected routes

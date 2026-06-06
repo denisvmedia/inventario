@@ -256,6 +256,13 @@ spec:
                 secretKeyRef:
                   name: inventario-secrets
                   key: APP_DB_DSN
+            # Mount the public /api/v1/seed route ONLY on this throwaway
+            # init-data seed server (#2039). It is set as a direct env on the
+            # init container, NOT in inventario-config, so the long-running
+            # `inventario` container below (which shares that ConfigMap) keeps
+            # the privileged route off.
+            - name: INVENTARIO_RUN_ENABLE_SEED_ENDPOINT
+              value: "true"
           volumeMounts:
             - name: tmp
               mountPath: /tmp

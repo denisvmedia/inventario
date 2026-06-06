@@ -148,6 +148,11 @@ services:
       SEED_DATABASE: ${SEED_DATABASE:-true}
       # JWT secret required for seed endpoint
       INVENTARIO_RUN_JWT_SECRET: ${JWT_SECRET:-please-change-this-to-a-secure-random-value-use-openssl-rand-hex-32}
+      # Mount the public /api/v1/seed route on the throwaway server that
+      # init-data.sh boots to curl it (#2039). Off by default everywhere else
+      # (it exposes a privileged RLS-bypassing operation); NEVER set on the
+      # long-running `inventario` service below.
+      INVENTARIO_RUN_ENABLE_SEED_ENDPOINT: ${ENABLE_SEED_ENDPOINT:-true}
     volumes:
       # Track initialization state to prevent re-running
       - ./.docker/init-state:/app/state

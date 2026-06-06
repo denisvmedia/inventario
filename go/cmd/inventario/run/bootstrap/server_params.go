@@ -181,6 +181,11 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 
 	params.FeatureCurrencyMigration = cfg.FeatureCurrencyMigration
 	params.MagicLinkLoginEnabled = resolveMagicLinkLoginEnabled(cfg)
+	// Public, unauthenticated /seed gate (#2039). Off by default; mounting
+	// the route exposes a privileged RLS-bypassing operation, so it must stay
+	// off in production and is opted into only on dev / e2e / the init-data
+	// seed server.
+	params.SeedEndpointEnabled = cfg.SeedEndpointEnabled
 
 	emailLifecycle, err := buildEmailService(cfg)
 	if err != nil {

@@ -104,6 +104,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.IntVar(&cfg.AIVisionRateLimitPerHour, "ai-vision-rate-limit-per-hour", cfg.AIVisionRateLimitPerHour, "Per-user hourly scan rate limit (0 disables the limit)")
 	flags.IntVar(&cfg.AIVisionMaxTokens, "ai-vision-max-tokens", cfg.AIVisionMaxTokens, "Cap on the vision model's structured output (must hold a multi-line invoice; 0 = provider default 4096)")
 	flags.BoolVar(&cfg.PublicAIVisionScanEnabled, "public-ai-vision-scan-enabled", cfg.PublicAIVisionScanEnabled, "Enable the unauthenticated public photo-scan endpoint for the landing-page CTA (#1988). Default false; spends vendor tokens.")
+	flags.BoolVar(&cfg.SeedEndpointEnabled, "enable-seed-endpoint", cfg.SeedEndpointEnabled, "Mount the public, unauthenticated POST /api/v1/seed route (#2039). Default false; runs a privileged RLS-bypassing op — keep off in prod.")
 
 	// OAuth third-party sign-in (issue #1394). Each provider requires
 	// BOTH a client id AND a client secret to be enabled; the redirect
