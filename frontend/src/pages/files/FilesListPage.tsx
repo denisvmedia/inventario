@@ -11,8 +11,8 @@ import type { GalleryImage } from "@/components/files/ImageViewer"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { BulkActionBar } from "@/components/ui/bulk-action-bar"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Page, PageHeader } from "@/components/ui/page"
@@ -369,71 +369,52 @@ export function FilesListPage() {
         </div>
       </div>
 
-      {/* Bulk-action toolbar — a fixed bottom-centre overlay so toggling
-          the first checkbox doesn't reflow the list (no "jolt"). The
-          shadcn `popover` token already encodes the floating-surface
-          elevation, which keeps us off bespoke `shadow-*` per the design
-          rules. Slide-in animation via `tw-animate-css`. The bar is
-          preserved as an intentional `mock < reality` divergence
-          (BulkBar isn't in design-mocks/src/views/FileBrowserView.tsx) —
-          see devdocs/frontend/design-deviations.md. */}
       {selected.size > 0 ? (
-        <div
-          role="region"
-          aria-label={t("files:bulk.selected", { count: selected.size })}
-          className={cn(
-            "fixed bottom-6 left-1/2 z-40 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2",
-            "flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-popover px-4 py-2.5 text-sm text-popover-foreground",
-            "animate-in slide-in-from-bottom-4 fade-in-0 duration-200"
-          )}
+        <BulkActionBar
+          label={t("files:bulk.selected", { count: selected.size })}
+          selectAll={{
+            checked: allSelectedOnPage,
+            onCheckedChange: toggleAllOnPage,
+            label: t("files:list.selectAll"),
+            "data-testid": "files-select-all",
+          }}
           data-testid="files-bulk-bar"
         >
-          <div className="flex items-center gap-3">
-            <Checkbox
-              checked={allSelectedOnPage}
-              onCheckedChange={toggleAllOnPage}
-              aria-label={t("files:list.selectAll")}
-              data-testid="files-select-all"
-            />
-            <span>{t("files:bulk.selected", { count: selected.size })}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="files-bulk-move" className="sr-only">
+          <Label htmlFor="files-bulk-move" className="sr-only">
+            {t("files:bulk.move")}
+          </Label>
+          {/* eslint-disable-next-line no-restricted-syntax -- bulk "move to category" utility selector (context-mode bulk bar); native <select> retained, covered by native-select unit/e2e */}
+          <select
+            id="files-bulk-move"
+            data-testid="files-bulk-move"
+            defaultValue=""
+            disabled={bulkReclassify.isPending}
+            onChange={async (e) => {
+              const target = e.target.value as FileCategory | ""
+              e.target.value = ""
+              if (!target) return
+              await onBulkMove(target)
+            }}
+            className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+          >
+            <option value="" disabled>
               {t("files:bulk.move")}
-            </Label>
-            {/* eslint-disable-next-line no-restricted-syntax -- bulk "move to category" utility selector (context-mode bulk bar); native <select> retained, covered by native-select unit/e2e */}
-            <select
-              id="files-bulk-move"
-              data-testid="files-bulk-move"
-              defaultValue=""
-              disabled={bulkReclassify.isPending}
-              onChange={async (e) => {
-                const target = e.target.value as FileCategory | ""
-                e.target.value = ""
-                if (!target) return
-                await onBulkMove(target)
-              }}
-              className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
-            >
-              <option value="" disabled>
-                {t("files:bulk.move")}
-              </option>
-              <option value="images">{t("files:categoryImages")}</option>
-              <option value="documents">{t("files:categoryDocuments")}</option>
-              <option value="other">{t("files:categoryOther")}</option>
-            </select>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={onBulkDelete}
-              disabled={bulkDelete.isPending}
-              data-testid="files-bulk-delete"
-            >
-              <Trash2 className="mr-2 size-4" aria-hidden="true" />
-              {t("files:bulk.delete")}
-            </Button>
-          </div>
-        </div>
+            </option>
+            <option value="images">{t("files:categoryImages")}</option>
+            <option value="documents">{t("files:categoryDocuments")}</option>
+            <option value="other">{t("files:categoryOther")}</option>
+          </select>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={onBulkDelete}
+            disabled={bulkDelete.isPending}
+            data-testid="files-bulk-delete"
+          >
+            <Trash2 className="mr-2 size-4" aria-hidden="true" />
+            {t("files:bulk.delete")}
+          </Button>
+        </BulkActionBar>
       ) : null}
 
       {filesQuery.error ? (

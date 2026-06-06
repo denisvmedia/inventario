@@ -15,11 +15,12 @@ import {
   MapPinOff,
   Plus,
   Search,
-  X,
+  Trash2,
 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { BulkActionBar } from "@/components/ui/bulk-action-bar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -232,6 +233,7 @@ export function CommoditiesListPage() {
   // bulk action would surprise them.
   const typesKey = types.join(",")
   const statusesKey = statuses.join(",")
+  const warrantyKey = warrantyFilter.join(",")
   useEffect(() => {
     // Clear page-local selection on filter/page change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -246,6 +248,7 @@ export function CommoditiesListPage() {
     lentOutOnly,
     unassignedOnly,
     sortRaw,
+    warrantyKey,
   ])
 
   function toggleSelected(id: string) {
@@ -258,8 +261,21 @@ export function CommoditiesListPage() {
   }
   function toggleSelectAll(rows: Commodity[]) {
     setSelected((prev) => {
-      if (prev.size === rows.length) return new Set()
-      return new Set(rows.map((r) => r.id ?? "").filter(Boolean))
+      const ids = rows.map((r) => r.id ?? "").filter(Boolean)
+      // Derive the action from the SAME "every visible row selected"
+      // predicate the checkbox renders with — not a `prev.size ===
+      // rows.length` compare. A size compare wedges the toggle whenever
+      // `selected` still holds ids outside the visible set (e.g. the
+      // client-side warranty filter narrows `rows` without clearing
+      // selection): you could no longer uncheck in one click. Add/remove
+      // only the visible ids so off-page selection is preserved too.
+      const allVisibleSelected = ids.length > 0 && ids.every((id) => prev.has(id))
+      const next = new Set(prev)
+      for (const id of ids) {
+        if (allVisibleSelected) next.delete(id)
+        else next.add(id)
+      }
+      return next
     })
   }
 
@@ -439,6 +455,10 @@ export function CommoditiesListPage() {
   const serviceCounts = serviceCountsQuery.data ?? {}
   const total = list.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
+  // Select-all reflects the visible (post-warranty-filter) page only, so
+  // the bulk bar's checkbox never silently queues rows the user can't
+  // see. Mirrors the table-header checkbox state.
+  const allRowsSelected = rows.length > 0 && rows.every((r) => selected.has(r.id ?? ""))
   const isLoading = list.isLoading
   const isError = list.isError
   const isEmpty = !isLoading && !isError && rows.length === 0
@@ -575,13 +595,65 @@ export function CommoditiesListPage() {
 
         {selected.size > 0 ? (
           <BulkActionBar
-            count={selected.size}
-            onClear={() => setSelected(new Set())}
-            onDelete={handleBulkDelete}
-            onMove={() => setMoveOpen(true)}
-            isDeleting={bulkDelete.isPending}
-            locked={migrationLock.locked}
-          />
+            label={t("commodities:bulk.selected", { count: selected.size })}
+            regionLabel={t("commodities:bulk.regionLabel")}
+            selectAll={{
+              checked: allRowsSelected,
+              onCheckedChange: () => toggleSelectAll(rows),
+              label: t("commodities:list.selectAll"),
+              "data-testid": "commodities-select-all",
+            }}
+            data-testid="commodities-bulk-bar"
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              // Locked = aria-disabled + click-guard rather than the
+              // `disabled` attribute, so the "why" tooltip stays
+              // hover-discoverable (a real `disabled` button gets
+              // `pointer-events-none` and never shows its title).
+              onClick={() => {
+                if (!migrationLock.locked) setMoveOpen(true)
+              }}
+              aria-disabled={migrationLock.locked || undefined}
+              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              // Neutralize the hover bg too: Button's `disabled:` styles
+              // don't apply under `aria-disabled`, so without this the
+              // locked button would still light up on hover.
+              className={
+                migrationLock.locked
+                  ? "cursor-not-allowed opacity-50 hover:bg-background hover:text-foreground"
+                  : undefined
+              }
+              data-testid="commodities-bulk-move"
+            >
+              {t("commodities:bulk.moveButton")}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              // `disabled` is reserved for the in-flight delete; the
+              // migration lock uses aria-disabled + click-guard so the
+              // tooltip remains discoverable (see Move button above).
+              onClick={() => {
+                if (!migrationLock.locked) handleBulkDelete()
+              }}
+              disabled={bulkDelete.isPending}
+              aria-disabled={migrationLock.locked || undefined}
+              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              // Neutralize the hover bg under `aria-disabled` (Button's
+              // `disabled:` styles only key off the real attribute).
+              className={
+                migrationLock.locked
+                  ? "cursor-not-allowed opacity-50 hover:bg-destructive hover:text-white"
+                  : undefined
+              }
+              data-testid="commodities-bulk-delete"
+            >
+              <Trash2 className="mr-2 size-4" aria-hidden="true" />
+              {t("commodities:bulk.deleteButton")}
+            </Button>
+          </BulkActionBar>
         ) : null}
 
         {isError ? (
@@ -980,66 +1052,6 @@ function Toolbar(props: ToolbarProps) {
           <List className="size-4" aria-hidden="true" />
         </Button>
       </div>
-    </div>
-  )
-}
-
-// ---- Bulk action bar ----------------------------------------------------
-
-interface BulkActionBarProps {
-  count: number
-  onClear: () => void
-  onDelete: () => void
-  onMove: () => void
-  isDeleting: boolean
-  locked?: boolean
-}
-
-function BulkActionBar({
-  count,
-  onClear,
-  onDelete,
-  onMove,
-  isDeleting,
-  locked,
-}: BulkActionBarProps) {
-  const { t } = useTranslation()
-  const lockTitle = locked ? t("errors:lockedDuringMigration") : undefined
-  return (
-    <div
-      className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2"
-      role="region"
-      aria-label={t("commodities:bulk.regionLabel")}
-      data-testid="commodities-bulk-bar"
-    >
-      <span className="text-sm font-medium">{t("commodities:bulk.selected", { count })}</span>
-      <Separator orientation="vertical" className="h-4" />
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onMove}
-        disabled={locked}
-        title={lockTitle}
-        aria-disabled={locked || undefined}
-        data-testid="commodities-bulk-move"
-      >
-        {t("commodities:bulk.moveButton")}
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onDelete}
-        disabled={isDeleting || locked}
-        title={lockTitle}
-        aria-disabled={locked || undefined}
-        data-testid="commodities-bulk-delete"
-      >
-        {t("commodities:bulk.deleteButton")}
-      </Button>
-      <Button variant="ghost" size="sm" onClick={onClear} className="ml-auto gap-1">
-        <X className="size-3.5" aria-hidden="true" />
-        {t("common:actions.cancel")}
-      </Button>
     </div>
   )
 }
