@@ -104,6 +104,35 @@ describe("<LoginPage />", () => {
     )
   })
 
+  it("routes a fresh login to /welcome when a first-item draft is pending, even without ?redirect (#2015)", async () => {
+    // The #1988 anonymous hand-off now goes via /register → verify-email →
+    // /login, which drops the ?redirect query. finalizeLogin still routes to
+    // /welcome off the pending marker, and the isAuthenticated guard must NOT
+    // override that to "/" on the post-login re-render (the race that
+    // interrupted FirstItemResolver mid-replay — #2015).
+    savePendingFirstItem({ draftKey: "commodity-draft:anon:create", currency: "USD", savedAt: 1 })
+    server.use(
+      msw.post(api("/auth/login"), () =>
+        HttpResponse.json({
+          access_token: "tok",
+          csrf_token: "csrf",
+          user: { id: "u1", email: "alex@example.com", name: "Alex" },
+        })
+      )
+    )
+    const user = userEvent.setup()
+    renderLogin("/login")
+    // Dismiss the reassurance drawer so its overlay can't intercept the form.
+    await user.click(await screen.findByTestId("pending-first-item-drawer-ok"))
+    await user.type(screen.getByTestId("email"), "alex@example.com")
+    await user.type(screen.getByTestId("password"), "secret-pw")
+    await user.click(screen.getByTestId("login-button"))
+
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/welcome")
+    )
+  })
+
   it("surfaces the server error inline when the API returns 401", async () => {
     server.use(
       msw.post(api("/auth/login"), () =>

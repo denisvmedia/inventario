@@ -116,8 +116,26 @@ export function LoginPage() {
   // after the hooks above to keep the Rules-of-Hooks call order stable.
   // sanitizeRedirectPath rejects absolute / protocol-relative URLs so a
   // crafted ?redirect= query can't open-redirect off the app.
-  if (isAuthenticated) {
-    return <Navigate to={sanitizeRedirectPath(params.get("redirect"))} replace />
+  //
+  // Two subtleties:
+  //  - Gate on !loginMutation.isSuccess so a JUST-completed password login
+  //    doesn't ALSO redirect here: finalizeLogin() is the sole post-login
+  //    navigator. Otherwise the success re-render (isAuthenticated=true) races
+  //    finalizeLogin, and when /login was reached WITHOUT a ?redirect (the
+  //    #1988 first-item hand-off now arrives via /register → verify-email →
+  //    /login, dropping the query) the guard would send the user to "/" and
+  //    interrupt FirstItemResolver mid-replay. (The MFA path never reaches
+  //    this line — the `mfaChallenge` early-return above shields it — even
+  //    though its step-1 mutation is itself "successful".)
+  //  - Honor a pending first-item marker the way finalizeLogin does, so a
+  //    genuinely already-authenticated visitor (no mutation) who still has a
+  //    stashed draft is routed to /welcome to finish it instead of being
+  //    dropped on the dashboard with the draft stranded.
+  if (isAuthenticated && !loginMutation.isSuccess) {
+    const firstItemDest = peekPendingFirstItem()
+      ? "/welcome"
+      : sanitizeRedirectPath(params.get("redirect"))
+    return <Navigate to={firstItemDest} replace />
   }
 
   const isPending =
