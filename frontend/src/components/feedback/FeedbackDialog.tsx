@@ -7,12 +7,13 @@
 //     already enforces auth; the BE returns 401 if a stray request
 //     somehow lands here without a session.
 //   - Rate-limited at the BE (5/hour/user). On 429 we surface a
-//     friendly "try again later" toast that points at the static
-//     mailto fallback in Settings → Help.
+//     friendly "try again later" toast.
 //   - On 503 (SUPPORT_EMAIL not configured) we surface a "feedback
-//     isn't set up on this deployment" toast that also points at the
-//     mailto fallback. This is a real operator state — single-tenant
-//     deployments may not bother wiring SUPPORT_EMAIL at all.
+//     isn't configured on this deployment yet" toast. The BE returns a
+//     *typed* 503 (feedback.not_configured) so lib/http.ts doesn't read
+//     it as an outage and bounce the shell to /maintenance. This is a
+//     real operator state — single-tenant deployments may not bother
+//     wiring SUPPORT_EMAIL at all.
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useEffect, useId, useMemo } from "react"
 import { useForm } from "react-hook-form"

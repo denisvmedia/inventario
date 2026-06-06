@@ -51,6 +51,9 @@ data:
   {{- end }}
   INVENTARIO_RUN_EMAIL_FROM: {{ .Values.email.from | quote }}
   INVENTARIO_RUN_EMAIL_REPLY_TO: {{ .Values.email.replyTo | quote }}
+  # Feedback destination (#1387). Empty → the endpoint returns a typed 503
+  # (feedback.not_configured) and the dialog shows a "not configured" toast.
+  INVENTARIO_RUN_SUPPORT_EMAIL: {{ .Values.email.supportEmail | quote }}
   INVENTARIO_RUN_EMAIL_QUEUE_WORKERS: {{ .Values.email.queueWorkers | quote }}
   INVENTARIO_RUN_EMAIL_QUEUE_MAX_RETRIES: {{ .Values.email.queueMaxRetries | quote }}
   INVENTARIO_RUN_LOG_EMAIL_URLS: {{ .Values.email.logUrls | quote }}

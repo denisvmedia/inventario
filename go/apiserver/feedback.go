@@ -11,8 +11,12 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/render"
+	"github.com/go-extras/errx"
 
 	"github.com/denisvmedia/inventario/appctx"
+	"github.com/denisvmedia/inventario/internal/errormarshal"
+	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/services"
 )
 
@@ -43,6 +47,22 @@ const feedbackMaxDiagnosticsValueBytes = 1024
 const feedbackMaxRequestBodyBytes = feedbackMaxMessageBytes +
 	(feedbackMaxDiagnosticsEntries * feedbackMaxDiagnosticsValueBytes) +
 	16*1024
+
+// feedbackNotConfiguredCode is the JSON:API error code paired with the
+// 503 returned when SUPPORT_EMAIL is unset. Emitting a *typed* error
+// (dotted code) — rather than a bare text/plain 503 — is what stops the
+// FE's global HTTP client (frontend/src/lib/http.ts) from reading the
+// 503 as a "scheduled maintenance" outage and bouncing the whole shell
+// to /maintenance, which would hide the dialog's "feedback isn't
+// configured" toast. Mirrors the commodity_scan.provider_disabled
+// precedent (#1720 / #1835).
+const feedbackNotConfiguredCode = "feedback.not_configured"
+
+// errFeedbackNotConfigured is the sentinel surfaced by the 503 above.
+// errx.NewSentinel (not errors.New) keeps it consistent with the other
+// feature-level sentinels — e.g. aivision.ErrProviderDisabled — so it
+// classifies/wraps and asserts via errors.Is the same way across packages.
+var errFeedbackNotConfigured = errx.NewSentinel("feedback is not configured on this deployment")
 
 // FeedbackParams wires the dependencies of the /api/v1/feedback route.
 //
@@ -130,7 +150,7 @@ func Feedback(params FeedbackParams, limiter services.AuthRateLimiter) func(r ch
 // @Failure 400 {string} string "Bad Request"
 // @Failure 401 {string} string "Unauthorized"
 // @Failure 429 {string} string "Too Many Requests"
-// @Failure 503 {string} string "Feedback not configured"
+// @Failure 503 {object} jsonapi.Errors "Feedback not configured"
 // @Router /feedback [post]
 func (api *feedbackAPI) submit(w http.ResponseWriter, r *http.Request) {
 	user := appctx.UserFromContext(r.Context())
@@ -139,23 +159,34 @@ func (api *feedbackAPI) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if api.supportEmail == "" {
-		// Endpoint mounted but no destination address configured.
-		// The FE renders a static help message in that case (the
-		// SettingsPage Help section already has a mailto fallback);
-		// we surface a 503 so the toast can be specific.
-		slog.Warn("Feedback submission rejected: SUPPORT_EMAIL not configured", "user_id", user.ID)
-		http.Error(w, "Feedback is not configured on this deployment", http.StatusServiceUnavailable)
-		return
-	}
-
-	// Limit body to a few tens of KB. The handler reads the body itself
+	// Bound the request body up front — before any early return — so the
+	// "feedback not configured" 503 path can't be made to drain an
+	// oversized payload either. The handler reads the body itself
 	// (FeedbackRateLimitMiddleware does not peek), so this is the real
-	// upper bound for the request payload — sized to hold a max-length
-	// message + the diagnostics cap + JSON overhead so a legitimate
-	// worst-case payload never hits 413 before field validation runs.
+	// upper bound: sized to hold a max-length message + the diagnostics
+	// cap + JSON overhead so a legitimate worst-case payload never hits
+	// 413 before field validation runs.
 	r.Body = http.MaxBytesReader(w, r.Body, feedbackMaxRequestBodyBytes)
 	defer func() { _ = r.Body.Close() }()
+
+	if api.supportEmail == "" {
+		// Endpoint mounted but no destination address configured. Surface
+		// a *typed* 503 (feedback.not_configured) so the dialog shows its
+		// specific "feedback isn't configured" toast — and, crucially, so
+		// the FE's global 503→/maintenance bounce is skipped. lib/http.ts
+		// only bounces the shell for *untyped* 503s; a dotted JSON:API
+		// error code marks this as a per-feature state, not an outage
+		// (same contract as commodity_scan.provider_disabled, #1720).
+		slog.Warn("Feedback submission rejected: SUPPORT_EMAIL not configured", "user_id", user.ID)
+		_ = render.Render(w, r, jsonapi.NewErrors(jsonapi.Error{
+			Err:            errFeedbackNotConfigured,
+			UserError:      errormarshal.Marshal(errFeedbackNotConfigured),
+			HTTPStatusCode: http.StatusServiceUnavailable,
+			StatusText:     "Service Unavailable",
+			Code:           feedbackNotConfiguredCode,
+		}))
+		return
+	}
 
 	var req FeedbackRequest
 	dec := json.NewDecoder(r.Body)

@@ -17,7 +17,7 @@
   },
   "toasts": {
     "error": "Couldn't send your feedback. Please try again.",
-    "notConfigured": "Feedback isn't configured on this deployment. Please email support directly.",
+    "notConfigured": "Feedback isn't configured on this deployment yet.",
     "rateLimited": "You've sent a lot of feedback recently. Please try again in a few minutes.",
     "success": "Thanks — your feedback was sent."
   },

@@ -380,6 +380,7 @@ _None yet._
 - **Why**: A real ticketing system / contact form is a larger surface. `mailto:` is the lowest-friction stand-in that doesn't depend on an in-app destination that doesn't exist yet.
 - **Approved by**: agent-suggested.
 - **Reversion plan**: Swap the href for a real `/support` route or a dialog when the support surface lands.
+- **Resolution**: Resolved 2026-06-06 by #1387 / PR #2014 — the static `mailto:` row was folded into the in-app feedback entry point. The "Send feedback" row was relabelled "Contact support / share feedback" and now opens the existing `FeedbackDialog` (whose "Question" type doubles as the support channel); the `mailto:` row, its i18n keys, and the `HelpSection` external-link (`<a>`) render arm were removed. No `<a>`/`mailto` remains in the section.
 
 #### 2026-05-08 — "Currency migrations" history list inside Danger Zone
 
