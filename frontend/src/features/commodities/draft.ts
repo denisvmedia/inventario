@@ -35,7 +35,8 @@ export interface PendingFile {
 // crypto.randomUUID (present in every browser the app targets) and falls
 // back to a content-derived string for the rare environment without it
 // (older jsdom, locked-down embedded webviews) so list keys stay unique.
-export function newPendingId(file: File): string {
+// Internal to this module — the only caller is mergePendingFiles.
+function newPendingId(file: File): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID()
   return `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`
 }
