@@ -51,13 +51,13 @@ beforeEach(() => {
 })
 
 describe("<LandingPage />", () => {
-  it("renders the hero and the Browse card", async () => {
+  it("renders the hero, the Log in card and the register link", async () => {
     mockFlags(false)
     renderLanding()
     expect(await screen.findByTestId("landing-page")).toBeInTheDocument()
     expect(screen.getByText("Everything you own, organized")).toBeInTheDocument()
-    expect(screen.getByTestId("landing-browse")).toBeInTheDocument()
-    expect(screen.getByTestId("landing-login-link")).toBeInTheDocument()
+    expect(screen.getByTestId("landing-login")).toBeInTheDocument()
+    expect(screen.getByTestId("landing-register-link")).toBeInTheDocument()
   })
 
   it("shows the Add card (manual copy) when public_scan is off", async () => {
@@ -82,26 +82,26 @@ describe("<LandingPage />", () => {
     expect(add).toHaveTextContent("let AI fill in the details")
   })
 
-  it("Browse card navigates to /login?redirect=/", async () => {
+  it("Log in card navigates to /login?redirect=/", async () => {
     mockFlags(false)
     const user = userEvent.setup()
     renderLanding()
-    await user.click(await screen.findByTestId("landing-browse"))
+    await user.click(await screen.findByTestId("landing-login"))
     await waitFor(() => {
       expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/login")
     })
     expect(screen.getByTestId("loc").getAttribute("data-search")).toBe("?redirect=%2F")
   })
 
-  it("login link navigates to /login?redirect=/", async () => {
+  it("register link navigates to /register", async () => {
     mockFlags(false)
     const user = userEvent.setup()
     renderLanding()
-    await user.click(await screen.findByTestId("landing-login-link"))
+    await user.click(await screen.findByTestId("landing-register-link"))
     await waitFor(() => {
-      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/login")
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/register")
     })
-    expect(screen.getByTestId("loc").getAttribute("data-search")).toBe("?redirect=%2F")
+    expect(screen.getByTestId("loc").getAttribute("data-search")).toBe("")
   })
 
   it("hides the resume badge when there is no in-progress draft", async () => {

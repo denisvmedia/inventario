@@ -1,10 +1,11 @@
-// Bridge for the anonymous "add your first item before login" flow (#1988).
-// An unauthenticated visitor fills the create dialog on the landing page; on
-// save we stash the draft (already in localStorage + IndexedDB via the
-// dialog's own draft machinery) and set THIS marker, then send them to log
-// in. After auth, FirstItemResolver reads the marker, POSTs the stashed
-// commodity into the resolved group, uploads its pending files, and clears
-// everything.
+// Bridge for the anonymous "add your first item before you have an account"
+// flow (#1988). An unauthenticated visitor fills the create dialog on the
+// landing page; on save we stash the draft (already in localStorage +
+// IndexedDB via the dialog's own draft machinery) and set THIS marker, then
+// send them to register (the anonymous fill is new-user onboarding). After
+// they create an account and sign in, FirstItemResolver reads the marker,
+// POSTs the stashed commodity into the resolved group, uploads its pending
+// files, and clears everything.
 //
 // Scope is intentionally localStorage (not sessionStorage like the invite
 // bridge): the draft values + the IndexedDB pending files both live in

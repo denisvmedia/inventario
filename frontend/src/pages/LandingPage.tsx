@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate, useSearchParams } from "react-router-dom"
-import { ArrowRight, Package, Sparkles } from "lucide-react"
+import { ArrowRight, LogIn, Package, Sparkles } from "lucide-react"
 
 import { AnonymousCommodityDialog } from "@/components/items/AnonymousCommodityDialog"
 import {
@@ -13,11 +13,18 @@ import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { cn } from "@/lib/utils"
 
-// LandingPage is the public, unauthenticated "/" surface (#1988): an
-// anonymous visitor can start adding their first item (snap a photo, let
-// the public AI scan fill the details) BEFORE creating an account. On
-// save the draft is stashed and the user is sent to log in; after auth
-// the FirstItemResolver replays it into their group.
+// LandingPage is the public, unauthenticated "/" surface (#1988): it forks
+// up front into the two paths a logged-out visitor can take.
+//
+//   - "Add your first item" (new user): snap a photo / fill the form, then
+//     hand off to REGISTRATION. Because an anonymous visitor can't know
+//     which group (and currency) they'll land in, the anonymous fill is
+//     framed as new-user onboarding — after they create an account, verify,
+//     and sign in, FirstItemResolver auto-creates a group seeded with the
+//     item's own currency and replays the draft into it.
+//   - "Log in" (returning user): goes straight to the existing inventory.
+//     They never fill the anonymous form, so there's no draft to resolve and
+//     no currency ambiguity.
 //
 // No analogue exists in design-mocks/ (logged this as a deviation —
 // "Why: not present in mock"). The hero borrows NoGroupPage's
@@ -26,17 +33,18 @@ import { cn } from "@/lib/utils"
 // from the mock's onboarding/empty-state surfaces. The page renders its
 // own full-screen layout because it sits OUTSIDE the authenticated Shell.
 //
-// The "Add New Item" card is ALWAYS shown — adding your first item is the
+// The "Add your first item" card is ALWAYS shown — adding your first item is the
 // page's primary CTA (#1988) and must never disappear (the regression that
 // motivated this change: with public_scan off the page degenerated to a
 // browse-only dead-end). The `public_scan` feature flag only gates the AI
 // photo-scan *accelerator*, not the ability to add an item: when the flag
 // is off the dialog opens directly on manual entry (no scan endpoint is
 // offered, so nothing 404s) and the card copy drops the "let AI fill it in"
-// promise. The post-save hand-off (stash draft → login → replay) is
-// identical either way. "Browse My Items" and the ghost login link both
-// route to /login?redirect=/ so a returning user lands back on "/" (RootGate
-// then resolves them to their dashboard).
+// promise. The post-save hand-off (stash draft → register → replay) is
+// identical either way. The "Log in" card routes to /login?redirect=/ so a
+// returning user lands back on "/" (RootGate then resolves them to their
+// dashboard); the low-emphasis footer link offers a no-item "Create an
+// account" path straight to /register.
 export function LandingPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -92,6 +100,10 @@ export function LandingPage() {
     navigate(`/login?redirect=${encodeURIComponent("/")}`)
   }
 
+  function goToRegister() {
+    navigate("/register")
+  }
+
   return (
     <div className="flex min-h-svh w-full flex-col bg-background">
       <RouteTitle title={t("landing:hero.title")} />
@@ -123,11 +135,13 @@ export function LandingPage() {
             </p>
           </div>
 
-          {/* Add + Browse are both always present, so the grid is always
-              two-up on ≥sm. The Add card's icon + copy reflect whether the
-              AI scan accelerator is available (public_scan): Sparkles +
-              "let AI fill it in" when on, a plain Package + manual-entry
-              copy when off. */}
+          {/* The two paths a logged-out visitor can take are always both
+              present, so the grid is always two-up on ≥sm. The "Add your
+              first item" card's icon + copy reflect whether the AI scan
+              accelerator is available (public_scan): Sparkles + "let AI fill
+              it in" when on, a plain Package + manual-entry copy when off. It
+              hands off to registration. The "Log in" card is the returning
+              user's path. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <LandingCard
               title={t("landing:cards.addItem.title")}
@@ -141,22 +155,24 @@ export function LandingPage() {
               testId="landing-add-item"
             />
             <LandingCard
-              title={t("landing:cards.browse.title")}
-              description={t("landing:cards.browse.description")}
-              icon={Package}
+              title={t("landing:cards.login.title")}
+              description={t("landing:cards.login.description")}
+              icon={LogIn}
               onClick={goToLogin}
-              testId="landing-browse"
+              testId="landing-login"
             />
           </div>
 
+          {/* Low-emphasis no-item sign-up path for a visitor who'd rather
+              create their account before adding anything. */}
           <div className="text-center">
             <button
               type="button"
-              onClick={goToLogin}
+              onClick={goToRegister}
               className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-              data-testid="landing-login-link"
+              data-testid="landing-register-link"
             >
-              {t("landing:loginCta")}
+              {t("landing:registerCta")}
             </button>
           </div>
         </div>
