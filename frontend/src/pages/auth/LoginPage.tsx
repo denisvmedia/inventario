@@ -117,17 +117,25 @@ export function LoginPage() {
   // sanitizeRedirectPath rejects absolute / protocol-relative URLs so a
   // crafted ?redirect= query can't open-redirect off the app.
   //
-  // Gate on !loginMutation.isSuccess so a JUST-completed form login does NOT
-  // also redirect through this guard: finalizeLogin() is the sole post-login
-  // navigator. Without the gate, a successful login re-renders with
-  // isAuthenticated=true and this guard races finalizeLogin — and when the
-  // page was reached WITHOUT a ?redirect (the #1988 first-item hand-off now
-  // arrives via /register → verify-email → /login, dropping the query), the
-  // guard would send the user to "/" and interrupt FirstItemResolver
-  // mid-replay. Deferring to finalizeLogin keeps its marker → /welcome route
-  // authoritative.
+  // Two subtleties:
+  //  - Gate on !loginMutation.isSuccess so a JUST-completed password login
+  //    doesn't ALSO redirect here: finalizeLogin() is the sole post-login
+  //    navigator. Otherwise the success re-render (isAuthenticated=true) races
+  //    finalizeLogin, and when /login was reached WITHOUT a ?redirect (the
+  //    #1988 first-item hand-off now arrives via /register → verify-email →
+  //    /login, dropping the query) the guard would send the user to "/" and
+  //    interrupt FirstItemResolver mid-replay. (The MFA path never reaches
+  //    this line — the `mfaChallenge` early-return above shields it — even
+  //    though its step-1 mutation is itself "successful".)
+  //  - Honor a pending first-item marker the way finalizeLogin does, so a
+  //    genuinely already-authenticated visitor (no mutation) who still has a
+  //    stashed draft is routed to /welcome to finish it instead of being
+  //    dropped on the dashboard with the draft stranded.
   if (isAuthenticated && !loginMutation.isSuccess) {
-    return <Navigate to={sanitizeRedirectPath(params.get("redirect"))} replace />
+    const firstItemDest = peekPendingFirstItem()
+      ? "/welcome"
+      : sanitizeRedirectPath(params.get("redirect"))
+    return <Navigate to={firstItemDest} replace />
   }
 
   const isPending =
