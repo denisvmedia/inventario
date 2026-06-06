@@ -260,7 +260,7 @@ export async function createCommodityAsUser(user: TestUser, commodityName: strin
   let locationsBody: { data?: Array<{ id: string }> };
   try { locationsBody = JSON.parse(locationsText); }
   catch (err) { throw new Error(`createCommodityAsUser: GET /locations non-JSON (${locationsText.slice(0,80)}): ${(err as Error).message}`); }
-  if (locationsBody.data?.length > 0) {
+  if (locationsBody.data && locationsBody.data.length > 0) {
     locationId = locationsBody.data[0].id;
   } else {
     const createLoc = await user.page.request.post(`${apiBase}/locations`, {

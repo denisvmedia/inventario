@@ -232,7 +232,8 @@ test.describe.serial('AI vision scan flow', () => {
     await page
       .locator('[data-testid="commodity-form-ai-file-input"]')
       .setInputFiles(['fixtures/files/image.jpg', 'fixtures/files/invoice.pdf']);
-    await expect(page.locator('[data-testid="commodity-form-ai-thumb"]')).toHaveCount(2);
+    await expect(page.locator('[data-testid="commodity-form-ai-thumb"]')).toHaveCount(1);
+    await expect(page.locator('[data-testid="commodity-form-ai-pdf"]')).toHaveCount(1);
 
     await page.locator('[data-testid="commodity-form-ai-scan"]').click();
     await page.locator('[data-testid="commodity-form-ai-review"]').waitFor();
