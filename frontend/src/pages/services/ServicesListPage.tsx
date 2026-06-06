@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useGroupServices } from "@/features/services/hooks"
@@ -72,10 +72,8 @@ export function ServicesListPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="sr-only">{t("services:list.title")}</CardTitle>
-        </CardHeader>
         <CardContent>
+          <h2 className="sr-only">{t("services:list.title")}</h2>
           {list.isLoading ? (
             <div className="flex flex-col gap-2" data-testid="in-service-loading">
               <Skeleton className="h-10" />
