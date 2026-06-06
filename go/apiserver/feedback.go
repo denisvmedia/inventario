@@ -159,6 +159,16 @@ func (api *feedbackAPI) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Bound the request body up front — before any early return — so the
+	// "feedback not configured" 503 path can't be made to drain an
+	// oversized payload either. The handler reads the body itself
+	// (FeedbackRateLimitMiddleware does not peek), so this is the real
+	// upper bound: sized to hold a max-length message + the diagnostics
+	// cap + JSON overhead so a legitimate worst-case payload never hits
+	// 413 before field validation runs.
+	r.Body = http.MaxBytesReader(w, r.Body, feedbackMaxRequestBodyBytes)
+	defer func() { _ = r.Body.Close() }()
+
 	if api.supportEmail == "" {
 		// Endpoint mounted but no destination address configured. Surface
 		// a *typed* 503 (feedback.not_configured) so the dialog shows its
@@ -177,14 +187,6 @@ func (api *feedbackAPI) submit(w http.ResponseWriter, r *http.Request) {
 		}))
 		return
 	}
-
-	// Limit body to a few tens of KB. The handler reads the body itself
-	// (FeedbackRateLimitMiddleware does not peek), so this is the real
-	// upper bound for the request payload — sized to hold a max-length
-	// message + the diagnostics cap + JSON overhead so a legitimate
-	// worst-case payload never hits 413 before field validation runs.
-	r.Body = http.MaxBytesReader(w, r.Body, feedbackMaxRequestBodyBytes)
-	defer func() { _ = r.Body.Close() }()
 
 	var req FeedbackRequest
 	dec := json.NewDecoder(r.Body)
