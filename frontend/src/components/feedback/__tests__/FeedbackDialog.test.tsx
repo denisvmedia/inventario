@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { http as msw, HttpResponse } from "msw"
+import { http as msw, HttpResponse, delay } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -13,6 +13,7 @@ import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
+import { __resetNavigationForTests, setNavigateToMaintenance } from "@/lib/navigation"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
@@ -50,6 +51,7 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+  __resetNavigationForTests()
 })
 
 describe("<FeedbackDialog />", () => {
@@ -141,5 +143,56 @@ describe("<FeedbackDialog />", () => {
     await waitFor(() => {
       expect(onOpenChange).not.toHaveBeenCalledWith(false)
     })
+  })
+
+  it("keeps the dialog open (no /maintenance bounce) on a typed 503 not-configured error", async () => {
+    // Regression: on deployments without SUPPORT_EMAIL the BE returns 503.
+    // It used to be an untyped text/plain 503, which tripped the global
+    // 503 → /maintenance bounce in lib/http.ts and unmounted the whole
+    // shell instead of letting the dialog show its toast. The BE now
+    // returns a *typed* `feedback.not_configured` code (mirrors the
+    // commodity_scan #1720 contract); the dialog must stay put.
+    const navigate = vi.fn()
+    setNavigateToMaintenance(navigate)
+    server.use(
+      ...baseUserHandlers,
+      msw.post(api("/feedback"), async () => {
+        // Small delay so the in-flight (disabled) → settled (enabled)
+        // transition on the submit button is observable below.
+        await delay(30)
+        return HttpResponse.json(
+          {
+            errors: [
+              {
+                status: "503",
+                code: "feedback.not_configured",
+                error: "feedback is not configured on this deployment",
+              },
+            ],
+          },
+          { status: 503 }
+        )
+      })
+    )
+    const user = userEvent.setup()
+    const { onOpenChange } = renderDialog()
+
+    await waitFor(() => expect(screen.getByTestId("feedback-message")).toBeInTheDocument())
+    await user.type(screen.getByTestId("feedback-message"), "anyone home?")
+    const submit = screen.getByTestId("feedback-submit")
+    await user.click(submit)
+
+    // Drive the full submit cycle so the negative assertion isn't vacuous:
+    // the button disables while the request is in flight, then re-enables
+    // once the 503 has been received AND the global bounce decision (in
+    // lib/http.ts) has run. Only then is "navigate not called" meaningful.
+    await waitFor(() => expect(submit).toBeDisabled())
+    await waitFor(() => expect(submit).not.toBeDisabled())
+
+    // The typed product 503 must NOT bounce the shell to /maintenance…
+    expect(navigate).not.toHaveBeenCalled()
+    // …and the dialog stays open so the user keeps their typed message.
+    expect(screen.getByTestId("feedback-dialog")).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
   })
 })

@@ -175,8 +175,10 @@ func TestFeedback_HappyPath(t *testing.T) {
 // TestFeedback_NoSupportEmail asserts the operator-misconfiguration
 // path: the route stays mounted (so the FE has a stable URL), but
 // without SUPPORT_EMAIL the handler responds 503 and never calls the
-// email service. The FE relies on this status to surface the static
-// mailto fallback in the toast.
+// email service. The 503 carries a *typed* JSON:API code
+// (feedback.not_configured) — the FE relies on that dotted code to skip
+// its global 503→/maintenance bounce and instead show the dialog's
+// "feedback isn't configured" toast.
 func TestFeedback_NoSupportEmail(t *testing.T) {
 	c := qt.New(t)
 	email := &capturingFeedbackEmailService{}
@@ -193,6 +195,7 @@ func TestFeedback_NoSupportEmail(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusServiceUnavailable)
+	assertErrorCode(t, c, rr.Body.Bytes(), "feedback.not_configured")
 	c.Assert(email.calls, qt.Equals, 0)
 }
 

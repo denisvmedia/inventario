@@ -2285,7 +2285,7 @@ const docTemplate = `{
                     "503": {
                         "description": "Feedback not configured",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     }
                 }
