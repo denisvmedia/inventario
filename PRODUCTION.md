@@ -417,7 +417,12 @@ Use independent layers — at least the first two are required:
   (PVCs, Secrets, ConfigMaps, workloads) after a node or cluster loss, complementing the
   Postgres logical backup and R2 versioning above. ⚠️ R2: set `checksumAlgorithm: ""` on the
   `BackupStorageLocation` (Velero/kopia's S3 path otherwise trips R2's checksum handling).
-  Always test `velero restore` into a scratch namespace before relying on it.
+  ⚠️ **Set a stable repository encryption key** (the kopia password, e.g.
+  `velero install --secret-file ...` / a pre-created `velero-repo-credentials` Secret) and
+  store it in your secrets manager. If you let Velero auto-generate it, the password lives
+  only in an in-cluster Secret — a from-scratch restore on a fresh cluster then **cannot
+  decrypt** the backups, defeating the purpose. Always test `velero restore` into a scratch
+  namespace before relying on it.
   > Per-distro note: managed Postgres + managed object storage already cover most DR, so
   > Velero matters most when you self-host the data tier in-cluster (e.g. CloudNativePG +
   > MinIO on PVCs). On GKE/DOKS you can lean on Cloud SQL / DO Managed DB snapshots instead.
