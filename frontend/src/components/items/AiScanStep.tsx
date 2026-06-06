@@ -135,10 +135,17 @@ interface AiScanStepProps {
   // Called when the user clicks "Use these values" — receives only
   // the checked fields, already coerced into form-shape, plus a meta
   // object the caller can use to surface follow-up notes on the next
-  // step (e.g. a dropped unknown-currency code). Caller is
-  // responsible for `setValue`-ing each into RHF and advancing the
+  // step (e.g. a dropped unknown-currency code), plus the source files
+  // the user scanned. Caller is responsible for `setValue`-ing each
+  // value into RHF, queuing the files for attach, and advancing the
   // wizard to Basics.
-  onAccept: (values: ScanAcceptedValues, meta?: ScanAcceptMeta) => void
+  //
+  // `sourceFiles` (#1983 Part A): the photos / PDFs the user fed to the
+  // scan are no longer discarded — they're handed back so the dialog can
+  // attach them to the created commodity (images → the `images` bucket,
+  // PDFs → `documents`). Only the accept path retains them; "Fill
+  // manually" / retake abandon the scan and keep nothing.
+  onAccept: (values: ScanAcceptedValues, meta: ScanAcceptMeta, sourceFiles: File[]) => void
   // Called when the user clicks "Fill manually" (offer/review/error)
   // — caller advances to Basics without any prefill.
   onSkip: () => void
@@ -416,11 +423,21 @@ export function AiScanStep({
           break
       }
     }
+    // Hand the source files back so the dialog can attach them to the
+    // created commodity (#1983 Part A). Snapshot the File objects BEFORE
+    // clearPhotos() — revoking the object-URLs only invalidates the
+    // preview blob: URLs, not the underlying File bytes, so the upload
+    // path still reads them fine.
+    const sourceFiles = photos.map((p) => p.file)
     // Pass-through if no checked fields produced a value — the
     // wizard still advances to Basics so the user isn't stuck.
-    onAccept(out, {
-      droppedCurrency,
-    })
+    onAccept(
+      out,
+      {
+        droppedCurrency,
+      },
+      sourceFiles
+    )
     // Side-effect: clear staged photos so a re-take starts clean
     // (also relevant for the implicit revocation cleanup).
     clearPhotos()
@@ -479,6 +496,7 @@ export function AiScanStep({
           onRetake={retakePhotos}
           onSkip={onSkip}
           knownCurrencies={currencySet}
+          attachCount={photos.length}
         />
       ) : (
         <OfferPanel
@@ -863,6 +881,9 @@ interface ReviewPanelProps {
   onRetake: () => void
   onSkip: () => void
   knownCurrencies: Set<string>
+  // Number of source files the user scanned. Drives the "these files will
+  // be attached" reassurance (#1983 Part A); 0 hides it.
+  attachCount: number
 }
 
 function ReviewPanel({
@@ -874,6 +895,7 @@ function ReviewPanel({
   onRetake,
   onSkip,
   knownCurrencies,
+  attachCount,
 }: ReviewPanelProps) {
   const { t } = useTranslation()
   // Group warnings by field so each row can render its own inline
@@ -922,6 +944,16 @@ function ReviewPanel({
       <p className="text-xs text-muted-foreground">
         {t("commodities:form.step.ai.review.subtitle")}
       </p>
+
+      {attachCount > 0 ? (
+        <p
+          className="flex items-center gap-1.5 text-xs text-muted-foreground"
+          data-testid="commodity-form-ai-attach-note"
+        >
+          <FileText aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+          {t("commodities:form.step.ai.review.filesAttached", { count: attachCount })}
+        </p>
+      ) : null}
 
       {warningsByField.global.length > 0 ? (
         <Alert>

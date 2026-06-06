@@ -331,6 +331,8 @@
             "medium": "{{percent}}% likely"
           },
           "currencyInferred": "Currency wasn't on the server's supported list — it won't be pre-filled.",
+          "filesAttached_one": "The file you scanned will be attached to this item — manage it on the Files step.",
+          "filesAttached_other": "The {{count}} files you scanned will be attached to this item — manage them on the Files step.",
           "retake": "Start over",
           "subtitle": "Untick anything that looks wrong before we prefill the form.",
           "title": "Review extracted details",

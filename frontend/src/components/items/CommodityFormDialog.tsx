@@ -52,6 +52,7 @@ import { categoryFromMime } from "@/features/files/constants"
 import {
   buildDefaults,
   clearDraft,
+  mergePendingFiles,
   readDraft,
   toRequest,
   uploadPendingFiles,
@@ -614,7 +615,11 @@ export function CommodityFormDialog({
   // can return partial values (e.g. just a name) that aren't enough
   // to pass the per-field validators yet; the Basics step revalidates
   // on first Next click anyway.
-  function handleAiAccept(values: ScanAcceptedValues, _meta?: ScanAcceptMeta) {
+  function handleAiAccept(
+    values: ScanAcceptedValues,
+    _meta: ScanAcceptMeta,
+    sourceFiles: File[] = []
+  ) {
     const apply = (
       name: keyof CommodityFormInput,
       value: CommodityFormInput[keyof CommodityFormInput]
@@ -644,6 +649,15 @@ export function CommodityFormDialog({
     }
     if (values.comments !== undefined) apply("comments", values.comments)
     if (values.tags !== undefined) apply("tags", values.tags)
+    // #1983 Part A: keep the photos / PDFs the user scanned. They join the
+    // Files-step queue (deduped against anything already staged there), so
+    // the existing post-create uploadPendingFiles() attaches them with the
+    // new commodity id — and the anonymous flow's IDB mirror + FirstItem-
+    // Resolver replay carry them across the login hand-off for free. The
+    // user can still drop any of them from the Files step before saving.
+    if (sourceFiles.length > 0) {
+      setPendingFiles((prev) => mergePendingFiles(prev, sourceFiles))
+    }
     setStep("basics")
   }
 
@@ -1873,17 +1887,10 @@ function FilesStep({ pendingFiles, setPendingFiles }: FilesStepProps) {
   const [dragging, setDragging] = useState(false)
   function add(files: File[]) {
     if (files.length === 0) return
-    setPendingFiles((prev) => [
-      ...prev,
-      ...files.map((file) => ({
-        id:
-          typeof crypto !== "undefined" && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
-        file,
-        tags: [] as string[],
-      })),
-    ])
+    // mergePendingFiles de-dupes by file signature, so re-picking a file
+    // that's already staged (incl. one carried over from the AI scan,
+    // #1983) is a no-op rather than a double-attach.
+    setPendingFiles((prev) => mergePendingFiles(prev, files))
   }
   function remove(id: string) {
     setPendingFiles((prev) => prev.filter((entry) => entry.id !== id))

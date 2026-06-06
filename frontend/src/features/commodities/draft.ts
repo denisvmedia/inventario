@@ -31,6 +31,46 @@ export interface PendingFile {
   tags: string[]
 }
 
+// newPendingId mints a stable id for a staged file row. Prefers
+// crypto.randomUUID (present in every browser the app targets) and falls
+// back to a content-derived string for the rare environment without it
+// (older jsdom, locked-down embedded webviews) so list keys stay unique.
+export function newPendingId(file: File): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID()
+  return `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`
+}
+
+// fileSignature is a cheap identity for a staged File — name + size +
+// last-modified. Used to de-dupe the AI-scan source files against files
+// the user also picks in the Files step (and vice-versa) so the same
+// bytes are never attached twice (#1983 dedup open question).
+export function fileSignature(file: File): string {
+  return `${file.name}::${file.size}::${file.lastModified}`
+}
+
+// mergePendingFiles folds `incoming` File objects into the existing pending
+// list as PendingFile entries, skipping any whose signature already matches
+// an entry already in the list. Returns the same array reference when there
+// is nothing new to add so React can bail out of a no-op state update.
+//
+// This is how AI-scan source files (#1983 Part A) join the Files-step queue:
+// the dialog merges the files the user scanned into `pendingFiles`, then the
+// existing post-create `uploadPendingFiles()` attaches them with the new
+// commodity id — images land in the `images` bucket and PDFs in `documents`
+// (the category is derived from MIME by both the FE row and the BE).
+export function mergePendingFiles(existing: PendingFile[], incoming: File[]): PendingFile[] {
+  if (incoming.length === 0) return existing
+  const seen = new Set(existing.map((entry) => fileSignature(entry.file)))
+  const additions: PendingFile[] = []
+  for (const file of incoming) {
+    const sig = fileSignature(file)
+    if (seen.has(sig)) continue
+    seen.add(sig)
+    additions.push({ id: newPendingId(file), file, tags: [] })
+  }
+  return additions.length > 0 ? [...existing, ...additions] : existing
+}
+
 // ---- Draft persistence helpers ------------------------------------------
 
 // readDraft pulls the previously-saved form values for `key` (per
