@@ -7,9 +7,11 @@
 //        make build-frontend
 //   2. Build the binary with the with_frontend tag:
 //        cd go/cmd/inventario && go build -tags with_frontend -o ../../../bin/inventario .
-//   3. Run the binary:
+//   3. Run the binary (--enable-seed-endpoint mounts the public /seed
+//      route, which is OFF by default in production — #2039):
 //        ./bin/inventario run --db-dsn=memory:// \
-//          --no-auth-rate-limit --no-global-rate-limit
+//          --no-auth-rate-limit --no-global-rate-limit \
+//          --enable-seed-endpoint
 //   4. Seed the DB:
 //        curl -X POST http://localhost:3333/api/v1/seed
 //   5. Run this script:

@@ -130,6 +130,16 @@ type Config struct {
 	// takes effect when a real AI vision provider is also configured.
 	PublicAIVisionScanEnabled bool `yaml:"public_ai_vision_scan_enabled" env:"PUBLIC_AI_VISION_SCAN_ENABLED" env-default:"false"`
 
+	// SeedEndpointEnabled gates the PUBLIC, UNAUTHENTICATED POST /api/v1/seed
+	// endpoint (#2039). Default FALSE. Seed runs a privileged, RLS-bypassing
+	// service-registry operation, so leaving it public lets an anonymous
+	// caller pollute the production tenant — it MUST stay off in production.
+	// Enable it (env INVENTARIO_RUN_ENABLE_SEED_ENDPOINT=true /
+	// --enable-seed-endpoint) only where seeding is intended: dev / e2e
+	// stacks and the throwaway localhost server the Helm init-data Job boots
+	// to curl /seed.
+	SeedEndpointEnabled bool `yaml:"enable_seed_endpoint" env:"ENABLE_SEED_ENDPOINT" env-default:"false"`
+
 	// WorkersOnly / WorkersExclude restrict which background workers run in
 	// `inventario run workers`. See the run/workers package for the accepted
 	// syntax and mutual-exclusion rules. Both fields default to empty, meaning

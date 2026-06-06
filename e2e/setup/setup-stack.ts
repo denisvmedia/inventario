@@ -160,6 +160,12 @@ export async function startBackend(): Promise<void> {
       // deployment.
       INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE:
         process.env.INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE ?? 'true',
+      // Mount the public POST /api/v1/seed route (#2039) so seedDatabase()
+      // below can reach it. The endpoint is OFF by default in the binary —
+      // it runs a privileged, RLS-bypassing operation — and must never be
+      // enabled in a real deployment; here it backs the e2e fixture seed.
+      INVENTARIO_RUN_ENABLE_SEED_ENDPOINT:
+        process.env.INVENTARIO_RUN_ENABLE_SEED_ENDPOINT ?? 'true',
       // Currency-migration surface defaults on in the binary now
       // (Config.FeatureCurrencyMigration env-default since #1612). Pass
       // an explicit override through only if the operator wants to flip

@@ -306,6 +306,13 @@ spec:
             # MinIO demo, where the app can never read them.
             - name: INVENTARIO_RUN_UPLOAD_LOCATION
               value: {{ include "inventario.uploadLocation" . | quote }}
+            # Mount the public /api/v1/seed route ONLY on this throwaway
+            # in-Job seed server so the shell step can curl it (#2039). Seed
+            # runs a privileged, RLS-bypassing operation, so the route is off
+            # by default everywhere else; it is set here and NEVER on the main
+            # app Deployment / ConfigMap, keeping production unable to seed.
+            - name: INVENTARIO_RUN_ENABLE_SEED_ENDPOINT
+              value: "true"
             {{- if .Values.demo.redis.enabled }}
             - name: INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL
               value: {{ $redisUrl | quote }}

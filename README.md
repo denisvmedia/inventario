@@ -320,9 +320,11 @@ canonical worker types, the equivalent admin REST API, and the
    make all
    ```
 
-3. **Run the application**:
+3. **Run the application** (`--enable-seed-endpoint` mounts the public
+   `/api/v1/seed` route used by the next step — it is OFF by default and
+   must stay off in production):
    ```bash
-   cd bin && ./inventario run
+   cd bin && ./inventario run --enable-seed-endpoint
    ```
 
 4. **Seed the database** (optional, for development):
@@ -353,9 +355,11 @@ canonical worker types, the equivalent admin REST API, and the
    make all
    ```
 
-3. **Run the application**:
+3. **Run the application** (`--enable-seed-endpoint` mounts the public
+   `/api/v1/seed` route used by the next step — it is OFF by default and
+   must stay off in production):
    ```bash
-   cd bin && ./inventario run
+   cd bin && ./inventario run --enable-seed-endpoint
    ```
 
 4. **Seed the database** (optional, for development):
@@ -384,10 +388,12 @@ canonical worker types, the equivalent admin REST API, and the
    ```
    Note: If you don't have Make installed, you can use Git Bash which includes Make.
 
-3. **Run the application**:
+3. **Run the application** (`--enable-seed-endpoint` mounts the public
+   `/api/v1/seed` route used by the next step — it is OFF by default and
+   must stay off in production):
    ```powershell
    cd bin
-   .\inventario.exe run
+   .\inventario.exe run --enable-seed-endpoint
    ```
 
 4. **Seed the database** (optional, for development):

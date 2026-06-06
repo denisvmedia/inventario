@@ -180,6 +180,16 @@ spec:
                 secretKeyRef:
                   name: inventario-secrets
                   key: jwt-secret
+            # Mount the public /api/v1/seed route ONLY on this throwaway
+            # one-shot setup-Job seed server (#2039). The server is curled by
+            # the step above when an operator opts in via SEED_DATABASE=true
+            # (default false); it runs to completion and dies, exposing
+            # nothing at runtime. Set as a direct env on the init container,
+            # NOT in inventario-config, so the long-running `inventario`
+            # Deployment (which shares that ConfigMap) keeps the privileged
+            # route off. Without this the opt-in seed would 404.
+            - name: INVENTARIO_RUN_ENABLE_SEED_ENDPOINT
+              value: "true"
           volumeMounts:
             - name: app-data
               mountPath: /data

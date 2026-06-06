@@ -77,14 +77,17 @@ version:
 	@echo "Build Date: $(BUILD_DATE)"
 
 # Run the backend server
+# --enable-seed-endpoint mounts the public /api/v1/seed route (used by the
+# seed-db target). It is OFF by default in the binary (#2039) and must stay
+# off in production; these are local dev targets, so it is safe to enable here.
 .PHONY: run-backend
 run-backend: build-backend
-	$(BINARY_PATH) run --addr $(SERVER_ADDR) --upload-location $(UPLOAD_LOCATION) --db-dsn $(DB_DSN)
+	$(BINARY_PATH) run --addr $(SERVER_ADDR) --upload-location $(UPLOAD_LOCATION) --db-dsn $(DB_DSN) --enable-seed-endpoint
 
 # Run the backend server with PostgreSQL
 .PHONY: run-backend-postgres
 run-backend-postgres: build-backend
-	$(BINARY_PATH) run --addr $(SERVER_ADDR) --upload-location $(UPLOAD_LOCATION) --db-dsn postgres://postgres:password@localhost:5432/inventario
+	$(BINARY_PATH) run --addr $(SERVER_ADDR) --upload-location $(UPLOAD_LOCATION) --db-dsn postgres://postgres:password@localhost:5432/inventario --enable-seed-endpoint
 
 # Run the React frontend dev server (Vite). Proxies /api to :3333.
 .PHONY: run-frontend
@@ -137,7 +140,8 @@ test: test-go test-frontend
 test-e2e:
 	cd e2e && npm install && npm run test
 
-# Seed the database
+# Seed the database (requires the server to run with --enable-seed-endpoint,
+# which the run-backend targets above pass; #2039).
 .PHONY: seed-db
 seed-db:
 	@echo "Seeding the database..."

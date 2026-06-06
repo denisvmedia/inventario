@@ -358,6 +358,11 @@ jobs:
           # platform admin. OFF by default in the binary — /api/v1/seed is
           # unauthenticated, so this must never be set in a real deployment.
           INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE: "true"
+          # Mount the public POST /api/v1/seed route (#2039) so the
+          # "Seed test fixtures" step below can reach it. OFF by default in
+          # the binary (it runs a privileged, RLS-bypassing operation); set
+          # here only for this throwaway CI server, never in a real deployment.
+          INVENTARIO_RUN_ENABLE_SEED_ENDPOINT: "true"
         run: |
           mkdir -p /tmp/inventario-uploads
           nohup ./bin/inventario run > /tmp/inventario.log 2>&1 &
