@@ -911,14 +911,15 @@ function HelpSection() {
   const shortcutsDialog = useKeyboardShortcutsDialog()
   const [feedbackOpen, setFeedbackOpen] = useState(false)
 
-  // Five rows: docs (#1384), shortcuts (#1385 — opens the cheat-sheet
+  // Four rows: docs (#1384), shortcuts (#1385 — opens the cheat-sheet
   // modal in-place), what's new (#1386 — with a marketing v{Major.Minor}
-  // badge per design-audit #1536), send feedback (#1387 — opens the
-  // FeedbackDialog in-place), contact support (mailto fallback while a
-  // real ticketing surface is scoped). Real destinations behind each
-  // route are ComingSoonPage already; this section mostly acts as a
-  // discovery aid.
-  type HelpRowKey = "documentation" | "shortcuts" | "whatsNew" | "feedback" | "contactSupport"
+  // badge per design-audit #1536), and "Contact support / share
+  // feedback" (#1387 — opens the FeedbackDialog in-place). The dialog's
+  // "Question" type doubles as the contact-support channel, so the
+  // former static mailto row was folded into this single entry point.
+  // Real destinations behind each route are ComingSoonPage already;
+  // this section mostly acts as a discovery aid.
+  type HelpRowKey = "documentation" | "shortcuts" | "whatsNew" | "feedback"
   // `href: "modal:shortcuts"` → renders a click-to-open <button> wired
   //   to the keyboard-shortcuts dialog. `href: "modal:feedback"` →
   //   opens the FeedbackDialog. Using a sentinel string keeps the row
@@ -928,7 +929,6 @@ function HelpSection() {
     { key: "shortcuts", href: "modal:shortcuts" },
     { key: "whatsNew", href: "/whats-new" },
     { key: "feedback", href: "modal:feedback" },
-    { key: "contactSupport", href: "mailto:support@inventario.app" },
   ]
 
   const versionShort = shortAppVersion(APP_VERSION)
@@ -938,13 +938,12 @@ function HelpSection() {
       <SectionTitle>{t("settings:help.title")}</SectionTitle>
       <div className="rounded-xl border border-border divide-y divide-border">
         {rows.map(({ key, href }) => {
-          // Three-arm union: modal trigger (in-app dialog), external
-          // (mailto), or in-app route. All three use the same chrome —
-          // chevron-right + label + description. The version Badge only
-          // renders on the "whatsNew" row.
+          // Two-arm union: modal trigger (in-app dialog) or in-app
+          // route. Both use the same chrome — chevron-right + label +
+          // description. The version Badge only renders on the
+          // "whatsNew" row.
           const labelKey = key
           const isModal = href.startsWith("modal:")
-          const isExternal = href.startsWith("mailto:") || href.startsWith("http")
           const RowInner = (
             <>
               <div className="flex items-center gap-2">
@@ -976,19 +975,6 @@ function HelpSection() {
                 <div>{RowInner}</div>
                 <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
               </button>
-            )
-          }
-          if (isExternal) {
-            return (
-              <a
-                key={key}
-                href={href}
-                data-testid={`help-row-${key}`}
-                className="flex items-center justify-between p-4 text-left transition-colors hover:bg-muted/50"
-              >
-                <div>{RowInner}</div>
-                <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
-              </a>
             )
           }
           return (

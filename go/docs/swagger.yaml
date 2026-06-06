@@ -6134,7 +6134,7 @@ paths:
         "503":
           description: Feedback not configured
           schema:
-            type: string
+            $ref: '#/definitions/jsonapi.Errors'
       summary: Submit feedback
       tags:
       - feedback

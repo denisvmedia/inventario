@@ -434,6 +434,15 @@ email:
   # Env: INVENTARIO_RUN_EMAIL_REPLY_TO
   replyTo: ""
 
+  # Destination inbox for in-app "Contact support / share feedback"
+  # submissions (#1387). Empty leaves POST /api/v1/feedback mounted but it
+  # returns a typed 503 (feedback.not_configured) and the dialog shows a
+  # "feedback isn't configured on this deployment" toast. Set a real address
+  # to enable the channel. With demo.mailpit on, this just needs to be a
+  # valid address — Mailpit captures everything regardless of destination.
+  # Env: INVENTARIO_RUN_SUPPORT_EMAIL
+  supportEmail: ""
+
   # Number of background queue workers
   # Env: INVENTARIO_RUN_EMAIL_QUEUE_WORKERS
   queueWorkers: 5

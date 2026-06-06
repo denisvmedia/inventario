@@ -64,12 +64,10 @@
   },
   "help": {
     "rows": {
-      "contactSupport": "Contact support",
-      "contactSupportDescription": "Get help from the team.",
       "documentation": "Documentation",
       "documentationDescription": "Browse guides and tutorials.",
-      "feedback": "Send feedback",
-      "feedbackDescription": "Help us improve Inventario.",
+      "feedback": "Contact support / share feedback",
+      "feedbackDescription": "Ask the team for help, report a bug, or tell us what to build next.",
       "shortcuts": "Keyboard shortcuts",
       "shortcutsDescription": "View every keyboard shortcut used across the app.",
       "whatsNew": "What's new",

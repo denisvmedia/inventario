@@ -71,6 +71,12 @@ demo:
 # links in these emails resolve to the same tailnet node.
 email:
   from: "noreply@inventario.example"
+  # Feedback destination (#1387). demo.mailpit forces provider=smtp, so a real
+  # submit from Settings → "Contact support / share feedback" actually delivers
+  # here and is viewable in the Mailpit web UI (the mail-<app host> tailnet
+  # node) instead of dead-ending on the "not configured" toast. The address is
+  # arbitrary — Mailpit captures all mail regardless of recipient.
+  supportEmail: "support@inventario.example"
 
 # Bootstrap + migrate runs via the chart's setup Job (templates/job-setup.yaml).
 # Idempotent — re-applies safely.

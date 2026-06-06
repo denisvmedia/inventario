@@ -615,11 +615,12 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			LoginEventRegistry:   params.FactorySet.LoginEventRegistry,
 		}))
 		// In-app feedback / contact support (#1387). Auth-required and
-		// per-user rate-limited (5/hour). The handler returns 503 when
-		// SupportEmail is empty, so it stays mounted in the
-		// "feedback not configured" deployment shape too — the FE can
-		// rely on a stable URL and surface the operator's mailto
-		// fallback when the 503 comes back.
+		// per-user rate-limited (5/hour). The handler returns a typed 503
+		// (feedback.not_configured) when SupportEmail is empty, so it stays
+		// mounted in the "feedback not configured" deployment shape too —
+		// the FE can rely on a stable URL and surface a "feedback isn't
+		// configured" toast (not the global /maintenance bounce) when the
+		// typed 503 comes back.
 		r.With(userMiddlewares...).Route("/feedback", Feedback(FeedbackParams{
 			EmailService: emailSvc,
 			SupportEmail: params.SupportEmail,
