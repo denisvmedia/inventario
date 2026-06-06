@@ -852,7 +852,20 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
             </>
           ) : tab === "warranty" ? (
-            <WarrantyTab commodity={commodity} onSwitchToFiles={() => setTab("files")} />
+            <WarrantyTab
+              commodity={commodity}
+              onUploadReceipt={() => {
+                // #2012: open the upload dialog directly (commodity
+                // preselected) — the same dialog the Files-tab dropzone
+                // opens — instead of just switching tabs and leaving the
+                // user to hunt for the dropzone. Switch the underlying
+                // tab to Files too so the newly uploaded receipt is
+                // visible once the dialog closes.
+                setTab("files")
+                setPendingDropFiles([])
+                setUploadOpen(true)
+              }}
+            />
           ) : tab === "lend" ? (
             <LendTab
               commodityId={commodity?.id ?? id}
@@ -1488,16 +1501,19 @@ function FilesTab({
 
 interface WarrantyTabProps {
   commodity?: Commodity
-  // Optional. When provided, renders an "Upload Receipt" CTA that
-  // jumps to the Files tab so the user can drop the warranty PDF
-  // there instead of inventing a per-commodity upload widget.
-  onSwitchToFiles?: () => void
+  // Optional. When provided, renders an "Upload Receipt" CTA that opens
+  // the page-level UploadFilesDialog with this commodity preselected —
+  // the same dialog the Files-tab dropzone opens (#2012) — instead of
+  // inventing a per-commodity upload widget. The page wires this to
+  // open the dialog and switch the Files tab underneath.
+  onUploadReceipt?: () => void
 }
 
 // WarrantyTab renders the first-class warranty surface (#1367):
 // status-coloured card + expiry-with-days-remaining line + notes block
-// + an "Upload Receipt" CTA pointing at the Files tab. Layout mirrors
-// the design mock (`inventario-design/src/components/ItemDetail.tsx`,
+// + an "Upload Receipt" CTA that opens the upload dialog (#2012).
+// Layout mirrors the design mock
+// (`inventario-design/src/components/ItemDetail.tsx`,
 // `<TabsContent value="warranty">`); the design mock CLAUDE.md
 // requires that warranty status colours go through the canonical
 // WarrantyBadge / `WARRANTY_STATUS_CONFIG` so all four surfaces
@@ -1505,7 +1521,7 @@ interface WarrantyTabProps {
 //
 // The form inputs themselves live in the commodity edit dialog's
 // Warranty step — this tab stays read-only.
-function WarrantyTab({ commodity, onSwitchToFiles }: WarrantyTabProps) {
+function WarrantyTab({ commodity, onUploadReceipt }: WarrantyTabProps) {
   const { t } = useTranslation()
   // #1554: bundle commodities don't carry a warranty — render the
   // "split into separate items" hint instead of the live pill / notes
@@ -1591,13 +1607,13 @@ function WarrantyTab({ commodity, onSwitchToFiles }: WarrantyTabProps) {
             {t("commodities:detail.warranty.emptyState")}
           </p>
         ) : null}
-        {onSwitchToFiles ? (
+        {onUploadReceipt ? (
           <Button
             type="button"
             variant="outline"
             size="sm"
             className="w-fit gap-1.5"
-            onClick={onSwitchToFiles}
+            onClick={onUploadReceipt}
             data-testid="commodity-detail-warranty-upload-receipt"
           >
             <FileText className="size-3.5" aria-hidden="true" />
