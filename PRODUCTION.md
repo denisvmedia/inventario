@@ -342,6 +342,23 @@ than one replica (set `persistence.enabled=false`).
     inventario backoffice mfa setup --email ops@example.com   # enroll TOTP
   ```
 
+- [ ] ⚠️ **Block the unauthenticated seed endpoint.** `POST /api/v1/seed` is currently
+  mounted in every environment and runs a privileged, RLS-bypassing seed — an anonymous
+  caller can pollute your tenant and lock your main currency (#201). A config flag to
+  disable it (off by default) is tracked in
+  [#2039](https://github.com/denisvmedia/inventario/issues/2039); once it ships, production
+  simply leaves `INVENTARIO_RUN_ENABLE_SEED_ENDPOINT` unset. **Until then, deny the path at
+  the ingress** and verify `curl -X POST https://<DOMAIN>/api/v1/seed` returns 404:
+
+  ```yaml
+  # ingress-nginx: add to the Inventario Ingress annotations
+  nginx.ingress.kubernetes.io/server-snippet: |
+    location = /api/v1/seed { return 404; }
+  ```
+
+  (Traefik: attach a middleware that blocks the `/api/v1/seed` path; GCE: an equivalent
+  URL-map rule or an upstream WAF.)
+
 ### B10. Monitoring & alerting — required go-live gate
 
 ⚠️ **Do not call the deployment "done" until alerts fire to a real channel.** The app
@@ -386,9 +403,24 @@ manually:
 
 ### B11. Backups & disaster recovery
 
-- [ ] **PostgreSQL**: enable automated backups (managed snapshots, CloudNativePG scheduled
-  backups, or a `pg_dump` CronJob). Verify a restore actually works.
-- [ ] **Object storage (R2)**: enable bucket versioning / lifecycle rules.
+Use independent layers — at least the first two are required:
+
+- [ ] **PostgreSQL (logical)**: enable automated backups (managed snapshots, CloudNativePG
+  scheduled backups, or a `pg_dump` CronJob). This is your primary data backup. Verify a
+  restore actually works.
+- [ ] **Object storage (R2)**: enable bucket versioning / lifecycle rules so uploaded files
+  survive accidental deletion/overwrite.
+- [ ] **Cluster-level (Velero)**: for whole-namespace disaster recovery — Kubernetes
+  resource manifests **and** PersistentVolume data — install [Velero](https://velero.io)
+  with an object-store backup location (S3, **Cloudflare R2**, GCS, or DO Spaces) and a
+  scheduled backup of `<NAMESPACE>`. This is the layer that rebuilds the entire release
+  (PVCs, Secrets, ConfigMaps, workloads) after a node or cluster loss, complementing the
+  Postgres logical backup and R2 versioning above. ⚠️ R2: set `checksumAlgorithm: ""` on the
+  `BackupStorageLocation` (Velero/kopia's S3 path otherwise trips R2's checksum handling).
+  Always test `velero restore` into a scratch namespace before relying on it.
+  > Per-distro note: managed Postgres + managed object storage already cover most DR, so
+  > Velero matters most when you self-host the data tier in-cluster (e.g. CloudNativePG +
+  > MinIO on PVCs). On GKE/DOKS you can lean on Cloud SQL / DO Managed DB snapshots instead.
 - [ ] **App-level backups (optional)**: the signed `.inb` backup/export feature (#534) lets
   an operator export the full dataset; store the Ed25519 backup signing key stably if you
   rely on it.
