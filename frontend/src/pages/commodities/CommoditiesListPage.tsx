@@ -606,10 +606,16 @@ export function CommoditiesListPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setMoveOpen(true)}
-              disabled={migrationLock.locked}
-              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              // Locked = aria-disabled + click-guard rather than the
+              // `disabled` attribute, so the "why" tooltip stays
+              // hover-discoverable (a real `disabled` button gets
+              // `pointer-events-none` and never shows its title).
+              onClick={() => {
+                if (!migrationLock.locked) setMoveOpen(true)
+              }}
               aria-disabled={migrationLock.locked || undefined}
+              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              className={migrationLock.locked ? "cursor-not-allowed opacity-50" : undefined}
               data-testid="commodities-bulk-move"
             >
               {t("commodities:bulk.moveButton")}
@@ -617,10 +623,16 @@ export function CommoditiesListPage() {
             <Button
               variant="destructive"
               size="sm"
-              onClick={handleBulkDelete}
-              disabled={bulkDelete.isPending || migrationLock.locked}
-              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              // `disabled` is reserved for the in-flight delete; the
+              // migration lock uses aria-disabled + click-guard so the
+              // tooltip remains discoverable (see Move button above).
+              onClick={() => {
+                if (!migrationLock.locked) handleBulkDelete()
+              }}
+              disabled={bulkDelete.isPending}
               aria-disabled={migrationLock.locked || undefined}
+              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              className={migrationLock.locked ? "cursor-not-allowed opacity-50" : undefined}
               data-testid="commodities-bulk-delete"
             >
               <Trash2 className="mr-2 size-4" aria-hidden="true" />
