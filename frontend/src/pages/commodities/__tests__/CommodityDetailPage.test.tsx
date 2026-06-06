@@ -169,6 +169,34 @@ describe("<CommodityDetailPage />", () => {
     expect(await screen.findByTestId("commodity-detail-files")).toBeInTheDocument()
   })
 
+  it("opens the upload dialog directly from the Warranty tab's Upload Receipt CTA (#2012)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      ...fileHandlers.list(SLUG, []),
+      ...fileHandlers.counts(SLUG, {})
+    )
+    renderDetail(`/g/${SLUG}/commodities/${ID}?tab=warranty`)
+    const uploadReceipt = await screen.findByTestId("commodity-detail-warranty-upload-receipt")
+    // Regression guard: before #2012 this button only switched to the
+    // Files tab and the user had to hunt for the dropzone. The dialog
+    // must not be open until the CTA is clicked.
+    expect(screen.queryByTestId("files-upload-dialog")).toBeNull()
+    await user.click(uploadReceipt)
+    // The CTA now opens the page-level UploadFilesDialog directly — the
+    // same dialog the Files-tab dropzone opens — with this commodity
+    // preselected (the title carries the commodity name).
+    const dialog = await screen.findByTestId("files-upload-dialog")
+    expect(dialog).toBeInTheDocument()
+    expect(dialog).toHaveTextContent(/MacBook Pro 16/)
+    // …and it switches the underlying tab to Files (#2012) so the newly
+    // uploaded receipt is visible once the dialog closes — the Files tab
+    // content mounts behind the modal.
+    expect(await screen.findByTestId("commodity-detail-files")).toBeInTheDocument()
+  })
+
   it("preselects the Warranty tab when the URL has ?tab=warranty (#1529)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
