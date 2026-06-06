@@ -16,6 +16,8 @@ docker-compose up -d
 # Login with credentials from .env.example: admin@example.com / admin123
 ```
 
+**Going to production on Kubernetes?** Follow the [Production Release & Deployment Runbook](PRODUCTION.md) — a step-by-step checklist that cuts a release and deploys to any Kubernetes distribution (k3s, GKE, DigitalOcean DOKS).
+
 ## Future Features
 
 - **Inventory Management**: Easily create, update, and delete items in your inventory. Add essential details such as item name, description, location, purchase date, and more.
@@ -454,6 +456,8 @@ This test validates:
 
 ## Documentation
 
+- [Production Release & Deployment Runbook](PRODUCTION.md) - Cut a release and deploy to Kubernetes (k3s/GKE/DOKS), distribution-agnostic
+- [Production Deployment (bare-metal / systemd)](DEPLOYMENT.md) - Single-host install without Kubernetes
 - [Signed URLs for Secure File Access](SIGNED_URLS.md) - Comprehensive guide to the secure file access system
 - [System Admin Operations Runbook](devdocs/admin-runbook.md) - Bootstrapping system admins, audit-log inspection, lockout recovery
 - [Admin Section Threat Model](devdocs/security/admin-threat-model.md) - Security model for the cross-tenant admin surface
