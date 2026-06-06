@@ -147,6 +147,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — issue #1547 asks for a compact surfacing of `purchase_date` on the grid card ("below `area` or alongside `current_price`"), names the i18n key shape, and names the `formatDate` helper. The chip-in-top-right-cluster placement is an agent-chosen interpretation of "compact" that the user confirmed visually after two earlier iterations (standalone line, inline dot-separator) were rejected.
 - **Reversion plan**: Permanent until the upstream mock adopts the same line; reconcile when it does.
 
+#### 2026-06-05 — Items bulk-action bar adopts the Files fixed-bottom-overlay shape (shared `BulkActionBar`)
+
+- **Issue/PR**: PR #2016
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) has no bulk-select affordance, and the design language doc ([`design/15-form-and-data-ux.md`](design/15-form-and-data-ux.md)) describes the multi-select bar as an _in-flow_ element that "shifts the page header down — doesn't overlay it".
+- **Reality**: The Items list bulk bar (`data-testid="commodities-bulk-bar"`) moved from an in-flow `bg-primary/5` block (which reflowed the list on first selection) to the same `fixed bottom-6 left-1/2 -translate-x-1/2 z-40` `bg-popover` overlay the Files page already uses. Both pages now render the one shared `BulkActionBar` component (`frontend/src/components/ui/bulk-action-bar.tsx`): identical floating shell, slide-in animation, select-all checkbox + "N selected" cluster, and a destructive Delete. The move affordance stays page-specific (Items opens an area-picker dialog; Files uses an inline category `<select>`) because the destination sets differ. The Items bar dropped its separate "Cancel" button (the select-all checkbox now toggles the whole page off, matching Files).
+- **Why**: User-requested unification — the two surfaces shipped visibly different bulk bars (inline tinted block vs. floating pill) and the floating overlay is the already-approved canonical shape (see the Files entry of 2026-05-16). Extracting one component removes the drift risk and supersedes the in-flow description in `15-form-and-data-ux.md` for the overlay treatment.
+- **Approved by**: user (explicit) — asked to make the Items selection panel match the Files one.
+- **Reversion plan**: Permanent unless the upstream mock adopts a richer mass-action pattern; reconcile both surfaces together via the shared component if it does.
+
 ### Dashboard / Overview
 
 #### 2026-05-10 — Stat-card grid: 6 inventory metrics in a single `lg:grid-cols-3` block
