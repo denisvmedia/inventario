@@ -278,6 +278,48 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     expect(nameInput.value).toBe("Sony WH-1000XM5")
   })
 
+  it("queues the scanned source files into the Files step on accept (#1983)", async () => {
+    // Return a complete, high-confidence field set so accepting prefills
+    // every required field — the wizard can then walk straight to the Files
+    // step without manual entry, where the retained source files surface.
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: {
+          name: { value: "Sony WH-1000XM5", confidence: 0.95 },
+          short_name: { value: "Sony XM5", confidence: 0.95 },
+          type: { value: "electronics", confidence: 0.95 },
+          original_price: { value: 399, confidence: 0.95 },
+          original_price_currency: { value: "USD", confidence: 0.95 },
+          purchase_date: { value: "2024-01-15", confidence: 0.95 },
+        },
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+
+    // Scan one image + one PDF, then accept.
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), [
+      makeImage("front.jpg"),
+      makePdf("receipt.pdf"),
+    ])
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    await user.click(screen.getByTestId("commodity-form-ai-use-values"))
+
+    // Walk Basics → Purchase → Warranty → Extras → Files. Every required
+    // field was prefilled by the scan, so each Next passes validation.
+    await screen.findByTestId("commodity-form-basics-step")
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByTestId("commodity-form-next"))
+    }
+
+    const filesStep = await screen.findByTestId("commodity-form-files-step")
+    // Both scanned files are now staged in the Files step — the image and the
+    // PDF — ready for the post-create uploadPendingFiles() attach.
+    expect(within(filesStep).getByText("front.jpg")).toBeInTheDocument()
+    expect(within(filesStep).getByText("receipt.pdf")).toBeInTheDocument()
+  })
+
   it("accepts a server-supported non-default currency (CZK) guessed from the scan", async () => {
     // defaultCurrency is USD; the /currencies mock (beforeEach) includes CZK.
     // A Czech-invoice guess must therefore be pre-fillable — not dropped as
