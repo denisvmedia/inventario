@@ -259,8 +259,21 @@ export function CommoditiesListPage() {
   }
   function toggleSelectAll(rows: Commodity[]) {
     setSelected((prev) => {
-      if (prev.size === rows.length) return new Set()
-      return new Set(rows.map((r) => r.id ?? "").filter(Boolean))
+      const ids = rows.map((r) => r.id ?? "").filter(Boolean)
+      // Derive the action from the SAME "every visible row selected"
+      // predicate the checkbox renders with — not a `prev.size ===
+      // rows.length` compare. A size compare wedges the toggle whenever
+      // `selected` still holds ids outside the visible set (e.g. the
+      // client-side warranty filter narrows `rows` without clearing
+      // selection): you could no longer uncheck in one click. Add/remove
+      // only the visible ids so off-page selection is preserved too.
+      const allVisibleSelected = ids.length > 0 && ids.every((id) => prev.has(id))
+      const next = new Set(prev)
+      for (const id of ids) {
+        if (allVisibleSelected) next.delete(id)
+        else next.add(id)
+      }
+      return next
     })
   }
 
