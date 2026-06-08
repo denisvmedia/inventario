@@ -50,7 +50,7 @@ require (
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
 	gocloud.dev v0.45.0
 	golang.org/x/crypto v0.52.0
-	golang.org/x/exp v0.0.0-20260529124908-c761662dc8c9
+	golang.org/x/exp v0.0.0-20260603202125-055de637280b
 	golang.org/x/image v0.41.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
