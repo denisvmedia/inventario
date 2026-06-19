@@ -113,7 +113,7 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.3.3 // indirect
-	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-extras/nolintguard v0.4.0 // indirect
 	github.com/go-extras/qtlint v1.5.0 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
