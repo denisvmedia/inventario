@@ -13,10 +13,19 @@ import {
 // dictionary on every test that mounts the meter and (b) leak microtasks
 // across tests via the module-level loader cache.
 const zxcvbnMock = vi.fn()
-const setOptionsMock = vi.fn()
+// v4 configures scoring through the ZxcvbnFactory constructor rather than the
+// old zxcvbnOptions.setOptions singleton. factoryMock stands in for that
+// construction step so a test can make it throw to simulate a load failure.
+const factoryMock = vi.fn()
 vi.mock("@zxcvbn-ts/core", () => ({
-  zxcvbn: (...args: unknown[]) => zxcvbnMock(...args),
-  zxcvbnOptions: { setOptions: (...args: unknown[]) => setOptionsMock(...args) },
+  ZxcvbnFactory: class {
+    constructor(...args: unknown[]) {
+      factoryMock(...args)
+    }
+    check(...args: unknown[]) {
+      return zxcvbnMock(...args)
+    }
+  },
 }))
 vi.mock("@zxcvbn-ts/language-common", () => ({
   adjacencyGraphs: {},
@@ -29,7 +38,7 @@ vi.mock("@zxcvbn-ts/language-en", () => ({
 
 beforeEach(() => {
   zxcvbnMock.mockReset()
-  setOptionsMock.mockReset()
+  factoryMock.mockReset()
   __resetZxcvbnLoader()
 })
 afterEach(() => {
@@ -85,8 +94,8 @@ describe("<PasswordStrengthMeter />", () => {
   })
 
   it("falls back to the heuristic when the zxcvbn dynamic import fails", async () => {
-    // First call to setOptions throws, simulating a chunk-download failure.
-    setOptionsMock.mockImplementation(() => {
+    // Constructing the factory throws, simulating a chunk-download failure.
+    factoryMock.mockImplementation(() => {
       throw new Error("network offline")
     })
     render(<PasswordStrengthMeter password="LongerOne1" />)
