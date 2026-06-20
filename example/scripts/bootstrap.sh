@@ -2,11 +2,11 @@
 set -e
 
 echo "=== RUNNING BOOTSTRAP MIGRATIONS (IDEMPOTENT) ==="
-echo "Database DSN: $INVENTARIO_DB_DSN"
+echo "Database DSN: [configured]"
 
 # Debug: Show what we're trying to connect to
 echo "Trying to connect with:"
-echo "  DSN: $INVENTARIO_DB_DSN"
+echo "  DSN: [configured]"
 echo "  Bootstrap user: $INVENTARIO_BOOTSTRAP_USERNAME"
 echo "  Migration user: $INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS"
 
