@@ -1,5 +1,527 @@
 {
+  "bulk": {
+    "deleteButton": "Smazat",
+    "deleteDescription_one": "Tímto trvale odstraníte vybranou položku.",
+    "deleteDescription_few": "Tímto trvale odstraníte {{count}} vybrané položky.",
+    "deleteDescription_many": "Tímto trvale odstraníte {{count}} vybrané položky.",
+    "deleteDescription_other": "Tímto trvale odstraníte {{count}} vybraných položek.",
+    "deleteTitle_one": "Smazat {{count}} položku?",
+    "deleteTitle_few": "Smazat {{count}} položky?",
+    "deleteTitle_many": "Smazat {{count}} položky?",
+    "deleteTitle_other": "Smazat {{count}} položek?",
+    "moveButton": "Přesunout…",
+    "moveConfirm": "Přesunout položky",
+    "moveDescription": "Vyberte cílovou oblast pro vybrané položky.",
+    "moveTargetLabel": "Cílová oblast",
+    "moveTargetPlaceholder": "Vyberte oblast…",
+    "moveTitle_one": "Přesunout {{count}} položku",
+    "moveTitle_few": "Přesunout {{count}} položky",
+    "moveTitle_many": "Přesunout {{count}} položky",
+    "moveTitle_other": "Přesunout {{count}} položek",
+    "regionLabel": "Lišta hromadných akcí",
+    "selected_one": "{{count}} položka vybrána",
+    "selected_few": "{{count}} položky vybrány",
+    "selected_many": "{{count}} položky vybráno",
+    "selected_other": "{{count}} položek vybráno"
+  },
+  "card": {
+    "purchasedOn": "Zakoupeno {{date}}"
+  },
+  "cover": {
+    "clearSuccess": "Titulní fotografie odstraněna.",
+    "error": "Titulní fotografii se nepodařilo aktualizovat.",
+    "setSuccess": "Titulní fotografie aktualizována."
+  },
+  "delete": {
+    "description": "Tímto trvale odstraníte položku i všechny připojené soubory.",
+    "title": "Smazat {{name}}?"
+  },
   "detail": {
-    "viewFullDetails": "Zobrazit všechny podrobnosti"
+    "acquisitionPrice": "Původně zakoupeno za {{price}}",
+    "backToList": "Zpět na položky",
+    "delete": "Smazat",
+    "documentTitle": "Položka",
+    "edit": "Upravit",
+    "errorDescription": "Načtěte stránku znovu nebo to za chvíli zkuste znovu.",
+    "errorTitle": "Tuto položku se nepodařilo načíst",
+    "fields": {
+      "area": "Oblast",
+      "comments": "Poznámky",
+      "convertedOriginalPrice": "Přepočtená původní cena",
+      "count": "Množství",
+      "currentPrice": "Aktuální hodnota",
+      "extraSerialNumbers": "Další sériová čísla",
+      "lastModifiedDate": "Naposledy upraveno",
+      "location": "Umístění",
+      "originalPrice": "Původní cena",
+      "partNumbers": "Čísla dílů",
+      "purchaseDate": "Datum nákupu",
+      "registeredDate": "Datum přidání",
+      "serialNumber": "Sériové číslo",
+      "status": "Stav",
+      "tags": "Štítky",
+      "urls": "Odkazy"
+    },
+    "filesTab": {
+      "browse": "procházet",
+      "chip": {
+        "all": "Vše",
+        "documents": "Dokumenty",
+        "images": "Obrázky",
+        "invoices": "Faktury",
+        "other": "Ostatní"
+      },
+      "dropDocuments": "Přetáhněte dokumenty nebo",
+      "dropFiles": "Přetáhněte soubory nebo",
+      "dropImages": "Přetáhněte obrázky nebo",
+      "dropInvoices": "Přetáhněte faktury nebo",
+      "emptyAll": "Zatím nejsou připojeny žádné soubory.",
+      "emptyDocuments": "Zatím žádné dokumenty. Návody, záruky, certifikáty.",
+      "emptyImages": "Zatím žádné obrázky. Přidejte obrázky položky, abyste je mohli použít na kartách.",
+      "emptyInvoices": "Zatím žádné faktury. Přidejte doklady o nákupu, aby se zobrazily v reportech.",
+      "emptyOther": "Zatím žádné další soubory."
+    },
+    "historyDescription": "Každá změna této položky — kdo, kdy a co se změnilo.",
+    "historyEmpty": "Zatím žádná aktivita.",
+    "historyError": "Aktivitu se nepodařilo načíst. Zkuste obnovit stránku.",
+    "historyEvent": {
+      "backFromServiceLabel": "Vráceno ze servisu",
+      "backFromServiceLabelOn": "Vráceno ze servisu dne {{returnedAt}}",
+      "by": "uživatelem {{name}}",
+      "coverChangedLabelCleared": "Titulní fotografie odstraněna",
+      "coverChangedLabelSet": "Nastavena titulní fotografie",
+      "createdLabel": "Položka přidána",
+      "deletedLabel": "Položka smazána",
+      "lentOutLabel": "Zapůjčeno uživateli {{borrower}}",
+      "lentOutLabelDue": "Zapůjčeno uživateli {{borrower}} (vrátit do {{dueBack}})",
+      "lentOutLabelGeneric": "Zapůjčeno",
+      "loanField": {
+        "borrower_contact": "kontakt vypůjčitele",
+        "borrower_name": "jméno vypůjčitele",
+        "borrower_note": "poznámka k zápůjčce",
+        "due_back_at": "datum vrácení"
+      },
+      "loanUpdatedLabel": "Zápůjčka aktualizována",
+      "loanUpdatedLabelFields": "Zápůjčka aktualizována: {{fields}}",
+      "movedLabel": "Přesunuto do nové oblasti",
+      "priceChangedLabel": "Cena změněna",
+      "returnedLabel": "Označeno jako vráceno",
+      "returnedLabelOn": "Označeno jako vráceno dne {{returnedAt}}",
+      "sentForServiceLabel": "Odesláno do servisu k {{provider}}",
+      "sentForServiceLabelGeneric": "Odesláno do servisu",
+      "sentForServiceLabelReason": "Odesláno k {{provider}} z důvodu {{reason}}",
+      "serviceField": {
+        "cost": "náklady",
+        "expected_return_at": "očekávané vrácení",
+        "provider_contact": "kontakt poskytovatele",
+        "provider_name": "poskytovatel",
+        "reason": "důvod"
+      },
+      "serviceUpdatedLabel": "Servis aktualizován",
+      "serviceUpdatedLabelFields": "Servis aktualizován: {{fields}}",
+      "statusChangedFromLabel": "Stav: {{from}} → {{to}}",
+      "statusChangedLabel": "Označeno jako {{to}}",
+      "updatedLabel": "Položka upravena"
+    },
+    "historyShowLess": "Zobrazit méně",
+    "historyShowMore_one": "Zobrazit {{count}} další",
+    "historyShowMore_few": "Zobrazit {{count}} další",
+    "historyShowMore_many": "Zobrazit {{count}} dalšího",
+    "historyShowMore_other": "Zobrazit {{count}} dalších",
+    "historyTitle": "Historie",
+    "insuranceReport": "Pojistný report",
+    "notFoundDescription": "Mohla být smazána nebo k ní nemáte přístup.",
+    "notFoundTitle": "Položka nenalezena",
+    "noValue": "—",
+    "print": "Tisk",
+    "sheetDescriptionFallback": "Prohlédněte si, upravte nebo spravujte soubory vybrané položky.",
+    "sheetTitleFallback": "Podrobnosti položky",
+    "statusTransition": {
+      "heading": "Změnit stav"
+    },
+    "statusTransitionDialog": {
+      "dateLabel": "Datum",
+      "description": {
+        "disposed": "Trvale odeberte tuto položku z inventáře.",
+        "lost": "Označte tuto položku jako ztracenou. Změnu lze později vrátit.",
+        "sold": "Zaznamenejte prodej této položky včetně výnosu.",
+        "written_off": "Odepište tuto položku — obvykle pro pojištění nebo účetnictví."
+      },
+      "errors": {
+        "dateInvalid": "Zadejte platné datum.",
+        "dateRequired": "Datum je povinné.",
+        "noteTooLong": "Poznámka může mít nejvýše 1024 znaků.",
+        "salePriceInvalid": "Zadejte platnou částku.",
+        "salePriceRequired": "Při označení jako prodáno je prodejní cena povinná."
+      },
+      "noteLabel": "Poznámky (nepovinné)",
+      "notePlaceholder": {
+        "disposed": "Podrobnosti…",
+        "lost": "Naposledy viděno na…",
+        "sold": "Prodáno komu…",
+        "written_off": "Podrobnosti…"
+      },
+      "salePriceLabel": "Prodejní cena",
+      "title": "Označit jako {{label}}"
+    },
+    "tabs": {
+      "details": "Podrobnosti",
+      "files": "Soubory",
+      "lend": "Zápůjčka",
+      "maintenance": "Údržba",
+      "service": "Servis",
+      "supplies": "Spotřební materiál",
+      "warranty": "Záruka"
+    },
+    "terminalStatus": {
+      "revert": "Vrátit do používání",
+      "revertConfirmDescription": "Tímto se položka vrátí do aktivního používání. Později ji můžete znovu označit jako prodanou, ztracenou, vyřazenou nebo odepsanou.",
+      "revertConfirmTitle": "Vrátit do používání?",
+      "salePrice": "Prodejní cena: {{value}}",
+      "statusDate": "Datum: {{date}}"
+    },
+    "viewFullDetails": "Zobrazit všechny podrobnosti",
+    "warranty": {
+      "daysRemaining_one": "Zbývá {{count}} den",
+      "daysRemaining_few": "Zbývají {{count}} dny",
+      "daysRemaining_many": "Zbývá {{count}} dne",
+      "daysRemaining_other": "Zbývá {{count}} dní",
+      "description": "Sledujte, kdy končí krytí výrobce nebo prodejce.",
+      "emptyState": "Zatím není sledována žádná záruka. Upravte položku a přidejte datum konce platnosti.",
+      "expiredAgo_one": "Vypršela před {{count}} dnem",
+      "expiredAgo_few": "Vypršela před {{count}} dny",
+      "expiredAgo_many": "Vypršela před {{count}} dne",
+      "expiredAgo_other": "Vypršela před {{count}} dny",
+      "expiredOnAgo_one": "Vypršela {{date}} — před {{count}} dnem",
+      "expiredOnAgo_few": "Vypršela {{date}} — před {{count}} dny",
+      "expiredOnAgo_many": "Vypršela {{date}} — před {{count}} dne",
+      "expiredOnAgo_other": "Vypršela {{date}} — před {{count}} dny",
+      "expiresOn": "Vyprší {{date}}",
+      "expiresOnIn_one": "Vyprší {{date}} — za {{count}} den",
+      "expiresOnIn_few": "Vyprší {{date}} — za {{count}} dny",
+      "expiresOnIn_many": "Vyprší {{date}} — za {{count}} dne",
+      "expiresOnIn_other": "Vyprší {{date}} — za {{count}} dní",
+      "expiresToday": "Vyprší dnes",
+      "noneInline": "Pro tuto položku nejsou zaznamenány žádné informace o záruce.",
+      "notesLabel": "Poznámky",
+      "title": "Záruka",
+      "uploadReceipt": "Nahrát doklad"
+    }
+  },
+  "fields": {
+    "area": "Oblast",
+    "areaPlaceholder": "Vyberte oblast",
+    "areaPlaceholderNoLocation": "Nejprve vyberte umístění",
+    "clearLocation": "Vymazat umístění",
+    "comments": "Poznámky",
+    "commentsPlaceholder": "Tipy k údržbě, modely filtrů, cokoli užitečného…",
+    "convertedOriginalPrice": "Přepočtená nákupní cena ({{groupCurrency}})",
+    "convertedOriginalPriceHint": "Kolik jste zaplatili, vyjádřeno v měně skupiny.",
+    "count": "Množství",
+    "currentPrice": "Aktuální hodnota",
+    "currentPriceForeign": "Aktuální hodnota ({{groupCurrency}})",
+    "currentPriceHelp": "Aktuální prodejní / pojistná hodnota v měně skupiny.",
+    "draft": "Uložit jako koncept",
+    "draftHelp": "Povinná pole jsou nepovinná — dokončíte později",
+    "extraSerialNumbers": "Další sériová čísla",
+    "extraSerialNumbersHelp": "Vícedílné produkty jich mohou mít několik.",
+    "foreignCurrencyBanner": "Skupina používá {{groupCurrency}}. Vyplňte alespoň jedno z níže uvedených polí, aby bylo možné hodnotu položky použít v reportech.",
+    "foreignCurrencyDetected": "Zjištěna cizí měna.",
+    "foreignCurrencyOr": "nebo",
+    "location": "Umístění",
+    "locationPlaceholder": "Vyberte umístění",
+    "name": "Název",
+    "namePlaceholder": "např. myčka Bosch SMV6ZCX42E",
+    "originalPrice": "Původní cena",
+    "originalPriceHelp": "Měna původního nákupu",
+    "partNumbers": "Čísla dílů",
+    "partNumbersHelp": "Čísla dílů výrobce — užitečná při objednávání náhrad.",
+    "purchaseDate": "Datum nákupu",
+    "revealExtraSerials": "Tato položka má více sériových čísel",
+    "revealPartNumbers": "Přidat čísla dílů",
+    "serialNumber": "Sériové číslo",
+    "serialNumberHelp": "Najdete na štítku zařízení nebo obalu",
+    "serialNumberPlaceholder": "např. SN-MEL-2022-00412",
+    "shortName": "Krátký název",
+    "shortNameHelp": "1–40 znaků, používá se v kompaktních seznamech a štítcích",
+    "shortNamePlaceholder": "např. Myčka",
+    "status": "Stav",
+    "tags": "Štítky",
+    "tagsHelp": "Vyberte štítky ze seznamu nebo napište vlastní a stiskněte Enter či čárku.",
+    "tagsPlaceholder": "Zadejte štítky oddělené čárkou, např. kuchyně, elektronika, dárek…",
+    "type": "Typ",
+    "typePlaceholder": "Vyberte typ",
+    "urls": "Adresy URL produktu",
+    "urlsAdd": "Přidat",
+    "urlsHelp": "Odkazy na stránku produktu, podporu, dokumentaci",
+    "urlsPlaceholder": "https://…",
+    "warrantyExpiresAt": "Záruka vyprší dne",
+    "warrantyExpiresAtHelp": "Nechte prázdné, pokud není co sledovat. Systém zasílá připomínky 60, 30 a 7 dní před tímto datem.",
+    "warrantyNotes": "Poznámky k záruce",
+    "warrantyNotesPlaceholder": "Registrační číslo, rozšířený plán, kontakt…"
+  },
+  "filter": {
+    "area": "Oblast",
+    "areaAll": "Všechny oblasti",
+    "clear": "Vymazat filtry",
+    "inactiveHidden": "Skrýt neaktivní",
+    "inactiveShown": "Zobrazují se neaktivní",
+    "lentOut": "Zapůjčeno",
+    "status": "Stav",
+    "type": "Typ",
+    "unassigned": "Bez umístění",
+    "warranty": "Záruka"
+  },
+  "form": {
+    "assignLocationBanner": {
+      "cta": "Umístit do umístění",
+      "dismiss": "Zavřít",
+      "title": "Umístit tuto položku do umístění?"
+    },
+    "back": "Zpět",
+    "closeConfirm": {
+      "description": "Máte neuložené změny. Uložte je jako koncept a dokončete později, nebo je zahoďte a začněte příště znovu.",
+      "discard": "Zahodit",
+      "keepEditing": "Pokračovat v úpravách",
+      "saveDraft": "Uložit jako koncept",
+      "title": "Uložit váš postup?"
+    },
+    "continue": "Pokračovat",
+    "createTitle": "Přidat položku",
+    "editTitle": "Upravit položku",
+    "fileUploadFailed": "Soubor {{name}} se nepodařilo nahrát. Můžete jej připojit později ze stránky s podrobnostmi položky.",
+    "fillManually": "Vyplnit ručně",
+    "serverError": "Něco se pokazilo. Zkuste to prosím znovu.",
+    "step": {
+      "ai": {
+        "choose": {
+          "itemFallback": "Položka {{index}}",
+          "subtitle": "Našli jsme více než jeden produkt. Vyberte ten, který chcete přidat — ostatní můžete přidat samostatně později.",
+          "title": "Vyberte, kterou položku přidat"
+        },
+        "description": "Vyfotografujte položku a její štítek nebo přidejte PDF s účtenkou či fakturou — AI za vás formulář předvyplní.",
+        "dropzone": {
+          "hint": "JPG, PNG, WEBP, HEIC/HEIF nebo PDF — až 5 souborů",
+          "primary": "Sem přetáhněte fotografie nebo PDF, případně procházejte"
+        },
+        "errors": {
+          "noDetails": "Nepodařilo se z toho přečíst žádné podrobnosti. Zkuste jasnější fotografii nebo jiný dokument.",
+          "photoTooLarge": "Jeden ze souborů je příliš velký na naskenování. Zkuste menší soubor.",
+          "providerDisabled": {
+            "detail": "AI rozpoznávání obrazu není na tomto serveru právě nyní povoleno. Pokračujte volbou Vyplnit ručně.",
+            "title": "AI rozpoznávání obrazu není dostupné"
+          },
+          "providerError": {
+            "title": "AI rozpoznávání obrazu tyto soubory nezpracovalo"
+          },
+          "providerTimeout": {
+            "title": "AI rozpoznávání obrazu odpovídalo příliš dlouho"
+          },
+          "rateLimited": {
+            "detail": "Příliš mnoho požadavků na skenování. Zkuste to za chvíli znovu.",
+            "title": "Moment — příliš mnoho skenování"
+          },
+          "tooManyPhotos": "Na jedno skenování můžete připojit nejvýše 5 souborů.",
+          "unsupportedMime": "Skenovat lze pouze fotografie JPG, PNG, WEBP, HEIC, HEIF a dokumenty PDF."
+        },
+        "fullItem": {
+          "description": "Vyfotografujte celou položku jasně, aby ji AI dokázala identifikovat",
+          "title": "Fotografie celé položky"
+        },
+        "label": {
+          "description": "Vyfotografujte informační štítek s číslem modelu a sériovým číslem",
+          "title": "Štítek / výrobní štítek"
+        },
+        "offer": {
+          "dropzone": {
+            "activeHint": "Uvolněte pro přidání souborů"
+          },
+          "staged": {
+            "remove": "Odebrat",
+            "title_one": "{{count}} soubor připraven",
+            "title_few": "{{count}} soubory připraveny",
+            "title_many": "{{count}} souboru připraveno",
+            "title_other": "{{count}} souborů připraveno"
+          }
+        },
+        "review": {
+          "confidence": {
+            "high": "{{percent}}% jistota",
+            "low": "{{percent}}% odhad",
+            "medium": "{{percent}}% pravděpodobnost"
+          },
+          "currencyInferred": "Měna nebyla na seznamu podporovaných serverem — nebude předvyplněna.",
+          "filesAttached_one": "Soubor, který jste naskenovali, bude připojen k této položce — spravujte jej v kroku Soubory.",
+          "filesAttached_few": "{{count}} soubory, které jste naskenovali, budou připojeny k této položce — spravujte je v kroku Soubory.",
+          "filesAttached_many": "{{count}} souboru, který jste naskenovali, bude připojen k této položce — spravujte jej v kroku Soubory.",
+          "filesAttached_other": "{{count}} souborů, které jste naskenovali, bude připojeno k této položce — spravujte je v kroku Soubory.",
+          "retake": "Začít znovu",
+          "subtitle": "Před předvyplněním formuláře odškrtněte vše, co vypadá špatně.",
+          "title": "Zkontrolujte rozpoznané údaje",
+          "useValues": "Použít tyto hodnoty",
+          "warning": {
+            "ambiguousPrice": "Cena vypadá nejednoznačně",
+            "currencyInferred": "Měna byla odvozena",
+            "lowConfidence": "Nízká jistota",
+            "multipleItems": "Vypadá to na více než jednu položku — předvyplnili jsme tu nejvýraznější. Ostatní přidejte samostatně po uložení.",
+            "unreadableSerial": "Sériové číslo bylo špatně čitelné"
+          }
+        },
+        "scanning": {
+          "cancel": "Zrušit",
+          "subtitle": "AI čte štítek a identifikuje položku.",
+          "title": "Skenování vašich souborů…"
+        },
+        "scanPhotos": "Naskenovat soubory",
+        "title": "Vyplnit pomocí AI"
+      },
+      "basics": {
+        "title": "Základní údaje"
+      },
+      "extras": {
+        "title": "Doplňky"
+      },
+      "files": {
+        "categoryAuto": "Kategorie: <1>{{category}}</1> (automaticky zjištěno)",
+        "categoryAutoTitle": "Kategorie se nastavuje automaticky podle typu souboru a lze ji později změnit na stránce s podrobnostmi souboru.",
+        "dropzone": "Sem přetáhněte soubory nebo klikněte pro procházení",
+        "hint": "Každý soubor zařadíme do kategorie Fotografie, Dokumenty nebo Ostatní podle jeho typu.",
+        "intro": "Připojte cokoli, co se týká této položky — fotografie, účtenky, návody. Soubory jsou nepovinné a lze je přidat později.",
+        "tagsPlaceholder": "Zadejte štítky oddělené čárkou, např. faktura, záruka, návod…",
+        "title": "Soubory"
+      },
+      "purchase": {
+        "title": "Nákup"
+      },
+      "warranty": {
+        "title": "Záruka"
+      }
+    },
+    "stepCounter": "Krok {{current}} z {{total}} — {{label}}",
+    "stepperLabel": "Kroky formuláře",
+    "submitCreate": "Přidat položku",
+    "submitEdit": "Uložit změny",
+    "submitting": "Ukládání…"
+  },
+  "list": {
+    "addItem": "Přidat položku",
+    "documentTitle": "Položky",
+    "draftBadge": "Koncept",
+    "emptyDescription": "Přidejte svou první položku inventáře a začněte sledovat, co vlastníte.",
+    "emptyFilteredDescription": "Zkuste rozšířit vyhledávání nebo vymazat filtry.",
+    "emptyFilteredTitle": "Žádné položky neodpovídají těmto filtrům",
+    "emptyTitle": "Zatím žádné položky",
+    "errorDescription": "Načtěte stránku znovu nebo to za chvíli zkuste znovu.",
+    "errorTitle": "Položky se nepodařilo načíst",
+    "headerArea": "Oblast",
+    "headerName": "Položka",
+    "headerStatus": "Stav",
+    "headerValue": "Hodnota",
+    "heading": "Položky",
+    "searchPlaceholder": "Hledat podle názvu nebo krátkého názvu…",
+    "selectAll": "Vybrat vše viditelné",
+    "subtitle_one": "{{count}} položka v této skupině",
+    "subtitle_few": "{{count}} položky v této skupině",
+    "subtitle_many": "{{count}} položky v této skupině",
+    "subtitle_other": "{{count}} položek v této skupině",
+    "viewGrid": "Zobrazení mřížky",
+    "viewList": "Zobrazení seznamu"
+  },
+  "pagination": {
+    "label": "Stránkování",
+    "next": "Další stránka",
+    "pageOf": "Stránka {{page}} z {{total}}",
+    "previous": "Předchozí stránka"
+  },
+  "print": {
+    "back": "Zpět",
+    "documentTitle": "Tisk — {{name}}",
+    "noPrice": "—",
+    "print": "Tisk",
+    "sectionBasics": "Základní údaje",
+    "sectionExtras": "Doplňky",
+    "sectionPurchase": "Nákup"
+  },
+  "sort": {
+    "count": "Množství",
+    "current_price": "Aktuální hodnota",
+    "label": "Seřadit podle",
+    "name": "Název",
+    "original_price": "Původní cena",
+    "purchase_date": "Datum nákupu",
+    "registered_date": "Datum přidání"
+  },
+  "status": {
+    "disposed": "Vyřazeno",
+    "in_use": "Používá se",
+    "lost": "Ztraceno",
+    "sold": "Prodáno",
+    "written_off": "Odepsáno"
+  },
+  "toast": {
+    "bulkDeleted_one": "{{count}} položka smazána.",
+    "bulkDeleted_few": "{{count}} položky smazány.",
+    "bulkDeleted_many": "{{count}} položky smazáno.",
+    "bulkDeleted_other": "{{count}} položek smazáno.",
+    "bulkDeleteError": "Vybrané položky se nepodařilo smazat.",
+    "bulkMoved_one": "{{count}} položka přesunuta.",
+    "bulkMoved_few": "{{count}} položky přesunuty.",
+    "bulkMoved_many": "{{count}} položky přesunuto.",
+    "bulkMoved_other": "{{count}} položek přesunuto.",
+    "bulkMoveError": "Vybrané položky se nepodařilo přesunout.",
+    "created": "Položka přidána.",
+    "deleted": "Položka smazána.",
+    "deleteError": "Položku se nepodařilo smazat.",
+    "statusUpdated": "Stav aktualizován.",
+    "statusUpdateError": "Stav se nepodařilo aktualizovat.",
+    "updated": "Položka uložena."
+  },
+  "trackingRestrictions": {
+    "bannerBody": "Hromadné položky nepodporují sledování záruky, zápůjčky ani servisu. Pokud potřebujete kterékoli z toho na jednotku, rozdělte je na samostatné položky.",
+    "bannerTitle": "Množství větší než 1",
+    "lendDisabled": "U položek s množstvím větším než 1 se zápůjčka nesleduje. Pro zapůjčení jednotlivých kusů je rozdělte na samostatné položky.",
+    "serviceDisabled": "U položek s množstvím větším než 1 není sledování servisu dostupné. Pro odeslání jednoho kusu do opravy je rozdělte na samostatné položky.",
+    "warrantyDisabled": "U položek s množstvím větším než 1 se záruka nesleduje. Pokud potřebujete sledovat záruku na jednotku, rozdělte je na samostatné položky.",
+    "warrantyStepHint": "Pole záruky jsou zakázána, dokud je množství větší než 1."
+  },
+  "type": {
+    "clothes": "Oblečení",
+    "electronics": "Elektronika",
+    "equipment": "Vybavení",
+    "furniture": "Nábytek",
+    "other": "Ostatní",
+    "white_goods": "Spotřebič"
+  },
+  "validation": {
+    "areaRequired": "Vyberte oblast.",
+    "commentsTooLong": "Poznámky mohou mít nejvýše 1000 znaků.",
+    "convertedPriceRequired": "Přepočtená původní cena je u položek, které nejsou koncepty, povinná.",
+    "countMin": "Množství musí být alespoň 1.",
+    "currencyRequired": "Měna je povinná.",
+    "nameRequired": "Název je povinný.",
+    "nameTooLong": "Název může mít nejvýše 200 znaků.",
+    "noPriceInGroupCurrency": "Zadejte alespoň přepočtenou cenu nebo aktuální hodnotu, aby byla položka vykazatelná v měně skupiny.",
+    "notANumber": "Zadejte platné číslo.",
+    "originalPriceRequired": "Původní cena je u položek, které nejsou koncepty, povinná.",
+    "purchaseDateFuture": "Datum nákupu nemůže být v budoucnosti.",
+    "purchaseDateRequired": "Datum nákupu je u položek, které nejsou koncepty, povinné.",
+    "quantityForbidsWarranty": "Položky s množstvím větším než 1 nepodporují sledování záruky. Pro sledování na jednotku je rozdělte na samostatné položky.",
+    "shortNameRequired": "Krátký název je povinný.",
+    "shortNameTooLong": "Krátký název může mít nejvýše 40 znaků.",
+    "statusRequired": "Vyberte stav.",
+    "typeRequired": "Vyberte typ.",
+    "urlInvalid": "Zadejte platnou adresu URL (např. https://example.com)."
+  },
+  "warranty": {
+    "active": "Aktivní",
+    "expired": "Vypršela",
+    "expiring": "Brzy vyprší",
+    "none": "Bez záruky"
+  },
+  "warrantyStatus": {
+    "active": "Záruka aktivní",
+    "expired": "Záruka vypršela",
+    "expiring": "Brzy vyprší",
+    "none": "Bez záruky"
   }
 }

@@ -1,1 +1,200 @@
-{}
+{
+  "actions": {
+    "createExport": "Nový export",
+    "delete": "Smazat",
+    "download": "Stáhnout",
+    "import": "Importovat zálohu",
+    "restore": "Obnovit",
+    "showDeleted": "Zobrazit smazané"
+  },
+  "detail": {
+    "binaryDataSize": "Velikost příloh",
+    "completedAt": "Dokončeno",
+    "counts": {
+      "areas_one": "{{count}} oblast",
+      "areas_few": "{{count}} oblasti",
+      "areas_many": "{{count}} oblasti",
+      "areas_other": "{{count}} oblastí",
+      "commodities_one": "{{count}} položka",
+      "commodities_few": "{{count}} položky",
+      "commodities_many": "{{count}} položky",
+      "commodities_other": "{{count}} položek",
+      "files_one": "{{count}} soubor",
+      "files_few": "{{count}} soubory",
+      "files_many": "{{count}} souboru",
+      "files_other": "{{count}} souborů",
+      "locations_one": "{{count}} umístění",
+      "locations_few": "{{count}} umístění",
+      "locations_many": "{{count}} umístění",
+      "locations_other": "{{count}} umístění"
+    },
+    "createdAt": "Vytvořeno",
+    "errorMessage": "Chyba",
+    "imported": "Tento export byl naimportován ze souboru zálohy.",
+    "includesFileData": "Včetně příloh",
+    "noDescription": "Bez popisu.",
+    "noRestores": "Z tohoto exportu zatím nebyla provedena žádná obnova.",
+    "notFound": "Export nenalezen.",
+    "restoreHistory": "Historie obnov",
+    "scope": "Rozsah",
+    "scopeSelectedItems_one": "{{count}} vybraná položka",
+    "scopeSelectedItems_few": "{{count}} vybrané položky",
+    "scopeSelectedItems_many": "{{count}} vybrané položky",
+    "scopeSelectedItems_other": "{{count}} vybraných položek",
+    "title": "Export",
+    "totalSize": "Velikost souboru"
+  },
+  "errors": {
+    "createFailed": "Export se nepodařilo vytvořit: {{error}}",
+    "deleteFailed": "Export se nepodařilo smazat: {{error}}",
+    "downloadFailed": "Export se nepodařilo stáhnout: {{error}}",
+    "importFailed": "Zálohu se nepodařilo naimportovat: {{error}}",
+    "invalidFileType": "Vyberte soubor zálohy (.inb).",
+    "loadFailed": "Exporty se nepodařilo načíst: {{error}}",
+    "restoreCreateFailed": "Obnovu se nepodařilo spustit: {{error}}",
+    "uploadFailed": "Soubor se nepodařilo nahrát: {{error}}"
+  },
+  "importView": {
+    "description": "Popis",
+    "descriptionHint": "Nepovinné. Pomůže vám import později najít v seznamu.",
+    "descriptionPlaceholder": "Záloha naimportovaná z disku",
+    "dropHint": "Přetáhněte sem soubor zálohy (.inb) nebo klikněte pro výběr.",
+    "fileChosen": "Připraveno k nahrání: {{name}} ({{size}}).",
+    "fileLabel": "Soubor zálohy",
+    "intro": "Nahrajte existující zálohu Inventario (.inb) a obnovte ji. Soubor se nejprve uloží na server a zkontroluje se až při spuštění obnovy.",
+    "submit": "Nahrát a pokračovat",
+    "submitting": "Nahrávání…",
+    "success": "Záloha nahrána — nastavte obnovu.",
+    "title": "Import zálohy",
+    "uploadProgress": "Nahrávání souboru…"
+  },
+  "list": {
+    "countLabel_one": "{{count}} export",
+    "countLabel_few": "{{count}} exporty",
+    "countLabel_many": "{{count}} exportu",
+    "countLabel_other": "{{count}} exportů",
+    "deletedBadge": "Smazáno",
+    "description": "Vytvářejte stažitelné zálohy svého inventáře a využijte existující exporty k obnově dat do této skupiny.",
+    "empty": "Zatím žádné exporty — vytvořte první a uchovejte si zálohu této skupiny.",
+    "emptyFiltered": "Žádné smazané exporty.",
+    "imported": "Naimportováno",
+    "sectionHeader": "Exporty",
+    "title": "Záloha a obnova"
+  },
+  "polling": {
+    "live": "Živě"
+  },
+  "removal": {
+    "confirmAction": "Smazat export",
+    "confirmCancel": "Zrušit",
+    "confirmDescription": "Export bude měkce smazán a jeho soubor bude odstraněn z úložiště. Tuto akci nelze vrátit zpět.",
+    "confirmTitle": "Smazat export?",
+    "success": "Export smazán."
+  },
+  "restore": {
+    "description": "Popis",
+    "descriptionHint": "Povinné. Užitečné při porovnávání zkušebních běhů.",
+    "descriptionPlaceholder": "Obnova do stagingu dne 2026-05-03",
+    "dialog": {
+      "submit": "Obnovit nyní",
+      "submitDryRun": "Náhled obnovy",
+      "title": "Obnova z exportu"
+    },
+    "dryRun": "Zkušební běh",
+    "dryRunDescription": "Zobrazí náhled změn bez úpravy dat.",
+    "dryRunLabel": "Zkušební běh",
+    "includeFileData": "Obnovit přiložené soubory",
+    "includeFileDataDescription": "Obnoví přiložené soubory spolu s metadaty.",
+    "intro": "Obnovte obsah tohoto exportu do aktuální skupiny. Zvolte strategii a nejprve spusťte zkušební běh, abyste si změny prohlédli.",
+    "log": {
+      "descriptionComplete": "Operace obnovy dokončena. Zkontrolujte záznam níže.",
+      "descriptionPreview": "Žádné změny nebyly provedeny. Zkontrolujte, co by se stalo.",
+      "done": "Hotovo",
+      "empty": "Zatím žádné záznamy.",
+      "loading": "Načítání kroků obnovy…",
+      "titleComplete": "Obnova dokončena",
+      "titlePreview": "Náhled obnovy",
+      "viewLog": "Zobrazit záznam"
+    },
+    "riskLabel": {
+      "destructive": "Destruktivní",
+      "moderate": "Středně rizikové",
+      "safe": "Bezpečné"
+    },
+    "strategy": "Strategie",
+    "strategyDescription": {
+      "full_replace": "Před importem smaže existující řádky v cílovém rozsahu. Destruktivní.",
+      "merge_add": "Vloží nové řádky; existující řádky zůstanou nedotčené.",
+      "merge_update": "Vloží nové řádky a aktualizuje existující na místě."
+    },
+    "strategyLabel": {
+      "full_replace": "Úplné nahrazení",
+      "merge_add": "Sloučit a přidat",
+      "merge_update": "Sloučit a aktualizovat"
+    },
+    "submitting": "Spouštění obnovy…",
+    "success": "Obnova spuštěna.",
+    "successDryRun": "Zkušební běh spuštěn — po dokončení zkontrolujte zprávu.",
+    "title": "Obnova z exportu"
+  },
+  "retention": {
+    "description": "Automatické čištění starých exportů zatím není k dispozici — prozatím spravujte uchovávání ručně.",
+    "title": "Zásady uchovávání"
+  },
+  "scope": {
+    "areas": "Oblasti",
+    "commodities": "Položky",
+    "files": "Soubory",
+    "full_database": "Celá databáze",
+    "imported": "Naimportováno",
+    "locations": "Umístění",
+    "selected_items": "Vybrané položky"
+  },
+  "status": {
+    "completed": "Dokončeno",
+    "failed": "Selhalo",
+    "in_progress": "Probíhá",
+    "pending": "Čeká",
+    "running": "Běží"
+  },
+  "validation": {
+    "selectedItemsRequired": "Vyberte k exportu alespoň jednu položku."
+  },
+  "wizard": {
+    "back": "Zpět",
+    "cancel": "Zrušit",
+    "creating": "Vytváření exportu…",
+    "descriptionHint": "Nepovinné. Pokud ponecháte prázdné, pojmenujeme jej za vás: „Záloha · Celá databáze · 2026-05-13 10:42 UTC“.",
+    "descriptionLabelOptional": "Popis (nepovinné)",
+    "descriptionPlaceholder": "např. Záloha · Celá databáze · 2026-05-13 10:42 UTC",
+    "intro": "Vyberte, co zálohovat. Úloha exportu běží na pozadí a po dokončení vám umožní stáhnout výsledek.",
+    "next": "Další",
+    "scope": {
+      "fullDatabase": "Celá databáze",
+      "fullDatabaseHint": "Vše: umístění, oblasti, položky, soubory, štítky.",
+      "selectedItems": "Vybrané položky",
+      "selectedItemsHint": "Vyberte konkrétní umístění, oblasti nebo položky k zahrnutí."
+    },
+    "scopePicker": {
+      "empty": "Žádná dostupná umístění — nejprve nějaké vytvořte.",
+      "loadError": "Umístění se nepodařilo načíst. Obnovte stránku a zkuste to znovu.",
+      "searchEmpty": "Žádné umístění neodpovídá „{{query}}“.",
+      "searchPlaceholder": "Hledat umístění…",
+      "title": "Vybrané položky"
+    },
+    "step1Title": "Co exportovat",
+    "step2Title": "Potvrzení",
+    "step3Title": "Úloha exportu",
+    "submit": "Vytvořit export",
+    "summary": {
+      "includeFileData": "Přílohy",
+      "includeFileDataNo": "Pouze metadata",
+      "includeFileDataYes": "Zahrnuto v archivu",
+      "items": "Vybrané položky",
+      "noDescription": "—",
+      "type": "Rozsah"
+    },
+    "title": "Nový export",
+    "toggleIncludeFileData": "Zahrnout přiložené soubory (fotky, faktury, návody)"
+  }
+}

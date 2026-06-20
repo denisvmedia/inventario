@@ -1,1 +1,50 @@
-{}
+{
+  "documentTitle": "Обзор",
+  "error": {
+    "description": "Не удалось загрузить сводку по вашему инвентарю. Обновите страницу, чтобы повторить попытку, или обратитесь в поддержку, если проблема не исчезает.",
+    "title": "Не удалось загрузить обзор"
+  },
+  "expiringWarranties": {
+    "daysAgo_one": "{{count}} день назад",
+    "daysAgo_few": "{{count}} дня назад",
+    "daysAgo_many": "{{count}} дней назад",
+    "daysAgo_other": "{{count}} дня назад",
+    "daysLeft_one": "остался {{count}} день",
+    "daysLeft_few": "осталось {{count}} дня",
+    "daysLeft_many": "осталось {{count}} дней",
+    "daysLeft_other": "осталось {{count}} дня",
+    "description": "Гарантии, истекающие в течение 60 дней.",
+    "empty": "Всё в порядке — в ближайшее время гарантии не истекают.",
+    "title": "Истекающие гарантии"
+  },
+  "heading": "Обзор",
+  "mobileCta": {
+    "subtitle": "Добавьте устройство, технику, инструмент…",
+    "title": "Добавить предмет"
+  },
+  "recentlyAdded": {
+    "description": "Ваши последние записи в инвентаре.",
+    "empty": "Здесь пока пусто. Добавьте предмет, чтобы он появился тут.",
+    "title": "Недавно добавленные",
+    "untitled": "Предмет без названия"
+  },
+  "stats": {
+    "activeWarranties": "Активные гарантии",
+    "activeWarrantiesSub_one": "{{count}} истекает скоро",
+    "activeWarrantiesSub_few": "{{count}} истекают скоро",
+    "activeWarrantiesSub_many": "{{count}} истекают скоро",
+    "activeWarrantiesSub_other": "{{count}} истекает скоро",
+    "expiredWarranties": "Истёкшие гарантии",
+    "expiredWarrantiesSub": "Стоит продлить",
+    "totalItems": "Всего предметов",
+    "totalItemsSub": "По всем локациям",
+    "totalValue": "Оценочная общая стоимость",
+    "totalValueSub": "Сумма текущих цен"
+  },
+  "tagline": "Всё, чем вы владеете, как на ладони.",
+  "warrantyHealth": {
+    "description": "Распределение статусов по всем предметам.",
+    "empty": "Предметов пока нет. Распределение гарантий появится, как только вы начнёте вести инвентарь.",
+    "title": "Состояние гарантий"
+  }
+}

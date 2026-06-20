@@ -1,1 +1,73 @@
-{}
+{
+  "bundleHint": "Plán údržby nelze nastavit pro sadu. Nejprve rozdělte řádek na jednotlivé položky.",
+  "confirm": {
+    "delete": "Smazat tento plán?"
+  },
+  "dialog": {
+    "createTitle": "Přidat plán údržby",
+    "description": "Nastavte interval a počáteční datum splatnosti. Připomenutí zašleme e-mailem 14, 7 a 1 den před každým cyklem.",
+    "editTitle": "Upravit plán údržby",
+    "intervalLabel": "Každých (dní)",
+    "nextDueLabel": "Příští termín (nepovinné)",
+    "notesLabel": "Poznámky",
+    "notesPlaceholder": "Použít filtr NSF-53, balí se po 2 kusech",
+    "titleLabel": "Název",
+    "titlePlaceholder": "Vyměnit vodní filtr"
+  },
+  "list": {
+    "commodity": "Položka",
+    "empty": "Žádná nadcházející údržba. Přidejte plány k položkám a sledujte opakovanou péči.",
+    "heading": "Údržba",
+    "lastDone": "Naposledy provedeno",
+    "nextDue": "Příští termín",
+    "noCommodity": "—",
+    "schedule": "Plán",
+    "subheading": "Upozornění na opakovanou péči napříč vaším inventářem, seřazená podle příštího termínu."
+  },
+  "row": {
+    "dueInDays_one": "za {{count}} den",
+    "dueInDays_few": "za {{count}} dny",
+    "dueInDays_many": "za {{count}} dne",
+    "dueInDays_other": "za {{count}} dní",
+    "dueSoon": "Brzy splatné",
+    "enabledLabel": "Zapnuto",
+    "intervalLabel_one": "Každý {{count}} den",
+    "intervalLabel_few": "Každé {{count}} dny",
+    "intervalLabel_many": "Každých {{count}} dne",
+    "intervalLabel_other": "Každých {{count}} dní",
+    "lastDoneLabel": "Naposledy provedeno",
+    "markDone": "Provedl jsem to",
+    "nextDueLabel": "Příští termín",
+    "overdue": "Po termínu",
+    "overdueByDays_one": "{{count}} den po termínu",
+    "overdueByDays_few": "{{count}} dny po termínu",
+    "overdueByDays_many": "{{count}} dne po termínu",
+    "overdueByDays_other": "{{count}} dní po termínu",
+    "paused": "Pozastaveno"
+  },
+  "tab": {
+    "add": "Přidat plán",
+    "empty": "Zatím žádné plány údržby. Přidejte plán a sledujte opakovanou péči, jako jsou výměny filtrů, výměny oleje nebo odvápňování.",
+    "heading": "Údržba",
+    "subheading": "Připomenutí opakované péče. Zašleme vám e-mail 14, 7 a 1 den před každým termínem."
+  },
+  "toast": {
+    "createSuccess": "Plán přidán.",
+    "deleteError": "Plán se nepodařilo smazat.",
+    "deleteSuccess": "Plán smazán.",
+    "doneError": "Nepodařilo se označit jako provedené.",
+    "doneSuccess": "Označeno jako provedené.",
+    "saveError": "Plán se nepodařilo uložit.",
+    "updateError": "Plán se nepodařilo aktualizovat.",
+    "updateSuccess": "Plán aktualizován."
+  },
+  "validation": {
+    "intervalInvalid": "Zadejte celé číslo dní.",
+    "intervalMax": "Interval může být nejvýše 36500 dní (~100 let).",
+    "intervalMin": "Interval musí být alespoň 1 den.",
+    "nextDueAtInvalid": "Použijte formát RRRR-MM-DD.",
+    "notesTooLong": "Poznámky mohou mít nejvýše 1000 znaků.",
+    "titleRequired": "Název je povinný.",
+    "titleTooLong": "Název může mít nejvýše 200 znaků."
+  }
+}

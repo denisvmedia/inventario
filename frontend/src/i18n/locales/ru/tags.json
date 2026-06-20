@@ -1,1 +1,122 @@
-{}
+{
+  "color": {
+    "amber": "Янтарный",
+    "blue": "Синий",
+    "green": "Зелёный",
+    "muted": "Приглушённый",
+    "orange": "Оранжевый",
+    "red": "Красный",
+    "selectLabel": "Выберите цвет"
+  },
+  "create": {
+    "button": "Создать тег"
+  },
+  "description": "Управляйте метками, которые можно прикреплять к предметам и файлам. Переименование тега обновляет ссылки на него везде; при удалении используемого тега запрашивается подтверждение.",
+  "form": {
+    "cancel": "Отмена",
+    "color": "Цвет",
+    "create": "Создать тег",
+    "createError": "Не удалось создать тег: {{error}}",
+    "createSuccess": "Тег создан.",
+    "createTitle": "Создание тега",
+    "editTitle": "Редактирование тега",
+    "label": "Название",
+    "labelPlaceholder": "напр. Кухня",
+    "previewFallback": "Тег",
+    "save": "Сохранить изменения",
+    "slug": "Слаг",
+    "slugHint": "Строчные буквы, цифры и дефисы. Используется как идентификатор в ссылках JSONB.",
+    "slugPlaceholder": "kitchen",
+    "updateError": "Не удалось обновить тег: {{error}}",
+    "updateSuccess": "Тег обновлён."
+  },
+  "inlineCreate": {
+    "cancel": "Отменить новый тег",
+    "label": "Название тега",
+    "placeholder": "имя-тега",
+    "save": "Сохранить новый тег",
+    "toggle": "Новый тег"
+  },
+  "list": {
+    "delete": "Удалить тег",
+    "edit": "Редактировать тег",
+    "emptyFiltered": "Нет тегов, соответствующих «{{query}}».",
+    "emptyScopeCommodity": "Пока нет тегов, использованных на предметах — примените один на шаге «Дополнительно» в диалоге добавления предмета, чтобы заполнить этот список.",
+    "emptyScopeFile": "Пока нет тегов, использованных на файлах — примените один в поле тегов файла, чтобы заполнить этот список.",
+    "loadError": "Не удалось загрузить теги: {{error}}",
+    "results_one": "{{count}} результат",
+    "results_few": "{{count}} результата",
+    "results_many": "{{count}} результатов",
+    "results_other": "{{count}} результата",
+    "totalTags_one": "{{count}} тег",
+    "totalTags_few": "{{count}} тега",
+    "totalTags_many": "{{count}} тегов",
+    "totalTags_other": "{{count}} тега",
+    "usageFiles_one": "{{count}} файл",
+    "usageFiles_few": "{{count}} файла",
+    "usageFiles_many": "{{count}} файлов",
+    "usageFiles_other": "{{count}} файла",
+    "usageItems_one": "{{count}} предмет",
+    "usageItems_few": "{{count}} предмета",
+    "usageItems_many": "{{count}} предметов",
+    "usageItems_other": "{{count}} предмета",
+    "usageNone": "Пока не используется"
+  },
+  "removal": {
+    "confirmAction": "Удалить",
+    "confirmDescription": "Удалить тег «{{label}}» из этой группы. Это действие нельзя отменить.",
+    "confirmTitle": "Удалить тег?",
+    "deleteError": "Не удалось удалить тег: {{error}}",
+    "deleteSuccess": "Тег удалён.",
+    "forceAction": "Удалить принудительно",
+    "forceCancel": "Отмена",
+    "inUseDescription": "На «{{label}}» ссылаются {{items}} и {{files}}. Принудительное удаление сначала уберёт эти ссылки, затем удалит тег.",
+    "inUseTitle": "Тег используется"
+  },
+  "search": {
+    "clear": "Очистить поиск",
+    "label": "Поиск тегов",
+    "placeholder": "Фильтровать теги…"
+  },
+  "sort": {
+    "label": "Сортировка",
+    "labelAsc": "А → Я",
+    "labelDesc": "Я → А",
+    "mostUsed": "По использованию",
+    "newest": "Сначала новые"
+  },
+  "stats": {
+    "commodityTagsTotal": "Теги предметов",
+    "filesTagged": "Файлы с тегами",
+    "filesUntagged": "Файлы без тегов",
+    "fileTagsTotal": "Теги файлов",
+    "itemsTagged": "Предметы с тегами",
+    "itemsUntagged": "Предметы без тегов",
+    "tagsTotal": "Теги"
+  },
+  "title": "Теги",
+  "usage": {
+    "files_one": "{{count}} файл",
+    "files_few": "{{count}} файла",
+    "files_many": "{{count}} файлов",
+    "files_other": "{{count}} файла",
+    "items_one": "{{count}} предмет",
+    "items_few": "{{count}} предмета",
+    "items_many": "{{count}} предметов",
+    "items_other": "{{count}} предмета"
+  },
+  "validation": {
+    "colorRequired": "Выберите цвет.",
+    "duplicateSlug": "Тег с таким слагом уже существует.",
+    "labelRequired": "Укажите название.",
+    "labelTooLong": "Название не должно превышать 64 символа.",
+    "slugInvalid": "Слаг должен быть в нижнем регистре, в стиле kebab-case.",
+    "slugRequired": "Укажите слаг.",
+    "slugTooLong": "Слаг не должен превышать 64 символа."
+  },
+  "views": {
+    "commodity": "Теги предметов",
+    "file": "Теги файлов",
+    "label": "Тип тега"
+  }
+}

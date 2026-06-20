@@ -1,1 +1,93 @@
-{}
+{
+  "badge": {
+    "lentOut": "Zapůjčeno"
+  },
+  "confirm": {
+    "delete": "Odstranit tento záznam o zápůjčce? Je to určeno k opravě překlepu — historie auditu se obvykle zachovává.",
+    "markReturned": "Označit tuto zápůjčku jako vrácenou?"
+  },
+  "current": {
+    "delete": "Odstranit",
+    "dueOn": "vrátit do {{date}}",
+    "edit": "Upravit",
+    "lentOn": "Zapůjčeno {{date}}",
+    "lentTo": "Zapůjčeno komu: {{name}}",
+    "markReturned": "Označit jako vrácené",
+    "overdue_one": "Po termínu o {{count}} den",
+    "overdue_few": "Po termínu o {{count}} dny",
+    "overdue_many": "Po termínu o {{count}} dne",
+    "overdue_other": "Po termínu o {{count}} dní"
+  },
+  "dialog": {
+    "borrowerContact": "Kontakt",
+    "borrowerContactHint": "Volný text — pouze pro vaši potřebu.",
+    "borrowerContactPlaceholder": "Telefon, e-mail, @uživatel…",
+    "borrowerName": "Vypůjčitel",
+    "borrowerNamePlaceholder": "např. Anna z účtárny",
+    "borrowerNote": "Poznámka",
+    "borrowerNotePlaceholder": "např. bydlí v bytě o patro níž",
+    "cancel": "Zrušit",
+    "description": "Sledujte, kdo má položku a kdy ji očekáváte zpět.",
+    "dueBackAt": "Vrátit do",
+    "lentAt": "Zapůjčeno dne",
+    "submit": "Zapůjčit",
+    "title": "Zapůjčit"
+  },
+  "editDialog": {
+    "clearDueBack": "Vymazat",
+    "closedDateLockedHint": "Data zapůjčení / vrácení / termínu nelze u uzavřené zápůjčky změnit — pro opravu dat ji smažte a vytvořte znovu.",
+    "description": "Upravte údaje vypůjčitele a termín vrácení. Datum zapůjčení je kvůli auditu pevně dané.",
+    "descriptionClosed": "Upravte údaje vypůjčitele. Data zapůjčení, termínu a vrácení jsou u uzavřené zápůjčky pevně daná.",
+    "returnedAt": "Vráceno",
+    "submit": "Uložit změny",
+    "title": "Upravit zápůjčku",
+    "titleClosed": "Upravit uzavřenou zápůjčku"
+  },
+  "list": {
+    "empty": "Aktuálnímu filtru neodpovídají žádné zápůjčky.",
+    "headerBorrower": "Vypůjčitel",
+    "headerDueBackAt": "Termín",
+    "headerItem": "Položka",
+    "headerLentAt": "Zapůjčeno",
+    "headerStatus": "Stav",
+    "openStatus": "Otevřená",
+    "overdueStatus_one": "Po termínu o {{count}} den",
+    "overdueStatus_few": "Po termínu o {{count}} dny",
+    "overdueStatus_many": "Po termínu o {{count}} dne",
+    "overdueStatus_other": "Po termínu o {{count}} dní",
+    "returnedStatus": "Vráceno {{date}}",
+    "stateAll": "Vše",
+    "stateOpen": "Otevřené",
+    "stateOverdue": "Po termínu",
+    "stateReturned": "Vrácené",
+    "subtitle": "Položky, které jsou momentálně mimo váš inventář.",
+    "title": "Zapůjčeno"
+  },
+  "tab": {
+    "blockedByService": "Tato položka je momentálně v servisu u {{provider}}. Než ji zapůjčíte, označte ji jako přijatou zpět — předmět může být vždy jen na jednom místě.",
+    "editHistory": "Upravit minulou zápůjčku",
+    "emptyState": "Momentálně není zapůjčeno. Zápůjčky, které zde vytvoříte, sledují, kdo položku má a kdy ji má vrátit.",
+    "historyTitle": "Minulé zápůjčky",
+    "lendButton": "Zapůjčit…",
+    "title": "Zapůjčeno"
+  },
+  "toast": {
+    "deleteError": "Záznam o zápůjčce se nepodařilo odstranit.",
+    "deleteSuccess": "Záznam o zápůjčce byl odstraněn.",
+    "editError": "Zápůjčku se nepodařilo aktualizovat.",
+    "editSuccess": "Zápůjčka byla aktualizována.",
+    "lendError": "Zápůjčku se nepodařilo zahájit.",
+    "lendSuccess": "Položka byla označena jako zapůjčená.",
+    "returnError": "Zápůjčku se nepodařilo označit jako vrácenou.",
+    "returnSuccess": "Položka byla označena jako vrácená."
+  },
+  "validation": {
+    "borrowerContactTooLong": "Kontakt smí mít nejvýše 200 znaků.",
+    "borrowerNameRequired": "Jméno vypůjčitele je povinné.",
+    "borrowerNameTooLong": "Jméno vypůjčitele smí mít nejvýše 200 znaků.",
+    "borrowerNoteTooLong": "Poznámka smí mít nejvýše 1000 znaků.",
+    "dueBackAtInvalid": "Datum vrácení musí být ve formátu RRRR-MM-DD.",
+    "lentAtInvalid": "Datum zapůjčení musí být ve formátu RRRR-MM-DD.",
+    "lentAtRequired": "Datum zapůjčení je povinné."
+  }
+}

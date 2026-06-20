@@ -1,1 +1,35 @@
-{}
+{
+  "dialog": {
+    "description": "Napište nám, co funguje, co ne nebo co byste rádi viděli. Putuje to přímo k týmu.",
+    "submit": "Odeslat zpětnou vazbu",
+    "submitting": "Odesílání…",
+    "title": "Odeslat zpětnou vazbu"
+  },
+  "fields": {
+    "includeDiagnostics": "Zahrnout diagnostiku",
+    "includeDiagnosticsHelp": "Přidá váš prohlížeč, velikost obrazovky, verzi aplikace a adresu URL, na které se nacházíte. Užitečné pro hlášení chyb.",
+    "message": "Zpráva",
+    "messagePlaceholder": "Co se stalo? Co jste se snažili udělat? Čím více podrobností, tím lépe.",
+    "replyTo": "E-mail pro odpověď (nepovinné)",
+    "replyToHelp": "Tuto adresu použijeme, pokud vás budeme potřebovat kontaktovat. Pro jednosměrnou zprávu ponechte prázdné.",
+    "replyToPlaceholder": "vy@priklad.cz",
+    "type": "Jaký druh zpětné vazby?"
+  },
+  "toasts": {
+    "error": "Vaši zpětnou vazbu se nepodařilo odeslat. Zkuste to prosím znovu.",
+    "notConfigured": "Zpětná vazba zatím není v tomto nasazení nakonfigurována.",
+    "rateLimited": "V poslední době jste odeslali velké množství zpětné vazby. Zkuste to prosím znovu za několik minut.",
+    "success": "Děkujeme — vaše zpětná vazba byla odeslána."
+  },
+  "types": {
+    "bug": "Chyba",
+    "feature": "Návrh funkce",
+    "feedback": "Obecná zpětná vazba",
+    "question": "Dotaz"
+  },
+  "validation": {
+    "messageRequired": "Popište prosím svou zpětnou vazbu.",
+    "messageTooLong": "Zpráva je příliš dlouhá. Zkraťte ji prosím pod 5 KB.",
+    "replyToInvalid": "Zadejte platnou e-mailovou adresu nebo pole ponechte prázdné."
+  }
+}

@@ -1,6 +1,154 @@
 {
+  "actions": {
+    "back": "Zpět",
+    "cancel": "Zrušit",
+    "close": "Zavřít",
+    "confirm": "Potvrdit",
+    "create": "Vytvořit",
+    "delete": "Smazat",
+    "edit": "Upravit",
+    "goHome": "Přejít na úvod",
+    "save": "Uložit"
+  },
+  "brand": "Inventario",
+  "comingSoon": "Již brzy.",
+  "documentTitle": "{{title}} · {{brand}}",
+  "errors": {
+    "generic": "Něco se pokazilo"
+  },
+  "loading": "Načítání…",
   "nav": {
-    "groupReports": "Skupinové sestavy",
-    "reports": "Sestavy"
-  }
+    "backup": "Záloha",
+    "dashboard": "Přehled",
+    "files": "Soubory",
+    "groupInventory": "Inventář",
+    "groupManage": "Skupina",
+    "groupPersonal": "Osobní",
+    "groupReports": "Sestavy",
+    "inService": "V provozu",
+    "items": "Všechny položky",
+    "lent": "Zapůjčeno",
+    "locations": "Umístění",
+    "maintenance": "Údržba",
+    "members": "Členové",
+    "preferences": "Předvolby",
+    "profile": "Profil",
+    "reports": "Sestavy",
+    "search": "Hledat",
+    "system": "Nastavení",
+    "tags": "Štítky",
+    "warranties": "Záruky"
+  },
+  "onboarding": {
+    "ariaLabel": "Prohlídka produktu",
+    "back": "Zpět",
+    "done": "Hotovo",
+    "next": "Další",
+    "restart": "Prohlídka",
+    "restartMenuItem": "Znovu spustit prohlídku produktu",
+    "restartTitle": "Znovu spustit prohlídku produktu",
+    "skip": "Přeskočit",
+    "skipLabel": "Přeskočit prohlídku",
+    "steps": {
+      "addItem": {
+        "description": "Klepnutím sem přidáte do svého inventáře jakoukoli položku — spotřebiče, elektroniku, nábytek, nářadí. Zaznamenejte si pořizovací cenu, sériové číslo a fotografie.",
+        "title": "Přidejte svou první položku"
+      },
+      "navDashboard": {
+        "description": "Vaše domovská základna. Na jednom místě uvidíte přehled celkové hodnoty inventáře, stavů záruk, nedávných položek a klíčových statistik.",
+        "title": "Přehled na dashboardu"
+      },
+      "navFiles": {
+        "description": "Nahrávejte účtenky, návody, záruční listy a fotografie — vše připojené přímo k položkám, umístěním nebo oblastem.",
+        "title": "Připojit soubory"
+      },
+      "navItems": {
+        "description": "Zobrazte si každou položku ve svém inventáři. Filtrujte podle kategorie, hledejte podle názvu, řaďte podle hodnoty — a otevřete kteroukoli položku pro úplné podrobnosti.",
+        "title": "Procházet všechny položky"
+      },
+      "navLocations": {
+        "description": "Uspořádejte svůj inventář podle místností a zón. Vytvářejte umístění jako „Kuchyně“ nebo „Garáž“ a poté je rozdělte do oblastí.",
+        "title": "Uspořádat podle umístění"
+      },
+      "navWarranties": {
+        "description": "Už nikdy nezmeškáte vypršení záruky. {{brand}} sleduje každou záruku a upozorní vás dříve, než vyprší.",
+        "title": "Sledovat záruky"
+      },
+      "welcome": {
+        "description": "Váš osobní systém pro evidenci domácího inventáře. Sledujte každou položku, záruku, soubor a účtenku — vše na jednom místě. Pojďme se rychle provést aplikací.",
+        "title": "Vítejte v {{brand}}"
+      }
+    }
+  },
+  "serverError": {
+    "conflict": {
+      "title": "Toto je v rozporu s jinou změnou"
+    },
+    "network": {
+      "title": "Nelze se připojit k serveru"
+    },
+    "retry": "Zkusit znovu",
+    "unknown": {
+      "title": "Něco se pokazilo"
+    },
+    "validation": {
+      "title": "Zkontrolujte prosím zvýrazněná pole"
+    }
+  },
+  "shell": {
+    "account": "Účet",
+    "commandGroupNavigation": "Navigace",
+    "commandGroupSearch": "Hledat",
+    "commandHint": "Pro hledání zadejte alespoň 2 znaky.",
+    "commandNoResults": "Žádné výsledky pro „{{query}}“.",
+    "commandPlaceholder": "Zadejte příkaz nebo hledejte…",
+    "commandSearchHandoff": "Hledat „{{query}}“ napříč položkami, umístěními, soubory…",
+    "createGroup": "Vytvořit novou skupinu",
+    "densityComfortable": "Pohodlné",
+    "densityCompact": "Kompaktní",
+    "densityCozy": "Útulné",
+    "groupCount_one": "{{count}} skupina",
+    "groupCount_few": "{{count}} skupiny",
+    "groupCount_many": "{{count}} skupiny",
+    "groupCount_other": "{{count}} skupin",
+    "groupSettings": "Nastavení skupiny",
+    "inviteBanner_one": "Máte {{count}} čekající pozvánku.",
+    "inviteBanner_few": "Máte {{count}} čekající pozvánky.",
+    "inviteBanner_many": "Máte {{count}} čekající pozvánky.",
+    "inviteBanner_other": "Máte {{count}} čekajících pozvánek.",
+    "inviteBannerDismiss": "Zavřít upozornění na pozvánku",
+    "inviteBannerView": "Zobrazit",
+    "memberCount_one": "{{count}} člen",
+    "memberCount_few": "{{count}} členové",
+    "memberCount_many": "{{count}} člena",
+    "memberCount_other": "{{count}} členů",
+    "noActiveGroup": "Vyberte skupinu",
+    "signOut": "Odhlásit se",
+    "switchGroup": "Přepnout skupinu",
+    "themeDark": "Tmavý",
+    "themeLight": "Světlý",
+    "themeSystem": "Systémový",
+    "toggleDensity": "Přepnout hustotu",
+    "toggleTheme": "Přepnout motiv"
+  },
+  "shortcuts": {
+    "categories": {
+      "actions": "Akce",
+      "help": "Nápověda",
+      "layout": "Rozložení",
+      "navigation": "Navigace",
+      "search": "Hledat"
+    },
+    "description": "Stisknutím kombinace kláves se přesunete po aplikaci. Kdykoli stiskněte ? pro opětovné otevření tohoto seznamu.",
+    "empty": "Žádné zkratky neodpovídají „{{query}}“.",
+    "entries": {
+      "openPalette": "Otevřít paletu příkazů",
+      "showShortcuts": "Zobrazit klávesové zkratky",
+      "toggleSidebar": "Přepnout postranní panel"
+    },
+    "filterPlaceholder": "Filtrovat zkratky…",
+    "then": "poté",
+    "title": "Klávesové zkratky"
+  },
+  "trackedBy": "Sledováno pomocí {{ref}}."
 }
