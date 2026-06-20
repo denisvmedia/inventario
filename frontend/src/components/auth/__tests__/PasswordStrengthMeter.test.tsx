@@ -61,8 +61,15 @@ describe("<PasswordStrengthMeter />", () => {
   })
 
   it("upgrades to the zxcvbn score and renders the first suggestion", async () => {
+    // zxcvbn scores this 2; the synchronous heuristic scores "hunter2" a 1
+    // (one length point + one for two character classes). The divergent
+    // scores are deliberate: the meter starts at the heuristic 1 and only
+    // flips to 2 once the async loader resolves, so waiting on "2" proves we
+    // observed the zxcvbn upgrade rather than the heuristic already on screen.
+    // Waiting on "1" would race — it's satisfied before the dynamic import
+    // settles, so the call assertion below would still see 0 calls.
     zxcvbnMock.mockReturnValue({
-      score: 1,
+      score: 2,
       feedback: { suggestions: ["Add another word or two.", "Avoid repeated patterns."] },
     })
     render(
@@ -72,7 +79,7 @@ describe("<PasswordStrengthMeter />", () => {
         testId="t-meter"
       />
     )
-    await waitFor(() => expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "1"))
+    await waitFor(() => expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "2"))
     expect(zxcvbnMock).toHaveBeenCalledWith("hunter2", ["alex@example.com"])
     expect(screen.getByTestId("t-meter-suggestion")).toHaveTextContent(/another word/i)
   })
