@@ -111,9 +111,9 @@ func ValidateEmailPublicURLConfig(provider, publicURL string) error {
 		// implies a real deployment where users will expect verification /
 		// reset / invite emails — none of which the stub ever sends. Warn loudly
 		// so a "users never receive any email" deployment is not silent.
-		if strings.TrimSpace(publicURL) != "" {
+		if trimmedURL := strings.TrimSpace(publicURL); trimmedURL != "" {
 			slog.Warn("email provider is 'stub': verification/reset/invite emails will be silently dropped; set a real SMTP (or other) provider + email.from for any deployment real users will use",
-				"public_url", strings.TrimSpace(publicURL))
+				"public_url", trimmedURL)
 		}
 		return nil
 	case services.EmailProviderSMTP,

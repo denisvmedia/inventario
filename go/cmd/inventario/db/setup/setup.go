@@ -220,6 +220,15 @@ func (m *DataSetupManager) createDefaultTenant(ctx context.Context, tx *sql.Tx, 
 
 // createOrUpdateAdminUser creates or updates the admin user
 func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.Tx, opts SetupOptions, result *SetupResult) (string, error) {
+	// Validate the configured admin password up front so a complexity failure
+	// surfaces as a clear, distinct error on every path (create, update, and
+	// --dry-run) instead of the generic "failed to hash password" deep in the
+	// create branch. SetPassword also validates internally; this just wraps it
+	// with an actionable message for operators reading init-data logs.
+	if err := models.ValidatePassword(opts.AdminPassword); err != nil {
+		return "", fmt.Errorf("admin password does not meet complexity requirements (min 8 chars with upper, lower, and a digit): %w", err)
+	}
+
 	// Check if admin user already exists
 	var existingUserID string
 	err := tx.QueryRowContext(ctx, "SELECT id FROM users WHERE email = $1", opts.AdminEmail).Scan(&existingUserID)
@@ -245,14 +254,6 @@ func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.
 			Email:    opts.AdminEmail,
 			Name:     opts.AdminName,
 			IsActive: true,
-		}
-
-		// Validate the password explicitly first so a complexity failure is
-		// reported as a clear, distinct, non-transient error (rather than the
-		// generic "failed to hash password"). This is the message the init-data
-		// shell script keys off to stop retrying a misconfigured admin password.
-		if err = models.ValidatePassword(opts.AdminPassword); err != nil {
-			return "", fmt.Errorf("admin password does not meet complexity requirements (min 8 chars with upper, lower, and a digit): %w", err)
 		}
 
 		err = user.SetPassword(opts.AdminPassword)
