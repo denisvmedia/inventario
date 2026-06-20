@@ -23,7 +23,7 @@ jobs:
       ci: ${{ steps.filter.outputs.ci }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Filter changed paths
         id: filter
         uses: dorny/paths-filter@v4
@@ -40,7 +40,7 @@ jobs:
       needs.changes.outputs.ci == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Major-version pin keeps CI deterministic while letting dependabot
       # cleanly bump the action alongside other workflow upgrades.
