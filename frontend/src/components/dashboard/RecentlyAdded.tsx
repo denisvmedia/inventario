@@ -79,7 +79,7 @@ export function RecentlyAdded({ items, isLoading = false }: RecentlyAddedProps) 
                     // dashboard. Let modifier / middle clicks through so the
                     // browser opens the full page in a new tab.
                     if (!slug || !item.id) return
-                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
                     e.preventDefault()
                     navigate(
                       `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(item.id)}`,
