@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import { Package } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -18,13 +18,21 @@ interface RecentlyAddedProps {
   isLoading?: boolean
 }
 
-// RecentlyAdded is the right-hand list on the dashboard. Each row links
-// to /g/:slug/commodities/:id (the items detail page lives in #1410;
-// the placeholder mounted there today still renders a recognisable
-// "Coming soon" stub, so the click target is not a dead end).
+// RecentlyAdded is the right-hand list on the dashboard. A plain click on
+// a row opens the commodity detail in the slide-out sheet overlay (mock
+// parity, #1581 item 6) by stamping the current dashboard URL onto
+// `state.background` — the router (app/router.tsx) reads that state and
+// renders CommodityDetailSheet on top of the dashboard. This is the same
+// row→sheet pattern the items list uses (CommoditiesListPage's
+// `openCommodityInSheet`). Modifier / middle clicks fall through to the
+// underlying <Link> so "open in new tab" lands on the full detail page (a
+// new document carries no `state.background`, so the overlay tree stays
+// unmounted there).
 export function RecentlyAdded({ items, isLoading = false }: RecentlyAddedProps) {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
+  const navigate = useNavigate()
+  const location = useLocation()
   const slug = currentGroup?.slug
   return (
     <Card>
@@ -66,6 +74,18 @@ export function RecentlyAdded({ items, isLoading = false }: RecentlyAddedProps) 
                       ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(item.id)}`
                       : "#"
                   }
+                  onClick={(e) => {
+                    // Plain left-click → open the slide-out sheet over the
+                    // dashboard. Let modifier / middle clicks through so the
+                    // browser opens the full page in a new tab.
+                    if (!slug || !item.id) return
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+                    e.preventDefault()
+                    navigate(
+                      `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(item.id)}`,
+                      { state: { background: location } }
+                    )
+                  }}
                   className="flex w-full items-center justify-between gap-3 px-6 py-3.5 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 outline-none"
                   data-testid="recently-added-row"
                 >

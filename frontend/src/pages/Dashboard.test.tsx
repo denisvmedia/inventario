@@ -100,6 +100,55 @@ describe("<DashboardPage />", () => {
     expect(rows[2]).toHaveTextContent("Office chair")
   })
 
+  // #1581 item 6: a plain click on a Recently-Added row opens the
+  // commodity detail in the slide-out sheet overlay — it navigates to the
+  // detail route AND stamps the current dashboard URL onto
+  // `state.background` (the signal app/router.tsx reads to render the
+  // sheet over the backdrop). Mirrors the items-list row→sheet pattern.
+  it("opens a Recently-Added row in the sheet overlay (navigates with state.background)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityResource("c1", { name: "MacBook Pro", registered_date: "2026-04-20" }),
+      ]),
+      ...commodityHandlers.values(SLUG, { globalTotal: 1500 })
+    )
+    function NavSentinel() {
+      const location = useLocation()
+      const hasBackground = !!(location.state as { background?: unknown } | null)?.background
+      return (
+        <div>
+          <span data-testid="nav-sentinel-path">{location.pathname}</span>
+          <span data-testid="nav-sentinel-bg">{hasBackground ? "yes" : "no"}</span>
+        </div>
+      )
+    }
+    setAccessToken("good-token")
+    renderWithProviders({
+      initialPath: `/g/${SLUG}`,
+      routes: (
+        <>
+          <Route
+            path="/g/:groupSlug"
+            element={
+              <GroupProvider>
+                <DashboardPage />
+              </GroupProvider>
+            }
+          />
+          <Route path="/g/:groupSlug/commodities/:id" element={<NavSentinel />} />
+        </>
+      ),
+    })
+    const row = await screen.findByTestId("recently-added-row")
+    const user = userEvent.setup()
+    await user.click(row)
+    expect(await screen.findByTestId("nav-sentinel-path")).toHaveTextContent(
+      `/g/${SLUG}/commodities/c1`
+    )
+    expect(screen.getByTestId("nav-sentinel-bg")).toHaveTextContent("yes")
+  })
+
   // #1684: low-denomination currencies (HUF / IDR / VND / KRW / IRR / …)
   // hit 8–9 digit totals routinely and clip the half-screen stat-card
   // cell even with cents dropped. At ≥1e7 the hero hands off to
