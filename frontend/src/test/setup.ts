@@ -22,8 +22,14 @@ expect.extend(toHaveNoViolations)
 // and deterministic — the per-component meter test still re-mocks locally
 // (vi.mock hoists per file) when it needs to assert behavior end-to-end.
 vi.mock("@zxcvbn-ts/core", () => ({
-  zxcvbn: () => ({ score: 0, feedback: { suggestions: [] } }),
-  zxcvbnOptions: { setOptions: () => undefined },
+  // v4 scores via a ZxcvbnFactory instance (the global zxcvbn()/zxcvbnOptions
+  // singletons were removed); the constructor accepts the dictionary options
+  // and check() returns the result.
+  ZxcvbnFactory: class {
+    check() {
+      return { score: 0, feedback: { suggestions: [] } }
+    }
+  },
 }))
 vi.mock("@zxcvbn-ts/language-common", () => ({
   adjacencyGraphs: {},
