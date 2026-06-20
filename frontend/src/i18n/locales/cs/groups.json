@@ -1,1 +1,166 @@
-{}
+{
+  "create": {
+    "cancel": "Zrušit",
+    "currencyAriaLabel": "Měna",
+    "currencyHelp": "Nastavuje se jednorázově při vytvoření a poté ji nelze změnit — viz #202 pro nástroj migrace měny.",
+    "currencyLabel": "Měna skupiny",
+    "currencyNoMatch": "Žádná měna neodpovídá.",
+    "currencyPlaceholder": "Vyberte měnu",
+    "currencySearchPlaceholder": "Hledat kód ISO 4217…",
+    "errorGeneric": "Skupinu se nepodařilo vytvořit. Zkuste to prosím znovu.",
+    "errorMissingSlug": "Skupina byla vytvořena, ale chybí její adresa URL. Pokračujte znovunačtením stránky.",
+    "iconChange": "Změnit",
+    "iconHelp": "Volitelné — vyberte něco, podle čeho skupinu snáze poznáte v postranním panelu.",
+    "iconLabel": "Ikona",
+    "iconNone": "Bez ikony",
+    "iconPick": "Vybrat…",
+    "nameLabel": "Název skupiny",
+    "namePlaceholder": "Hlavní bydliště",
+    "submit": "Vytvořit skupinu",
+    "submitting": "Vytvářím…",
+    "subtitle": "Nastavte si vlastní inventář a pozvěte do něj další.",
+    "successToast": "Skupina vytvořena.",
+    "title": "Vytvořit novou skupinu"
+  },
+  "migration": {
+    "banner": "Probíhá migrace měny pro skupinu {{name}}.",
+    "rateLabel": "1 {{from}} = {{rate}} {{to}}",
+    "status": {
+      "completed": "Dokončeno",
+      "failed": "Selhalo",
+      "pending": "Čeká",
+      "running": "Probíhá"
+    },
+    "toastInProgress": "Pro tuto skupinu již migrace měny probíhá.",
+    "toastStartFailed": "Migraci se nepodařilo spustit. Zkuste to prosím znovu."
+  },
+  "settings": {
+    "currencyLabel": "Měna skupiny",
+    "dangerDescription": "Smazáním této skupiny trvale odstraníte všechna umístění, položky, soubory a exporty. Tuto akci nelze vrátit zpět.",
+    "dangerTitle": "Nebezpečná zóna",
+    "data": {
+      "exportTitle": "Exportovat data",
+      "noGroupSlug": "Exporty budou dostupné, jakmile se načte adresa URL této skupiny — zkuste obnovit stránku.",
+      "title": "Data a úložiště"
+    },
+    "deleteCta": "Smazat skupinu",
+    "deleteDialog": {
+      "body": "Pro potvrzení zadejte název skupiny a své aktuální heslo. Název chrání před nechtěným kliknutím; heslo před zneužitím relace.",
+      "cancel": "Zrušit",
+      "confirm": "Trvale smazat",
+      "confirmWordLabel": "Název skupiny",
+      "deleting": "Mažu…",
+      "errorGeneric": "Skupinu se nepodařilo smazat. Zkuste to prosím znovu.",
+      "passwordLabel": "Vaše heslo",
+      "title": "Smazat skupinu {{name}}?",
+      "wrongPassword": "Toto heslo je nesprávné."
+    },
+    "dialog": {
+      "back": "Zpět",
+      "cancel": "Zrušit",
+      "confirmHelp": "Pro potvrzení zadejte {{name}}. Tím se přecení každá komodita v této skupině.",
+      "continue": "Pokračovat",
+      "currentCurrencyLabel": "Aktuální měna skupiny",
+      "previewCommodityCount_one": "Přecení se {{count}} komodita",
+      "previewCommodityCount_few": "Přecení se {{count}} komodity",
+      "previewCommodityCount_many": "Přecení se {{count}} komodity",
+      "previewCommodityCount_other": "Přecení se {{count}} komodit",
+      "previewExpired": "Platnost tohoto náhledu vypršela. Otevřete průvodce znovu pro jeho obnovení.",
+      "previewExpiresIn": "Platnost náhledu vyprší za {{value}}",
+      "previewFailed": "Náhled se nepodařilo vygenerovat. Zkuste to prosím znovu.",
+      "previewNoDiffs": "Žádná komodita nemá nastavenou aktuální cenu, takže se nezobrazují žádné rozdíly po řádcích.",
+      "previewTopDeltasTitle": "Nejvýraznější změny (podle absolutního rozdílu aktuální ceny)",
+      "previewTotalAfter": "Celkem po",
+      "previewTotalBefore": "Celkem před",
+      "rateHelp": "1 {{from}} = ? {{to}}",
+      "rateLabel": "Směnný kurz",
+      "rateMaxDecimalsHint": "Až 6 desetinných míst.",
+      "rateRequired": "Zadejte kladný směnný kurz.",
+      "starting": "Spouštím…",
+      "stepConfirm": "Potvrzení",
+      "stepPreview": "Náhled",
+      "stepRate": "Kurz",
+      "stepTarget": "Cíl",
+      "submit": "Spustit migraci",
+      "targetHelp": "Nová měna skupiny. Musí se lišit od aktuální.",
+      "targetLabel": "Nová měna skupiny",
+      "targetSameAsCurrent": "Vyberte měnu odlišnou od {{current}}.",
+      "title": "Migrovat měnu"
+    },
+    "errorGeneric": "Skupinu se nepodařilo uložit. Zkuste to prosím znovu.",
+    "iconLabel": "Ikona",
+    "leaveCta": "Opustit skupinu",
+    "leaveDescription": "Ztratíte přístup ke všem datům v této skupině.",
+    "leaveError": "Skupinu se nepodařilo opustit.",
+    "leaveLastAdmin": "Jste posledním vlastníkem této skupiny. Před odchodem povyšte jiného člena na vlastníka — nebo skupinu níže smažte.",
+    "leaveLastAdminTitle": "Jste posledním vlastníkem. Nejprve povyšte jiného člena, nebo skupinu smažte.",
+    "leaveLastMember": "Jste posledním členem této skupiny. Místo odchodu skupinu raději smažte — odchodem byste ji osiřeli a nikdo by ji nemohl spravovat ani odstranit.",
+    "leaveSuccess": "Opustili jste skupinu.",
+    "leaveTitle": "Opustit skupinu",
+    "membersLink": "Členové",
+    "migrateCurrency": "Migrovat měnu…",
+    "migrateCurrencyDisabledHelp": "Migrace měny je v tomto nasazení zakázána. Pro její povolení kontaktujte svého operátora.",
+    "migrateCurrencyHelp": "Přepněte tuto skupinu na jinou měnu. Každá komodita se přecení kurzem, který nastavíte.",
+    "migrationsEmpty": "Zatím žádné migrace měny.",
+    "migrationsHelp": "Posledních 10 migrací (od nejnovější). Migrace nelze vrátit zpět.",
+    "migrationsHistoryCta_one": "Zobrazit {{count}} minulou migraci",
+    "migrationsHistoryCta_few": "Zobrazit {{count}} minulé migrace",
+    "migrationsHistoryCta_many": "Zobrazit {{count}} minulé migrace",
+    "migrationsHistoryCta_other": "Zobrazit {{count}} minulých migrací",
+    "migrationsTitle": "Migrace měny",
+    "nameLabel": "Název skupiny",
+    "notifications": {
+      "errorGeneric": "Předvolby oznámení se nepodařilo načíst.",
+      "saveError": "Předvolby se nepodařilo uložit. Zkuste to znovu.",
+      "subtitle": "Vyberte, která oznámení chcete z této skupiny dostávat. Tato přepsání platí pouze zde.",
+      "title": "Oznámení",
+      "toggles": {
+        "warrantyExpiringAlerts": {
+          "description": "E-mail, když komoditě v této skupině brzy vyprší záruka.",
+          "label": "Upozornění na končící záruku"
+        },
+        "weeklyDigest": {
+          "description": "Týdenní souhrnný e-mail pro tuto skupinu.",
+          "label": "Týdenní souhrnný e-mail"
+        }
+      }
+    },
+    "plan": {
+      "activeBadge": "Aktivní",
+      "chips": {
+        "items": "Položky",
+        "locations": "Umístění",
+        "storage": "Úložiště souborů",
+        "unlimited": "Neomezeně"
+      },
+      "errorGeneric": "Podrobnosti tarifu se nepodařilo načíst.",
+      "infoBanner": "Možnosti skupiny se řídí předplatným vlastníka. Pokud se tarif změní, změní se s ním i dostupné funkce každého člena.",
+      "ownerLine": "Vlastník: {{name}}",
+      "ownerLineUnknown": "Vlastník: —",
+      "title": "Tarif skupiny {{name}}",
+      "upgrade": "Vylepšit"
+    },
+    "save": "Uložit změny",
+    "saved": "Skupina uložena.",
+    "saving": "Ukládám…",
+    "sections": {
+      "data": "Data a úložiště",
+      "info": "Informace",
+      "management": "Správa",
+      "members": "Členové",
+      "notifications": "Oznámení"
+    },
+    "slugHelp": "Slugy se generují náhodně při vytvoření a nelze je změnit.",
+    "slugLabel": "Slug adresy URL",
+    "subtitle": "Spravujte profil, členy a životní cyklus své skupiny.",
+    "title": "Nastavení skupiny"
+  },
+  "validation": {
+    "confirmWordMismatch": "Název skupiny neodpovídá",
+    "confirmWordRequired": "Pro potvrzení prosím zadejte název skupiny",
+    "currencyInvalid": "Použijte třípísmenný kód měny ISO (např. USD, EUR, CZK)",
+    "iconUnknown": "Vyberte ikonu ze seznamu",
+    "nameRequired": "Název skupiny je povinný",
+    "nameTooLong": "Název skupiny smí mít nejvýše 100 znaků"
+  }
+}

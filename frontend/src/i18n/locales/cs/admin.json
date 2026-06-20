@@ -4,29 +4,6 @@
     "description": "Nemáte oprávnění zobrazit oblast správy. Tato oblast je vyhrazena pro systémové administrátory.",
     "title": "Přístup odepřen"
   },
-  "impersonation": {
-    "banner": {
-      "end": "Ukončit vystupování",
-      "ending": "Ukončování…",
-      "label": "Vystupujete jako {{name}}",
-      "sessionEndsIn": "Relace končí za"
-    }
-  },
-  "layout": {
-    "breadcrumbRoot": "Správa"
-  },
-  "nav": {
-    "groups": "Skupiny",
-    "section": "Správa",
-    "tenants": "Tenanty"
-  },
-  "pagination": {
-    "next": "Další stránka",
-    "nextLabel": "Další",
-    "previous": "Předchozí stránka",
-    "previousLabel": "Předchozí",
-    "showing": "Zobrazeno {{from}}–{{to}} z {{total}}"
-  },
   "groupDetail": {
     "back": "Zpět na skupiny",
     "danger": {
@@ -125,6 +102,29 @@
     },
     "title": "Skupiny",
     "unknownTenant": "Neznámý tenant"
+  },
+  "impersonation": {
+    "banner": {
+      "end": "Ukončit vystupování",
+      "ending": "Ukončování…",
+      "label": "Vystupujete jako {{name}}",
+      "sessionEndsIn": "Relace končí za"
+    }
+  },
+  "layout": {
+    "breadcrumbRoot": "Správa"
+  },
+  "nav": {
+    "groups": "Skupiny",
+    "section": "Správa",
+    "tenants": "Tenanty"
+  },
+  "pagination": {
+    "next": "Další stránka",
+    "nextLabel": "Další",
+    "previous": "Předchozí stránka",
+    "previousLabel": "Předchozí",
+    "showing": "Zobrazeno {{from}}–{{to}} z {{total}}"
   },
   "tenantDetail": {
     "back": "Zpět na tenanty",
@@ -277,7 +277,7 @@
     "sessions": {
       "count_one": "{{count}} aktivní relace",
       "count_few": "{{count}} aktivní relace",
-      "count_many": "{{count}} aktivních relací",
+      "count_many": "{{count}} aktivní relace",
       "count_other": "{{count}} aktivních relací",
       "countHint": "Počítáno z neodvolaných obnovovacích tokenů.",
       "empty": "Žádné aktivní relace.",

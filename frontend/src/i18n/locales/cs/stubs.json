@@ -1,1 +1,98 @@
-{}
+{
+  "areaDetail": "Oblast",
+  "areaEdit": "Upravit oblast",
+  "backup": "Záloha",
+  "commodities": "Položky",
+  "commodityDetail": "Položka",
+  "commodityEdit": "Upravit položku",
+  "commodityNew": "Nová položka",
+  "commodityPrint": "Vytisknout položku",
+  "exportDetail": "Export",
+  "exportImport": "Import",
+  "exportNew": "Nový export",
+  "exportRestore": "Obnovit",
+  "exports": "Exporty",
+  "fileDetail": "Soubor",
+  "fileEdit": "Upravit soubor",
+  "fileNew": "Nahrát soubory",
+  "files": "Soubory",
+  "forgotPassword": "Zapomenuté heslo",
+  "groupCreate": "Vytvořit skupinu",
+  "groupSettings": "Nastavení skupiny",
+  "helpCenter": "Centrum nápovědy",
+  "inviteAccept": "Přijmout pozvánku",
+  "locationDetail": "Umístění",
+  "locationEdit": "Upravit umístění",
+  "locationNew": "Nové umístění",
+  "locations": "Umístění",
+  "login": "Přihlásit se",
+  "members": "Členové",
+  "noGroup": "Žádná skupina",
+  "plans": "Tarify",
+  "profile": "Profil",
+  "register": "Vytvořit účet",
+  "resetPassword": "Obnovit heslo",
+  "search": "Hledat",
+  "surfaces": {
+    "activeSessions": {
+      "description": "Zobrazte a odvolejte zařízení přihlášená k vašemu účtu.",
+      "title": "Aktivní relace"
+    },
+    "authStatsTeaser": {
+      "description": "Živé statistiky z vašeho inventáře zobrazené vedle přihlašovacího formuláře.",
+      "title": "Ukázka statistik inventáře"
+    },
+    "connectedAccounts": {
+      "description": "Propojte Google nebo GitHub, abyste se ze stránky profilu přihlásili rychleji.",
+      "title": "Propojené účty"
+    },
+    "filesUnification": {
+      "description": "Fotky, faktury a dokumenty budou žít ve sjednoceném prohlížeči souborů s kategoriemi a štítky.",
+      "title": "Prohlížeč souborů"
+    },
+    "helpCenter": {
+      "description": "Procházejte články a návody k používání Inventario.",
+      "title": "Centrum nápovědy"
+    },
+    "loginHistory": {
+      "description": "Auditní záznam nedávných přihlášení, zdrojů a výsledků pro váš účet.",
+      "title": "Historie přihlášení"
+    },
+    "maintenanceReminders": {
+      "description": "Opakované servisní připomínky pro položky, které vyžadují údržbu.",
+      "title": "Připomínky údržby"
+    },
+    "multiStepDraft": {
+      "description": "Vytvořte koncept položky v několika krocích a pokračujte později.",
+      "title": "Vícekrokový koncept položky"
+    },
+    "notificationPreferences": {
+      "description": "Určete, které události vám pošlou e-mail nebo oznámení v aplikaci.",
+      "title": "Předvolby oznámení"
+    },
+    "oauth": {
+      "description": "Přihlaste se přes Google nebo GitHub místo e-mailu a hesla.",
+      "title": "Přihlášení přes OAuth"
+    },
+    "plans": {
+      "description": "Porovnejte dostupné úrovně předplatného a přejděte na vyšší či nižší tarif.",
+      "title": "Tarify předplatného"
+    },
+    "profilePhoto": {
+      "description": "Nahrajte fotku a přizpůsobte si svůj profil.",
+      "title": "Profilová fotka"
+    },
+    "warranties": {
+      "description": "Sledujte záruční podmínky, expiraci a prodloužení u jednotlivých položek.",
+      "title": "Záruky"
+    },
+    "whatsNew": {
+      "description": "Přehled všech vydaných změn v Inventario, od nejnovějších.",
+      "title": "Novinky"
+    }
+  },
+  "tags": "Štítky",
+  "verifyEmail": "Ověřit e-mail",
+  "warranties": "Záruky",
+  "whatsNew": "Novinky"
+}

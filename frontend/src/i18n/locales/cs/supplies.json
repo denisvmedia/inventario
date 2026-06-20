@@ -1,1 +1,35 @@
-{}
+{
+  "add": "Přidat odkaz",
+  "delete": {
+    "confirm": "Smazat",
+    "description": "Odebrat „{{label}}“ z odkazů na spotřební materiál této položky?",
+    "title": "Smazat odkaz na spotřební materiál?"
+  },
+  "dialog": {
+    "cancel": "Zrušit",
+    "description": "Pojmenujte spotřební materiál a vložte odkaz, kde jej znovu nakupujete.",
+    "save": "Uložit"
+  },
+  "edit": "Upravit odkaz na spotřební materiál",
+  "empty": "Zatím žádné odkazy na spotřební materiál. Přidejte adresu URL, kde znovu nakupujete spotřební materiál této položky.",
+  "fields": {
+    "label": "Označení",
+    "labelPlaceholder": "např. Vodní filtr",
+    "notes": "Poznámky (volitelné)",
+    "notesPlaceholder": "Velikost balení, frekvence doplňování apod.",
+    "url": "URL"
+  },
+  "moveDown": "Posunout dolů",
+  "moveUp": "Posunout nahoru",
+  "open": "Otevřít",
+  "title": "Odkazy na spotřební materiál",
+  "toasts": {
+    "created": "Odkaz na spotřební materiál byl přidán.",
+    "createError": "Odkaz na spotřební materiál se nepodařilo přidat.",
+    "deleted": "Odkaz na spotřební materiál byl smazán.",
+    "deleteError": "Odkaz na spotřební materiál se nepodařilo smazat.",
+    "reorderError": "Odkazy na spotřební materiál se nepodařilo přeřadit.",
+    "updated": "Odkaz na spotřební materiál byl aktualizován.",
+    "updateError": "Odkaz na spotřební materiál se nepodařilo aktualizovat."
+  }
+}

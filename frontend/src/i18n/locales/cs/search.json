@@ -1,1 +1,53 @@
-{}
+{
+  "clear": "Vymazat",
+  "errorBody": "Při načítání výsledků došlo k chybě. Zkuste to za chvíli znovu.",
+  "errorTitle": "Vyhledávání se nezdařilo",
+  "groupCount_one": "{{count}} shoda",
+  "groupCount_few": "{{count}} shody",
+  "groupCount_many": "{{count}} shody",
+  "groupCount_other": "{{count}} shod",
+  "groupEmpty": "Žádné shody v sekci {{group}}",
+  "groups": {
+    "areas": "Oblasti",
+    "commodities": "Položky",
+    "files": "Soubory",
+    "locations": "Umístění",
+    "tags": "Štítky"
+  },
+  "groupUnavailableBody": "Tento zdroj je v plánu. Sledováno pod {{ref}}.",
+  "groupUnavailableTitle": "Vyhledávání v sekci {{group}} zatím není k dispozici",
+  "inputLabel": "Hledat",
+  "inputPlaceholder": "Hledat v této skupině…",
+  "loading": "Hledání…",
+  "noResultsBody": "Zkuste jiné klíčové slovo nebo zkontrolujte, zda je položka v této skupině.",
+  "noResultsTitle": "Žádné shody pro „{{query}}“",
+  "queryEmptyBody": "Zadejte název, štítek nebo umístění a najděte cokoli v této skupině.",
+  "queryEmptyTitle": "Prohledejte svůj inventář",
+  "queryHints": {
+    "category": "kategorii",
+    "item": "název položky",
+    "location": "místnost",
+    "tag": "štítek",
+    "title": "Zkuste vyhledat…"
+  },
+  "recent": {
+    "clear": "Vymazat historii",
+    "empty": "Zatím žádné nedávné položky — otevřete několik položek, umístění nebo souborů a objeví se zde.",
+    "subtitle": "Stránky, které jste v této skupině nedávno otevřeli.",
+    "title": "Nedávno navštívené"
+  },
+  "resultCard": {
+    "openArea": "Otevřít oblast",
+    "openFile": "Otevřít soubor",
+    "openItem": "Otevřít položku",
+    "openLocation": "Otevřít umístění"
+  },
+  "seeAll": "Zobrazit vše",
+  "seeAllResults_one": "Zobrazit {{count}} shodu v sekci {{group}}",
+  "seeAllResults_few": "Zobrazit všechny {{count}} shody v sekci {{group}}",
+  "seeAllResults_many": "Zobrazit všech {{count}} shody v sekci {{group}}",
+  "seeAllResults_other": "Zobrazit všech {{count}} shod v sekci {{group}}",
+  "submit": "Hledat",
+  "subtitle": "Najděte položky, umístění, oblasti, soubory a štítky v této skupině.",
+  "title": "Hledat"
+}

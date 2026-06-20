@@ -1,1 +1,32 @@
-{}
+{
+  "cards": {
+    "addItem": {
+      "description": "Vyfoťte ji a nechte detaily doplnit AI — pro uložení si vytvořte bezplatný účet.",
+      "descriptionManual": "Přidejte svou první položku během pár vteřin — pro uložení si vytvořte bezplatný účet.",
+      "title": "Přidejte svou první položku"
+    },
+    "login": {
+      "description": "Už máte účet? Přihlaste se a spravujte vše, co vlastníte.",
+      "title": "Už mám účet"
+    }
+  },
+  "draft": {
+    "resume": "Pokračovat v položce"
+  },
+  "hero": {
+    "subtitle": "Sledujte svůj majetek, jeho záruky a hodnoty na jednom místě.",
+    "title": "Vše, co vlastníte, přehledně"
+  },
+  "registerCta": "Jste tu poprvé? Vytvořte si účet",
+  "resolver": {
+    "defaultGroupName": "Hlavní",
+    "errorGeneric": "Při přidávání položky se něco pokazilo. Váš koncept je v bezpečí — zkuste to znovu.",
+    "errorTitle": "Položku se nepodařilo přidat",
+    "pickGroupSubtitle": "Vyberte skupinu, do které se má přidat vaše první položka.",
+    "pickGroupTitle": "Kam má tato položka patřit?",
+    "retry": "Zkusit znovu",
+    "settingUp": "Probíhá nastavení…",
+    "skip": "Zatím přeskočit",
+    "title": "Nastavení"
+  }
+}

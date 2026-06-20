@@ -1,1 +1,85 @@
-{}
+{
+  "actions": {
+    "changeRole": "Změnit roli",
+    "remove": "Odebrat",
+    "removeLastOwner": "Nelze odebrat posledního vlastníka — nejprve povyšte jiného člena na vlastníka nebo skupinu smažte.",
+    "removing": "Odebírání…"
+  },
+  "adminOnlyHelp": "Role měnit, členy odebírat a pozvánky spravovat mohou pouze správci a vlastníci.",
+  "empty": "Tato skupina zatím nemá žádné členy.",
+  "errors": {
+    "lastMember": "Nelze odebrat. Skupina by zůstala prázdná — místo toho ji smažte.",
+    "lastOwner": "Nelze odebrat. Jde o posledního vlastníka — nejprve povyšte jiného člena na vlastníka."
+  },
+  "invite": {
+    "actions": {
+      "resend": "Odeslat pozvánku znovu",
+      "revoke": "Zrušit"
+    },
+    "cta": "Pozvat",
+    "dialog": {
+      "cancel": "Zrušit",
+      "description": "Odešlete odkaz s pozvánkou a přidejte někoho do této skupiny umístění.",
+      "emailLabel": "E-mailová adresa",
+      "emailPlaceholder": "kolega@example.com",
+      "roleLabel": "Role",
+      "send": "Odeslat pozvánku",
+      "sending": "Odesílání…",
+      "sent": "Odesláno!",
+      "title": "Pozvat do skupiny {{group}}",
+      "tokenFallback": "Nebo místo toho vytvořte odkaz s pozvánkou ke zkopírování"
+    },
+    "pendingBadge": "Čeká na vyřízení",
+    "resendError": "Pozvánku se nepodařilo odeslat znovu",
+    "resendSuccess": "Pozvánka byla odeslána znovu",
+    "revokeConfirm": {
+      "cancel": "Zrušit",
+      "confirm": "Zrušit",
+      "description": "Pozvánka odeslaná na adresu {{email}} bude zrušena. Odkaz s pozvánkou již nebude možné použít.",
+      "title": "Zrušit pozvánku?"
+    },
+    "sentAt": "Pozváno {{date}}"
+  },
+  "invites": {
+    "copied": "Zkopírováno do schránky",
+    "copy": "Kopírovat",
+    "copyFailed": "Kopírování se nezdařilo. Text výše zkopírujte ručně.",
+    "createError": "Odkaz s pozvánkou se nepodařilo vytvořit. Zkuste to prosím znovu.",
+    "empty": "Žádné aktivní odkazy s pozvánkou — vytvořte je tlačítkem Pozvat výše.",
+    "revokeError": "Tuto pozvánku se nepodařilo zrušit. Použité pozvánky nelze zrušit.",
+    "revoking": "Rušení…",
+    "title": "Odkazy s pozvánkou",
+    "tokenLabel": "Odkaz s pozvánkou"
+  },
+  "joinedSince": "od {{date}}",
+  "legend": {
+    "title": "Oprávnění rolí"
+  },
+  "loadError": "Seznam členů se nepodařilo načíst.",
+  "removeConfirm": {
+    "cancel": "Zrušit",
+    "confirm": "Odebrat",
+    "description": "Ztratí přístup k datům této skupiny. Později je můžete pozvat znovu.",
+    "title": "Odebrat člena {{name}}?"
+  },
+  "roleDescriptions": {
+    "admin": "Může spravovat členy, údaje skupiny, umístění a oblasti",
+    "owner": "Plný přístup včetně smazání skupiny a všech dat",
+    "user": "Může přidávat a odebírat položky (nikoli umístění nebo oblasti)",
+    "viewer": "Může zobrazit všechny položky, ale nemůže provádět žádné změny"
+  },
+  "roles": {
+    "admin": "Správce",
+    "owner": "Vlastník",
+    "user": "Uživatel",
+    "viewer": "Pozorovatel"
+  },
+  "stats": {
+    "admins": "Správci a vlastníci",
+    "members": "Členové",
+    "pending": "Čekající pozvánky"
+  },
+  "subtitle": "Spravujte, kdo má přístup k této skupině, a jejich role.",
+  "title": "Členové",
+  "you": "(vy)"
+}

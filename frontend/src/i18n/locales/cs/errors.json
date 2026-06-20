@@ -1,1 +1,44 @@
-{}
+{
+  "currencyMigrationDailyCapReached": "Pro tuto skupinu můžete spustit nejvýše 2 migrace měny denně; vraťte se po {{retry_at_local_time}}.",
+  "currencyMigrationFeatureDisabled": "Migrace měny je v této instalaci vypnutá. Pro její zapnutí kontaktujte svého operátora.",
+  "currencyMigrationPreviewExpired": "Náhled vypršel. Generuje se nový náhled…",
+  "currencyMigrationRestoreInProgress": "U této skupiny právě probíhá obnova; zkuste to znovu po jejím dokončení.",
+  "currencyMigrationStateChanged": "Skupina se od vygenerování náhledu změnila. Přepočítává se…",
+  "currencyMigrationTokenInvalid": "Požadavek na migraci se nepodařilo ověřit. Zkuste to prosím znovu.",
+  "global": {
+    "server": "Chyba serveru. Zkuste to prosím později."
+  },
+  "lockedDuringMigration": "Uzamčeno po dobu běhu migrace měny.",
+  "maintenance": {
+    "badge": "Plánovaná údržba",
+    "components": {
+      "api": "API",
+      "database": "Databáze",
+      "storage": "Úložiště souborů"
+    },
+    "description": "Systém je dočasně nedostupný z důvodu plánované údržby. Obvykle to trvá méně než 30 minut.",
+    "documentTitle": "Plánovaná údržba",
+    "heading": "Brzy jsme zpět",
+    "resumeAt": "Předpokládané obnovení v {{time}}.",
+    "retry": "Zkusit znovu",
+    "statusHeading": "Stav",
+    "statusLabels": {
+      "degraded": "Omezený provoz",
+      "maintenance": "Údržba",
+      "operational": "V provozu"
+    }
+  },
+  "notFound": {
+    "description": "Požadovaná stránka neexistuje nebo byla přesunuta.",
+    "documentTitle": "Stránka nenalezena",
+    "heading": "Stránka nenalezena"
+  },
+  "unexpected": {
+    "description": "Došlo k neočekávané chybě. Vaše data jsou v bezpečí — jde pouze o problém se zobrazením. Zkuste stránku znovu načíst.",
+    "devDetails": "Podrobnosti o chybě",
+    "documentTitle": "Něco se pokazilo",
+    "heading": "Něco se pokazilo",
+    "reload": "Znovu načíst stránku",
+    "retry": "Zkusit znovu"
+  }
+}

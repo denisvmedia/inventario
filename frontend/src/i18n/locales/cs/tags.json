@@ -1,1 +1,122 @@
-{}
+{
+  "color": {
+    "amber": "Jantarová",
+    "blue": "Modrá",
+    "green": "Zelená",
+    "muted": "Tlumená",
+    "orange": "Oranžová",
+    "red": "Červená",
+    "selectLabel": "Vyberte barvu"
+  },
+  "create": {
+    "button": "Vytvořit štítek"
+  },
+  "description": "Spravujte štítky, které můžete připojit k položkám a souborům. Přejmenování štítku přepíše jeho odkazy všude; smazání používaného štítku vyžaduje potvrzení.",
+  "form": {
+    "cancel": "Zrušit",
+    "color": "Barva",
+    "create": "Vytvořit štítek",
+    "createError": "Štítek se nepodařilo vytvořit: {{error}}",
+    "createSuccess": "Štítek byl vytvořen.",
+    "createTitle": "Vytvořit štítek",
+    "editTitle": "Upravit štítek",
+    "label": "Popisek",
+    "labelPlaceholder": "např. Kuchyně",
+    "previewFallback": "Štítek",
+    "save": "Uložit změny",
+    "slug": "Slug",
+    "slugHint": "Malá písmena, číslice a pomlčky. Používá se jako identifikátor v odkazech JSONB.",
+    "slugPlaceholder": "kuchyne",
+    "updateError": "Štítek se nepodařilo aktualizovat: {{error}}",
+    "updateSuccess": "Štítek byl aktualizován."
+  },
+  "inlineCreate": {
+    "cancel": "Zrušit nový štítek",
+    "label": "Název štítku",
+    "placeholder": "nazev-stitku",
+    "save": "Uložit nový štítek",
+    "toggle": "Nový štítek"
+  },
+  "list": {
+    "delete": "Smazat štítek",
+    "edit": "Upravit štítek",
+    "emptyFiltered": "Žádné štítky neodpovídají dotazu „{{query}}“.",
+    "emptyScopeCommodity": "Zatím žádné štítky používané u položek — přiřaďte některý v kroku Doplňky dialogu Přidat položku, abyste tento seznam naplnili.",
+    "emptyScopeFile": "Zatím žádné štítky používané u souborů — přiřaďte některý ve vstupu štítků u souboru, abyste tento seznam naplnili.",
+    "loadError": "Štítky se nepodařilo načíst: {{error}}",
+    "results_one": "{{count}} výsledek",
+    "results_few": "{{count}} výsledky",
+    "results_many": "{{count}} výsledku",
+    "results_other": "{{count}} výsledků",
+    "totalTags_one": "{{count}} štítek",
+    "totalTags_few": "{{count}} štítky",
+    "totalTags_many": "{{count}} štítku",
+    "totalTags_other": "{{count}} štítků",
+    "usageFiles_one": "{{count}} soubor",
+    "usageFiles_few": "{{count}} soubory",
+    "usageFiles_many": "{{count}} souboru",
+    "usageFiles_other": "{{count}} souborů",
+    "usageItems_one": "{{count}} položka",
+    "usageItems_few": "{{count}} položky",
+    "usageItems_many": "{{count}} položky",
+    "usageItems_other": "{{count}} položek",
+    "usageNone": "Zatím nepoužito"
+  },
+  "removal": {
+    "confirmAction": "Smazat",
+    "confirmDescription": "Odebrat štítek „{{label}}“ z této skupiny. Tuto akci nelze vrátit zpět.",
+    "confirmTitle": "Smazat štítek?",
+    "deleteError": "Štítek se nepodařilo smazat: {{error}}",
+    "deleteSuccess": "Štítek byl smazán.",
+    "forceAction": "Vynutit smazání",
+    "forceCancel": "Zrušit",
+    "inUseDescription": "Na štítek „{{label}}“ odkazuje {{items}} a {{files}}. Vynucené smazání nejprve odstraní tyto odkazy a poté štítek smaže.",
+    "inUseTitle": "Štítek se používá"
+  },
+  "search": {
+    "clear": "Vymazat hledání",
+    "label": "Hledat štítky",
+    "placeholder": "Filtrovat štítky…"
+  },
+  "sort": {
+    "label": "Řadit",
+    "labelAsc": "A → Z",
+    "labelDesc": "Z → A",
+    "mostUsed": "Nejpoužívanější",
+    "newest": "Nejnovější"
+  },
+  "stats": {
+    "commodityTagsTotal": "Štítky položek",
+    "filesTagged": "Označené soubory",
+    "filesUntagged": "Neoznačené soubory",
+    "fileTagsTotal": "Štítky souborů",
+    "itemsTagged": "Označené položky",
+    "itemsUntagged": "Neoznačené položky",
+    "tagsTotal": "Štítky"
+  },
+  "title": "Štítky",
+  "usage": {
+    "files_one": "{{count}} soubor",
+    "files_few": "{{count}} soubory",
+    "files_many": "{{count}} souboru",
+    "files_other": "{{count}} souborů",
+    "items_one": "{{count}} položka",
+    "items_few": "{{count}} položky",
+    "items_many": "{{count}} položky",
+    "items_other": "{{count}} položek"
+  },
+  "validation": {
+    "colorRequired": "Vyberte barvu.",
+    "duplicateSlug": "Štítek s tímto slugem již existuje.",
+    "labelRequired": "Popisek je povinný.",
+    "labelTooLong": "Popisek může mít nejvýše 64 znaků.",
+    "slugInvalid": "Slug musí být malými písmeny ve formátu kebab-case.",
+    "slugRequired": "Slug je povinný.",
+    "slugTooLong": "Slug může mít nejvýše 64 znaků."
+  },
+  "views": {
+    "commodity": "Štítky položek",
+    "file": "Štítky souborů",
+    "label": "Typ štítku"
+  }
+}

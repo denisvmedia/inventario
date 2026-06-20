@@ -1,1 +1,350 @@
-{}
+{
+  "account": {
+    "changePassword": "Změnit heslo",
+    "changePasswordDescription": "Aktualizujte heslo používané k přihlášení k vašemu účtu.",
+    "dangerZone": {
+      "deleteAccount": "Smazat účet",
+      "deleteUnavailableConfirm": "Rozumím",
+      "deleteUnavailableDescription": "Smazání účtu vlastními silami je v plánu. Zatím se prosím obraťte na podporu, která váš účet odstraní.",
+      "deleteUnavailableTitle": "Smazání účtu zatím není k dispozici",
+      "description": "Jakmile bude váš účet smazán, budou všechna data trvale odstraněna.",
+      "title": "Nebezpečná zóna"
+    },
+    "displayName": "Zobrazované jméno",
+    "editProfile": "Upravit profil",
+    "email": "E-mailová adresa",
+    "memberSince": "Členem od",
+    "memberSinceUnknown": "—",
+    "title": "Účet"
+  },
+  "appearance": {
+    "defaultViewHelp": "Nastaví výchozí rozvržení při otevření seznamu položek. Stále jej můžete přepnout pro danou relaci z panelu nástrojů.",
+    "defaultViewLabel": "Výchozí zobrazení",
+    "defaultViewOptions": {
+      "grid": "Mřížka",
+      "list": "Seznam"
+    },
+    "densityHelp": "Kompaktní režim zhutní ovládací prvky záhlaví a seznamy. Uloženo na tomto zařízení.",
+    "densityLabel": "Hustota",
+    "localeHelp": "Přepne všechny přeložené texty v aplikaci. Uloženo na tomto zařízení.",
+    "localeLabel": "Jazyk",
+    "localeOptions": {
+      "cs": "Čeština",
+      "en": "English",
+      "ru": "Русский"
+    },
+    "numberFormatLocaleHelp": "Určuje, jak se formátují čísla, data a měny (oddělovače, umístění symbolu). Nezávisle na jazyce rozhraní — vyberte „Čeština (Česko)“ pro „329 849,30 Kč“ a přitom ponechte rozhraní v angličtině.",
+    "numberFormatLocaleLabel": "Region a formátování",
+    "numberFormatLocaleOptions": {
+      "auto": "Automaticky rozpoznat (prohlížeč)",
+      "cs-CZ": "Čeština (Česko)",
+      "de-DE": "Němčina (Německo)",
+      "en-GB": "Angličtina (Spojené království)",
+      "en-US": "Angličtina (Spojené státy)",
+      "es-ES": "Španělština (Španělsko)",
+      "fr-FR": "Francouzština (Francie)",
+      "hu-HU": "Maďarština (Maďarsko)",
+      "it-IT": "Italština (Itálie)",
+      "ja-JP": "Japonština (Japonsko)",
+      "nl-NL": "Nizozemština (Nizozemsko)",
+      "pl-PL": "Polština (Polsko)",
+      "pt-BR": "Portugalština (Brazílie)",
+      "ru-RU": "Ruština (Rusko)",
+      "sv-SE": "Švédština (Švédsko)"
+    },
+    "preferredCurrencyHelp": "Osobní preference pro zobrazení měny. Uložené hodnoty u položek si ponechávají měnu své skupiny — toto ovlivňuje pouze formátování zobrazení, jakmile bude propojeno (návazná úprava).",
+    "preferredCurrencyLabel": "Preferovaná měna",
+    "themeLabel": "Motiv",
+    "themeOptions": {
+      "dark": "Tmavý",
+      "light": "Světlý",
+      "system": "Systémový"
+    },
+    "title": "Vzhled"
+  },
+  "help": {
+    "rows": {
+      "documentation": "Dokumentace",
+      "documentationDescription": "Procházet návody a tutoriály.",
+      "feedback": "Kontaktovat podporu / sdílet zpětnou vazbu",
+      "feedbackDescription": "Požádejte tým o pomoc, nahlaste chybu nebo nám řekněte, co máme vytvořit příště.",
+      "shortcuts": "Klávesové zkratky",
+      "shortcutsDescription": "Zobrazit všechny klávesové zkratky používané v aplikaci.",
+      "whatsNew": "Co je nového",
+      "whatsNewBadge": "v{{version}}",
+      "whatsNewDescription": "Podívejte se na nejnovější funkce a aktualizace."
+    },
+    "title": "Nápověda a podpora",
+    "version": "Inventario · React rewrite (epic #1397)"
+  },
+  "loginHistory": {
+    "empty": "Zatím nebyly zaznamenány žádné pokusy o přihlášení.",
+    "failedBanner": {
+      "description": "Pokud tuto aktivitu nepoznáváte, změňte si heslo a odvolejte aktivní relace.",
+      "title_one": "Za posledních 7 dní jsme zaznamenali {{count}} neúspěšný pokus o přihlášení.",
+      "title_few": "Za posledních 7 dní jsme zaznamenali {{count}} neúspěšné pokusy o přihlášení.",
+      "title_many": "Za posledních 7 dní jsme zaznamenali {{count}} neúspěšného pokusu o přihlášení.",
+      "title_other": "Za posledních 7 dní jsme zaznamenali {{count}} neúspěšných pokusů o přihlášení."
+    },
+    "loading": "Načítání historie přihlášení…",
+    "methods": {
+      "oauth_github": "GitHub",
+      "oauth_google": "Google",
+      "oauth_other": "OAuth",
+      "password": "Heslo"
+    },
+    "outcomes": {
+      "account_disabled": "Účet zakázán",
+      "account_locked": "Účet uzamčen",
+      "bad_mfa": "Neúspěch: chybný kód MFA",
+      "bad_password": "Neúspěch: chybné heslo",
+      "email_not_verified": "E-mail neověřen",
+      "identity_linked": "Propojený způsob přihlášení",
+      "mfa_admin_reset": "MFA resetováno podporou",
+      "mfa_required": "Vyžadováno MFA",
+      "ok": "Úspěch",
+      "tenant_mismatch": "Odmítnuto přihlášení OAuth napříč nájemci",
+      "unknown": "Neznámé"
+    },
+    "subtitle": "Nedávné pokusy o přihlášení k vašemu účtu. Zaznamenávají se i neúspěšné pokusy, abyste mohli odhalit podezřelou aktivitu.",
+    "title": "Historie přihlášení",
+    "ua": {
+      "unknownBrowser": "Neznámý prohlížeč",
+      "unknownOs": "Neznámý OS"
+    },
+    "unknownIp": "Neznámá IP"
+  },
+  "notifications": {
+    "errors": {
+      "loadFailed": "Předvolby oznámení se nepodařilo načíst. Zkuste to za chvíli znovu.",
+      "saveFailed": "Změnu se nepodařilo uložit. Vaše předchozí nastavení bylo zachováno."
+    },
+    "groups": {
+      "channels": "Kanály",
+      "reminders": "Připomínky",
+      "updates": "Aktualizace"
+    },
+    "rows": {
+      "channelEmail": "E-mailová oznámení",
+      "channelEmailDescription": "Dostávejte oznámení na e-mailovou adresu uvedenou u vašeho účtu.",
+      "channelPush": "Push oznámení",
+      "channelPushDescription": "Push v prohlížeči a na mobilu (vyžaduje povolení).",
+      "loanReminder": "Připomínky zápůjček",
+      "loanReminderDescription": "Upozornit, když má být zapůjčená položka vrácena nebo je vrácení po termínu.",
+      "maintenanceReminder": "Připomínky údržby",
+      "maintenanceReminderDescription": "Naplánovaná upozornění na péči o položky, které jste nastavili.",
+      "priceDrop": "Upozornění na pokles ceny",
+      "priceDropDescription": "Upozornit, když u sledovaných odkazů na zboží klesne cena.",
+      "warrantyExpiry": "Konec záruky",
+      "warrantyExpiryDescription": "Dostanete upozornění 60, 30 a 7 dní před koncem záruky.",
+      "weeklyDigest": "Týdenní souhrn",
+      "weeklyDigestDescription": "Souhrn změn v inventáři a blížících se konců platnosti."
+    },
+    "title": "Oznámení"
+  },
+  "privacy": {
+    "mfa": {
+      "backupCodesRemaining_one": "Zbývá pouze {{count}} záložní kód — brzy jej vygenerujte znovu.",
+      "backupCodesRemaining_few": "Zbývají pouze {{count}} záložní kódy — brzy je vygenerujte znovu.",
+      "backupCodesRemaining_many": "Zbývá pouze {{count}} záložního kódu — brzy je vygenerujte znovu.",
+      "backupCodesRemaining_other": "Zbývá pouze {{count}} záložních kódů — brzy je vygenerujte znovu.",
+      "descriptionActive": "TOTP je na vašem účtu povoleno. Kliknutím jej zakážete nebo vygenerujete nové kódy.",
+      "descriptionInactive": "Přidejte autentizační aplikaci, abyste při přihlášení vyžadovali kód.",
+      "descriptionUnavailable": "Stav MFA se nepodařilo načíst. Obnovte stránku nebo to zkuste znovu později.",
+      "disable": {
+        "backupLabel": "Záložní kód",
+        "backupPlaceholder": "ABCDE-FGHIJ",
+        "description": "Odstranění dvoufaktorového ověření oslabí váš účet. Potvrďte heslem a aktuálním kódem.",
+        "error": "Dvoufaktorové ověření se nepodařilo zakázat. Zkontrolujte heslo a kód a zkuste to znovu.",
+        "password": "Heslo",
+        "submit": "Zakázat",
+        "submitting": "Zakazování…",
+        "title": "Zakázat dvoufaktorové ověření",
+        "toastSuccess": "Dvoufaktorové ověření zakázáno.",
+        "totpLabel": "Kód z autentizační aplikace",
+        "totpPlaceholder": "123 456",
+        "useBackupInstead": "Použít místo toho záložní kód",
+        "useTotpInstead": "Použít místo toho kód z autentizační aplikace"
+      },
+      "label": "Dvoufaktorové ověření",
+      "setup": {
+        "ackSaved": "Tyto kódy jsem uložil/a na bezpečné místo.",
+        "codeLabel": "Ověřovací kód",
+        "codePlaceholder": "123 456",
+        "codesDescription": "Každý kód je na jedno použití a může jednou nahradit vaši autentizační aplikaci. Uložte je na bezpečné místo — znovu je neuvidíte.",
+        "codesTitle": "Uložte si záložní kódy",
+        "copied": "Záložní kódy zkopírovány.",
+        "copyAll": "Kopírovat kódy",
+        "copyFailed": "Nepodařilo se zkopírovat — vyberte kódy ručně.",
+        "copySecret": "Kopírovat tajný klíč",
+        "errorStart": "Nastavení MFA se nepodařilo spustit. Zkuste to za chvíli znovu.",
+        "errorVerify": "Neplatný kód. Znovu zkontrolujte autentizační aplikaci a zkuste to znovu.",
+        "finish": "Hotovo",
+        "generating": "Generování tajného klíče…",
+        "manualSecretHint": "Pokud nemůžete naskenovat QR kód, zadejte toto do své autentizační aplikace.",
+        "manualSecretLabel": "Klíč pro ruční nastavení",
+        "scanDescription": "Naskenujte QR kód ve své autentizační aplikaci (Google Authenticator, 1Password, Authy…) a pro potvrzení zadejte šestimístný kód.",
+        "scanTitle": "Nastavit dvoufaktorové ověření",
+        "toastSuccess": "Dvoufaktorové ověření je nyní aktivní.",
+        "verify": "Ověřit a povolit",
+        "verifying": "Ověřování…"
+      },
+      "statusActive": "Aktivní",
+      "statusInactive": "Neaktivní",
+      "statusLoading": "Načítání…",
+      "statusUnavailable": "Nedostupné"
+    },
+    "rows": {
+      "activeSessions": "Aktivní relace",
+      "activeSessionsBadge_one": "{{count}} aktivní",
+      "activeSessionsBadge_few": "{{count}} aktivní",
+      "activeSessionsBadge_many": "{{count}} aktivní",
+      "activeSessionsBadge_other": "{{count}} aktivních",
+      "activeSessionsDescription": "Spravujte zařízení, která jsou přihlášena k vašemu účtu.",
+      "loginHistory": "Historie přihlášení",
+      "loginHistoryDescription": "Prohlédněte si nedávné pokusy o přihlášení."
+    },
+    "title": "Soukromí a zabezpečení"
+  },
+  "profile": {
+    "activityTab": {
+      "emptyDescription": "Pracujeme na personalizovaném přehledu aktivity. Do té doby najdete historii na úrovni položek na stránce s podrobnostmi každé položky.",
+      "emptyTitle": "Zatím žádná nedávná aktivita"
+    },
+    "defaultGroup": "Výchozí skupina",
+    "defaultGroupHelp": "Po přihlášení se ocitnete zde. Jinou skupinu si můžete kdykoli vybrat.",
+    "defaultGroupSaved": "Výchozí skupina aktualizována.",
+    "edit": {
+      "cancel": "Zrušit",
+      "emailReadOnlyHelp": "Změna e-mailu zde zatím není k dispozici — pro aktualizaci adresy u vašeho účtu se obraťte na podporu.",
+      "errorGeneric": "Váš profil se nepodařilo uložit. Zkuste to prosím znovu.",
+      "save": "Uložit změny",
+      "savedBanner": "Profil aktualizován.",
+      "saving": "Ukládání…",
+      "subtitle": "Aktualizujte své zobrazované jméno a výchozí skupinu.",
+      "successToast": "Profil uložen.",
+      "title": "Upravit profil"
+    },
+    "editProfile": "Upravit profil",
+    "groupsTab": {
+      "emptyDescription": "Vytvořte skupinu nebo přijměte pozvánku a začněte sledovat inventář.",
+      "emptyTitle": "Zatím nejste v žádné skupině",
+      "errorDescription": "Vaše skupiny se nyní nepodařilo načíst. Zkuste to za chvíli znovu.",
+      "errorTitle": "Nepodařilo se načíst vaše skupiny",
+      "membersCount_one": "{{count}} člen",
+      "membersCount_few": "{{count}} členové",
+      "membersCount_many": "{{count}} člena",
+      "membersCount_other": "{{count}} členů",
+      "moreGroups_one": "+{{count}} další skupina",
+      "moreGroups_few": "+{{count}} další skupiny",
+      "moreGroups_many": "+{{count}} další skupiny",
+      "moreGroups_other": "+{{count}} dalších skupin",
+      "roleAdmin": "Správce",
+      "roleOwner": "Vlastník",
+      "roleUser": "Člen",
+      "roleViewer": "Pozorovatel",
+      "tileAria": "Otevřít {{name}}"
+    },
+    "heading": "Můj profil",
+    "memberSince": "Členem od {{date}}",
+    "noEmail": "Žádný e-mail v záznamech",
+    "noGroupsCta": "Vytvořte svou první skupinu",
+    "noGroupSet": "Není nastavena výchozí skupina",
+    "noGroupsHelp": "Jakmile nějakou vytvoříte nebo se k ní připojíte, ocitnete se zde po přihlášení automaticky.",
+    "noGroupsTitle": "Zatím nejste v žádné skupině",
+    "password": {
+      "confirmLabel": "Potvrdit nové heslo",
+      "currentLabel": "Současné heslo",
+      "errorGeneric": "Heslo se nepodařilo změnit. Zkuste to prosím znovu.",
+      "hide": "Zrušit změnu hesla",
+      "incorrectCurrent": "Vaše současné heslo je nesprávné.",
+      "newLabel": "Nové heslo",
+      "show": "Změnit heslo",
+      "submit": "Změnit heslo",
+      "submitting": "Měním…",
+      "subtitle": "Použijte silné heslo, které nepoužíváte nikde jinde.",
+      "successBody": "Budete odhlášeni, aby se nové heslo projevilo na všech zařízeních.",
+      "successTitle": "Heslo změněno",
+      "title": "Změnit heslo"
+    },
+    "planFree": "Bezplatný plán",
+    "stats": {
+      "activeWarranties": "Aktivní záruky",
+      "estValue": "Odhad. hodnota",
+      "expiringSoon": "Brzy končí platnost",
+      "items": "Položky"
+    },
+    "subtitle": "Váš účet, identita a předvolby skupin.",
+    "tabs": {
+      "activity": "Aktivita",
+      "groups": "Skupiny"
+    },
+    "title": "Můj profil",
+    "upgrade": "Upgradovat"
+  },
+  "sections": {
+    "account": "Účet",
+    "appearance": "Vzhled",
+    "help": "Nápověda a podpora",
+    "notifications": "Oznámení",
+    "privacy": "Soukromí a zabezpečení"
+  },
+  "sessions": {
+    "confirmRevoke": {
+      "cta": "Odvolat",
+      "description": "Na tom zařízení se budete muset znovu přihlásit. Tuto akci nelze vrátit zpět.",
+      "title": "Odvolat tuto relaci?"
+    },
+    "confirmRevokeAll": {
+      "cta": "Odhlásit všude jinde",
+      "description": "Každé jiné zařízení přihlášené k tomuto účtu bude odhlášeno. Vaše současná relace zůstane aktivní.",
+      "title": "Odhlásit všechny ostatní relace?"
+    },
+    "createdAt": "Přihlášeno dne {{value}}",
+    "empty": "Žádné aktivní relace.",
+    "lastUsed": "Naposledy použito {{value}}",
+    "loading": "Načítání relací…",
+    "revoke": "Odvolat",
+    "revokeAll": {
+      "cta": "Odhlásit všude jinde",
+      "description_one": "Aktuálně přihlášeno na {{count}} dalším zařízení.",
+      "description_few": "Aktuálně přihlášeno na {{count}} dalších zařízeních.",
+      "description_many": "Aktuálně přihlášeno na {{count}} dalšího zařízení.",
+      "description_other": "Aktuálně přihlášeno na {{count}} dalších zařízeních.",
+      "label": "Odhlásit všechny ostatní relace"
+    },
+    "subtitle": "Každá karta představuje zařízení nebo prohlížeč s platným obnovovacím tokenem. Odvolání relace vynutí, aby se další požadavek z tohoto zařízení musel znovu přihlásit.",
+    "thisDevice": "Toto zařízení",
+    "title": "Aktivní relace",
+    "toasts": {
+      "allRevoked": "Odhlášeno ze všech ostatních relací.",
+      "revoked": "Relace odvolána.",
+      "revokeFailed": "Relaci se nepodařilo odvolat. Zkuste to prosím znovu."
+    },
+    "ua": {
+      "unknownBrowser": "Neznámý prohlížeč",
+      "unknownDevice": "Neznámé zařízení",
+      "unknownOs": "Neznámý OS"
+    }
+  },
+  "signOut": "Odhlásit se",
+  "storage": {
+    "breakdown": {
+      "documents": "Dokumenty",
+      "exports": "Exporty",
+      "images": "Obrázky",
+      "invoices": "Faktury",
+      "other": "Ostatní"
+    },
+    "errorBody": "Využití úložiště se nyní nepodařilo načíst. Zkuste to za chvíli znovu.",
+    "free": "Volné",
+    "manageFiles": "Spravovat soubory",
+    "noGroup": "Vyberte skupinu pro zobrazení jejího využití úložiště.",
+    "title": "Využití úložiště",
+    "unlimited": "{{used}} využito",
+    "usageOfQuota": "{{used}} z {{quota}}",
+    "usagePercent": "{{percent}} % kvóty skupiny"
+  },
+  "subtitle": "Spravujte svůj účet a předvolby.",
+  "title": "Předvolby"
+}

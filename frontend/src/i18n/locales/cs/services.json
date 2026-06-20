@@ -1,1 +1,88 @@
-{}
+{
+  "badge": {
+    "inService": "V servisu"
+  },
+  "confirm": {
+    "delete": "Odebrat tento servisní záznam? Slouží k opravě překlepu — historie auditu se obvykle zachovává.",
+    "markReturned": "Označit tuto položku jako vrácenou ze servisu?"
+  },
+  "current": {
+    "atProvider": "U {{name}}",
+    "cost": "Náklady: {{amount}} {{currency}}",
+    "delete": "Odebrat",
+    "expectedOn": "očekáváno zpět {{date}}",
+    "markReturned": "Označit jako přijaté zpět",
+    "overdue_one": "Po termínu o {{count}} den",
+    "overdue_few": "Po termínu o {{count}} dny",
+    "overdue_many": "Po termínu o {{count}} dne",
+    "overdue_other": "Po termínu o {{count}} dní",
+    "sentOn": "Odesláno {{date}}"
+  },
+  "dialog": {
+    "cancel": "Zrušit",
+    "costAmount": "Náklady (nepovinné)",
+    "costCurrency": "Měna",
+    "description": "Sledujte, kdy jste položku odeslali a kdy ji očekáváte zpět.",
+    "expectedReturnAt": "Očekáváno zpět",
+    "providerContact": "Kontakt na poskytovatele",
+    "providerContactHint": "Volný text — telefon, e-mail, adresa.",
+    "providerContactPlaceholder": "Telefon, e-mail, adresa…",
+    "providerName": "Poskytovatel servisu",
+    "providerNamePlaceholder": "např. Autorizovaný servis Apple",
+    "reason": "Důvod",
+    "reasonHint": "Co se opravuje (volný text).",
+    "reasonPlaceholder": "např. výměna displeje",
+    "sentAt": "Datum odeslání",
+    "submit": "Odeslat do servisu",
+    "title": "Odeslat do servisu"
+  },
+  "list": {
+    "empty": "Aktuálnímu filtru neodpovídají žádné servisní záznamy.",
+    "headerCost": "Náklady",
+    "headerExpectedReturnAt": "Očekáváno zpět",
+    "headerItem": "Položka",
+    "headerProvider": "Poskytovatel",
+    "headerReason": "Důvod",
+    "headerSentAt": "Odesláno",
+    "headerStatus": "Stav",
+    "openStatus": "U poskytovatele",
+    "overdueStatus_one": "Po termínu o {{count}} den",
+    "overdueStatus_few": "Po termínu o {{count}} dny",
+    "overdueStatus_many": "Po termínu o {{count}} dne",
+    "overdueStatus_other": "Po termínu o {{count}} dní",
+    "returnedStatus": "Zpět {{date}}",
+    "stateAll": "Vše",
+    "stateCompleted": "Dokončeno",
+    "stateOpen": "Otevřené",
+    "stateOverdue": "Po termínu",
+    "subtitle": "Položky, které jsou aktuálně v dílnách nebo servisních střediscích.",
+    "title": "V servisu"
+  },
+  "tab": {
+    "blockedByLoan": "Tato položka je aktuálně zapůjčena uživateli {{borrower}}. Před odesláním do servisu označte zápůjčku jako vrácenou — věc může být vždy jen na jednom místě.",
+    "emptyState": "Aktuálně není v servisu. Použijte, když položku předáváte do dílny nebo servisního střediska.",
+    "historyTitle": "Předchozí servisy",
+    "sendButton": "Odeslat do servisu…",
+    "title": "V servisu"
+  },
+  "toast": {
+    "deleteError": "Servisní záznam se nepodařilo odebrat.",
+    "deleteSuccess": "Servisní záznam byl odebrán.",
+    "returnError": "Položku se nepodařilo označit jako vrácenou ze servisu.",
+    "returnSuccess": "Položka byla označena jako vrácená ze servisu.",
+    "sendError": "Položku se nepodařilo odeslat do servisu.",
+    "sendSuccess": "Položka byla odeslána do servisu."
+  },
+  "validation": {
+    "costAmountInvalid": "Náklady musí být číslo s maximálně dvěma desetinnými místy.",
+    "costCurrencyInvalid": "Měna musí být třípísmenný kód (např. EUR).",
+    "costPairRequired": "Zadejte částku i měnu, nebo nechte obojí prázdné.",
+    "expectedReturnAtInvalid": "Očekávané vrácení musí být ve formátu RRRR-MM-DD.",
+    "providerContactTooLong": "Kontakt smí mít nejvýše 200 znaků.",
+    "providerNameRequired": "Jméno poskytovatele je povinné.",
+    "providerNameTooLong": "Jméno poskytovatele smí mít nejvýše 200 znaků.",
+    "reasonTooLong": "Důvod smí mít nejvýše 1000 znaků.",
+    "sentAtInvalid": "Datum odeslání musí být ve formátu RRRR-MM-DD.",
+    "sentAtRequired": "Datum odeslání je povinné."
+  }
+}

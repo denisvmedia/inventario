@@ -1,1 +1,29 @@
-{}
+{
+  "list": {
+    "empty": {
+      "active": "Žádné položky nejsou aktuálně v aktivní záruce.",
+      "expired": "V poslední době nic nevypršelo.",
+      "expiring": "V příštích 60 dnech nevyprší žádná záruka.",
+      "none": "Každá sledovaná položka už má nastavené datum záruky."
+    },
+    "row": {
+      "daysAgo_one": "před {{count}} dnem",
+      "daysAgo_few": "před {{count}} dny",
+      "daysAgo_many": "před {{count}} dne",
+      "daysAgo_other": "před {{count}} dny",
+      "daysLeft_one": "zbývá {{count}} den",
+      "daysLeft_few": "zbývají {{count}} dny",
+      "daysLeft_many": "zbývá {{count}} dne",
+      "daysLeft_other": "zbývá {{count}} dnů",
+      "noDate": "Bez data"
+    },
+    "subtitle": "Sledujte záruky výrobce i prodejce na jednom místě. Připomínkové e-maily přijdou 60, 30 a 7 dní před vypršením.",
+    "tab": {
+      "active": "Aktivní",
+      "expired": "Vypršené",
+      "expiring": "Vypršující",
+      "none": "Bez záruky"
+    },
+    "title": "Záruky"
+  }
+}

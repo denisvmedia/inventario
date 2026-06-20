@@ -34,6 +34,7 @@
     "photos": {
       "full": "Plná velikost",
       "heading_few": "Fotografie ({{count}})",
+      "heading_many": "Fotografie ({{count}})",
       "heading_one": "Fotografie ({{count}})",
       "heading_other": "Fotografií ({{count}})",
       "label": "Fotografie:",

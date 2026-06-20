@@ -1,1 +1,76 @@
-{}
+{
+  "fields": {
+    "email": "E-mail operátora",
+    "emailPlaceholder": "operator@company.com",
+    "password": "Heslo",
+    "passwordPlaceholder": "••••••••"
+  },
+  "layout": {
+    "brand": "Platforma Inventario",
+    "footer": "© Inventario · Pouze pro oprávněné osoby",
+    "restrictedBadge": "Omezený přístup",
+    "subtitle": "Nástroje pro operace napříč nájemci, audit a zosobnění. Přístup je zaznamenáván.",
+    "tagline": "Správa back-office"
+  },
+  "login": {
+    "disclaimer": "Tato oblast je určena operátorům platformy. Pokusy o přístup jsou zaznamenávány.",
+    "errorGeneric": "Přihlášení se nezdařilo. Zkontrolujte své přihlašovací údaje a zkuste to znovu.",
+    "mfaNotEnrolled": {
+      "body": "Pro účet {{email}} je vyžadováno dvoufaktorové ověření, ale dosud nebylo nastaveno. Spusťte na serveru níže uvedený příkaz CLI a poté se sem vraťte a přihlaste se.",
+      "cli": "inventario backoffice mfa setup --email {{email}}",
+      "title": "Vyžadováno nastavení dvoufaktorového ověření"
+    },
+    "routeTitle": "Přihlášení do back-office",
+    "submit": "Pokračovat",
+    "submitting": "Přihlašování…",
+    "subtitle": "Přihlaste se pomocí svých přihlašovacích údajů operátora platformy.",
+    "title": "Přihlášení do back-office"
+  },
+  "me": {
+    "fields": {
+      "email": "E-mail",
+      "lastLogin": "Poslední přihlášení",
+      "mfaEnforced": "Vynuceno MFA",
+      "role": "Role"
+    },
+    "routeTitle": "Profil operátora",
+    "signingOut": "Odhlašování…",
+    "signOut": "Odhlásit se",
+    "subtitle": "Vaše back-office identita a ovládání relace.",
+    "title": "Profil operátora",
+    "unknownOperator": "Operátor",
+    "values": {
+      "no": "Ne",
+      "yes": "Ano"
+    }
+  },
+  "mfa": {
+    "challenge": {
+      "backupHint": "Použijte jeden z jednorázových záložních kódů, které jste si uložili při nastavení.",
+      "backupLabel": "Záložní kód",
+      "backupPlaceholder": "xxxx-xxxx",
+      "cancel": "Zpět na přihlášení",
+      "error": "Kód byl odmítnut. Zkuste to znovu nebo použijte záložní kód.",
+      "submit": "Ověřit",
+      "submitting": "Ověřování…",
+      "subtitle": "Zadejte ověřovací kód pro {{email}}.",
+      "title": "Dvoufaktorové ověření",
+      "totpHint": "Otevřete svou autentizační aplikaci a zkopírujte šestimístný kód.",
+      "totpLabel": "Kód z autentizační aplikace",
+      "totpPlaceholder": "123456",
+      "useBackupInstead": "Použít místo toho záložní kód",
+      "useTotpInstead": "Použít místo toho kód z autentizační aplikace"
+    }
+  },
+  "session": {
+    "authRequired": "Pro pokračování se přihlaste do prostředí back-office.",
+    "ended": "Vaše back-office relace skončila.",
+    "expired": "Platnost vaší back-office relace vypršela. Přihlaste se prosím znovu."
+  },
+  "shell": {
+    "brand": "Platforma Inventario",
+    "operator": "Operátor",
+    "planeChip": "Back-office",
+    "signOut": "Odhlásit se"
+  }
+}
