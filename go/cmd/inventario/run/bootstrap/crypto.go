@@ -23,16 +23,22 @@ import (
 var ErrPlaceholderSecret = errx.NewSentinel("configured secret is a well-known public placeholder; set a real secret (openssl rand -hex 32) or leave it unset for an auto-generated ephemeral key")
 
 // placeholderSecretMarkers lists case-insensitive substrings that identify a
-// known public placeholder secret. Any configured secret containing one of
-// these is rejected by isPlaceholderSecret. Keep this list in sync with the
-// neutralized placeholders in .env.example and docker-compose.
+// known public placeholder secret shipped in this repo. Any configured secret
+// containing one of these is rejected by isPlaceholderSecret. Keep this list in
+// sync with the neutralized placeholders in .env.example, docker-compose.yaml,
+// and example/docker-compose.override.yaml.example.
+//
+// These are intentionally SPECIFIC instructional phrases, not broad words like
+// "change". A broad marker would false-positive on legitimate fixed secrets —
+// e.g. the labelled CI test secrets (`e2e-jwt-secret-please-change-for-prod`,
+// `e2e-file-signing-key-please-change`) or a real passphrase that happens to
+// contain a common word — and refuse to start. The goal is to catch the repo's
+// own placeholders, not to police secret content.
 var placeholderSecretMarkers = []string{
-	"please-change",
-	"use-openssl-rand",
-	"change-this",
-	"changeme",
-	"your-secret",
-	"your-secure",
+	"please-change-this",  // root .env.example / docker-compose.yaml placeholder
+	"use-openssl-rand",    // root placeholder ("...-use-openssl-rand-hex-32")
+	"replace-this-value",  // example/docker-compose.override.yaml.example placeholders
+	"your-secure-32-byte", // example/docker-compose.override.yaml.example placeholders
 }
 
 // isPlaceholderSecret reports whether the supplied value is a known public

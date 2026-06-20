@@ -88,3 +88,63 @@ func TestGetBackupSigningKey_ValidHexBuildsSigner(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(signer, qt.IsNotNil)
 }
+
+func TestIsPlaceholderSecret(t *testing.T) {
+	c := qt.New(t)
+
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{"empty", "", false},
+		{"root placeholder", "please-change-this-to-a-secure-random-value-use-openssl-rand-hex-32", true},
+		{"root placeholder uppercased", "PLEASE-CHANGE-THIS-TO-A-SECURE-RANDOM-VALUE-USE-OPENSSL-RAND-HEX-32", true},
+		{"override jwt placeholder", "your-secure-32-byte-jwt-secret-here-replace-this-value", true},
+		{"override file placeholder", "your-secure-32-byte-file-signing-key-here-replace-this-value", true},
+		// Labelled CI test fixtures (.github/workflows/e2e-tests.yml) must NOT be
+		// rejected — otherwise the e2e stack can't start. Regression guard for the
+		// over-broad "please-change" marker that previously matched these.
+		{"e2e jwt fixture", "e2e-jwt-secret-please-change-for-prod", false},
+		{"e2e file fixture", "e2e-file-signing-key-please-change", false},
+		{"real hex secret", "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b", false},
+	}
+	for _, tt := range tests {
+		c.Run(tt.name, func(c *qt.C) {
+			c.Assert(isPlaceholderSecret(tt.value), qt.Equals, tt.want)
+		})
+	}
+}
+
+func TestGetJWTSecret_RejectsRepoPlaceholder(t *testing.T) {
+	c := qt.New(t)
+
+	secret, err := getJWTSecret("please-change-this-to-a-secure-random-value-use-openssl-rand-hex-32")
+	c.Assert(err, qt.ErrorIs, ErrPlaceholderSecret)
+	c.Assert(secret, qt.IsNil)
+}
+
+func TestGetJWTSecret_AcceptsLabelledTestFixture(t *testing.T) {
+	c := qt.New(t)
+
+	// The e2e workflow sets this exact value; it must be accepted so the stack starts.
+	secret, err := getJWTSecret("e2e-jwt-secret-please-change-for-prod")
+	c.Assert(err, qt.IsNil)
+	c.Assert(secret, qt.DeepEquals, []byte("e2e-jwt-secret-please-change-for-prod"))
+}
+
+func TestGetFileSigningKey_AcceptsLabelledTestFixture(t *testing.T) {
+	c := qt.New(t)
+
+	key, err := getFileSigningKey("e2e-file-signing-key-please-change")
+	c.Assert(err, qt.IsNil)
+	c.Assert(key, qt.DeepEquals, []byte("e2e-file-signing-key-please-change"))
+}
+
+func TestGetJWTSecret_EmptyGeneratesRandom(t *testing.T) {
+	c := qt.New(t)
+
+	secret, err := getJWTSecret("")
+	c.Assert(err, qt.IsNil)
+	c.Assert(secret, qt.HasLen, 32)
+}
