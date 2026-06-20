@@ -13,8 +13,13 @@ git clone https://github.com/denisvmedia/inventario.git
 cd inventario
 docker-compose up -d
 # Open http://localhost:3333
-# Login with credentials from .env.example: admin@example.com / admin123
+# Login with credentials from .env.example: admin@example.com / Admin123
 ```
+
+> The default compose leaves `JWT_SECRET` and `FILE_SIGNING_KEY` unset, so the
+> backend auto-generates an ephemeral random key on each start — fine for local
+> dev only. For any real or network-exposed deployment, set both to your own
+> secrets (`openssl rand -hex 32`).
 
 **Going to production on Kubernetes?** Follow the [Production Release & Deployment Runbook](PRODUCTION.md) — a step-by-step checklist that cuts a release and deploys to any Kubernetes distribution (k3s, GKE, DigitalOcean DOKS).
 

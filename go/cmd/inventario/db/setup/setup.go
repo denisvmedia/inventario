@@ -48,7 +48,7 @@ func DefaultSetupOptions() SetupOptions {
 		DefaultTenantSlug:             "default",
 		DefaultTenantRegistrationMode: models.RegistrationModeClosed,
 		AdminEmail:                    "admin@example.com",
-		AdminPassword:                 "admin123",
+		AdminPassword:                 "Admin123",
 		AdminName:                     "System Administrator",
 		DryRun:                        false,
 	}
@@ -245,6 +245,14 @@ func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.
 			Email:    opts.AdminEmail,
 			Name:     opts.AdminName,
 			IsActive: true,
+		}
+
+		// Validate the password explicitly first so a complexity failure is
+		// reported as a clear, distinct, non-transient error (rather than the
+		// generic "failed to hash password"). This is the message the init-data
+		// shell script keys off to stop retrying a misconfigured admin password.
+		if err = models.ValidatePassword(opts.AdminPassword); err != nil {
+			return "", fmt.Errorf("admin password does not meet complexity requirements (min 8 chars with upper, lower, and a digit): %w", err)
 		}
 
 		err = user.SetPassword(opts.AdminPassword)

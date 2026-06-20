@@ -2,7 +2,7 @@
 set -e
 
 echo "=== RUNNING SCHEMA MIGRATIONS ==="
-echo "Database DSN: $INVENTARIO_DATABASE_DB_DSN"
+echo "Database DSN: $INVENTARIO_DB_DSN"
 
 # Wait for database to be ready with retry mechanism
 echo "Waiting for database to be ready for migrations..."

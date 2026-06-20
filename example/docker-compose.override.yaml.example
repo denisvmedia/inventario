@@ -19,7 +19,7 @@ services:
   inventario:
     environment:
       # Database configuration
-      INVENTARIO_DATABASE_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
+      INVENTARIO_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
 
       # REQUIRED: Set a secure JWT secret for production
       # Generate with: openssl rand -hex 32
@@ -80,18 +80,18 @@ services:
   inventario-bootstrap:
     environment:
       # Database configuration
-      INVENTARIO_DATABASE_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
+      INVENTARIO_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
 
   inventario-migrate:
     environment:
       # Database configuration
-      INVENTARIO_DATABASE_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
+      INVENTARIO_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
 
   # Override initial data setup configuration
   inventario-init-data:
     environment:
       # Database configuration
-      INVENTARIO_DATABASE_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
+      INVENTARIO_DB_DSN: "postgres://inventario_user:your-secure-postgres-password-here@postgres:5432/inventario_prod?sslmode=disable"
 
       # REQUIRED: Customize initial admin user and organization
       INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_ID: "test-tenant-id"

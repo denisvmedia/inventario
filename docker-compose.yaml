@@ -142,12 +142,13 @@ services:
       INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG: ${DEFAULT_TENANT_SLUG:-default}
       INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_REGISTRATION_MODE: ${DEFAULT_TENANT_REGISTRATION_MODE:-closed}
       INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
-      INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin123}
       INVENTARIO_MIGRATE_DATA_ADMIN_NAME: ${ADMIN_NAME:-System Administrator}
       # Seeding configuration (optional - includes example data and system settings)
       SEED_DATABASE: ${SEED_DATABASE:-true}
-      # JWT secret required for seed endpoint
-      INVENTARIO_RUN_JWT_SECRET: ${JWT_SECRET:-please-change-this-to-a-secure-random-value-use-openssl-rand-hex-32}
+      # JWT secret required for seed endpoint.
+      # Empty default → backend auto-generates an ephemeral random key (dev only).
+      INVENTARIO_RUN_JWT_SECRET: ${JWT_SECRET:-}
       # Mount the public /api/v1/seed route on the throwaway server that
       # init-data.sh boots to curl it (#2039). Off by default everywhere else
       # (it exposes a privileged RLS-bypassing operation); NEVER set on the
@@ -193,9 +194,11 @@ services:
       # File storage configuration
       INVENTARIO_UPLOAD_LOCATION: "${INVENTARIO_UPLOAD_LOCATION:-file:///app/uploads?create_dir=1}"
 
-      # Security configuration
-      INVENTARIO_RUN_JWT_SECRET: ${JWT_SECRET:-please-change-this-to-a-secure-random-value-use-openssl-rand-hex-32}
-      INVENTARIO_RUN_FILE_SIGNING_KEY: ${FILE_SIGNING_KEY:-please-change-this-to-a-secure-random-value-use-openssl-rand-hex-32}
+      # Security configuration.
+      # Empty defaults → backend auto-generates ephemeral random keys (dev only).
+      # Set a fixed JWT_SECRET / FILE_SIGNING_KEY in production (see PRODUCTION.md).
+      INVENTARIO_RUN_JWT_SECRET: ${JWT_SECRET:-}
+      INVENTARIO_RUN_FILE_SIGNING_KEY: ${FILE_SIGNING_KEY:-}
       INVENTARIO_RUN_FILE_URL_EXPIRATION: ${FILE_URL_EXPIRATION:-15m}
 
       # Worker configuration

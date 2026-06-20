@@ -63,7 +63,7 @@ services:
         condition: service_healthy
     environment:
       # Use the main database user for bootstrap (has necessary privileges in this setup)
-      INVENTARIO_DATABASE_DB_DSN: "postgres://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
+      INVENTARIO_DB_DSN: "postgres://${POSTGRES_USER:-inventario}:${POSTGRES_PASSWORD:-inventario_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
       INVENTARIO_BOOTSTRAP_USERNAME: "${POSTGRES_USER:-inventario}"
       INVENTARIO_BOOTSTRAP_USERNAME_FOR_MIGRATIONS: "${POSTGRES_MIGRATOR_USER:-inventario_migrator}"
     networks:
@@ -88,7 +88,7 @@ services:
       inventario-bootstrap:
         condition: service_completed_successfully
     environment:
-      INVENTARIO_DATABASE_DB_DSN: "postgres://${POSTGRES_MIGRATOR_USER:-inventario_migrator}:${POSTGRES_MIGRATOR_PASSWORD:-inventario_migrator_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
+      INVENTARIO_DB_DSN: "postgres://${POSTGRES_MIGRATOR_USER:-inventario_migrator}:${POSTGRES_MIGRATOR_PASSWORD:-inventario_migrator_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
     networks:
       - inventario-internal
     volumes:
@@ -110,12 +110,12 @@ services:
       inventario-migrate:
         condition: service_completed_successfully
     environment:
-      INVENTARIO_DATABASE_DB_DSN: "postgres://${POSTGRES_MIGRATOR_USER:-inventario_migrator}:${POSTGRES_MIGRATOR_PASSWORD:-inventario_migrator_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
+      INVENTARIO_DB_DSN: "postgres://${POSTGRES_MIGRATOR_USER:-inventario_migrator}:${POSTGRES_MIGRATOR_PASSWORD:-inventario_migrator_password}@postgres:5432/${POSTGRES_DB:-inventario}?sslmode=disable"
       # Initial data configuration (override in docker-compose.override.yaml)
       INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME: ${DEFAULT_TENANT_NAME:-Default Organization}
       INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG: ${DEFAULT_TENANT_SLUG:-default}
       INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
-      INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin123}
       INVENTARIO_MIGRATE_DATA_ADMIN_NAME: ${ADMIN_NAME:-System Administrator}
     volumes:
       # Track initialization state to prevent re-running (host mount for easy access)

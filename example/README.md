@@ -33,7 +33,8 @@ This directory contains a production-ready Docker Compose configuration for depl
 
 ### Services
 
-- **postgres**: PostgreSQL 17 database (internal only, no host port exposure)
+- **postgres**: PostgreSQL 18 database (internal only, no host port exposure)
+- **redis**: Redis cache for the token blacklist (internal only, no host port exposure)
 - **inventario-bootstrap**: Runs database bootstrap migrations (every startup - idempotent)
 - **inventario-migrate**: Runs schema migrations (every startup)
 - **inventario-init-data**: Sets up initial data (first run only)
@@ -103,7 +104,7 @@ services:
 | `JWT_SECRET` | (required) | JWT signing secret (32+ characters) |
 | `DEFAULT_TENANT_NAME` | `Default Organization` | Initial organization name |
 | `ADMIN_EMAIL` | `admin@example.com` | Initial admin user email |
-| `ADMIN_PASSWORD` | `admin123` | Initial admin user password |
+| `ADMIN_PASSWORD` | `Admin123` | Initial admin user password |
 
 ## Security Considerations
 

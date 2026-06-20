@@ -10,7 +10,7 @@ type Config struct {
 
 	// Admin user configuration
 	AdminEmail    string `yaml:"admin_email" env:"ADMIN_EMAIL" env-default:"admin@example.com"`
-	AdminPassword string `yaml:"admin_password" env:"ADMIN_PASSWORD" env-default:"admin123"`
+	AdminPassword string `yaml:"admin_password" env:"ADMIN_PASSWORD" env-default:"Admin123"`
 	AdminName     string `yaml:"admin_name" env:"ADMIN_NAME" env-default:"System Administrator"`
 
 	// Setup options

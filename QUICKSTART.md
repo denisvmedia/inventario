@@ -36,6 +36,12 @@ cd inventario
 docker-compose up -d
 ```
 
+> **Note:** The default compose leaves `JWT_SECRET` and `FILE_SIGNING_KEY`
+> unset, so the backend auto-generates an ephemeral random key on each start —
+> suitable for local dev only. For any real or network-exposed deployment, set
+> both to your own secrets (`openssl rand -hex 32`) as shown in
+> [Next Steps](#change-default-credentials-recommended).
+
 That's it! The first startup will take a few minutes to:
 - Build the application image
 - Set up PostgreSQL database
@@ -53,7 +59,7 @@ http://localhost:3333
 
 **Login Credentials** (from `.env.example` configuration):
 - **Email:** `admin@example.com`
-- **Password:** `admin123`
+- **Password:** `Admin123`
 
 > **Note:** If you created a custom `.env` file with different `ADMIN_EMAIL` and `ADMIN_PASSWORD` values, use those credentials instead.
 >
@@ -143,7 +149,7 @@ docker-compose down -v
 | `JWT_SECRET` | (see .env.example) | JWT signing secret (32+ chars) |
 | `FILE_SIGNING_KEY` | (see .env.example) | File URL signing key (32+ chars) |
 | `ADMIN_EMAIL` | `admin@example.com` | Initial admin email |
-| `ADMIN_PASSWORD` | `admin123` | Initial admin password |
+| `ADMIN_PASSWORD` | `Admin123` | Initial admin password |
 | `DEFAULT_TENANT_NAME` | `Test Organization` | Organization name |
 | `SEED_DATABASE` | `true` | Seed with example data and settings (set to `false` for clean start) |
 
