@@ -169,7 +169,7 @@ func TestBuildMIMEMessage_EncodesNonASCIISubject(t *testing.T) {
 	subject := mimeHeaderValue(c, raw, "Subject")
 	// Raw Cyrillic must NOT appear unencoded in the header...
 	c.Assert(subject, qt.Not(qt.Contains), "Подтвердите")
-	c.Assert(strings.HasPrefix(subject, "=?utf-8?"), qt.IsTrue)
+	c.Assert(strings.HasPrefix(subject, "=?UTF-8?"), qt.IsTrue)
 	// ...and the encoded-word decodes back to the original.
 	decoded, err := new(mime.WordDecoder).DecodeHeader(subject)
 	c.Assert(err, qt.IsNil)
@@ -191,6 +191,30 @@ func TestBuildMIMEMessage_StripsHeaderInjection(t *testing.T) {
 	c.Assert(raw, qt.Not(qt.Contains), "\r\nBcc:")
 	// Everything collapses onto the single Subject line.
 	c.Assert(mimeHeaderValue(c, raw, "Subject"), qt.Equals, "HelloBcc: attacker@example.com")
+}
+
+// #2139: encodeSubject leaves pure-ASCII subjects untouched and, for
+// non-ASCII, emits the shorter of Q- and B-encoding (base64 wins for heavy
+// Cyrillic — roughly halving the Russian subject, leaving more headroom
+// under the RFC 5322 line limit, see #2142). The result must round-trip.
+func TestEncodeSubject_PicksCompactEncoding(t *testing.T) {
+	c := qt.New(t)
+	// Pure ASCII passes through untouched (en subjects stay readable).
+	c.Assert(encodeSubject("Welcome to Inventario"), qt.Equals, "Welcome to Inventario")
+
+	for _, s := range []string{
+		"Ověřte svůj účet Inventario",                // Czech
+		"Подтвердите свою учётную запись Inventario", // Russian
+	} {
+		got := encodeSubject(s)
+		c.Assert(strings.HasPrefix(got, "=?UTF-8?"), qt.IsTrue, qt.Commentf("got %q", got))
+		decoded, err := new(mime.WordDecoder).DecodeHeader(got)
+		c.Assert(err, qt.IsNil)
+		c.Assert(decoded, qt.Equals, s)
+		// The shorter of Q-/B-encoding was chosen.
+		c.Assert(len(got) <= len(mime.QEncoding.Encode("UTF-8", s)), qt.IsTrue)
+		c.Assert(len(got) <= len(mime.BEncoding.Encode("UTF-8", s)), qt.IsTrue)
+	}
 }
 
 // mimeHeaderValue returns the value of the first `key: ` header in the

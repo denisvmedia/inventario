@@ -140,10 +140,9 @@ func buildMIMEMessage(message sender.Message) []byte {
 	fmt.Fprintf(&b, "From: %s\r\n", sanitizeHeader(message.From))
 	fmt.Fprintf(&b, "To: %s\r\n", sanitizeHeader(message.To))
 	// RFC 2047-encode the Subject so non-ASCII (cs/ru) subjects render
-	// correctly in mail clients. QEncoding returns pure-ASCII subjects
-	// unchanged and an encoded-word can't contain a raw CRLF, so this also
-	// closes the header-injection vector for the Subject. #2139
-	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", sanitizeHeader(message.Subject)))
+	// correctly in mail clients; encodeSubject never emits a raw CRLF, so
+	// this also closes the header-injection vector for the Subject. #2139
+	fmt.Fprintf(&b, "Subject: %s\r\n", encodeSubject(sanitizeHeader(message.Subject)))
 	if strings.TrimSpace(message.ReplyTo) != "" {
 		fmt.Fprintf(&b, "Reply-To: %s\r\n", sanitizeHeader(message.ReplyTo))
 	}
@@ -177,4 +176,19 @@ var headerSanitizer = strings.NewReplacer("\r", "", "\n", "")
 // single-line. #2139
 func sanitizeHeader(v string) string {
 	return headerSanitizer.Replace(v)
+}
+
+// encodeSubject RFC 2047-encodes a Subject for the header. Pure-ASCII
+// subjects pass through unchanged (both encoders do this); for non-ASCII it
+// picks the shorter of Q- and B-encoding — Q wins when only a few runes
+// need escaping, B (base64) when most do (e.g. Cyrillic), which roughly
+// halves a Russian subject. The shorter encoded-word also leaves more
+// headroom under the RFC 5322 line-length limit. #2139
+func encodeSubject(s string) string {
+	q := mime.QEncoding.Encode("UTF-8", s)
+	b := mime.BEncoding.Encode("UTF-8", s)
+	if len(b) < len(q) {
+		return b
+	}
+	return q
 }
