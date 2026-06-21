@@ -2078,6 +2078,13 @@ type UserMFASecretRegistry interface {
 	// and UpdatedAt to `now` on a win, so the TOTP success path needs no
 	// separate last-used bump.
 	MarkTOTPStepUsedAtomic(ctx context.Context, tenantID, userID string, step int64, now time.Time) (bool, error)
+
+	// UpdateBackupCodes replaces backup_codes_hashed (the regenerate flow),
+	// writing ONLY that column + updated_at. last_used_step / last_used_at are
+	// owned exclusively by MarkTOTPStepUsedAtomic; a full-row Update here would
+	// clobber a concurrent step advance and re-open the replay window (#2124).
+	// Returns ErrNotFound if the row is gone.
+	UpdateBackupCodes(ctx context.Context, tenantID, userID string, hashes []string, now time.Time) error
 }
 
 // BackofficeUserMFASecretRegistry stores per-back-office-user TOTP
@@ -2124,11 +2131,6 @@ type BackofficeUserMFASecretRegistry interface {
 	// when none matched, and a classified error on infrastructure
 	// failure. Updates LastUsedAt to `now` on a successful consumption.
 	ConsumeBackupCodeAtomic(ctx context.Context, backofficeUserID string, now time.Time, matchHash func(hash string) bool) (bool, error)
-
-	// BumpLastUsedAt sets the last_used_at column to `now` after a
-	// successful TOTP verification (the backup-code path bumps it
-	// inside ConsumeBackupCodeAtomic). Used by the login MFA handler.
-	BumpLastUsedAt(ctx context.Context, backofficeUserID string, now time.Time) error
 
 	// MarkTOTPStepUsedAtomic compare-and-swaps the row's last_used_step
 	// to `step`, succeeding only when the stored last_used_step is

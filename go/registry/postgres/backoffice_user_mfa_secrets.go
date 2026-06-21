@@ -239,34 +239,6 @@ func (r *BackofficeUserMFASecretRegistry) ConsumeBackupCodeAtomic(
 	return consumed, nil
 }
 
-// BumpLastUsedAt sets LastUsedAt to `now` after a successful TOTP
-// verification (the backup-code path bumps it inside
-// ConsumeBackupCodeAtomic instead).
-func (r *BackofficeUserMFASecretRegistry) BumpLastUsedAt(ctx context.Context, backofficeUserID string, now time.Time) error {
-	if backofficeUserID == "" {
-		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "BackofficeUserID"))
-	}
-	reg := r.newSQLRegistry()
-	return reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf(
-			`UPDATE %s SET last_used_at = $1, updated_at = now() WHERE backoffice_user_id = $2`,
-			r.tableNames.BackofficeUserMFASecrets(),
-		)
-		res, err := tx.ExecContext(ctx, query, now, backofficeUserID)
-		if err != nil {
-			return errxtrace.Wrap("failed to bump backoffice MFA last_used_at", err)
-		}
-		affected, raErr := res.RowsAffected()
-		if raErr != nil {
-			return errxtrace.Wrap("failed to read rows affected for backoffice MFA bump", raErr)
-		}
-		if affected == 0 {
-			return errxtrace.Classify(registry.ErrBackofficeMFASecretNotFound, errx.Attrs("backoffice_user_id", backofficeUserID))
-		}
-		return nil
-	})
-}
-
 // MarkTOTPStepUsedAtomic compare-and-swaps last_used_step to `step` in a
 // single UPDATE guarded by `last_used_step < $step` — the back-office
 // mirror of UserMFASecretRegistry.MarkTOTPStepUsedAtomic. See there for

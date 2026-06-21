@@ -160,6 +160,31 @@ func (r *UserMFASecretRegistry) MarkTOTPStepUsedAtomic(_ context.Context, tenant
 	return false, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "UserMFASecret"))
 }
 
+// UpdateBackupCodes replaces BackupCodesHashed for the regenerate flow,
+// leaving LastUsedStep / LastUsedAt untouched (owned by
+// MarkTOTPStepUsedAtomic) so a concurrent step advance can't be reverted
+// (#2124).
+func (r *UserMFASecretRegistry) UpdateBackupCodes(_ context.Context, tenantID, userID string, hashes []string, now time.Time) error {
+	if tenantID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	if userID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		mfa := pair.Value
+		if mfa.TenantID != tenantID || mfa.UserID != userID {
+			continue
+		}
+		mfa.BackupCodesHashed = hashes
+		mfa.UpdatedAt = now
+		return nil
+	}
+	return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "UserMFASecret"))
+}
+
 func (r *UserMFASecretRegistry) DeleteByUser(_ context.Context, tenantID, userID string) error {
 	if tenantID == "" {
 		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))

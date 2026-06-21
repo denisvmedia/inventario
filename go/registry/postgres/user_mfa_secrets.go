@@ -276,6 +276,39 @@ func (r *UserMFASecretRegistry) MarkTOTPStepUsedAtomic(ctx context.Context, tena
 	return won, nil
 }
 
+// UpdateBackupCodes replaces backup_codes_hashed for the regenerate flow,
+// writing ONLY that column and updated_at. last_used_step / last_used_at are
+// left to MarkTOTPStepUsedAtomic: regenerate CAS-commits the consumed TOTP
+// step first, and a full-row Update here would revert a concurrent step
+// advance, re-opening the replay window (#2124).
+func (r *UserMFASecretRegistry) UpdateBackupCodes(ctx context.Context, tenantID, userID string, hashes []string, now time.Time) error {
+	if tenantID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	if userID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+	reg := r.newSQLRegistry()
+	return reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET backup_codes_hashed = $1, updated_at = $2 WHERE tenant_id = $3 AND user_id = $4`,
+			r.tableNames.UserMFASecrets(),
+		)
+		res, err := tx.ExecContext(ctx, query, models.ValuerSlice[string](hashes), now, tenantID, userID)
+		if err != nil {
+			return errxtrace.Wrap("failed to update user MFA backup codes", err)
+		}
+		affected, raErr := res.RowsAffected()
+		if raErr != nil {
+			return errxtrace.Wrap("failed to read rows affected for backup-code update", raErr)
+		}
+		if affected == 0 {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "UserMFASecret"))
+		}
+		return nil
+	})
+}
+
 // DeleteByUser removes the user's MFA row idempotently — a missing row
 // is not an error, since the disable flow is a no-op for non-enrolled users.
 func (r *UserMFASecretRegistry) DeleteByUser(ctx context.Context, tenantID, userID string) error {

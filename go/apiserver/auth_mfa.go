@@ -306,10 +306,18 @@ func (api *AuthAPI) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 	// Enrollment intentionally does NOT advance last_used_step. The replay
 	// guard (#2124) covers the endpoints where replaying a sniffed code has
 	// value — login, disable, regenerate — which share the monotonic step
-	// ledger. Enrollment is a one-time, already-authenticated, idempotent
-	// pending→enabled confirmation; bumping it here would only block a
-	// legitimate user who manages MFA within the same 30s step, for no real
-	// gain (an enrollment-code→login replay also needs the victim's password).
+	// ledger via MarkTOTPStepUsedAtomic. Enrollment is a one-time,
+	// already-authenticated, idempotent pending→enabled confirmation, and
+	// bumping it would block a legitimate user who manages MFA within the same
+	// 30s step. Accepted residual: because enrollment leaves last_used_step at
+	// 0, a sniffed enrollment code could, within its ~60s validity, be
+	// replayed at /auth/mfa/regenerate-backup-codes — the one consume path
+	// that needs no password, only the already-authenticated session — to
+	// rotate the user's backup codes. That requires an attacker who has BOTH
+	// hijacked the session AND sniffed the enrollment code in the same window
+	// (an already-compromised account), so we accept it rather than break the
+	// legitimate same-step manage flow. login + disable are unaffected (both
+	// gate on the password / step-1 mfa_token).
 	row.BackupCodesHashed = models.ValuerSlice[string](hashes)
 	if _, err := api.mfaRegistry.Update(r.Context(), *row); err != nil {
 		slog.Error("MFA verify: persist row failed", "user_id", user.ID, "error", err)
@@ -482,13 +490,13 @@ func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *htt
 		http.Error(w, "Failed to regenerate codes", http.StatusInternalServerError)
 		return
 	}
-	// Carry the step + timestamp the CAS just committed into the in-memory
-	// row so the full-row Update below doesn't revert last_used_step /
-	// last_used_at to their pre-CAS values.
-	row.BackupCodesHashed = models.ValuerSlice[string](hashes)
-	row.LastUsedAt = &now
-	row.LastUsedStep = matchedStep
-	if _, err := api.mfaRegistry.Update(r.Context(), *row); err != nil {
+	// Persist ONLY the new backup codes via a targeted update. last_used_step
+	// and last_used_at were already committed by the CAS above; a full-row
+	// Update here would re-write last_used_step from this handler's loaded
+	// value and could clobber a concurrent login that advanced the step in
+	// the meantime, re-opening the replay window (#2124). Keeping the CAS the
+	// sole writer of last_used_step preserves monotonicity.
+	if err := api.mfaRegistry.UpdateBackupCodes(r.Context(), user.TenantID, user.ID, hashes, now); err != nil {
 		slog.Error("MFA regenerate: persist failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to regenerate codes", http.StatusInternalServerError)
 		return

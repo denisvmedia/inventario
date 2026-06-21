@@ -202,7 +202,7 @@ jobs:
           POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
         run: |
           go test -v -race -p 1 \
-            -run 'TestUserIsolation|TestAPIUserIsolation' \
+            -run 'TestUserIsolation|TestAPIUserIsolation|TestAPIAuthentication' \
             -skip 'LoadTesting|PerformanceRegression' \
             ./integration/...
         working-directory: go

@@ -181,26 +181,6 @@ func (r *BackofficeUserMFASecretRegistry) ConsumeBackupCodeAtomic(
 	return false, errxtrace.Classify(registry.ErrBackofficeMFASecretNotFound, errx.Attrs("backoffice_user_id", backofficeUserID))
 }
 
-// BumpLastUsedAt sets LastUsedAt to `now` and bumps UpdatedAt. Used by
-// the login MFA handler after a successful TOTP verification.
-func (r *BackofficeUserMFASecretRegistry) BumpLastUsedAt(_ context.Context, backofficeUserID string, now time.Time) error {
-	if backofficeUserID == "" {
-		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "BackofficeUserID"))
-	}
-	r.lock.Lock()
-	defer r.lock.Unlock()
-	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
-		row := pair.Value
-		if row.BackofficeUserID == backofficeUserID {
-			stamped := now
-			row.LastUsedAt = &stamped
-			row.UpdatedAt = time.Now().UTC()
-			return nil
-		}
-	}
-	return errxtrace.Classify(registry.ErrBackofficeMFASecretNotFound, errx.Attrs("backoffice_user_id", backofficeUserID))
-}
-
 // MarkTOTPStepUsedAtomic replicates the postgres CAS under the registry
 // write lock: it bumps last_used_step to `step` only when the stored
 // value is strictly less, returning whether this call won. The lock held
