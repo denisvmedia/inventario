@@ -315,7 +315,7 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 			continue
 		}
 		attempted++
-		sendErr := s.emailSvc.SendWarrantyReminderEmail(ctx, r.email, r.name, c.Name, expiry, url, int(threshold))
+		sendErr := s.emailSvc.SendWarrantyReminderEmail(withReminderLanguage(ctx, prefsCache, r.user), r.email, r.name, c.Name, expiry, url, int(threshold))
 		if sendErr != nil {
 			enqueueErrs++
 			if firstEnqueueErr == nil {

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ru">
+<body>
+<p>Здравствуйте, {{.Name}}!</p>
+{{- if eq .ThresholdDays 0}}
+<p>Задача по обслуживанию предмета <strong>{{.CommodityName}}</strong> теперь <strong>просрочена</strong>.</p>
+{{- else}}
+<p>Это ваше <strong>напоминание об обслуживании за {{.ThresholdDays}} дн.</strong>
+для предмета <strong>{{.CommodityName}}</strong>.</p>
+{{- end}}
+<p>Задача: <strong>{{.MaintenanceTitle}}</strong><br/>
+Срок: <strong>{{.MaintenanceDueDate}}</strong></p>
+{{- if .CommodityURL}}
+<p>Вы можете просмотреть предмет здесь: <a href="{{.CommodityURL}}">{{.CommodityURL}}</a></p>
+{{- end}}
+<p>Inventario отправляет это письмо, чтобы вы могли запланировать обслуживание,
+прежде чем срок будет просрочен ещё больше.</p>
+</body>
+</html>

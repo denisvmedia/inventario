@@ -3,8 +3,10 @@ package services
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
 	htemplate "html/template"
+	"io/fs"
 	"strings"
 	ttemplate "text/template"
 	"time"
@@ -13,7 +15,7 @@ import (
 // emailTemplatesFS embeds all transactional templates so deployment does not
 // depend on runtime filesystem paths.
 //
-//go:embed email_templates/*.html.tmpl email_templates/*.txt.tmpl
+//go:embed email_templates/*.html.tmpl email_templates/*.txt.tmpl email_templates/cs/*.html.tmpl email_templates/cs/*.txt.tmpl email_templates/ru/*.html.tmpl email_templates/ru/*.txt.tmpl
 var emailTemplatesFS embed.FS
 
 type emailTemplateType string
@@ -41,9 +43,13 @@ type renderedEmail struct {
 // emailTemplateRenderer caches parsed templates for each transactional type.
 //
 // Parsing happens once at startup; rendering executes templates per job.
+// Keyed by language ("en"/"cs"/"ru") then template type. The "en" maps are
+// always fully populated; cs/ru hold the localized subset (feedback is
+// operator-facing and stays English). A missing (lang, type) entry falls
+// back to en at render time. #2090
 type emailTemplateRenderer struct {
-	htmlTemplates map[emailTemplateType]*htemplate.Template
-	textTemplates map[emailTemplateType]*ttemplate.Template
+	htmlTemplates map[string]map[emailTemplateType]*htemplate.Template
+	textTemplates map[string]map[emailTemplateType]*ttemplate.Template
 }
 
 type emailTemplateData struct {
@@ -111,74 +117,114 @@ type emailTemplateData struct {
 	DiagnosticsLines []string
 }
 
-// newEmailTemplateRenderer parses all embedded template files and builds a
-// renderer instance used by AsyncEmailService workers.
+// emailTemplateLanguages lists the locales we ship templates + subjects
+// for. "en" is the canonical, always-complete catalog; cs/ru are localized
+// subsets that fall back to en per type at render time. #2090
+var emailTemplateLanguages = []string{"en", "cs", "ru"}
+
+// emailTemplateBasenames maps each template type to its file basename
+// (shared across languages); the ".html.tmpl"/".txt.tmpl" suffix is
+// appended by the loader.
+var emailTemplateBasenames = map[emailTemplateType]string{
+	emailTemplateVerification:        "verification",
+	emailTemplatePasswordReset:       "password_reset",
+	emailTemplateMagicLink:           "magic_link",
+	emailTemplatePasswordChange:      "password_changed",
+	emailTemplateWelcome:             "welcome",
+	emailTemplateWarrantyReminder:    "warranty_reminder",
+	emailTemplateGroupInvite:         "group_invite",
+	emailTemplateStorageQuotaWarning: "storage_quota_warning",
+	emailTemplateLoanReminder:        "loan_reminder",
+	emailTemplateMaintenanceReminder: "maintenance_reminder",
+	emailTemplateFeedback:            "feedback",
+}
+
+// emailTemplatePath resolves the embedded path for (lang, basename, suffix).
+// en templates live at the root; cs/ru in per-language subdirs.
+func emailTemplatePath(lang, base, suffix string) string {
+	// #nosec G101 -- these are template file paths, not credentials.
+	if lang == "en" {
+		return "email_templates/" + base + suffix
+	}
+	return "email_templates/" + lang + "/" + base + suffix
+}
+
+// newEmailTemplateRenderer parses all embedded template files (en + cs + ru)
+// and builds a renderer instance used by AsyncEmailService workers. A
+// localized (cs/ru) variant that is absent is skipped — render() falls back
+// to the en template for that type.
 func newEmailTemplateRenderer() (*emailTemplateRenderer, error) {
 	renderer := &emailTemplateRenderer{
-		htmlTemplates: make(map[emailTemplateType]*htemplate.Template),
-		textTemplates: make(map[emailTemplateType]*ttemplate.Template),
-	}
-	// #nosec G101 -- these are template file paths, not credentials.
-	htmlTemplateFiles := map[emailTemplateType]string{
-		emailTemplateVerification:        "email_templates/verification.html.tmpl",
-		emailTemplatePasswordReset:       "email_templates/password_reset.html.tmpl",
-		emailTemplateMagicLink:           "email_templates/magic_link.html.tmpl",
-		emailTemplatePasswordChange:      "email_templates/password_changed.html.tmpl",
-		emailTemplateWelcome:             "email_templates/welcome.html.tmpl",
-		emailTemplateWarrantyReminder:    "email_templates/warranty_reminder.html.tmpl",
-		emailTemplateGroupInvite:         "email_templates/group_invite.html.tmpl",
-		emailTemplateStorageQuotaWarning: "email_templates/storage_quota_warning.html.tmpl",
-		emailTemplateLoanReminder:        "email_templates/loan_reminder.html.tmpl",
-		emailTemplateMaintenanceReminder: "email_templates/maintenance_reminder.html.tmpl",
-		emailTemplateFeedback:            "email_templates/feedback.html.tmpl",
-	}
-	// #nosec G101 -- these are template file paths, not credentials.
-	textTemplateFiles := map[emailTemplateType]string{
-		emailTemplateVerification:        "email_templates/verification.txt.tmpl",
-		emailTemplatePasswordReset:       "email_templates/password_reset.txt.tmpl",
-		emailTemplateMagicLink:           "email_templates/magic_link.txt.tmpl",
-		emailTemplatePasswordChange:      "email_templates/password_changed.txt.tmpl",
-		emailTemplateWelcome:             "email_templates/welcome.txt.tmpl",
-		emailTemplateWarrantyReminder:    "email_templates/warranty_reminder.txt.tmpl",
-		emailTemplateGroupInvite:         "email_templates/group_invite.txt.tmpl",
-		emailTemplateStorageQuotaWarning: "email_templates/storage_quota_warning.txt.tmpl",
-		emailTemplateLoanReminder:        "email_templates/loan_reminder.txt.tmpl",
-		emailTemplateMaintenanceReminder: "email_templates/maintenance_reminder.txt.tmpl",
-		emailTemplateFeedback:            "email_templates/feedback.txt.tmpl",
+		htmlTemplates: make(map[string]map[emailTemplateType]*htemplate.Template),
+		textTemplates: make(map[string]map[emailTemplateType]*ttemplate.Template),
 	}
 
-	for tt, file := range htmlTemplateFiles {
-		raw, err := emailTemplatesFS.ReadFile(file)
-		if err != nil {
-			return nil, fmt.Errorf("read html template %q: %w", file, err)
-		}
-		tmpl, err := htemplate.New(string(tt)).Parse(string(raw))
-		if err != nil {
-			return nil, fmt.Errorf("parse html template %q: %w", file, err)
-		}
-		renderer.htmlTemplates[tt] = tmpl
-	}
+	for _, lang := range emailTemplateLanguages {
+		renderer.htmlTemplates[lang] = make(map[emailTemplateType]*htemplate.Template)
+		renderer.textTemplates[lang] = make(map[emailTemplateType]*ttemplate.Template)
 
-	for tt, file := range textTemplateFiles {
-		raw, err := emailTemplatesFS.ReadFile(file)
-		if err != nil {
-			return nil, fmt.Errorf("read text template %q: %w", file, err)
+		for tt, base := range emailTemplateBasenames {
+			htmlPath := emailTemplatePath(lang, base, ".html.tmpl")
+			rawHTML, err := emailTemplatesFS.ReadFile(htmlPath)
+			if err != nil {
+				// A localized variant may legitimately be absent (e.g. cs/ru
+				// have no feedback template); fall back to en at render time.
+				if lang != "en" && errors.Is(err, fs.ErrNotExist) {
+					continue
+				}
+				return nil, fmt.Errorf("read html template %q: %w", htmlPath, err)
+			}
+			htmlTmpl, err := htemplate.New(lang + ":" + string(tt)).Parse(string(rawHTML))
+			if err != nil {
+				return nil, fmt.Errorf("parse html template %q: %w", htmlPath, err)
+			}
+			renderer.htmlTemplates[lang][tt] = htmlTmpl
+
+			textPath := emailTemplatePath(lang, base, ".txt.tmpl")
+			rawText, err := emailTemplatesFS.ReadFile(textPath)
+			if err != nil {
+				return nil, fmt.Errorf("read text template %q: %w", textPath, err)
+			}
+			textTmpl, err := ttemplate.New(lang + ":" + string(tt)).Parse(string(rawText))
+			if err != nil {
+				return nil, fmt.Errorf("parse text template %q: %w", textPath, err)
+			}
+			renderer.textTemplates[lang][tt] = textTmpl
 		}
-		tmpl, err := ttemplate.New(string(tt)).Parse(string(raw))
-		if err != nil {
-			return nil, fmt.Errorf("parse text template %q: %w", file, err)
-		}
-		renderer.textTemplates[tt] = tmpl
 	}
 
 	return renderer, nil
+}
+
+// templateForHTML returns the html template for (lang, type), falling back
+// to the en template when no localized variant exists.
+func (r *emailTemplateRenderer) templateForHTML(lang string, tt emailTemplateType) (*htemplate.Template, bool) {
+	if m, ok := r.htmlTemplates[lang]; ok {
+		if t, ok := m[tt]; ok {
+			return t, true
+		}
+	}
+	t, ok := r.htmlTemplates["en"][tt]
+	return t, ok
+}
+
+// templateForText mirrors templateForHTML for the plain-text variant.
+func (r *emailTemplateRenderer) templateForText(lang string, tt emailTemplateType) (*ttemplate.Template, bool) {
+	if m, ok := r.textTemplates[lang]; ok {
+		if t, ok := m[tt]; ok {
+			return t, true
+		}
+	}
+	t, ok := r.textTemplates["en"][tt]
+	return t, ok
 }
 
 // render merges a logical emailJob with template data and returns the subject
 // plus HTML/text bodies required by sender.Message.
 func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 	tt := job.TemplateType
-	subject, ok := computeSubject(job)
+	lang := normalizeEmailLang(job.Language)
+	subject, ok := computeSubject(job, lang)
 	if !ok {
 		return renderedEmail{}, fmt.Errorf("unsupported template type: %q", tt)
 	}
@@ -230,11 +276,11 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 		data.ExpiresAt = job.ExpiresAt.UTC().Format(time.RFC1123)
 	}
 
-	htmlTmpl, ok := r.htmlTemplates[tt]
+	htmlTmpl, ok := r.templateForHTML(lang, tt)
 	if !ok {
 		return renderedEmail{}, fmt.Errorf("missing html template: %q", tt)
 	}
-	textTmpl, ok := r.textTemplates[tt]
+	textTmpl, ok := r.templateForText(lang, tt)
 	if !ok {
 		return renderedEmail{}, fmt.Errorf("missing text template: %q", tt)
 	}
@@ -256,11 +302,90 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 	}, nil
 }
 
-// computeSubject is the kind-aware subject builder. Most templates have
-// a fixed subject (delegated to subjectByTemplateType); the loan
-// reminder needs to interpolate the commodity name and branch on the
-// LoanKind, so it gets its own switch.
-func computeSubject(job emailJob) (string, bool) {
+// normalizeEmailLang collapses an arbitrary language code to one of the
+// locales we ship (en/cs/ru); anything unknown (including "") → "en".
+func normalizeEmailLang(lang string) string {
+	switch lang {
+	case "cs", "ru":
+		return lang
+	default:
+		return "en"
+	}
+}
+
+// emailSubjects holds the fixed per-type subject line for each language.
+// cs/ru omit feedback (operator-facing, English only); subjectByTemplateType
+// falls back to en for any missing (lang, type). #2090
+var emailSubjects = map[string]map[emailTemplateType]string{
+	"en": { // #nosec G101 -- email subject lines, not credentials
+		emailTemplateVerification:        "Verify your Inventario account",
+		emailTemplatePasswordReset:       "Reset your Inventario password",
+		emailTemplateMagicLink:           "Sign in to Inventario",
+		emailTemplatePasswordChange:      "Your Inventario password was changed",
+		emailTemplateWelcome:             "Welcome to Inventario",
+		emailTemplateWarrantyReminder:    "Inventario warranty reminder",
+		emailTemplateGroupInvite:         "You're invited to a group on Inventario",
+		emailTemplateStorageQuotaWarning: "Your group is approaching its storage quota",
+		emailTemplateLoanReminder:        "Inventario loan reminder",
+		emailTemplateMaintenanceReminder: "Inventario maintenance reminder",
+		emailTemplateFeedback:            "Inventario feedback",
+	},
+	"cs": { // #nosec G101 -- email subject lines, not credentials
+		emailTemplateVerification:        "Ověřte svůj účet Inventario",
+		emailTemplatePasswordReset:       "Obnovení hesla pro Inventario",
+		emailTemplateMagicLink:           "Přihlášení do Inventaria",
+		emailTemplatePasswordChange:      "Vaše heslo k Inventario bylo změněno",
+		emailTemplateWelcome:             "Vítejte v Inventario",
+		emailTemplateWarrantyReminder:    "Připomenutí záruky Inventario",
+		emailTemplateGroupInvite:         "Máte pozvánku do skupiny v Inventariu",
+		emailTemplateStorageQuotaWarning: "Vaše skupina se blíží svému úložnému limitu",
+		emailTemplateLoanReminder:        "Připomenutí zápůjčky Inventario",
+		emailTemplateMaintenanceReminder: "Připomenutí údržby v Inventariu",
+	},
+	"ru": { // #nosec G101 -- email subject lines, not credentials
+		emailTemplateVerification:        "Подтвердите свою учётную запись Inventario",
+		emailTemplatePasswordReset:       "Сброс пароля в Inventario",
+		emailTemplateMagicLink:           "Вход в Inventario",
+		emailTemplatePasswordChange:      "Ваш пароль Inventario был изменён",
+		emailTemplateWelcome:             "Добро пожаловать в Inventario",
+		emailTemplateWarrantyReminder:    "Напоминание о гарантии Inventario",
+		emailTemplateGroupInvite:         "Вас пригласили в группу в Inventario",
+		emailTemplateStorageQuotaWarning: "Ваша группа приближается к лимиту квоты хранилища",
+		emailTemplateLoanReminder:        "Напоминание о займе Inventario",
+		emailTemplateMaintenanceReminder: "Напоминание об обслуживании в Inventario",
+	},
+}
+
+// loanSubjectSet holds the kind-aware loan-reminder subject parts. The
+// commodity name is concatenated (never fmt-interpolated) so a name
+// containing '%' can't corrupt the subject.
+type loanSubjectSet struct {
+	overduePrefix string
+	overdueSuffix string
+	dueSoonPrefix string
+	dueSoonSuffix string
+	def           string
+	itemFallback  string
+}
+
+var loanSubjectsByLang = map[string]loanSubjectSet{
+	"en": {"Reminder: ", " is overdue", "", " is due back soon", "Inventario loan reminder", "your item"},
+	"cs": {"Připomenutí: ", " je po termínu vrácení", "", " se brzy blíží termín vrácení", "Připomenutí zápůjčky Inventario", "vaši položku"},
+	"ru": {"Напоминание: ", " просрочен", "Скоро нужно вернуть ", "", "Напоминание о займе Inventario", "ваш предмет"},
+}
+
+func loanSubjects(lang string) loanSubjectSet {
+	if s, ok := loanSubjectsByLang[lang]; ok {
+		return s
+	}
+	return loanSubjectsByLang["en"]
+}
+
+// computeSubject is the kind-aware subject builder. Most templates have a
+// fixed per-language subject (subjectByTemplateType); the loan reminder
+// interpolates the commodity name and branches on LoanKind; feedback is
+// operator-facing and stays English regardless of the recipient language.
+func computeSubject(job emailJob, lang string) (string, bool) {
 	if job.TemplateType == emailTemplateFeedback {
 		feedbackType := strings.TrimSpace(job.FeedbackType)
 		if feedbackType == "" {
@@ -273,54 +398,36 @@ func computeSubject(job emailJob) (string, bool) {
 		return fmt.Sprintf("[Inventario %s] from %s", feedbackType, from), true
 	}
 	if job.TemplateType == emailTemplateLoanReminder {
+		ls := loanSubjects(lang)
 		name := strings.TrimSpace(job.CommodityName)
 		if name == "" {
-			name = "your item"
+			name = ls.itemFallback
 		}
 		switch job.LoanKind {
 		case "overdue":
-			return "Reminder: " + name + " is overdue", true
+			return ls.overduePrefix + name + ls.overdueSuffix, true
 		case "due_soon":
-			return name + " is due back soon", true
+			return ls.dueSoonPrefix + name + ls.dueSoonSuffix, true
 		default:
 			// Unknown kind — return a generic subject rather than failing
 			// the render outright. The body still surfaces the loan
 			// details so the recipient isn't left guessing.
-			return "Inventario loan reminder", true
+			return ls.def, true
 		}
 	}
-	return subjectByTemplateType(job.TemplateType)
+	return subjectByTemplateType(job.TemplateType, lang)
 }
 
-func subjectByTemplateType(tt emailTemplateType) (string, bool) {
-	switch tt {
-	case emailTemplateVerification:
-		return "Verify your Inventario account", true
-	case emailTemplatePasswordReset:
-		return "Reset your Inventario password", true
-	case emailTemplateMagicLink:
-		return "Sign in to Inventario", true
-	case emailTemplatePasswordChange:
-		return "Your Inventario password was changed", true
-	case emailTemplateWelcome:
-		return "Welcome to Inventario", true
-	case emailTemplateWarrantyReminder:
-		return "Inventario warranty reminder", true
-	case emailTemplateGroupInvite:
-		return "You're invited to a group on Inventario", true
-	case emailTemplateStorageQuotaWarning:
-		return "Your group is approaching its storage quota", true
-	case emailTemplateLoanReminder:
-		return "Inventario loan reminder", true
-	case emailTemplateMaintenanceReminder:
-		return "Inventario maintenance reminder", true
-	case emailTemplateFeedback:
-		// Subject for feedback is built dynamically by computeSubject so
-		// it can surface the submitter's address; this branch only
-		// exists so emailTemplateFeedback is recognised as a valid type
-		// at enqueue time (see AsyncEmailService.enqueue).
-		return "Inventario feedback", true
-	default:
-		return "", false
+// subjectByTemplateType returns the fixed subject for a template type in the
+// requested language, falling back to en when the (lang, type) is absent.
+func subjectByTemplateType(tt emailTemplateType, lang string) (string, bool) {
+	if m, ok := emailSubjects[lang]; ok {
+		if s, ok := m[tt]; ok {
+			return s, true
+		}
 	}
+	if s, ok := emailSubjects["en"][tt]; ok {
+		return s, true
+	}
+	return "", false
 }

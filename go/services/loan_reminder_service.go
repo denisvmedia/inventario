@@ -252,7 +252,8 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 	commodityName := s.lookupCommodityName(ctx, l.CommodityID)
 	daysDelta := computeDaysDelta(l.DueBackAt, now)
 	sendErr := s.emailSvc.SendLoanReminderEmail(
-		ctx,
+		// Localize to the lender's chosen UI language (#2090).
+		withReminderLanguage(ctx, prefsCache, lender),
 		recipientEmail,
 		recipientName,
 		commodityName,

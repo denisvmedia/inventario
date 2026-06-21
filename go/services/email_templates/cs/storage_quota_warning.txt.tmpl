@@ -1,0 +1,19 @@
+Dobrý den, {{.Name}},
+
+Skupina v Inventariu {{.GroupName}} využívá {{.UsedHuman}} ze svého
+úložného limitu {{.QuotaHuman}} — to je {{.UsagePercent}}%, tedy nad
+varovnou hranicí {{.ThresholdPercent}}%.
+{{if .BreakdownLines}}
+Aktuální využití podle kategorie:
+{{range .BreakdownLines}}  - {{.}}
+{{end}}{{end}}
+Místo můžete uvolnit smazáním položek, exportů nebo souborů, které již
+nepotřebujete.
+{{if .FilesURL}}
+Zkontrolovat soubory: {{.FilesURL}}
+{{end}}{{if .SettingsURL}}
+Otevřít Nastavení → Data a úložiště: {{.SettingsURL}}
+{{end}}
+Inventario tento e-mail odešle jednou, když je hranice poprvé překročena.
+Nový e-mail se odešle pouze v případě, že využití klesne zpět pod hranici a
+poté ji znovu překročí.

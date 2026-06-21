@@ -12,6 +12,7 @@ import { TopBar } from "@/components/TopBar"
 import { Toaster } from "@/components/ui/sonner"
 import { useAuth } from "@/features/auth/AuthContext"
 import { ImpersonationProvider } from "@/features/admin/impersonation/ImpersonationContext"
+import { LanguageSync } from "@/features/settings/LanguageSync"
 import { NumberFormatLocaleSync } from "@/features/settings/NumberFormatLocaleSync"
 import { KeyboardShortcutsProvider } from "@/features/shortcuts"
 import { ConfirmProvider } from "@/hooks/useConfirm"
@@ -51,6 +52,7 @@ export function Shell() {
     <RouteTitleProvider>
       <ConfirmProvider>
         <NumberFormatLocaleSync />
+        <LanguageSync />
         <KeyboardShortcutsProvider>
           {/* ImpersonationProvider tracks the active admin-impersonation
               session (#1752) so the ImpersonationBanner below can render

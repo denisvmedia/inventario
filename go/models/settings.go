@@ -106,6 +106,11 @@ const (
 	SettingNameAppearanceDefaultItemsView         SettingName = "appearance.default_items_view"
 	SettingNameAppearancePreferredDisplayCurrency SettingName = "appearance.preferred_display_currency"
 	SettingNameAppearanceNumberFormatLocale       SettingName = "appearance.number_format_locale"
+	// `language` is the user's chosen UI language (short code: en/cs/ru).
+	// Unlike `number_format_locale` (a formatting-only hint), this IS the UI
+	// language and is the source of truth the backend reads to localize
+	// transactional emails (#2090). Unset falls back to English.
+	SettingNameAppearanceLanguage SettingName = "appearance.language"
 )
 
 // SettingsObject is the user-scoped key/value blob persisted to the
@@ -135,6 +140,9 @@ type SettingsObject struct {
 	AppearanceDefaultItemsView         *string `configfield:"appearance.default_items_view"`
 	AppearancePreferredDisplayCurrency *string `configfield:"appearance.preferred_display_currency"`
 	AppearanceNumberFormatLocale       *string `configfield:"appearance.number_format_locale"`
+	// AppearanceLanguage is the user's UI language (en/cs/ru) and the source
+	// of truth for localizing transactional emails (#2090).
+	AppearanceLanguage *string `configfield:"appearance.language"`
 }
 
 func (s *SettingsObject) Set(field string, value any) error {

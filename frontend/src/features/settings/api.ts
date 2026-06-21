@@ -23,6 +23,10 @@ export const SETTING_NOTIFICATIONS_CHANNEL_PUSH = "notifications.channel.push"
 export const SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW = "appearance.default_items_view"
 export const SETTING_APPEARANCE_PREFERRED_DISPLAY_CURRENCY = "appearance.preferred_display_currency"
 export const SETTING_APPEARANCE_NUMBER_FORMAT_LOCALE = "appearance.number_format_locale"
+// appearance.language is the user's UI language (en/cs/ru). It is the
+// cross-device source of truth for the interface language AND the language
+// the backend localizes transactional emails in (#2090).
+export const SETTING_APPEARANCE_LANGUAGE = "appearance.language"
 
 export async function getSettings(signal?: AbortSignal): Promise<SettingsObject> {
   // The rewrite middleware in lib/http prepends `/g/{active-slug}` —

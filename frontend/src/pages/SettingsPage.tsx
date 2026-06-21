@@ -42,6 +42,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useKeyboardShortcutsDialog } from "@/features/shortcuts"
 import {
   SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW,
+  SETTING_APPEARANCE_LANGUAGE,
   SETTING_APPEARANCE_NUMBER_FORMAT_LOCALE,
   SETTING_APPEARANCE_PREFERRED_DISPLAY_CURRENCY,
   SETTING_NOTIFICATIONS_CHANNEL_EMAIL,
@@ -544,6 +545,9 @@ function AppearanceSection() {
               // key "inventario-language" — calling changeLanguage triggers
               // that cache write, so reload picks the new locale up.
               void i18next.changeLanguage(next as SupportedLanguage)
+              // Persist server-side so it becomes the cross-device source of
+              // truth AND the language the backend localizes emails in (#2090).
+              onChangeRemote(SETTING_APPEARANCE_LANGUAGE, next)
             }}
           >
             <SelectTrigger

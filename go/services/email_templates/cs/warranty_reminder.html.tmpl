@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="cs">
+<body>
+<p>Dobrý den {{.Name}},</p>
+<p>toto je vaše <strong>připomenutí záruky {{.ThresholdDays}} dní předem</strong>
+pro položku <strong>{{.CommodityName}}</strong>.</p>
+<p>Záruka vyprší {{.ExpiryDate}}.</p>
+{{- if .CommodityURL}}
+<p>Položku si můžete prohlédnout zde: <a href="{{.CommodityURL}}">{{.CommodityURL}}</a></p>
+{{- end}}
+<p>Inventario tuto zprávu zasílá, abyste mohli naplánovat prodloužení, servis nebo
+výměnu dříve, než záruka skončí.</p>
+</body>
+</html>

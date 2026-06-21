@@ -4286,6 +4286,11 @@ definitions:
       appearanceDefaultItemsView:
         description: Per-user appearance preferences.
         type: string
+      appearanceLanguage:
+        description: |-
+          AppearanceLanguage is the user's UI language (en/cs/ru) and the source
+          of truth for localizing transactional emails (#2090).
+        type: string
       appearanceNumberFormatLocale:
         type: string
       appearancePreferredDisplayCurrency:

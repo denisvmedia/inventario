@@ -1,0 +1,16 @@
+Здравствуйте, {{.Name}}!
+
+{{if .LoanIsOverdue -}}
+{{if .CommodityName}}{{.CommodityName}}{{else}}Ваш предмет{{end}} ПРОСРОЧЕН — его нужно было вернуть {{.DueBackAt}}{{if gt .LoanDaysDelta 0}} ({{.LoanDaysDelta}} {{if ne .LoanDaysDelta 1}}дн.{{else}}день{{end}} назад){{end}}.
+{{else if .LoanIsDueSoon -}}
+{{if .CommodityName}}{{.CommodityName}}{{else}}Ваш предмет{{end}} нужно вернуть {{.DueBackAt}}{{if gt .LoanDaysDelta 0}} (через {{.LoanDaysDelta}} {{if ne .LoanDaysDelta 1}}дн.{{else}}день{{end}}){{end}}.
+{{else -}}
+У вас есть напоминание о займе для {{if .CommodityName}}{{.CommodityName}}{{else}}вашего предмета{{end}}.
+{{end}}
+Выдано: {{.BorrowerName}}, {{.LentAt}}.
+{{if .CommodityURL}}
+Откройте предмет, чтобы напомнить получателю или отметить возврат:
+{{.CommodityURL}}
+{{end}}
+Inventario отправляет это один раз для каждого займа, чтобы вы не теряли из виду
+выданные предметы.

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+<body>
+<p>Здравствуйте, {{.Name}}!</p>
+{{- if .LoanIsOverdue}}
+<p><strong>{{if .CommodityName}}{{.CommodityName}}{{else}}Ваш предмет{{end}}</strong>
+<strong>просрочен</strong> — его нужно было вернуть {{.DueBackAt}}{{if gt .LoanDaysDelta 0}}
+({{.LoanDaysDelta}} {{if ne .LoanDaysDelta 1}}дн.{{else}}день{{end}} назад){{end}}.</p>
+{{- else if .LoanIsDueSoon}}
+<p><strong>{{if .CommodityName}}{{.CommodityName}}{{else}}Ваш предмет{{end}}</strong>
+нужно вернуть {{.DueBackAt}}{{if gt .LoanDaysDelta 0}}
+(через {{.LoanDaysDelta}} {{if ne .LoanDaysDelta 1}}дн.{{else}}день{{end}}){{end}}.</p>
+{{- else}}
+<p>У вас есть напоминание о займе для
+<strong>{{if .CommodityName}}{{.CommodityName}}{{else}}вашего предмета{{end}}</strong>.</p>
+{{- end}}
+<p>Выдано: <strong>{{.BorrowerName}}</strong>, {{.LentAt}}.</p>
+{{- if .CommodityURL}}
+<p>Откройте предмет, чтобы напомнить получателю или отметить возврат:
+<a href="{{.CommodityURL}}">{{.CommodityURL}}</a></p>
+{{- end}}
+<p>Inventario отправляет это один раз для каждого займа, чтобы вы не теряли из виду
+выданные предметы.</p>
+</body>
+</html>
