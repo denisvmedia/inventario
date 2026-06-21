@@ -38,7 +38,7 @@ import {
 } from "@/components/locations/DeleteWithItemsDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas, useCreateArea, useDeleteArea } from "@/features/areas/hooks"
-import { useCommodities } from "@/features/commodities/hooks"
+import { useAreaItemCounter, useCommodities } from "@/features/commodities/hooks"
 import { warrantyStatus } from "@/features/commodities/constants"
 import {
   useDeleteLocation,
@@ -87,6 +87,7 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
   const deleteLocation = useDeleteLocation()
   const createArea = useCreateArea()
   const deleteArea = useDeleteArea()
+  const countAreaItems = useAreaItemCounter()
 
   const toast = useAppToast()
   const confirm = useConfirm()
@@ -155,9 +156,10 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
     toast.success(t("locations:toast.areaCreated"))
   }
 
-  // Item count for one area, sampled from the page-level commodities
-  // fetch. May undercount past the fetch cap, but for the empty-vs-non-
-  // empty branch any value ≥1 is enough to surface the strategy dialog.
+  // Item count for one area, sampled from the page-level commodities fetch.
+  // Excludes inactive rows and may undercount past the fetch cap, so it's
+  // only a fallback for the delete gate when the accurate per-area count
+  // (useAreaItemCounter) can't be fetched; the tile chips also read it.
   function itemsInArea(areaId: string): number {
     return (itemsForCounts.data?.commodities ?? []).filter((c) => c.area_id === areaId).length
   }
@@ -186,7 +188,21 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
     if (!location.data?.id) return
     const myAreaList = (allAreas.data ?? []).filter((a) => a.location_id === id)
     const areaCount = myAreaList.length
-    const locationItemCount = myAreaList.reduce((sum, a) => sum + (a.id ? itemsInArea(a.id) : 0), 0)
+    // Sum the accurate (incl. inactive, uncapped) per-area counts so the
+    // cascade dialog states the true number of items that would be deleted.
+    // Falls back to the page sample if a count lookup fails — the gate is
+    // driven by areaCount anyway (a location with areas is always non-empty,
+    // since commodities can't exist without an area), so the sum only feeds
+    // the dialog copy, never the empty-vs-non-empty decision.
+    let locationItemCount: number
+    try {
+      const counts = await Promise.all(
+        myAreaList.map((a) => (a.id ? countAreaItems(a.id) : Promise.resolve(0)))
+      )
+      locationItemCount = counts.reduce((sum, n) => sum + n, 0)
+    } catch {
+      locationItemCount = myAreaList.reduce((sum, a) => sum + (a.id ? itemsInArea(a.id) : 0), 0)
+    }
     // A location is "non-empty" if it holds areas OR items — either way
     // deleting it has side effects the user should choose how to handle.
     if (areaCount > 0 || locationItemCount > 0) {
@@ -211,7 +227,18 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
 
   async function handleDeleteArea(area: Area) {
     if (!area.id) return
-    const count = itemsInArea(area.id)
+    // Accurate count (incl. inactive, uncapped) so an area whose items live
+    // past the page-level sample cap or are all inactive still routes to the
+    // cascade/unlink dialog instead of a bare delete the BE rejects with 422
+    // (#2137 review — capped-sample gate produced a "dead" delete button).
+    // Fall back to the page sample if the lookup fails so a transient error
+    // doesn't block deletes outright; the BE 422 remains the safety backstop.
+    let count: number
+    try {
+      count = await countAreaItems(area.id)
+    } catch {
+      count = itemsInArea(area.id)
+    }
     if (count > 0) {
       setDeleteTarget({
         kind: "area",

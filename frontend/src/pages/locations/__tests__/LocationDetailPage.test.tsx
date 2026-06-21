@@ -291,6 +291,43 @@ describe("<LocationDetailPage />", () => {
     await waitFor(() => expect(observedDataId).toBe("loc1"))
   })
 
+  it("opens the cascade/unlink dialog for an area that looks empty in the page sample but holds inactive items (#2137)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Main House" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      ...areaHandlers.list(SLUG, [areaResource("a1", { name: "Kitchen", location_id: "loc1" })]),
+      ...fileHandlers.list(SLUG, []),
+      // The page-level sample fetches active items only and would see
+      // Kitchen as empty; the delete gate must instead consult the
+      // accurate count (area_id + include_inactive=true), which reports
+      // one inactive item — so the strategy dialog opens rather than a
+      // bare delete the BE would 422. A single param-aware handler serves
+      // both calls.
+      http.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        const url = new URL(request.url)
+        const includeInactive = url.searchParams.get("include_inactive") === "true"
+        const areaId = url.searchParams.get("area_id")
+        if (includeInactive && areaId === "a1") {
+          return HttpResponse.json({
+            data: [commodityResource("c1", { name: "Old Blender", area_id: "a1", status: "sold" })],
+          })
+        }
+        return HttpResponse.json({ data: [] })
+      })
+    )
+    renderDetail(`/g/${SLUG}/locations/loc1`)
+    const tile = await screen.findByTestId("location-detail-area")
+    await user.click(within(tile).getByTestId("location-detail-area-menu"))
+    await user.click(await screen.findByTestId("location-detail-area-delete"))
+    const dialog = await screen.findByTestId("delete-with-items-dialog")
+    expect(within(dialog).getByText('Delete area "Kitchen"?')).toBeInTheDocument()
+    // The copy reflects the accurate (incl. inactive) count of 1, not the
+    // empty page sample — proving the gate consulted useAreaItemCounter.
+    expect(within(dialog).getByText(/still holds 1 item\b/i)).toBeInTheDocument()
+  })
+
   it("shows the drop overlay while files are dragged over the location detail page (#1448)", async () => {
     const { fireEvent } = await import("@testing-library/react")
     server.use(
