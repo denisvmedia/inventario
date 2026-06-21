@@ -18,6 +18,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags := cmd.PersistentFlags()
 	flags.StringVar(&cfg.Addr, "addr", cfg.Addr, "Bind address for the server")
 	flags.StringVar(&cfg.UploadLocation, "upload-location", cfg.UploadLocation, "Location for the uploaded files")
+	flags.Int64Var(&cfg.MaxUploadBytes, "max-upload-bytes", cfg.MaxUploadBytes, "Maximum size of a single uploaded file in bytes; 0 or negative disables the limit")
 	shared.RegisterDatabaseFlags(cmd, dbConfig)
 	flags.IntVar(&cfg.MaxConcurrentExports, "max-concurrent-exports", cfg.MaxConcurrentExports, "Maximum number of concurrent export processes")
 	flags.IntVar(&cfg.MaxConcurrentImports, "max-concurrent-imports", cfg.MaxConcurrentImports, "Maximum number of concurrent import processes")

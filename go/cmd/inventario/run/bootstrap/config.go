@@ -16,8 +16,15 @@ import (
 // example --workers-only / --workers-exclude) live on the same struct but are
 // only bound to CLI flags on the subcommand that consumes them.
 type Config struct {
-	Addr                             string `yaml:"addr" env:"ADDR" env-default:":3333"`
-	UploadLocation                   string `yaml:"upload_location" env:"UPLOAD_LOCATION" env-default:""`
+	Addr           string `yaml:"addr" env:"ADDR" env-default:":3333"`
+	UploadLocation string `yaml:"upload_location" env:"UPLOAD_LOCATION" env-default:""`
+	// MaxUploadBytes caps the size of a single uploaded file (issue #2101).
+	// The multipart upload path streams the body straight to the blob store
+	// and deliberately bypasses the 1 MiB request-body cap, so without this
+	// limit one user can fill the shared storage with an unbounded upload.
+	// Default 1 GiB (1<<30) is generous enough for normal photo/video/PDF
+	// uploads; 0 (or negative) disables the cap for back-compat / opt-out.
+	MaxUploadBytes                   int64  `yaml:"max_upload_bytes" env:"MAX_UPLOAD_BYTES" env-default:"1073741824"`
 	MaxConcurrentExports             int    `yaml:"max_concurrent_exports" env:"MAX_CONCURRENT_EXPORTS" env-default:"0"`
 	MaxConcurrentImports             int    `yaml:"max_concurrent_imports" env:"MAX_CONCURRENT_IMPORTS" env-default:"0"`
 	MaxConcurrentRestores            int    `yaml:"max_concurrent_restores" env:"MAX_CONCURRENT_RESTORES" env-default:"0"`

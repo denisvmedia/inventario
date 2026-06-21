@@ -22,15 +22,17 @@ export async function revokeSession(id: string): Promise<void> {
 }
 
 // revokeAllOtherSessions revokes every session except the one identified
-// as current. We must pass the id of the row the list endpoint flagged
-// `is_current: true` via `?keep_id=` because the refresh cookie is
-// path-scoped to /api/v1/auth — it isn't sent on /users/me/sessions, so
-// the BE can't fall back to hashing the cookie here. Pass `undefined`
-// to deliberately wipe every session (e.g. for "log out everywhere"
-// surfaces yet to be built).
-export async function revokeAllOtherSessions(keepSessionId?: string): Promise<void> {
-  const path = keepSessionId
-    ? `/users/me/sessions?keep_id=${encodeURIComponent(keepSessionId)}`
-    : "/users/me/sessions"
-  await http.del(path, { skipGroupRewrite: true })
+// as current. The id of the row the list endpoint flagged
+// `is_current: true` is REQUIRED and passed via `?keep_id=`: the refresh
+// cookie is path-scoped to /api/v1/auth — it isn't sent on
+// /users/me/sessions, so the BE can't fall back to hashing the cookie
+// here. The parameter is intentionally non-optional so a call site that
+// can't resolve a current session (e.g. an impersonation session, which
+// has no is_current row) is a compile error rather than a silent
+// wipe-all (#2126). The matching BE guard refuses an empty keep_id with
+// 400, but we never send that shape from here.
+export async function revokeAllOtherSessions(keepSessionId: string): Promise<void> {
+  await http.del(`/users/me/sessions?keep_id=${encodeURIComponent(keepSessionId)}`, {
+    skipGroupRewrite: true,
+  })
 }

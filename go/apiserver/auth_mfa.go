@@ -278,7 +278,7 @@ func (api *AuthAPI) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ok, err := api.mfaService.VerifyTOTP(*row, req.Code)
+	_, ok, err := api.mfaService.VerifyTOTPStep(*row, req.Code)
 	if err != nil {
 		slog.Error("MFA verify: totp check failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to verify MFA", http.StatusInternalServerError)
@@ -303,6 +303,13 @@ func (api *AuthAPI) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	row.EnabledAt = &now
 	row.LastUsedAt = &now
+	// Enrollment intentionally does NOT advance last_used_step. The replay
+	// guard (#2124) covers the endpoints where replaying a sniffed code has
+	// value — login, disable, regenerate — which share the monotonic step
+	// ledger. Enrollment is a one-time, already-authenticated, idempotent
+	// pending→enabled confirmation; bumping it here would only block a
+	// legitimate user who manages MFA within the same 30s step, for no real
+	// gain (an enrollment-code→login replay also needs the victim's password).
 	row.BackupCodesHashed = models.ValuerSlice[string](hashes)
 	if _, err := api.mfaRegistry.Update(r.Context(), *row); err != nil {
 		slog.Error("MFA verify: persist row failed", "user_id", user.ID, "error", err)
@@ -438,7 +445,7 @@ func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *htt
 		return
 	}
 
-	ok, err := api.mfaService.VerifyTOTP(*row, req.Code)
+	matchedStep, ok, err := api.mfaService.VerifyTOTPStep(*row, req.Code)
 	if err != nil {
 		slog.Error("MFA regenerate: totp check failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to regenerate codes", http.StatusInternalServerError)
@@ -450,6 +457,24 @@ func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *htt
 		http.Error(w, "Invalid code", http.StatusUnauthorized)
 		return
 	}
+	// Replay guard (RFC 6238 §5.2, #2124): commit the matched step via the
+	// atomic CAS before regenerating codes. A replayed TOTP (step already
+	// consumed) loses the CAS and is rejected like a wrong code, so a
+	// stolen session can't reuse a single sniffed code to churn the
+	// legitimate user's backup codes.
+	now := time.Now()
+	won, casErr := api.mfaRegistry.MarkTOTPStepUsedAtomic(r.Context(), user.TenantID, user.ID, matchedStep, now)
+	if casErr != nil {
+		slog.Error("MFA regenerate: totp step CAS failed", "user_id", user.ID, "error", casErr)
+		http.Error(w, "Failed to regenerate codes", http.StatusInternalServerError)
+		return
+	}
+	if !won {
+		errMsg := "replayed code during regenerate-backup-codes"
+		api.logAuth(r.Context(), "mfa_regenerate", &user.ID, &user.TenantID, false, r, &errMsg)
+		http.Error(w, "Invalid code", http.StatusUnauthorized)
+		return
+	}
 
 	plain, hashes, err := api.mfaService.GenerateBackupCodes(services.MFABackupCodeCount)
 	if err != nil {
@@ -457,13 +482,12 @@ func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *htt
 		http.Error(w, "Failed to regenerate codes", http.StatusInternalServerError)
 		return
 	}
-	// Update LastUsedAt alongside the new code set — the user just
-	// proved possession of a valid TOTP, so the row's "last used"
-	// timestamp should reflect that, matching how loginMFA / mfa_disable
-	// touch LastUsedAt on every successful verification (#1645 review).
-	now := time.Now()
+	// Carry the step + timestamp the CAS just committed into the in-memory
+	// row so the full-row Update below doesn't revert last_used_step /
+	// last_used_at to their pre-CAS values.
 	row.BackupCodesHashed = models.ValuerSlice[string](hashes)
 	row.LastUsedAt = &now
+	row.LastUsedStep = matchedStep
 	if _, err := api.mfaRegistry.Update(r.Context(), *row); err != nil {
 		slog.Error("MFA regenerate: persist failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to regenerate codes", http.StatusInternalServerError)
@@ -637,19 +661,17 @@ func (api *AuthAPI) issueMFALoginSession(w http.ResponseWriter, r *http.Request,
 func (api *AuthAPI) consumeAnyMFACode(r *http.Request, user *models.User, row *models.UserMFASecret, totpCode, backupCode, action string) bool {
 	ctx := r.Context()
 	if totpCode != "" {
-		ok, err := api.mfaService.VerifyTOTP(*row, totpCode)
-		if err != nil {
-			slog.Error("MFA verify path: totp check failed", "user_id", user.ID, "error", err)
+		consumed, abort := api.consumeTOTPCode(ctx, user, row, totpCode)
+		if abort {
 			return false
 		}
-		if ok {
-			now := time.Now()
-			row.LastUsedAt = &now
-			if _, err := api.mfaRegistry.Update(ctx, *row); err != nil {
-				slog.Error("MFA verify path: persist last_used_at failed", "user_id", user.ID, "error", err)
-			}
+		if consumed {
 			return true
 		}
+		// A non-consumed TOTP — a wrong code, or a replayed code that lost
+		// the CAS — falls through to the backup-code path and the shared
+		// invalid-code audit/return below, so a replay is logged and
+		// rejected identically to a wrong code.
 	}
 	if backupCode != "" {
 		matcher := api.mfaService.MatchBackupCode(backupCode)
@@ -669,6 +691,32 @@ func (api *AuthAPI) consumeAnyMFACode(r *http.Request, user *models.User, row *m
 	errMsg := "invalid mfa code"
 	api.logAuth(ctx, action, &user.ID, &user.TenantID, false, r, &errMsg)
 	return false
+}
+
+// consumeTOTPCode verifies totpCode against the user's secret and, on a
+// match, commits the matched time-step via the atomic replay-guard CAS
+// (#2124, RFC 6238 §5.2). consumed is true only when the code both
+// verified and WON the CAS — i.e. a fresh, non-replayed code. A replayed
+// code (the same step re-presented within the ±1-step skew window, or a
+// concurrent racer with an identical code) loses the CAS and returns
+// consumed=false. abort is true on an already-logged infrastructure
+// failure, signalling the caller to reject the request. The CAS also
+// stamps last_used_at, so no separate bump is needed.
+func (api *AuthAPI) consumeTOTPCode(ctx context.Context, user *models.User, row *models.UserMFASecret, totpCode string) (consumed, abort bool) {
+	matchedStep, ok, err := api.mfaService.VerifyTOTPStep(*row, totpCode)
+	if err != nil {
+		slog.Error("MFA verify path: totp check failed", "user_id", user.ID, "error", err)
+		return false, true
+	}
+	if !ok {
+		return false, false
+	}
+	won, casErr := api.mfaRegistry.MarkTOTPStepUsedAtomic(ctx, user.TenantID, user.ID, matchedStep, time.Now())
+	if casErr != nil {
+		slog.Error("MFA verify path: totp step CAS failed", "user_id", user.ID, "error", casErr)
+		return false, true
+	}
+	return won, false
 }
 
 // issueMFAToken signs a short-lived JWT that authorizes the step-2

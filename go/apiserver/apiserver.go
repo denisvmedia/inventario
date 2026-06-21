@@ -160,9 +160,16 @@ func parsePagination(pageStr, perPageStr string) (page, perPage int) {
 }
 
 type Params struct {
-	FactorySet                 *registry.FactorySet
-	EntityService              *services.EntityService
-	UploadLocation             string
+	FactorySet     *registry.FactorySet
+	EntityService  *services.EntityService
+	UploadLocation string
+	// MaxUploadBytes caps the size of a single uploaded file (issue #2101).
+	// The multipart upload path streams the body straight to the blob store
+	// and bypasses the 1 MiB request-body cap in security_middleware.go, so
+	// without this limit one user can exhaust the shared storage. Threaded
+	// into uploadsAPI and enforced in saveFile via http.MaxBytesReader; a
+	// breach renders 413. <= 0 disables the cap (back-compat / opt-out).
+	MaxUploadBytes             int64
 	DebugInfo                  *debug.Info
 	StartTime                  time.Time
 	JWTSecret                  []byte                             // JWT secret for user authentication

@@ -9356,6 +9356,10 @@ paths:
           description: Created
           schema:
             $ref: '#/definitions/jsonapi.FileResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: Unprocessable Entity
           schema:
@@ -9390,6 +9394,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/jsonapi.UploadResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: Unprocessable Entity
           schema:
@@ -10114,7 +10122,8 @@ paths:
         Revoke every refresh token for the authenticated user except the one identified as current.
         Resolution order for the "current" session: `?keep_id=<id>` (recommended; the id the FE
         rendered with `is_current: true` on GET /users/me/sessions) → access token `rti` claim
-        → refresh cookie hash. When none matches, every session is revoked.
+        → refresh cookie hash. When none matches, the request is rejected with 400 (the current
+        session can't be identified, so revoking everything is refused).
       parameters:
       - description: Session id to keep alive (the is_current row from GET /users/me/sessions).
           Optional — when omitted the BE falls back to the access token's rti claim,
@@ -10127,6 +10136,10 @@ paths:
       responses:
         "204":
           description: No Content
+          schema:
+            type: string
+        "400":
+          description: Bad Request
           schema:
             type: string
         "401":

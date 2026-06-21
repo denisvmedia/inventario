@@ -211,19 +211,24 @@ func (api *usersMeAPI) revokeSession(w http.ResponseWriter, r *http.Request) {
 //  3. The refresh cookie's hash, retained for tokens minted before
 //     "rti" landed or for callers that scope their cookie wider.
 //
-// When none of the three produces a match we still revoke everything —
-// the caller has already proven they hold a valid access token, so
-// wiping all sessions is the correct outcome for that (legitimate but
-// rare) shape.
+// When none of the three produces a match we REFUSE the wipe with 400
+// rather than revoking everything (#2126). The endpoint's contract is
+// "revoke all OTHER sessions" — keep the current one — and an inability
+// to identify the current session means we can't honour that contract.
+// The only caller that lands here is an impersonation session (no rti,
+// no tenant refresh cookie); revoking all would leave the impersonated
+// user with no surviving session.
 // @Summary Revoke all other sessions
 // @Description Revoke every refresh token for the authenticated user except the one identified as current.
 // @Description Resolution order for the "current" session: `?keep_id=<id>` (recommended; the id the FE
 // @Description rendered with `is_current: true` on GET /users/me/sessions) → access token `rti` claim
-// @Description → refresh cookie hash. When none matches, every session is revoked.
+// @Description → refresh cookie hash. When none matches, the request is rejected with 400 (the current
+// @Description session can't be identified, so revoking everything is refused).
 // @Tags users-me
 // @Produce json
 // @Param keep_id query string false "Session id to keep alive (the is_current row from GET /users/me/sessions). Optional — when omitted the BE falls back to the access token's rti claim, then the refresh cookie."
 // @Success 204 {string} string "No Content"
+// @Failure 400 {string} string "Bad Request"
 // @Failure 401 {string} string "Unauthorized"
 // @Router /users/me/sessions [delete]
 func (api *usersMeAPI) revokeAllOtherSessions(w http.ResponseWriter, r *http.Request) {
@@ -263,6 +268,20 @@ func (api *usersMeAPI) revokeAllOtherSessions(w http.ResponseWriter, r *http.Req
 				keepID = rt.ID
 			}
 		}
+	}
+
+	// #2126: refuse the full wipe when the current session can't be
+	// identified. This endpoint's contract is "revoke all OTHER sessions"
+	// (keep the current one); if none of ?keep_id=, the access token's rti
+	// claim, or the refresh cookie resolves a row to keep, revoking
+	// everything is never the intent. The only shape that reaches here with
+	// keepID == "" is an impersonation session (no rti, no tenant refresh
+	// cookie) — a normal logged-in user always resolves a keepID via rti or
+	// cookie. Calling RevokeAllExceptID with "" would nuke every refresh
+	// token for the impersonated user, leaving no survivor.
+	if keepID == "" {
+		http.Error(w, "cannot determine the current session to keep; refusing to revoke all sessions", http.StatusBadRequest)
+		return
 	}
 
 	if err := api.refreshTokenRegistry.RevokeAllExceptID(r.Context(), user.ID, keepID); err != nil {

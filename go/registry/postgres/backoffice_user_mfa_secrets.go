@@ -266,3 +266,38 @@ func (r *BackofficeUserMFASecretRegistry) BumpLastUsedAt(ctx context.Context, ba
 		return nil
 	})
 }
+
+// MarkTOTPStepUsedAtomic compare-and-swaps last_used_step to `step` in a
+// single UPDATE guarded by `last_used_step < $step` — the back-office
+// mirror of UserMFASecretRegistry.MarkTOTPStepUsedAtomic. See there for
+// the full replay-guard rationale (#2124). Returns rowsAffected > 0; a
+// lost CAS (zero rows) is reported as (false, nil), the replay signal.
+// last_used_at / updated_at are bumped in the same statement.
+func (r *BackofficeUserMFASecretRegistry) MarkTOTPStepUsedAtomic(ctx context.Context, backofficeUserID string, step int64, now time.Time) (bool, error) {
+	if backofficeUserID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "BackofficeUserID"))
+	}
+
+	won := false
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET last_used_step = $1, last_used_at = $2, updated_at = $3 WHERE backoffice_user_id = $4 AND last_used_step < $1`,
+			r.tableNames.BackofficeUserMFASecrets(),
+		)
+		res, err := tx.ExecContext(ctx, query, step, now, now, backofficeUserID)
+		if err != nil {
+			return errxtrace.Wrap("failed to mark backoffice TOTP step used", err)
+		}
+		affected, raErr := res.RowsAffected()
+		if raErr != nil {
+			return errxtrace.Wrap("failed to read rows affected for backoffice TOTP step CAS", raErr)
+		}
+		won = affected > 0
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return won, nil
+}

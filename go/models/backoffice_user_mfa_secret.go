@@ -59,6 +59,12 @@ type BackofficeUserMFASecret struct {
 	// CLI surfaces it as "Last used" on the disable confirmation prompt.
 	//migrator:schema:field name="last_used_at" type="TIMESTAMP"
 	LastUsedAt *time.Time `json:"last_used_at,omitempty" db:"last_used_at" userinput:"false"`
+	// LastUsedStep is the TOTP time-step counter (unix/30) of the most
+	// recently accepted TOTP code. A presented code whose computed step is
+	// <= this value is a replay within the ±1-step skew window and is
+	// rejected (RFC 6238 §5.2). Bumped atomically on each accepted TOTP.
+	//migrator:schema:field name="last_used_step" type="BIGINT" not_null="true" default="0"
+	LastUsedStep int64 `json:"-" db:"last_used_step" userinput:"false"`
 	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"

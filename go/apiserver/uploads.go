@@ -79,6 +79,11 @@ type uploadsAPI struct {
 	fileSigningService *services.FileSigningService
 	factorySet         *registry.FactorySet
 	thumbnailConfig    services.ThumbnailGenerationConfig
+	// maxUploadBytes caps a single uploaded file (issue #2101). When > 0 the
+	// streaming save wraps the source in http.MaxBytesReader so the TOTAL
+	// bytes (MIME sniff + body) are bounded; a breach surfaces as 413. <= 0
+	// disables the cap (back-compat / opt-out).
+	maxUploadBytes int64
 }
 
 // @Summary Upload a file
@@ -89,6 +94,7 @@ type uploadsAPI struct {
 // @Param groupSlug path string true "Group slug"
 // @Param file formData file true "File to upload"
 // @Success 201 {object} jsonapi.FileResponse "Created"
+// @Failure 413 {object} jsonapi.Errors "Request Entity Too Large"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
 // @Failure 500 {object} jsonapi.Errors "Internal Server Error"
 // @Router /g/{groupSlug}/uploads/file [post]
@@ -209,6 +215,7 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 // @Param groupSlug path string true "Group slug"
 // @Param file formData file true "Signed .inb backup file to upload"
 // @Success 200 {object} jsonapi.UploadResponse "OK"
+// @Failure 413 {object} jsonapi.Errors "Request Entity Too Large"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
 // @Failure 500 {object} jsonapi.Errors "Internal Server Error"
 // @Router /g/{groupSlug}/uploads/restores [post]
@@ -281,11 +288,23 @@ type uploadHTTPError struct {
 func (e *uploadHTTPError) Error() string { return e.err.Error() }
 func (e *uploadHTTPError) Unwrap() error { return e.err }
 
+// isUploadHTTPError reports whether err already carries a chosen HTTP status
+// (an *uploadHTTPError). Used by saveOnePart to pass such errors through
+// untouched rather than rewrapping them into a generic 500.
+func isUploadHTTPError(err error) bool {
+	_, ok := errors.AsType[*uploadHTTPError](err)
+	return ok
+}
+
 func renderUploadError(w http.ResponseWriter, r *http.Request, err error) {
 	if ue, ok := errors.AsType[*uploadHTTPError](err); ok {
 		switch ue.status {
 		case http.StatusUnprocessableEntity:
 			unprocessableEntityError(w, r, ue.err)
+		case http.StatusRequestEntityTooLarge:
+			// #2101: the streamed file exceeded the configured per-file
+			// size cap. Render 413 rather than the generic 500.
+			requestEntityTooLargeError(w, r, ue.err)
 		default:
 			internalServerError(w, r, ue.err)
 		}
@@ -359,6 +378,11 @@ func (api *uploadsAPI) saveOnePart(ctx context.Context, part io.Reader, basename
 			status: http.StatusUnprocessableEntity,
 			err:    errxtrace.Wrap("unsupported content type", err),
 		}
+	case isUploadHTTPError(err):
+		// saveFile already chose the HTTP status (e.g. the #2101 oversize
+		// 413). Pass it through untouched so the dispatch renders that
+		// status instead of rewrapping it into a generic 500.
+		return uploadedFile{}, err
 	case err != nil:
 		return uploadedFile{}, errxtrace.Wrap("unable to save file", err)
 	}
@@ -382,10 +406,29 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 		err = errors.Join(err, fw.Close())
 	}()
 
-	wrappedSrc := mimekit.NewMIMEReader(src, allowedContentTypes)
+	// Cap the source before MIME sniffing so the TOTAL bytes read (the
+	// sniff window + the streamed body) are bounded (issue #2101). The
+	// multipart upload path bypasses the 1 MiB request-body cap in
+	// security_middleware.go, so without this an unbounded io.Copy lets one
+	// user fill the shared blob store. A nil ResponseWriter is supported —
+	// MaxBytesReader only uses it to set the "request too large" connection
+	// flag, which is irrelevant here; on overflow Read returns a
+	// *http.MaxBytesError that we map to 413 below.
+	bodySrc := src
+	if api.maxUploadBytes > 0 {
+		bodySrc = http.MaxBytesReader(nil, io.NopCloser(src), api.maxUploadBytes)
+	}
+
+	wrappedSrc := mimekit.NewMIMEReader(bodySrc, allowedContentTypes)
 
 	written, err := io.Copy(fw, wrappedSrc)
 	if err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return "", 0, &uploadHTTPError{
+				status: http.StatusRequestEntityTooLarge,
+				err:    errxtrace.Classify(errx.NewDisplayable("uploaded file exceeds the maximum allowed size")),
+			}
+		}
 		return "", 0, errxtrace.Wrap("failed when saving the file", err, errx.Attrs("filename", filename))
 	}
 
@@ -399,6 +442,7 @@ func Uploads(params Params) func(r chi.Router) {
 		fileSigningService: services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 		factorySet:         params.FactorySet,
 		thumbnailConfig:    params.ThumbnailConfig,
+		maxUploadBytes:     params.MaxUploadBytes,
 	}
 
 	// Create concurrent upload service for upload limiting

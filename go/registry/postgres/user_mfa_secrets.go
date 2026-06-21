@@ -232,6 +232,50 @@ func (r *UserMFASecretRegistry) ConsumeBackupCodeAtomic(
 	return consumed, nil
 }
 
+// MarkTOTPStepUsedAtomic compare-and-swaps last_used_step to `step` in a
+// single UPDATE guarded by `last_used_step < $step`. The CAS is what
+// makes the TOTP replay guard atomic (#2124): two concurrent step-2
+// requests presenting the SAME code compute the SAME step S, but only
+// the first UPDATE finds last_used_step < S and affects a row — the
+// second affects zero rows and loses. Returns rowsAffected > 0.
+//
+// A single statement (no SELECT … FOR UPDATE) is sufficient because the
+// row-level write lock Postgres takes for the UPDATE serialises the two
+// racers and the WHERE predicate is evaluated against the locked row's
+// committed value. last_used_at / updated_at are bumped in the same
+// statement so the TOTP success path needs no separate BumpLastUsedAt.
+func (r *UserMFASecretRegistry) MarkTOTPStepUsedAtomic(ctx context.Context, tenantID, userID string, step int64, now time.Time) (bool, error) {
+	if tenantID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	if userID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+
+	won := false
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET last_used_step = $1, last_used_at = $2, updated_at = $3 WHERE tenant_id = $4 AND user_id = $5 AND last_used_step < $1`,
+			r.tableNames.UserMFASecrets(),
+		)
+		res, err := tx.ExecContext(ctx, query, step, now, now, tenantID, userID)
+		if err != nil {
+			return errxtrace.Wrap("failed to mark user TOTP step used", err)
+		}
+		affected, raErr := res.RowsAffected()
+		if raErr != nil {
+			return errxtrace.Wrap("failed to read rows affected for user TOTP step CAS", raErr)
+		}
+		won = affected > 0
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return won, nil
+}
+
 // DeleteByUser removes the user's MFA row idempotently — a missing row
 // is not an error, since the disable flow is a no-op for non-enrolled users.
 func (r *UserMFASecretRegistry) DeleteByUser(ctx context.Context, tenantID, userID string) error {

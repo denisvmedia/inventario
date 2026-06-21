@@ -233,6 +233,19 @@ func unprocessableEntityError(w http.ResponseWriter, r *http.Request, err error)
 	return render.Render(w, r, jsonapi.NewErrors(NewUnprocessableEntityError(err)))
 }
 
+// requestEntityTooLargeError renders a 413 Payload Too Large with the
+// JSON:API envelope. Used by the upload path (#2101) when a streamed file
+// exceeds the configured per-file size cap.
+func requestEntityTooLargeError(w http.ResponseWriter, r *http.Request, err error) error {
+	jsErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusRequestEntityTooLarge,
+		StatusText:     "Request Entity Too Large",
+	}
+	return render.Render(w, r, jsonapi.NewErrors(jsErr))
+}
+
 // adminBlockGuardError maps the two #1747 admin-block guard sentinels
 // (self-block, admin-on-admin without force) to their 422 + code wire
 // shape. Extracted so the toJSONAPIError switch stays under the

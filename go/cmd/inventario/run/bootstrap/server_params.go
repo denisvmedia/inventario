@@ -62,6 +62,7 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 	params := apiserver.Params{
 		FactorySet:     factorySet,
 		UploadLocation: cfg.UploadLocation,
+		MaxUploadBytes: cfg.MaxUploadBytes,
 		StartTime:      time.Now(),
 	}
 	params.EntityService = services.NewEntityService(factorySet, params.UploadLocation)

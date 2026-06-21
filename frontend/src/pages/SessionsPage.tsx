@@ -50,6 +50,13 @@ export function SessionsPage() {
   // is still undefined and the deps trip exhaustive-deps.
   const sessions = useMemo(() => sessionsQuery.data?.sessions ?? [], [sessionsQuery.data?.sessions])
   const otherSessionsCount = useMemo(() => sessions.filter((s) => !s.is_current).length, [sessions])
+  // The "Sign out all other sessions" CTA must keep the current session
+  // alive, so it only makes sense when exactly that row is identifiable.
+  // During impersonation no row is flagged `is_current` (the imp session
+  // has no rti claim and no tenant refresh cookie), and firing the CTA
+  // would resolve a keep-id of undefined and wipe EVERY session for the
+  // impersonated user (#2126). Gate the CTA on a current session existing.
+  const hasCurrentSession = useMemo(() => sessions.some((s) => s.is_current), [sessions])
 
   const confirmRevoke = (session: SessionView) => setPendingRevoke(session)
 
@@ -76,6 +83,14 @@ export function SessionsPage() {
     // isn't sent on this route (issue surfaced via the
     // sessions-and-login-history e2e cleanup branch).
     const currentSessionId = sessions.find((s) => s.is_current)?.id
+    // No current session means we can't keep one alive — firing here
+    // would wipe EVERY session (#2126, the impersonation case). The CTA
+    // is already hidden in this state; this is the belt-and-suspenders
+    // no-op so the mutation is never called with an undefined keep-id.
+    if (!currentSessionId) {
+      setRevokeAllOpen(false)
+      return
+    }
     revokeAllOthersMutation.mutate(currentSessionId, {
       onSuccess: () => {
         toast.success(t("settings:sessions.toasts.allRevoked"))
@@ -106,7 +121,7 @@ export function SessionsPage() {
           }
         />
 
-        {otherSessionsCount > 0 ? (
+        {otherSessionsCount > 0 && hasCurrentSession ? (
           <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-3">
               <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">

@@ -2063,6 +2063,21 @@ type UserMFASecretRegistry interface {
 	// classified error on infrastructure failure. Updates LastUsedAt
 	// to `now` on a successful consumption alongside the slice rewrite.
 	ConsumeBackupCodeAtomic(ctx context.Context, tenantID, userID string, now time.Time, matchHash func(hash string) bool) (bool, error)
+
+	// MarkTOTPStepUsedAtomic compare-and-swaps the row's last_used_step
+	// to `step`, succeeding only when the stored last_used_step is
+	// strictly less than `step`. This is the TOTP replay guard
+	// (RFC 6238 §5.2, #2124): a code's time-step is monotonic, so once a
+	// step has been accepted, re-presenting the same code (which computes
+	// the same step) loses the CAS and is rejected. Two concurrent step-2
+	// requests with the same code compute the same step S; only the first
+	// UPDATE (last_used_step < S) affects a row — the second affects zero
+	// rows and the caller treats it as a replay. Returns (true, nil) when
+	// this call won the swap, (false, nil) when it lost (replay), and a
+	// classified error on infrastructure failure. Also stamps LastUsedAt
+	// and UpdatedAt to `now` on a win, so the TOTP success path needs no
+	// separate last-used bump.
+	MarkTOTPStepUsedAtomic(ctx context.Context, tenantID, userID string, step int64, now time.Time) (bool, error)
 }
 
 // BackofficeUserMFASecretRegistry stores per-back-office-user TOTP
@@ -2114,6 +2129,17 @@ type BackofficeUserMFASecretRegistry interface {
 	// successful TOTP verification (the backup-code path bumps it
 	// inside ConsumeBackupCodeAtomic). Used by the login MFA handler.
 	BumpLastUsedAt(ctx context.Context, backofficeUserID string, now time.Time) error
+
+	// MarkTOTPStepUsedAtomic compare-and-swaps the row's last_used_step
+	// to `step`, succeeding only when the stored last_used_step is
+	// strictly less than `step`. The back-office mirror of
+	// UserMFASecretRegistry.MarkTOTPStepUsedAtomic — see there for the
+	// full replay-guard rationale (RFC 6238 §5.2, #2124). Returns
+	// (true, nil) when this call won the swap, (false, nil) when it lost
+	// (replay), and a classified error on infrastructure failure. Also
+	// stamps LastUsedAt and UpdatedAt to `now` on a win, so the TOTP
+	// success path needs no separate BumpLastUsedAt call.
+	MarkTOTPStepUsedAtomic(ctx context.Context, backofficeUserID string, step int64, now time.Time) (bool, error)
 }
 
 // GroupPurger hard-deletes every row whose group_id references the given
