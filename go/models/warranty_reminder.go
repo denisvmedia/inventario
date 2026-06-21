@@ -128,7 +128,7 @@ func (w *WarrantyReminder) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&w.CommodityID, rules.NotEmpty),
 		validation.Field(&w.ThresholdDays, validation.Required, validation.By(func(any) error {
 			if !WarrantyReminderThreshold(w.ThresholdDays).IsValid() {
-				return validation.NewError("invalid_threshold", "invalid warranty reminder threshold")
+				return validation.NewError("invalid_warranty_threshold", "invalid warranty reminder threshold")
 			}
 			return nil
 		})),

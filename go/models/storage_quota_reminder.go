@@ -119,7 +119,7 @@ func (s *StorageQuotaReminder) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.TenantGroupAwareEntityID),
 		validation.Field(&s.ThresholdPercent, validation.Required, validation.By(func(any) error {
 			if !StorageQuotaThreshold(s.ThresholdPercent).IsValid() {
-				return validation.NewError("invalid_threshold", "invalid storage quota reminder threshold")
+				return validation.NewError("invalid_storage_quota_threshold", "invalid storage quota reminder threshold")
 			}
 			return nil
 		})),
