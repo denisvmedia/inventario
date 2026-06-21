@@ -3,6 +3,7 @@ package smtp
 import (
 	"bufio"
 	"context"
+	"mime"
 	"net"
 	"strconv"
 	"strings"
@@ -152,4 +153,55 @@ func TestSender_Send(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for SMTP DATA payload")
 	}
+}
+
+// #2139: non-ASCII (cs/ru) subjects must be RFC 2047 encoded-words so mail
+// clients render them correctly instead of garbling raw UTF-8.
+func TestBuildMIMEMessage_EncodesNonASCIISubject(t *testing.T) {
+	c := qt.New(t)
+	raw := string(buildMIMEMessage(sender.Message{
+		From:    "Inventario <noreply@example.com>",
+		To:      "user@example.com",
+		Subject: "Подтвердите свою учётную запись Inventario",
+		Text:    "text",
+		HTML:    "<p>html</p>",
+	}))
+	subject := mimeHeaderValue(c, raw, "Subject")
+	// Raw Cyrillic must NOT appear unencoded in the header...
+	c.Assert(strings.Contains(subject, "Подтвердите"), qt.IsFalse)
+	c.Assert(strings.HasPrefix(subject, "=?utf-8?"), qt.IsTrue)
+	// ...and the encoded-word decodes back to the original.
+	decoded, err := new(mime.WordDecoder).DecodeHeader(subject)
+	c.Assert(err, qt.IsNil)
+	c.Assert(decoded, qt.Equals, "Подтвердите свою учётную запись Inventario")
+}
+
+// #2139: a CRLF embedded in a header value (e.g. a commodity name in the
+// Subject) must not be able to inject additional headers.
+func TestBuildMIMEMessage_StripsHeaderInjection(t *testing.T) {
+	c := qt.New(t)
+	raw := string(buildMIMEMessage(sender.Message{
+		From:    "noreply@example.com",
+		To:      "user@example.com",
+		Subject: "Hello\r\nBcc: attacker@example.com",
+		Text:    "text",
+		HTML:    "<p>html</p>",
+	}))
+	// No injected Bcc header line is created.
+	c.Assert(strings.Contains(raw, "\r\nBcc:"), qt.IsFalse)
+	// Everything collapses onto the single Subject line.
+	c.Assert(mimeHeaderValue(c, raw, "Subject"), qt.Equals, "HelloBcc: attacker@example.com")
+}
+
+// mimeHeaderValue returns the value of the first `key: ` header in the
+// header block (everything before the first blank line) of a raw message.
+func mimeHeaderValue(c *qt.C, raw, key string) string {
+	headers, _, ok := strings.Cut(raw, "\r\n\r\n")
+	c.Assert(ok, qt.IsTrue)
+	for line := range strings.SplitSeq(headers, "\r\n") {
+		if v, found := strings.CutPrefix(line, key+": "); found {
+			return v
+		}
+	}
+	return ""
 }
