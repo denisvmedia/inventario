@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"mime"
 	"net"
 	stdsmtp "net/smtp"
 	"strconv"
@@ -136,11 +137,14 @@ func buildMIMEMessage(message sender.Message) []byte {
 	boundary := fmt.Sprintf("inventario-%d", time.Now().UnixNano())
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "From: %s\r\n", message.From)
-	fmt.Fprintf(&b, "To: %s\r\n", message.To)
-	fmt.Fprintf(&b, "Subject: %s\r\n", message.Subject)
+	fmt.Fprintf(&b, "From: %s\r\n", sanitizeHeader(message.From))
+	fmt.Fprintf(&b, "To: %s\r\n", sanitizeHeader(message.To))
+	// RFC 2047-encode the Subject so non-ASCII (cs/ru) subjects render
+	// correctly in mail clients; encodeSubject never emits a raw CRLF, so
+	// this also closes the header-injection vector for the Subject. #2139
+	fmt.Fprintf(&b, "Subject: %s\r\n", encodeSubject(sanitizeHeader(message.Subject)))
 	if strings.TrimSpace(message.ReplyTo) != "" {
-		fmt.Fprintf(&b, "Reply-To: %s\r\n", message.ReplyTo)
+		fmt.Fprintf(&b, "Reply-To: %s\r\n", sanitizeHeader(message.ReplyTo))
 	}
 	b.WriteString("MIME-Version: 1.0\r\n")
 	fmt.Fprintf(&b, "Content-Type: multipart/alternative; boundary=%q\r\n", boundary)
@@ -160,4 +164,31 @@ func buildMIMEMessage(message sender.Message) []byte {
 
 	fmt.Fprintf(&b, "--%s--\r\n", boundary)
 	return []byte(b.String())
+}
+
+// headerSanitizer strips CR and LF from header values. A Replacer is
+// concurrency-safe and reusable, so it is built once rather than per call.
+var headerSanitizer = strings.NewReplacer("\r", "", "\n", "")
+
+// sanitizeHeader strips CR and LF from a header value so user-influenced
+// data (e.g. a commodity name interpolated into the Subject) can't inject
+// additional headers or message body. RFC 5322 header field values are
+// single-line. #2139
+func sanitizeHeader(v string) string {
+	return headerSanitizer.Replace(v)
+}
+
+// encodeSubject RFC 2047-encodes a Subject for the header. Pure-ASCII
+// subjects pass through unchanged (both encoders do this); for non-ASCII it
+// picks the shorter of Q- and B-encoding — Q wins when only a few runes
+// need escaping, B (base64) when most do (e.g. Cyrillic), which roughly
+// halves a Russian subject. The shorter encoded-word also leaves more
+// headroom under the RFC 5322 line-length limit. #2139
+func encodeSubject(s string) string {
+	q := mime.QEncoding.Encode("UTF-8", s)
+	b := mime.BEncoding.Encode("UTF-8", s)
+	if len(b) < len(q) {
+		return b
+	}
+	return q
 }

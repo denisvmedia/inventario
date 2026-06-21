@@ -3,7 +3,9 @@ package smtp
 import (
 	"bufio"
 	"context"
+	"mime"
 	"net"
+	"net/mail"
 	"strconv"
 	"strings"
 	"testing"
@@ -152,4 +154,102 @@ func TestSender_Send(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for SMTP DATA payload")
 	}
+}
+
+// #2139: non-ASCII (cs/ru) subjects must be RFC 2047 encoded-words so mail
+// clients render them correctly instead of garbling raw UTF-8.
+func TestBuildMIMEMessage_EncodesNonASCIISubject(t *testing.T) {
+	c := qt.New(t)
+	raw := string(buildMIMEMessage(sender.Message{
+		From:    "Inventario <noreply@example.com>",
+		To:      "user@example.com",
+		Subject: "Подтвердите свою учётную запись Inventario",
+		Text:    "text",
+		HTML:    "<p>html</p>",
+	}))
+	subject := mimeHeaderValue(c, raw, "Subject")
+	// Raw Cyrillic must NOT appear unencoded in the header...
+	c.Assert(subject, qt.Not(qt.Contains), "Подтвердите")
+	c.Assert(strings.HasPrefix(subject, "=?UTF-8?"), qt.IsTrue)
+	// ...and the encoded-word decodes back to the original.
+	decoded, err := new(mime.WordDecoder).DecodeHeader(subject)
+	c.Assert(err, qt.IsNil)
+	c.Assert(decoded, qt.Equals, "Подтвердите свою учётную запись Inventario")
+}
+
+// #2139: a CRLF embedded in a header value (e.g. a commodity name in the
+// Subject) must not be able to inject additional headers.
+func TestBuildMIMEMessage_StripsHeaderInjection(t *testing.T) {
+	c := qt.New(t)
+	raw := string(buildMIMEMessage(sender.Message{
+		From:    "noreply@example.com",
+		To:      "user@example.com",
+		Subject: "Hello\r\nBcc: attacker@example.com",
+		Text:    "text",
+		HTML:    "<p>html</p>",
+	}))
+	// No injected Bcc header line is created.
+	c.Assert(raw, qt.Not(qt.Contains), "\r\nBcc:")
+	// Everything collapses onto the single Subject line.
+	c.Assert(mimeHeaderValue(c, raw, "Subject"), qt.Equals, "HelloBcc: attacker@example.com")
+}
+
+// #2139: encodeSubject leaves pure-ASCII subjects untouched and, for
+// non-ASCII, emits the shorter of Q- and B-encoding (base64 wins for heavy
+// Cyrillic — roughly halving the Russian subject, leaving more headroom
+// under the RFC 5322 line limit, see #2142). The result must round-trip.
+func TestEncodeSubject_PicksCompactEncoding(t *testing.T) {
+	c := qt.New(t)
+	// Pure ASCII passes through untouched (en subjects stay readable).
+	c.Assert(encodeSubject("Welcome to Inventario"), qt.Equals, "Welcome to Inventario")
+
+	for _, s := range []string{
+		"Ověřte svůj účet Inventario",                // Czech
+		"Подтвердите свою учётную запись Inventario", // Russian
+	} {
+		got := encodeSubject(s)
+		c.Assert(strings.HasPrefix(got, "=?UTF-8?"), qt.IsTrue, qt.Commentf("got %q", got))
+		decoded, err := new(mime.WordDecoder).DecodeHeader(got)
+		c.Assert(err, qt.IsNil)
+		c.Assert(decoded, qt.Equals, s)
+		// The shorter of Q-/B-encoding was chosen.
+		c.Assert(len(got) <= len(mime.QEncoding.Encode("UTF-8", s)), qt.IsTrue)
+		c.Assert(len(got) <= len(mime.BEncoding.Encode("UTF-8", s)), qt.IsTrue)
+	}
+}
+
+// #2139: the assembled message must be a well-formed email — net/mail's
+// parser accepts it and the encoded non-ASCII Subject decodes back. This
+// guards the whole MIME structure (header block, boundary), not just one
+// header.
+func TestBuildMIMEMessage_ParsesAsValidEmail(t *testing.T) {
+	c := qt.New(t)
+	raw := buildMIMEMessage(sender.Message{
+		From:    "Inventario <noreply@example.com>",
+		To:      "user@example.com",
+		ReplyTo: "support@example.com",
+		Subject: "Подтвердите свою учётную запись Inventario",
+		Text:    "text",
+		HTML:    "<p>html</p>",
+	})
+	msg, err := mail.ReadMessage(strings.NewReader(string(raw)))
+	c.Assert(err, qt.IsNil)
+	c.Assert(msg.Header.Get("To"), qt.Equals, "user@example.com")
+	c.Assert(msg.Header.Get("Reply-To"), qt.Equals, "support@example.com")
+	decoded, err := new(mime.WordDecoder).DecodeHeader(msg.Header.Get("Subject"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(decoded, qt.Equals, "Подтвердите свою учётную запись Inventario")
+}
+
+// mimeHeaderValue returns the value of the first `key: ` header in the
+// header block (everything before the first blank line) of a raw message.
+func mimeHeaderValue(c *qt.C, raw, key string) string {
+	headers, _, ok := strings.Cut(raw, "\r\n\r\n")
+	c.Assert(ok, qt.IsTrue)
+	for line := range strings.SplitSeq(headers, "\r\n") {
+		if v, found := strings.CutPrefix(line, key+": "); found {
+			return v
+		}
+	}
+	return ""
 }
