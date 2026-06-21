@@ -11,6 +11,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jellydator/validation"
 
+	"github.com/denisvmedia/inventario/internal/checkers"
 	"github.com/denisvmedia/inventario/internal/errormarshal"
 )
 
@@ -276,27 +277,17 @@ func TestMarshal_ValidationErrorsEmitsCodeTree(t *testing.T) {
 		},
 	}
 
-	raw := errormarshal.Marshal(verrs)
-	var env struct {
-		Error      map[string]any `json:"error"`
-		ErrorCodes map[string]any `json:"errorCodes"`
-		Type       string         `json:"type"`
-	}
-	c.Assert(json.Unmarshal(raw, &env), qt.IsNil)
+	raw := []byte(errormarshal.Marshal(verrs))
 
 	// Message tree unchanged (backward-compatible): rendered English strings.
-	attrsMsg := env.Error["data"].(map[string]any)["attributes"].(map[string]any)
-	c.Assert(attrsMsg["name"], qt.Equals, "cannot be blank")
-	c.Assert(attrsMsg["short"], qt.Equals, "the length must be between 2 and 50")
+	c.Assert(raw, checkers.JSONPathEquals("$.error.data.attributes.name"), "cannot be blank")
+	c.Assert(raw, checkers.JSONPathEquals("$.error.data.attributes.short"), "the length must be between 2 and 50")
 
-	// Parallel code tree: stable code + params per field.
-	attrsCode := env.ErrorCodes["data"].(map[string]any)["attributes"].(map[string]any)
-	c.Assert(attrsCode["name"].(map[string]any)["code"], qt.Equals, "validation_required")
-	short := attrsCode["short"].(map[string]any)
-	c.Assert(short["code"], qt.Equals, "validation_length_out_of_range")
-	c.Assert(short["params"].(map[string]any)["max"], qt.Equals, float64(50))
+	// Parallel code tree: stable code + interpolation params per field.
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.name.code"), "validation_required")
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.short.code"), "validation_length_out_of_range")
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.short.params.max"), float64(50))
 	// Plain (codeless) errors keep an empty code + the message for FE fallback.
-	rawLeaf := attrsCode["raw"].(map[string]any)
-	c.Assert(rawLeaf["code"], qt.Equals, "")
-	c.Assert(rawLeaf["message"], qt.Equals, "ID field not allowed in create requests")
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.raw.code"), "")
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.raw.message"), "ID field not allowed in create requests")
 }
