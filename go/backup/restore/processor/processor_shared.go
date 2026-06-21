@@ -55,7 +55,7 @@ func NewRestoreOperationProcessor(restoreOperationID string, factorySet *registr
 		tagService:            services.NewTagService(factorySet),
 		uploadLocation:        uploadLocation,
 		signer:                signer,
-		securityValidator:     security.NewRestoreSecurityValidator(factorySet, logger),
+		securityValidator:     security.NewRestoreSecurityValidator(logger),
 		importSessionEntities: make(map[string]bool),
 	}
 }
