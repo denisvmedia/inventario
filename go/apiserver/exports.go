@@ -16,6 +16,7 @@ import (
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/export"
+	"github.com/denisvmedia/inventario/internal/blobkeys"
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -445,15 +446,30 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create export record with pending status and source file path
-	importedExport := models.NewImportedExport(data.Data.Attributes.Description, data.Data.Attributes.SourceFilePath)
-
 	// Extract user from authenticated request context
 	user := GetUserFromRequest(r)
 	if user == nil {
 		http.Error(w, "User context required", http.StatusInternalServerError)
 		return
 	}
+
+	// The import worker reads the source blob key WITHOUT RLS, and a signed
+	// `.inb` archive is verified against a tenant-AGNOSTIC server key. Reject a
+	// SourceFilePath that points outside the caller's own tenant namespace so a
+	// user cannot import another tenant's backup (cross-tenant exfiltration).
+	// A legitimate restore upload is keyed `t/<callerTenant>/restores/...` (see
+	// blobkeys.BuildRestoreUploadKey), so this passes for real flows. Guard the
+	// empty-tenant case explicitly — TenantPrefix("") is "", which would make
+	// HasPrefix vacuously true and defeat the check.
+	src := data.Data.Attributes.SourceFilePath
+	prefix := blobkeys.TenantPrefix(user.TenantID)
+	if prefix == "" || !strings.HasPrefix(src, prefix) {
+		unprocessableEntityError(w, r, errImportSourceForeignTenant)
+		return
+	}
+
+	// Create export record with pending status and source file path
+	importedExport := models.NewImportedExport(data.Data.Attributes.Description, src)
 
 	if importedExport.TenantID == "" {
 		importedExport.TenantID = user.TenantID

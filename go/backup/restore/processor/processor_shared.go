@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -15,6 +16,7 @@ import (
 	"github.com/denisvmedia/inventario/backup/restore/security"
 	"github.com/denisvmedia/inventario/backup/restore/types"
 	"github.com/denisvmedia/inventario/internal/backupsign"
+	"github.com/denisvmedia/inventario/internal/blobkeys"
 	"github.com/denisvmedia/inventario/internal/validationctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -55,7 +57,7 @@ func NewRestoreOperationProcessor(restoreOperationID string, factorySet *registr
 		tagService:            services.NewTagService(factorySet),
 		uploadLocation:        uploadLocation,
 		signer:                signer,
-		securityValidator:     security.NewRestoreSecurityValidator(factorySet, logger),
+		securityValidator:     security.NewRestoreSecurityValidator(logger),
 		importSessionEntities: make(map[string]bool),
 	}
 }
@@ -103,6 +105,19 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 	}
 
 	l.createRestoreStep(ctx, "Initializing restore", models.RestoreStepResultInProgress, "")
+
+	// Defense-in-depth: the restore worker reads the export's blob key WITHOUT
+	// RLS, and an `.inb` archive is signed against a tenant-AGNOSTIC server key.
+	// Refuse a FilePath that lives outside the export's own tenant namespace
+	// before opening it, so a row whose FilePath was somehow set to another
+	// tenant's key cannot exfiltrate that tenant's data. An empty tenant yields
+	// an empty prefix — guard it explicitly so HasPrefix can't pass vacuously.
+	prefix := blobkeys.TenantPrefix(export.TenantID)
+	if prefix == "" || !strings.HasPrefix(export.FilePath, prefix) {
+		return l.markRestoreFailed(ctx,
+			errx.NewSentinel("export file path is outside the export's tenant namespace"),
+			"failed to open export file")
+	}
 
 	b, err := blob.OpenBucket(ctx, l.uploadLocation)
 	if err != nil {

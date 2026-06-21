@@ -32,7 +32,7 @@ func TestImportService_ProcessImport_ExportNotFound(t *testing.T) {
 	service := importpkg.NewImportService(factorySet, uploadLocation, nil)
 	ctx := context.Background()
 
-	err := service.ProcessImport(ctx, "non-existent-id", "test-file.xml")
+	err := service.ProcessImport(ctx, "non-existent-id", "t/test-tenant/restores/test-file.xml")
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "not found")
 }
@@ -48,14 +48,15 @@ func TestImportService_ProcessImport_BlobBucketError(t *testing.T) {
 
 	// Create a test export
 	export := models.Export{
-		Type:        models.ExportTypeImported,
-		Status:      models.ExportStatusPending,
-		Description: "Test import",
+		Type:                     models.ExportTypeImported,
+		Status:                   models.ExportStatusPending,
+		Description:              "Test import",
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "test-tenant"},
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
 
-	err = service.ProcessImport(ctx, createdExport.ID, "test-file.xml")
+	err = service.ProcessImport(ctx, createdExport.ID, "t/test-tenant/restores/test-file.xml")
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "failed to open blob bucket")
 
@@ -76,14 +77,15 @@ func TestImportService_ProcessImport_FileNotFound(t *testing.T) {
 
 	// Create a test export
 	export := models.Export{
-		Type:        models.ExportTypeImported,
-		Status:      models.ExportStatusPending,
-		Description: "Test import",
+		Type:                     models.ExportTypeImported,
+		Status:                   models.ExportStatusPending,
+		Description:              "Test import",
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "test-tenant"},
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
 
-	err = service.ProcessImport(ctx, createdExport.ID, "non-existent-file.xml")
+	err = service.ProcessImport(ctx, createdExport.ID, "t/test-tenant/restores/non-existent-file.xml")
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "failed to open uploaded backup file")
 
@@ -111,16 +113,17 @@ func TestImportService_ProcessImport_InvalidXML(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	invalidXML := "not valid xml at all <unclosed tag"
-	filePath := "invalid.xml"
+	filePath := "t/test-tenant/restores/invalid.xml"
 	err = b.WriteAll(ctx, filePath, []byte(invalidXML), nil)
 	c.Assert(err, qt.IsNil)
 	b.Close()
 
 	// Create a test export
 	export := models.Export{
-		Type:        models.ExportTypeImported,
-		Status:      models.ExportStatusPending,
-		Description: "Test import",
+		Type:                     models.ExportTypeImported,
+		Status:                   models.ExportStatusPending,
+		Description:              "Test import",
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "test-tenant"},
 	}
 	createdExport, err := registrySet.ExportRegistry.Create(ctx, export)
 	c.Assert(err, qt.IsNil)
@@ -163,7 +166,7 @@ func TestImportService_ProcessImport_Success(t *testing.T) {
 		</commodity>
 	</commodities>
 </inventory>`
-	filePath := "valid.xml"
+	filePath := "t/test-tenant/restores/valid.xml"
 	err = b.WriteAll(ctx, filePath, []byte(validXML), nil)
 	c.Assert(err, qt.IsNil)
 	b.Close()
@@ -242,7 +245,7 @@ func TestImportService_ProcessImport_SuccessWithFileData(t *testing.T) {
 		</commodity>
 	</commodities>
 </inventory>`
-	filePath := "with-files.xml"
+	filePath := "t/test-tenant/restores/with-files.xml"
 	err = b.WriteAll(ctx, filePath, []byte(xmlWithFiles), nil)
 	c.Assert(err, qt.IsNil)
 	b.Close()

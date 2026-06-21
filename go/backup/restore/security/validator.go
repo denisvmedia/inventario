@@ -3,13 +3,8 @@ package security
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"slices"
 	"time"
-
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/registry"
 )
 
 // Package-level errors
@@ -18,11 +13,11 @@ var (
 	ErrOwnershipViolation = errors.New("commodity belongs to a different user")
 )
 
-// SecurityValidator defines the interface for security validation during restore operations
+// SecurityValidator is the audit-logging surface for restore operations: it
+// records unauthorized entity-access attempts. Ownership and import scope are
+// enforced by the RLS layer and the restore processor
+// (validateCommodityOwnershipInDB), not here — this interface only logs.
 type SecurityValidator interface {
-	ValidateEntityOwnership(ctx context.Context, entityID string, userID string) error
-	ValidateRelationshipIntegrity(ctx context.Context, fileType string, parentEntityType string) error
-	ValidateImportScope(ctx context.Context, entityID string, importSession string, sessionEntities map[string]bool) error
 	LogUnauthorizedAttempt(ctx context.Context, attempt UnauthorizedAttempt)
 }
 
@@ -37,130 +32,21 @@ type UnauthorizedAttempt struct {
 	RequestDetails map[string]any
 }
 
-// RestoreSecurityValidator implements SecurityValidator for restore operations
+// RestoreSecurityValidator is the slog-backed SecurityValidator the restore
+// processor uses to record unauthorized-access attempts.
 type RestoreSecurityValidator struct {
-	factorySet *registry.FactorySet
-	logger     *slog.Logger
+	logger *slog.Logger
 }
 
 // NewRestoreSecurityValidator creates a new RestoreSecurityValidator
-func NewRestoreSecurityValidator(factorySet *registry.FactorySet, logger *slog.Logger) *RestoreSecurityValidator {
+func NewRestoreSecurityValidator(logger *slog.Logger) *RestoreSecurityValidator {
 	return &RestoreSecurityValidator{
-		factorySet: factorySet,
-		logger:     logger,
+		logger: logger,
 	}
-}
-
-// ValidateEntityOwnership validates that the current user owns the specified entity
-func (v *RestoreSecurityValidator) ValidateEntityOwnership(ctx context.Context, entityID string, userID string) error {
-	// Use service account registries to bypass user filtering and see all entities
-	commodityRegistry := v.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
-	areaRegistry := v.factorySet.AreaRegistryFactory.CreateServiceRegistry()
-	locationRegistry := v.factorySet.LocationRegistryFactory.CreateServiceRegistry()
-
-	// Check commodity ownership
-	if commodity, err := commodityRegistry.Get(ctx, entityID); err == nil {
-		if commodity.CreatedByUserID != userID {
-			v.LogUnauthorizedAttempt(ctx, UnauthorizedAttempt{
-				UserID:         userID,
-				TargetEntityID: entityID,
-				EntityType:     "commodity",
-				Operation:      "restore_link_files",
-				AttemptType:    "cross_user_access",
-				Timestamp:      time.Now(),
-			})
-			return errors.New("unauthorized: cannot link to entity owned by different user")
-		}
-		return nil
-	}
-
-	// Check area ownership
-	if area, err := areaRegistry.Get(ctx, entityID); err == nil {
-		if area.CreatedByUserID != userID {
-			v.LogUnauthorizedAttempt(ctx, UnauthorizedAttempt{
-				UserID:         userID,
-				TargetEntityID: entityID,
-				EntityType:     "area",
-				Operation:      "restore_link_files",
-				AttemptType:    "cross_user_access",
-				Timestamp:      time.Now(),
-			})
-			return errors.New("unauthorized: cannot link to entity owned by different user")
-		}
-		return nil
-	}
-
-	// Check location ownership
-	if location, err := locationRegistry.Get(ctx, entityID); err == nil {
-		if location.CreatedByUserID != userID {
-			v.LogUnauthorizedAttempt(ctx, UnauthorizedAttempt{
-				UserID:         userID,
-				TargetEntityID: entityID,
-				EntityType:     "location",
-				Operation:      "restore_link_files",
-				AttemptType:    "cross_user_access",
-				Timestamp:      time.Now(),
-			})
-			return errors.New("unauthorized: cannot link to entity owned by different user")
-		}
-		return nil
-	}
-
-	// Entity not found - log the attempt but allow file upload (will be orphaned)
-	v.LogUnauthorizedAttempt(ctx, UnauthorizedAttempt{
-		UserID:         userID,
-		TargetEntityID: entityID,
-		EntityType:     "unknown",
-		Operation:      "restore_link_files",
-		AttemptType:    "non_existent_entity_access",
-		Timestamp:      time.Now(),
-	})
-	return errors.New("entity not found: file will be uploaded as orphaned")
-}
-
-// ValidateRelationshipIntegrity validates that file types can be linked to appropriate entity types
-func (v *RestoreSecurityValidator) ValidateRelationshipIntegrity(ctx context.Context, fileType string, parentEntityType string) error {
-	allowedRelationships := map[string][]string{
-		"invoice": {"commodity"},
-		"image":   {"commodity"},
-		"manual":  {"commodity"},
-	}
-
-	allowedParents, exists := allowedRelationships[fileType]
-	if !exists {
-		return fmt.Errorf("unknown file type: %s", fileType)
-	}
-
-	if slices.Contains(allowedParents, parentEntityType) {
-		return nil // Valid relationship
-	}
-
-	return fmt.Errorf("invalid relationship: %s files cannot be linked to %s entities", fileType, parentEntityType)
-}
-
-// ValidateImportScope validates that entities being linked are within the import scope
-func (v *RestoreSecurityValidator) ValidateImportScope(ctx context.Context, entityID string, importSession string, sessionEntities map[string]bool) error {
-	// Check if entity was created in this import session
-	if sessionEntities[entityID] {
-		return nil // OK - entity created in this import
-	}
-
-	// Check if user already owns this entity
-	currentUser := appctx.UserFromContext(ctx)
-	if currentUser == nil {
-		return ErrNoUserContext
-	}
-
-	err := v.ValidateEntityOwnership(ctx, entityID, currentUser.ID)
-	if err != nil {
-		return fmt.Errorf("unauthorized: cannot link to entity outside import scope: %w", err)
-	}
-
-	return nil // OK - user owns existing entity
 }
 
 // LogUnauthorizedAttempt logs details about unauthorized access attempts
-func (v *RestoreSecurityValidator) LogUnauthorizedAttempt(ctx context.Context, attempt UnauthorizedAttempt) {
+func (v *RestoreSecurityValidator) LogUnauthorizedAttempt(_ context.Context, attempt UnauthorizedAttempt) {
 	v.logger.Warn("Unauthorized entity access attempt",
 		"user_id", attempt.UserID,
 		"target_entity_id", attempt.TargetEntityID,
