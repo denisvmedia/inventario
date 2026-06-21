@@ -447,6 +447,45 @@ func (r *CurrencyMigrationRegistry) ListAuditRows(ctx context.Context, migration
 	return rows, nil
 }
 
+// DeleteAuditRowsByGroup removes every audit row for the given (tenant,
+// group). The audit rows only cascade from the migration row
+// (currency_migration_audit_rows.migration_id ON DELETE CASCADE), not
+// from the group (group_id is NO ACTION), so the group-deletion cleanup
+// path must clear them explicitly. Idempotent: a parameterized DELETE
+// that matches zero rows returns (0, nil).
+func (r *CurrencyMigrationRegistry) DeleteAuditRowsByGroup(ctx context.Context, tenantID, groupID string) (int, error) {
+	if tenantID == "" || groupID == "" {
+		return 0, errxtrace.Wrap("tenant id and group id are required", registry.ErrFieldRequired)
+	}
+
+	auditReg := store.NewGroupAwareSQLRegistry[models.CurrencyMigrationAuditRow](
+		r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.CurrencyMigrationAudit(),
+	)
+	if r.service {
+		auditReg = store.NewGroupServiceSQLRegistry[models.CurrencyMigrationAuditRow](
+			r.dbx, r.tableNames.CurrencyMigrationAudit(),
+		)
+	}
+
+	var deleted int64
+	err := auditReg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`DELETE FROM %s WHERE tenant_id = $1 AND group_id = $2`,
+			r.tableNames.CurrencyMigrationAudit(),
+		)
+		res, err := tx.ExecContext(ctx, query, tenantID, groupID)
+		if err != nil {
+			return err
+		}
+		deleted, err = res.RowsAffected()
+		return err
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to delete currency migration audit rows by group", err)
+	}
+	return int(deleted), nil
+}
+
 // ClaimNextPending atomically picks one pending row, flips it to running
 // (TX1), sets started_at, and returns the updated row. Uses
 // SELECT ... FOR UPDATE SKIP LOCKED to serialise multiple workers on the

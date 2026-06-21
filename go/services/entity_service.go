@@ -24,12 +24,33 @@ func NewEntityService(factorySet *registry.FactorySet, uploadLocation string) *E
 	}
 }
 
-// DeleteCommodityRecursive deletes a commodity and all its linked files recursively
+// DeleteCommodityRecursive deletes a commodity and all its linked files.
+//
+// Ordering is row-first, blob-best-effort (#2120), mirroring
+// DeleteExportWithFile: the linked file IDs are collected first (no blob
+// deletes yet), then the commodity row is dropped — its children
+// (loans/services/supply-links) CASCADE and its cover_file_id FK is
+// ON DELETE SET NULL, so the row delete never trips a constraint — and only
+// then are the previously-linked files removed (row + best-effort blob) via
+// DeleteFileWithPhysical. Deleting the commodity before the files avoids the
+// old failure mode where a blob error aborted the operation after some rows
+// were already gone.
 func (s *EntityService) DeleteCommodityRecursive(ctx context.Context, id string) error {
-	// Delete all linked files (both physical and database records)
-	err := s.fileService.DeleteLinkedFiles(ctx, "commodity", id)
+	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return errxtrace.Wrap("failed to delete linked files", err)
+		return errxtrace.Wrap("failed to create file registry", err)
+	}
+
+	// Collect the IDs of the files linked to this commodity before it is
+	// deleted. We only need the IDs here — the actual file (row + blob)
+	// deletion happens after the commodity row is gone.
+	linkedFiles, err := fileReg.ListByLinkedEntity(ctx, "commodity", id)
+	if err != nil {
+		return errxtrace.Wrap("failed to list linked files", err)
+	}
+	fileIDs := make([]string, 0, len(linkedFiles))
+	for _, file := range linkedFiles {
+		fileIDs = append(fileIDs, file.ID)
 	}
 
 	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
@@ -37,8 +58,21 @@ func (s *EntityService) DeleteCommodityRecursive(ctx context.Context, id string)
 		return errxtrace.Wrap("failed to create commodity registry", err)
 	}
 
-	// Then delete the commodity itself
-	return comReg.Delete(ctx, id)
+	// Delete the commodity row first. Children CASCADE; cover_file_id is
+	// SET NULL, so the linked files can still be removed afterwards.
+	if err := comReg.Delete(ctx, id); err != nil {
+		return errxtrace.Wrap("failed to delete commodity", err)
+	}
+
+	// The commodity row has been removed. Now delete the linked files
+	// (row + best-effort blob). A file that is already gone is fine.
+	for _, fileID := range fileIDs {
+		if err := s.fileService.DeleteFileWithPhysical(ctx, fileID); err != nil && !errors.Is(err, registry.ErrNotFound) {
+			return errxtrace.Wrap("failed to delete linked file", err, errx.Attrs("file_id", fileID))
+		}
+	}
+
+	return nil
 }
 
 // DeleteAreaRecursive deletes an area and all its commodities recursively
@@ -74,6 +108,13 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 		}
 	}
 
+	// Delete files attached directly to the area (#2119) before the area row
+	// is removed, mirroring the commodity path. ErrNotFound is tolerated so a
+	// concurrently-removed file doesn't abort the cascade.
+	if err := s.fileService.DeleteLinkedFiles(ctx, "area", id); err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return errxtrace.Wrap("failed to delete area files", err, errx.Attrs("areaID", id))
+	}
+
 	// Finally delete the area itself
 	return areaReg.Delete(ctx, id)
 }
@@ -107,8 +148,66 @@ func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) 
 		}
 	}
 
+	// Delete files attached directly to the location (#2119) before the
+	// location row is removed, mirroring the commodity path. ErrNotFound is
+	// tolerated so a concurrently-removed file doesn't abort the cascade.
+	if err := s.fileService.DeleteLinkedFiles(ctx, "location", id); err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return errxtrace.Wrap("failed to delete location files", err, errx.Attrs("locationID", id))
+	}
+
 	// Finally delete the location itself
 	return locReg.Delete(ctx, id)
+}
+
+// DeleteArea deletes an EMPTY area together with the files attached directly to
+// the area (#2119). It is NON-recursive on purpose: the underlying registry
+// Delete returns ErrCannotDelete while the area still holds commodities, so a
+// non-empty area is rejected (HTTP 422) before anything is removed — preserving
+// the long-standing "can't delete a non-empty area" guard. Letting the user
+// choose cascade-vs-unlink for a non-empty area is a separate feature.
+func (s *EntityService) DeleteArea(ctx context.Context, id string) error {
+	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create area registry", err)
+	}
+
+	// Delete the area row first: this returns ErrCannotDelete when the area
+	// still has commodities, so a non-empty area is left fully intact.
+	if err := areaReg.Delete(ctx, id); err != nil {
+		return errxtrace.Wrap("failed to delete area", err)
+	}
+
+	// The (empty) area row is gone; remove files attached directly to the area
+	// so they don't orphan. A concurrently-removed file is fine.
+	if err := s.fileService.DeleteLinkedFiles(ctx, "area", id); err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return errxtrace.Wrap("failed to delete area files", err, errx.Attrs("areaID", id))
+	}
+
+	return nil
+}
+
+// DeleteLocation deletes an EMPTY location together with the files attached
+// directly to the location (#2119). Non-recursive, mirroring DeleteArea: the
+// registry Delete returns ErrCannotDelete while the location still holds areas,
+// so a non-empty location is rejected (HTTP 422) before anything is removed.
+func (s *EntityService) DeleteLocation(ctx context.Context, id string) error {
+	locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create location registry", err)
+	}
+
+	// Delete the location row first: ErrCannotDelete leaves a non-empty
+	// location intact.
+	if err := locReg.Delete(ctx, id); err != nil {
+		return errxtrace.Wrap("failed to delete location", err)
+	}
+
+	// The (empty) location row is gone; remove files attached directly to it.
+	if err := s.fileService.DeleteLinkedFiles(ctx, "location", id); err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return errxtrace.Wrap("failed to delete location files", err, errx.Attrs("locationID", id))
+	}
+
+	return nil
 }
 
 // DeleteExportWithFile deletes an export and its associated file

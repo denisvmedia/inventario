@@ -398,6 +398,11 @@ func newParamsAreaRegistryOnly() (apiserver.Params, *models.User, *models.Locati
 	params.UploadLocation = uploadLocation
 	params.JWTSecret = testJWTSecret
 	params.BackupSigner = testBackupSigner
+
+	// EntityService is required by the area/location delete handlers
+	// (#2119 routes deletes through DeleteAreaRecursive /
+	// DeleteLocationRecursive). Without it those handlers nil-deref.
+	params.EntityService = services.NewEntityService(params.FactorySet, params.UploadLocation)
 	return params, testUser, testGroup
 }
 

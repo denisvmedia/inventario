@@ -867,11 +867,25 @@ type ThumbnailGenerationJobRegistry interface {
 	// GetJobByFileID returns the thumbnail generation job for a specific file
 	GetJobByFileID(ctx context.Context, fileID string) (*models.ThumbnailGenerationJob, error)
 
+	// ListByFileID returns every thumbnail generation job referencing the
+	// given file. A file can own more than one job (e.g. a failed job plus a
+	// retry), so the file-cleanup path uses this to find every job whose
+	// concurrency slots must be cleared before the jobs are deleted. Returns
+	// an empty slice (no ErrNotFound) when no job references the file.
+	ListByFileID(ctx context.Context, fileID string) ([]*models.ThumbnailGenerationJob, error)
+
 	// UpdateJobStatus updates the status of a thumbnail generation job
 	UpdateJobStatus(ctx context.Context, jobID string, status models.ThumbnailGenerationStatus, errorMessage string) error
 
 	// CleanupCompletedJobs removes completed/failed jobs older than the specified duration
 	CleanupCompletedJobs(ctx context.Context, olderThan time.Duration) error
+
+	// DeleteByFileID removes every thumbnail generation job referencing the
+	// given file. Used by the file-deletion cleanup path to break the
+	// thumbnail_generation_jobs.file_id -> files(id) FK (NO ACTION) before
+	// the file row is removed. Idempotent: deleting when no job references
+	// the file is a no-op and returns nil (no ErrNotFound on zero matches).
+	DeleteByFileID(ctx context.Context, fileID string) error
 }
 
 type UserConcurrencySlotRegistry interface {
@@ -888,6 +902,13 @@ type UserConcurrencySlotRegistry interface {
 
 	// CleanupExpiredSlots removes expired slots
 	CleanupExpiredSlots(ctx context.Context) error
+
+	// DeleteByJobID removes every concurrency slot referencing the given
+	// thumbnail generation job. Used by the thumbnail-cleanup path to break
+	// the user_concurrency_slots.job_id -> thumbnail_generation_jobs(id) FK
+	// (NO ACTION) before the job row is removed. Idempotent: deleting when
+	// no slot references the job is a no-op and returns nil.
+	DeleteByJobID(ctx context.Context, jobID string) error
 }
 
 type OperationSlotRegistry interface {
@@ -977,6 +998,17 @@ type CurrencyMigrationRegistry interface {
 	// ListAuditRows returns every audit row for a migration in stable
 	// (created_at, id) order. Drives the "what changed" history view.
 	ListAuditRows(ctx context.Context, migrationID string) ([]*models.CurrencyMigrationAuditRow, error)
+
+	// DeleteAuditRowsByGroup removes every currency-migration audit row
+	// belonging to the given (tenant, group). Used by the group-deletion
+	// cleanup path to break the
+	// currency_migration_audit_rows.group_id -> location_groups(id) FK
+	// (NO ACTION) before the group is removed. The audit rows do NOT
+	// cascade from the group (they only cascade from the migration row via
+	// currency_migration_audit_rows.migration_id), so they must be cleared
+	// explicitly. Returns the number of rows deleted. Idempotent: zero
+	// matches returns (0, nil).
+	DeleteAuditRowsByGroup(ctx context.Context, tenantID, groupID string) (int, error)
 
 	// ClaimNextPending atomically picks one pending row, flips it to
 	// running (TX1) and returns it. Uses SELECT FOR UPDATE SKIP LOCKED
@@ -1672,6 +1704,13 @@ type GroupNotificationPrefRegistry interface {
 	// post-write row so callers can echo the saved value back to the
 	// client without a follow-up SELECT.
 	Upsert(ctx context.Context, pref models.GroupNotificationPref) (*models.GroupNotificationPref, error)
+
+	// DeleteByGroup removes every per-user notification override for the
+	// given (tenant, group). Used by the group-deletion cleanup path to
+	// break the group_notification_prefs.group_id -> location_groups(id)
+	// FK (NO ACTION) before the group is removed. Returns the number of
+	// rows deleted. Idempotent: zero matches returns (0, nil).
+	DeleteByGroup(ctx context.Context, tenantID, groupID string) (int, error)
 }
 
 // GroupInviteRegistry manages invite links for location groups.

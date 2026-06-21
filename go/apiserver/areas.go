@@ -12,6 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 func areaFromContext(ctx context.Context) *models.Area {
@@ -23,6 +24,7 @@ func areaFromContext(ctx context.Context) *models.Area {
 }
 
 type areasAPI struct {
+	entityService *services.EntityService
 }
 
 // listAreas lists all areas with pagination.
@@ -158,24 +160,18 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Area not found"
 // @Router /g/{groupSlug}/areas/{areaID} [delete].
 func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
-	// Get user-aware settings registry from context
-	registrySet := RegistrySetFromContext(r.Context())
-	if registrySet == nil {
-		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
-		return
-	}
-
 	area := areaFromContext(r.Context())
 	if area == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	ctx := r.Context()
-	areaReg := registrySet.AreaRegistry
-
-	err := areaReg.Delete(ctx, area.ID)
-	if err != nil {
+	// #2119: route through the EntityService so deleting an (empty) area also
+	// removes the files attached directly to it (DB rows + blob storage)
+	// instead of orphaning them. DeleteArea is non-recursive — a non-empty
+	// area is still rejected with ErrCannotDelete (422); cascade-vs-unlink for
+	// a non-empty area is a separate feature.
+	if err := api.entityService.DeleteArea(r.Context(), area.ID); err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
@@ -244,8 +240,10 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func Areas() func(r chi.Router) {
-	api := &areasAPI{}
+func Areas(params Params) func(r chi.Router) {
+	api := &areasAPI{
+		entityService: params.EntityService,
+	}
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listAreas) // GET /areas
 		r.Route("/{areaID}", func(r chi.Router) {

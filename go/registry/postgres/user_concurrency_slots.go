@@ -273,6 +273,24 @@ func (r *UserConcurrencySlotRegistry) CleanupExpiredSlots(ctx context.Context) e
 	return err
 }
 
+// DeleteByJobID removes every concurrency slot referencing the given
+// thumbnail generation job. Idempotent: a parameterized DELETE that
+// matches zero rows is a no-op (no ErrNotFound), so the thumbnail-cleanup
+// path can call it unconditionally before dropping the job row.
+func (r *UserConcurrencySlotRegistry) DeleteByJobID(ctx context.Context, jobID string) error {
+	reg := r.newSQLRegistry()
+
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`DELETE FROM %s WHERE job_id = $1`, r.tableNames.UserConcurrencySlots())
+		if _, err := tx.ExecContext(ctx, query, jobID); err != nil {
+			return errxtrace.Wrap("failed to delete concurrency slots by job ID", err)
+		}
+		return nil
+	})
+
+	return err
+}
+
 func (r *UserConcurrencySlotRegistry) newSQLRegistry() *store.RLSRepository[models.UserConcurrencySlot, *models.UserConcurrencySlot] {
 	if r.service {
 		return store.NewServiceSQLRegistry[models.UserConcurrencySlot](r.dbx, r.tableNames.UserConcurrencySlots())

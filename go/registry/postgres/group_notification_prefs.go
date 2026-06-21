@@ -188,3 +188,32 @@ func (r *GroupNotificationPrefRegistry) Upsert(ctx context.Context, pref models.
 	}
 	return &written, nil
 }
+
+// DeleteByGroup removes every per-user notification override for the
+// given (tenant, group). The group-deletion cleanup path calls this to
+// break the group_notification_prefs.group_id -> location_groups(id) FK
+// (NO ACTION) before the group is removed. Idempotent: a parameterized
+// DELETE that matches zero rows returns (0, nil).
+func (r *GroupNotificationPrefRegistry) DeleteByGroup(ctx context.Context, tenantID, groupID string) (int, error) {
+	if tenantID == "" || groupID == "" {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "tenant_id|group_id"))
+	}
+
+	var deleted int64
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`DELETE FROM %s WHERE tenant_id = $1 AND group_id = $2`,
+			r.tableNames.GroupNotificationPrefs(),
+		)
+		res, err := tx.ExecContext(ctx, query, tenantID, groupID)
+		if err != nil {
+			return err
+		}
+		deleted, err = res.RowsAffected()
+		return err
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to delete group notification prefs by group", err)
+	}
+	return int(deleted), nil
+}

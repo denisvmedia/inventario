@@ -121,6 +121,26 @@ func (r *ThumbnailGenerationJobRegistry) GetJobByFileID(ctx context.Context, fil
 	return nil, registry.ErrNotFound
 }
 
+// ListByFileID returns every thumbnail generation job referencing the given
+// file. A file may own more than one job (a failed job plus a retry). Returns
+// an empty slice (no ErrNotFound) when no job references the file, mirroring
+// the postgres ScanByField query.
+func (r *ThumbnailGenerationJobRegistry) ListByFileID(ctx context.Context, fileID string) ([]*models.ThumbnailGenerationJob, error) {
+	jobs, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*models.ThumbnailGenerationJob
+	for _, job := range jobs {
+		if job.FileID == fileID {
+			result = append(result, job)
+		}
+	}
+
+	return result, nil
+}
+
 // UpdateJobStatus updates the status of a thumbnail generation job
 func (r *ThumbnailGenerationJobRegistry) UpdateJobStatus(ctx context.Context, jobID string, status models.ThumbnailGenerationStatus, errorMessage string) error {
 	job, err := r.Get(ctx, jobID)
@@ -134,6 +154,27 @@ func (r *ThumbnailGenerationJobRegistry) UpdateJobStatus(ctx context.Context, jo
 
 	_, err = r.Update(ctx, *job)
 	return err
+}
+
+// DeleteByFileID removes every thumbnail generation job referencing the
+// given file. Idempotent: when no job references the file it is a no-op
+// and returns nil, mirroring the postgres parameterized DELETE.
+func (r *ThumbnailGenerationJobRegistry) DeleteByFileID(ctx context.Context, fileID string) error {
+	jobs, err := r.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, job := range jobs {
+		if job.FileID != fileID {
+			continue
+		}
+		if err := r.Delete(ctx, job.ID); err != nil {
+			return errxtrace.Wrap("failed to delete thumbnail generation job by file ID", err, errx.Attrs("file_id", fileID, "job_id", job.ID))
+		}
+	}
+
+	return nil
 }
 
 // CleanupCompletedJobs removes completed/failed jobs older than the specified duration

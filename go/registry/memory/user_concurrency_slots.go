@@ -207,6 +207,32 @@ func (r *UserConcurrencySlotRegistry) CleanupExpiredSlots(ctx context.Context) e
 	return nil
 }
 
+// DeleteByJobID removes every concurrency slot referencing the given
+// thumbnail generation job. Idempotent: when no slot references the job
+// it is a no-op and returns nil, mirroring the postgres parameterized
+// DELETE.
+func (r *UserConcurrencySlotRegistry) DeleteByJobID(ctx context.Context, jobID string) error {
+	// Use dedicated mutex for slot operations to ensure atomicity
+	r.slotMutex.Lock()
+	defer r.slotMutex.Unlock()
+
+	slots, err := r.List(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list slots", err)
+	}
+
+	for _, slot := range slots {
+		if slot.JobID != jobID {
+			continue
+		}
+		if err := r.Delete(ctx, slot.ID); err != nil {
+			return errxtrace.Wrap("failed to delete concurrency slot by job ID", err)
+		}
+	}
+
+	return nil
+}
+
 // GetUserSlotCount returns the number of active slots for a user
 func (r *UserConcurrencySlotRegistry) GetUserSlotCount(ctx context.Context, userID string) (int, error) {
 	activeSlots, err := r.getUserActiveSlots(ctx, userID)

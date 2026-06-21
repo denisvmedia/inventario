@@ -8,9 +8,12 @@ import (
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
+	"github.com/denisvmedia/inventario/services"
 )
 
-type locationsAPI struct{}
+type locationsAPI struct {
+	entityService *services.EntityService
+}
 
 // listLocations lists all locations with pagination.
 // @Summary List locations
@@ -169,24 +172,17 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 // @Failure 404 {object} jsonapi.Errors "Location not found"
 // @Router /g/{groupSlug}/locations/{locationID} [delete].
 func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) {
-	// Get user-aware registry from context
-	registrySet := RegistrySetFromContext(r.Context())
-	if registrySet == nil {
-		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
-		return
-	}
-
 	location := locationFromContext(r.Context())
 	if location == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	// Use WithCurrentUser to ensure proper user context and validation
-	ctx := r.Context()
-	locationReg := registrySet.LocationRegistry
-	err := locationReg.Delete(ctx, location.ID)
-	if err != nil {
+	// #2119: route through the EntityService so deleting an (empty) location
+	// also removes the files attached directly to it (DB rows + blob storage)
+	// instead of orphaning them. DeleteLocation is non-recursive — a non-empty
+	// location is still rejected with ErrCannotDelete (422).
+	if err := api.entityService.DeleteLocation(r.Context(), location.ID); err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
@@ -277,8 +273,10 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 // #1399 backfill in production; that drop is a separate follow-up.
 
 // Locations returns a Chi router function that registers all location-related routes.
-func Locations() func(r chi.Router) {
-	api := &locationsAPI{}
+func Locations(params Params) func(r chi.Router) {
+	api := &locationsAPI{
+		entityService: params.EntityService,
+	}
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listLocations) // GET /locations
 		r.Route("/{locationID}", func(r chi.Router) {

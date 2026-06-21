@@ -50,6 +50,65 @@ func TestLocationsDelete(t *testing.T) {
 	c.Assert(cnt, qt.Equals, expectedCount)
 }
 
+// TestLocationsDelete_NonEmptyRejected covers #2119: deleting a NON-empty
+// location through the API must be rejected (the handler no longer cascades).
+// The seeded locations[0] contains an area whose commodity owns the seeded
+// files; the DELETE returns 422 and the whole subtree survives (GET file →
+// 200), proving the API path routes through the non-recursive
+// EntityService.DeleteLocation which surfaces ErrCannotDelete for a non-empty
+// location.
+func TestLocationsDelete_NonEmptyRejected(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+
+	// Seeded layout: locations[0] holds the areas; areas[0] holds
+	// commodities[0], which owns the seeded files. Resolve a file linked
+	// to a commodity that lives under locations[0] so we can prove nothing
+	// was removed.
+	locations := must.Must(registrySet.LocationRegistry.List(c.Context()))
+	location := locations[0]
+	areaIDs := must.Must(registrySet.LocationRegistry.GetAreas(c.Context(), location.ID))
+	c.Assert(areaIDs, qt.Not(qt.HasLen), 0)
+	commodityIDs := must.Must(registrySet.AreaRegistry.GetCommodities(c.Context(), areaIDs[0]))
+	c.Assert(commodityIDs, qt.Not(qt.HasLen), 0)
+	files := must.Must(registrySet.FileRegistry.List(c.Context()))
+	var fileID string
+	for _, f := range files {
+		if f.LinkedEntityType == "commodity" && f.LinkedEntityID == commodityIDs[0] {
+			fileID = f.ID
+			break
+		}
+	}
+	c.Assert(fileID, qt.Not(qt.Equals), "")
+
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	// Non-empty location: rejected with 422, nothing removed.
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+
+	// The location and its areas survive.
+	c.Assert(must.Must(registrySet.LocationRegistry.Get(c.Context(), location.ID)), qt.IsNotNil)
+	c.Assert(must.Must(registrySet.LocationRegistry.GetAreas(c.Context(), location.ID)), qt.Not(qt.HasLen), 0)
+
+	// The file linked to the location's commodity survives too (GET → 200).
+	req, err = http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/files/"+fileID, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+}
+
 func TestLocationsCreate(t *testing.T) {
 	c := qt.New(t)
 

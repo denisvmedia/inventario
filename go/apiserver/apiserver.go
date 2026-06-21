@@ -662,8 +662,8 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		structuralWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleAdmin)
 		contentWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleUser)
 		r.With(groupScopedMiddlewares...).Route("/g/{groupSlug}", func(r chi.Router) {
-			r.With(structuralWriteGate).Route("/locations", Locations())
-			r.With(structuralWriteGate).Route("/areas", Areas())
+			r.With(structuralWriteGate).Route("/locations", Locations(params))
+			r.With(structuralWriteGate).Route("/areas", Areas(params))
 			// Commodity write paths are guarded by requireGroupNotMigrating
 			// (issue #202 §3.2) so an in-flight currency migration locks
 			// concurrent edits with HTTP 423. The middleware is a no-op
