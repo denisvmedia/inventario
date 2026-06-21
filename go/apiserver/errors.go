@@ -28,6 +28,14 @@ var (
 	// unknown `?strategy=` value (#2137). The handler answers 422 directly via
 	// unprocessableEntityError, so it does not need a toJSONAPIError mapping.
 	errInvalidDeleteStrategy = errx.NewSentinel("invalid delete strategy: must be one of cascade, unlink")
+	// errImportSourceForeignTenant rejects a backup-import request whose
+	// SourceFilePath points outside the caller's own tenant namespace
+	// (`t/<callerTenant>/...`). A signed `.inb` archive is verified against a
+	// tenant-AGNOSTIC server key, so without this guard a user could import
+	// another tenant's backup by naming its blob key — cross-tenant data
+	// exfiltration. The handler answers 422 directly via
+	// unprocessableEntityError, so it does not need a toJSONAPIError mapping.
+	errImportSourceForeignTenant = errx.NewSentinel("import source path must be within your tenant namespace")
 	// ErrNotSystemAdmin is returned by RequireSystemAdmin when the caller's
 	// user is not flagged as a system administrator. Surfaces as a 403 with
 	// JSON:API code "admin.forbidden" so the FE can render specific copy

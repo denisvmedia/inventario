@@ -573,6 +573,121 @@ func TestExportCreate_NonWhitespaceTooLongDescription_Rejects(t *testing.T) {
 		qt.Commentf("expected 422 for 501-char description, body: %s", w.Body.String()))
 }
 
+// TestImportExport_ForeignTenantSourcePath_Rejected is the cross-tenant
+// security regression for POST /exports/import. A signed `.inb` archive is
+// verified against a tenant-AGNOSTIC server key, so the handler MUST reject a
+// SourceFilePath that lives outside the caller's own tenant namespace — without
+// the guard a user could import another tenant's backup blob
+// (`t/<victim>/exports/backup_….inb`) straight into their own account.
+func TestImportExport_ForeignTenantSourcePath_Rejected(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "caller-tenant-id",
+		},
+		Email:    "test+import-foreign@example.com",
+		Name:     "Test User",
+		IsActive: true,
+	}
+	must.Assert(testUser.SetPassword("Password123"))
+	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUser))
+
+	r := chi.NewRouter()
+	r.Use(render.SetContentType(render.ContentTypeJSON))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
+
+	params := apiserver.Params{
+		FactorySet:     factorySet,
+		UploadLocation: "memory://",
+		EntityService:  services.NewEntityService(factorySet, "memory://"),
+		JWTSecret:      testJWTSecret,
+	}
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+
+	requestPayload := jsonapi.ImportExportRequest{
+		Data: &jsonapi.ImportExportRequestData{
+			Type: "exports",
+			Attributes: &jsonapi.ImportExportAttributes{
+				Description: "Import another tenant's backup",
+				// Victim tenant's namespace — must be rejected.
+				SourceFilePath: "t/victim-tenant-id/exports/backup_full_database_20260101.inb",
+			},
+		},
+	}
+	payloadBytes := must.Must(json.Marshal(requestPayload))
+
+	req := httptest.NewRequest("POST", "/exports/import", bytes.NewReader(payloadBytes))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, createdUser.ID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusUnprocessableEntity,
+		qt.Commentf("foreign-tenant import source must be rejected; body: %s", w.Body.String()))
+}
+
+// TestImportExport_OwnTenantSourcePath_Accepted is the negative control for the
+// cross-tenant guard above: a legitimate restore upload is keyed
+// `t/<callerTenant>/restores/...` (see blobkeys.BuildRestoreUploadKey), so the
+// prefix check MUST pass and the import record must be created (201). This
+// proves the guard does not break real import flows.
+func TestImportExport_OwnTenantSourcePath_Accepted(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "caller-tenant-id",
+		},
+		Email:    "test+import-own@example.com",
+		Name:     "Test User",
+		IsActive: true,
+	}
+	must.Assert(testUser.SetPassword("Password123"))
+	createdUser := must.Must(factorySet.UserRegistry.Create(context.Background(), testUser))
+
+	r := chi.NewRouter()
+	r.Use(render.SetContentType(render.ContentTypeJSON))
+	r.Use(apiserver.JWTMiddleware(testJWTSecret, factorySet.UserRegistry, nil))
+	r.Use(apiserver.RegistrySetMiddleware(factorySet))
+
+	params := apiserver.Params{
+		FactorySet:     factorySet,
+		UploadLocation: "memory://",
+		EntityService:  services.NewEntityService(factorySet, "memory://"),
+		JWTSecret:      testJWTSecret,
+	}
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	r.Route("/exports", apiserver.Exports(params, mockRestoreWorker))
+
+	requestPayload := jsonapi.ImportExportRequest{
+		Data: &jsonapi.ImportExportRequestData{
+			Type: "exports",
+			Attributes: &jsonapi.ImportExportAttributes{
+				Description: "Import my own uploaded backup",
+				// Caller's own restore-upload namespace — must pass.
+				SourceFilePath: "t/caller-tenant-id/restores/backup.inb",
+			},
+		},
+	}
+	payloadBytes := must.Must(json.Marshal(requestPayload))
+
+	req := httptest.NewRequest("POST", "/exports/import", bytes.NewReader(payloadBytes))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, createdUser.ID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusCreated,
+		qt.Commentf("own-tenant import source must be accepted; body: %s", w.Body.String()))
+}
+
 // TestGenerateExportSignedURL covers GET /exports/{id}/signed-url (#1780).
 // The endpoint lets the frontend download a completed export without
 // putting a JWT in the URL: it returns an HMAC-signed URL targeting the

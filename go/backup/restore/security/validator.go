@@ -13,7 +13,10 @@ var (
 	ErrOwnershipViolation = errors.New("commodity belongs to a different user")
 )
 
-// SecurityValidator defines the interface for security validation during restore operations
+// SecurityValidator is the audit-logging surface for restore operations: it
+// records unauthorized entity-access attempts. Ownership and import scope are
+// enforced by the RLS layer and the restore processor
+// (validateCommodityOwnershipInDB), not here — this interface only logs.
 type SecurityValidator interface {
 	LogUnauthorizedAttempt(ctx context.Context, attempt UnauthorizedAttempt)
 }
@@ -29,7 +32,8 @@ type UnauthorizedAttempt struct {
 	RequestDetails map[string]any
 }
 
-// RestoreSecurityValidator implements SecurityValidator for restore operations
+// RestoreSecurityValidator is the slog-backed SecurityValidator the restore
+// processor uses to record unauthorized-access attempts.
 type RestoreSecurityValidator struct {
 	logger *slog.Logger
 }
