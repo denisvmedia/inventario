@@ -46,7 +46,13 @@ func validationCodeTree(errs validation.Errors) map[string]any {
 		}
 		var verr validation.Error
 		if errors.As(e, &verr) {
-			out[field] = map[string]any{"code": verr.Code(), "params": verr.Params()}
+			leaf := map[string]any{"code": verr.Code()}
+			// Omit empty params (the common case — required/blank errors carry
+			// none) rather than emitting "params":null on every field.
+			if params := verr.Params(); len(params) > 0 {
+				leaf["params"] = params
+			}
+			out[field] = leaf
 			continue
 		}
 		out[field] = map[string]any{"code": "", "message": e.Error()}

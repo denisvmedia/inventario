@@ -170,13 +170,15 @@ func TestMarshal_ErrxWrappedValidationError(t *testing.T) {
 	// Wrap validation error with errx
 	testErr := errx.Wrap("validation failed", validationErr)
 
-	result := errormarshal.Marshal(testErr)
-	c.Assert(result, qt.IsNotNil)
+	raw := []byte(errormarshal.Marshal(testErr))
 
-	// Should handle the wrapped validation error
-	var decoded map[string]any
-	err := json.Unmarshal(result, &decoded)
-	c.Assert(err, qt.IsNil)
+	// #1990: a validation.Errors wrapped by errx is unwrapped to its bare
+	// field tree — the wrapper's "validation failed" message (and any errx
+	// attrs) are dropped so the client gets the per-field tree — and the
+	// parallel errorCodes tree is emitted, with a codeless leaf for the plain
+	// errors.New() value.
+	c.Assert(raw, checkers.JSONPathEquals("$.error.email"), "invalid email format")
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.email.code"), "")
 }
 
 func TestMarshal_ReturnsValidJSON(t *testing.T) {
