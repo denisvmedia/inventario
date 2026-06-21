@@ -171,11 +171,12 @@ test.describe.serial('MFA / TOTP enrollment + login', () => {
 
     const { secret, backupCodes } = await enrollMFA(page);
 
-    // Logout and re-login with a TOTP code. We regenerate the code here
-    // rather than reusing the enrollment-verify code: even though the
-    // server allows ±1 step and accepts in-window replay, deriving the
-    // code at the moment of the call is robust to test slowness and
-    // doesn't depend on the previous code being in the same window.
+    // Logout and re-login with a fresh TOTP code. This consumes the current
+    // 30s time-step: the #2124 replay guard records last_used_step, so any
+    // later TOTP in the same window would now be rejected as a replay. That
+    // is why the recover + disable steps below use backup codes instead of a
+    // second same-window TOTP (the pre-#2124 spec relied on in-window TOTP
+    // replay being accepted, which it no longer is — RFC 6238 §5.2).
     await logout(page);
     const totp1 = generateTOTP(secret);
     await loginWithMFA(page, { totp: totp1 }, true);
@@ -189,11 +190,11 @@ test.describe.serial('MFA / TOTP enrollment + login', () => {
     await logout(page);
     await loginWithMFA(page, { backup: backup0 }, false);
 
-    // Recover by typing a fresh TOTP code so the session can continue.
-    await page.fill('[data-testid="mfa-code-input"]', '');
-    await page.click('[data-testid="mfa-toggle-mode"]');
-    const totp2 = generateTOTP(secret);
-    await page.fill('[data-testid="mfa-code-input"]', totp2);
+    // Recover so the session can continue. The login TOTP above already
+    // consumed this 30s step, so a same-window TOTP would be rejected by the
+    // #2124 replay guard — recover with a fresh, unused backup code. The
+    // challenge is already in backup-code mode from the rejected replay above.
+    await page.fill('[data-testid="mfa-code-input"]', backupCodes[1]);
     await Promise.all([
       page.waitForResponse(
         (r) => r.url().includes('/auth/login/mfa') && r.status() === 200,
@@ -204,9 +205,10 @@ test.describe.serial('MFA / TOTP enrollment + login', () => {
       timeout: 15000,
     });
 
-    // Cleanup so a re-run doesn't trip over leftover state.
-    const totpForDisable = generateTOTP(secret);
-    await disableMFA(page, { totp: totpForDisable });
+    // Cleanup so a re-run doesn't trip over leftover state. Disable with
+    // another fresh backup code (a same-window TOTP would again be rejected
+    // by the replay guard).
+    await disableMFA(page, { backup: backupCodes[2] });
   });
 });
 
