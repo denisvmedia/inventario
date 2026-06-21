@@ -12,7 +12,7 @@ in the issues that drove each ban.
 | `@base-ui/react` | The design mock shipped both `radix-ui` and `@base-ui/react`. Two headless primitive libraries doing the same job is one too many. | `radix-ui` (the umbrella package). |
 | `@tailwindcss/animate` | Replaced by `tw-animate-css` (works with Tailwind v4's `@theme inline`). | `tw-animate-css` — already in `package.json`, imported at the top of `src/index.css`. |
 | `@fortawesome/react-fontawesome` (and any FA icon set), `primeicons`, `react-icons`, `@heroicons/react`, `@material-ui/icons` | One icon library. Mixing icon libraries breaks the visual rhythm and bloats the bundle. | `lucide-react`. See [icons.md](icons.md). |
-| Bolt scaffolding artifacts (`bolt-*` packages, `BoltGlobals`, `bolt:` data attributes, the literal string `"Bolt"` in `<title>`) | Leftover from the React scaffold's origin. They have no runtime purpose and act as a tripwire. | Delete on sight. The Go embed test (`go/apiserver/frontend_embed_test.go`) asserts the bundled HTML's title is `Inventario` and contains no Bolt artifacts. |
+| Bolt scaffolding artifacts (`bolt-*` packages, `BoltGlobals`, `bolt:` data attributes, the literal string `"Bolt"` in `<title>`) | Leftover from the React scaffold's origin. They have no runtime purpose and act as a tripwire. | Delete on sight. The `<title>` is `Inventario` (`frontend/index.html`); keep it that way. |
 | Vue, Vue Router, Pinia, PrimeVue, PrimeFlex, vue-i18n, sass | Legacy frontend dependencies, deleted at cutover (#1423, PR #1457). | The React stack — see [README.md](README.md). |
 | Framer Motion, react-spring, popmotion | Animation needs are met by `tw-animate-css` + Tailwind utilities; a runtime animation library is dead weight. | `animate-in`, `fade-in-0`, `slide-in-from-top-2`, etc. (see [styles-and-tokens.md](styles-and-tokens.md)). |
 | `axios`, `superagent`, `ky` | We have one fetch wrapper (`src/lib/http.ts`) that owns CSRF, group-rewriting, refresh, and JSON:API content type — none of which a generic HTTP library handles for us. | `src/lib/http.ts` via the feature slice's `api.ts`. See [data.md](data.md). |
@@ -26,10 +26,13 @@ The conventions above are enforced by:
 
 1. **PR review.** `package.json` adds get scrutiny — every new
    dependency justifies itself in the PR body.
-2. **Embed smoke tests.** `go/apiserver/frontend_embed_test.go` asserts
-   the bundled HTML's `<title>` is `Inventario` and contains no Bolt
-   artifacts. Catches accidental scaffolding leftovers and HTML edits
-   that swap in something else.
+2. **Embed smoke test.** `go/apiserver/frontend_embed_test.go`
+   (`TestFrontendEmbed_UnderscorePrefixedFilesArePresent`) asserts the
+   stable marker file `dist/_inventario-embed.txt` (copied verbatim from
+   `frontend/public/_inventario-embed.txt`) is present in the embedded
+   filesystem — proving the `//go:embed all:dist` directive ships
+   underscore-prefixed files (Go silently skips `_`/`.`-prefixed names
+   without the `all:` prefix). It does not inspect the HTML title.
 3. **Lighthouse `best-practices`.** Console errors from a banned-but-
    somehow-installed library (e.g. `next-themes` complaining about a
    missing context) tank the score and trip the gate.

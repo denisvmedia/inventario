@@ -1,5 +1,16 @@
 # Files backfill runbook
 
+> **HISTORICAL — NO LONGER RUNNABLE.** The `inventario migrate files-backfill`
+> command described below never shipped in its final form and does not exist
+> today (`inventario db migrate` exposes only `up` / `list` / `down` / `data` /
+> `verify`). The `services/files_backfill/` package was removed in PR
+> [#1479](https://github.com/denisvmedia/inventario/pull/1479), and the legacy
+> `images` / `invoices` / `manuals` tables were dropped by migration
+> `1777734471_drop_legacy_file_tables`. The only real backfill command today is
+> `inventario backfill blobs` ([#1793](https://github.com/denisvmedia/inventario/issues/1793)),
+> which is a different feature (tenant-namespaced blob keys, not the legacy
+> file-table merge). This document is retained for historical context only.
+
 `inventario migrate files-backfill` copies the legacy commodity-scoped
 `images`, `invoices`, and `manuals` tables into the unified `files` table
 introduced under epic [#1397](https://github.com/denisvmedia/inventario/issues/1397).

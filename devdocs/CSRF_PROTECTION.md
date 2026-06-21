@@ -10,9 +10,9 @@ Inventario implements comprehensive CSRF protection for all state-changing opera
 
 ### Components
 
-1. **CSRF Service** (`go/services/csrf_service.go`)
-   - Manages CSRF token lifecycle (generation, validation, deletion)
-   - Supports multiple backends: Redis (production), In-Memory (development), No-op (testing)
+1. **CSRF Service factory** (`go/services/csrf_service.go`) and backends (`go/csrf/{inmemory,redis,noop}`)
+   - `NewCSRFService(redisURL)` selects the backend: Redis when a URL is set, otherwise in-memory with a warning.
+   - The token lifecycle (generation, validation, revocation, expiry) lives in the backend packages under `go/csrf/` — `inmemory` (default), `redis` (production / multi-instance), and `noop` (testing).
    - Tokens expire after 1 hour and are refreshed on token refresh
 
 2. **CSRF Middleware** (`go/apiserver/csrf_middleware.go`)
@@ -20,10 +20,10 @@ Inventario implements comprehensive CSRF protection for all state-changing opera
    - Bypasses safe methods (GET, HEAD, OPTIONS)
    - Implements fail-open design for backend errors
 
-3. **Frontend Integration** (`frontend/src/services/api.ts`)
-   - Stores CSRF tokens in memory
-   - Automatically includes tokens in mutating requests
-   - Recovers tokens from login/refresh responses
+3. **Frontend Integration** (`frontend/src/lib/http.ts`)
+   - The single fetch-based HTTP wrapper (no axios) stores the CSRF token in memory
+   - Automatically includes the token in mutating requests
+   - Recovers the token from login/refresh responses
 
 ## Token Flow
 
@@ -41,7 +41,7 @@ Inventario implements comprehensive CSRF protection for all state-changing opera
 ### Request Flow
 ```
 1. Frontend makes mutating request (POST/PUT/PATCH/DELETE)
-2. Axios interceptor adds X-CSRF-Token header
+2. The fetch wrapper (src/lib/http.ts) adds the X-CSRF-Token header
 3. CSRF middleware validates token against stored value
 4. Request proceeds if token is valid
 5. Request is rejected with 403 if token is missing/invalid
@@ -82,12 +82,18 @@ export INVENTARIO_RUN_CSRF_REDIS_URL="redis://localhost:6379/0"
 CSRF protection requires proper CORS configuration:
 
 ```bash
-# Development (allows all origins)
+# Development with the in-memory backend (memory:// DSN): a fixed local
+# dev allowlist (DefaultDevAllowedOrigins) is applied automatically.
 ./inventario run
 
 # Production (whitelist specific origins)
 ./inventario run --allowed-origins="https://example.com,https://app.example.com"
 ```
+
+CORS is **fail-closed**: when `AllowedOrigins` is empty the middleware rejects
+every cross-origin request (`AllowOriginFunc` returns `false`). The convenience
+dev allowlist is only seeded when the database DSN is `memory://`; `*` and `null`
+origins are rejected outright. See `go/apiserver/cors_config.go`.
 
 The CORS configuration automatically includes:
 - `AllowCredentials: true` (required for httpOnly cookies)
@@ -125,13 +131,16 @@ The CORS configuration automatically includes:
 
 ### Unit Tests
 
-**CSRF Service Tests** (`go/services/csrf_service_test.go`):
+**CSRF backend tests** (`go/csrf/inmemory/service_test.go`, `go/csrf/redis/service_test.go`, `go/csrf/noop/service_test.go`):
 - Token generation and retrieval
-- Token deletion
-- Token replacement
+- Token revocation / delete-all
 - Multi-user isolation
+- LRU eviction
 - Concurrent access
 - No-op service behavior
+
+**CSRF factory tests** (`go/services/csrf_service_test.go`):
+- Backend selection (`TestNewCSRFService_FallbackToInMemory`, `TestNewCSRFService_InvalidRedisURL`)
 
 **CSRF Middleware Tests** (`go/apiserver/csrf_middleware_test.go`):
 - Safe method bypass
@@ -148,11 +157,12 @@ The CORS configuration automatically includes:
 ```bash
 # Run all CSRF tests
 cd go
+go test -v ./csrf/...
 go test -v ./services -run CSRF
 go test -v ./apiserver -run CSRF
 
-# Run specific test
-go test -v ./services -run TestInMemoryCSRFService_GenerateAndGetToken
+# Run a specific backend test
+go test -v ./csrf/inmemory -run TestService_GenerateToken
 ```
 
 ## Troubleshooting
@@ -194,5 +204,4 @@ go test -v ./services -run TestInMemoryCSRFService_GenerateAndGetToken
 
 - Issue: [#837 - MVP Phase 1.3: Implement CSRF Protection](https://github.com/denisvmedia/inventario/issues/837)
 - Related: [#497 - CRITICAL SECURITY: Missing Security Headers](https://github.com/denisvmedia/inventario/issues/497)
-- Documentation: `.research/phase-1-security-and-auth.md` lines 691-835
 

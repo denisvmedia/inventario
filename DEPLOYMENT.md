@@ -1,16 +1,31 @@
-# Inventario Production Deployment Guide
+# Inventario Bare-Metal / systemd Deployment Guide
 
-This guide covers how to deploy and run the Inventario application in a production environment.
+This guide covers how to deploy and run the Inventario application directly on a
+single host (bare metal or VM) under systemd.
+
+> **Kubernetes is the canonical production target.** For a Helm/Kubernetes deploy
+> — including the full configuration surface, secret handling, Redis, object
+> storage, email, AI vision, ingress/TLS, monitoring, and backups — use the
+> [`PRODUCTION.md`](PRODUCTION.md) runbook. The authoritative source of truth for
+> every config key and env var is [`helm/inventario/values.yaml`](helm/inventario/values.yaml)
+> and the `run` config in `go/cmd/inventario/run/bootstrap/config.go`. This bare-metal
+> guide mirrors the same env vars; where it is terser, defer to `PRODUCTION.md`.
 
 ## Prerequisites
 
 ### System Requirements
 
 - **Operating System**: Linux, macOS, or Windows
-- **PostgreSQL**: Version 12 or higher
+- **PostgreSQL**: Version 12 or higher (`memory://` is dev-only — data is lost on restart)
+- **Redis**: Recommended. Backs the token blacklist, auth + global rate limiting, CSRF,
+  and the email queue. Without it the app uses an in-memory fallback that logs a
+  "not suitable for multi-instance" warning and loses that state on restart.
+- **Object storage**: `file://` (single host) or S3/R2/GCS/Azure for the upload location
+- **SMTP / email provider**: Required for real email (registration, password reset,
+  invites, magic-link). The default `stub` provider only logs.
 - **Disk Space**: Minimum 1GB for application and initial data storage
 - **Memory**: Minimum 512MB RAM (1GB+ recommended)
-- **Network**: Access to PostgreSQL database and file storage location
+- **Network**: Access to PostgreSQL database, Redis, and the file storage location
 
 ### Required Tools
 
@@ -87,6 +102,23 @@ Create the initial tenant and admin user:
   --default-tenant-name="Your Organization"
 ```
 
+### 5. Create the Back-Office (Platform-Operator) Account
+
+`db migrate data` creates the **tenant** and the tenant **admin** user. The
+**back-office / platform-operator** account lives in a separate auth plane and
+is created with the `backoffice` CLI (run it on the application host with the
+DB DSN available in the environment, e.g. `INVENTARIO_DB_DSN`):
+
+```bash
+# Create the operator account (a strong random password is generated if --password is omitted)
+./inventario backoffice bootstrap \
+  --email="ops@yourcompany.com" \
+  --name="Operations"
+
+# Enroll TOTP for the operator (required by default — bootstrap sets --mfa-enforced=true)
+./inventario backoffice mfa setup --email="ops@yourcompany.com"
+```
+
 ## Application Configuration
 
 ### Environment Variables
@@ -94,15 +126,47 @@ Create the initial tenant and admin user:
 Create a production configuration using environment variables:
 
 ```bash
-# Database configuration
+# Database configuration (top-level key — NOT under a run/ prefix)
 export INVENTARIO_DB_DSN="postgres://inventario:your_secure_password@localhost:5432/inventario?sslmode=disable"
 
 # Server configuration
-export INVENTARIO_ADDR=":8080"
-export INVENTARIO_UPLOAD_LOCATION="file:///var/lib/inventario/uploads?create_dir=1"
+# The default port is :3333. The run server reads its settings under the
+# INVENTARIO_RUN_ prefix; INVENTARIO_ADDR / INVENTARIO_UPLOAD_LOCATION (no prefix)
+# are NOT consumed.
+export INVENTARIO_RUN_ADDR=":3333"
+export INVENTARIO_RUN_UPLOAD_LOCATION="file:///var/lib/inventario/uploads?create_dir=1"
+export INVENTARIO_RUN_PUBLIC_URL="https://inventario.example.com"   # used in email links
 
-# Security configuration (REQUIRED for production)
+# Security configuration (BOTH REQUIRED for production)
+# If either is left empty the app auto-generates an ephemeral key at boot and logs
+# it — that breaks user sessions / MFA (JWT) and every signed file URL (file signing
+# key) across restarts, so set stable values and keep them constant forever.
 export INVENTARIO_RUN_JWT_SECRET="$(openssl rand -hex 32)"
+export INVENTARIO_RUN_FILE_SIGNING_KEY="$(openssl rand -hex 32)"
+
+# Optional: backup signing key for signed .inb backups (#534).
+# Auto-generated if empty; set it stably to keep .inb archives verifiable.
+export INVENTARIO_RUN_BACKUP_SIGNING_KEY="$(openssl rand -hex 32)"
+
+# CORS (the bundled SPA is same-origin; leave empty to deny cross-origin)
+export INVENTARIO_RUN_ALLOWED_ORIGINS=""
+
+# Redis (recommended). Wire each Redis-backed feature to your Redis instance;
+# without these the app uses single-instance in-memory fallbacks.
+export INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL="redis://localhost:6379/0"
+export INVENTARIO_RUN_AUTH_RATE_LIMIT_REDIS_URL="redis://localhost:6379/0"
+export INVENTARIO_RUN_GLOBAL_RATE_LIMIT_REDIS_URL="redis://localhost:6379/0"
+export INVENTARIO_RUN_CSRF_REDIS_URL="redis://localhost:6379/0"
+export INVENTARIO_RUN_EMAIL_QUEUE_REDIS_URL="redis://localhost:6379/0"
+
+# Email provider (default "stub" only logs; use "smtp" for real delivery)
+export INVENTARIO_RUN_EMAIL_PROVIDER="smtp"
+export INVENTARIO_RUN_EMAIL_FROM="no-reply@example.com"
+export INVENTARIO_RUN_SMTP_HOST="smtp.example.com"
+export INVENTARIO_RUN_SMTP_PORT="587"
+export INVENTARIO_RUN_SMTP_USERNAME="smtp-user"
+export INVENTARIO_RUN_SMTP_PASSWORD="smtp-password"
+export INVENTARIO_RUN_SMTP_USE_TLS="true"
 
 # Worker configuration (optional)
 export INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS="3"
@@ -122,13 +186,24 @@ export TZ="UTC"
 Instead of environment variables, you can create a `config.yaml` file:
 
 ```yaml
-database:
-  db-dsn: "postgres://inventario:your_secure_password@localhost:5432/inventario?sslmode=disable"
+# db-dsn is a top-level key (not nested under a "database:" key).
+db-dsn: "postgres://inventario:your_secure_password@localhost:5432/inventario?sslmode=disable"
 
 run:
-  addr: ":8080"
+  addr: ":3333"
   upload-location: "file:///var/lib/inventario/uploads?create_dir=1"
+  public-url: "https://inventario.example.com"
   jwt-secret: "your-secure-32-byte-secret-here"
+  file-signing-key: "your-secure-32-byte-file-signing-key-here"
+  allowed-origins: ""
+  token-blacklist-redis-url: "redis://localhost:6379/0"
+  csrf-redis-url: "redis://localhost:6379/0"
+  email-provider: "smtp"
+  email-from: "no-reply@example.com"
+  smtp-host: "smtp.example.com"
+  smtp-port: 587
+  smtp-username: "smtp-user"
+  smtp-use-tls: true
   max-concurrent-exports: 3
   max-concurrent-imports: 1
   thumbnail-max-concurrent-per-user: 5
@@ -138,10 +213,15 @@ run:
 
 ### Security Considerations
 
-1. **JWT Secret**: Generate a secure 32+ character secret:
+1. **JWT Secret & File Signing Key**: Both are required in production. Generate
+   each as a secure 32+ byte value and keep them constant across restarts:
    ```bash
-   openssl rand -hex 32
+   openssl rand -hex 32   # INVENTARIO_RUN_JWT_SECRET
+   openssl rand -hex 32   # INVENTARIO_RUN_FILE_SIGNING_KEY
    ```
+   Leaving either empty makes the app auto-generate an ephemeral key at boot:
+   rotating the JWT secret invalidates all sessions and MFA enrollments, and a
+   changing file signing key breaks every outstanding signed download URL.
 
 2. **Database Passwords**: Use strong, unique passwords for database users
 
@@ -169,7 +249,7 @@ run:
 
 # Or with command line flags
 ./inventario run \
-  --addr=":8080" \
+  --addr=":3333" \
   --db-dsn="postgres://inventario:password@localhost:5432/inventario?sslmode=disable" \
   --upload-location="file:///var/lib/inventario/uploads?create_dir=1"
 ```
@@ -195,9 +275,10 @@ RestartSec=5
 
 # Environment variables
 Environment=INVENTARIO_DB_DSN=postgres://inventario:password@localhost:5432/inventario?sslmode=disable
-Environment=INVENTARIO_ADDR=:8080
-Environment=INVENTARIO_UPLOAD_LOCATION=file:///var/lib/inventario/uploads?create_dir=1
+Environment=INVENTARIO_RUN_ADDR=:3333
+Environment=INVENTARIO_RUN_UPLOAD_LOCATION=file:///var/lib/inventario/uploads?create_dir=1
 Environment=INVENTARIO_RUN_JWT_SECRET=your-secure-32-byte-secret-here
+Environment=INVENTARIO_RUN_FILE_SIGNING_KEY=your-secure-32-byte-file-signing-key-here
 
 # Security settings
 NoNewPrivileges=true
@@ -227,10 +308,10 @@ Once the application is running, verify it's working:
 
 ```bash
 # Check readiness endpoint (DB/Redis dependencies reachable)
-curl http://localhost:8080/readyz
+curl http://localhost:3333/readyz
 
 # Check web interface
-curl http://localhost:8080/
+curl http://localhost:3333/
 ```
 
 ### Database Connection
@@ -350,10 +431,11 @@ second factor on next sign-in, and can re-enable MFA from Settings.
 
 ### Logs and Debugging
 
-Enable verbose logging by setting log level:
+There is no log-level knob (`LOG_LEVEL` / `INVENTARIO_LOG_LEVEL` are not consumed).
+The only logging control is the output format — set it to `json` for structured logs:
 
 ```bash
-export LOG_LEVEL=debug
+export INVENTARIO_LOG_FORMAT=json
 ./inventario run
 ```
 

@@ -6,8 +6,10 @@ practical, otherwise enforced by review. If a rule disagrees with the
 
 ## TypeScript
 
-- **Strict mode is on** — see `frontend/tsconfig.json`. Never weaken `strict`
-  to land a PR; fix the typing instead.
+- **Strict mode is on** — set in `frontend/tsconfig.app.json` and
+  `frontend/tsconfig.node.json` (the root `frontend/tsconfig.json` is a
+  solution file that only references them). Never weaken `strict` to land a
+  PR; fix the typing instead.
 - **`any` is a warning, not an error** — `@typescript-eslint/no-explicit-any:
   warn` (see `frontend/eslint.config.js`). Treat each `any` as a TODO and
   prefer `unknown` + a narrowing guard, or a typed schema (`zod`,

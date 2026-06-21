@@ -302,52 +302,43 @@ curl http://localhost:3333/readyz
 
 For advanced use cases, you can run migrations manually:
 
-#### Check Migration Status
+#### List Migrations
 
 ```bash
-# See which migrations have been applied
-docker-compose exec inventario ./inventario db migrate status
-
-# Expected output:
-# Migration: 001_initial_schema.up.sql - Applied
-# Migration: 002_add_user_roles.up.sql - Applied
-# Migration: 003_add_file_signing.up.sql - Pending
+# See the available migrations and which have been applied
+docker-compose exec inventario inventario db migrate list
 ```
 
 #### Run Migrations Manually
 
 ```bash
 # Run all pending migrations
-docker-compose exec inventario ./inventario db migrate up
-
-# Run specific number of migrations
-docker-compose exec inventario ./inventario db migrate up --steps 1
+docker-compose exec inventario inventario db migrate up
 
 # Preview migrations without executing (dry-run)
-docker-compose exec inventario ./inventario db migrate up --dry-run
+docker-compose exec inventario inventario db migrate up --dry-run
 ```
 
 #### Rollback Migrations
 
+`down` takes a target version (the migration version to roll back to) as a positional argument.
+
 ```bash
-# Rollback last migration
-docker-compose exec inventario ./inventario db migrate down --steps 1
+# Roll back to a specific migration version (find versions with `db migrate list`)
+docker-compose exec inventario inventario db migrate down <target-version>
 
 # Preview rollback without executing
-docker-compose exec inventario ./inventario db migrate down --steps 1 --dry-run
+docker-compose exec inventario inventario db migrate down <target-version> --dry-run
 
-# Check status after rollback
-docker-compose exec inventario ./inventario db migrate status
+# Skip the confirmation prompt (dangerous!)
+docker-compose exec inventario inventario db migrate down <target-version> --confirm
+
+# List migrations after rollback
+docker-compose exec inventario inventario db migrate list
 ```
 
-#### Force Migration Version
-
-```bash
-# Mark a migration as applied without running it
-docker-compose exec inventario ./inventario db migrate force --version 3
-
-# Useful for recovery scenarios
-```
+> **Warning:** Down migrations can cause data loss. Always back up your database
+> before rolling back in production.
 
 ### Migration Troubleshooting
 
@@ -392,7 +383,7 @@ docker-compose logs inventario-migrate | grep -i "error\|failed"
 docker-compose exec postgres pg_isready -U inventario
 
 # 4. Verify database schema
-docker-compose exec inventario ./inventario db migrate status
+docker-compose exec inventario inventario db migrate verify
 
 # 5. If database is corrupted, restore from backup
 docker-compose down

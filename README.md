@@ -84,21 +84,13 @@ Inventario supports dry run mode for all database operations, allowing you to pr
 
 # Create tenants and users for initial setup
 ./inventario tenants create --name="My Organization" --slug="my-org" --dry-run
-./inventario users create --email="admin@example.com" --tenant="my-org" --role="admin" --dry-run
+./inventario users create --email="admin@example.com" --tenant="my-org" --dry-run
 ```
 
-For schema management operations using the Ptah tool:
-
-```bash
-# Preview schema creation
-go run ./ptah/cmd write-db --root-dir ./models --db-url postgres://user:pass@localhost/db --dry-run
-
-# Preview schema deletion
-go run ./ptah/cmd drop-schema --root-dir ./models --db-url postgres://user:pass@localhost/db --dry-run
-
-# Preview complete database cleanup
-go run ./ptah/cmd drop-all --db-url postgres://user:pass@localhost/db --dry-run
-```
+Schema migrations are generated from the Go model annotations (Ptah is an
+external module — `github.com/stokaro/ptah`) via `scripts/generate-migration.sh`
+and applied with `./inventario db migrate up`. See [AGENTS.md](AGENTS.md) for the
+migration workflow.
 
 Dry run mode is especially useful for:
 - Testing configurations before applying to production
@@ -134,25 +126,21 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 # Get detailed tenant information
 ./inventario tenants get acme
 
-# Update tenant properties
-./inventario tenants update acme --name="Acme Corp Ltd" --domain="newdomain.com"
-
-# Update tenant interactively
-./inventario tenants update acme --interactive
+# Update tenant registration mode (open, approval, closed)
+./inventario tenants update acme --registration-mode=approval
 
 # Delete tenant with confirmation
 ./inventario tenants delete acme
 
 # Preview operations without making changes
 ./inventario tenants create --dry-run --name="Test Org"
-./inventario tenants update acme --name="New Name" --dry-run
 ./inventario tenants delete acme --dry-run
 ```
 
 #### User Management
 ```bash
-# Create an admin user
-./inventario users create --email="admin@acme.com" --tenant="acme" --role="admin"
+# Create a user
+./inventario users create --email="admin@acme.com" --tenant="acme"
 
 # Create a user interactively with secure password input
 ./inventario users create
@@ -163,8 +151,8 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 # List users in specific tenant
 ./inventario users list --tenant=acme
 
-# List admin users only
-./inventario users list --role=admin
+# List active users only
+./inventario users list --active=true
 
 # Search users
 ./inventario users list --search=john
@@ -172,29 +160,18 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 # Get detailed user information
 ./inventario users get admin@acme.com
 
-# Update user properties
-./inventario users update admin@acme.com --name="New Name" --role="user"
-
-# Change user password
-./inventario users update admin@acme.com --password
-
-# Move user to different tenant
-./inventario users update admin@acme.com --tenant="other-tenant"
-
-# Deactivate user
-./inventario users update admin@acme.com --active=false
-
-# Update user interactively
-./inventario users update admin@acme.com --interactive
-
 # Delete user with confirmation
 ./inventario users delete admin@acme.com
 
 # Preview operations without making changes
 ./inventario users create --dry-run --email="test@example.com" --tenant="acme"
-./inventario users update admin@acme.com --role="user" --dry-run
 ./inventario users delete admin@acme.com --dry-run
 ```
+
+> **Note:** `users update` is **not yet implemented** — the command currently
+> prints a placeholder message and exits 0 without modifying anything. To grant
+> platform-wide system-admin privileges, use `admin grant-system-admin` (see
+> [System Administrators](#system-administrators) below).
 
 **Important**: User and tenant commands only work with PostgreSQL databases. Memory databases are not supported for persistent operations.
 
@@ -266,9 +243,9 @@ canonical worker types, the equivalent admin REST API, and the
 
 **User Commands:**
 - `create`: Create new users with secure password input and validation
-- `list`: List users with filtering by tenant, role, active status, and search
+- `list`: List users with filtering by tenant, active status, and search
 - `get`: Get detailed user information including tenant details
-- `update`: Update user properties including password changes and tenant moves
+- `update`: Not yet implemented (placeholder — exits without modifying anything)
 - `delete`: Delete users with confirmation prompts
 
 **Common Flags:**
@@ -283,7 +260,6 @@ canonical worker types, the equivalent admin REST API, and the
 - `--offset`: Number of results to skip (default: 0)
 - `--search`: Search by name, slug, or email
 - `--status`: Filter by status (tenants: active, suspended, inactive)
-- `--role`: Filter by role (users: admin, user)
 - `--active`: Filter by active status (users: true, false)
 - `--tenant`: Filter by tenant (users only)
 
@@ -303,7 +279,7 @@ canonical worker types, the equivalent admin REST API, and the
 ### Prerequisites
 
 - **Go**: Version 1.26 or higher
-- **Node.js**: Version 22.15 or higher (managed via Volta)
+- **Node.js**: Version 24.16.0 (managed via Volta)
 - **Git**: For cloning the repository
 
 ### macOS
@@ -432,8 +408,11 @@ For integration tests with PostgreSQL:
 
 ```bash
 export POSTGRES_TEST_DSN="postgres://user:password@localhost:5432/test_db?sslmode=disable"
-go test -tags=integration ./...
+cd go && go test ./...
 ```
+
+Integration tests gate on the `POSTGRES_TEST_DSN` environment variable: when it
+is unset, the relevant tests call `t.Skip`. There is no build tag to enable them.
 
 ### CLI Workflow Integration Test
 
@@ -445,7 +424,7 @@ export POSTGRES_TEST_DSN="postgres://user:password@localhost:5432/test_db?sslmod
 
 # Run the CLI workflow integration test
 cd go
-go test -tags=integration ./integration_test/cli_workflow_integration_test.go -v
+go test ./integration/ -run TestCLIWorkflowIntegration -v
 
 # Or use the provided scripts
 ./scripts/run-integration-tests.sh  # Linux/macOS
@@ -463,9 +442,16 @@ This test validates:
 
 - [Production Release & Deployment Runbook](PRODUCTION.md) - Cut a release and deploy to Kubernetes (k3s/GKE/DOKS), distribution-agnostic
 - [Production Deployment (bare-metal / systemd)](DEPLOYMENT.md) - Single-host install without Kubernetes
-- [Signed URLs for Secure File Access](SIGNED_URLS.md) - Comprehensive guide to the secure file access system
 - [System Admin Operations Runbook](devdocs/admin-runbook.md) - Bootstrapping system admins, audit-log inspection, lockout recovery
 - [Admin Section Threat Model](devdocs/security/admin-threat-model.md) - Security model for the cross-tenant admin surface
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the security policy and how to report a vulnerability.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set up your environment and submit changes.
 
 ## License
 This module is licensed under the MIT License. See the [LICENSE](LICENSE) file for details. You are free to use, modify, and distribute this software in accordance with the terms of the license.

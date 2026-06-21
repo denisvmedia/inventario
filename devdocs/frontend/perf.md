@@ -8,8 +8,8 @@ Config: `frontend/.size-limit.json`. Three groups:
 
 | Group                                   | Limit (gzip) | Why                                                                                              |
 | --------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------ |
-| Initial JS (main + jsx-runtime + button) | 200 KB       | First-paint cost. Today: ~178 KB after auth (#1407) + dashboard (#1408). ~20 KB of headroom for items list (#1410) + widgets. |
-| CSS                                     | 14 KB        | Tailwind v4 + tokens. Today: ~12.5 KB after the dashboard's stat-card grid + the `Card` primitive shadow tier; was 12 KB before #1408. |
+| Initial JS (entry chunk — all eager code) | 230 KB       | First-paint cost. Headroom for items list (#1410) + widgets. |
+| CSS                                     | 20 KB        | Tailwind v4 + tokens. |
 | Lazy real pages (Dashboard / NotFound / RootRedirect) | 6 KB | Code-split chunks. Today: ~3.7 KB after the dashboard widgets landed (#1408); was 3 KB while the page was a placeholder. |
 
 Run locally:
@@ -33,7 +33,7 @@ CI: `.github/workflows/frontend-size.yml` runs `npm ci && npm run build && npm r
 
 1. `npm run size:why` — opens an interactive bundle inspector. Look for new dependencies that landed in the same PR.
 2. `dist/assets/index-*.js` — the entry chunk. If a feature page added eagerly (not via `React.lazy()`), it lands here.
-3. `vite.config.ts` — confirm `build.rolldownOptions.output.codeSplitting` is on; sometimes an unintentional side-effect import breaks a chunk.
+3. Code-splitting relies on Vite's default per-`React.lazy()` chunking (`vite.config.ts` doesn't override `build.rollupOptions`); sometimes an unintentional eager (static) import of a lazy page pulls it back into the entry chunk.
 
 ## Lighthouse — LHCI
 

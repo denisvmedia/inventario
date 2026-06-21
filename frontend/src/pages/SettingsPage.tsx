@@ -69,6 +69,18 @@ import { APP_VERSION, shortAppVersion } from "@/lib/app-version"
 
 type SectionId = "account" | "appearance" | "notifications" | "privacy" | "help"
 
+// End-user "Getting started" guide. Opened in a new tab from the Help
+// section's Documentation row, which no longer points at the coming-soon
+// /help stub (#2104) — the /help route itself still exists. Hosted
+// alongside the source so it tracks the running version.
+const DOCS_URL =
+  "https://github.com/denisvmedia/inventario/blob/master/docs/user-guide/getting-started.md"
+
+// GitHub Releases page. Opened in a new tab from the Help section's
+// "What's new" row, which no longer points at the coming-soon /whats-new
+// stub — the /whats-new route itself still exists.
+const RELEASES_URL = "https://github.com/denisvmedia/inventario/releases"
+
 interface SectionMeta {
   id: SectionId
   // Lucide icon for the nav rail.
@@ -911,23 +923,26 @@ function HelpSection() {
   const shortcutsDialog = useKeyboardShortcutsDialog()
   const [feedbackOpen, setFeedbackOpen] = useState(false)
 
-  // Four rows: docs (#1384), shortcuts (#1385 — opens the cheat-sheet
-  // modal in-place), what's new (#1386 — with a marketing v{Major.Minor}
-  // badge per design-audit #1536), and "Contact support / share
-  // feedback" (#1387 — opens the FeedbackDialog in-place). The dialog's
-  // "Question" type doubles as the contact-support channel, so the
-  // former static mailto row was folded into this single entry point.
-  // Real destinations behind each route are ComingSoonPage already;
-  // this section mostly acts as a discovery aid.
+  // Four rows: docs (#2104 — opens the end-user "Getting started" guide in
+  // a new tab; the row no longer points at the coming-soon /help stub, though
+  // the /help route still exists), shortcuts (#1385 — opens the cheat-sheet
+  // modal in-place), what's new (#1386 — opens the GitHub Releases page in a
+  // new tab instead of the coming-soon /whats-new stub, which still exists;
+  // carries a marketing v{Major.Minor} badge per design-audit #1536), and
+  // "Contact support / share feedback" (#1387 — opens the FeedbackDialog
+  // in-place). The dialog's "Question" type doubles as the contact-support
+  // channel, so the former static mailto row was folded into this single
+  // entry point.
   type HelpRowKey = "documentation" | "shortcuts" | "whatsNew" | "feedback"
   // `href: "modal:shortcuts"` → renders a click-to-open <button> wired
   //   to the keyboard-shortcuts dialog. `href: "modal:feedback"` →
-  //   opens the FeedbackDialog. Using a sentinel string keeps the row
-  //   map flat and the renderer easy to follow.
+  //   opens the FeedbackDialog. An `http(s)` href → external <a> opening
+  //   in a new tab. Anything else → in-app <Link>. Using a sentinel
+  //   string keeps the row map flat and the renderer easy to follow.
   const rows: Array<{ key: HelpRowKey; href: string }> = [
-    { key: "documentation", href: "/help" },
+    { key: "documentation", href: DOCS_URL },
     { key: "shortcuts", href: "modal:shortcuts" },
-    { key: "whatsNew", href: "/whats-new" },
+    { key: "whatsNew", href: RELEASES_URL },
     { key: "feedback", href: "modal:feedback" },
   ]
 
@@ -938,12 +953,13 @@ function HelpSection() {
       <SectionTitle>{t("settings:help.title")}</SectionTitle>
       <div className="rounded-xl border border-border divide-y divide-border">
         {rows.map(({ key, href }) => {
-          // Two-arm union: modal trigger (in-app dialog) or in-app
-          // route. Both use the same chrome — chevron-right + label +
-          // description. The version Badge only renders on the
-          // "whatsNew" row.
+          // Three-arm union: modal trigger (in-app dialog), external link
+          // (opens in a new tab), or in-app route. All use the same chrome
+          // — chevron-right + label + description. The version Badge only
+          // renders on the "whatsNew" row.
           const labelKey = key
           const isModal = href.startsWith("modal:")
+          const isExternal = /^https?:\/\//.test(href)
           const RowInner = (
             <>
               <div className="flex items-center gap-2">
@@ -975,6 +991,21 @@ function HelpSection() {
                 <div>{RowInner}</div>
                 <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
               </button>
+            )
+          }
+          if (isExternal) {
+            return (
+              <a
+                key={key}
+                href={href}
+                target="_blank"
+                rel="noreferrer noopener"
+                data-testid={`help-row-${key}`}
+                className="flex items-center justify-between p-4 text-left transition-colors hover:bg-muted/50"
+              >
+                <div>{RowInner}</div>
+                <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
+              </a>
             )
           }
           return (

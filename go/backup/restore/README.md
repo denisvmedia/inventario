@@ -1,182 +1,148 @@
 # Restore Package
 
-The `restore` package is a core Go package that handles XML restore operations in the Inventario application. It provides comprehensive functionality to restore inventory data from XML exports with support for multiple restore strategies, detailed logging, and background processing.
+The `restore` package handles backup restore operations in the Inventario application. It restores inventory data from a backup archive with support for multiple restore strategies, detailed step-by-step logging, and background processing. By default it restores from a **signed `.inb` archive** (issue #534); the obsolete XML format is supported only behind the `legacy_xml_backup` build tag.
 
 ## Overview
 
-The restore package is responsible for parsing XML export files and restoring inventory data back into the database. It supports multiple restore strategies to handle different scenarios, implements streaming approaches for large files, and provides detailed step-by-step logging of the restoration process.
+The restore package reads a backup archive and writes its inventory data back into the database. For the default `.inb` format it **verifies the Ed25519 signature against the server's own key before inflating**, then walks the inner tar applying each entity through strategy-aware model handlers. It supports multiple restore strategies, streams large file members without buffering, and logs the process step by step.
+
+## Backup Format
+
+The decode body splits by build tag; everything around it is format-agnostic.
+
+- `processor/processor.go` (under `//go:build !legacy_xml_backup`) — the default `.inb` restorer: `decodeAndRestore` verifies the signature, then `applyInbPayload` walks the inner tar.
+- `processor/processor_legacy_xml.go` (under `//go:build legacy_xml_backup`) — the deprecated XML restorer; this is where the build-tag-gated `RestoreFromXML` entry point lives (used only by the legacy XML test suite).
+- `processor/processor_shared.go` — build-agnostic processor glue: `Process`, option validation, strategy handlers, step logging.
+- `service.go` — the thin `RestoreService` that constructs a processor.
+- `worker.go`, `status_querier.go` — background worker and a query-only status helper.
+
+An `.inb` archive (see the `export` package) is an outer tar of `payload.tar.gz.sig` + `payload.tar.gz`. On restore the payload is spooled to a temp file while a streaming SHA-256 digest is computed, the signature is verified **before** inflate, and only then is the inner tar walked: per-location JSON members recreate entities, and `files/...` members stream their bytes into a re-minted tenant blob key. A bad/missing signature, a non-`.inb` upload, or any framing violation fails the restore hard.
 
 ## Key Features
 
 ### 1. Multiple Restore Strategies
-- **Full Replace (Destructive)**: Wipes current database and restores everything from backup
-- **Merge Add**: Only adds data missing in current database (matched by primary key)
+- **Full Replace (Destructive)**: Wipes current data and restores everything from backup
+- **Merge Add**: Only adds data missing in the current database (matched by immutable UUID)
 - **Merge Update**: Creates if missing, updates if exists, leaves other records untouched
 
-### 2. Streaming XML Processing
-- Memory-efficient streaming approach for large XML files
-- On-the-fly processing without loading entire files into memory
-- Chunked decoding to handle massive inventories with embedded base64 data
-- Real-time statistics collection during processing
+### 2. Memory-Safe Streaming
+- The verified payload is inflated and walked member-by-member; file bytes are streamed straight into blob storage, never buffered.
+- Per-member and total caps bound a hostile archive (`maxInbMembers`, `maxInbTotalUncompress` = 8 GiB, `maxLocationDocBytes` = 32 MiB).
 
 ### 3. Detailed Step Logging
-- Comprehensive step-by-step logging of restoration process
-- Emoji-based status indicators (📝, 🔄, ✅, ❌, ⏭️)
-- Individual item processing logs showing what was checked, skipped, updated
-- Real-time progress tracking with detailed action descriptions
+- Step-by-step logging of the restoration process with status updates per phase and per entity
+- Real-time progress tracking persisted as restore steps
 
 ### 4. File Data Restoration
-- Restoration of binary file attachments (images, invoices, manuals)
-- Base64 decoding and file recreation in blob storage
-- Proper MIME type and extension handling
-- Error resilience for corrupted or missing file data
+- Commodity file members are streamed into a re-minted tenant blob key (never the archive path or source key)
+- A declared file reference whose member never arrives fails the restore (`ErrMissingFileMembers`) rather than silently dropping data
+- Cover-photo cross-references (#1451) are patched after all files are restored
 
 ### 5. Background Processing
 - Worker-based architecture for asynchronous restoration
-- Prevents API timeouts on large restore operations
-- Semaphore-based concurrency control (only one restore at a time)
-- Graceful error handling and status reporting
+- Semaphore-based concurrency control (default: one restore at a time)
+- Soft-pause aware (#1308)
 
 ### 6. Dry Run Support
-- Preview mode to see what would be restored without making changes
-- Validation of XML structure and data integrity
-- Conflict detection and resolution preview
-- Safe testing of restore operations
+- Preview mode that drains file bytes (for the byte count) but writes nothing
 
 ## Architecture
 
-The restore package follows a processor-based architecture where each restore operation is handled by a dedicated `RestoreOperationProcessor` instance. This design provides better isolation, detailed logging, and cleaner separation of concerns.
+The restore package is processor-based: each restore operation is handled by a dedicated `RestoreOperationProcessor` instance (in the `processor` subpackage) for isolation, detailed logging, and cleaner separation of concerns.
 
 ### Core Components
 
 #### RestoreService (`service.go`)
-The main service responsible for restore operations:
-- **NewRestoreService()**: Creates a new restore service instance
-- **ProcessRestoreOperation()**: Delegates restore processing to RestoreOperationProcessor
-- Lightweight service that acts as a factory for restore processors
+A thin service that constructs and delegates to a processor:
+- **NewRestoreService()**: creates the service
+- **ProcessRestoreOperation()**: builds a `RestoreOperationProcessor` and calls its `Process()`
 
-#### RestoreOperationProcessor (`service.go`)
-Core processor that handles restore operations with detailed logging:
-- **Process()**: Main orchestration method for complete restore operations
-- **RestoreFromXML()**: Processes XML restore with streaming and detailed logging
-- **processRestoreWithDetailedLogging()**: Handles detailed step-by-step logging
-- **validateOptions()**: Validates restore configuration options
-- **clearExistingData()**: Handles full replace strategy data clearing
-- **markRestoreFailed()**: Error handling and status management
-- Supports multiple restore strategies with specialized processing methods
+#### RestoreOperationProcessor (`processor/`)
+Core processor that handles a restore with detailed logging:
+- **Process()** (`processor_shared.go`): main orchestration — status/step bookkeeping, blob open, then the per-build `decodeAndRestore`
+- **decodeAndRestore()** (`processor.go` / `processor_legacy_xml.go`): the per-build decode/verify/apply body
+- **applyInbPayload()** (`processor.go`): walks the verified inner tar
+- **RestoreFromXML()** (`processor_legacy_xml.go`, **build-tag-gated**): exported entry point used only by the legacy XML test suite
+- **validateOptions()**, **prepareRestore()**, **markRestoreFailed()**, and the strategy handlers (`applyStrategyForLocationModel`, `…AreaModel`, `…CommodityModel`, `…FileModel`) in `processor_shared.go`
 
 #### RestoreWorker (`worker.go`)
 Background worker that manages restore processing:
-- **Start()**: Begins processing restores in the background
-- **Stop()**: Gracefully stops the restore worker
-- **processPendingRestores()**: Finds and processes pending restore requests
-- **processRestore()**: Processes individual restore operations
-- Configurable poll intervals (default: 10 seconds)
-- Semaphore-based concurrency limiting (max 1 concurrent restore)
+- **Start() / Stop() / IsRunning()**: lifecycle control
+- **processPendingRestores()**: finds and processes pending restore operations; respects soft-pause
+- **processRestore()**: processes a single restore operation
+- **HasRunningRestores()**: delegates to `RegistryStatusQuerier`
+- Configurable poll interval (default: 10 seconds) and max-concurrency (default: 1)
 
-#### XML Types (`types.go`)
-Defines XML structure and conversion methods:
-- **XMLInventory**: Root element containing all restore data
-- **XMLLocation**, **XMLArea**, **XMLCommodity**: Entity representations
-- **XMLFile**: File attachment structure with base64 data
-- **RestoreStats**: Statistics tracking during restoration
-- **RestoreOptions**: Configuration options for restore operations
+#### `.inb` Schemas (`types/types_inb.go`)
+Decoded counterparts to the export-side `.inb` documents (kept in sync with `backup/export/inb_types.go`): `INBLocationDoc`, `INBLocation`, `INBArea`, `INBCommodity`, `INBFileRef`, `INBUnassignedDoc`, plus the member-name constants `INBManifestMember`, `INBUnassignedMember`.
 
-### Processor-Based Architecture
-
-The refactored architecture centers around the `RestoreOperationProcessor` pattern:
-
-#### Key Benefits
-- **Operation Isolation**: Each restore operation gets its own processor instance
-- **Detailed Logging**: Built-in step-by-step logging with emoji indicators
-- **Error Handling**: Comprehensive error tracking and status management
-- **Resource Management**: Proper cleanup and resource management per operation
-- **Testability**: Easier unit testing with dedicated processor instances
-
-#### Processor Lifecycle
-1. **Creation**: `NewRestoreOperationProcessor()` creates processor for specific operation
-2. **Validation**: Processor validates restore operation and export file existence
-3. **Processing**: `Process()` method orchestrates the complete restore workflow
-4. **Logging**: Detailed steps logged throughout the process with status updates
-5. **Completion**: Final status and statistics recorded in database
-
-#### Key Processor Methods
-- **`Process()`**: Main orchestration method that handles the complete restore workflow
-- **`processRestoreWithDetailedLogging()`**: Coordinates XML processing with step logging
-- **`restoreFromXMLWithStreamingLogging()`**: Core XML processing with streaming and logging
-- **`processLocationWithLogging()`**: Processes individual locations with detailed logging
-- **`processAreaWithLogging()`**: Processes individual areas with detailed logging
-- **`processCommodityWithLogging()`**: Processes individual commodities with detailed logging
-- **`createRestoreStep()`**: Creates new restore steps for progress tracking
-- **`updateRestoreStep()`**: Updates existing restore steps with results
-- **`predictAction()`**: Predicts what action will be taken based on strategy
-- **`markRestoreFailed()`**: Handles error scenarios and status updates
+#### Restore Types (`types/types.go`)
+- **RestoreOptions**: `Strategy`, `IncludeFileData`, `DryRun`
+- **RestoreStrategy** + constants: `RestoreStrategyFullReplace` (`"full_replace"`), `RestoreStrategyMergeAdd` (`"merge_add"`), `RestoreStrategyMergeUpdate` (`"merge_update"`)
+- **RestoreStats**, **ExistingEntities**, **IDMapping**
 
 ### Restore Strategies
 
 #### Full Replace Strategy
 ```go
-RestoreStrategyFullReplace
+types.RestoreStrategyFullReplace // "full_replace"
 ```
-- **Behavior**: Clears entire database before restoration
-- **Use Case**: Complete database replacement from backup
+- **Behavior**: Clears existing data before restoration
+- **Use Case**: Complete replacement from backup
 - **Risk**: All current data is lost
-- **Validation**: Requires explicit confirmation
 
 #### Merge Add Strategy
 ```go
-RestoreStrategyMergeAdd
+types.RestoreStrategyMergeAdd // "merge_add"
 ```
 - **Behavior**: Only adds missing data, skips existing items
-- **Use Case**: Adding new data from backup without conflicts
-- **Risk**: Low - existing data remains unchanged
-- **Matching**: Based on XML IDs and unique identifiers
+- **Risk**: Low — existing data remains unchanged
+- **Matching**: Based on immutable UUIDs
 
 #### Merge Update Strategy
 ```go
-RestoreStrategyMergeUpdate
+types.RestoreStrategyMergeUpdate // "merge_update"
 ```
 - **Behavior**: Creates missing items, updates existing ones
-- **Use Case**: Synchronizing with updated backup data
-- **Risk**: Medium - existing data may be overwritten
-- **Matching**: Based on XML IDs with update capability
+- **Risk**: Medium — existing data may be overwritten
+- **Matching**: Based on immutable UUIDs with update capability
 
 ## Data Flow
 
-### Standard Restore Process
-1. **Request Creation**: User creates restore operation via API
+1. **Request Creation**: User creates a restore operation via API
 2. **Record Storage**: Restore operation created with "pending" status
-3. **Worker Detection**: RestoreWorker polls and detects pending operation
-4. **Processor Creation**: RestoreOperationProcessor created for the specific operation
-5. **Initialization**: Processor begins processing with initial logging and validation
-6. **XML Parsing**: Streaming XML parser processes file sections
-7. **Data Processing**: Entities processed according to selected strategy with detailed logging
-8. **File Restoration**: Binary files decoded and stored in blob storage
-9. **Statistics Collection**: Real-time tracking of processed entities
-10. **Completion**: Restore operation marked as completed with final statistics
-
-### Detailed Logging Flow
-1. **Step Creation**: RestoreOperationProcessor creates restore steps for each major phase
-2. **Progress Updates**: Steps updated with in-progress, success, or error status via `createRestoreStep()` and `updateRestoreStep()`
-3. **Item Logging**: Individual items logged with emoji indicators using `processLocationWithLogging()`, `processAreaWithLogging()`, `processCommodityWithLogging()`
-4. **Action Prediction**: `predictAction()` method predicts what action will be taken for each item based on strategy
-5. **Result Tracking**: Actual results compared with predictions and logged accordingly
-6. **Error Handling**: Failed items logged with detailed error messages via `markRestoreFailed()`
+3. **Worker Detection**: `RestoreWorker` polls and detects the pending operation
+4. **Processor Creation**: a `RestoreOperationProcessor` is created for the operation
+5. **Verify**: for `.inb`, the signature is verified before inflate
+6. **Apply**: the inner tar is walked, recreating entities per the selected strategy with step logging
+7. **File Restoration**: file members stream into re-minted tenant blob keys
+8. **Completion**: restore operation marked completed with final statistics
 
 ## Usage
 
 ### Creating a Restore Service
 ```go
-import "github.com/denisvmedia/inventario/backup/restore"
+import (
+    "github.com/denisvmedia/inventario/backup/restore"
+    "github.com/denisvmedia/inventario/internal/backupsign"
+    "github.com/denisvmedia/inventario/services"
+)
 
-// Create restore service
-service := restore.NewRestoreService(registrySet, uploadLocation)
+// entityService is *services.EntityService; signer is *backupsign.Signer
+// (used by the .inb restorer to verify the archive; ignored by the legacy XML
+// restorer, so the signature is identical across both builds).
+service := restore.NewRestoreService(factorySet, entityService, uploadLocation, signer)
 ```
 
 ### Starting the Restore Worker
 ```go
-// Create worker with max 1 concurrent restore
-worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation, 1)
+// registrySet is *registry.Set; the worker defaults to one concurrent restore.
+worker := restore.NewRestoreWorker(restoreService, registrySet, uploadLocation)
+
+// Optional configuration via functional options:
+//   restore.WithPollInterval(5 * time.Second)
+//   restore.WithMaxConcurrent(1)
+//   restore.WithPauseController(pauseController) // #1308 soft-pause
 
 // Start background processing
 ctx := context.Background()
@@ -188,7 +154,7 @@ defer worker.Stop()
 
 ### Processing a Restore Operation
 ```go
-// Process restore operation by ID
+// Process restore operation by ID.
 err := service.ProcessRestoreOperation(ctx, restoreOperationID, uploadLocation)
 if err != nil {
     log.Printf("Restore failed: %v", err)
@@ -197,152 +163,62 @@ if err != nil {
 
 ### Direct Processor Usage
 ```go
-// Create processor for specific restore operation
-processor := restore.NewRestoreOperationProcessor(restoreOperationID, registrySet, uploadLocation)
+import "github.com/denisvmedia/inventario/backup/restore/processor"
 
-// Process the restore operation
-err := processor.Process(ctx)
-if err != nil {
+p := processor.NewRestoreOperationProcessor(
+    restoreOperationID, factorySet, entityService, uploadLocation, signer,
+)
+if err := p.Process(ctx); err != nil {
     log.Printf("Restore failed: %v", err)
 }
 ```
 
 ### Restore Options Configuration
 ```go
-options := restore.RestoreOptions{
-    Strategy:        restore.RestoreStrategyMergeUpdate,
+options := types.RestoreOptions{
+    Strategy:        types.RestoreStrategyMergeUpdate,
     IncludeFileData: true,
     DryRun:          false,
 }
-
-// Using processor directly for XML restore
-processor := restore.NewRestoreOperationProcessor("operation-id", registrySet, uploadLocation)
-stats, err := processor.RestoreFromXML(ctx, xmlReader, options)
 ```
-
-## XML Processing
-
-### Streaming Approach
-The restore package uses a streaming XML parser to handle large files efficiently:
-
-```go
-decoder := xml.NewDecoder(reader)
-for {
-    tok, err := decoder.Token()
-    if err == io.EOF {
-        break
-    }
-    // Process tokens as they arrive
-}
-```
-
-### Entity Processing Order
-1. **Locations**: Processed first as they are referenced by areas
-2. **Areas**: Processed second as they are referenced by commodities
-3. **Commodities**: Processed last with full dependency resolution
-
-### File Data Handling
-- Base64 encoded data is decoded on-the-fly
-- Files are streamed directly to blob storage
-- MIME types and extensions are preserved
-- Corrupted files are logged but don't stop the restore
 
 ## Error Handling
-
-### Comprehensive Error Management
-- **Graceful Degradation**: Individual item failures don't stop entire restore
-- **Detailed Logging**: All errors logged with context and item information
-- **Status Tracking**: Failed restores marked with detailed error messages
-- **Rollback Support**: Dry run mode allows safe testing
-
-### Error Recovery
-- **Partial Success**: Statistics reflect successfully processed items
-- **File Fallbacks**: Missing or corrupted files logged but restore continues
-- **Validation Errors**: Data validation failures logged with specific field information
-- **Dependency Resolution**: Missing dependencies handled gracefully
+- **Graceful Degradation**: most per-item failures are tolerated and counted in `RestoreStats.Errors`
+- **Hard Failures**: signature verification failure, framing violations, missing file members (`ErrMissingFileMembers`), oversized members (`ErrLocationDocTooLarge`), and malformed entity fields (`ErrMalformedEntity`) abort the whole restore
+- **Status Tracking**: failed restores marked with a detailed error message
 
 ## Performance Considerations
 
 ### Memory Efficiency
-- **Streaming Processing**: XML processed without loading entire file into memory
-- **Chunked File Handling**: Large binary files processed in chunks
-- **Real-time Statistics**: Statistics collected without memory accumulation
-- **Garbage Collection**: Proper resource cleanup and memory management
+- **Verify-before-inflate**: the payload is digested via a temp file; nothing is decompressed until the signature is trusted
+- **Streaming file members**: file bytes are copied straight into blob storage
+- **Bounded walk**: per-member and total caps prevent decompression-bomb DoS
 
 ### Concurrency Control
-- **Single Restore Limit**: Only one restore operation allowed at a time
-- **Semaphore Protection**: Prevents resource conflicts and data corruption
-- **Background Processing**: Asynchronous processing prevents API timeouts
-- **Worker Isolation**: Restore operations isolated from other system processes
+- **Single Restore Default**: one restore operation at a time (`WithMaxConcurrent` to override)
+- **Background Processing**: asynchronous processing prevents API timeouts
 
 ## Testing
 
 ### Test Coverage
-- **Unit Tests**: `service_test.go`, `worker_test.go`, `types_test.go`
-- **Strategy Tests**: `merge_add_strategy_test.go` and other strategy-specific tests
-- **Integration Tests**: End-to-end restore operations with real XML files
-- **Error Tests**: Error handling and recovery scenarios
-
-### Test Framework
+- **Unit / Integration Tests**: `service_test.go`, `worker_test.go`, `streaming_test.go`, `restore_files_test.go`, `restore_tags_test.go`, `recursive_delete_integration_test.go`, `status_querier_test.go`
 - Uses frankban's quicktest framework
-- Table-driven tests for multiple restore strategies
-- RestoreOperationProcessor-based testing for realistic scenarios
 - Memory registries for isolated testing
-- Temporary file handling for integration tests
 
-## Configuration
+## Security Considerations
 
-### Environment Variables
-- **Upload Location**: Configurable blob storage location for file restoration
-- **Worker Concurrency**: Maximum concurrent restore operations (recommended: 1)
-- **Poll Intervals**: Restore processing frequency
-- **Timeout Settings**: Maximum restore operation duration
-
-### Database Integration
-- **Restore Operation Registry**: Stores restore metadata and status
-- **Restore Step Registry**: Tracks individual restore steps
-- **Entity Registries**: Access to locations, areas, commodities for restoration
-- **File Registries**: Access to images, invoices, manuals for file restoration
+### Data Protection
+- **Signature Verification**: `.inb` archives are verified against the server's own key before any inflate
+- **Path Sanitization**: inner-tar member names are sanitized (`blobkeys.SanitizeArchivePath`); unsafe names are rejected
+- **Key Re-minting**: file bytes are always written to a fresh tenant-namespaced blob key, never the archive path or source key (#1793)
+- **Ownership Validation**: commodity ownership is validated against the importing user before persisting
 
 ## Integration Points
 
 ### API Server Integration
 - **REST Endpoints**: `/api/v1/exports/{id}/restores` for restore operations
-- **Status Endpoints**: Real-time restore status and progress checking
-- **Step Endpoints**: Detailed step-by-step progress monitoring
-- **File Endpoints**: File restoration status and error reporting
-
-### Frontend Integration
-- **Restore Interface**: User interface for restore configuration
-- **Progress Tracking**: Real-time progress updates with step details
-- **Strategy Selection**: User-friendly restore strategy selection
-- **Dry Run Preview**: Preview mode for safe restore testing
+- **Status / Step Endpoints**: real-time restore status and step progress
 
 ### Storage Integration
-- **Blob Storage**: File restoration to cloud-agnostic storage
-- **Database Storage**: Metadata and status persistence
-- **File Management**: Automatic file organization and cleanup
-
-## Security Considerations
-
-### Data Protection
-- **Validation**: Comprehensive input validation for XML data
-- **Sanitization**: Proper sanitization of file paths and names
-- **Access Control**: Restore operations require appropriate permissions
-- **Audit Logging**: Complete audit trail of all restore operations
-
-### File Security
-- **Path Validation**: Prevention of directory traversal attacks
-- **File Type Validation**: MIME type and extension validation
-- **Size Limits**: Protection against oversized file uploads
-- **Virus Scanning**: Integration points for file scanning (future enhancement)
-
-## Future Enhancements
-
-Potential areas for future development:
-- **Selective Restoration**: Restore specific entities or date ranges
-- **Conflict Resolution UI**: Interactive conflict resolution interface
-- **Backup Validation**: Pre-restore backup integrity checking
-- **Progress Streaming**: Real-time progress updates (e.g. via WebSocket)
-- **Rollback Capability**: Automatic rollback on restore failures
-- **Format Support**: Revise the format to use tar.gz, which will contain XML file with DB records and files that the XML refers to
+- **Blob Storage**: file restoration to tenant-namespaced, cloud-agnostic storage
+- **Database Storage**: metadata and status persistence

@@ -84,7 +84,7 @@ or `imp: true` / `impersonator_id`, or replays a captured one.
 - All tokens are HS256-signed with the server secret and verified on
   every request; the algorithm is pinned (no `alg:none` downgrade).
 - Access tokens are short-lived; impersonation tokens are shorter still
-  (≤30 min, `INVENTARIO_IMPERSONATION_TTL`).
+  (≤30 min, `INVENTARIO_RUN_IMPERSONATION_TTL`).
 - The `is_system_admin` claim is **not** the authorization gate (#1784):
   `RequireSystemAdmin` queries `system_admin_grants` on every admin
   request, so a forged claim that escaped signature verification
@@ -212,8 +212,12 @@ admin request from a malicious page.
   impersonation end (back to the operator).
 - `POST /admin/impersonation/end` is the one mutation mounted outside
   CSRF middleware; it is self-authorising — it requires a validly
-  signed impersonation token *and* the matching browser-bound marker
-  cookie, which together provide equivalent assurance.
+  signed impersonation token (`imp=true`) whose `impersonator_id` matches
+  the JTI-keyed server-side return slot (`OperatorUserID`, with
+  `OperatorKind == backoffice_user`). The browser-bound `imp:<jti>`
+  marker cookie that previously co-authenticated this endpoint was retired
+  in #1785 Phase 5; the signed token + return-slot binding now provides the
+  assurance on its own.
 
 **Residual risk.** Minimal; same posture as the rest of the app.
 

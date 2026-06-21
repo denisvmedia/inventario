@@ -218,7 +218,7 @@ than one replica (set `persistence.enabled=false`).
 
 - [ ] Put the R2 credentials in the Secret as `AWS_ACCESS_KEY_ID` /
   `AWS_SECRET_ACCESS_KEY`.
-- [ ] ⚠️ **R2 checksum caveat.** `aws-sdk-go-v2` (v1.41) defaults to sending request
+- [ ] ⚠️ **R2 checksum caveat.** `aws-sdk-go-v2` (v1.42.0) defaults to sending request
   checksums (CRC32) that R2 has historically rejected (uploads fail with HTTP 501 /
   signature errors). If you hit that, set these two env vars — the chart loads the whole
   Secret as env, so just add them as keys in the runtime Secret (or via a ConfigMap in
@@ -342,13 +342,15 @@ than one replica (set `persistence.enabled=false`).
     inventario backoffice mfa setup --email ops@example.com   # enroll TOTP
   ```
 
-- [ ] ⚠️ **Block the unauthenticated seed endpoint.** `POST /api/v1/seed` is currently
-  mounted in every environment and runs a privileged, RLS-bypassing seed — an anonymous
-  caller can pollute your tenant and lock your main currency (#201). A config flag to
-  disable it (off by default) is tracked in
-  [#2039](https://github.com/denisvmedia/inventario/issues/2039); once it ships, production
-  simply leaves `INVENTARIO_RUN_ENABLE_SEED_ENDPOINT` unset. **Until then, deny the path at
-  the ingress** and verify `curl -X POST https://<DOMAIN>/api/v1/seed` returns 404:
+- [ ] **Confirm the unauthenticated seed endpoint stays off.** `POST /api/v1/seed` runs a
+  privileged, RLS-bypassing seed (an anonymous caller could pollute your tenant and lock
+  your main currency — #201). As of [#2039](https://github.com/denisvmedia/inventario/issues/2039)
+  the route is **only mounted when `INVENTARIO_RUN_ENABLE_SEED_ENDPOINT=true`** (default
+  `false`), so a production install that leaves the flag unset never exposes it — verify
+  `curl -X POST https://<DOMAIN>/api/v1/seed` returns `404`.
+- [ ] (Optional) **Defense-in-depth: also deny the path at the ingress.** No longer required
+  now that the route is unmounted by default, but a belt-and-braces block keeps the path
+  404 even if someone later flips the flag by mistake:
 
   ```yaml
   # ingress-nginx: add to the Inventario Ingress annotations

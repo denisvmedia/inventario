@@ -208,7 +208,7 @@ new chunk only loads when the user navigates to that route. Watch for:
 ## Anti-patterns
 
 - **Nested `<BrowserRouter>`s.** There is exactly one `BrowserRouter`,
-  in `src/main.tsx`. Tests use `MemoryRouter` via `renderWithProviders`.
+  in `src/app/providers.tsx`. Tests use `MemoryRouter` via `renderWithProviders`.
 - **`window.location.href = …` to navigate.** Use `useNavigate()` or
   `<Navigate>`. The hard exception is `navigateToLogin()` in
   `src/lib/navigation.ts`, which fires from non-React HTTP code.

@@ -37,7 +37,7 @@ spec:
           emptyDir: {}
       initContainers:
         - name: wait-for-bootstrap
-          image: ghcr.io/denisvmedia/inventario:latest
+          image: ghcr.io/denisvmedia/inventario:latest # replace :latest with a pinned, immutable release tag before applying to production (see k8s/README.md)
           imagePullPolicy: Always
           command: ["/bin/sh", "-ec"]
           args:
@@ -62,7 +62,7 @@ spec:
             capabilities:
               drop: ["ALL"]
         - name: migrate
-          image: ghcr.io/denisvmedia/inventario:latest
+          image: ghcr.io/denisvmedia/inventario:latest # replace :latest with a pinned, immutable release tag before applying to production (see k8s/README.md)
           imagePullPolicy: Always
           command: ["/bin/sh", "-ec"]
           args:
@@ -95,7 +95,7 @@ spec:
             capabilities:
               drop: ["ALL"]
         - name: wait-for-init-data
-          image: ghcr.io/denisvmedia/inventario:latest
+          image: ghcr.io/denisvmedia/inventario:latest # replace :latest with a pinned, immutable release tag before applying to production (see k8s/README.md)
           imagePullPolicy: Always
           command: ["/bin/sh", "-ec"]
           args:
@@ -121,7 +121,7 @@ spec:
               drop: ["ALL"]
       containers:
         - name: inventario
-          image: ghcr.io/denisvmedia/inventario:latest
+          image: ghcr.io/denisvmedia/inventario:latest # replace :latest with a pinned, immutable release tag before applying to production (see k8s/README.md)
           imagePullPolicy: Always
           ports:
             - name: http
