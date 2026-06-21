@@ -270,8 +270,10 @@ func TestMFA_Login_TOTPReplayRejectedWithinWindow(t *testing.T) {
 	f := newAuthMFAFixture(t)
 	enrollAndEnable(t, f)
 
-	row, _ := f.mfaRegistry.GetByUser(context.Background(), f.user.TenantID, f.user.ID)
-	plain, _ := decryptOf(t, f, row.SecretEncrypted)
+	row, err := f.mfaRegistry.GetByUser(context.Background(), f.user.TenantID, f.user.ID)
+	c.Assert(err, qt.IsNil)
+	plain, err := decryptOf(t, f, row.SecretEncrypted)
+	c.Assert(err, qt.IsNil)
 	code, err := totp.GenerateCodeCustom(plain, time.Now(), totp.ValidateOpts{
 		Period: 30, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
 	})
@@ -463,8 +465,10 @@ func TestMFA_Regenerate_RejectsReplayedCode(t *testing.T) {
 	f := newAuthMFAFixture(t)
 	enrollAndEnable(t, f)
 
-	row, _ := f.mfaRegistry.GetByUser(context.Background(), f.user.TenantID, f.user.ID)
-	plain, _ := decryptOf(t, f, row.SecretEncrypted)
+	row, err := f.mfaRegistry.GetByUser(context.Background(), f.user.TenantID, f.user.ID)
+	c.Assert(err, qt.IsNil)
+	plain, err := decryptOf(t, f, row.SecretEncrypted)
+	c.Assert(err, qt.IsNil)
 	code, err := totp.GenerateCodeCustom(plain, time.Now(), totp.ValidateOpts{
 		Period: 30, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
 	})

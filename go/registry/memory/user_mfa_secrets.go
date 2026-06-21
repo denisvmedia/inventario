@@ -157,7 +157,11 @@ func (r *UserMFASecretRegistry) MarkTOTPStepUsedAtomic(_ context.Context, tenant
 		mfa.UpdatedAt = now
 		return true, nil
 	}
-	return false, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "UserMFASecret"))
+	// No row → the step could not be claimed. Mirror the postgres CAS, which
+	// reports zero affected rows as (false, nil): the handler treats that as a
+	// lost CAS (rejected like a wrong code), not an infrastructure error, so
+	// the two backends share one control flow (#2124).
+	return false, nil
 }
 
 // UpdateBackupCodes replaces BackupCodesHashed for the regenerate flow,

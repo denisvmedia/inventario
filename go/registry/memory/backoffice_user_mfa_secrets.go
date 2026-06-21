@@ -207,5 +207,9 @@ func (r *BackofficeUserMFASecretRegistry) MarkTOTPStepUsedAtomic(_ context.Conte
 		row.UpdatedAt = now
 		return true, nil
 	}
-	return false, errxtrace.Classify(registry.ErrBackofficeMFASecretNotFound, errx.Attrs("backoffice_user_id", backofficeUserID))
+	// No row → the step could not be claimed. Mirror the postgres CAS, which
+	// reports zero affected rows as (false, nil): a lost CAS (rejected like a
+	// wrong code), not an infrastructure error — keeps memory and production
+	// on one control flow (#2124).
+	return false, nil
 }

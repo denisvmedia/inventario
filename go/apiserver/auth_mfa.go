@@ -277,6 +277,18 @@ func (api *AuthAPI) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to verify MFA", http.StatusInternalServerError)
 		return
 	}
+	if row.IsEnabled() {
+		// /auth/mfa/verify is strictly the one-time pending→enabled
+		// confirmation. The comment below explains why this path deliberately
+		// does NOT bump last_used_step — which is only safe while the endpoint
+		// can't run on an already-enabled row. Without this guard a still-valid
+		// code could be re-submitted here post-enrollment to re-issue backup
+		// codes AND skip the replay ledger, leaving that code replayable at
+		// login/disable/regenerate. Re-enrollment goes through setup (409);
+		// rotating codes goes through regenerate (which DOES CAS). (#2124)
+		http.Error(w, "MFA already enabled", http.StatusBadRequest)
+		return
+	}
 
 	_, ok, err := api.mfaService.VerifyTOTPStep(*row, req.Code)
 	if err != nil {
