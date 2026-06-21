@@ -129,6 +129,18 @@ maintainer for explicit approval before writing SQL by hand.**
 - Write tests for new behavior; add or update unit, integration, and e2e tests
   as appropriate for the layer you touched.
 
+## User documentation
+
+The end-user docs site is an [Astro Starlight](https://starlight.astro.build)
+project in [`docs/site/`](docs/site), deployed to GitHub Pages by
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml) (decided in #2146).
+To add or edit a page, edit the Markdown under `docs/site/src/content/docs/`.
+English is the default locale; `cs` / `ru` live under
+`docs/site/src/content/docs/{cs,ru}/` and fall back to English when a page is
+missing (so translating is additive). Screenshots live in
+`docs/site/src/assets/screenshots/` and are embedded with relative paths.
+Preview locally with `cd docs/site && npm install && npm run dev`.
+
 ## Questions
 
 If something here is unclear or out of date, open a regular issue (for

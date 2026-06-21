@@ -1,0 +1,66 @@
+name: Docs
+
+# Builds the Astro Starlight user-docs site (docs/site) and deploys it to
+# GitHub Pages on merge to master. On pull requests it only builds, as a
+# breakage gate (no deploy). Decided in #2146.
+#
+# One-time setup by a maintainer: repo Settings → Pages → Source = "GitHub
+# Actions". For a custom domain, set astro.config `base: '/'`, add
+# docs/site/public/CNAME, and the DNS CNAME record (#2146 open question 1).
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'docs/site/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/site/**'
+      - '.github/workflows/docs.yml'
+
+# Permissions needed for the GitHub Pages deployment.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (Astro)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs/site
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: docs/site/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      # Publish the built site only on master; PRs build as a check only.
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
