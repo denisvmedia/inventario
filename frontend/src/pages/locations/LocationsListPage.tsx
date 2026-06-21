@@ -27,6 +27,7 @@ import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { LocationFormDialog } from "@/components/locations/LocationFormDialog"
 import { AreaFormDialog } from "@/components/locations/AreaFormDialog"
+import { DeleteWithItemsDialog } from "@/components/locations/DeleteWithItemsDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas, useCreateArea } from "@/features/areas/hooks"
 import { useCommodities } from "@/features/commodities/hooks"
@@ -35,6 +36,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { cn } from "@/lib/utils"
+import type { DeleteStrategy } from "@/features/areas/api"
 import type { Location } from "@/features/locations/api"
 
 interface LocationsListPageProps {
@@ -86,6 +88,11 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
   // typically small (single-digit) so paging / server-side search
   // would be over-engineered.
   const [query, setQuery] = useState("")
+
+  // Target for the non-empty cascade/unlink delete dialog (#2137); null
+  // when closed.
+  type DeleteTarget = { id: string; name: string; itemCount: number; areaCount: number }
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
 
   // Dialog state. We track both kinds in one state slot so the page
   // never tries to mount two modals at once.
@@ -173,28 +180,44 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
     toast.success(t("locations:toast.areaCreated"))
   }
 
-  async function handleDeleteLocation(loc: Location) {
-    if (!loc.id) return
-    const areaCount = (areas.data ?? []).filter((a) => a.location_id === loc.id).length
-    const ok = await confirm({
-      title: t("locations:delete.locationTitle", { name: loc.name ?? "" }),
-      // Surface the orphan count so the user can't blow away a populated
-      // location by accident. Areas belonging to the location go with
-      // it server-side; the legacy frontend renders this same warning.
-      description:
-        areaCount > 0
-          ? t("locations:delete.locationDescriptionWithAreas", { count: areaCount })
-          : t("locations:delete.locationDescription"),
-      confirmLabel: t("common:actions.delete"),
-      destructive: true,
-    })
-    if (!ok) return
+  async function runDeleteLocation(id: string, strategy?: DeleteStrategy) {
     try {
-      await deleteLocation.mutateAsync(loc.id)
+      await deleteLocation.mutateAsync({ id, strategy })
       toast.success(t("locations:toast.locationDeleted"))
     } catch {
       toast.error(t("locations:toast.locationDeleteError"))
     }
+  }
+
+  async function handleDeleteLocation(loc: Location) {
+    if (!loc.id) return
+    const locAreas = (areas.data ?? []).filter((a) => a.location_id === loc.id)
+    const areaCount = locAreas.length
+    const itemCount = locAreas.reduce(
+      (sum, a) => sum + (a.id ? (areaItemCounts.get(a.id) ?? 0) : 0),
+      0
+    )
+    // Non-empty (has areas or items) → offer the cascade/unlink choice so
+    // the user can't blow away a populated location by accident. Empty →
+    // the plain confirm.
+    if (areaCount > 0 || itemCount > 0) {
+      setDeleteTarget({ id: loc.id, name: loc.name ?? "", itemCount, areaCount })
+      return
+    }
+    const ok = await confirm({
+      title: t("locations:delete.locationTitle", { name: loc.name ?? "" }),
+      description: t("locations:delete.locationDescription"),
+      confirmLabel: t("common:actions.delete"),
+      destructive: true,
+    })
+    if (!ok) return
+    await runDeleteLocation(loc.id)
+  }
+
+  function handleDeleteResolve(strategy: DeleteStrategy | null) {
+    const target = deleteTarget
+    setDeleteTarget(null)
+    if (target && strategy) void runDeleteLocation(target.id, strategy)
   }
 
   const isLoading = locations.isLoading || areas.isLoading
@@ -317,6 +340,16 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
         defaultLocationId={dialog.kind === "create-area" ? dialog.locationId : undefined}
         onSubmit={handleCreateArea}
         isPending={createArea.isPending}
+      />
+
+      <DeleteWithItemsDialog
+        open={deleteTarget !== null}
+        kind="location"
+        name={deleteTarget?.name ?? ""}
+        itemCount={deleteTarget?.itemCount ?? 0}
+        areaCount={deleteTarget?.areaCount ?? 0}
+        isPending={deleteLocation.isPending}
+        onResolve={handleDeleteResolve}
       />
     </>
   )

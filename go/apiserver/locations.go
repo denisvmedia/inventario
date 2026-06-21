@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -168,8 +169,10 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 // @Produce  json-api
 // @Param groupSlug path string true "Group slug"
 // @Param locationID path string true "Location ID"
+// @Param strategy query string false "Non-empty-location strategy: cascade deletes the commodities, unlink keeps them area-less. Omit to reject a non-empty location." Enums(cascade, unlink)
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Location not found"
+// @Failure 422 {object} jsonapi.Errors "Non-empty location (no strategy) or unknown strategy"
 // @Router /g/{groupSlug}/locations/{locationID} [delete].
 func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) {
 	location := locationFromContext(r.Context())
@@ -178,15 +181,41 @@ func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// #2119: route through the EntityService so deleting an (empty) location
-	// also removes the files attached directly to it (DB rows + blob storage)
-	// instead of orphaning them. DeleteLocation is non-recursive — a non-empty
-	// location is still rejected with ErrCannotDelete (422).
-	if err := api.entityService.DeleteLocation(r.Context(), location.ID); err != nil {
+	// #2137: a non-empty location is deleted according to the chosen strategy:
+	//   absent  → DeleteLocation (non-recursive; #2119 — empty only, 422 on
+	//             ErrCannotDelete; drops the location's files)
+	//   cascade → DeleteLocationRecursive (deletes the commodities too)
+	//   unlink  → UnlinkAndDeleteLocation (keeps the commodities, area-less)
+	// Any other value is rejected with 422 before anything is removed.
+	strategy := strings.TrimSpace(r.URL.Query().Get("strategy"))
+	deleteFn, err := resolveLocationDeleteStrategy(api.entityService, strategy)
+	if err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	if err := deleteFn(r.Context(), location.ID); err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// resolveLocationDeleteStrategy maps a `?strategy=` value to the matching
+// EntityService delete method (#2137). An empty value keeps the historical
+// non-recursive DeleteLocation behaviour; an unrecognised value yields an error
+// so the handler can answer 422 before touching any data.
+func resolveLocationDeleteStrategy(svc *services.EntityService, strategy string) (entityDeleteFunc, error) {
+	switch strategy {
+	case "":
+		return svc.DeleteLocation, nil
+	case "cascade":
+		return svc.DeleteLocationRecursive, nil
+	case "unlink":
+		return svc.UnlinkAndDeleteLocation, nil
+	default:
+		return nil, errInvalidDeleteStrategy
+	}
 }
 
 // updateLocation updates a location.

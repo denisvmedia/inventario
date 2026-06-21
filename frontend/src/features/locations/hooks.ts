@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { areaKeys } from "@/features/areas/keys"
+import { commodityKeys } from "@/features/commodities/keys"
 
 import {
   createLocation,
@@ -9,10 +11,19 @@ import {
   listLocations,
   updateLocation,
   type CreateLocationRequest,
+  type DeleteStrategy,
   type Location,
   type UpdateLocationRequest,
 } from "./api"
 import { locationKeys } from "./keys"
+
+// Variables for the delete mutation. `strategy` is omitted for an empty
+// location (BE safe default) and set when the user picks one in the
+// non-empty delete dialog (#2137).
+export interface DeleteLocationVars {
+  id: string
+  strategy?: DeleteStrategy
+}
 
 interface QueryOptions {
   // Gate the query — typically `!!currentGroup`. The locations
@@ -124,9 +135,9 @@ export function useDeleteLocation() {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const listKey = locationKeys.list(slug)
-  return useMutation<void, Error, string, { previousList?: Location[] }>({
-    mutationFn: (id) => deleteLocation(id),
-    onMutate: async (id) => {
+  return useMutation<void, Error, DeleteLocationVars, { previousList?: Location[] }>({
+    mutationFn: ({ id, strategy }) => deleteLocation(id, strategy),
+    onMutate: async ({ id }) => {
       await qc.cancelQueries({ queryKey: listKey })
       const previousList = qc.getQueryData<Location[]>(listKey)
       if (previousList) {
@@ -137,11 +148,20 @@ export function useDeleteLocation() {
       }
       return { previousList }
     },
-    onError: (_err, _id, ctx) => {
+    onError: (_err, _vars, ctx) => {
       if (ctx?.previousList) qc.setQueryData(listKey, ctx.previousList)
     },
-    onSettled: () => {
+    onSettled: (_data, _err, vars) => {
       qc.invalidateQueries({ queryKey: listKey })
+      // A strategy-delete touches the location's areas (all removed) and
+      // its items (cascade ⇒ deleted, unlink ⇒ un-located). Refresh the
+      // group's areas list + commodity caches so the freed items and the
+      // emptied areas drop out of every view. The empty-location default
+      // (no strategy) never touches either, so skip the extra work. #2137
+      if (vars.strategy) {
+        qc.invalidateQueries({ queryKey: areaKeys.list(slug) })
+        qc.invalidateQueries({ queryKey: commodityKeys.group(slug) })
+      }
     },
   })
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/checkers"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 )
 
 // Legacy `/locations/{id}/{images,files}*` route tests (formerly in this
@@ -107,6 +108,122 @@ func TestLocationsDelete_NonEmptyRejected(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+}
+
+// TestLocationsDelete_CascadeStrategy covers #2137: DELETE ?strategy=cascade on
+// a non-empty location returns 204 and removes the location, its areas and the
+// commodities under them.
+func TestLocationsDelete_CascadeStrategy(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+
+	locations := must.Must(registrySet.LocationRegistry.List(c.Context()))
+	location := locations[0]
+	areaIDs := must.Must(registrySet.LocationRegistry.GetAreas(c.Context(), location.ID))
+	c.Assert(areaIDs, qt.Not(qt.HasLen), 0)
+	commodityIDs := must.Must(registrySet.AreaRegistry.GetCommodities(c.Context(), areaIDs[0]))
+	c.Assert(commodityIDs, qt.Not(qt.HasLen), 0)
+
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID+"?strategy=cascade", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+
+	// The location, its areas and commodities are all gone.
+	_, err = registrySet.LocationRegistry.Get(c.Context(), location.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	for _, id := range areaIDs {
+		_, err = registrySet.AreaRegistry.Get(c.Context(), id)
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	}
+	for _, id := range commodityIDs {
+		_, err = registrySet.CommodityRegistry.Get(c.Context(), id)
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	}
+}
+
+// TestLocationsDelete_UnlinkStrategy covers #2137: DELETE ?strategy=unlink on a
+// non-empty location returns 204, removes the location and its areas, and keeps
+// the commodities — left area-less (AreaID == nil); a GET on a surviving
+// commodity still returns 200.
+func TestLocationsDelete_UnlinkStrategy(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+
+	locations := must.Must(registrySet.LocationRegistry.List(c.Context()))
+	location := locations[0]
+	areaIDs := must.Must(registrySet.LocationRegistry.GetAreas(c.Context(), location.ID))
+	c.Assert(areaIDs, qt.Not(qt.HasLen), 0)
+	commodityIDs := must.Must(registrySet.AreaRegistry.GetCommodities(c.Context(), areaIDs[0]))
+	c.Assert(commodityIDs, qt.Not(qt.HasLen), 0)
+
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID+"?strategy=unlink", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+
+	// The location and its areas are gone.
+	_, err = registrySet.LocationRegistry.Get(c.Context(), location.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	for _, id := range areaIDs {
+		_, err = registrySet.AreaRegistry.Get(c.Context(), id)
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	}
+
+	// The commodities survive, now area-less; a GET still returns 200.
+	for _, id := range commodityIDs {
+		commodity := must.Must(registrySet.CommodityRegistry.Get(c.Context(), id))
+		c.Assert(commodity.AreaID, qt.IsNil)
+
+		req, err = http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/commodities/"+id, nil)
+		c.Assert(err, qt.IsNil)
+		addTestUserAuthHeader(req, testUser.ID)
+		rr = httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	}
+}
+
+// TestLocationsDelete_BogusStrategy covers #2137: an unknown `?strategy=` value
+// is rejected with 422 before anything is removed.
+func TestLocationsDelete_BogusStrategy(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+
+	locations := must.Must(registrySet.LocationRegistry.List(c.Context()))
+	location := locations[0]
+
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID+"?strategy=bogus", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+
+	// The location survives — nothing was removed.
+	c.Assert(must.Must(registrySet.LocationRegistry.Get(c.Context(), location.ID)), qt.IsNotNil)
 }
 
 func TestLocationsCreate(t *testing.T) {

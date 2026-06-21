@@ -16,6 +16,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/checkers"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/registry"
 )
 
 // mockRestoreWorker is a mock implementation of RestoreStatusQuerier for testing
@@ -277,6 +278,110 @@ func TestAreaDelete_NonEmptyRejected(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+}
+
+// TestAreaDelete_CascadeStrategy covers #2137: DELETE ?strategy=cascade on a
+// non-empty area returns 204 and removes the area together with its commodities.
+func TestAreaDelete_CascadeStrategy(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+
+	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
+	area := expectedAreas[0]
+	commodityIDs := must.Must(registrySet.AreaRegistry.GetCommodities(context.Background(), area.ID))
+	c.Assert(commodityIDs, qt.Not(qt.HasLen), 0)
+
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/areas/"+area.ID+"?strategy=cascade", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+
+	// The area is gone.
+	_, err = registrySet.AreaRegistry.Get(context.Background(), area.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// Its commodities are gone too (cascade).
+	for _, id := range commodityIDs {
+		_, err = registrySet.CommodityRegistry.Get(context.Background(), id)
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	}
+}
+
+// TestAreaDelete_UnlinkStrategy covers #2137: DELETE ?strategy=unlink on a
+// non-empty area returns 204, removes the area, and keeps its commodities — left
+// area-less (AreaID == nil); a GET on a surviving commodity still returns 200.
+func TestAreaDelete_UnlinkStrategy(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+
+	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
+	area := expectedAreas[0]
+	commodityIDs := must.Must(registrySet.AreaRegistry.GetCommodities(context.Background(), area.ID))
+	c.Assert(commodityIDs, qt.Not(qt.HasLen), 0)
+
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/areas/"+area.ID+"?strategy=unlink", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+
+	// The area is gone.
+	_, err = registrySet.AreaRegistry.Get(context.Background(), area.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// Its commodities survive, now area-less; a GET still returns 200.
+	for _, id := range commodityIDs {
+		commodity := must.Must(registrySet.CommodityRegistry.Get(context.Background(), id))
+		c.Assert(commodity.AreaID, qt.IsNil)
+
+		req, err = http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/commodities/"+id, nil)
+		c.Assert(err, qt.IsNil)
+		addTestUserAuthHeader(req, testUser.ID)
+		rr = httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	}
+}
+
+// TestAreaDelete_BogusStrategy covers #2137: an unknown `?strategy=` value is
+// rejected with 422 before anything is removed.
+func TestAreaDelete_BogusStrategy(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+
+	expectedAreas := must.Must(registrySet.AreaRegistry.List(context.Background()))
+	area := expectedAreas[0]
+
+	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/areas/"+area.ID+"?strategy=bogus", nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+
+	// The area survives — nothing was removed.
+	c.Assert(must.Must(registrySet.AreaRegistry.Get(context.Background(), area.ID)), qt.IsNotNil)
 }
 
 func TestAreaUpdate(t *testing.T) {

@@ -921,3 +921,102 @@ func TestDeleteLocation_NonEmptyRejected(t *testing.T) {
 	c.Assert(must.Must(registrySet.LocationRegistry.Get(ctx, location.ID)), qt.IsNotNil)
 	c.Assert(must.Must(registrySet.AreaRegistry.Get(ctx, area.ID)), qt.IsNotNil)
 }
+
+// TestUnlinkAndDeleteArea_KeepsCommodities asserts #2137: the "unlink" strategy
+// removes a non-empty area (and the files attached directly to it) while
+// keeping its commodities — left area-less (AreaID == nil) rather than deleted.
+func TestUnlinkAndDeleteArea_KeepsCommodities(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
+	commodity1 := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:   "Commodity 1",
+		AreaID: new(area.ID),
+	}))
+	commodity2 := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:   "Commodity 2",
+		AreaID: new(area.ID),
+	}))
+
+	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "area",
+		LinkedEntityID:   area.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "area-doc",
+			OriginalPath: "area-doc.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	err := service.UnlinkAndDeleteArea(ctx, area.ID)
+	c.Assert(err, qt.IsNil)
+
+	// The area and the file attached directly to it are gone.
+	_, err = registrySet.AreaRegistry.Get(ctx, area.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = registrySet.FileRegistry.Get(ctx, areaFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// Both commodities survive, now area-less.
+	got1 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity1.ID))
+	c.Assert(got1.AreaID, qt.IsNil)
+	got2 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity2.ID))
+	c.Assert(got2.AreaID, qt.IsNil)
+}
+
+// TestUnlinkAndDeleteLocation_KeepsCommodities asserts #2137: the "unlink"
+// strategy removes a non-empty location and all its areas while keeping the
+// commodities filed under those areas — left area-less (AreaID == nil).
+func TestUnlinkAndDeleteLocation_KeepsCommodities(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area1 := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area 1", LocationID: location.ID}))
+	area2 := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area 2", LocationID: location.ID}))
+	commodity1 := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:   "Commodity 1",
+		AreaID: new(area1.ID),
+	}))
+	commodity2 := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:   "Commodity 2",
+		AreaID: new(area2.ID),
+	}))
+
+	err := service.UnlinkAndDeleteLocation(ctx, location.ID)
+	c.Assert(err, qt.IsNil)
+
+	// The location and both its areas are gone.
+	_, err = registrySet.LocationRegistry.Get(ctx, location.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = registrySet.AreaRegistry.Get(ctx, area1.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = registrySet.AreaRegistry.Get(ctx, area2.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// Both commodities survive, now area-less.
+	got1 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity1.ID))
+	c.Assert(got1.AreaID, qt.IsNil)
+	got2 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity2.ID))
+	c.Assert(got2.AreaID, qt.IsNil)
+}

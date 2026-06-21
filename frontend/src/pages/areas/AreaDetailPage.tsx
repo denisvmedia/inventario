@@ -13,13 +13,16 @@ import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { useFileDropZone } from "@/components/files/useFileDropZone"
 import { LocationsBreadcrumb } from "@/components/locations/LocationsBreadcrumb"
 import { AreaFormDialog } from "@/components/locations/AreaFormDialog"
+import { DeleteWithItemsDialog } from "@/components/locations/DeleteWithItemsDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { AreaItemsPanel } from "@/pages/areas/AreaItemsPanel"
 import { useArea, useDeleteArea, useUpdateArea } from "@/features/areas/hooks"
+import { useCommodities } from "@/features/commodities/hooks"
 import { useLocation, useLocations } from "@/features/locations/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
+import type { DeleteStrategy } from "@/features/areas/api"
 
 interface AreaDetailPageProps {
   initialMode?: "edit"
@@ -48,6 +51,13 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
     enabled: !!area.data?.location_id,
   })
   const allLocations = useLocations({ enabled: !!currentGroup })
+  // Drives the empty-vs-non-empty delete branch (#2137). We only need the
+  // total, so a single-row page keeps the request cheap.
+  const itemsInArea = useCommodities(
+    { areaId: id, perPage: 1, includeInactive: true },
+    { enabled: !!currentGroup && !!id }
+  )
+  const itemCount = itemsInArea.data?.total ?? 0
   const updateArea = useUpdateArea(id)
   const deleteArea = useDeleteArea()
 
@@ -55,6 +65,8 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
   const confirm = useConfirm()
 
   const [editOpen, setEditOpen] = useState(initialMode === "edit")
+  // Open state for the non-empty (strategy-choice) delete dialog. #2137
+  const [deleteWithItemsOpen, setDeleteWithItemsOpen] = useState(false)
 
   // Drop-overlay + upload dialog wiring — same pattern as
   // LocationDetailPage. Dragging files anywhere on the page surfaces the
@@ -92,8 +104,38 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
     toast.success(t("locations:toast.areaUpdated"))
   }
 
+  function navigateAfterDelete() {
+    if (slug && area.data?.location_id) {
+      navigate(
+        `/g/${encodeURIComponent(slug)}/locations/${encodeURIComponent(area.data.location_id)}`,
+        { replace: true }
+      )
+    } else if (slug) {
+      navigate(`/g/${encodeURIComponent(slug)}/locations`, { replace: true })
+    }
+  }
+
+  // Shared delete path. `strategy` is omitted for an empty area (the BE's
+  // safe default) and supplied when the user picks one in the non-empty
+  // dialog (#2137).
+  async function runDelete(strategy?: DeleteStrategy) {
+    if (!id) return
+    try {
+      await deleteArea.mutateAsync({ id, strategy })
+      toast.success(t("locations:toast.areaDeleted"))
+      navigateAfterDelete()
+    } catch {
+      toast.error(t("locations:toast.areaDeleteError"))
+    }
+  }
+
   async function handleDelete() {
     if (!id) return
+    // Non-empty → offer the cascade/unlink choice; empty → plain confirm.
+    if (itemCount > 0) {
+      setDeleteWithItemsOpen(true)
+      return
+    }
     const ok = await confirm({
       title: t("locations:delete.areaTitle", { name: area.data?.name ?? "" }),
       description: t("locations:delete.areaDescription"),
@@ -101,20 +143,7 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
       destructive: true,
     })
     if (!ok) return
-    try {
-      await deleteArea.mutateAsync(id)
-      toast.success(t("locations:toast.areaDeleted"))
-      if (slug && area.data?.location_id) {
-        navigate(
-          `/g/${encodeURIComponent(slug)}/locations/${encodeURIComponent(area.data.location_id)}`,
-          { replace: true }
-        )
-      } else if (slug) {
-        navigate(`/g/${encodeURIComponent(slug)}/locations`, { replace: true })
-      }
-    } catch {
-      toast.error(t("locations:toast.areaDeleteError"))
-    }
+    await runDelete()
   }
 
   if (area.isError) {
@@ -246,6 +275,18 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
         locations={allLocations.data ?? []}
         onSubmit={handleEdit}
         isPending={updateArea.isPending}
+      />
+
+      <DeleteWithItemsDialog
+        open={deleteWithItemsOpen}
+        kind="area"
+        name={area.data?.name ?? ""}
+        itemCount={itemCount}
+        isPending={deleteArea.isPending}
+        onResolve={(strategy) => {
+          setDeleteWithItemsOpen(false)
+          if (strategy) void runDelete(strategy)
+        }}
       />
 
       <UploadFilesDialog

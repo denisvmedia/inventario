@@ -210,6 +210,127 @@ func (s *EntityService) DeleteLocation(ctx context.Context, id string) error {
 	return nil
 }
 
+// UnlinkAndDeleteArea deletes a NON-empty area by first un-assigning every
+// commodity filed under it (commodity.area_id is *string nullable per #1986),
+// then deleting the now-empty area via DeleteArea (which also drops the files
+// attached directly to the area).
+//
+// The commodities themselves SURVIVE — they are left area-less (AreaID == nil),
+// not deleted. This is the "unlink" deletion strategy, distinct from the
+// "cascade" strategy (DeleteAreaRecursive) which deletes the commodities too.
+//
+// Each commodity is updated read-modify-write (Get → set AreaID=nil → Update)
+// so no other field is wiped. Like the recursive path this is NOT a single
+// transaction (matching the codebase's recursive-delete precedent); it is
+// idempotent / re-runnable: a commodity that has already been removed
+// (ErrNotFound) is skipped, and DeleteArea no-ops when the area is already gone.
+func (s *EntityService) UnlinkAndDeleteArea(ctx context.Context, id string) error {
+	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create area registry", err)
+	}
+
+	// If the area is already gone there is nothing to unlink — treat as success.
+	_, err = areaReg.Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			return nil
+		}
+		return errxtrace.Wrap("failed to get area", err)
+	}
+
+	commodities, err := areaReg.GetCommodities(ctx, id)
+	if err != nil {
+		return errxtrace.Wrap("failed to get commodities", err)
+	}
+
+	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create commodity registry", err)
+	}
+
+	// Un-assign each commodity (read-modify-write so no field is lost). A
+	// commodity that has been removed in the meantime is fine — skip it.
+	for _, commodityID := range commodities {
+		commodity, err := comReg.Get(ctx, commodityID)
+		if err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				continue
+			}
+			return errxtrace.Wrap("failed to get commodity", err, errx.Attrs("commodity_id", commodityID))
+		}
+
+		commodity.AreaID = nil
+		if _, err := comReg.Update(ctx, *commodity); err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				continue
+			}
+			return errxtrace.Wrap("failed to unlink commodity", err, errx.Attrs("commodity_id", commodityID))
+		}
+	}
+
+	// The area is now empty; DeleteArea removes it together with its own files.
+	if err := s.DeleteArea(ctx, id); err != nil {
+		return errxtrace.Wrap("failed to delete unlinked area", err, errx.Attrs("areaID", id))
+	}
+
+	return nil
+}
+
+// UnlinkAndDeleteLocation deletes a NON-empty location by un-linking each of its
+// areas (via UnlinkAndDeleteArea) and then deleting the location itself via
+// DeleteLocation (which also drops the files attached directly to the location).
+//
+// The commodities filed under the location's areas SURVIVE — they are left
+// area-less (AreaID == nil). The location's AREAS and the location itself ARE
+// removed (there is no commodity.location_id, and area.location_id is required,
+// so an area cannot outlive its location). This is the "unlink" deletion
+// strategy, distinct from "cascade" (DeleteLocationRecursive) which deletes the
+// commodities too.
+//
+// Like the recursive path this is NOT a single transaction; it is idempotent /
+// re-runnable: an area already removed is skipped by UnlinkAndDeleteArea, and
+// DeleteLocation no-ops when the location is already gone.
+func (s *EntityService) UnlinkAndDeleteLocation(ctx context.Context, id string) error {
+	locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create location registry", err)
+	}
+
+	// If the location is already gone there is nothing to unlink — success.
+	_, err = locReg.Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			return nil
+		}
+		return errxtrace.Wrap("failed to get location", err)
+	}
+
+	areas, err := locReg.GetAreas(ctx, id)
+	if err != nil {
+		return errxtrace.Wrap("failed to get areas", err)
+	}
+
+	// Un-link each area (this un-assigns its commodities, then removes the
+	// now-empty area). An area already removed is tolerated.
+	for _, areaID := range areas {
+		if err := s.UnlinkAndDeleteArea(ctx, areaID); err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				continue
+			}
+			return errxtrace.Wrap("failed to unlink area", err, errx.Attrs("areaID", areaID))
+		}
+	}
+
+	// The location is now empty; DeleteLocation removes it together with its
+	// own files.
+	if err := s.DeleteLocation(ctx, id); err != nil {
+		return errxtrace.Wrap("failed to delete unlinked location", err, errx.Attrs("locationID", id))
+	}
+
+	return nil
+}
+
 // DeleteExportWithFile deletes an export and its associated file
 func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) error {
 	expReg, err := s.factorySet.ExportRegistryFactory.CreateUserRegistry(ctx)

@@ -156,8 +156,10 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 // @Produce  json-api
 // @Param groupSlug path string true "Group slug"
 // @Param areaID path string true "Area ID"
+// @Param strategy query string false "Non-empty-area strategy: cascade deletes the commodities, unlink keeps them area-less. Omit to reject a non-empty area." Enums(cascade, unlink)
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Area not found"
+// @Failure 422 {object} jsonapi.Errors "Non-empty area (no strategy) or unknown strategy"
 // @Router /g/{groupSlug}/areas/{areaID} [delete].
 func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 	area := areaFromContext(r.Context())
@@ -166,17 +168,45 @@ func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// #2119: route through the EntityService so deleting an (empty) area also
-	// removes the files attached directly to it (DB rows + blob storage)
-	// instead of orphaning them. DeleteArea is non-recursive — a non-empty
-	// area is still rejected with ErrCannotDelete (422); cascade-vs-unlink for
-	// a non-empty area is a separate feature.
-	if err := api.entityService.DeleteArea(r.Context(), area.ID); err != nil {
+	// #2137: a non-empty area is deleted according to the chosen strategy:
+	//   absent  → DeleteArea (non-recursive; #2119 — empty only, 422 on
+	//             ErrCannotDelete for a non-empty area; drops the area's files)
+	//   cascade → DeleteAreaRecursive (deletes the commodities too)
+	//   unlink  → UnlinkAndDeleteArea (keeps the commodities, area-less)
+	// Any other value is rejected with 422 before anything is removed.
+	strategy := strings.TrimSpace(r.URL.Query().Get("strategy"))
+	deleteFn, err := resolveAreaDeleteStrategy(api.entityService, strategy)
+	if err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	if err := deleteFn(r.Context(), area.ID); err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// entityDeleteFunc is an EntityService delete method bound to a strategy.
+type entityDeleteFunc func(ctx context.Context, id string) error
+
+// resolveAreaDeleteStrategy maps a `?strategy=` value to the matching
+// EntityService delete method (#2137). An empty value keeps the historical
+// non-recursive DeleteArea behaviour; an unrecognised value yields an error so
+// the handler can answer 422 before touching any data.
+func resolveAreaDeleteStrategy(svc *services.EntityService, strategy string) (entityDeleteFunc, error) {
+	switch strategy {
+	case "":
+		return svc.DeleteArea, nil
+	case "cascade":
+		return svc.DeleteAreaRecursive, nil
+	case "unlink":
+		return svc.UnlinkAndDeleteArea, nil
+	default:
+		return nil, errInvalidDeleteStrategy
+	}
 }
 
 // updateArea updates a area.

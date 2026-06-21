@@ -1,18 +1,20 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route, Routes } from "react-router-dom"
 import { renderHook, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { MemoryRouter } from "react-router-dom"
 import { type ReactNode } from "react"
+import { http, HttpResponse } from "msw"
 
 import { useAreas, useDeleteArea, useUpdateArea } from "@/features/areas/hooks"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { server } from "@/test/server"
-import { areaHandlers, groupHandlers } from "@/test/handlers"
+import { apiUrl, areaHandlers, groupHandlers } from "@/test/handlers"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { areaKeys } from "@/features/areas/keys"
+import { commodityKeys } from "@/features/commodities/keys"
 import type { Schema } from "@/types"
 
 const SLUG = "household"
@@ -95,13 +97,83 @@ describe("useAreas + mutations", () => {
 
     await waitFor(() => expect(result.current.list.data?.length).toBe(1))
 
-    await result.current.remove.mutateAsync("a1").catch(() => {
+    await result.current.remove.mutateAsync({ id: "a1" }).catch(() => {
       /* expected */
     })
 
     await waitFor(() => {
       const list = client.getQueryData<unknown[]>(areaKeys.list(SLUG))
       expect(list).toHaveLength(1)
+    })
+  })
+
+  it("threads the chosen strategy into the DELETE url", async () => {
+    let capturedUrl = ""
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, [areaResource("a1", { name: "Workshop", location_id: "loc1" })]),
+      http.delete(apiUrl(`/g/${SLUG}/areas/a1`), ({ request }) => {
+        capturedUrl = request.url
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+    const client = newClient()
+    const { result } = renderHook(() => ({ list: useAreas(), remove: useDeleteArea() }), {
+      wrapper: makeWrapper(client),
+    })
+
+    await waitFor(() => expect(result.current.list.data?.length).toBe(1))
+
+    await result.current.remove.mutateAsync({ id: "a1", strategy: "unlink" })
+
+    expect(new URL(capturedUrl).searchParams.get("strategy")).toBe("unlink")
+  })
+
+  it("invalidates the commodity group + area list caches on a strategy delete", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, [areaResource("a1", { name: "Workshop", location_id: "loc1" })]),
+      ...areaHandlers.remove(SLUG, "a1")
+    )
+    const client = newClient()
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries")
+    const { result } = renderHook(() => ({ list: useAreas(), remove: useDeleteArea() }), {
+      wrapper: makeWrapper(client),
+    })
+
+    await waitFor(() => expect(result.current.list.data?.length).toBe(1))
+    invalidateSpy.mockClear()
+
+    await result.current.remove.mutateAsync({ id: "a1", strategy: "unlink" })
+
+    await waitFor(() => {
+      const keys = invalidateSpy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))
+      expect(keys).toContain(JSON.stringify(commodityKeys.group(SLUG)))
+      expect(keys).toContain(JSON.stringify(areaKeys.list(SLUG)))
+    })
+  })
+
+  it("does NOT touch the commodity cache on a default (no-strategy) delete", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, [areaResource("a1", { name: "Workshop", location_id: "loc1" })]),
+      ...areaHandlers.remove(SLUG, "a1")
+    )
+    const client = newClient()
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries")
+    const { result } = renderHook(() => ({ list: useAreas(), remove: useDeleteArea() }), {
+      wrapper: makeWrapper(client),
+    })
+
+    await waitFor(() => expect(result.current.list.data?.length).toBe(1))
+    invalidateSpy.mockClear()
+
+    await result.current.remove.mutateAsync({ id: "a1" })
+
+    await waitFor(() => {
+      const keys = invalidateSpy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))
+      expect(keys).toContain(JSON.stringify(areaKeys.list(SLUG)))
+      expect(keys).not.toContain(JSON.stringify(commodityKeys.group(SLUG)))
     })
   })
 })
