@@ -56,11 +56,11 @@ interface LocationDetailPageProps {
   initialMode?: "edit"
 }
 
-// Cap the single page-level commodities fetch behind area tiles —
-// matches LocationsListPage's cap so a navigate from list → detail
-// reuses the cached query. Partial counts beyond the cap surface as
-// "{N}+" on tiles.
-const ITEM_COUNT_FETCH_CAP = 500
+// Cap the single page-level commodities fetch behind area tiles — 100 is
+// the BE's max per_page (>100 silently falls back to 50), and it matches
+// LocationsListPage's cap so a navigate from list → detail reuses the
+// cached query. Partial counts beyond the cap surface as "{N}+" on tiles.
+const ITEM_COUNT_FETCH_CAP = 100
 
 // /locations/:id — single-location detail. Renders the multi-segment
 // breadcrumb, metadata + edit/delete header, the responsive area tile

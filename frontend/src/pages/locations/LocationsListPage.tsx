@@ -45,10 +45,12 @@ interface LocationsListPageProps {
 }
 
 // Cap the single page-level commodities fetch used to derive per-location
-// item-count chips. Large enough to cover typical groups; partial counts
-// past this are surfaced as "{N}+" so the chip stays useful instead of
-// silently undercounting.
-const ITEM_COUNT_FETCH_CAP = 500
+// item-count chips. 100 is the BE's max per_page (parsePagination caps at
+// 100 and silently falls back to 50 above that), so this is the largest
+// single-page sample the API actually honors; partial counts past it are
+// surfaced as "{N}+" so the chip stays useful instead of silently
+// undercounting.
+const ITEM_COUNT_FETCH_CAP = 100
 
 // /locations — list of every location in the active group. Each card is
 // a click-through tile (MapPin avatar + name + address + areas/items
