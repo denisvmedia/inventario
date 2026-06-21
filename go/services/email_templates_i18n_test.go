@@ -1,10 +1,80 @@
 package services
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 )
+
+// TestEmailTemplateRenderer_AllTypesAllLangsRender executes EVERY template
+// type in EVERY language with a fully-populated job. Go templates type-check
+// field access at Execute time (not Parse), so the startup parse in
+// newEmailTemplateRenderer alone can't catch a bad `{{.Field}}` reference in
+// a cs/ru translation — this does. #2090
+func TestEmailTemplateRenderer_AllTypesAllLangsRender(t *testing.T) {
+	c := qt.New(t)
+	renderer, err := newEmailTemplateRenderer()
+	c.Assert(err, qt.IsNil)
+
+	changedAt := time.Date(2026, 2, 28, 7, 0, 0, 0, time.UTC)
+	expiresAt := time.Date(2026, 3, 31, 7, 0, 0, 0, time.UTC)
+	base := emailJob{
+		To:                    "user@example.com",
+		Name:                  "Alex",
+		URL:                   "https://example.com/x",
+		ChangedAt:             &changedAt,
+		CommodityName:         "Drill",
+		CommodityURL:          "https://example.com/c/1",
+		ExpiryDate:            "2026-03-31",
+		ThresholdDays:         30,
+		InviterName:           "Sam",
+		GroupName:             "Household",
+		Role:                  "admin",
+		ExpiresAt:             &expiresAt,
+		ThresholdPercent:      90,
+		UsagePercent:          92,
+		StorageUsedHuman:      "135 MiB",
+		StorageQuotaHuman:     "150 MiB",
+		StorageBreakdownLines: []string{"Photos: 100 MiB"},
+		StorageFilesURL:       "https://example.com/files",
+		StorageSettingsURL:    "https://example.com/settings",
+		BorrowerName:          "Pat",
+		LentAt:                "2026-01-01",
+		DueBackAt:             "2026-02-01",
+		LoanKind:              "overdue",
+		LoanDaysDelta:         5,
+		MaintenanceTitle:      "Oil change",
+		MaintenanceDueDate:    "2026-03-01",
+		FeedbackType:          "Bug",
+		FromName:              "Alex",
+		FromEmail:             "alex@example.com",
+		FeedbackMessage:       "hello",
+		DiagnosticsLines:      []string{"x: y"},
+	}
+	types := []emailTemplateType{
+		emailTemplateVerification, emailTemplatePasswordReset, emailTemplateMagicLink,
+		emailTemplatePasswordChange, emailTemplateWelcome, emailTemplateWarrantyReminder,
+		emailTemplateGroupInvite, emailTemplateStorageQuotaWarning, emailTemplateLoanReminder,
+		emailTemplateMaintenanceReminder, emailTemplateFeedback,
+	}
+	for _, lang := range []string{"en", "cs", "ru"} {
+		for _, tt := range types {
+			t.Run(string(tt)+"/"+lang, func(t *testing.T) {
+				c := qt.New(t)
+				job := base
+				job.TemplateType = tt
+				job.Language = lang
+				rendered, err := renderer.render(job)
+				c.Assert(err, qt.IsNil)
+				c.Assert(strings.TrimSpace(rendered.Subject), qt.Not(qt.Equals), "")
+				c.Assert(strings.TrimSpace(rendered.HTML), qt.Not(qt.Equals), "")
+				c.Assert(strings.TrimSpace(rendered.Text), qt.Not(qt.Equals), "")
+			})
+		}
+	}
+}
 
 // TestEmailTemplateRenderer_SubjectLocalization pins the per-language subject
 // resolution + the English fallback for unset/unknown languages. #2090
