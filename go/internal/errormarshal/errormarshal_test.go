@@ -11,6 +11,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jellydator/validation"
 
+	"github.com/denisvmedia/inventario/internal/checkers"
 	"github.com/denisvmedia/inventario/internal/errormarshal"
 )
 
@@ -169,13 +170,15 @@ func TestMarshal_ErrxWrappedValidationError(t *testing.T) {
 	// Wrap validation error with errx
 	testErr := errx.Wrap("validation failed", validationErr)
 
-	result := errormarshal.Marshal(testErr)
-	c.Assert(result, qt.IsNotNil)
+	raw := []byte(errormarshal.Marshal(testErr))
 
-	// Should handle the wrapped validation error
-	var decoded map[string]any
-	err := json.Unmarshal(result, &decoded)
-	c.Assert(err, qt.IsNil)
+	// #1990: a validation.Errors wrapped by errx is unwrapped to its bare
+	// field tree — the wrapper's "validation failed" message (and any errx
+	// attrs) are dropped so the client gets the per-field tree — and the
+	// parallel errorCodes tree is emitted, with a codeless leaf for the plain
+	// errors.New() value.
+	c.Assert(raw, checkers.JSONPathEquals("$.error.email"), "invalid email format")
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.email.code"), "")
 }
 
 func TestMarshal_ReturnsValidJSON(t *testing.T) {
@@ -256,4 +259,37 @@ func TestMarshal_StandardErrorsFallbackToMinimal(t *testing.T) {
 	hasMsg := decoded["msg"] != nil
 	hasError := decoded["error"] != nil
 	c.Assert(hasMsg || hasError, qt.IsTrue)
+}
+
+// #1990: validation.Errors must serialize a parallel `errorCodes` tree (same
+// shape as the message tree) carrying each field's stable {code, params},
+// while the `error` (message) tree stays byte-compatible.
+func TestMarshal_ValidationErrorsEmitsCodeTree(t *testing.T) {
+	c := qt.New(t)
+
+	lengthErr := validation.NewError("validation_length_out_of_range", "the length must be between {{.min}} and {{.max}}").
+		SetParams(map[string]any{"min": 2, "max": 50})
+	verrs := validation.Errors{
+		"data": validation.Errors{
+			"attributes": validation.Errors{
+				"name":  validation.NewError("validation_required", "cannot be blank"),
+				"short": lengthErr,
+				"raw":   errors.New("ID field not allowed in create requests"),
+			},
+		},
+	}
+
+	raw := []byte(errormarshal.Marshal(verrs))
+
+	// Message tree unchanged (backward-compatible): rendered English strings.
+	c.Assert(raw, checkers.JSONPathEquals("$.error.data.attributes.name"), "cannot be blank")
+	c.Assert(raw, checkers.JSONPathEquals("$.error.data.attributes.short"), "the length must be between 2 and 50")
+
+	// Parallel code tree: stable code + interpolation params per field.
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.name.code"), "validation_required")
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.short.code"), "validation_length_out_of_range")
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.short.params.max"), float64(50))
+	// Plain (codeless) errors keep an empty code + the message for FE fallback.
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.raw.code"), "")
+	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.raw.message"), "ID field not allowed in create requests")
 }

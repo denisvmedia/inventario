@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import { HttpError } from "@/lib/http"
 import {
   classifyServerError,
+  extractFieldErrorCodes,
   extractFieldErrors,
   isRetryableKind,
   parseServerError,
@@ -10,7 +11,8 @@ import {
 
 // Builds the BE's nested 422 validation envelope around an `attributes`
 // object, mirroring what `errormarshal.Marshal(validation.Errors)` emits.
-function validationEnvelope(attributes: Record<string, unknown>) {
+// When `codes` is given it adds the parallel `errorCodes` tree (#1990).
+function validationEnvelope(attributes: Record<string, unknown>, codes?: Record<string, unknown>) {
   return {
     errors: [
       {
@@ -18,6 +20,7 @@ function validationEnvelope(attributes: Record<string, unknown>) {
         error: {
           type: "validation.Errors",
           error: { data: { attributes } },
+          ...(codes ? { errorCodes: { data: { attributes: codes } } } : {}),
         },
       },
     ],
@@ -153,5 +156,31 @@ describe("isRetryableKind", () => {
     // showing Retry would just queue another failure.
     expect(isRetryableKind("validation")).toBe(false)
     expect(isRetryableKind("conflict")).toBe(false)
+  })
+})
+
+describe("extractFieldErrorCodes (#1990)", () => {
+  it("parses the parallel errorCodes tree into {field: {code, params}}", () => {
+    const err = new HttpError(
+      "boom",
+      422,
+      "/x",
+      validationEnvelope(
+        { name: "cannot be blank", short: "the length must be between 2 and 50" },
+        {
+          name: { code: "validation_required", params: {} },
+          short: { code: "validation_length_out_of_range", params: { min: 2, max: 50 } },
+        }
+      )
+    )
+    expect(extractFieldErrorCodes(err)).toEqual({
+      name: { code: "validation_required", params: {} },
+      short: { code: "validation_length_out_of_range", params: { min: 2, max: 50 } },
+    })
+  })
+
+  it("returns null when the envelope carries no errorCodes tree", () => {
+    const err = new HttpError("boom", 422, "/x", validationEnvelope({ name: "cannot be blank" }))
+    expect(extractFieldErrorCodes(err)).toBeNull()
   })
 })
