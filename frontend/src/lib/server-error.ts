@@ -182,3 +182,60 @@ export function extractFieldErrors(err: unknown): Record<string, string> | null 
   flattenFieldErrors(attrs, "", result)
   return Object.keys(result).length > 0 ? result : null
 }
+
+// A single field's stable validation code + interpolation params, parsed
+// from the BE's parallel `errorCodes` tree (#1990). `code` is "" for
+// codeless errors.New()/fmt.Errorf() By-validator failures, in which case
+// `message` carries the raw English string to fall back to.
+export interface FieldErrorCode {
+  code: string
+  params?: Record<string, unknown>
+  message?: string
+}
+
+// flattenCodeTree mirrors flattenFieldErrors but for the `errorCodes` tree,
+// whose leaves are `{ code, params }` objects rather than message strings.
+// A node is a leaf iff it carries a string `code` property; everything else
+// is an intermediate (data / attributes / array-index) node to recurse into.
+function flattenCodeTree(node: unknown, prefix: string, out: Record<string, FieldErrorCode>): void {
+  if (!node || typeof node !== "object") return
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    const path = prefix ? `${prefix}.${key}` : key
+    if (
+      value &&
+      typeof value === "object" &&
+      typeof (value as { code?: unknown }).code === "string"
+    ) {
+      const leaf = value as { code: string; params?: Record<string, unknown>; message?: string }
+      out[path] = { code: leaf.code, params: leaf.params, message: leaf.message }
+    } else if (value && typeof value === "object") {
+      flattenCodeTree(value, path, out)
+    }
+  }
+}
+
+// extractFieldErrorCodes pulls the parallel `errorCodes` tree the BE emits
+// alongside the message tree (#1990), returning `{ <dotted-field-path>:
+// { code, params } }`. Field paths match extractFieldErrors' keys (same tree
+// shape), so callers can localize each message by its stable code and fall
+// back to the English message when the code is empty/unknown. Returns null
+// when the envelope carries no errorCodes (older BE / non-validation 422).
+export function extractFieldErrorCodes(err: unknown): Record<string, FieldErrorCode> | null {
+  if (!(err instanceof HttpError)) return null
+  const data = err.data
+  if (!data || typeof data !== "object") return null
+  const first = (data as ErrorEnvelope).errors?.[0] as { error?: unknown } | undefined
+  if (!first || typeof first !== "object") return null
+  const userErr = first.error
+  if (!userErr || typeof userErr !== "object") return null
+  const codes = (userErr as { errorCodes?: unknown }).errorCodes
+  if (!codes || typeof codes !== "object") return null
+  const dataObj = (codes as { data?: unknown }).data
+  if (!dataObj || typeof dataObj !== "object") return null
+  const attrs = (dataObj as { attributes?: unknown }).attributes
+  if (!attrs || typeof attrs !== "object") return null
+
+  const result: Record<string, FieldErrorCode> = {}
+  flattenCodeTree(attrs, "", result)
+  return Object.keys(result).length > 0 ? result : null
+}

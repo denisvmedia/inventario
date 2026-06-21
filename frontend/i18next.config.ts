@@ -54,6 +54,12 @@ export default defineConfig({
     preservePatterns: [
       "stubs:*",
       "common:nav.*",
+      // errors:validation.* — backend field-validation messages keyed by the
+      //   BE's stable validation code, resolved via
+      //   `i18next.t(\`errors:validation.${code}\`)` in lib/form-errors.ts
+      //   (applyServerFieldErrors). The codes come off the 422 `errorCodes`
+      //   tree at runtime, so the extractor only sees the template literal. (#1990)
+      "errors:validation.*",
       // common:onboarding.steps.* — OnboardingTour renders each of the 7
       //   step titles + descriptions via
       //   `t(\`common:onboarding.steps.${step.key}.title\`)` over the closed

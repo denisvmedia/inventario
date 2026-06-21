@@ -3,12 +3,16 @@ import { describe, expect, it, vi } from "vitest"
 import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { HttpError } from "@/lib/http"
 
-function validationEnvelope(attributes: Record<string, unknown>) {
+function validationEnvelope(attributes: Record<string, unknown>, codes?: Record<string, unknown>) {
   return {
     errors: [
       {
         status: "Unprocessable Entity",
-        error: { type: "validation.Errors", error: { data: { attributes } } },
+        error: {
+          type: "validation.Errors",
+          error: { data: { attributes } },
+          ...(codes ? { errorCodes: { data: { attributes: codes } } } : {}),
+        },
       },
     ],
   }
@@ -109,5 +113,44 @@ describe("shouldShowGenericError", () => {
 
   it("hides the banner when every error mapped cleanly", () => {
     expect(shouldShowGenericError({ mapped: ["address"], unmapped: {} })).toBe(false)
+  })
+})
+
+describe("applyServerFieldErrors localization (#1990)", () => {
+  it("localizes the field message by its validation code, interpolating params", () => {
+    const err = new HttpError(
+      "boom",
+      422,
+      "/x",
+      validationEnvelope(
+        { short: "RAW BE MESSAGE" },
+        { short: { code: "validation_length_out_of_range", params: { min: 2, max: 50 } } }
+      )
+    )
+    const setError = vi.fn()
+    applyServerFieldErrors(err, setError, { fields: ["short"] })
+    // The en validation key wins over the raw BE message, params interpolated.
+    expect(setError).toHaveBeenCalledWith("short", {
+      type: "server",
+      message: "the length must be between 2 and 50",
+    })
+  })
+
+  it("falls back to the BE message when the code is empty (codeless By-validator)", () => {
+    const err = new HttpError(
+      "boom",
+      422,
+      "/x",
+      validationEnvelope(
+        { weird: "some custom rule failed" },
+        { weird: { code: "", message: "some custom rule failed" } }
+      )
+    )
+    const setError = vi.fn()
+    applyServerFieldErrors(err, setError, { fields: ["weird"] })
+    expect(setError).toHaveBeenCalledWith("weird", {
+      type: "server",
+      message: "some custom rule failed",
+    })
   })
 })

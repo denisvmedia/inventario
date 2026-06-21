@@ -13,7 +13,9 @@
 // of `{ <server-root-segment>: <form-field-name> }`.
 import type { FieldValues, Path, UseFormSetError } from "react-hook-form"
 
-import { extractFieldErrors } from "./server-error"
+import { i18next } from "@/i18n"
+
+import { extractFieldErrors, extractFieldErrorCodes } from "./server-error"
 
 export interface ServerFieldErrorResult {
   // Form field paths that were successfully set on the form.
@@ -46,23 +48,37 @@ export function applyServerFieldErrors<TFieldValues extends FieldValues>(
 ): ServerFieldErrorResult | null {
   const raw = extractFieldErrors(err)
   if (!raw) return null
+  // Stable per-field validation codes (#1990): when present, localize the
+  // message by its code (params interpolated), falling back to the BE's
+  // English message. Doing it here — the single chokepoint — means even
+  // forms that render the message without t() show the user's language.
+  const codes = extractFieldErrorCodes(err)
+  const localize = (serverPath: string, message: string): string => {
+    const detail = codes?.[serverPath]
+    if (!detail?.code) return message
+    return i18next.t(`errors:validation.${detail.code}`, {
+      ...detail.params,
+      defaultValue: message,
+    })
+  }
 
   const known = new Set(options.fields)
   const mapped: string[] = []
   const unmapped: Record<string, string> = {}
 
   for (const [serverPath, message] of Object.entries(raw)) {
+    const localized = localize(serverPath, message)
     const root = serverPath.split(".")[0]
     const formRoot = options.map?.[root] ?? root
     if (!known.has(formRoot)) {
-      unmapped[serverPath] = message
+      unmapped[serverPath] = localized
       continue
     }
     // Swap only the root segment when remapped, preserving any compound
     // suffix (`urls.0` stays `urls.0`; `default_group_id` → `defaultGroupId`).
     // `options.map` keys are root segments only — never a compound path.
     const formPath = formRoot + serverPath.slice(root.length)
-    setError(formPath as Path<TFieldValues>, { type: "server", message })
+    setError(formPath as Path<TFieldValues>, { type: "server", message: localized })
     mapped.push(formPath)
   }
 

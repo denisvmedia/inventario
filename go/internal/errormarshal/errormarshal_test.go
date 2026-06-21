@@ -257,3 +257,46 @@ func TestMarshal_StandardErrorsFallbackToMinimal(t *testing.T) {
 	hasError := decoded["error"] != nil
 	c.Assert(hasMsg || hasError, qt.IsTrue)
 }
+
+// #1990: validation.Errors must serialize a parallel `errorCodes` tree (same
+// shape as the message tree) carrying each field's stable {code, params},
+// while the `error` (message) tree stays byte-compatible.
+func TestMarshal_ValidationErrorsEmitsCodeTree(t *testing.T) {
+	c := qt.New(t)
+
+	lengthErr := validation.NewError("validation_length_out_of_range", "the length must be between {{.min}} and {{.max}}").
+		SetParams(map[string]any{"min": 2, "max": 50})
+	verrs := validation.Errors{
+		"data": validation.Errors{
+			"attributes": validation.Errors{
+				"name":  validation.NewError("validation_required", "cannot be blank"),
+				"short": lengthErr,
+				"raw":   errors.New("ID field not allowed in create requests"),
+			},
+		},
+	}
+
+	raw := errormarshal.Marshal(verrs)
+	var env struct {
+		Error      map[string]any `json:"error"`
+		ErrorCodes map[string]any `json:"errorCodes"`
+		Type       string         `json:"type"`
+	}
+	c.Assert(json.Unmarshal(raw, &env), qt.IsNil)
+
+	// Message tree unchanged (backward-compatible): rendered English strings.
+	attrsMsg := env.Error["data"].(map[string]any)["attributes"].(map[string]any)
+	c.Assert(attrsMsg["name"], qt.Equals, "cannot be blank")
+	c.Assert(attrsMsg["short"], qt.Equals, "the length must be between 2 and 50")
+
+	// Parallel code tree: stable code + params per field.
+	attrsCode := env.ErrorCodes["data"].(map[string]any)["attributes"].(map[string]any)
+	c.Assert(attrsCode["name"].(map[string]any)["code"], qt.Equals, "validation_required")
+	short := attrsCode["short"].(map[string]any)
+	c.Assert(short["code"], qt.Equals, "validation_length_out_of_range")
+	c.Assert(short["params"].(map[string]any)["max"], qt.Equals, float64(50))
+	// Plain (codeless) errors keep an empty code + the message for FE fallback.
+	rawLeaf := attrsCode["raw"].(map[string]any)
+	c.Assert(rawLeaf["code"], qt.Equals, "")
+	c.Assert(rawLeaf["message"], qt.Equals, "ID field not allowed in create requests")
+}
