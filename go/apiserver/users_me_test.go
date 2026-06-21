@@ -353,6 +353,46 @@ func TestUsersMeAPI(t *testing.T) {
 		c.Assert(wiped.RevokedAt, qt.IsNotNil)
 	})
 
+	// DELETE /sessions — #2126: when the current session can't be
+	// identified (no ?keep_id=, no rti claim, no refresh cookie — exactly
+	// the impersonation shape), the handler MUST refuse the wipe with 400
+	// and leave every session intact rather than revoking all of them.
+	t.Run("revoke_all_other_sessions_refuses_when_no_keep_id", func(t *testing.T) {
+		c := qt.New(t)
+		a, err := rtReg.Create(c.Context(), models.RefreshToken{
+			TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+				TenantID: user.TenantID, UserID: user.ID,
+			},
+			TokenHash: "no-keep-a-hash",
+			ExpiresAt: time.Now().Add(time.Hour),
+		})
+		c.Assert(err, qt.IsNil)
+		b, err := rtReg.Create(c.Context(), models.RefreshToken{
+			TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+				TenantID: user.TenantID, UserID: user.ID,
+			},
+			TokenHash: "no-keep-b-hash",
+			ExpiresAt: time.Now().Add(time.Hour),
+		})
+		c.Assert(err, qt.IsNil)
+
+		// NO ?keep_id=, NO refresh cookie, NO rti claim — the shared `r`
+		// router injects the user but never sets a JWT claim, mirroring an
+		// impersonation session.
+		req := httptest.NewRequest(http.MethodDelete, "/users/me/sessions", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		c.Assert(w.Code, qt.Equals, http.StatusBadRequest)
+
+		// Both sessions survive — nothing was revoked.
+		storedA, err := rtReg.Get(c.Context(), a.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(storedA.RevokedAt, qt.IsNil)
+		storedB, err := rtReg.Get(c.Context(), b.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(storedB.RevokedAt, qt.IsNil)
+	})
+
 	// GET /login-history — newest first, optional failed-count
 	// hint populated.
 	t.Run("login_history_newest_first", func(t *testing.T) {

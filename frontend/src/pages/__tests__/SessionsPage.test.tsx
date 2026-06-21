@@ -143,4 +143,20 @@ describe("<SessionsPage />", () => {
     await user.click(await screen.findByTestId("sessions-confirm-revoke-all-btn"))
     await waitFor(() => expect(capturedQuery).toBe("?keep_id=rt-current"))
   })
+
+  it("hides the revoke-all CTA when no session is flagged current (impersonation)", async () => {
+    // During impersonation the imp session has no rti claim and no tenant
+    // refresh cookie, so the BE flags no row `is_current`. The CTA would
+    // resolve a keep-id of undefined and wipe EVERY session, so it must be
+    // hidden even though "other" sessions exist (#2126).
+    const noCurrent = baseTokens.map((t) => ({ ...t, is_current: false }))
+    server.use(
+      meHandler,
+      groupsHandler,
+      msw.get(api("/users/me/sessions"), () => HttpResponse.json({ sessions: noCurrent }))
+    )
+    renderPage()
+    await screen.findByTestId("sessions-list")
+    expect(screen.queryByTestId("sessions-revoke-all-btn")).not.toBeInTheDocument()
+  })
 })

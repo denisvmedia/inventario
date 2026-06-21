@@ -24,13 +24,15 @@ export function useRevokeSession() {
 }
 
 // useRevokeAllOtherSessions takes the id of the session the caller wants
-// to keep — typically the row the list endpoint marked `is_current: true`.
-// The BE needs an explicit signal here because the refresh cookie is
-// scoped to /api/v1/auth and isn't sent on /users/me/sessions.
+// to keep — the row the list endpoint marked `is_current: true`. The id
+// is REQUIRED because the BE needs an explicit signal (the refresh cookie
+// is scoped to /api/v1/auth and isn't sent on /users/me/sessions) and
+// because firing without one would wipe every session. The caller MUST
+// only mutate when an is_current row exists (#2126).
 export function useRevokeAllOtherSessions() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (keepSessionId: string | undefined) => revokeAllOtherSessions(keepSessionId),
+    mutationFn: (keepSessionId: string) => revokeAllOtherSessions(keepSessionId),
     onSuccess: () => qc.invalidateQueries({ queryKey: sessionsKeys.all }),
   })
 }

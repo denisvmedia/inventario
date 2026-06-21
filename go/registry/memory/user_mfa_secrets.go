@@ -127,6 +127,68 @@ func (r *UserMFASecretRegistry) ConsumeBackupCodeAtomic(
 	return false, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "UserMFASecret"))
 }
 
+// MarkTOTPStepUsedAtomic replicates the postgres CAS under the registry
+// write lock: it bumps last_used_step to `step` only when the stored
+// value is strictly less, returning whether this call won. The lock held
+// for the read-compare-write makes two concurrent callers presenting the
+// same code (same step) serialise — only the first wins, the second sees
+// the already-advanced step and loses (#2124).
+func (r *UserMFASecretRegistry) MarkTOTPStepUsedAtomic(_ context.Context, tenantID, userID string, step int64, now time.Time) (bool, error) {
+	if tenantID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	if userID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		mfa := pair.Value
+		if mfa.TenantID != tenantID || mfa.UserID != userID {
+			continue
+		}
+		if mfa.LastUsedStep >= step {
+			// Replay (or stale) — the step was already consumed.
+			return false, nil
+		}
+		mfa.LastUsedStep = step
+		mfa.LastUsedAt = &now
+		mfa.UpdatedAt = now
+		return true, nil
+	}
+	// No row → the step could not be claimed. Mirror the postgres CAS, which
+	// reports zero affected rows as (false, nil): the handler treats that as a
+	// lost CAS (rejected like a wrong code), not an infrastructure error, so
+	// the two backends share one control flow (#2124).
+	return false, nil
+}
+
+// UpdateBackupCodes replaces BackupCodesHashed for the regenerate flow,
+// leaving LastUsedStep / LastUsedAt untouched (owned by
+// MarkTOTPStepUsedAtomic) so a concurrent step advance can't be reverted
+// (#2124).
+func (r *UserMFASecretRegistry) UpdateBackupCodes(_ context.Context, tenantID, userID string, hashes []string, now time.Time) error {
+	if tenantID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	if userID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))
+	}
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		mfa := pair.Value
+		if mfa.TenantID != tenantID || mfa.UserID != userID {
+			continue
+		}
+		mfa.BackupCodesHashed = hashes
+		mfa.UpdatedAt = now
+		return nil
+	}
+	return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "UserMFASecret"))
+}
+
 func (r *UserMFASecretRegistry) DeleteByUser(_ context.Context, tenantID, userID string) error {
 	if tenantID == "" {
 		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))

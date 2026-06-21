@@ -260,6 +260,51 @@ func TestMFA_Login_ChallengeAndComplete(t *testing.T) {
 	c.Assert(loginResp.User.Email, qt.Equals, f.user.Email)
 }
 
+// TestMFA_Login_TOTPReplayRejectedWithinWindow locks in the #2124 guarantee:
+// a TOTP code consumed at /auth/login/mfa cannot be replayed at the same
+// endpoint within its ±1-step validity window, even though the code is still
+// arithmetically valid. Without the last_used_step CAS the second attempt
+// would mint a second session from a single sniffed code.
+func TestMFA_Login_TOTPReplayRejectedWithinWindow(t *testing.T) {
+	c := qt.New(t)
+	f := newAuthMFAFixture(t)
+	enrollAndEnable(t, f)
+
+	row, err := f.mfaRegistry.GetByUser(context.Background(), f.user.TenantID, f.user.ID)
+	c.Assert(err, qt.IsNil)
+	plain, err := decryptOf(t, f, row.SecretEncrypted)
+	c.Assert(err, qt.IsNil)
+	code, err := totp.GenerateCodeCustom(plain, time.Now(), totp.ValidateOpts{
+		Period: 30, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Each step-2 needs a fresh step-1 mfa_token; the TOTP code stays the same.
+	challenge := func() string {
+		step1 := f.call(t, "POST", "/auth/login", map[string]string{
+			"email":    f.user.Email,
+			"password": mfaTestPassword,
+		})
+		c.Assert(step1.Code, qt.Equals, http.StatusOK)
+		var ch apiserver.LoginMFARequiredResponse
+		c.Assert(json.NewDecoder(step1.Body).Decode(&ch), qt.IsNil)
+		return ch.MFAToken
+	}
+
+	first := f.call(t, "POST", "/auth/login/mfa", apiserver.LoginMFARequest{
+		MFAToken: challenge(),
+		TOTPCode: code,
+	})
+	c.Assert(first.Code, qt.Equals, http.StatusOK)
+
+	// Same code, same time-step → the replay is rejected like a wrong code.
+	replay := f.call(t, "POST", "/auth/login/mfa", apiserver.LoginMFARequest{
+		MFAToken: challenge(),
+		TOTPCode: code,
+	})
+	c.Assert(replay.Code, qt.Equals, http.StatusUnauthorized)
+}
+
 func TestMFA_Login_BackupCodeSingleUse(t *testing.T) {
 	c := qt.New(t)
 	f := newAuthMFAFixture(t)
@@ -408,6 +453,33 @@ func mintMFAToken(t *testing.T, secret []byte, claims jwt.MapClaims) string {
 		t.Fatalf("mintMFAToken: %v", err)
 	}
 	return signed
+}
+
+// TestMFA_Regenerate_RejectsReplayedCode locks in the #2124 guard on the
+// regenerate path: a TOTP code accepted once at /auth/mfa/regenerate-backup-
+// codes cannot be replayed within its skew window. The targeted backup-code
+// update (not a full-row Update) keeps MarkTOTPStepUsedAtomic the sole writer
+// of last_used_step, so the second attempt loses the CAS and is rejected.
+func TestMFA_Regenerate_RejectsReplayedCode(t *testing.T) {
+	c := qt.New(t)
+	f := newAuthMFAFixture(t)
+	enrollAndEnable(t, f)
+
+	row, err := f.mfaRegistry.GetByUser(context.Background(), f.user.TenantID, f.user.ID)
+	c.Assert(err, qt.IsNil)
+	plain, err := decryptOf(t, f, row.SecretEncrypted)
+	c.Assert(err, qt.IsNil)
+	code, err := totp.GenerateCodeCustom(plain, time.Now(), totp.ValidateOpts{
+		Period: 30, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
+	})
+	c.Assert(err, qt.IsNil)
+
+	first := f.call(t, "POST", "/auth/mfa/regenerate-backup-codes", apiserver.MFAVerifyRequest{Code: code})
+	c.Assert(first.Code, qt.Equals, http.StatusOK)
+
+	// Same code, same time-step → replay rejected like a wrong code.
+	replay := f.call(t, "POST", "/auth/mfa/regenerate-backup-codes", apiserver.MFAVerifyRequest{Code: code})
+	c.Assert(replay.Code, qt.Equals, http.StatusUnauthorized)
 }
 
 func TestMFA_Regenerate_RequiresCurrentCode(t *testing.T) {

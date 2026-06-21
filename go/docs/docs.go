@@ -6987,6 +6987,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.FileResponse"
                         }
                     },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Unprocessable Entity",
                         "schema": {
@@ -7036,6 +7042,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.UploadResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "422": {
@@ -8093,7 +8105,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Revoke every refresh token for the authenticated user except the one identified as current.\nResolution order for the \"current\" session: ` + "`" + `?keep_id=\u003cid\u003e` + "`" + ` (recommended; the id the FE\nrendered with ` + "`" + `is_current: true` + "`" + ` on GET /users/me/sessions) → access token ` + "`" + `rti` + "`" + ` claim\n→ refresh cookie hash. When none matches, every session is revoked.",
+                "description": "Revoke every refresh token for the authenticated user except the one identified as current.\nResolution order for the \"current\" session: ` + "`" + `?keep_id=\u003cid\u003e` + "`" + ` (recommended; the id the FE\nrendered with ` + "`" + `is_current: true` + "`" + ` on GET /users/me/sessions) → access token ` + "`" + `rti` + "`" + ` claim\n→ refresh cookie hash. When none matches, the request is rejected with 400 (the current\nsession can't be identified, so revoking everything is refused).",
                 "produces": [
                     "application/json"
                 ],
@@ -8112,6 +8124,12 @@ const docTemplate = `{
                 "responses": {
                     "204": {
                         "description": "No Content",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "string"
                         }

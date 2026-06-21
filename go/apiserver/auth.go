@@ -1036,8 +1036,12 @@ func (api *AuthAPI) applyDefaultGroupUpdate(w http.ResponseWriter, r *http.Reque
 		return true
 	}
 	// Membership check: the user can only pick a group they actually belong to.
-	// GroupMembershipRegistry is tenant-scoped, so a cross-tenant id is rejected
-	// by the same lookup.
+	// GetByGroupAndUser runs in RLS-bypass (service) mode and filters only by
+	// group_id, so the returned row can in principle belong to another tenant.
+	// We therefore compare tenants explicitly below (mirroring the OAuth-callback
+	// guards elsewhere in this file) instead of trusting the lookup to be
+	// tenant-scoped — never let a client move users.default_group_id onto another
+	// tenant's group via the client-controlled DefaultGroupID (#2112).
 	membership, err := api.groupMembershipRegistry.GetByGroupAndUser(r.Context(), *req.DefaultGroupID, user.ID)
 	switch {
 	case errors.Is(err, registry.ErrNotFound):
@@ -1062,6 +1066,16 @@ func (api *AuthAPI) applyDefaultGroupUpdate(w http.ResponseWriter, r *http.Reque
 		slog.Error("Group membership lookup returned nil membership without an error",
 			"user_id", user.ID, "group_id", *req.DefaultGroupID)
 		http.Error(w, "Failed to verify group membership", http.StatusInternalServerError)
+		return false
+	case membership.TenantID != user.TenantID:
+		// The membership row exists but belongs to a different tenant. Treat it
+		// exactly like "not a member": the user has no legitimate way to know a
+		// foreign tenant's group id, and a leaked/duplicated membership row must
+		// not become a cross-tenant write of default_group_id (#2112).
+		slog.Warn("User tried to set default_group_id for a group in another tenant",
+			"user_id", user.ID, "group_id", *req.DefaultGroupID,
+			"user_tenant_id", user.TenantID, "membership_tenant_id", membership.TenantID)
+		http.Error(w, "default_group_id must reference a group you belong to", http.StatusBadRequest)
 		return false
 	}
 	groupID := *req.DefaultGroupID

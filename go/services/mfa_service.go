@@ -11,6 +11,7 @@ package services
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base32"
 	"errors"
 	"fmt"
@@ -230,33 +231,77 @@ func (s *MFAService) DecryptSecret(ciphertext string) (string, error) {
 // VerifyTOTP returns true when `code` is the current 6-digit TOTP for
 // the user's stored secret, allowing ±1 step of clock skew.
 // Whitespace and hyphens in code are tolerated (paste-friendly).
+//
+// Implemented as a thin wrapper over VerifyTOTPStep so the boolean
+// "is this code valid?" answer and the "which step matched?" answer
+// can never diverge. Callers that need to defend against replay within
+// the skew window (RFC 6238 §5.2) should use VerifyTOTPStep and feed the
+// matched step into MarkTOTPStepUsedAtomic.
 func (s *MFAService) VerifyTOTP(stored models.UserMFASecret, code string) (bool, error) {
+	_, ok, err := s.VerifyTOTPStep(stored, code)
+	return ok, err
+}
+
+// VerifyTOTPStep verifies `code` against the user's stored secret and,
+// on a match, returns the TOTP time-step counter (unix/totpPeriodSeconds)
+// of the matched candidate. The ±totpSkew window is searched in step
+// order; the first matching candidate wins.
+//
+// The matched step is what the handler hands to MarkTOTPStepUsedAtomic:
+// a code whose step is <= the row's last_used_step is a replay within
+// the skew window and must be rejected even though it is otherwise a
+// cryptographically valid code (RFC 6238 §5.2).
+//
+// Whitespace and hyphens in code are tolerated (paste-friendly). A
+// non-6-digit code returns (0, false, nil) rather than an error so
+// brute-force probing with short strings can't smoke out which paths
+// log errors — same lenient shape as the old VerifyTOTP.
+func (s *MFAService) VerifyTOTPStep(stored models.UserMFASecret, code string) (matchedStep int64, ok bool, err error) {
 	if stored.SecretEncrypted == "" {
-		return false, ErrMFANotEnrolled
+		return 0, false, ErrMFANotEnrolled
 	}
 	plain, err := s.DecryptSecret(stored.SecretEncrypted)
 	if err != nil {
-		return false, err
+		return 0, false, err
 	}
 	cleaned := normalizeCode(code)
-	// A non-6-digit code is invalid by length alone — the pquerna
-	// library returns a non-nil error in that case, but the auth
-	// flow only cares about boolean validity. Treat shape failures
-	// as "wrong code" instead of a 500 so brute-force probing with
-	// short strings can't smoke out which paths log errors.
 	if len(cleaned) != totpDigits.Length() {
-		return false, nil
+		return 0, false, nil
 	}
-	ok, err := totp.ValidateCustom(cleaned, plain, s.now(), totp.ValidateOpts{
-		Period:    totpPeriodSeconds,
-		Skew:      totpSkew,
-		Digits:    totpDigits,
-		Algorithm: otp.AlgorithmSHA1,
-	})
-	if err != nil {
-		return false, fmt.Errorf("mfa: validate totp: %w", err)
+	step, matched := matchTOTPStep(plain, cleaned, s.now().Unix())
+	return step, matched, nil
+}
+
+// matchTOTPStep walks the ±totpSkew window around the current time-step
+// (nowUnix/totpPeriodSeconds) and returns the first candidate step whose
+// generated code constant-time-equals `cleaned`. The second return is
+// false when no candidate in the window matches.
+//
+// Factored out (and taking a plaintext secret rather than a stored row)
+// so both the tenant-plane verify and the back-office verify — which
+// hands in a decrypted secret via a thin shim — can obtain the matched
+// step without re-implementing the window walk. A GenerateCodeCustom
+// error for one candidate is treated as a no-match for that candidate
+// only (lenient, matching the old totp.ValidateCustom behaviour) rather
+// than aborting the whole window.
+func matchTOTPStep(plainSecret, cleaned string, nowUnix int64) (int64, bool) {
+	base := nowUnix / totpPeriodSeconds
+	cleanedBytes := []byte(cleaned)
+	for delta := -totpSkew; delta <= totpSkew; delta++ {
+		step := base + int64(delta)
+		candidate, genErr := totp.GenerateCodeCustom(plainSecret, time.Unix(step*totpPeriodSeconds, 0), totp.ValidateOpts{
+			Period:    totpPeriodSeconds,
+			Digits:    totpDigits,
+			Algorithm: otp.AlgorithmSHA1,
+		})
+		if genErr != nil {
+			continue
+		}
+		if subtle.ConstantTimeCompare([]byte(candidate), cleanedBytes) == 1 {
+			return step, true
+		}
 	}
-	return ok, nil
+	return 0, false
 }
 
 // GenerateBackupCodes returns N freshly-generated plaintext backup

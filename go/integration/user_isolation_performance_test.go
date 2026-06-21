@@ -9,15 +9,16 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/registry/postgres"
 )
 
-// BenchmarkUserIsolation_ConcurrentUsers benchmarks user isolation with concurrent users
+// BenchmarkUserIsolation_ConcurrentUsers benchmarks user isolation with
+// concurrent users, each in their own group.
 func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
 	if dsn == "" {
@@ -27,30 +28,25 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 
 	c := qt.New(b)
 
+	c.Assert(setupFreshDatabase(dsn), qt.IsNil, qt.Commentf("failed to set up fresh database"))
+
 	registrySetFunc, cleanup := postgres.NewPostgresRegistrySet()
 	defer cleanup()
 	factorySet, err := registrySetFunc(registry.Config(dsn))
 	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create registry set: %v", err))
 
-	// Create test users
-	users := make([]*models.User, 10)
-	for i := range 10 {
-		user := models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: fmt.Sprintf("bench-user-%d", i)},
-				TenantID: "test-tenant-id",
-			},
-			Email:    fmt.Sprintf("bench-user-%d@example.com", i),
-			Name:     fmt.Sprintf("Benchmark User %d", i),
-			IsActive: true,
-		}
+	tenant := createIsolationTenant(c, factorySet)
 
-		err = user.SetPassword("TestPassword123")
-		c.Assert(err, qt.IsNil, qt.Commentf("Failed to set password: %v", err))
-
-		created, err := factorySet.UserRegistry.Create(context.Background(), user)
-		c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user: %v", err))
-		users[i] = created
+	// Create test users, each with their own group + ready context + area.
+	const numUsers = 10
+	fixtures := make([]isolationFixture, numUsers)
+	areaIDs := make([]string, numUsers)
+	for i := range numUsers {
+		f := newGroupedUser(c, factorySet, tenant, fmt.Sprintf("bench-user-%d@example.com", i), fmt.Sprintf("Bench Group %d", i))
+		loc := seedLocation(c, factorySet, f, fmt.Sprintf("Bench Location %d", i))
+		area := seedArea(c, factorySet, f, loc.ID, fmt.Sprintf("Bench Area %d", i))
+		fixtures[i] = f
+		areaIDs[i] = area.ID
 	}
 
 	b.ResetTimer()
@@ -60,18 +56,20 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			userIndex := 0
 			for pb.Next() {
-				user := users[userIndex%len(users)]
-				ctx := appctx.WithUser(context.Background(), user)
+				f := fixtures[userIndex%len(fixtures)]
+				areaID := areaIDs[userIndex%len(areaIDs)]
 
-				// Create commodity
-				commodity := models.Commodity{
+				reg := must.Must(factorySet.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+
+				created := must.Must(reg.Create(f.ctx, models.Commodity{
 					TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-						EntityID:        models.EntityID{ID: fmt.Sprintf("bench-commodity-%d-%d", userIndex, time.Now().UnixNano())},
-						TenantID:        "test-tenant-id",
-						CreatedByUserID: user.ID,
+						TenantID:        f.tenant.ID,
+						GroupID:         f.group.ID,
+						CreatedByUserID: f.user.ID,
 					},
-					Name:                   fmt.Sprintf("Benchmark Commodity %d", userIndex),
+					Name:                   fmt.Sprintf("Benchmark Commodity %d-%d", userIndex, time.Now().UnixNano()),
 					ShortName:              fmt.Sprintf("BC%d", userIndex),
+					AreaID:                 new(areaID),
 					Type:                   models.CommodityTypeElectronics,
 					Count:                  1,
 					OriginalPrice:          decimal.NewFromFloat(100.00),
@@ -83,29 +81,16 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 					RegisteredDate:         models.ToPDate("2023-01-02"),
 					LastModifiedDate:       models.ToPDate("2023-01-03"),
 					Draft:                  false,
-				}
+				}))
 
-				userAwareCommodityRegistry, err := factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
-				c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user-aware registry: %v", err))
-
-				created, err := userAwareCommodityRegistry.Create(ctx, commodity)
-				c.Assert(err, qt.IsNil, qt.Commentf("Failed to create commodity: %v", err))
-
-				// List commodities (should only see own)
-				userAwareCommodityRegistry, err = factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
-				c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user-aware registry: %v", err))
-
-				commodities, err := userAwareCommodityRegistry.List(ctx)
-				c.Assert(err, qt.IsNil, qt.Commentf("Failed to list commodities: %v", err))
-
-				// Verify isolation - should only see own commodities
+				// List commodities — should only see own group's commodities.
+				commodities := must.Must(reg.List(f.ctx))
 				for _, commodity := range commodities {
-					c.Assert(commodity.GetCreatedByUserID(), qt.Equals, user.ID, qt.Commentf("Expected user ID %s, got %s", user.ID, commodity.GetCreatedByUserID()))
+					c.Assert(commodity.GetCreatedByUserID(), qt.Equals, f.user.ID)
 				}
 
-				// Clean up
-				err = userAwareCommodityRegistry.Delete(ctx, created.ID)
-				c.Assert(err, qt.IsNil, qt.Commentf("Failed to delete commodity: %v", err))
+				// Clean up.
+				c.Assert(reg.Delete(f.ctx, created.ID), qt.IsNil)
 
 				userIndex++
 			}
@@ -113,99 +98,81 @@ func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
 	})
 }
 
-// TestUserIsolation_LoadTesting tests user isolation under load
+// TestUserIsolation_LoadTesting tests user isolation under load. Excluded from
+// CI via `-skip 'LoadTesting'`; kept compiling + correct for local runs.
 func TestUserIsolation_LoadTesting(t *testing.T) {
 	c := qt.New(t)
-	registrySet, cleanup := setupTestDatabase(t)
+	fs, cleanup := setupTestDatabase(t)
 	defer cleanup()
 
-	// Create multiple users
-	numUsers := 50
-	users := make([]*models.User, numUsers)
-	for i := range numUsers {
-		user := models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: fmt.Sprintf("load-user-%d", i)},
-				TenantID: "test-tenant-id",
-			},
-			Email:    fmt.Sprintf("load-user-%d@example.com", i),
-			Name:     fmt.Sprintf("Load Test User %d", i),
-			IsActive: true,
-		}
-		err := user.SetPassword("TestPassword123")
-		c.Assert(err, qt.IsNil)
+	tenant := createIsolationTenant(c, fs)
 
-		created, err := registrySet.UserRegistry.Create(context.Background(), user)
-		c.Assert(err, qt.IsNil)
-		users[i] = created
+	// Create multiple users, each in their own group.
+	numUsers := 50
+	fixtures := make([]isolationFixture, numUsers)
+	for i := range numUsers {
+		fixtures[i] = newGroupedUser(c, fs, tenant, fmt.Sprintf("load-user-%d@example.com", i), fmt.Sprintf("Load Group %d", i))
 	}
 
-	// Each user creates commodities concurrently
+	// Each user creates commodities concurrently.
 	var wg sync.WaitGroup
-	errors := make(chan error, numUsers*10)
+	errCh := make(chan error, numUsers*10)
 
-	for i, user := range users {
+	for userIndex, f := range fixtures {
 		wg.Add(1)
-		go func(userIndex int, u *models.User) {
+		go func(userIndex int, f isolationFixture) {
 			defer wg.Done()
 
-			ctx := appctx.WithUser(context.Background(), u)
-
-			// Create location and area for this user's commodities
-			location := models.Location{
+			locReg, err := fs.LocationRegistryFactory.CreateUserRegistry(f.ctx)
+			if err != nil {
+				errCh <- fmt.Errorf("user %d failed to create location registry: %w", userIndex, err)
+				return
+			}
+			createdLocation, err := locReg.Create(f.ctx, models.Location{
 				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-					EntityID:        models.EntityID{ID: fmt.Sprintf("load-location-%d", userIndex)},
-					TenantID:        "test-tenant-id",
-					CreatedByUserID: u.ID,
+					TenantID:        f.tenant.ID,
+					GroupID:         f.group.ID,
+					CreatedByUserID: f.user.ID,
 				},
 				Name:    fmt.Sprintf("Load Test Location %d", userIndex),
 				Address: fmt.Sprintf("123 Load Street %d", userIndex),
-			}
-			userAwareLocationRegistry, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx)
+			})
 			if err != nil {
-				errors <- fmt.Errorf("user %d failed to create location registry: %v", userIndex, err)
-				return
-			}
-			createdLocation, err := userAwareLocationRegistry.Create(ctx, location)
-			if err != nil {
-				errors <- fmt.Errorf("user %d failed to create location: %v", userIndex, err)
+				errCh <- fmt.Errorf("user %d failed to create location: %w", userIndex, err)
 				return
 			}
 
-			area := models.Area{
+			areaReg, err := fs.AreaRegistryFactory.CreateUserRegistry(f.ctx)
+			if err != nil {
+				errCh <- fmt.Errorf("user %d failed to create area registry: %w", userIndex, err)
+				return
+			}
+			createdArea, err := areaReg.Create(f.ctx, models.Area{
 				TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-					EntityID:        models.EntityID{ID: fmt.Sprintf("load-area-%d", userIndex)},
-					TenantID:        "test-tenant-id",
-					CreatedByUserID: u.ID,
+					TenantID:        f.tenant.ID,
+					GroupID:         f.group.ID,
+					CreatedByUserID: f.user.ID,
 				},
 				Name:       fmt.Sprintf("Load Test Area %d", userIndex),
 				LocationID: createdLocation.ID,
-			}
-			userAwareAreaRegistry, err := registrySet.AreaRegistryFactory.CreateUserRegistry(ctx)
+			})
 			if err != nil {
-				errors <- fmt.Errorf("user %d failed to create area registry: %v", userIndex, err)
-				return
-			}
-			createdArea, err := userAwareAreaRegistry.Create(ctx, area)
-			if err != nil {
-				errors <- fmt.Errorf("user %d failed to create area: %v", userIndex, err)
+				errCh <- fmt.Errorf("user %d failed to create area: %w", userIndex, err)
 				return
 			}
 
-			// Create user-aware registry once for this user
-			userAwareCommodityRegistry, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+			comReg, err := fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx)
 			if err != nil {
-				errors <- fmt.Errorf("user %d failed to create user-aware registry: %v", userIndex, err)
+				errCh <- fmt.Errorf("user %d failed to create commodity registry: %w", userIndex, err)
 				return
 			}
 
-			// Create multiple commodities per user
 			for j := range 10 {
-				commodity := models.Commodity{
+				_, err = comReg.Create(f.ctx, models.Commodity{
 					TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-						EntityID:        models.EntityID{ID: fmt.Sprintf("load-commodity-%d-%d", userIndex, j)},
-						TenantID:        "test-tenant-id",
-						CreatedByUserID: u.ID,
+						TenantID:        f.tenant.ID,
+						GroupID:         f.group.ID,
+						CreatedByUserID: f.user.ID,
 					},
 					Name:                   fmt.Sprintf("Load Test Commodity %d-%d", userIndex, j),
 					ShortName:              fmt.Sprintf("LTC%d%d", userIndex, j),
@@ -221,114 +188,58 @@ func TestUserIsolation_LoadTesting(t *testing.T) {
 					RegisteredDate:         models.ToPDate("2023-01-02"),
 					LastModifiedDate:       models.ToPDate("2023-01-03"),
 					Draft:                  false,
-				}
-
-				_, err = userAwareCommodityRegistry.Create(ctx, commodity)
+				})
 				if err != nil {
-					errors <- fmt.Errorf("user %d failed to create commodity %d: %v", userIndex, j, err)
+					errCh <- fmt.Errorf("user %d failed to create commodity %d: %w", userIndex, j, err)
 					return
 				}
 			}
 
-			// List commodities and verify isolation
-			commodities, err := userAwareCommodityRegistry.List(ctx)
+			commodities, err := comReg.List(f.ctx)
 			if err != nil {
-				errors <- fmt.Errorf("user %d failed to list commodities: %v", userIndex, err)
+				errCh <- fmt.Errorf("user %d failed to list commodities: %w", userIndex, err)
 				return
 			}
-
-			// Should see exactly 10 commodities (own commodities only)
 			if len(commodities) != 10 {
-				errors <- fmt.Errorf("user %d sees %d commodities, expected 10", userIndex, len(commodities))
+				errCh <- fmt.Errorf("user %d sees %d commodities, expected 10", userIndex, len(commodities))
 				return
 			}
-
-			// Verify all commodities belong to this user
 			for _, commodity := range commodities {
-				if commodity.GetCreatedByUserID() != u.ID {
-					errors <- fmt.Errorf("user %d can see commodity belonging to user %s", userIndex, commodity.GetCreatedByUserID())
+				if commodity.GetCreatedByUserID() != f.user.ID {
+					errCh <- fmt.Errorf("user %d can see commodity belonging to user %s", userIndex, commodity.GetCreatedByUserID())
 					return
 				}
 			}
-		}(i, user)
+		}(userIndex, f)
 	}
 
 	wg.Wait()
-	close(errors)
+	close(errCh)
 
-	// Check for any errors
-	for err := range errors {
+	for err := range errCh {
 		c.Errorf("Load test error: %v", err)
 	}
 }
 
-// TestUserIsolation_SecurityBoundaries tests security edge cases
+// TestUserIsolation_SecurityBoundaries tests security edge cases: a battery of
+// malicious / malformed user identities must never be able to read, list,
+// update, or delete a legitimate user's commodity. This test RUNS in CI.
 func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 	c := qt.New(t)
-	registrySet, cleanup := setupTestDatabase(t)
+	fs, cleanup := setupTestDatabase(t)
 	defer cleanup()
 
-	// Create a legitimate user
-	user := createTestUser(c, registrySet.UserRegistry, "legitimate@example.com")
-	ctx := appctx.WithUser(context.Background(), user)
+	// Create a legitimate user + group and seed a commodity they own.
+	tenant := createIsolationTenant(c, fs)
+	legit := newGroupedUser(c, fs, tenant, "legitimate@example.com", "Legit Group")
 
-	// Create location and area for the commodity
-	location := models.Location{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			EntityID:        models.EntityID{ID: "security-test-location"},
-			TenantID:        "test-tenant-id",
-			CreatedByUserID: user.ID,
-		},
-		Name:    "Security Test Location",
-		Address: "123 Security Street",
-	}
-	userAwareLocationRegistry, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx)
-	c.Assert(err, qt.IsNil)
-	createdLocation, err := userAwareLocationRegistry.Create(ctx, location)
-	c.Assert(err, qt.IsNil)
+	loc := seedLocation(c, fs, legit, "Security Test Location")
+	area := seedArea(c, fs, legit, loc.ID, "Security Test Area")
+	created := seedCommodity(c, fs, legit, area.ID, "Security Test Commodity", "STC")
 
-	area := models.Area{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			EntityID:        models.EntityID{ID: "security-test-area"},
-			TenantID:        "test-tenant-id",
-			CreatedByUserID: user.ID,
-		},
-		Name:       "Security Test Area",
-		LocationID: createdLocation.ID,
-	}
-	userAwareAreaRegistry, err := registrySet.AreaRegistryFactory.CreateUserRegistry(ctx)
-	c.Assert(err, qt.IsNil)
-	createdArea, err := userAwareAreaRegistry.Create(ctx, area)
-	c.Assert(err, qt.IsNil)
-
-	// Create a commodity
-	commodity := models.Commodity{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			EntityID:        models.EntityID{ID: "security-test-commodity"},
-			TenantID:        "test-tenant-id",
-			CreatedByUserID: user.ID,
-		},
-		Name:                   "Security Test Commodity",
-		ShortName:              "STC",
-		AreaID:                 new(createdArea.ID),
-		Type:                   models.CommodityTypeElectronics,
-		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(100.00),
-		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.Zero,
-		CurrentPrice:           decimal.NewFromFloat(90.00),
-		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           models.ToPDate("2023-01-01"),
-		RegisteredDate:         models.ToPDate("2023-01-02"),
-		LastModifiedDate:       models.ToPDate("2023-01-03"),
-		Draft:                  false,
-	}
-	userAwareCommodityRegistry, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
-	c.Assert(err, qt.IsNil)
-	created, err := userAwareCommodityRegistry.Create(ctx, commodity)
-	c.Assert(err, qt.IsNil)
-
-	// Test various malicious user ID attempts
+	// Various malicious user IDs. Each is paired with a bogus group so the
+	// registry factory always builds successfully and the RLS denial — not a
+	// missing-group setup error — is what we exercise.
 	maliciousUserIDs := []string{
 		"'; DROP TABLE commodities; --",
 		"<script>alert('xss')</script>",
@@ -345,132 +256,94 @@ func TestUserIsolation_SecurityBoundaries(t *testing.T) {
 	}
 
 	for _, maliciousID := range maliciousUserIDs {
-		// Create a sanitized test name to avoid 0x00 pollution in output
 		testName := fmt.Sprintf("Malicious ID: %q", maliciousID)
 		if len(maliciousID) > 100 {
 			testName = fmt.Sprintf("Malicious ID: very_long_string_%d_bytes", len(maliciousID))
 		}
 		t.Run(testName, func(t *testing.T) {
 			c := qt.New(t)
-			maliciousCtx := appctx.WithUser(context.Background(), &models.User{
-				TenantAwareEntityID: models.TenantAwareEntityID{
-					EntityID: models.EntityID{ID: maliciousID},
-					TenantID: "test-tenant-id",
+			maliciousCtx := userGroupContext(
+				context.Background(),
+				&models.User{
+					TenantAwareEntityID: models.TenantAwareEntityID{
+						EntityID: models.EntityID{ID: maliciousID},
+						TenantID: "non-existent-tenant-id",
+					},
 				},
-			})
+				&models.LocationGroup{
+					TenantAwareEntityID: models.TenantAwareEntityID{
+						EntityID: models.EntityID{ID: "non-existent-group-id"},
+						TenantID: "non-existent-tenant-id",
+					},
+					GroupCurrency: models.Currency("USD"),
+				},
+			)
 
-			// Try to access the legitimate user's commodity
-			maliciousUserAwareRegistry, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(maliciousCtx)
+			maliciousReg, err := fs.CommodityRegistryFactory.CreateUserRegistry(maliciousCtx)
 			if err != nil {
-				// If CreateUserRegistry fails, that's expected for malicious contexts
+				// If CreateUserRegistry fails, that's an acceptable outcome for a
+				// malicious context — denial achieved.
 				return
 			}
-			_, err = maliciousUserAwareRegistry.Get(maliciousCtx, created.ID)
-			c.Assert(err, qt.IsNotNil) // Should fail
 
-			// Try to list commodities
-			commodities, err := maliciousUserAwareRegistry.List(maliciousCtx)
+			// Cannot Get the legit commodity.
+			_, err = maliciousReg.Get(maliciousCtx, created.ID)
+			c.Assert(err, qt.IsNotNil)
+
+			// List must not leak the legit commodity.
+			commodities, err := maliciousReg.List(maliciousCtx)
 			if err == nil {
-				// If no error, should return empty list
 				c.Assert(commodities, qt.HasLen, 0)
 			}
 
-			// Try to update the commodity
-			created.Name = "Hacked Name"
-			_, err = maliciousUserAwareRegistry.Update(maliciousCtx, *created)
-			c.Assert(err, qt.IsNotNil) // Should fail
+			// Cannot Update.
+			tampered := *created
+			tampered.Name = "Hacked Name"
+			_, err = maliciousReg.Update(maliciousCtx, tampered)
+			c.Assert(err, qt.IsNotNil)
 
-			// Try to delete the commodity
-			err = maliciousUserAwareRegistry.Delete(maliciousCtx, created.ID)
-			c.Assert(err, qt.IsNotNil) // Should fail
+			// Cannot Delete.
+			err = maliciousReg.Delete(maliciousCtx, created.ID)
+			c.Assert(err, qt.IsNotNil)
 		})
 	}
 
-	// Verify the original commodity is still intact
-	retrieved, err := userAwareCommodityRegistry.Get(ctx, created.ID)
+	// The legit commodity survives the assault intact.
+	legitReg := must.Must(fs.CommodityRegistryFactory.CreateUserRegistry(legit.ctx))
+	retrieved, err := legitReg.Get(legit.ctx, created.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(retrieved.Name, qt.Equals, "Security Test Commodity")
 }
 
-// TestUserIsolation_PerformanceRegression tests for performance regressions
+// TestUserIsolation_PerformanceRegression tests for performance regressions.
+// Excluded from CI via `-skip 'PerformanceRegression'`; kept compiling + correct.
 func TestUserIsolation_PerformanceRegression(t *testing.T) {
 	c := qt.New(t)
-	registrySet, cleanup := setupTestDatabase(t)
+	fs, cleanup := setupTestDatabase(t)
 	defer cleanup()
 
-	// Create a user
-	user := createTestUser(c, registrySet.UserRegistry, "perf@example.com")
-	ctx := appctx.WithUser(context.Background(), user)
+	tenant := createIsolationTenant(c, fs)
+	f := newGroupedUser(c, fs, tenant, "perf@example.com", "Perf Group")
 
-	// Create location and area for commodities
-	location := models.Location{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			EntityID:        models.EntityID{ID: "perf-location"},
-			TenantID:        "test-tenant-id",
-			CreatedByUserID: user.ID,
-		},
-		Name:    "Performance Test Location",
-		Address: "123 Performance Street",
-	}
-	userAwareLocationRegistry, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx)
-	c.Assert(err, qt.IsNil)
-	createdLocation, err := userAwareLocationRegistry.Create(ctx, location)
-	c.Assert(err, qt.IsNil)
+	loc := seedLocation(c, fs, f, "Performance Test Location")
+	area := seedArea(c, fs, f, loc.ID, "Performance Test Area")
 
-	area := models.Area{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			EntityID:        models.EntityID{ID: "perf-area"},
-			TenantID:        "test-tenant-id",
-			CreatedByUserID: user.ID,
-		},
-		Name:       "Performance Test Area",
-		LocationID: createdLocation.ID,
-	}
-	userAwareAreaRegistry, err := registrySet.AreaRegistryFactory.CreateUserRegistry(ctx)
-	c.Assert(err, qt.IsNil)
-	createdArea, err := userAwareAreaRegistry.Create(ctx, area)
-	c.Assert(err, qt.IsNil)
-
-	// Create many commodities
 	numCommodities := 1000
-	userAwareCommodityRegistry, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
-	c.Assert(err, qt.IsNil)
+	comReg := must.Must(fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
 
 	for i := range numCommodities {
-		commodity := models.Commodity{
-			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-				EntityID:        models.EntityID{ID: fmt.Sprintf("perf-commodity-%d", i)},
-				TenantID:        "test-tenant-id",
-				CreatedByUserID: user.ID,
-			},
-			Name:                   fmt.Sprintf("Performance Test Commodity %d", i),
-			ShortName:              fmt.Sprintf("PTC%d", i),
-			AreaID:                 new(createdArea.ID),
-			Type:                   models.CommodityTypeElectronics,
-			Count:                  1,
-			OriginalPrice:          decimal.NewFromFloat(100.00),
-			OriginalPriceCurrency:  "USD",
-			ConvertedOriginalPrice: decimal.Zero,
-			CurrentPrice:           decimal.NewFromFloat(90.00),
-			Status:                 models.CommodityStatusInUse,
-			PurchaseDate:           models.ToPDate("2023-01-01"),
-			RegisteredDate:         models.ToPDate("2023-01-02"),
-			LastModifiedDate:       models.ToPDate("2023-01-03"),
-			Draft:                  false,
-		}
-		_, err = userAwareCommodityRegistry.Create(ctx, commodity)
-		c.Assert(err, qt.IsNil)
+		_ = seedCommodity(c, fs, f, area.ID,
+			fmt.Sprintf("Performance Test Commodity %d", i),
+			fmt.Sprintf("PTC%d", i))
 	}
 
-	// Measure list performance
 	start := time.Now()
-	commodities, err := userAwareCommodityRegistry.List(ctx)
+	commodities, err := comReg.List(f.ctx)
 	duration := time.Since(start)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(commodities, qt.HasLen, numCommodities)
 
-	// Performance should be reasonable (less than 1 second for 1000 items)
 	if duration > time.Second {
 		t.Errorf("List operation took too long: %v", duration)
 	}

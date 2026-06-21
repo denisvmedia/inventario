@@ -181,22 +181,35 @@ func (r *BackofficeUserMFASecretRegistry) ConsumeBackupCodeAtomic(
 	return false, errxtrace.Classify(registry.ErrBackofficeMFASecretNotFound, errx.Attrs("backoffice_user_id", backofficeUserID))
 }
 
-// BumpLastUsedAt sets LastUsedAt to `now` and bumps UpdatedAt. Used by
-// the login MFA handler after a successful TOTP verification.
-func (r *BackofficeUserMFASecretRegistry) BumpLastUsedAt(_ context.Context, backofficeUserID string, now time.Time) error {
+// MarkTOTPStepUsedAtomic replicates the postgres CAS under the registry
+// write lock: it bumps last_used_step to `step` only when the stored
+// value is strictly less, returning whether this call won. The lock held
+// for the read-compare-write serialises two concurrent callers presenting
+// the same code (same step) — only the first wins (#2124).
+func (r *BackofficeUserMFASecretRegistry) MarkTOTPStepUsedAtomic(_ context.Context, backofficeUserID string, step int64, now time.Time) (bool, error) {
 	if backofficeUserID == "" {
-		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "BackofficeUserID"))
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "BackofficeUserID"))
 	}
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		row := pair.Value
-		if row.BackofficeUserID == backofficeUserID {
-			stamped := now
-			row.LastUsedAt = &stamped
-			row.UpdatedAt = time.Now().UTC()
-			return nil
+		if row.BackofficeUserID != backofficeUserID {
+			continue
 		}
+		if row.LastUsedStep >= step {
+			// Replay (or stale) — the step was already consumed.
+			return false, nil
+		}
+		row.LastUsedStep = step
+		stamped := now
+		row.LastUsedAt = &stamped
+		row.UpdatedAt = now
+		return true, nil
 	}
-	return errxtrace.Classify(registry.ErrBackofficeMFASecretNotFound, errx.Attrs("backoffice_user_id", backofficeUserID))
+	// No row → the step could not be claimed. Mirror the postgres CAS, which
+	// reports zero affected rows as (false, nil): a lost CAS (rejected like a
+	// wrong code), not an infrastructure error — keeps memory and production
+	// on one control flow (#2124).
+	return false, nil
 }

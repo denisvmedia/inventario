@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -18,7 +17,6 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -27,16 +25,24 @@ import (
 	"github.com/denisvmedia/inventario/services"
 )
 
-// setupTestAPIServer creates a test API server with authentication
-func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.User, user2 *models.User, jwtSecret string, registrySet *registry.Set, cleanup func()) {
-	c := qt.New(t)
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		t.Skip("POSTGRES_TEST_DSN environment variable not set")
-		return nil, nil, nil, "", nil, nil
-	}
+// apiIsolationFixture bundles one user with their own group (incl. an
+// owner-membership row so GroupSlugResolverMiddleware admits them) and a ready
+// WithUser+WithGroup context for registry-level seeding.
+type apiIsolationFixture struct {
+	user  *models.User
+	group *models.LocationGroup
+	ctx   context.Context
+}
 
-	// Set up fresh database with bootstrap and migrations
+// setupTestAPIServer creates a test API server with authentication, a real
+// tenant, and TWO users — each owning a SEPARATE group. The modern data routes
+// are group-scoped (/api/v1/g/{groupSlug}/...) and gated by group membership, so
+// isolation is exercised by routing each user through their own group's slug.
+func setupTestAPIServer(t *testing.T) (server *httptest.Server, fs *registry.FactorySet, user1, user2 apiIsolationFixture, jwtSecret string, cleanup func()) {
+	t.Helper()
+	c := qt.New(t)
+	dsn := mustTestDSN(t)
+
 	err := setupFreshDatabase(dsn)
 	c.Assert(err, qt.IsNil, qt.Commentf("Failed to setup fresh database"))
 
@@ -46,52 +52,47 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 
 	jwtSecretBytes := []byte("test-secret-32-bytes-minimum-length")
 
-	// Create test tenant first with unique identifiers
-	testTenant := models.Tenant{
-		Name:   "Test Tenant API " + time.Now().Format("20060102-150405"),
-		Slug:   "test-tenant-api-" + fmt.Sprintf("%d", time.Now().UnixNano()%1000000),
-		Status: models.TenantStatusActive,
+	// Real tenant, marked as the system default so the host→tenant resolver
+	// (PublicTenantMiddleware → TenantRegistry.GetDefault) resolves every
+	// request to it. Without a default tenant the server 503s
+	// ("No default tenant configured") before auth or routing runs — the CI
+	// failure these tests hit on a truly fresh DB (#2094). setupFreshDatabase
+	// bootstraps + migrates but does NOT truncate, so a prior test's default
+	// tenant may linger: demote it first to satisfy the
+	// tenants_single_default_idx partial unique index (mirrors
+	// createTenantAndGetID in cli_workflow_integration_test.go).
+	uniq := fmt.Sprintf("%d", time.Now().UnixNano())
+	if existing, getErr := factorySet.TenantRegistry.GetDefault(context.Background()); getErr == nil {
+		existing.IsDefault = false
+		must.Must(factorySet.TenantRegistry.Update(context.Background(), *existing))
 	}
-	createdTenant, err := factorySet.TenantRegistry.Create(context.Background(), testTenant)
-	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create test tenant"))
-	testTenantID := createdTenant.ID
+	createdTenant := must.Must(factorySet.TenantRegistry.Create(context.Background(), models.Tenant{
+		Name:      "Test Tenant API " + uniq,
+		Slug:      "test-tenant-api-" + uniq,
+		Status:    models.TenantStatusActive,
+		IsDefault: true,
+	}))
 
-	// Create test users with unique identifiers
-	timestamp := fmt.Sprintf("%d", time.Now().UnixNano()%1000000)
-	user1Model := models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: testTenantID,
-		},
-		Email:    "user1-" + timestamp + "@api-test.com",
-		Name:     "API Test User 1",
-		IsActive: true,
-	}
-	err = user1Model.SetPassword("TestPassword123")
-	c.Assert(err, qt.IsNil, qt.Commentf("Failed to set password for user1"))
+	// Two users in the same tenant.
+	createdUser1 := mustCreateAPIUser(c, factorySet, createdTenant.ID, "user1-"+uniq+"@api-test.com")
+	createdUser2 := mustCreateAPIUser(c, factorySet, createdTenant.ID, "user2-"+uniq+"@api-test.com")
 
-	user2Model := models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			TenantID: testTenantID,
-		},
-		Email:    "user2-" + timestamp + "@api-test.com",
-		Name:     "API Test User 2",
-		IsActive: true,
-	}
-	err = user2Model.SetPassword("TestPassword123")
-	c.Assert(err, qt.IsNil, qt.Commentf("Failed to set password for user2"))
+	// GroupService wired exactly like the production apiserver so CreateGroup
+	// both creates the group AND inserts the creator's owner-membership row
+	// (required by GroupSlugResolverMiddleware).
+	groupService := services.NewGroupService(
+		factorySet.LocationGroupRegistry,
+		factorySet.GroupMembershipRegistry,
+		factorySet.GroupInviteRegistry,
+	)
+	groupService.SetUserRegistry(factorySet.UserRegistry)
 
-	createdUser1, err := factorySet.UserRegistry.Create(context.Background(), user1Model)
-	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user1"))
+	group1 := must.Must(groupService.CreateGroup(context.Background(), createdTenant.ID, createdUser1.ID, "User1 Group", "", "", models.Currency("USD")))
+	group2 := must.Must(groupService.CreateGroup(context.Background(), createdTenant.ID, createdUser2.ID, "User2 Group", "", "", models.Currency("USD")))
 
-	createdUser2, err := factorySet.UserRegistry.Create(context.Background(), user2Model)
-	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user2"))
+	user1 = apiIsolationFixture{user: createdUser1, group: group1, ctx: userGroupContext(context.Background(), createdUser1, group1)}
+	user2 = apiIsolationFixture{user: createdUser2, group: group2, ctx: userGroupContext(context.Background(), createdUser2, group2)}
 
-	// Create user-aware registry set for user1 (for testing purposes)
-	ctx := appctx.WithUser(context.Background(), createdUser1)
-	registrySet, err = factorySet.CreateUserRegistrySet(ctx)
-	c.Assert(err, qt.IsNil, qt.Commentf("Failed to create user registry set"))
-
-	// Create API server
 	params := apiserver.Params{
 		FactorySet:     factorySet,
 		EntityService:  services.NewEntityService(factorySet, "file://uploads?memfs=1&create_dir=1"),
@@ -111,21 +112,38 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, user1 *models.Us
 		}
 	}
 
-	return server, createdUser1, createdUser2, string(jwtSecretBytes), registrySet, cleanup
+	return server, factorySet, user1, user2, string(jwtSecretBytes), cleanup
 }
 
-// generateJWTToken creates a JWT token for the given user
+// mustCreateAPIUser creates an active user with a known password in the tenant.
+func mustCreateAPIUser(c *qt.C, fs *registry.FactorySet, tenantID, email string) *models.User {
+	c.Helper()
+	u := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		Email:               email,
+		Name:                "API Test User",
+		IsActive:            true,
+	}
+	c.Assert(u.SetPassword("TestPassword123"), qt.IsNil)
+	return must.Must(fs.UserRegistry.Create(context.Background(), u))
+}
+
+// generateJWTToken creates a JWT access token for the given user. The
+// token_type=access claim is mandatory post-#1778 — the JWT middleware rejects
+// any token without it as "invalid token type".
 func generateJWTToken(user *models.User, jwtSecret string) (string, error) {
-	expiresAt := time.Now().Add(24 * time.Hour)
+	now := time.Now()
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": user.ID,
-		"exp":     expiresAt.Unix(),
+		"user_id":    user.ID,
+		"token_type": "access",
+		"exp":        now.Add(24 * time.Hour).Unix(),
+		"iat":        now.Unix(),
 	})
 
 	return token.SignedString([]byte(jwtSecret))
 }
 
-// makeAuthenticatedRequest makes an HTTP request with JWT authentication
+// makeAuthenticatedRequest makes an HTTP request with JWT authentication.
 func makeAuthenticatedRequest(method, url string, body []byte, token string) (*http.Response, error) {
 	var req *http.Request
 	var err error
@@ -135,7 +153,6 @@ func makeAuthenticatedRequest(method, url string, body []byte, token string) (*h
 	} else {
 		req, err = http.NewRequest(method, url, nil)
 	}
-
 	if err != nil {
 		return nil, err
 	}
@@ -147,79 +164,65 @@ func makeAuthenticatedRequest(method, url string, body []byte, token string) (*h
 	return client.Do(req)
 }
 
-// TestAPIUserIsolation_Commodities tests commodity API isolation
-func TestAPIUserIsolation_Commodities(t *testing.T) {
-	server, createdUser1, createdUser2, jwtSecret, registrySet, cleanup := setupTestAPIServer(t)
-	defer cleanup()
-
-	// Get the variables we need
-	testTenantID := createdUser1.TenantID // Both users have the same tenant ID
-
-	// Group currency now lives on the location group, which setupTestAPIServer
-	// already stamps with GroupCurrency=USD — so nothing to do here.
-
-	// Create a location and area for the commodity
-	location := models.Location{
+// seedAPILocationArea creates a location + area in the fixture's group via the
+// user-aware registry, returning the area id the HTTP commodity-create needs.
+func seedAPILocationArea(c *qt.C, fs *registry.FactorySet, f apiIsolationFixture) string {
+	c.Helper()
+	locReg := must.Must(fs.LocationRegistryFactory.CreateUserRegistry(f.ctx))
+	loc := must.Must(locReg.Create(f.ctx, models.Location{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        testTenantID,
-			CreatedByUserID: createdUser1.ID,
+			TenantID:        f.user.TenantID,
+			GroupID:         f.group.ID,
+			CreatedByUserID: f.user.ID,
 		},
 		Name:    "Test Location",
 		Address: "123 Test St",
-	}
-
-	// Create location using user1's context
-	ctx := appctx.WithUser(context.Background(), createdUser1)
-	createdLocation, err := registrySet.LocationRegistry.Create(ctx, location)
-	if err != nil {
-		t.Fatalf("Failed to create location: %v", err)
-	}
-
-	area := models.Area{
+	}))
+	areaReg := must.Must(fs.AreaRegistryFactory.CreateUserRegistry(f.ctx))
+	area := must.Must(areaReg.Create(f.ctx, models.Area{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        testTenantID,
-			CreatedByUserID: createdUser1.ID,
+			TenantID:        f.user.TenantID,
+			GroupID:         f.group.ID,
+			CreatedByUserID: f.user.ID,
 		},
 		Name:       "Test Area",
-		LocationID: createdLocation.ID,
-	}
-	createdArea, err := registrySet.AreaRegistry.Create(ctx, area)
-	if err != nil {
-		t.Fatalf("Failed to create area: %v", err)
-	}
+		LocationID: loc.ID,
+	}))
+	return area.ID
+}
 
-	// Generate tokens for both users
-	token1, err := generateJWTToken(createdUser1, jwtSecret)
-	if err != nil {
-		t.Fatalf("Failed to generate token for user1: %v", err)
-	}
+// commoditiesPath builds the group-scoped commodities collection URL.
+func commoditiesPath(serverURL, groupSlug string) string {
+	return serverURL + "/api/v1/g/" + groupSlug + "/commodities"
+}
 
-	token2, err := generateJWTToken(createdUser2, jwtSecret)
-	if err != nil {
-		t.Fatalf("Failed to generate token for user2: %v", err)
-	}
+// TestAPIUserIsolation_Commodities exercises commodity API isolation at the HTTP
+// layer: user1 creates a commodity in their group; user2 (a different group) must
+// not see it; and user2 is denied membership when targeting user1's group slug.
+func TestAPIUserIsolation_Commodities(t *testing.T) {
+	server, fs, user1, user2, jwtSecret, cleanup := setupTestAPIServer(t)
+	defer cleanup()
+	c := qt.New(t)
 
-	// User1 creates a commodity (as draft to avoid price validation)
-	//commodityData := map[string]any{
-	//	"name":        "User1 Commodity",
-	//	"description": "A commodity created by user1",
-	//	"area_id":     area.ID,
-	//	"count":       1,
-	//	"status":      "in_use",
-	//	"draft":       true, // Create as draft to bypass group currency validation
-	//}
+	areaID := seedAPILocationArea(c, fs, user1)
 
+	token1, err := generateJWTToken(user1.user, jwtSecret)
+	c.Assert(err, qt.IsNil)
+	token2, err := generateJWTToken(user2.user, jwtSecret)
+	c.Assert(err, qt.IsNil)
+
+	// User1 creates a commodity (draft → bypasses group-currency price math).
 	obj := &jsonapi.CommodityRequest{
 		Data: &jsonapi.CommodityData{
 			Type: "commodities",
 			Attributes: &models.Commodity{
 				Name:                   "New Commodity in Area 2",
 				ShortName:              "NewCom2",
-				AreaID:                 new(createdArea.ID),
+				AreaID:                 new(areaID),
 				Type:                   models.CommodityTypeElectronics,
 				OriginalPrice:          must.Must(decimal.NewFromString("1000.00")),
 				OriginalPriceCurrency:  models.Currency("USD"),
-				ConvertedOriginalPrice: must.Must(decimal.NewFromString("0")), // to pass the validation
+				ConvertedOriginalPrice: must.Must(decimal.NewFromString("0")),
 				CurrentPrice:           must.Must(decimal.NewFromString("800.00")),
 				SerialNumber:           "SN123456",
 				ExtraSerialNumbers:     []string{"SN654321"},
@@ -237,114 +240,97 @@ func TestAPIUserIsolation_Commodities(t *testing.T) {
 	}
 
 	jsonData, err := json.Marshal(obj)
-	if err != nil {
-		t.Fatalf("Failed to marshal commodity data: %v", err)
-	}
+	c.Assert(err, qt.IsNil)
 
-	resp, err := makeAuthenticatedRequest("POST", server.URL+"/api/v1/commodities", jsonData, token1)
-	if err != nil {
-		t.Fatalf("Failed to create commodity: %v", err)
-	}
+	resp, err := makeAuthenticatedRequest(http.MethodPost, commoditiesPath(server.URL, user1.group.Slug), jsonData, token1)
+	c.Assert(err, qt.IsNil)
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("Expected status %d, got %d. Response body: %s", http.StatusCreated, resp.StatusCode, string(body))
+		resp.Body.Close()
+		c.Fatalf("Expected status %d, got %d. Response body: %s", http.StatusCreated, resp.StatusCode, string(body))
 	}
 	resp.Body.Close()
 
-	// User2 tries to list commodities - should see empty list
-	resp, err = makeAuthenticatedRequest("GET", server.URL+"/api/v1/commodities", nil, token2)
-	if err != nil {
-		t.Fatalf("Failed to list commodities for user2: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, resp.StatusCode)
-	}
+	// User2, on THEIR OWN group, sees an empty list (group-scoped isolation).
+	resp, err = makeAuthenticatedRequest(http.MethodGet, commoditiesPath(server.URL, user2.group.Slug), nil, token2)
+	c.Assert(err, qt.IsNil)
+	c.Assert(resp.StatusCode, qt.Equals, http.StatusOK)
+	c.Assert(decodeDataLen(c, resp), qt.Equals, 0)
+
+	// User2 is forbidden from even addressing user1's group slug (not a member).
+	resp, err = makeAuthenticatedRequest(http.MethodGet, commoditiesPath(server.URL, user1.group.Slug), nil, token2)
+	c.Assert(err, qt.IsNil)
+	c.Assert(resp.StatusCode, qt.Equals, http.StatusForbidden)
+	resp.Body.Close()
+
+	// User1 sees their one commodity.
+	resp, err = makeAuthenticatedRequest(http.MethodGet, commoditiesPath(server.URL, user1.group.Slug), nil, token1)
+	c.Assert(err, qt.IsNil)
+	c.Assert(resp.StatusCode, qt.Equals, http.StatusOK)
 
 	var commodities map[string]any
-	err = json.NewDecoder(resp.Body).Decode(&commodities)
-	if err != nil {
-		t.Fatalf("Failed to decode commodities: %v", err)
-	}
-	if len(commodities["data"].([]any)) != 0 {
-		t.Errorf("Expected 0 commodities for user2, got %d", len(commodities))
-	}
+	c.Assert(json.NewDecoder(resp.Body).Decode(&commodities), qt.IsNil)
 	resp.Body.Close()
-
-	// User1 can see their commodity
-	resp, err = makeAuthenticatedRequest("GET", server.URL+"/api/v1/commodities", nil, token1)
-	if err != nil {
-		t.Fatalf("Failed to list commodities for user1: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, resp.StatusCode)
-	}
-
-	commodities = map[string]any(nil)
-	err = json.NewDecoder(resp.Body).Decode(&commodities)
-	if err != nil {
-		t.Fatalf("Failed to decode commodities for user1: %v", err)
-	}
-	dataArray := commodities["data"].([]any)
-	if len(dataArray) != 1 {
-		t.Errorf("Expected 1 commodity for user1, got %d", len(dataArray))
-	}
-	if len(dataArray) > 0 {
-		name := dataArray[0].(map[string]any)["attributes"].(map[string]any)["name"]
-		if name != obj.Data.Attributes.Name {
-			t.Errorf("Expected '%s', got %v", obj.Data.Attributes.Name, name)
-		}
-	}
-	resp.Body.Close()
+	dataArray, ok := commodities["data"].([]any)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(dataArray, qt.HasLen, 1)
+	name := dataArray[0].(map[string]any)["attributes"].(map[string]any)["name"]
+	c.Assert(name, qt.Equals, obj.Data.Attributes.Name)
 }
 
-// TestAPIAuthentication tests authentication requirements for API endpoints
+// decodeDataLen decodes a JSON:API collection response and returns len(data).
+func decodeDataLen(c *qt.C, resp *http.Response) int {
+	c.Helper()
+	defer resp.Body.Close()
+	var payload map[string]any
+	c.Assert(json.NewDecoder(resp.Body).Decode(&payload), qt.IsNil)
+	data, ok := payload["data"].([]any)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("response has no data array: %v", payload))
+	return len(data)
+}
+
+// TestAPIAuthentication tests authentication requirements for group-scoped API
+// endpoints: every data route must reject an unauthenticated request with 401.
 func TestAPIAuthentication(t *testing.T) {
-	server, _, _, _, _, cleanup := setupTestAPIServer(t)
+	server, _, user1, _, _, cleanup := setupTestAPIServer(t)
 	defer cleanup()
 
+	slug := user1.group.Slug
 	endpoints := []struct {
 		method string
 		path   string
 	}{
-		{"GET", "/api/v1/commodities"},
-		{"POST", "/api/v1/commodities"},
-		{"GET", "/api/v1/locations"},
-		{"POST", "/api/v1/locations"},
-		{"GET", "/api/v1/areas"},
-		{"POST", "/api/v1/areas"},
-		{"GET", "/api/v1/files"},
-		{"GET", "/api/v1/exports"},
-		{"POST", "/api/v1/exports"},
+		{http.MethodGet, "/api/v1/g/" + slug + "/commodities"},
+		{http.MethodPost, "/api/v1/g/" + slug + "/commodities"},
+		{http.MethodGet, "/api/v1/g/" + slug + "/locations"},
+		{http.MethodPost, "/api/v1/g/" + slug + "/locations"},
+		{http.MethodGet, "/api/v1/g/" + slug + "/areas"},
+		{http.MethodPost, "/api/v1/g/" + slug + "/areas"},
+		{http.MethodGet, "/api/v1/g/" + slug + "/files"},
+		{http.MethodGet, "/api/v1/g/" + slug + "/exports"},
+		{http.MethodPost, "/api/v1/g/" + slug + "/exports"},
 	}
 
 	for _, endpoint := range endpoints {
 		t.Run(fmt.Sprintf("%s %s", endpoint.method, endpoint.path), func(t *testing.T) {
-			// Test without authentication - should fail
+			c := qt.New(t)
 			var req *http.Request
 			var err error
 
-			if endpoint.method == "POST" {
-				testData := map[string]any{"name": "Test"}
-				jsonData, _ := json.Marshal(testData)
+			if endpoint.method == http.MethodPost {
+				jsonData := must.Must(json.Marshal(map[string]any{"name": "Test"}))
 				req, err = http.NewRequest(endpoint.method, server.URL+endpoint.path, bytes.NewBuffer(jsonData))
 			} else {
 				req, err = http.NewRequest(endpoint.method, server.URL+endpoint.path, nil)
 			}
-
-			if err != nil {
-				t.Fatalf("Failed to create request: %v", err)
-			}
+			c.Assert(err, qt.IsNil)
 			req.Header.Set("Content-Type", "application/json")
 
 			client := &http.Client{}
 			resp, err := client.Do(req)
-			if err != nil {
-				t.Fatalf("Request failed: %v", err)
-			}
-			if resp.StatusCode != http.StatusUnauthorized {
-				t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, resp.StatusCode)
-			}
-			resp.Body.Close()
+			c.Assert(err, qt.IsNil)
+			defer resp.Body.Close()
+			c.Assert(resp.StatusCode, qt.Equals, http.StatusUnauthorized)
 		})
 	}
 }

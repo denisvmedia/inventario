@@ -26,6 +26,38 @@ func TestConfigSetDefaults_DefaultsNegativeEmailQueueMaxRetries(t *testing.T) {
 	c.Assert(cfg.EmailQueueMaxRetries, qt.Equals, 5)
 }
 
+func TestConfigSetDefaults_MaxUploadBytesDefaultsAppliedWhenZero(t *testing.T) {
+	c := qt.New(t)
+
+	// #2101: a YAML config that omits max_upload_bytes leaves the field at 0
+	// (cleanenv applies env-default only on env reads), which would silently
+	// disable the upload cap. SetDefaults must backfill the 1 GiB default.
+	cfg := bootstrap.Config{MaxUploadBytes: 0}
+	cfg.SetDefaults()
+
+	c.Assert(cfg.MaxUploadBytes, qt.Equals, int64(1<<30))
+}
+
+func TestConfigSetDefaults_MaxUploadBytesPreservesExplicitPositive(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := bootstrap.Config{MaxUploadBytes: 5 << 20}
+	cfg.SetDefaults()
+
+	c.Assert(cfg.MaxUploadBytes, qt.Equals, int64(5<<20))
+}
+
+func TestConfigSetDefaults_MaxUploadBytesPreservesNegativeAsDisabled(t *testing.T) {
+	c := qt.New(t)
+
+	// A negative value is the explicit opt-out ("no limit") — the enforcement
+	// path treats <= 0 as "no cap", so it must NOT be backfilled.
+	cfg := bootstrap.Config{MaxUploadBytes: -1}
+	cfg.SetDefaults()
+
+	c.Assert(cfg.MaxUploadBytes, qt.Equals, int64(-1))
+}
+
 func TestConfigSetDefaults_GlobalRateLimitDefaultsApplied(t *testing.T) {
 	c := qt.New(t)
 

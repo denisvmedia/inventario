@@ -181,6 +181,32 @@ jobs:
         run: go test -v -race -tags integration ./debug/seeddata/...
         working-directory: go
 
+      - name: Run cross-tenant / RLS isolation tests
+        # #2094: these negative user/tenant/group-isolation suites previously
+        # never ran in CI — go-test.yml self-skips with no DSN, and this
+        # workflow only ran ./registry/postgres and two named INB tests. They
+        # exercise the real RLS-enforced path through the user-aware registries
+        # (the registry/postgres suite uses a superuser connection that
+        # bypasses RLS), so a tenant/group isolation regression would otherwise
+        # merge green. Serial (-p 1): the ./integration tests share one
+        # database and are not isolation-safe when run together (see #1953).
+        # The load/perf variants (TestUserIsolation_LoadTesting /
+        # _PerformanceRegression) are excluded — they are not negative-isolation
+        # coverage and would add CI flake/runtime. NOTE: the raw-SQL
+        # ./models -tags integration RLS tests are intentionally NOT wired here
+        # — they assert the pre-groups, tenant-only policy shape (INSERT
+        # locations with no group_id, set_tenant_context) and need their own
+        # modernization; the registry-level ./integration suite supersedes that
+        # coverage.
+        env:
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
+        run: |
+          go test -v -race -p 1 \
+            -run 'TestUserIsolation|TestAPIUserIsolation|TestAPIAuthentication' \
+            -skip 'LoadTesting|PerformanceRegression' \
+            ./integration/...
+        working-directory: go
+
       - name: Run backup .inb integration tests
         # #534: the signed .inb round trips on a REAL database — the only
         # Go-level coverage of two postgres-only behaviours the in-memory

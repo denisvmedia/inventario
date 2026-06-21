@@ -7937,6 +7937,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.FileResponse"];
                     };
                 };
+                /** @description Request Entity Too Large */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Unprocessable Entity */
                 422: {
                     headers: {
@@ -8005,6 +8014,15 @@ export type paths = {
                     };
                     content: {
                         "application/vnd.api+json": components["schemas"]["jsonapi.UploadResponse"];
+                    };
+                };
+                /** @description Request Entity Too Large */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
                 /** @description Unprocessable Entity */
@@ -9349,7 +9367,8 @@ export type paths = {
          * @description Revoke every refresh token for the authenticated user except the one identified as current.
          *     Resolution order for the "current" session: `?keep_id=<id>` (recommended; the id the FE
          *     rendered with `is_current: true` on GET /users/me/sessions) → access token `rti` claim
-         *     → refresh cookie hash. When none matches, every session is revoked.
+         *     → refresh cookie hash. When none matches, the request is rejected with 400 (the current
+         *     session can't be identified, so revoking everything is refused).
          */
         delete: {
             parameters: {
@@ -9365,6 +9384,15 @@ export type paths = {
             responses: {
                 /** @description No Content */
                 204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };

@@ -239,30 +239,37 @@ func (r *BackofficeUserMFASecretRegistry) ConsumeBackupCodeAtomic(
 	return consumed, nil
 }
 
-// BumpLastUsedAt sets LastUsedAt to `now` after a successful TOTP
-// verification (the backup-code path bumps it inside
-// ConsumeBackupCodeAtomic instead).
-func (r *BackofficeUserMFASecretRegistry) BumpLastUsedAt(ctx context.Context, backofficeUserID string, now time.Time) error {
+// MarkTOTPStepUsedAtomic compare-and-swaps last_used_step to `step` in a
+// single UPDATE guarded by `last_used_step < $step` — the back-office
+// mirror of UserMFASecretRegistry.MarkTOTPStepUsedAtomic. See there for
+// the full replay-guard rationale (#2124). Returns rowsAffected > 0; a
+// lost CAS (zero rows) is reported as (false, nil), the replay signal.
+// last_used_at / updated_at are bumped in the same statement.
+func (r *BackofficeUserMFASecretRegistry) MarkTOTPStepUsedAtomic(ctx context.Context, backofficeUserID string, step int64, now time.Time) (bool, error) {
 	if backofficeUserID == "" {
-		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "BackofficeUserID"))
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "BackofficeUserID"))
 	}
+
+	won := false
 	reg := r.newSQLRegistry()
-	return reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
-			`UPDATE %s SET last_used_at = $1, updated_at = now() WHERE backoffice_user_id = $2`,
+			`UPDATE %s SET last_used_step = $1, last_used_at = $2, updated_at = $3 WHERE backoffice_user_id = $4 AND last_used_step < $1`,
 			r.tableNames.BackofficeUserMFASecrets(),
 		)
-		res, err := tx.ExecContext(ctx, query, now, backofficeUserID)
+		res, err := tx.ExecContext(ctx, query, step, now, now, backofficeUserID)
 		if err != nil {
-			return errxtrace.Wrap("failed to bump backoffice MFA last_used_at", err)
+			return errxtrace.Wrap("failed to mark backoffice TOTP step used", err)
 		}
 		affected, raErr := res.RowsAffected()
 		if raErr != nil {
-			return errxtrace.Wrap("failed to read rows affected for backoffice MFA bump", raErr)
+			return errxtrace.Wrap("failed to read rows affected for backoffice TOTP step CAS", raErr)
 		}
-		if affected == 0 {
-			return errxtrace.Classify(registry.ErrBackofficeMFASecretNotFound, errx.Attrs("backoffice_user_id", backofficeUserID))
-		}
+		won = affected > 0
 		return nil
 	})
+	if err != nil {
+		return false, err
+	}
+	return won, nil
 }

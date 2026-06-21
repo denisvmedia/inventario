@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/internal/backupsign"
@@ -211,4 +212,104 @@ func TestUploads_file_tenantPrefixedKey(t *testing.T) {
 	c.Assert(strings.HasPrefix(resp.Attributes.OriginalPath, "t/"+testUser.TenantID+"/files/"), qt.IsTrue,
 		qt.Commentf("OriginalPath %q must live under the authenticated tenant's namespace", resp.Attributes.OriginalPath))
 	c.Assert(resp.Attributes.Path, qt.Not(qt.Contains), "t/")
+}
+
+// TestUploads_file_tooLarge is the #2101 regression test: a POST
+// /uploads/file whose body exceeds the configured per-file size cap is
+// rejected with 413 and persists no FileEntity row. Without the cap the
+// streaming io.Copy is unbounded and one user can fill the shared blob
+// store; the multipart path also bypasses the 1 MiB request-body cap in
+// security_middleware.go, so the limit must live in the save path itself.
+func TestUploads_file_tooLarge(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	// Tiny cap so a small payload trips it. 0/negative would disable the
+	// cap entirely (the back-compat opt-out), so we set a positive value.
+	params.MaxUploadBytes = 16
+
+	// Count the seeded file rows up-front so the assertion proves the
+	// rejected upload added nothing, regardless of the harness fixtures.
+	ctx := createTestUserContextWithGroup(testUser.ID, testUser.TenantID, testGroup.ID)
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
+	before := must.Must(registrySet.FileRegistry.Count(ctx))
+
+	// Build a JPEG larger than the cap so the MIME sniff passes but the
+	// total streamed bytes exceed MaxUploadBytes.
+	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for x := range 64 {
+		for y := range 64 {
+			img.Set(x, y, color.RGBA{R: uint8(x), G: uint8(y), B: 128, A: 255})
+		}
+	}
+	var imgBuf bytes.Buffer
+	c.Assert(jpeg.Encode(&imgBuf, img, &jpeg.Options{Quality: 90}), qt.IsNil)
+	c.Assert(imgBuf.Len() > 16, qt.IsTrue, qt.Commentf("payload %d bytes must exceed the 16-byte cap", imgBuf.Len()))
+
+	bodyBuf := &bytes.Buffer{}
+	bodyWriter := multipart.NewWriter(bodyBuf)
+	h := CreateFormFileMIME("file", "big-photo.jpg", "image/jpeg")
+	fileWriter, err := bodyWriter.CreatePart(h)
+	c.Assert(err, qt.IsNil)
+	_, err = fileWriter.Write(imgBuf.Bytes())
+	c.Assert(err, qt.IsNil)
+	contentType := bodyWriter.FormDataContentType()
+	bodyWriter.Close()
+
+	req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/uploads/file", bodyBuf)
+	c.Assert(err, qt.IsNil)
+	req.Header.Set("Content-Type", contentType)
+	addTestUserAuthHeader(req, testUser.ID)
+
+	rr := httptest.NewRecorder()
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusRequestEntityTooLarge, qt.Commentf("body=%s", rr.Body.String()))
+
+	// No FileEntity row was persisted for the rejected upload.
+	after := must.Must(registrySet.FileRegistry.Count(ctx))
+	c.Assert(after, qt.Equals, before)
+}
+
+// TestUploads_file_capDisabled proves the #2101 opt-out: with
+// MaxUploadBytes <= 0 a large file is accepted (201), so the cap is purely
+// additive and existing deployments that don't set the knob keep working.
+func TestUploads_file_capDisabled(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	params.MaxUploadBytes = 0 // disabled
+
+	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for x := range 64 {
+		for y := range 64 {
+			img.Set(x, y, color.RGBA{R: uint8(x), G: uint8(y), B: 200, A: 255})
+		}
+	}
+	var imgBuf bytes.Buffer
+	c.Assert(jpeg.Encode(&imgBuf, img, &jpeg.Options{Quality: 90}), qt.IsNil)
+
+	bodyBuf := &bytes.Buffer{}
+	bodyWriter := multipart.NewWriter(bodyBuf)
+	h := CreateFormFileMIME("file", "ok-photo.jpg", "image/jpeg")
+	fileWriter, err := bodyWriter.CreatePart(h)
+	c.Assert(err, qt.IsNil)
+	_, err = fileWriter.Write(imgBuf.Bytes())
+	c.Assert(err, qt.IsNil)
+	contentType := bodyWriter.FormDataContentType()
+	bodyWriter.Close()
+
+	req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/uploads/file", bodyBuf)
+	c.Assert(err, qt.IsNil)
+	req.Header.Set("Content-Type", contentType)
+	addTestUserAuthHeader(req, testUser.ID)
+
+	rr := httptest.NewRecorder()
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -16,39 +17,62 @@ import (
 	"github.com/denisvmedia/inventario/registry/postgres"
 )
 
-// setupTestDatabase creates a test database connection and returns cleanup function
+// setupTestDatabase creates a test database connection and returns cleanup function.
 func setupTestDatabase(t *testing.T) (*registry.FactorySet, func()) {
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		t.Skip("POSTGRES_TEST_DSN environment variable not set")
-		return nil, nil
-	}
+	t.Helper()
+	dsn := mustTestDSN(t)
 
-	// Set up fresh database with bootstrap and migrations
+	// Set up fresh database with bootstrap and migrations.
 	err := setupFreshDatabase(dsn)
 	if err != nil {
 		t.Fatalf("Failed to setup fresh database: %v", err)
 	}
 
 	registrySetFunc, cleanupFunc := postgres.NewPostgresRegistrySet()
-	registrySet, err := registrySetFunc(registry.Config(dsn))
+	factorySet, err := registrySetFunc(registry.Config(dsn))
 	if err != nil {
 		t.Fatalf("Failed to create registry set: %v", err)
 	}
 
-	return registrySet, func() {
+	return factorySet, func() {
 		cleanupFunc()
 	}
 }
 
-// createTestUser creates a test user with the given email and returns the created user
-func createTestUser(c *qt.C, userRegistry registry.UserRegistry, email string) *models.User {
-	// Make email unique by adding timestamp to avoid conflicts between tests
+// mustTestDSN returns the Postgres DSN for the integration suite, skipping the
+// test when it is unset (the CI gate that does set it is issue #2094).
+func mustTestDSN(t *testing.T) string {
+	t.Helper()
+	dsn := os.Getenv("POSTGRES_TEST_DSN")
+	if dsn == "" {
+		t.Skip("POSTGRES_TEST_DSN environment variable not set")
+	}
+	return dsn
+}
+
+// createTestTenant creates a real, active tenant row. location_groups and users
+// FK to tenants, so the isolation tests need a genuine tenant id rather than the
+// pre-groups era's hardcoded "test-tenant-id" string.
+func createIsolationTenant(c *qt.C, fs *registry.FactorySet) *models.Tenant {
+	c.Helper()
+	uniq := fmt.Sprintf("%d", time.Now().UnixNano())
+	tenant := must.Must(fs.TenantRegistry.Create(context.Background(), models.Tenant{
+		Name:   "Isolation Tenant " + uniq,
+		Slug:   "isolation-tenant-" + uniq,
+		Status: models.TenantStatusActive,
+	}))
+	return tenant
+}
+
+// createTestUser creates a test user in the given tenant. The id is minted
+// server-side; the email is made unique so repeated calls within a suite never
+// collide on the unique-email constraint.
+func createTestUser(c *qt.C, userRegistry registry.UserRegistry, tenantID, email string) *models.User {
+	c.Helper()
 	uniqueEmail := fmt.Sprintf("%s-%d", email, time.Now().UnixNano())
 	user := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: "user-" + uniqueEmail},
-			TenantID: "test-tenant-id",
+			TenantID: tenantID,
 		},
 		Email:    uniqueEmail,
 		Name:     "Test User",
@@ -65,66 +89,107 @@ func createTestUser(c *qt.C, userRegistry registry.UserRegistry, email string) *
 	return created
 }
 
-// withUserContext creates a context with the given user ID
-func withUserContext(ctx context.Context, userID string) context.Context {
-	return appctx.WithUser(ctx, &models.User{
-		TenantAwareEntityID: models.TenantAwareEntityID{
-			EntityID: models.EntityID{ID: userID},
-			TenantID: "test-tenant-id",
-		},
-	})
+// createTestGroup creates an active USD location group owned by the given user.
+// RLS for locations/areas/commodities/files/exports is GROUP-scoped
+// (tenant_id AND group_id), so every isolation fixture needs its own group, and
+// the group MUST carry GroupCurrency (commodity validation reads it off the
+// group in context).
+func createTestGroup(c *qt.C, fs *registry.FactorySet, tenantID, userID, name string) *models.LocationGroup {
+	c.Helper()
+	group := must.Must(fs.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Name:                name,
+		Status:              models.LocationGroupStatusActive,
+		GroupCurrency:       models.Currency("USD"),
+		CreatedBy:           userID,
+	}))
+	return group
 }
 
-// TestUserIsolation_Commodities tests that users cannot access each other's commodities
-func TestUserIsolation_Commodities(t *testing.T) {
-	c := qt.New(t)
-	registrySet, cleanup := setupTestDatabase(t)
-	defer cleanup()
+// userGroupContext builds the request context the user-aware registries expect:
+// it carries BOTH the user (→ get_current_tenant_id / get_current_user_id) AND
+// the group (→ get_current_group_id). Without the group, group-scoped RLS sees
+// an empty get_current_group_id() and every create/read fails closed.
+func userGroupContext(ctx context.Context, user *models.User, group *models.LocationGroup) context.Context {
+	return appctx.WithGroup(appctx.WithUser(ctx, user), group)
+}
 
-	// Setup: Create two users
-	user1 := createTestUser(c, registrySet.UserRegistry, "user1@example.com")
-	user2 := createTestUser(c, registrySet.UserRegistry, "user2@example.com")
+// isolationFixture is a fully-wired single-user tenant/group/context bundle used
+// by the isolation tests. Two fixtures in DIFFERENT groups model the two parties
+// whose data must stay mutually invisible under group-scoped RLS.
+type isolationFixture struct {
+	tenant *models.Tenant
+	user   *models.User
+	group  *models.LocationGroup
+	ctx    context.Context
+}
 
-	// Create location and area for user1's commodity
-	ctx1 := withUserContext(context.Background(), user1.ID)
-	location1 := models.Location{
+// newIsolationPair builds two users in two SEPARATE groups within ONE tenant.
+// Same tenant + different group is exactly what makes the negative assertions
+// meaningful: isolation here is enforced by the group dimension of RLS, not by
+// the tenant dimension (which is held constant) and not by user id.
+func newIsolationPair(c *qt.C, fs *registry.FactorySet) (user1, user2 isolationFixture) {
+	c.Helper()
+	tenant := createIsolationTenant(c, fs)
+
+	u1 := createTestUser(c, fs.UserRegistry, tenant.ID, "user1@example.com")
+	g1 := createTestGroup(c, fs, tenant.ID, u1.ID, "User1 Group")
+
+	u2 := createTestUser(c, fs.UserRegistry, tenant.ID, "user2@example.com")
+	g2 := createTestGroup(c, fs, tenant.ID, u2.ID, "User2 Group")
+
+	user1 = isolationFixture{tenant: tenant, user: u1, group: g1, ctx: userGroupContext(context.Background(), u1, g1)}
+	user2 = isolationFixture{tenant: tenant, user: u2, group: g2, ctx: userGroupContext(context.Background(), u2, g2)}
+	return user1, user2
+}
+
+// seedLocation creates a location owned by the fixture's user/group via the
+// user-aware (RLS-scoped) registry.
+func seedLocation(c *qt.C, fs *registry.FactorySet, f isolationFixture, name string) *models.Location {
+	c.Helper()
+	reg := must.Must(fs.LocationRegistryFactory.CreateUserRegistry(f.ctx))
+	return must.Must(reg.Create(f.ctx, models.Location{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			EntityID:        models.EntityID{ID: "location-user1"},
-			TenantID:        "test-tenant-id",
-			CreatedByUserID: user1.ID,
+			TenantID:        f.tenant.ID,
+			GroupID:         f.group.ID,
+			CreatedByUserID: f.user.ID,
 		},
-		Name:    "User1 Location",
-		Address: "123 User1 Street",
-	}
-	userAwareLocationRegistry1, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx1)
-	c.Assert(err, qt.IsNil)
-	createdLocation1, err := userAwareLocationRegistry1.Create(ctx1, location1)
-	c.Assert(err, qt.IsNil)
+		Name:    name,
+		Address: "123 " + name + " Street",
+	}))
+}
 
-	area1 := models.Area{
+// seedArea creates an area under the given location, owned by the fixture.
+func seedArea(c *qt.C, fs *registry.FactorySet, f isolationFixture, locationID, name string) *models.Area {
+	c.Helper()
+	reg := must.Must(fs.AreaRegistryFactory.CreateUserRegistry(f.ctx))
+	return must.Must(reg.Create(f.ctx, models.Area{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			EntityID:        models.EntityID{ID: "area-user1"},
-			TenantID:        "test-tenant-id",
-			CreatedByUserID: user1.ID,
+			TenantID:        f.tenant.ID,
+			GroupID:         f.group.ID,
+			CreatedByUserID: f.user.ID,
 		},
-		Name:       "User1 Area",
-		LocationID: createdLocation1.ID,
-	}
-	userAwareAreaRegistry1, err := registrySet.AreaRegistryFactory.CreateUserRegistry(ctx1)
-	c.Assert(err, qt.IsNil)
-	createdArea1, err := userAwareAreaRegistry1.Create(ctx1, area1)
-	c.Assert(err, qt.IsNil)
+		Name:       name,
+		LocationID: locationID,
+	}))
+}
 
-	// Test: User1 creates a commodity
-	commodity1 := models.Commodity{
+// seedCommodity creates a non-draft commodity in the given area, owned by the
+// fixture. Currency is USD to match the group currency (so ConvertedOriginalPrice
+// stays zero).
+func seedCommodity(c *qt.C, fs *registry.FactorySet, f isolationFixture, areaID, name, shortName string) *models.Commodity {
+	c.Helper()
+	reg := must.Must(fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	return must.Must(reg.Create(f.ctx, models.Commodity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			EntityID:        models.EntityID{ID: "commodity-user1"},
-			TenantID:        "test-tenant-id",
-			CreatedByUserID: user1.ID,
+			TenantID:        f.tenant.ID,
+			GroupID:         f.group.ID,
+			CreatedByUserID: f.user.ID,
 		},
-		Name:                   "User1 Commodity",
-		ShortName:              "UC1",
-		AreaID:                 new(createdArea1.ID),
+		Name:                   name,
+		ShortName:              shortName,
+		AreaID:                 new(areaID),
 		Type:                   models.CommodityTypeElectronics,
 		Count:                  1,
 		OriginalPrice:          decimal.NewFromFloat(100.00),
@@ -136,98 +201,87 @@ func TestUserIsolation_Commodities(t *testing.T) {
 		RegisteredDate:         models.ToPDate("2023-01-02"),
 		LastModifiedDate:       models.ToPDate("2023-01-03"),
 		Draft:                  false,
-	}
+	}))
+}
 
-	userAwareCommodityRegistry1, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(ctx1)
-	c.Assert(err, qt.IsNil)
-	created1, err := userAwareCommodityRegistry1.Create(ctx1, commodity1)
-	c.Assert(err, qt.IsNil)
-	c.Assert(created1, qt.IsNotNil)
-	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.ID)
+// TestUserIsolation_Commodities tests that a user in one group cannot access a
+// commodity created by a user in a different group (group-scoped RLS).
+func TestUserIsolation_Commodities(t *testing.T) {
+	c := qt.New(t)
+	fs, cleanup := setupTestDatabase(t)
+	defer cleanup()
 
-	// Test: User2 cannot access User1's commodity
-	ctx2 := withUserContext(context.Background(), user2.ID)
-	userAwareCommodityRegistry2, err := registrySet.CommodityRegistryFactory.CreateUserRegistry(ctx2)
-	c.Assert(err, qt.IsNil)
-	_, err = userAwareCommodityRegistry2.Get(ctx2, created1.ID)
+	user1, user2 := newIsolationPair(c, fs)
+
+	// User1 creates location → area → commodity in group1.
+	loc1 := seedLocation(c, fs, user1, "User1 Location")
+	area1 := seedArea(c, fs, user1, loc1.ID, "User1 Area")
+	created1 := seedCommodity(c, fs, user1, area1.ID, "User1 Commodity", "UC1")
+	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.user.ID)
+
+	// User2 (different group) cannot Get user1's commodity.
+	reg2 := must.Must(fs.CommodityRegistryFactory.CreateUserRegistry(user2.ctx))
+	_, err := reg2.Get(user2.ctx, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
-	// Test: User2 cannot see User1's commodity in list
-	commodities2, err := userAwareCommodityRegistry2.List(ctx2)
+	// User2 cannot see user1's commodity in their list.
+	commodities2, err := reg2.List(user2.ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(commodities2, qt.HasLen, 0)
 
-	// Test: User1 can see their own commodity
-	commodities1, err := userAwareCommodityRegistry1.List(ctx1)
+	// User1 can see their own commodity.
+	reg1 := must.Must(fs.CommodityRegistryFactory.CreateUserRegistry(user1.ctx))
+	commodities1, err := reg1.List(user1.ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(commodities1, qt.HasLen, 1)
 	c.Assert(commodities1[0].ID, qt.Equals, created1.ID)
 }
 
-// TestUserIsolation_Locations tests that users cannot access each other's locations
+// TestUserIsolation_Locations tests that a user in one group cannot access a
+// location created by a user in a different group.
 func TestUserIsolation_Locations(t *testing.T) {
 	c := qt.New(t)
-	registrySet, cleanup := setupTestDatabase(t)
+	fs, cleanup := setupTestDatabase(t)
 	defer cleanup()
 
-	// Setup: Create two users
-	user1 := createTestUser(c, registrySet.UserRegistry, "user1@example.com")
-	user2 := createTestUser(c, registrySet.UserRegistry, "user2@example.com")
+	user1, user2 := newIsolationPair(c, fs)
 
-	// Test: User1 creates a location
-	ctx1 := withUserContext(context.Background(), user1.ID)
-	location1 := models.Location{
-		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        "test-tenant-id",
-			CreatedByUserID: user1.ID,
-		},
-		Name:    "User1 Location",
-		Address: "123 User1 Street",
-	}
+	created1 := seedLocation(c, fs, user1, "User1 Location")
+	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.user.ID)
 
-	userAwareLocationRegistry1, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx1)
-	c.Assert(err, qt.IsNil)
-	created1, err := userAwareLocationRegistry1.Create(ctx1, location1)
-	c.Assert(err, qt.IsNil)
-	c.Assert(created1, qt.IsNotNil)
-	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.ID)
-
-	// Test: User2 cannot access User1's location
-	ctx2 := withUserContext(context.Background(), user2.ID)
-	userAwareLocationRegistry2, err := registrySet.LocationRegistryFactory.CreateUserRegistry(ctx2)
-	c.Assert(err, qt.IsNil)
-	_, err = userAwareLocationRegistry2.Get(ctx2, created1.ID)
+	// User2 (different group) cannot Get user1's location.
+	reg2 := must.Must(fs.LocationRegistryFactory.CreateUserRegistry(user2.ctx))
+	_, err := reg2.Get(user2.ctx, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
-	// Test: User2 cannot see User1's location in list
-	locations2, err := userAwareLocationRegistry2.List(ctx2)
+	// User2 cannot see user1's location in their list.
+	locations2, err := reg2.List(user2.ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(locations2, qt.HasLen, 0)
 
-	// Test: User1 can see their own location
-	locations1, err := userAwareLocationRegistry1.List(ctx1)
+	// User1 can see their own location.
+	reg1 := must.Must(fs.LocationRegistryFactory.CreateUserRegistry(user1.ctx))
+	locations1, err := reg1.List(user1.ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(locations1, qt.HasLen, 1)
 	c.Assert(locations1[0].ID, qt.Equals, created1.ID)
 }
 
-// TestUserIsolation_Files tests that users cannot access each other's files
+// TestUserIsolation_Files tests that a user in one group cannot access a file
+// created by a user in a different group.
 func TestUserIsolation_Files(t *testing.T) {
 	c := qt.New(t)
-	registrySet, cleanup := setupTestDatabase(t)
+	fs, cleanup := setupTestDatabase(t)
 	defer cleanup()
 
-	// Setup: Create two users
-	user1 := createTestUser(c, registrySet.UserRegistry, "user1@example.com")
-	user2 := createTestUser(c, registrySet.UserRegistry, "user2@example.com")
+	user1, user2 := newIsolationPair(c, fs)
 
-	// Test: User1 creates a file
-	ctx1 := withUserContext(context.Background(), user1.ID)
-	file1 := models.FileEntity{
+	reg1 := must.Must(fs.FileRegistryFactory.CreateUserRegistry(user1.ctx))
+	created1 := must.Must(reg1.Create(user1.ctx, models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			EntityID:        models.EntityID{ID: "file-user1"},
-			TenantID:        "test-tenant-id",
-			CreatedByUserID: user1.ID,
+			TenantID:        user1.tenant.ID,
+			GroupID:         user1.group.ID,
+			CreatedByUserID: user1.user.ID,
 		},
 		Title:       "User1 File",
 		Description: "A file created by user1",
@@ -238,78 +292,61 @@ func TestUserIsolation_Files(t *testing.T) {
 			Ext:          ".txt",
 			MIMEType:     "text/plain",
 		},
-	}
+	}))
+	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.user.ID)
 
-	userAwareFileRegistry1, err := registrySet.FileRegistryFactory.CreateUserRegistry(ctx1)
-	c.Assert(err, qt.IsNil)
-	created1, err := userAwareFileRegistry1.Create(ctx1, file1)
-	c.Assert(err, qt.IsNil)
-	c.Assert(created1, qt.IsNotNil)
-	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.ID)
-
-	// Test: User2 cannot access User1's file
-	ctx2 := withUserContext(context.Background(), user2.ID)
-	userAwareFileRegistry2, err := registrySet.FileRegistryFactory.CreateUserRegistry(ctx2)
-	c.Assert(err, qt.IsNil)
-	_, err = userAwareFileRegistry2.Get(ctx2, created1.ID)
+	// User2 (different group) cannot Get user1's file.
+	reg2 := must.Must(fs.FileRegistryFactory.CreateUserRegistry(user2.ctx))
+	_, err := reg2.Get(user2.ctx, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
-	// Test: User2 cannot see User1's file in list
-	files2, err := userAwareFileRegistry2.List(ctx2)
+	// User2 cannot see user1's file in their list.
+	files2, err := reg2.List(user2.ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(files2, qt.HasLen, 0)
 
-	// Test: User1 can see their own file
-	files1, err := userAwareFileRegistry1.List(ctx1)
+	// User1 can see their own file.
+	files1, err := reg1.List(user1.ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(files1, qt.HasLen, 1)
 	c.Assert(files1[0].ID, qt.Equals, created1.ID)
 }
 
-// TestUserIsolation_Exports tests that users cannot access each other's exports
+// TestUserIsolation_Exports tests that a user in one group cannot access an
+// export created by a user in a different group. Exports are GROUP-scoped just
+// like the other entities (tenant_id AND group_id in the RLS policy).
 func TestUserIsolation_Exports(t *testing.T) {
 	c := qt.New(t)
-	registrySet, cleanup := setupTestDatabase(t)
+	fs, cleanup := setupTestDatabase(t)
 	defer cleanup()
 
-	// Setup: Create two users
-	user1 := createTestUser(c, registrySet.UserRegistry, "user1@example.com")
-	user2 := createTestUser(c, registrySet.UserRegistry, "user2@example.com")
+	user1, user2 := newIsolationPair(c, fs)
 
-	// Test: User1 creates an export
-	ctx1 := withUserContext(context.Background(), user1.ID)
-	export1 := models.Export{
+	reg1 := must.Must(fs.ExportRegistryFactory.CreateUserRegistry(user1.ctx))
+	created1 := must.Must(reg1.Create(user1.ctx, models.Export{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			EntityID:        models.EntityID{ID: "export-user1"},
-			TenantID:        "test-tenant-id",
-			CreatedByUserID: user1.ID,
+			TenantID:        user1.tenant.ID,
+			GroupID:         user1.group.ID,
+			CreatedByUserID: user1.user.ID,
 		},
 		Type:        models.ExportTypeFullDatabase,
 		Description: "An export created by user1",
 		Status:      models.ExportStatusPending,
-	}
+	}))
+	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.user.ID)
 
-	userAwareExportRegistry1, err := registrySet.ExportRegistryFactory.CreateUserRegistry(ctx1)
-	c.Assert(err, qt.IsNil)
-	created1, err := userAwareExportRegistry1.Create(ctx1, export1)
-	c.Assert(err, qt.IsNil)
-	c.Assert(created1, qt.IsNotNil)
-	c.Assert(created1.GetCreatedByUserID(), qt.Equals, user1.ID)
-
-	// Test: User2 cannot access User1's export
-	ctx2 := withUserContext(context.Background(), user2.ID)
-	userAwareExportRegistry2, err := registrySet.ExportRegistryFactory.CreateUserRegistry(ctx2)
-	c.Assert(err, qt.IsNil)
-	_, err = userAwareExportRegistry2.Get(ctx2, created1.ID)
+	// User2 (different group) cannot Get user1's export.
+	reg2 := must.Must(fs.ExportRegistryFactory.CreateUserRegistry(user2.ctx))
+	_, err := reg2.Get(user2.ctx, created1.ID)
 	c.Assert(err, qt.IsNotNil)
 
-	// Test: User2 cannot see User1's export in list
-	exports2, err := userAwareExportRegistry2.List(ctx2)
+	// User2 cannot see user1's export in their list.
+	exports2, err := reg2.List(user2.ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(exports2, qt.HasLen, 0)
 
-	// Test: User1 can see their own export
-	exports1, err := userAwareExportRegistry1.List(ctx1)
+	// User1 can see their own export.
+	exports1, err := reg1.List(user1.ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(exports1, qt.HasLen, 1)
 	c.Assert(exports1[0].ID, qt.Equals, created1.ID)

@@ -118,30 +118,24 @@ func (api *BackofficeAuthAPI) loginMFA(w http.ResponseWriter, r *http.Request) {
 }
 
 // consumeBackofficeMFACode tries the TOTP code first, then the backup
-// code. On a successful TOTP match it bumps LastUsedAt (the backup-code
-// path does that internally via ConsumeBackupCodeAtomic). Returns true
-// iff one of the codes verified.
+// code. On a successful TOTP match it commits the matched time-step via
+// MarkTOTPStepUsedAtomic — the replay guard (#2124) — which also stamps
+// LastUsedAt; a replayed code loses that CAS and is treated as invalid.
+// The backup-code path stamps LastUsedAt internally via
+// ConsumeBackupCodeAtomic. Returns true iff one of the codes verified.
 func (api *BackofficeAuthAPI) consumeBackofficeMFACode(r *http.Request, user *models.BackofficeUser, row *models.BackofficeUserMFASecret, totpCode, backupCode string) bool {
 	ctx := r.Context()
 	if totpCode != "" {
-		// Reuse the existing MFAService verifier — the TOTP secret
-		// envelope is identical to the tenant-plane secret, so the
-		// same VerifyTOTP path applies. We construct a thin shim
-		// models.UserMFASecret that carries just the encrypted secret;
-		// the verifier only reads SecretEncrypted.
-		shim := models.UserMFASecret{SecretEncrypted: row.SecretEncrypted}
-		ok, err := api.mfaService.VerifyTOTP(shim, totpCode)
-		if err != nil {
-			slog.Error("Backoffice login_mfa: TOTP verify failed", "user_id", user.ID, "error", err)
+		consumed, abort := api.consumeBackofficeTOTPCode(ctx, user, row, totpCode)
+		if abort {
 			return false
 		}
-		if ok {
-			if bumpErr := api.mfaRegistry.BumpLastUsedAt(ctx, user.ID, time.Now()); bumpErr != nil {
-				// Non-fatal — the user still authenticated.
-				slog.Error("Backoffice login_mfa: failed to bump last_used_at", "user_id", user.ID, "error", bumpErr)
-			}
+		if consumed {
 			return true
 		}
+		// A non-consumed TOTP — a wrong code, or a replayed code that lost
+		// the CAS — falls through to the backup-code path and the caller's
+		// invalid-code handling (audit + 401).
 	}
 	if backupCode != "" {
 		matcher := api.mfaService.MatchBackupCode(backupCode)
@@ -157,6 +151,33 @@ func (api *BackofficeAuthAPI) consumeBackofficeMFACode(r *http.Request, user *mo
 		}
 	}
 	return false
+}
+
+// consumeBackofficeTOTPCode verifies totpCode against the back-office
+// user's secret and, on a match, commits the matched time-step via the
+// atomic replay-guard CAS (#2124). The back-office TOTP secret envelope is
+// identical to the tenant-plane secret, so it reuses MFAService via a thin
+// models.UserMFASecret shim carrying only the encrypted secret (the
+// verifier reads SecretEncrypted only). consumed is true only when the code
+// both verified and WON the CAS; a replayed code loses the CAS and returns
+// consumed=false. abort is true on an already-logged infrastructure
+// failure. The CAS also stamps last_used_at.
+func (api *BackofficeAuthAPI) consumeBackofficeTOTPCode(ctx context.Context, user *models.BackofficeUser, row *models.BackofficeUserMFASecret, totpCode string) (consumed, abort bool) {
+	shim := models.UserMFASecret{SecretEncrypted: row.SecretEncrypted}
+	matchedStep, ok, err := api.mfaService.VerifyTOTPStep(shim, totpCode)
+	if err != nil {
+		slog.Error("Backoffice login_mfa: TOTP verify failed", "user_id", user.ID, "error", err)
+		return false, true
+	}
+	if !ok {
+		return false, false
+	}
+	won, casErr := api.mfaRegistry.MarkTOTPStepUsedAtomic(ctx, user.ID, matchedStep, time.Now())
+	if casErr != nil {
+		slog.Error("Backoffice login_mfa: TOTP step CAS failed", "user_id", user.ID, "error", casErr)
+		return false, true
+	}
+	return won, false
 }
 
 // afterBackofficeMFASuccess clears the step-2 failed-attempt counter
