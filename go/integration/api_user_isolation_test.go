@@ -52,12 +52,25 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, fs *registry.Fac
 
 	jwtSecretBytes := []byte("test-secret-32-bytes-minimum-length")
 
-	// Real tenant.
+	// Real tenant, marked as the system default so the host→tenant resolver
+	// (PublicTenantMiddleware → TenantRegistry.GetDefault) resolves every
+	// request to it. Without a default tenant the server 503s
+	// ("No default tenant configured") before auth or routing runs — the CI
+	// failure these tests hit on a truly fresh DB (#2094). setupFreshDatabase
+	// bootstraps + migrates but does NOT truncate, so a prior test's default
+	// tenant may linger: demote it first to satisfy the
+	// tenants_single_default_idx partial unique index (mirrors
+	// createTenantAndGetID in cli_workflow_integration_test.go).
 	uniq := fmt.Sprintf("%d", time.Now().UnixNano())
+	if existing, getErr := factorySet.TenantRegistry.GetDefault(context.Background()); getErr == nil {
+		existing.IsDefault = false
+		must.Must(factorySet.TenantRegistry.Update(context.Background(), *existing))
+	}
 	createdTenant := must.Must(factorySet.TenantRegistry.Create(context.Background(), models.Tenant{
-		Name:   "Test Tenant API " + uniq,
-		Slug:   "test-tenant-api-" + uniq,
-		Status: models.TenantStatusActive,
+		Name:      "Test Tenant API " + uniq,
+		Slug:      "test-tenant-api-" + uniq,
+		Status:    models.TenantStatusActive,
+		IsDefault: true,
 	}))
 
 	// Two users in the same tenant.

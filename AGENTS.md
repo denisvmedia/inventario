@@ -196,7 +196,7 @@ Support for multiple database backends via DSN:
 
 ### File Storage Configuration
 - `--upload-location` - Supports file://, s3://, azblob://, gs://
-- `--max-upload-bytes` - Maximum size of a single uploaded file in bytes (default 1 GiB / `1073741824`); `0` or negative disables the limit
+- `--max-upload-bytes` - Maximum size of a single uploaded file in bytes (default 1 GiB / `1073741824`); a negative value disables the limit
 
 ## Testing Strategy
 

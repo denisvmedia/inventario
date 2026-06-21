@@ -3,6 +3,7 @@ package integration_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -182,7 +183,7 @@ func TestUserIsolation_EdgeCases(t *testing.T) {
 	})
 
 	c.Run("Very Long User ID", func(c *qt.C) {
-		longUserID := string(make([]byte, 10000))
+		longUserID := strings.Repeat("a", 10000)
 		longCtx := userGroupContext(
 			context.Background(),
 			&models.User{
@@ -200,15 +201,16 @@ func TestUserIsolation_EdgeCases(t *testing.T) {
 			},
 		)
 
-		// Should handle gracefully - expect error for extremely long user ID.
+		// Should handle gracefully. Denial at registry-set creation is
+		// acceptable; if it succeeds, isolation must still hold — a
+		// non-existent tenant/group must surface zero rows, never a leak.
 		registrySet, err := fs.CreateUserRegistrySet(longCtx)
 		if err != nil {
-			// If registry creation fails, that's acceptable for extremely long IDs.
-			c.Logf("Registry creation failed for long user ID (expected): %v", err)
 			return
 		}
-		_, err = registrySet.CommodityRegistry.List(longCtx)
-		// Either success or failure is acceptable for edge case testing.
-		c.Logf("List operation result for long user ID: %v", err)
+		commodities, err := registrySet.CommodityRegistry.List(longCtx)
+		if err == nil {
+			c.Assert(commodities, qt.HasLen, 0)
+		}
 	})
 }
