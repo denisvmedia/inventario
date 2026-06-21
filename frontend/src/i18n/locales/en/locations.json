@@ -36,9 +36,23 @@
     "areaDescription": "Items already filed in this area will lose their area assignment. This cannot be undone.",
     "areaTitle": "Delete area \"{{name}}\"?",
     "locationDescription": "This cannot be undone.",
-    "locationDescriptionWithAreas_one": "This will also delete {{count}} area inside it. This cannot be undone.",
-    "locationDescriptionWithAreas_other": "This will also delete {{count}} areas inside it. This cannot be undone.",
     "locationTitle": "Delete location \"{{name}}\"?"
+  },
+  "deleteWithItems": {
+    "areaDescription_one": "This area still holds {{count}} item. Choose what happens to it.",
+    "areaDescription_other": "This area still holds {{count}} items. Choose what happens to them.",
+    "areaTitle": "Delete area \"{{name}}\"?",
+    "areaUnlinkHelp": "The items stay in your inventory but become un-located. Only the area is removed.",
+    "areaUnlinkLabel": "Keep items, just remove the area",
+    "cascadeHelp_one": "Permanently delete the {{count}} item inside and its files. This cannot be undone.",
+    "cascadeHelp_other": "Permanently delete the {{count}} items inside and their files. This cannot be undone.",
+    "cascadeLabel": "Delete everything",
+    "locationDescription_one": "This location still holds {{count}} item. Choose what happens to it.",
+    "locationDescription_other": "This location still holds {{count}} items. Choose what happens to them.",
+    "locationTitle": "Delete location \"{{name}}\"?",
+    "locationUnlinkHelp_one": "The items stay in your inventory but become un-located. The location and its {{count}} area are removed (the items survive).",
+    "locationUnlinkHelp_other": "The items stay in your inventory but become un-located. The location and its {{count}} areas are removed (the items survive).",
+    "locationUnlinkLabel": "Keep items, just remove the location"
   },
   "detail": {
     "areaExpiring_one": "{{count}} warranty expiring",

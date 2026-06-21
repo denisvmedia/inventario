@@ -3574,7 +3574,10 @@ export type paths = {
          */
         delete: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Non-empty-area strategy: cascade deletes the commodities, unlink keeps them area-less. Omit to reject a non-empty area. */
+                    strategy?: "cascade" | "unlink";
+                };
                 header?: never;
                 path: {
                     /** @description Group slug */
@@ -3595,6 +3598,15 @@ export type paths = {
                 };
                 /** @description Area not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Non-empty area (no strategy) or unknown strategy */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6589,7 +6601,10 @@ export type paths = {
          */
         delete: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Non-empty-location strategy: cascade deletes the commodities, unlink keeps them area-less. Omit to reject a non-empty location. */
+                    strategy?: "cascade" | "unlink";
+                };
                 header?: never;
                 path: {
                     /** @description Group slug */
@@ -6610,6 +6625,15 @@ export type paths = {
                 };
                 /** @description Location not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Non-empty location (no strategy) or unknown strategy */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };

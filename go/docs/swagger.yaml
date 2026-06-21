@@ -6324,6 +6324,14 @@ paths:
         name: areaID
         required: true
         type: string
+      - description: 'Non-empty-area strategy: cascade deletes the commodities, unlink
+          keeps them area-less. Omit to reject a non-empty area.'
+        enum:
+        - cascade
+        - unlink
+        in: query
+        name: strategy
+        type: string
       produces:
       - application/vnd.api+json
       responses:
@@ -6331,6 +6339,10 @@ paths:
           description: No content
         "404":
           description: Area not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Non-empty area (no strategy) or unknown strategy
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Delete an area
@@ -8406,6 +8418,14 @@ paths:
         name: locationID
         required: true
         type: string
+      - description: 'Non-empty-location strategy: cascade deletes the commodities,
+          unlink keeps them area-less. Omit to reject a non-empty location.'
+        enum:
+        - cascade
+        - unlink
+        in: query
+        name: strategy
+        type: string
       produces:
       - application/vnd.api+json
       responses:
@@ -8413,6 +8433,10 @@ paths:
           description: No content
         "404":
           description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Non-empty location (no strategy) or unknown strategy
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Delete a location

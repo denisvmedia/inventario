@@ -281,6 +281,60 @@ async function captureQuickAttach(pageTestId, prefix, entityName) {
   }
 }
 
+// Capture the #2137 cascade/unlink delete dialog — the three-way prompt
+// shown when a NON-EMPTY area/location is deleted (distinct from the
+// binary useConfirm() dialog an empty container gets). Opens it from
+// `deleteTestId`, shoots the safe unlink default + the destructive
+// cascade selection, then CANCELS: this capture must never confirm a
+// real delete. Skips cleanly when the strategy dialog doesn't appear
+// (empty container → confirm dialog instead, or the button is missing)
+// so the rest of the run keeps going.
+async function captureDeleteWithItems(deleteTestId, prefix, kind) {
+  const btn = page.locator(`[data-testid="${deleteTestId}"]`).first()
+  if ((await btn.count()) === 0) {
+    console.warn(`   ${prefix}: ${deleteTestId} missing; skipping delete-dialog capture`)
+    return
+  }
+  console.log(`-> ${prefix}: ${kind} cascade/unlink delete dialog`)
+  await btn.click()
+  try {
+    await page.waitForSelector('[data-testid="delete-with-items-dialog"]', { timeout: 3000 })
+  } catch {
+    console.warn(`   ${prefix}: strategy dialog did not open (container likely empty); skipping`)
+    await page.keyboard.press("Escape").catch(() => {})
+    await settle(200)
+    return
+  }
+  await settle(300)
+  await shoot(`${prefix}-unlink-default`, false)
+
+  // Select the destructive cascade option → the option border + the
+  // footer Delete button both turn destructive-red.
+  const cascade = page.locator('[data-testid="delete-with-items-cascade"]')
+  if ((await cascade.count()) > 0) {
+    await cascade.click()
+    await settle(200)
+    await shoot(`${prefix}-cascade-selected`, false)
+  }
+
+  // CANCEL — never confirm. Prefer the explicit cancel button; fall back
+  // to Escape. Wait for the dialog to detach so the next step starts from
+  // a clean page.
+  const cancel = page.locator('[data-testid="delete-with-items-cancel"]')
+  if ((await cancel.count()) > 0) {
+    await cancel.click()
+  } else {
+    await page.keyboard.press("Escape").catch(() => {})
+  }
+  await page
+    .waitForSelector('[data-testid="delete-with-items-dialog"]', {
+      state: "detached",
+      timeout: 5000,
+    })
+    .catch(() => {})
+  await settle(200)
+}
+
 // Resolve the active group slug from the URL after login. The router
 // redirects "/" to "/g/<first-slug>/" so we can read the slug straight
 // off the post-login URL — but if the user lands on "/no-group" we
@@ -374,6 +428,13 @@ try {
         await page.goto(`${BASE_URL}${href}`, { waitUntil: "domcontentloaded" })
         await settle()
         await shoot("13-location-detail")
+
+        // #2137 cascade/unlink delete dialog. The seeded first location
+        // holds areas, so its Delete opens the three-way strategy prompt
+        // (not the binary confirm) — capture the unlink default + the
+        // destructive cascade selection, then cancel. Skips itself if the
+        // first location happens to be empty.
+        await captureDeleteWithItems("location-detail-delete", "13d-location-delete", "location")
 
         // #1448 quick-attach surfaces on the location detail page.
         // Use the visible heading text as the entityName (we don't

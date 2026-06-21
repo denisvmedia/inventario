@@ -12,6 +12,7 @@ import (
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 func areaFromContext(ctx context.Context) *models.Area {
@@ -23,6 +24,7 @@ func areaFromContext(ctx context.Context) *models.Area {
 }
 
 type areasAPI struct {
+	entityService *services.EntityService
 }
 
 // listAreas lists all areas with pagination.
@@ -154,33 +156,57 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 // @Produce  json-api
 // @Param groupSlug path string true "Group slug"
 // @Param areaID path string true "Area ID"
+// @Param strategy query string false "Non-empty-area strategy: cascade deletes the commodities, unlink keeps them area-less. Omit to reject a non-empty area." Enums(cascade, unlink)
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Area not found"
+// @Failure 422 {object} jsonapi.Errors "Non-empty area (no strategy) or unknown strategy"
 // @Router /g/{groupSlug}/areas/{areaID} [delete].
 func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {
-	// Get user-aware settings registry from context
-	registrySet := RegistrySetFromContext(r.Context())
-	if registrySet == nil {
-		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
-		return
-	}
-
 	area := areaFromContext(r.Context())
 	if area == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	ctx := r.Context()
-	areaReg := registrySet.AreaRegistry
-
-	err := areaReg.Delete(ctx, area.ID)
+	// #2137: a non-empty area is deleted according to the chosen strategy:
+	//   absent  → DeleteArea (non-recursive; #2119 — empty only, 422 on
+	//             ErrCannotDelete for a non-empty area; drops the area's files)
+	//   cascade → DeleteAreaRecursive (deletes the commodities too)
+	//   unlink  → UnlinkAndDeleteArea (keeps the commodities, area-less)
+	// Any other value is rejected with 422 before anything is removed.
+	strategy := strings.TrimSpace(r.URL.Query().Get("strategy"))
+	deleteFn, err := resolveAreaDeleteStrategy(api.entityService, strategy)
 	if err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	if err := deleteFn(r.Context(), area.ID); err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// entityDeleteFunc is an EntityService delete method bound to a strategy.
+type entityDeleteFunc func(ctx context.Context, id string) error
+
+// resolveAreaDeleteStrategy maps a `?strategy=` value to the matching
+// EntityService delete method (#2137). An empty value keeps the historical
+// non-recursive DeleteArea behaviour; an unrecognised value yields an error so
+// the handler can answer 422 before touching any data.
+func resolveAreaDeleteStrategy(svc *services.EntityService, strategy string) (entityDeleteFunc, error) {
+	switch strategy {
+	case "":
+		return svc.DeleteArea, nil
+	case "cascade":
+		return svc.DeleteAreaRecursive, nil
+	case "unlink":
+		return svc.UnlinkAndDeleteArea, nil
+	default:
+		return nil, errInvalidDeleteStrategy
+	}
 }
 
 // updateArea updates a area.
@@ -244,8 +270,10 @@ func (api *areasAPI) updateArea(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func Areas() func(r chi.Router) {
-	api := &areasAPI{}
+func Areas(params Params) func(r chi.Router) {
+	api := &areasAPI{
+		entityService: params.EntityService,
+	}
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listAreas) // GET /areas
 		r.Route("/{areaID}", func(r chi.Router) {

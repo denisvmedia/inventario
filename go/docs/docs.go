@@ -2656,6 +2656,16 @@ const docTemplate = `{
                         "name": "areaID",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "enum": [
+                            "cascade",
+                            "unlink"
+                        ],
+                        "type": "string",
+                        "description": "Non-empty-area strategy: cascade deletes the commodities, unlink keeps them area-less. Omit to reject a non-empty area.",
+                        "name": "strategy",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -2664,6 +2674,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Area not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Non-empty area (no strategy) or unknown strategy",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -5692,6 +5708,16 @@ const docTemplate = `{
                         "name": "locationID",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "enum": [
+                            "cascade",
+                            "unlink"
+                        ],
+                        "type": "string",
+                        "description": "Non-empty-location strategy: cascade deletes the commodities, unlink keeps them area-less. Omit to reject a non-empty location.",
+                        "name": "strategy",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -5700,6 +5726,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Location not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Non-empty location (no strategy) or unknown strategy",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useCurrentGroup } from "@/features/group/GroupContext"
 
+import { commodityKeys } from "@/features/commodities/keys"
+
 import {
   createArea,
   deleteArea,
@@ -10,9 +12,18 @@ import {
   updateArea,
   type Area,
   type CreateAreaRequest,
+  type DeleteStrategy,
   type UpdateAreaRequest,
 } from "./api"
 import { areaKeys } from "./keys"
+
+// Variables for the delete mutation. `strategy` is omitted for an empty
+// area (BE safe default) and set when the user picks one in the
+// non-empty delete dialog (#2137).
+export interface DeleteAreaVars {
+  id: string
+  strategy?: DeleteStrategy
+}
 
 interface QueryOptions {
   enabled?: boolean
@@ -103,9 +114,9 @@ export function useDeleteArea() {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const listKey = areaKeys.list(slug)
-  return useMutation<void, Error, string, { previousList?: Area[] }>({
-    mutationFn: (id) => deleteArea(id),
-    onMutate: async (id) => {
+  return useMutation<void, Error, DeleteAreaVars, { previousList?: Area[] }>({
+    mutationFn: ({ id, strategy }) => deleteArea(id, strategy),
+    onMutate: async ({ id }) => {
       await qc.cancelQueries({ queryKey: listKey })
       const previousList = qc.getQueryData<Area[]>(listKey)
       if (previousList) {
@@ -116,11 +127,19 @@ export function useDeleteArea() {
       }
       return { previousList }
     },
-    onError: (_err, _id, ctx) => {
+    onError: (_err, _vars, ctx) => {
       if (ctx?.previousList) qc.setQueryData(listKey, ctx.previousList)
     },
-    onSettled: () => {
+    onSettled: (_data, _err, vars) => {
       qc.invalidateQueries({ queryKey: listKey })
+      // Unlink frees the area's items (they become un-located), so any
+      // cached commodity list for this group is now stale. Cascade also
+      // removes the items, so refresh in both non-default-strategy
+      // branches — the BE only changes commodities when a strategy is
+      // given (the empty-area default never touches items). #2137
+      if (vars.strategy) {
+        qc.invalidateQueries({ queryKey: commodityKeys.group(slug) })
+      }
     },
   })
 }

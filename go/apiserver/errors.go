@@ -24,6 +24,10 @@ var (
 	ErrMissingUploadSlot      = errx.NewSentinel("missing X-Upload-Slot header")
 	ErrInvalidUploadSlot      = errx.NewSentinel("invalid or expired upload slot")
 	ErrNotFound               = errx.NewSentinel("not found", registry.ErrNotFound)
+	// errInvalidDeleteStrategy is returned when a DELETE request carries an
+	// unknown `?strategy=` value (#2137). The handler answers 422 directly via
+	// unprocessableEntityError, so it does not need a toJSONAPIError mapping.
+	errInvalidDeleteStrategy = errx.NewSentinel("invalid delete strategy: must be one of cascade, unlink")
 	// ErrNotSystemAdmin is returned by RequireSystemAdmin when the caller's
 	// user is not flagged as a system administrator. Surfaces as a 403 with
 	// JSON:API code "admin.forbidden" so the FE can render specific copy

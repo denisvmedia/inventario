@@ -7,6 +7,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/appctx"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
@@ -15,6 +16,15 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 	"github.com/denisvmedia/inventario/services"
 )
+
+// uploadLocationForTempDir builds a file:// upload-location URL for the given
+// temp dir, matching the OS-specific scheme the rest of the package uses.
+func uploadLocationForTempDir(tempDir string) string {
+	if runtime.GOOS == "windows" {
+		return "file:///" + tempDir + "?create_dir=1"
+	}
+	return "file://" + tempDir + "?create_dir=1"
+}
 
 // newTestContext creates a context with test user for testing
 func newTestContext(factorySet *registry.FactorySet) context.Context {
@@ -484,4 +494,529 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestDeleteFileWithPhysical_DeletesThumbnailJob asserts the #2117 cleanup
+// order: deleting a file also removes the thumbnail-generation job that
+// references it and the concurrency slot that references that job, so the
+// NO ACTION FKs (slots -> jobs -> files) never block the file row delete.
+func TestDeleteFileWithPhysical_DeletesThumbnailJob(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewFileService(factorySet, uploadLocation)
+
+	// Write the physical blob.
+	testFilePath := "thumb-source.jpg"
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	err := b.WriteAll(ctx, testFilePath, []byte("image bytes"), nil)
+	c.Assert(err, qt.IsNil)
+
+	// Create the file row.
+	createdFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		Type: models.FileTypeImage,
+		File: &models.File{
+			Path:         "thumb-source",
+			OriginalPath: testFilePath,
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
+		},
+	}))
+
+	// Create a thumbnail-generation job for the file and a concurrency slot
+	// for that job.
+	createdJob := must.Must(registrySet.ThumbnailGenerationJobRegistry.Create(ctx, models.ThumbnailGenerationJob{
+		FileID:      createdFile.ID,
+		Status:      models.ThumbnailStatusPending,
+		MaxAttempts: 3,
+	}))
+	createdSlot := must.Must(registrySet.UserConcurrencySlotRegistry.Create(ctx, models.UserConcurrencySlot{
+		JobID:  createdJob.ID,
+		Status: models.SlotStatusActive,
+	}))
+
+	// Delete the file.
+	err = service.DeleteFileWithPhysical(ctx, createdFile.ID)
+	c.Assert(err, qt.IsNil)
+
+	// The file row is gone.
+	_, err = registrySet.FileRegistry.Get(ctx, createdFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// The thumbnail job is gone.
+	_, err = registrySet.ThumbnailGenerationJobRegistry.Get(ctx, createdJob.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// The concurrency slot is gone.
+	_, err = registrySet.UserConcurrencySlotRegistry.Get(ctx, createdSlot.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// The physical blob is gone (best-effort cleanup ran after the row delete).
+	exists := must.Must(b.Exists(ctx, testFilePath))
+	c.Assert(exists, qt.IsFalse)
+}
+
+// TestDeleteFileWithPhysical_DeletesAllJobsAndSlots covers the multi-job-per-file
+// case: idx_thumbnail_jobs_file_id is NOT unique, so a file can own more than
+// one job (e.g. a failed job plus a retry). Deleting the file must clear EVERY
+// job's concurrency slots before dropping the jobs, otherwise the second job's
+// slot dangles and (on postgres) FK-fails the file delete. Here the file owns
+// two jobs, each with an active slot; after the delete both jobs and both slots
+// are gone.
+func TestDeleteFileWithPhysical_DeletesAllJobsAndSlots(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewFileService(factorySet, uploadLocation)
+
+	// Write the physical blob.
+	testFilePath := "thumb-source-multi.jpg"
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, testFilePath, []byte("image bytes"), nil), qt.IsNil)
+
+	// Create the file row.
+	createdFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		Type: models.FileTypeImage,
+		File: &models.File{
+			Path:         "thumb-source-multi",
+			OriginalPath: testFilePath,
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
+		},
+	}))
+
+	// Two jobs for the same file (a failed job plus a retry), each with a slot.
+	failedJob := must.Must(registrySet.ThumbnailGenerationJobRegistry.Create(ctx, models.ThumbnailGenerationJob{
+		FileID:      createdFile.ID,
+		Status:      models.ThumbnailStatusFailed,
+		MaxAttempts: 3,
+	}))
+	retryJob := must.Must(registrySet.ThumbnailGenerationJobRegistry.Create(ctx, models.ThumbnailGenerationJob{
+		FileID:      createdFile.ID,
+		Status:      models.ThumbnailStatusPending,
+		MaxAttempts: 3,
+	}))
+	failedSlot := must.Must(registrySet.UserConcurrencySlotRegistry.Create(ctx, models.UserConcurrencySlot{
+		JobID:  failedJob.ID,
+		Status: models.SlotStatusActive,
+	}))
+	retrySlot := must.Must(registrySet.UserConcurrencySlotRegistry.Create(ctx, models.UserConcurrencySlot{
+		JobID:  retryJob.ID,
+		Status: models.SlotStatusActive,
+	}))
+
+	// Delete the file.
+	c.Assert(service.DeleteFileWithPhysical(ctx, createdFile.ID), qt.IsNil)
+
+	// The file row is gone.
+	_, err := registrySet.FileRegistry.Get(ctx, createdFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// Both jobs are gone.
+	_, err = registrySet.ThumbnailGenerationJobRegistry.Get(ctx, failedJob.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = registrySet.ThumbnailGenerationJobRegistry.Get(ctx, retryJob.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// Both slots are gone — including the second job's slot, which the old
+	// single-job path would have left dangling.
+	_, err = registrySet.UserConcurrencySlotRegistry.Get(ctx, failedSlot.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = registrySet.UserConcurrencySlotRegistry.Get(ctx, retrySlot.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// TestDeleteCommodityRecursive_RowFirst asserts the #2120 happy path: the
+// commodity and its linked files (rows + blobs) are all gone after the
+// row-first delete.
+func TestDeleteCommodityRecursive_RowFirst(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
+	commodity := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:   "Commodity",
+		AreaID: new(area.ID),
+	}))
+
+	// Two physical blobs + their linked file rows.
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+
+	filePaths := []string{"com-1.jpg", "com-2.pdf"}
+	mimeTypes := []string{"image/jpeg", "application/pdf"}
+	var fileIDs []string
+	for i, p := range filePaths {
+		c.Assert(b.WriteAll(ctx, p, []byte("bytes"), nil), qt.IsNil)
+		file := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+			LinkedEntityType: "commodity",
+			LinkedEntityID:   commodity.ID,
+			LinkedEntityMeta: "images",
+			File: &models.File{
+				Path:         p,
+				OriginalPath: p,
+				Ext:          ".x",
+				MIMEType:     mimeTypes[i],
+			},
+		}))
+		fileIDs = append(fileIDs, file.ID)
+	}
+
+	err := service.DeleteCommodityRecursive(ctx, commodity.ID)
+	c.Assert(err, qt.IsNil)
+
+	// Commodity row is gone.
+	_, err = registrySet.CommodityRegistry.Get(ctx, commodity.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// Linked file rows + blobs are gone.
+	for i, fileID := range fileIDs {
+		_, err = registrySet.FileRegistry.Get(ctx, fileID)
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+		exists := must.Must(b.Exists(ctx, filePaths[i]))
+		c.Assert(exists, qt.IsFalse)
+	}
+}
+
+// TestDeleteAreaRecursive_DeletesAttachedFiles asserts #2119: files attached
+// directly to an area (not via a commodity) are removed when the area is
+// recursively deleted.
+func TestDeleteAreaRecursive_DeletesAttachedFiles(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
+
+	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "area",
+		LinkedEntityID:   area.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "area-doc",
+			OriginalPath: "area-doc.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	err := service.DeleteAreaRecursive(ctx, area.ID)
+	c.Assert(err, qt.IsNil)
+
+	_, err = registrySet.AreaRegistry.Get(ctx, area.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	_, err = registrySet.FileRegistry.Get(ctx, areaFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// TestDeleteLocationRecursive_DeletesAttachedFiles asserts #2119: files
+// attached directly to a location are removed when the location is recursively
+// deleted.
+func TestDeleteLocationRecursive_DeletesAttachedFiles(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+
+	locationFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "location",
+		LinkedEntityID:   location.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "loc-doc",
+			OriginalPath: "loc-doc.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	err := service.DeleteLocationRecursive(ctx, location.ID)
+	c.Assert(err, qt.IsNil)
+
+	_, err = registrySet.LocationRegistry.Get(ctx, location.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	_, err = registrySet.FileRegistry.Get(ctx, locationFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// TestDeleteArea_DeletesLinkedFiles asserts #2119: the non-recursive DeleteArea
+// removes an EMPTY area together with the files attached directly to it (DB
+// rows + blob), so they don't orphan.
+func TestDeleteArea_DeletesLinkedFiles(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
+
+	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "area",
+		LinkedEntityID:   area.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "area-doc",
+			OriginalPath: "area-doc.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	err := service.DeleteArea(ctx, area.ID)
+	c.Assert(err, qt.IsNil)
+
+	_, err = registrySet.AreaRegistry.Get(ctx, area.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	_, err = registrySet.FileRegistry.Get(ctx, areaFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	linked := must.Must(registrySet.FileRegistry.ListByLinkedEntity(ctx, "area", area.ID))
+	c.Assert(linked, qt.HasLen, 0)
+}
+
+// TestDeleteArea_NonEmptyRejected asserts #2119: DeleteArea is non-recursive —
+// an area that still holds a commodity is rejected with ErrCannotDelete and
+// nothing is removed.
+func TestDeleteArea_NonEmptyRejected(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
+	commodity := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:   "Commodity",
+		AreaID: new(area.ID),
+	}))
+
+	err := service.DeleteArea(ctx, area.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrCannotDelete)
+
+	// The area and its commodity survive.
+	c.Assert(must.Must(registrySet.AreaRegistry.Get(ctx, area.ID)), qt.IsNotNil)
+	c.Assert(must.Must(registrySet.CommodityRegistry.Get(ctx, commodity.ID)), qt.IsNotNil)
+}
+
+// TestDeleteLocation_DeletesLinkedFiles asserts #2119: the non-recursive
+// DeleteLocation removes an EMPTY location together with the files attached
+// directly to it.
+func TestDeleteLocation_DeletesLinkedFiles(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+
+	locationFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "location",
+		LinkedEntityID:   location.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "loc-doc",
+			OriginalPath: "loc-doc.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	err := service.DeleteLocation(ctx, location.ID)
+	c.Assert(err, qt.IsNil)
+
+	_, err = registrySet.LocationRegistry.Get(ctx, location.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	_, err = registrySet.FileRegistry.Get(ctx, locationFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	linked := must.Must(registrySet.FileRegistry.ListByLinkedEntity(ctx, "location", location.ID))
+	c.Assert(linked, qt.HasLen, 0)
+}
+
+// TestDeleteLocation_NonEmptyRejected asserts #2119: DeleteLocation is
+// non-recursive — a location that still holds an area is rejected with
+// ErrCannotDelete and nothing is removed.
+func TestDeleteLocation_NonEmptyRejected(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
+
+	err := service.DeleteLocation(ctx, location.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrCannotDelete)
+
+	// The location and its area survive.
+	c.Assert(must.Must(registrySet.LocationRegistry.Get(ctx, location.ID)), qt.IsNotNil)
+	c.Assert(must.Must(registrySet.AreaRegistry.Get(ctx, area.ID)), qt.IsNotNil)
+}
+
+// TestUnlinkAndDeleteArea_KeepsCommodities asserts #2137: the "unlink" strategy
+// removes a non-empty area (and the files attached directly to it) while
+// keeping its commodities — left area-less (AreaID == nil) rather than deleted.
+func TestUnlinkAndDeleteArea_KeepsCommodities(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
+	commodity1 := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:   "Commodity 1",
+		AreaID: new(area.ID),
+	}))
+	commodity2 := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:   "Commodity 2",
+		AreaID: new(area.ID),
+	}))
+
+	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "area",
+		LinkedEntityID:   area.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "area-doc",
+			OriginalPath: "area-doc.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	err := service.UnlinkAndDeleteArea(ctx, area.ID)
+	c.Assert(err, qt.IsNil)
+
+	// The area and the file attached directly to it are gone.
+	_, err = registrySet.AreaRegistry.Get(ctx, area.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = registrySet.FileRegistry.Get(ctx, areaFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// Both commodities survive, now area-less.
+	got1 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity1.ID))
+	c.Assert(got1.AreaID, qt.IsNil)
+	got2 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity2.ID))
+	c.Assert(got2.AreaID, qt.IsNil)
+}
+
+// TestUnlinkAndDeleteLocation_KeepsCommodities asserts #2137: the "unlink"
+// strategy removes a non-empty location and all its areas while keeping the
+// commodities filed under those areas — left area-less (AreaID == nil).
+func TestUnlinkAndDeleteLocation_KeepsCommodities(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area1 := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area 1", LocationID: location.ID}))
+	area2 := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area 2", LocationID: location.ID}))
+	commodity1 := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:   "Commodity 1",
+		AreaID: new(area1.ID),
+	}))
+	commodity2 := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:   "Commodity 2",
+		AreaID: new(area2.ID),
+	}))
+
+	err := service.UnlinkAndDeleteLocation(ctx, location.ID)
+	c.Assert(err, qt.IsNil)
+
+	// The location and both its areas are gone.
+	_, err = registrySet.LocationRegistry.Get(ctx, location.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = registrySet.AreaRegistry.Get(ctx, area1.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = registrySet.AreaRegistry.Get(ctx, area2.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// Both commodities survive, now area-less.
+	got1 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity1.ID))
+	c.Assert(got1.AreaID, qt.IsNil)
+	got2 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity2.ID))
+	c.Assert(got2.AreaID, qt.IsNil)
 }

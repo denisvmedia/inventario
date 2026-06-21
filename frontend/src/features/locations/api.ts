@@ -94,6 +94,15 @@ export async function updateLocation(id: string, req: UpdateLocationRequest): Pr
   return { ...body.data.attributes, id: body.data.id }
 }
 
-export async function deleteLocation(id: string): Promise<void> {
-  await http.del<void>(`/locations/${encodeURIComponent(id)}`)
+// Strategy for deleting a non-empty container (#2137). Absent ⇒ the
+// BE's safe default that 422s when the location still holds areas/items.
+//   cascade — delete the items inside (and their files).
+//   unlink  — un-assign the items (they become un-located) and delete
+//             the location; its areas are also removed, but the items
+//             survive.
+export type DeleteStrategy = "cascade" | "unlink"
+
+export async function deleteLocation(id: string, strategy?: DeleteStrategy): Promise<void> {
+  const qs = strategy ? `?strategy=${encodeURIComponent(strategy)}` : ""
+  await http.del<void>(`/locations/${encodeURIComponent(id)}${qs}`)
 }

@@ -78,3 +78,28 @@ func (r *GroupNotificationPrefRegistry) Upsert(ctx context.Context, pref models.
 	pref.UpdatedAt = now
 	return r.baseGroupNotificationPrefRegistry.Create(ctx, pref)
 }
+
+// DeleteByGroup removes every per-user notification override for the
+// given (tenant, group) from the in-memory store. Mirrors the postgres
+// parameterized DELETE used by the group-deletion cleanup path.
+// Idempotent: zero matches returns (0, nil).
+func (r *GroupNotificationPrefRegistry) DeleteByGroup(_ context.Context, tenantID, groupID string) (int, error) {
+	if tenantID == "" || groupID == "" {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "tenant_id|group_id"))
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	var toDelete []string
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		p := pair.Value
+		if p.TenantID == tenantID && p.GroupID == groupID {
+			toDelete = append(toDelete, p.GetID())
+		}
+	}
+	for _, id := range toDelete {
+		r.items.Delete(id)
+	}
+	return len(toDelete), nil
+}

@@ -130,6 +130,13 @@ export default defineConfig({
       // strings, surfaced through RHF errors[name].message → t() at
       // render time. Same pattern as auth:validation.* / groups:validation.*.
       "locations:validation.*",
+      // locations:deleteWithItems.* — DeleteWithItemsDialog (#2137) builds
+      //   the per-container copy via `t(\`locations:deleteWithItems.${kind}Title\`)`
+      //   etc. over the closed DeleteContainerKind union (area | location),
+      //   plus i18next plural suffixes on the *Description / *UnlinkHelp /
+      //   cascadeHelp lines. The extractor sees only the template literals
+      //   for the kind-prefixed keys, so preserve the whole subtree.
+      "locations:deleteWithItems.*",
       // commodities:validation.* — same pattern as auth/groups/locations:
       // schema messages in features/commodities/schemas.ts are plain
       // strings flowing through RHF errors[name].message at render time.

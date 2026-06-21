@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"log/slog"
 	"strings"
 
 	"github.com/go-extras/errx"
@@ -128,7 +129,20 @@ func (s *FileService) GetThumbnailPaths(tenantID, fileID string) map[string]stri
 	return thumbnails
 }
 
-// DeleteFileWithPhysical deletes a file entity and its associated physical file
+// DeleteFileWithPhysical deletes a file entity and its associated physical
+// file. The ordering is row-first, blob-best-effort (#2117):
+//
+//  1. Resolve the file row.
+//  2. Break the thumbnail_generation_jobs.file_id -> files(id) FK (NO ACTION)
+//     by first deleting the user_concurrency_slots that reference each job
+//     (slots.job_id -> thumbnail_generation_jobs(id), NO ACTION) and then the
+//     jobs themselves.
+//  3. Delete the file row.
+//  4. Only after the row delete commits, best-effort delete the physical blob
+//     and its thumbnails. Blob failures are swallowed/logged and never surface
+//     as an error, so a missing or unreachable blob can never leave the row
+//     undeleted (the previous blob-first ordering aborted before the row was
+//     removed, which is what broke the restore path in processor_shared.go).
 func (s *FileService) DeleteFileWithPhysical(ctx context.Context, fileID string) error {
 	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
@@ -141,17 +155,68 @@ func (s *FileService) DeleteFileWithPhysical(ctx context.Context, fileID string)
 		return errxtrace.Wrap("failed to get file entity", err)
 	}
 
-	// Delete the physical file and thumbnails if they exist
-	if file.File != nil && file.File.OriginalPath != "" {
-		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, fileID, file.File.OriginalPath, file.File.MIMEType); err != nil {
-			return errxtrace.Wrap("failed to delete physical file and thumbnails", err)
-		}
+	// Break the thumbnail-generation chain before the file row is removed so
+	// the NO ACTION FKs (slots -> jobs -> files) don't block the delete.
+	if err := s.deleteThumbnailGenerationChain(ctx, fileID); err != nil {
+		return errxtrace.Wrap("failed to delete thumbnail generation chain", err)
 	}
 
 	// Delete the file entity from database
-	err = fileReg.Delete(ctx, fileID)
-	if err != nil {
+	if err := fileReg.Delete(ctx, fileID); err != nil {
 		return errxtrace.Wrap("failed to delete file entity", err)
+	}
+
+	// The row delete has committed. From here on, blob cleanup is best-effort:
+	// a failure to remove the physical blob or its thumbnails must never undo
+	// the row delete or surface as an error to the caller.
+	if file.File != nil && file.File.OriginalPath != "" {
+		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, fileID, file.File.OriginalPath, file.File.MIMEType); err != nil {
+			slog.WarnContext(ctx, "failed to delete physical blob after file row delete (best-effort)",
+				"file_id", fileID, "tenant_id", file.TenantID, "error", err.Error())
+		}
+	}
+
+	return nil
+}
+
+// deleteThumbnailGenerationChain removes the thumbnail-generation jobs that
+// reference the given file along with the concurrency slots that reference
+// those jobs, in FK-safe order (slots -> jobs). A file can own more than one
+// job (a failed job plus a retry), so every job's slots must be cleared — not
+// just one — or the leftover jobs' slots dangle and FK-fail the file delete on
+// postgres. All registry deletes here are idempotent: a second call (or a file
+// that never had a job) matches zero rows and returns nil. Each job's slots are
+// cleared first because the slots.job_id -> jobs(id) FK is NO ACTION and must
+// be gone before the job row can be removed.
+func (s *FileService) deleteThumbnailGenerationChain(ctx context.Context, fileID string) error {
+	jobReg, err := s.factorySet.ThumbnailGenerationJobRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create thumbnail generation job registry", err)
+	}
+
+	// Resolve every job for this file so each job's slots can be cleared before
+	// the job rows are deleted. No job is not an error — the file may never
+	// have had thumbnails generated.
+	jobs, err := jobReg.ListByFileID(ctx, fileID)
+	if err != nil {
+		return errxtrace.Wrap("failed to list thumbnail jobs for file", err, errx.Attrs("file_id", fileID))
+	}
+
+	if len(jobs) > 0 {
+		slotReg, slotErr := s.factorySet.UserConcurrencySlotRegistryFactory.CreateUserRegistry(ctx)
+		if slotErr != nil {
+			return errxtrace.Wrap("failed to create user concurrency slot registry", slotErr)
+		}
+		for _, job := range jobs {
+			if slotErr := slotReg.DeleteByJobID(ctx, job.ID); slotErr != nil {
+				return errxtrace.Wrap("failed to delete concurrency slots for thumbnail job", slotErr, errx.Attrs("file_id", fileID, "job_id", job.ID))
+			}
+		}
+	}
+
+	// Delete every job referencing the file (idempotent; no-op on zero rows).
+	if err := jobReg.DeleteByFileID(ctx, fileID); err != nil {
+		return errxtrace.Wrap("failed to delete thumbnail generation jobs for file", err, errx.Attrs("file_id", fileID))
 	}
 
 	return nil

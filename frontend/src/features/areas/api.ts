@@ -88,6 +88,14 @@ export async function updateArea(id: string, req: UpdateAreaRequest): Promise<Ar
   return { ...body.data.attributes, id: body.data.id }
 }
 
-export async function deleteArea(id: string): Promise<void> {
-  await http.del<void>(`/areas/${encodeURIComponent(id)}`)
+// Strategy for deleting a non-empty container (#2137). Absent ⇒ the
+// BE's safe default that 422s when the area still holds items.
+//   cascade — delete the items inside (and their files).
+//   unlink  — un-assign the items (they become un-located) and delete
+//             the area; the items survive.
+export type DeleteStrategy = "cascade" | "unlink"
+
+export async function deleteArea(id: string, strategy?: DeleteStrategy): Promise<void> {
+  const qs = strategy ? `?strategy=${encodeURIComponent(strategy)}` : ""
+  await http.del<void>(`/areas/${encodeURIComponent(id)}${qs}`)
 }

@@ -9,7 +9,9 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+	"github.com/shopspring/decimal"
 
+	"github.com/denisvmedia/inventario/appctx"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // register file:// driver
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -218,6 +220,120 @@ func TestGroupPurgeService_Postgres_CleanExpiredInvitesCrossTenant(t *testing.T)
 	_, err = fs.GroupInviteRegistry.Get(ctx, activeInvite)
 	c.Assert(err, qt.IsNil)
 	_, err = fs.GroupInviteRegistry.Get(ctx, usedInvite)
+	c.Assert(err, qt.IsNil)
+}
+
+// TestGroupPurger_Postgres_PurgesAllGroupDependents is the #2095 + #2117
+// regression: a group carrying every late-added group-scoped dependent
+// (tag, currency_migration + audit row, group_notification_pref,
+// commodity_loan + commodity, and a file with a thumbnail_generation_job +
+// user_concurrency_slot) must be fully cleared by PurgeGroupDependents so the
+// subsequent location_groups DELETE succeeds. Before the fix the NO ACTION
+// FKs on those tables (and the group-id-less thumbnail chain) left orphan
+// rows that blocked the final group delete.
+func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
+	c := qt.New(t)
+
+	set, _ := setupTestRegistrySet(t)
+
+	dsn := skipIfNoPostgreSQL(t)
+	pool, err := getOrCreatePool(dsn)
+	c.Assert(err, qt.IsNil)
+	dbx := sqlx.NewDb(stdlib.OpenDBFromPool(pool), "pgx")
+	fs := postgres.NewFactorySet(dbx)
+
+	user := getTestUser(c, set)
+
+	// Discover the group setupTestRegistrySet created (the only one).
+	serviceSet := fs.CreateServiceRegistrySet()
+	groups, err := serviceSet.LocationGroupRegistry.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(groups, qt.HasLen, 1)
+	groupID := groups[0].ID
+	tenantID := user.TenantID
+
+	ctx := appctx.WithUser(context.Background(), user)
+	ctx = appctx.WithGroup(ctx, &models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: groupID},
+			TenantID: tenantID,
+		},
+	})
+
+	// -- seed every late-added group-scoped dependent ----------------------
+
+	// Tag (#2095): commodity-kind tag in the group.
+	mustCreateTag(c, set.TagRegistry, ctx, models.TagKindCommodity, "purge-tag")
+
+	// Group notification pref (#2095): service-mode registry, explicit IDs.
+	_, err = fs.GroupNotificationPrefRegistry.Upsert(ctx, models.GroupNotificationPref{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		GroupID:             groupID,
+		UserID:              user.ID,
+		Category:            "warranty",
+		Enabled:             false,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Commodity (with its area+location) + an open loan (#2095).
+	areaID := seedTagArea(c, set, ctx)
+	commodityID := seedTagCommodity(c, set, ctx, areaID, "Loaned Drill")
+	_, err = set.CommodityLoanRegistry.Create(ctx, models.CommodityLoan{
+		CommodityID:  commodityID,
+		BorrowerName: "Borrower",
+		LentAt:       models.Date("2026-05-01"),
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Currency migration + audit row (#2095). The audit row's group_id FK is
+	// NO ACTION, so it must be cleared explicitly before currency_migrations.
+	migration, err := set.CurrencyMigrationRegistry.Create(ctx, models.CurrencyMigration{
+		FromCurrency: "USD",
+		ToCurrency:   "EUR",
+		ExchangeRate: decimal.NewFromFloat(0.92),
+	})
+	c.Assert(err, qt.IsNil)
+	// WriteAuditRow stamps tenant/group/created_by from the user-aware
+	// registry's own scope, so use set (not serviceSet) to land the row in
+	// this group.
+	_, err = set.CurrencyMigrationRegistry.WriteAuditRow(ctx, models.CurrencyMigrationAuditRow{
+		MigrationID: migration.ID,
+		CommodityID: &commodityID,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// File with a thumbnail_generation_job + user_concurrency_slot (#2117).
+	// Neither the job nor the slot carries a group_id; both FK with NO ACTION
+	// to files/jobs, so the purger must clear them through the file chain
+	// before the files DELETE.
+	fileID := seedTagFile(c, set, ctx, "thumb-source")
+	job, err := set.ThumbnailGenerationJobRegistry.Create(ctx, models.ThumbnailGenerationJob{
+		FileID: fileID,
+		Status: models.ThumbnailStatusPending,
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = set.UserConcurrencySlotRegistry.Create(ctx, models.UserConcurrencySlot{
+		JobID:  job.ID,
+		Status: models.SlotStatusActive,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// -- purge, then prove the group row can finally be removed -------------
+
+	err = fs.GroupPurger.PurgeGroupDependents(context.Background(), tenantID, groupID)
+	c.Assert(err, qt.IsNil)
+
+	// The final location_groups DELETE is what was blocked before the fix:
+	// any orphaned dependent (loan/tag/currency/thumbnail chain) would trip a
+	// NO ACTION FK here and fail. It succeeding end-to-end is the regression.
+	err = serviceSet.LocationGroupRegistry.Delete(context.Background(), groupID)
+	c.Assert(err, qt.IsNil)
+
+	_, err = serviceSet.LocationGroupRegistry.Get(context.Background(), groupID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// Idempotent: a second purge after the rows are gone is a clean no-op.
+	err = fs.GroupPurger.PurgeGroupDependents(context.Background(), tenantID, groupID)
 	c.Assert(err, qt.IsNil)
 }
 

@@ -184,6 +184,25 @@ func (r *ThumbnailGenerationJobRegistry) GetJobByFileID(ctx context.Context, fil
 	return &job, nil
 }
 
+// ListByFileID returns every thumbnail generation job referencing the given
+// file. A file may own more than one job (a failed job plus a retry), so the
+// file-cleanup path uses this to clear every job's concurrency slots before the
+// jobs themselves are removed. Returns an empty slice (no ErrNotFound) when no
+// job references the file.
+func (r *ThumbnailGenerationJobRegistry) ListByFileID(ctx context.Context, fileID string) ([]*models.ThumbnailGenerationJob, error) {
+	var jobs []*models.ThumbnailGenerationJob
+	reg := r.newSQLRegistry()
+
+	for job, err := range reg.ScanByField(ctx, store.Pair("file_id", fileID)) {
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to list thumbnail generation jobs by file ID", err, errx.Attrs("file_id", fileID))
+		}
+		jobs = append(jobs, &job)
+	}
+
+	return jobs, nil
+}
+
 // ListPending retrieves all pending thumbnail generation jobs
 func (r *ThumbnailGenerationJobRegistry) ListPending(ctx context.Context) ([]*models.ThumbnailGenerationJob, error) {
 	var jobs []*models.ThumbnailGenerationJob
@@ -264,6 +283,24 @@ func (r *ThumbnailGenerationJobRegistry) CleanupCompletedJobs(ctx context.Contex
 		_, err := tx.ExecContext(ctx, query, models.ThumbnailStatusCompleted, models.ThumbnailStatusFailed, cutoffTime)
 		if err != nil {
 			return errxtrace.Wrap("failed to cleanup completed thumbnail generation jobs", err)
+		}
+		return nil
+	})
+
+	return err
+}
+
+// DeleteByFileID removes every thumbnail generation job referencing the
+// given file. Idempotent: a parameterized DELETE that matches zero rows
+// is a no-op (no ErrNotFound), so the file-cleanup path can call it
+// unconditionally before dropping the file row.
+func (r *ThumbnailGenerationJobRegistry) DeleteByFileID(ctx context.Context, fileID string) error {
+	reg := r.newSQLRegistry()
+
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`DELETE FROM %s WHERE file_id = $1`, r.tableNames.ThumbnailGenerationJobs())
+		if _, err := tx.ExecContext(ctx, query, fileID); err != nil {
+			return errxtrace.Wrap("failed to delete thumbnail generation jobs by file ID", err, errx.Attrs("file_id", fileID))
 		}
 		return nil
 	})

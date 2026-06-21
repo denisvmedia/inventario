@@ -319,6 +319,32 @@ func (r *CurrencyMigrationRegistry) ListAuditRows(_ context.Context, migrationID
 	return out, nil
 }
 
+// DeleteAuditRowsByGroup removes every audit row for the given (tenant,
+// group) from the bespoke audit slice. Mirrors the postgres registry's
+// explicit cleanup: the audit rows do not cascade from the group, so the
+// group-deletion path clears them directly. Idempotent: zero matches
+// returns (0, nil).
+func (r *CurrencyMigrationRegistry) DeleteAuditRowsByGroup(_ context.Context, tenantID, groupID string) (int, error) {
+	if tenantID == "" || groupID == "" {
+		return 0, errxtrace.Wrap("tenant id and group id are required", registry.ErrFieldRequired)
+	}
+
+	r.auditLock.Lock()
+	defer r.auditLock.Unlock()
+
+	kept := make([]*models.CurrencyMigrationAuditRow, 0, len(*r.auditRows))
+	deleted := 0
+	for _, row := range *r.auditRows {
+		if row.TenantID == tenantID && row.GroupID == groupID {
+			deleted++
+			continue
+		}
+		kept = append(kept, row)
+	}
+	*r.auditRows = kept
+	return deleted, nil
+}
+
 func (r *CurrencyMigrationRegistry) ClaimNextPending(_ context.Context) (*models.CurrencyMigration, error) {
 	if !r.service {
 		return nil, errxtrace.Wrap("ClaimNextPending requires a service registry", registry.ErrUserContextRequired)

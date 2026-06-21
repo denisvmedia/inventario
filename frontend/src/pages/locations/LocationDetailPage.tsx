@@ -32,9 +32,13 @@ import { useFileDropZone } from "@/components/files/useFileDropZone"
 import { LocationsBreadcrumb } from "@/components/locations/LocationsBreadcrumb"
 import { LocationFormDialog } from "@/components/locations/LocationFormDialog"
 import { AreaFormDialog } from "@/components/locations/AreaFormDialog"
+import {
+  DeleteWithItemsDialog,
+  type DeleteContainerKind,
+} from "@/components/locations/DeleteWithItemsDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas, useCreateArea, useDeleteArea } from "@/features/areas/hooks"
-import { useCommodities } from "@/features/commodities/hooks"
+import { useAreaItemCounter, useCommodities } from "@/features/commodities/hooks"
 import { warrantyStatus } from "@/features/commodities/constants"
 import {
   useDeleteLocation,
@@ -46,17 +50,17 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { cn } from "@/lib/utils"
-import type { Area } from "@/features/areas/api"
+import type { Area, DeleteStrategy } from "@/features/areas/api"
 
 interface LocationDetailPageProps {
   initialMode?: "edit"
 }
 
-// Cap the single page-level commodities fetch behind area tiles —
-// matches LocationsListPage's cap so a navigate from list → detail
-// reuses the cached query. Partial counts beyond the cap surface as
-// "{N}+" on tiles.
-const ITEM_COUNT_FETCH_CAP = 500
+// Cap the single page-level commodities fetch behind area tiles — 100 is
+// the BE's max per_page (>100 silently falls back to 50), and it matches
+// LocationsListPage's cap so a navigate from list → detail reuses the
+// cached query. Partial counts beyond the cap surface as "{N}+" on tiles.
+const ITEM_COUNT_FETCH_CAP = 100
 
 // /locations/:id — single-location detail. Renders the multi-segment
 // breadcrumb, metadata + edit/delete header, the responsive area tile
@@ -83,6 +87,7 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
   const deleteLocation = useDeleteLocation()
   const createArea = useCreateArea()
   const deleteArea = useDeleteArea()
+  const countAreaItems = useAreaItemCounter()
 
   const toast = useAppToast()
   const confirm = useConfirm()
@@ -91,6 +96,18 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
   const [dialog, setDialog] = useState<DialogState>(() =>
     initialMode === "edit" ? { kind: "edit" } : { kind: "none" }
   )
+
+  // Target for the non-empty (cascade/unlink) delete dialog (#2137). The
+  // location row and any per-area row funnel through the same dialog; we
+  // stash which one + its counts so the copy renders correctly.
+  type DeleteTarget = {
+    kind: DeleteContainerKind
+    id: string
+    name: string
+    itemCount: number
+    areaCount: number
+  }
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
 
   // #1448 quick-attach: same pattern as the commodity detail page.
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -139,21 +156,18 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
     toast.success(t("locations:toast.areaCreated"))
   }
 
-  async function handleDelete() {
+  // Item count for one area, sampled from the page-level commodities fetch.
+  // Excludes inactive rows and may undercount past the fetch cap, so it's
+  // only a fallback for the delete gate when the accurate per-area count
+  // (useAreaItemCounter) can't be fetched; the tile chips also read it.
+  function itemsInArea(areaId: string): number {
+    return (itemsForCounts.data?.commodities ?? []).filter((c) => c.area_id === areaId).length
+  }
+
+  async function runDeleteLocation(strategy?: DeleteStrategy) {
     if (!location.data?.id) return
-    const areaCount = (allAreas.data ?? []).filter((a) => a.location_id === id).length
-    const ok = await confirm({
-      title: t("locations:delete.locationTitle", { name: location.data.name ?? "" }),
-      description:
-        areaCount > 0
-          ? t("locations:delete.locationDescriptionWithAreas", { count: areaCount })
-          : t("locations:delete.locationDescription"),
-      confirmLabel: t("common:actions.delete"),
-      destructive: true,
-    })
-    if (!ok) return
     try {
-      await deleteLocation.mutateAsync(location.data.id)
+      await deleteLocation.mutateAsync({ id: location.data.id, strategy })
       toast.success(t("locations:toast.locationDeleted"))
       if (slug) navigate(`/g/${encodeURIComponent(slug)}/locations`, { replace: true })
     } catch {
@@ -161,8 +175,80 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
     }
   }
 
+  async function runDeleteArea(areaId: string, strategy?: DeleteStrategy) {
+    try {
+      await deleteArea.mutateAsync({ id: areaId, strategy })
+      toast.success(t("locations:toast.areaDeleted"))
+    } catch {
+      toast.error(t("locations:toast.areaDeleteError"))
+    }
+  }
+
+  async function handleDelete() {
+    if (!location.data?.id) return
+    const myAreaList = (allAreas.data ?? []).filter((a) => a.location_id === id)
+    const areaCount = myAreaList.length
+    // Sum the accurate (incl. inactive, uncapped) per-area counts so the
+    // cascade dialog states the true number of items that would be deleted.
+    // Falls back to the page sample if a count lookup fails — the gate is
+    // driven by areaCount anyway (a location with areas is always non-empty,
+    // since commodities can't exist without an area), so the sum only feeds
+    // the dialog copy, never the empty-vs-non-empty decision.
+    let locationItemCount: number
+    try {
+      const counts = await Promise.all(
+        myAreaList.map((a) => (a.id ? countAreaItems(a.id) : Promise.resolve(0)))
+      )
+      locationItemCount = counts.reduce((sum, n) => sum + n, 0)
+    } catch {
+      locationItemCount = myAreaList.reduce((sum, a) => sum + (a.id ? itemsInArea(a.id) : 0), 0)
+    }
+    // A location is "non-empty" if it holds areas OR items — either way
+    // deleting it has side effects the user should choose how to handle.
+    if (areaCount > 0 || locationItemCount > 0) {
+      setDeleteTarget({
+        kind: "location",
+        id: location.data.id,
+        name: location.data.name ?? "",
+        itemCount: locationItemCount,
+        areaCount,
+      })
+      return
+    }
+    const ok = await confirm({
+      title: t("locations:delete.locationTitle", { name: location.data.name ?? "" }),
+      description: t("locations:delete.locationDescription"),
+      confirmLabel: t("common:actions.delete"),
+      destructive: true,
+    })
+    if (!ok) return
+    await runDeleteLocation()
+  }
+
   async function handleDeleteArea(area: Area) {
     if (!area.id) return
+    // Accurate count (incl. inactive, uncapped) so an area whose items live
+    // past the page-level sample cap or are all inactive still routes to the
+    // cascade/unlink dialog instead of a bare delete the BE rejects with 422
+    // (#2137 review — capped-sample gate produced a "dead" delete button).
+    // Fall back to the page sample if the lookup fails so a transient error
+    // doesn't block deletes outright; the BE 422 remains the safety backstop.
+    let count: number
+    try {
+      count = await countAreaItems(area.id)
+    } catch {
+      count = itemsInArea(area.id)
+    }
+    if (count > 0) {
+      setDeleteTarget({
+        kind: "area",
+        id: area.id,
+        name: area.name ?? "",
+        itemCount: count,
+        areaCount: 0,
+      })
+      return
+    }
     const ok = await confirm({
       title: t("locations:delete.areaTitle", { name: area.name ?? "" }),
       description: t("locations:delete.areaDescription"),
@@ -170,12 +256,15 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
       destructive: true,
     })
     if (!ok) return
-    try {
-      await deleteArea.mutateAsync(area.id)
-      toast.success(t("locations:toast.areaDeleted"))
-    } catch {
-      toast.error(t("locations:toast.areaDeleteError"))
-    }
+    await runDeleteArea(area.id)
+  }
+
+  function handleDeleteResolve(strategy: DeleteStrategy | null) {
+    const target = deleteTarget
+    setDeleteTarget(null)
+    if (!target || !strategy) return
+    if (target.kind === "location") void runDeleteLocation(strategy)
+    else void runDeleteArea(target.id, strategy)
   }
 
   // Per-area item + expiring-warranty counts derived from the page's
@@ -417,6 +506,16 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
         defaultLocationId={id}
         onSubmit={handleCreateArea}
         isPending={createArea.isPending}
+      />
+
+      <DeleteWithItemsDialog
+        open={deleteTarget !== null}
+        kind={deleteTarget?.kind ?? "location"}
+        name={deleteTarget?.name ?? ""}
+        itemCount={deleteTarget?.itemCount ?? 0}
+        areaCount={deleteTarget?.areaCount ?? 0}
+        isPending={deleteLocation.isPending || deleteArea.isPending}
+        onResolve={handleDeleteResolve}
       />
 
       <UploadFilesDialog

@@ -112,6 +112,30 @@ export function useAllCommodities(opts: ListCommoditiesOptions = {}, query: Quer
   })
 }
 
+// Imperatively fetch the accurate item count for a single area, including
+// inactive rows and bypassing any page-level sample cap. Returns a function
+// a click handler can await before deciding whether a delete needs the
+// cascade/unlink choice dialog (#2137). A page that samples the capped
+// /commodities fetch can read 0 for an area whose items live past the cap
+// or are all inactive — that undercount used to drive a bare delete the BE
+// then rejected with 422 (a "dead" delete button). This reuses the exact
+// query key + fetcher of `useCommodities({ areaId, perPage: 1,
+// includeInactive: true })`, so the count is shared with AreaDetailPage's
+// cached query rather than issuing a duplicate request.
+export function useAreaItemCounter() {
+  const qc = useQueryClient()
+  const { currentGroup } = useCurrentGroup()
+  const slug = currentGroup?.slug ?? ""
+  return async (areaId: string): Promise<number> => {
+    const opts: ListCommoditiesOptions = { areaId, perPage: 1, includeInactive: true }
+    const res = await qc.fetchQuery({
+      queryKey: commodityKeys.list(slug, opts),
+      queryFn: ({ signal }) => listCommodities({ ...opts, signal }),
+    })
+    return res.total
+  }
+}
+
 // Fetches the precomputed value totals for the active group's commodities.
 export function useCommoditiesValue({ enabled = true }: QueryOptions = {}) {
   const { currentGroup } = useCurrentGroup()

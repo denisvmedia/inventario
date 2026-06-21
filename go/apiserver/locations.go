@@ -2,15 +2,19 @@ package apiserver
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/jsonapi"
+	"github.com/denisvmedia/inventario/services"
 )
 
-type locationsAPI struct{}
+type locationsAPI struct {
+	entityService *services.EntityService
+}
 
 // listLocations lists all locations with pagination.
 // @Summary List locations
@@ -165,32 +169,53 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 // @Produce  json-api
 // @Param groupSlug path string true "Group slug"
 // @Param locationID path string true "Location ID"
+// @Param strategy query string false "Non-empty-location strategy: cascade deletes the commodities, unlink keeps them area-less. Omit to reject a non-empty location." Enums(cascade, unlink)
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Location not found"
+// @Failure 422 {object} jsonapi.Errors "Non-empty location (no strategy) or unknown strategy"
 // @Router /g/{groupSlug}/locations/{locationID} [delete].
 func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) {
-	// Get user-aware registry from context
-	registrySet := RegistrySetFromContext(r.Context())
-	if registrySet == nil {
-		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
-		return
-	}
-
 	location := locationFromContext(r.Context())
 	if location == nil {
 		unprocessableEntityError(w, r, nil)
 		return
 	}
 
-	// Use WithCurrentUser to ensure proper user context and validation
-	ctx := r.Context()
-	locationReg := registrySet.LocationRegistry
-	err := locationReg.Delete(ctx, location.ID)
+	// #2137: a non-empty location is deleted according to the chosen strategy:
+	//   absent  → DeleteLocation (non-recursive; #2119 — empty only, 422 on
+	//             ErrCannotDelete; drops the location's files)
+	//   cascade → DeleteLocationRecursive (deletes the commodities too)
+	//   unlink  → UnlinkAndDeleteLocation (keeps the commodities, area-less)
+	// Any other value is rejected with 422 before anything is removed.
+	strategy := strings.TrimSpace(r.URL.Query().Get("strategy"))
+	deleteFn, err := resolveLocationDeleteStrategy(api.entityService, strategy)
 	if err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	if err := deleteFn(r.Context(), location.ID); err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// resolveLocationDeleteStrategy maps a `?strategy=` value to the matching
+// EntityService delete method (#2137). An empty value keeps the historical
+// non-recursive DeleteLocation behaviour; an unrecognised value yields an error
+// so the handler can answer 422 before touching any data.
+func resolveLocationDeleteStrategy(svc *services.EntityService, strategy string) (entityDeleteFunc, error) {
+	switch strategy {
+	case "":
+		return svc.DeleteLocation, nil
+	case "cascade":
+		return svc.DeleteLocationRecursive, nil
+	case "unlink":
+		return svc.UnlinkAndDeleteLocation, nil
+	default:
+		return nil, errInvalidDeleteStrategy
+	}
 }
 
 // updateLocation updates a location.
@@ -277,8 +302,10 @@ func (api *locationsAPI) updateLocation(w http.ResponseWriter, r *http.Request) 
 // #1399 backfill in production; that drop is a separate follow-up.
 
 // Locations returns a Chi router function that registers all location-related routes.
-func Locations() func(r chi.Router) {
-	api := &locationsAPI{}
+func Locations(params Params) func(r chi.Router) {
+	api := &locationsAPI{
+		entityService: params.EntityService,
+	}
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listLocations) // GET /locations
 		r.Route("/{locationID}", func(r chi.Router) {
