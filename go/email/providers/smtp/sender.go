@@ -167,10 +167,14 @@ func buildMIMEMessage(message sender.Message) []byte {
 	return []byte(b.String())
 }
 
+// headerSanitizer strips CR and LF from header values. A Replacer is
+// concurrency-safe and reusable, so it is built once rather than per call.
+var headerSanitizer = strings.NewReplacer("\r", "", "\n", "")
+
 // sanitizeHeader strips CR and LF from a header value so user-influenced
 // data (e.g. a commodity name interpolated into the Subject) can't inject
 // additional headers or message body. RFC 5322 header field values are
 // single-line. #2139
 func sanitizeHeader(v string) string {
-	return strings.NewReplacer("\r", "", "\n", "").Replace(v)
+	return headerSanitizer.Replace(v)
 }
