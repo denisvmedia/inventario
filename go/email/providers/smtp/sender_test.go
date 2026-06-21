@@ -5,6 +5,7 @@ import (
 	"context"
 	"mime"
 	"net"
+	"net/mail"
 	"strconv"
 	"strings"
 	"testing"
@@ -215,6 +216,29 @@ func TestEncodeSubject_PicksCompactEncoding(t *testing.T) {
 		c.Assert(len(got) <= len(mime.QEncoding.Encode("UTF-8", s)), qt.IsTrue)
 		c.Assert(len(got) <= len(mime.BEncoding.Encode("UTF-8", s)), qt.IsTrue)
 	}
+}
+
+// #2139: the assembled message must be a well-formed email — net/mail's
+// parser accepts it and the encoded non-ASCII Subject decodes back. This
+// guards the whole MIME structure (header block, boundary), not just one
+// header.
+func TestBuildMIMEMessage_ParsesAsValidEmail(t *testing.T) {
+	c := qt.New(t)
+	raw := buildMIMEMessage(sender.Message{
+		From:    "Inventario <noreply@example.com>",
+		To:      "user@example.com",
+		ReplyTo: "support@example.com",
+		Subject: "Подтвердите свою учётную запись Inventario",
+		Text:    "text",
+		HTML:    "<p>html</p>",
+	})
+	msg, err := mail.ReadMessage(strings.NewReader(string(raw)))
+	c.Assert(err, qt.IsNil)
+	c.Assert(msg.Header.Get("To"), qt.Equals, "user@example.com")
+	c.Assert(msg.Header.Get("Reply-To"), qt.Equals, "support@example.com")
+	decoded, err := new(mime.WordDecoder).DecodeHeader(msg.Header.Get("Subject"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(decoded, qt.Equals, "Подтвердите свою учётную запись Inventario")
 }
 
 // mimeHeaderValue returns the value of the first `key: ` header in the
