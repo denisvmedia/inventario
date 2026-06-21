@@ -959,7 +959,7 @@ function HelpSection() {
           // renders on the "whatsNew" row.
           const labelKey = key
           const isModal = href.startsWith("modal:")
-          const isExternal = href.startsWith("http")
+          const isExternal = /^https?:\/\//.test(href)
           const RowInner = (
             <>
               <div className="flex items-center gap-2">
