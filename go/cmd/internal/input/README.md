@@ -1,319 +1,219 @@
 # Interactive Input Abstraction
 
-This package provides a comprehensive interactive command input abstraction for Go CLI applications with support for various input types, validation, and user-friendly prompting.
+This package provides an interactive command-line input abstraction for the Inventario CLI, with support for several input types, per-field validation, and re-prompting on invalid input.
 
 ## Features
 
-- **Multiple Input Types**: Support for `bool`, `password`, `string`, and `int` input types
-- **Validation Integration**: Seamless integration with `github.com/jellydator/validation` package
-- **Fluent API**: Builder pattern for creating input prompts with method chaining
-- **Error Handling**: Automatic re-prompting on validation failures with clear error messages
-- **Default Values**: Support for optional fields with default values
-- **Secure Input**: Hidden password input with confirmation prompts
-- **Flexible Formatting**: Multiple boolean prompt formats (y/n, Y/n, y/N, yes/no)
-- **Range Validation**: Min/max constraints for numeric and string inputs
+- **Multiple Input Types**: `bool`, `string`, `password`, and `int` fields
+- **Reader-based I/O**: every field reads from a `*Reader` wrapping an `io.Reader` / `io.Writer`, so input/output are injectable (and easy to test)
+- **Fluent API**: chainable field configuration (each method returns a new field copy)
+- **Re-prompting**: on a validation error the user is re-prompted; non-validation errors (EOF, interrupts) are returned immediately
+- **Default Values**: optional fields can carry a default
+- **Secure Input**: hidden password input with an optional confirmation prompt
+- **Per-field Validation**: `ValidateEmail` / `ValidateSlug` / `ValidateStrength` / `ValidateCustom`
+
+## Core Types
+
+- **`Reader`** — wraps input/output; created with `NewReader(in io.Reader, out io.Writer)` or `NewDefaultReader()` (stdin/stdout).
+- **Field types** — `StringField`, `BoolField`, `PasswordField`, `IntField`, each created with `New<Type>Field(label string, reader *Reader)` and satisfying the `InputField` interface (`Prompt(ctx) (any, error)`).
+- **`Quick`** — one-off helpers; created with `NewQuick(in io.Reader, out io.Writer)` or `NewDefaultQuick()`.
+- **`Form`** — collects multiple fields at once; created with `NewForm(in io.Reader, out io.Writer)` or `NewDefaultForm()`.
+
+> There is no `Builder` type and no standalone validator constructors — validation lives on the field types as `Validate*` methods.
 
 ## Quick Start
 
-### Simple Usage with Quick API
+### Single fields
+
+This is the pattern the CLI commands use (see `cmd/inventario/users/create`):
 
 ```go
-package main
-
 import (
     "context"
-    "fmt"
+    "os"
+
     "github.com/denisvmedia/inventario/cmd/internal/input"
 )
 
-func main() {
-    ctx := context.Background()
-    quick := input.NewQuick()
+ctx := context.Background()
+reader := input.NewReader(os.Stdin, os.Stdout)
 
-    // Simple string input
-    name, err := quick.String(ctx, "Your name")
-    if err != nil {
-        panic(err)
-    }
+emailField := input.NewStringField("Email", reader).
+    Required().
+    ValidateEmail()
 
-    // String with default
-    email, err := quick.StringWithDefault(ctx, "Email", "user@example.com")
-    if err != nil {
-        panic(err)
-    }
-
-    // Boolean input
-    confirm, err := quick.Bool(ctx, "Confirm")
-    if err != nil {
-        panic(err)
-    }
-
-    // Password input
-    password, err := quick.Password(ctx, "Password")
-    if err != nil {
-        panic(err)
-    }
-
-    fmt.Printf("Name: %s, Email: %s, Confirm: %t\n", name, email, confirm)
+value, err := emailField.Prompt(ctx)
+if err != nil {
+    return err
 }
+email := value.(string)
+
+passwordField := input.NewPasswordField("Password", reader).
+    ValidateStrength()
+
+pwValue, err := passwordField.Prompt(ctx)
+if err != nil {
+    return err
+}
+password := pwValue.(string)
 ```
 
-### Advanced Usage with Builder API
+### Quick API
 
 ```go
-package main
+ctx := context.Background()
+quick := input.NewQuick(os.Stdin, os.Stdout) // or input.NewDefaultQuick()
 
-import (
-    "context"
-    "github.com/denisvmedia/inventario/cmd/internal/input"
-)
-
-func main() {
-    ctx := context.Background()
-    
-    builder := input.NewBuilder()
-
-    // String field with validation
-    builder.String("email").
-        Required().
-        Validate(input.EmailValidator())
-
-    // Password field with strength validation
-    builder.Password("password").
-        Validate(input.PasswordStrengthValidator())
-
-    // Boolean field with default
-    builder.Bool("newsletter").
-        DefaultYes()
-
-    // Integer field with range
-    builder.Int("age").
-        Range(18, 100)
-
-    // Collect all values
-    values, err := builder.Collect(ctx)
-    if err != nil {
-        panic(err)
-    }
-
-    // Access values
-    email := values["email"].(string)
-    password := values["password"].(string)
-    newsletter := values["newsletter"].(bool)
-    age := values["age"].(int)
-}
+name, err := quick.String(ctx, "Your name")
+email, err := quick.Email(ctx, "Email")   // string field with ValidateEmail
+slug, err := quick.Slug(ctx, "Slug")      // string field with ValidateSlug
+confirm, err := quick.Bool(ctx, "Confirm")
+password, err := quick.Password(ctx, "Password")
+age, err := quick.Int(ctx, "Age")
 ```
 
-### Form API with Struct Population
+### Form API
+
+`Form` collects all added fields and returns a `map[string]any` keyed by the field label.
 
 ```go
-package main
+ctx := context.Background()
+form := input.NewForm(os.Stdin, os.Stdout) // or input.NewDefaultForm()
 
-import (
-    "context"
-    "github.com/denisvmedia/inventario/cmd/internal/input"
-)
+form.AddString("name").Required().MinLength(2)
+form.AddString("email").Required().ValidateEmail()
+form.AddInt("age").Range(18, 100)
+form.AddBool("active").DefaultYes()
 
-type User struct {
-    Name     string `json:"name"`
-    Email    string `json:"email"`
-    Age      int    `json:"age"`
-    Active   bool   `json:"active"`
+values, err := form.Collect(ctx)
+if err != nil {
+    return err
 }
 
-func main() {
-    ctx := context.Background()
-    
-    form := input.NewForm()
-
-    form.String("name").Required().MinLength(2)
-    form.String("email").Required().Validate(input.EmailValidator())
-    form.Int("age").Range(18, 100)
-    form.Bool("active").DefaultYes()
-
-    var user User
-    err := form.CollectInto(ctx, &user)
-    if err != nil {
-        panic(err)
-    }
-
-    // user struct is now populated
-}
+name := values["name"].(string)
+email := values["email"].(string)
+age := values["age"].(int)
+active := values["active"].(bool)
 ```
 
 ## Input Types
 
-### String Input
+### String Input (`StringField`)
 
 ```go
-field := input.NewStringField("Name", prompter).
+reader := input.NewReader(os.Stdin, os.Stdout)
+field := input.NewStringField("Name", reader).
     Required().
     MinLength(2).
     MaxLength(50).
-    Validate(input.SlugValidator())
+    ValidateSlug()
 ```
 
 **Methods:**
-- `Required()` / `Optional()` - Set field requirement
-- `Default(value)` - Set default value
-- `MinLength(min)` - Set minimum length
-- `MaxLength(max)` - Set maximum length
-- `Length(min, max)` - Set both min and max length
-- `Validate(rules...)` - Add validation rules
+- `Required()` / `Optional()` — set field requirement
+- `Default(value)` — set default value
+- `MinLength(n)` / `MaxLength(n)` — length constraints
+- `ValidateEmail()` — require a valid email address
+- `ValidateSlug()` — require a valid slug (lowercase letters, numbers, hyphens)
+- `ValidateCustom(func(string) error)` — custom validation
+- `SetReader(*Reader)` — swap the reader (used in tests)
 
-### Boolean Input
+### Boolean Input (`BoolField`)
 
 ```go
-field := input.NewBoolField("Confirm", prompter).
-    DefaultYes().
-    YesNo()
+field := input.NewBoolField("Confirm", reader).DefaultYes()
 ```
 
 **Methods:**
-- `Required()` / `Optional()` - Set field requirement
-- `Default(value)` - Set default value
-- `DefaultYes()` - Set default to true with Y/n format
-- `DefaultNo()` - Set default to false with y/N format
-- `Format(format)` - Set prompt format
-- `YesNo()` - Use full words format
+- `Required()` / `Optional()` — set field requirement
+- `DefaultYes()` — default true (prompt shows `Y/n`)
+- `DefaultNo()` — default false (prompt shows `y/N`)
+- `SetReader(*Reader)` — swap the reader (used in tests)
 
-**Formats:**
-- `BoolFormatYN` - Equal weight (y/n)
-- `BoolFormatYesN` - Default yes (Y/n)
-- `BoolFormatYNo` - Default no (y/N)
-- `BoolFormatYesNo` - Full words (yes/no)
+Accepted answers: `y`/`Y`/`yes`/`Yes`/`YES` for true, `n`/`N`/`no`/`No`/`NO` for false.
 
-### Password Input
+### Password Input (`PasswordField`)
 
 ```go
-field := input.NewPasswordField("Password", prompter).
+field := input.NewPasswordField("Password", reader).
     MinLength(8).
-    Validate(input.PasswordStrengthValidator())
+    ValidateStrength()
 ```
 
-**Methods:**
-- `Required()` / `Optional()` - Set field requirement
-- `WithConfirmation()` / `NoConfirmation()` - Enable/disable confirmation
-- `MinLength(min)` - Set minimum length
-- `MaxLength(max)` - Set maximum length
-- `Length(min, max)` - Set both min and max length
-- `Validate(rules...)` - Add validation rules
+Passwords are **required and confirmed by default**.
 
-### Integer Input
+**Methods:**
+- `Required()` / `Optional()` — set field requirement
+- `WithConfirmation()` / `NoConfirmation()` — enable/disable the confirmation prompt
+- `MinLength(n)` — minimum length
+- `ValidateStrength()` — require 8+ chars with upper, lower, and a digit
+- `ValidateCustom(func(string) error)` — custom validation
+- `SetReader(*Reader)` — swap the reader (used in tests)
+
+### Integer Input (`IntField`)
 
 ```go
-field := input.NewIntField("Age", prompter).
+field := input.NewIntField("Age", reader).
     Range(18, 100).
     Default(25)
 ```
 
 **Methods:**
-- `Required()` / `Optional()` - Set field requirement
-- `Default(value)` - Set default value
-- `Min(min)` - Set minimum value
-- `Max(max)` - Set maximum value
-- `Range(min, max)` - Set both min and max value
-- `Positive()` - Constrain to positive values (> 0)
-- `NonNegative()` - Constrain to non-negative values (>= 0)
-- `Validate(rules...)` - Add validation rules
+- `Required()` / `Optional()` — set field requirement
+- `Default(value)` — set default value
+- `Min(n)` / `Max(n)` — value constraints
+- `Range(min, max)` — set both
+- `Positive()` — `> 0`
+- `NonNegative()` — `>= 0`
+- `SetReader(*Reader)` — swap the reader (used in tests)
 
-## Validation Helpers
+## Validation
 
-The package provides common validation helpers:
+Validation is attached per field via the `Validate*` methods listed above. Under the hood they use the package helpers in `patterns.go`:
 
-```go
-// Email validation
-input.EmailValidator()
+- `IsValidEmail(string) bool`
+- `IsValidSlug(string) bool`
+- `IsValidPassword(string) bool` (8+ chars with upper, lower, and a digit)
 
-// Password strength (8+ chars, upper, lower, digit)
-input.PasswordStrengthValidator()
+A failed validation surfaces as an `AnswerError` (see `errors.go`), which the field's `Prompt` loop catches and re-prompts on. A missing required field surfaces as a `RequiredFieldError`.
 
-// Slug format (lowercase, alphanumeric, hyphens)
-input.SlugValidator()
+## Integration with Cobra Commands
 
-// Length constraints
-input.MinLengthValidator(5)
-input.MaxLengthValidator(100)
-input.LengthValidator(5, 100)
-
-// Numeric constraints
-input.MinValidator(0)
-input.MaxValidator(100)
-input.RangeValidator(0, 100)
-
-// Custom validation
-input.CustomValidator(func(value any) error {
-    // Custom validation logic
-    return nil
-})
-```
-
-## Integration with Commands
-
-### Using with Cobra Commands
+Build a `*Reader` from the command's output writer so prompts go to the right stream:
 
 ```go
-func (c *Command) collectUserInput() (*UserRequest, error) {
-    ctx := context.Background()
-
-    // Create fields with command output
-    emailField := input.NewStringField("Email", input.NewDefaultPrompter()).
+func (c *Command) collectEmail(ctx context.Context) (string, error) {
+    reader := input.NewReader(os.Stdin, c.Cmd().OutOrStdout())
+    emailField := input.NewStringField("Email", reader).
         Required().
-        Validate(input.EmailValidator())
-    emailField.BaseField.Prompter.SetOutput(c.Cmd().OutOrStdout())
+        ValidateEmail()
 
-    passwordField := input.NewPasswordField("Password", input.NewDefaultPrompter()).
-        Validate(input.PasswordStrengthValidator())
-    passwordField.BaseField.Prompter.SetOutput(c.Cmd().OutOrStdout())
-
-    // Collect input
-    email, err := emailField.Prompt(ctx)
+    value, err := emailField.Prompt(ctx)
     if err != nil {
-        return nil, err
+        return "", err
     }
-
-    password, err := passwordField.Prompt(ctx)
-    if err != nil {
-        return nil, err
+    email, ok := value.(string)
+    if !ok {
+        return "", fmt.Errorf("unexpected type returned from email field")
     }
-
-    return &UserRequest{
-        Email:    email.(string),
-        Password: password.(string),
-    }, nil
+    return email, nil
 }
 ```
 
-## Error Handling
-
-The input system automatically handles validation errors by re-prompting the user:
-
-```go
-// This will keep prompting until valid email is entered
-email, err := input.NewStringField("Email", prompter).
-    Required().
-    Validate(input.EmailValidator()).
-    Prompt(ctx)
-```
-
-For non-validation errors (EOF, interrupts), the error is returned immediately.
-
 ## Testing
 
-The package is designed to be easily testable by allowing custom input/output:
+The package is easy to test by injecting a `*Reader` over in-memory buffers:
 
 ```go
 func TestInput(t *testing.T) {
     var output bytes.Buffer
-    inputReader := strings.NewReader("test@example.com\n")
+    reader := input.NewReader(strings.NewReader("test@example.com\n"), &output)
 
-    prompter := input.NewDefaultPrompter()
-    prompter.SetOutput(&output)
-    prompter.SetInput(inputReader)
-
-    field := input.NewStringField("Email", prompter).Required()
+    field := input.NewStringField("Email", reader).Required().ValidateEmail()
     result, err := field.Prompt(context.Background())
 
-    // Assert result and output
+    // assert on result and output
 }
 ```
+
+`SetReader` can also swap a field's reader after construction, which is handy when wiring fields up before the input source is known.

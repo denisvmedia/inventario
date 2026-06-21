@@ -56,7 +56,7 @@ Locations (Top-level containers)
   - Status: Draft, Active, Sold, Lost, Disposed, Written Off
   - Dates: Purchase Date, Registration Date, Last Modified
   - Organization: Tags, Comments, URLs
-- **Relationships**: Belongs to one Area, has multiple Files (Images, Invoices, Manuals)
+- **Relationships**: Optionally filed under one Area — `AreaID` is nullable (#1986), so a commodity may be unassigned ("No location"); has multiple Files (Images, Invoices, Manuals)
 
 #### File Management
 - **File Types**: Images, Invoices, Manuals

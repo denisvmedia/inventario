@@ -1,75 +1,88 @@
 # Export Package
 
-The `export` package is a core Go package that handles XML export operations in the Inventario application. It provides comprehensive functionality to export inventory data to XML format with support for various export types, file attachments, and background processing.
+The `export` package is a core Go package that handles backup export generation in the Inventario application. By default it produces a **signed, streaming `.inb` archive** (issue #534): a tar containing a signed payload plus the gzip-compressed payload itself. The obsolete XML format is retained only behind the `legacy_xml_backup` build tag.
 
 ## Overview
 
-The export package is responsible for generating XML exports of inventory data, including locations, areas, commodities, and their associated files (images, invoices, manuals). It supports multiple export types and implements streaming approaches to handle large datasets efficiently without memory exhaustion.
+The export package generates backup archives of inventory data, including locations, areas, commodities, and their associated commodity files (images, invoices, manuals). The default build streams the archive directly to blob storage without ever holding the whole payload (or any single file) in memory.
+
+## Backup Format
+
+### Default: signed `.inb` (streaming JSON)
+
+Files in this package split by build tag:
+
+- `jsonexport.go`, `inb_types.go`, `inb_builder.go` (under `//go:build !legacy_xml_backup`) — the default `.inb` exporter.
+- `service_legacy_xml.go`, `worker_legacy_xml.go` (under `//go:build legacy_xml_backup`) — the deprecated XML exporter.
+- `service_shared.go`, `worker.go`, `userinput.go`, `errors.go` — build-agnostic glue (service struct, worker, file-entity creation).
+
+An `.inb` artifact is an **outer tar** (`internal/inb`) holding:
+
+1. `payload.tar.gz.sig` — an Ed25519 signature (`internal/backupsign`) over the streaming SHA-256 digest of the payload.
+2. `payload.tar.gz` — a gzip(tar) payload whose members are:
+   - `manifest.json` — written first; format, signing-key info, per-location index, and aggregate statistics (see `inb_types.go`).
+   - one `location-<slug>-<uuid>.json` member per location (location → areas → commodities, each commodity bundling its image/invoice/manual file references).
+   - `unassigned-commodities.json` — area-less commodities, written only when at least one is in scope (issue #1986).
+   - `files/<loc>/<commodity>/<bucket>/<name>` — the raw bytes of each referenced commodity file, streamed directly from blob storage.
+
+The exporter stamps the resulting `FileEntity` with `Ext=".inb"`, `MIMEType="application/x-inventario-backup"`, and `LinkedEntityMeta="inb-2.0"` (`exportFileMeta` in `jsonexport.go`).
+
+### Legacy: XML (build-tag-gated)
+
+The pre-#534 XML format (root `<inventory>` with base64-embedded file data) is **deprecated** and compiled only with `go build -tags legacy_xml_backup`. Do not write new code against it.
 
 ## Key Features
 
 ### 1. Multiple Export Types
 - **Full Database**: Complete export of all inventory data
 - **Selected Items**: Export specific locations, areas, or commodities
-- **Locations**: Export only location data
-- **Areas**: Export only area data
-- **Commodities**: Export only commodity data
-- **Imported**: Special type for externally imported exports
+- **Locations / Areas / Commodities**: Scoped exports
+- **Imported**: Placeholder type for externally imported backups (skipped by the worker)
 
 ### 2. File Data Handling
-- Optional inclusion of binary file data (images, invoices, manuals)
-- Base64 encoding of file content for XML embedding
-- Streaming approach to prevent memory issues with large files
-- Support for multiple file types with proper MIME type handling
+- Commodity files (images, invoices, manuals) are streamed straight from blob storage into the archive — never base64-buffered in memory.
+- Each file member carries its original basename and metadata so a restore reproduces the original filename.
 
 ### 3. Background Processing
 - Worker-based architecture for asynchronous export generation
 - Prevents API timeouts on large exports
 - Semaphore-based concurrency control
-- Automatic cleanup of deleted exports
+- Soft-pause aware (#1308)
 
 ### 4. Statistics Tracking
-- Comprehensive statistics collection during export generation
-- Counts for locations, areas, commodities, and files
-- Binary data size tracking
-- Performance metrics and error reporting
+- Counts for locations, areas, commodities, images, invoices, manuals, and total files
+- Binary data size tracking, surfaced both on the `Export` record and in `manifest.json`
 
-### 5. Streaming XML Generation
-- Memory-efficient streaming approach for large datasets
-- Direct file-to-XML streaming without loading into memory
-- Chunked processing to handle massive inventories
-- Real-time statistics collection during streaming
+### 5. Memory-Safe Streaming
+- The inner `payload.tar.gz` is spooled to a **local temp file** while a streaming SHA-256 digest is computed via `io.MultiWriter`.
+- The signature is taken over that digest (never over a buffered payload), then the finished container is streamed from the temp file into blob storage.
 
 ## Architecture
 
 ### Core Components
 
-#### ExportService (`service.go`)
+#### ExportService (`service_shared.go`, `jsonexport.go`)
 The main service responsible for export generation:
-- **ProcessExport()**: Main method that orchestrates export generation
-- **generateExport()**: Creates XML files using blob storage
-- **streamXMLExport()**: Streams XML generation with statistics tracking
-- **ParseXMLMetadata()**: Parses existing XML files to extract metadata
-- Supports multiple export types with specialized streaming methods
+- **ProcessExport()** (`service_shared.go`): orchestrates an export — loads the record, injects user/group context, calls the per-build `generateExport`, creates the backing `FileEntity`, and records statistics. Format-agnostic.
+- **generateExport()** (`jsonexport.go`): produces the signed `.inb` archive and returns its blob key plus statistics.
+- **writePayload() / writeContainerToBlob()** (`jsonexport.go`): build and sign the streaming payload, then stream the container to blob storage.
 
 #### ExportWorker (`worker.go`)
 Background worker that manages export processing:
-- **Start()**: Begins processing exports in the background
-- **Stop()**: Gracefully stops the export worker
-- **processPendingExports()**: Finds and processes pending export requests
-- **cleanupDeletedExports()**: Removes files for soft-deleted exports
-- Configurable poll intervals (default: 10 seconds for exports, 1 hour for cleanup)
+- **Start() / Stop() / IsRunning()**: lifecycle control
+- **processPendingExports()**: finds and processes pending export requests; skips imported exports and respects soft-pause
+- Configurable poll interval (default: 10 seconds)
 - Semaphore-based concurrency limiting
 
-#### Export Types (`types.go`)
-Defines XML structure and data types:
-- **XMLInventory**: Root element containing all export data
-- **XMLLocation**, **XMLArea**, **XMLCommodity**: Entity representations
-- **File**: File attachment structure with base64 data
-- **ExportStats**: Statistics tracking during generation
-- **ExportArgs**: Configuration options for export operations
+#### `.inb` Schemas (`inb_types.go`)
+Defines the JSON documents written into the inner tar (kept in sync with `backup/restore/types/types_inb.go`):
+- **INBManifest**, **INBManifestLoc**, **INBManifestStats**, **INBSignatureInfo**
+- **INBLocationDoc**, **INBLocation**, **INBArea**, **INBCommodity**, **INBFileRef**
+- **INBUnassignedDoc** (area-less commodities, #1986)
+- Format constants: `INBFormatVersion = "2.0"`, `INBManifestName`, `INBUnassignedName`, `INBFilesPrefix`
 
-### Export Types and Models
+#### Export Types (`models/export.go`)
+- `ExportTypeFullDatabase`, `ExportTypeSelectedItems`, `ExportTypeLocations`, `ExportTypeAreas`, `ExportTypeCommodities`, `ExportTypeImported`
 
 #### Export Status Flow
 ```
@@ -77,45 +90,39 @@ Pending → In Progress → Completed
                     ↘ Failed
 ```
 
-#### Export Types (`models/export.go`)
-- `ExportTypeFullDatabase`: Complete inventory export
-- `ExportTypeSelectedItems`: User-selected items export
-- `ExportTypeLocations`: Location-only export
-- `ExportTypeAreas`: Area-only export
-- `ExportTypeCommodities`: Commodity-only export
-- `ExportTypeImported`: External import placeholder
-
 ## Data Flow
 
 ### Standard Export Process
-1. **Request Creation**: User creates export request via API
+1. **Request Creation**: User creates an export request via API
 2. **Record Storage**: Export record created with "pending" status
-3. **Worker Detection**: ExportWorker polls and detects pending export
-4. **Processing**: ExportService generates XML file with streaming approach
-5. **Statistics Collection**: Real-time tracking of exported entities and file sizes
-6. **Completion**: Export record updated with file path, statistics, and "completed" status
-7. **Download**: Users can download generated XML files
-
-### Import Process (External Files)
-1. **File Upload**: User uploads external XML file
-2. **Import Record**: System creates export record with type "imported"
-3. **Metadata Extraction**: ParseXMLMetadata extracts statistics without data restoration
-4. **Catalog Integration**: Import appears in export catalog for management
+3. **Worker Detection**: `ExportWorker` polls and detects the pending export
+4. **Processing**: `ExportService` generates a signed `.inb` archive and streams it to blob storage
+5. **Statistics Collection**: real-time tracking of exported entities and file sizes
+6. **File Entity**: a `FileEntity` is created for the artifact and linked to the export
+7. **Completion**: export record updated with file id, statistics, size, and "completed" status
 
 ## Usage
 
 ### Creating an Export Service
 ```go
-import "github.com/denisvmedia/inventario/backup/export"
+import (
+    "github.com/denisvmedia/inventario/backup/export"
+    "github.com/denisvmedia/inventario/internal/backupsign"
+)
 
-// Create export service
-service := export.NewExportService(registrySet, uploadLocation)
+// signer is *backupsign.Signer (consumed by the .inb exporter; ignored by the
+// legacy XML exporter, so the signature is the same across both builds).
+service := export.NewExportService(factorySet, uploadLocation, signer)
 ```
 
 ### Starting the Export Worker
 ```go
-// Create worker with max 3 concurrent exports
-worker := export.NewExportWorker(exportService, registrySet, 3)
+// Create worker with max 3 concurrent exports.
+worker := export.NewExportWorker(exportService, factorySet, 3)
+
+// Optional configuration via functional options:
+//   export.WithPollInterval(5 * time.Second)
+//   export.WithPauseController(pauseController) // #1308 soft-pause
 
 // Start background processing
 ctx := context.Background()
@@ -134,119 +141,55 @@ if err != nil {
 }
 ```
 
-### Custom Export Arguments
+### Export Arguments
 ```go
 args := export.ExportArgs{
-    IncludeFileData: true, // Include binary file data
+    IncludeFileData: true, // Include commodity file bytes in the archive
 }
-```
-
-## XML Structure
-
-### Root Element
-```xml
-<inventory xmlns="http://inventario.example.com/schema"
-           exportDate="2024-01-15T10:30:00Z"
-           exportType="full_database">
-```
-
-### Entity Sections
-- `<locations>`: Location data with nested areas
-- `<areas>`: Standalone area data
-- `<commodities>`: Commodity data with file attachments
-
-### File Attachments
-```xml
-<file id="123" path="image_001" originalPath="uploads/image_001.jpg"
-      extension=".jpg" mimeType="image/jpeg">
-  <data>base64encodedcontent...</data>
-</file>
 ```
 
 ## Performance Considerations
 
 ### Memory Efficiency
-- **Streaming Approach**: XML generation streams directly to storage
-- **Chunked Processing**: Large datasets processed in manageable chunks
-- **File Streaming**: Binary files streamed without loading into memory
-- **Statistics Tracking**: Real-time collection without memory accumulation
+- **Temp-file spooling**: the payload is digested and signed via a local temp file, never buffered on the heap.
+- **File streaming**: commodity file bytes are copied straight from blob storage into the tar.
+- **Manifest-first layout**: statistics are fully known before any payload bytes are written, so the import metadata path reads them without inflating file bodies.
 
 ### Concurrency Control
-- **Semaphore Limiting**: Prevents resource exhaustion during concurrent exports
-- **Background Processing**: Asynchronous generation prevents API timeouts
-- **Worker Isolation**: Export and cleanup operations run independently
-
-### Storage Optimization
-- **Blob Storage**: Efficient file storage with cloud provider support
-- **Cleanup Automation**: Automatic removal of deleted export files
-- **Compression**: XML files benefit from HTTP compression during download
+- **Semaphore Limiting**: bounds concurrent exports
+- **Background Processing**: asynchronous generation prevents API timeouts
 
 ## Error Handling
-
-### Comprehensive Error Management
-- **Graceful Degradation**: Individual file failures don't stop entire export
-- **Status Tracking**: Failed exports marked with detailed error messages
-- **Retry Logic**: Worker automatically retries failed operations
-- **Logging**: Detailed logging for debugging and monitoring
-
-### Error Recovery
-- **Partial Success**: Statistics reflect successfully processed items
-- **File Fallbacks**: Missing files logged but don't fail entire export
-- **Status Updates**: Real-time status updates during processing
+- **Status Tracking**: failed exports are marked with a detailed error message
+- **Atomic completion**: the export record is only marked completed after the artifact and its `FileEntity` are written
 
 ## Testing
 
 ### Test Coverage
-- **Unit Tests**: `service_test.go`, `worker_test.go`, `types_test.go`
-- **Integration Tests**: End-to-end export generation and parsing
-- **Performance Tests**: Large dataset handling and memory usage
-- **Concurrency Tests**: Multi-worker scenarios and race conditions
-
-### Test Framework
+- **Unit Tests**: `service_test.go`, `streaming_test.go`, `worker_test.go`, `worker_pause_test.go`
 - Uses frankban's quicktest framework
-- Table-driven tests for multiple scenarios
-- Mock registries for isolated testing
+- Memory registries for isolated testing
 - Temporary file handling for integration tests
 
 ## Configuration
 
-### Environment Variables
-- **Upload Location**: Configurable blob storage location
-- **Worker Concurrency**: Maximum concurrent export operations
-- **Poll Intervals**: Export processing and cleanup frequencies
-- **File Size Limits**: Maximum export file sizes
+### Inputs
+- **Upload Location**: blob storage location for the generated artifact
+- **Signer**: `*backupsign.Signer` used to sign the `.inb` archive
+- **Worker Concurrency**: maximum concurrent export operations
+- **Poll Interval**: export queue polling frequency (`WithPollInterval`)
 
 ### Database Integration
-- **Export Registry**: Stores export metadata and status
-- **Entity Registries**: Access to locations, areas, commodities
-- **File Registries**: Access to images, invoices, manuals
-- **Settings Registry**: Global configuration access
+- **Export Registry**: export metadata and status
+- **Entity / File Registries**: access to locations, areas, commodities, and their files
+- **User / Group Registries**: resolved into context for worker-driven exports
 
 ## Integration Points
 
 ### API Server Integration
-- **REST Endpoints**: `/api/v1/exports` for CRUD operations
-- **Download Endpoints**: Streaming file downloads
-- **Import Endpoints**: External file upload and processing
-- **Status Endpoints**: Real-time export status checking
-
-### Frontend Integration
-- **Export Service**: TypeScript service for API communication
-- **Progress Tracking**: Real-time status updates
-- **Download Management**: File download handling
-- **Import Interface**: External file upload interface
+- **REST Endpoints**: `/api/v1/exports` for CRUD operations and downloads
+- **Public Key**: `/api/v1/backup/public-key` exposes the server's backup verification key
 
 ### Storage Integration
-- **Blob Storage**: Cloud-agnostic file storage
-- **Database Storage**: Metadata and status persistence
-- **File Management**: Automatic cleanup and organization
-
-## Future Enhancements
-
-Potential areas for future development:
-- **Progress Reporting**: Real-time progress updates during generation
-- **Compression Options**: Optional ZIP compression for large exports
-- **Format Support**: Revise the format to use tar.gz, which will contain XML file with DB records and files that the XML refers to
-- **Scheduling**: Automated export generation on schedules
-- **Validation**: XML schema validation for generated exports
-- **Encryption**: Optional encryption for sensitive data exports
+- **Blob Storage**: cloud-agnostic file storage, tenant-namespaced (#1793)
+- **Database Storage**: metadata and status persistence

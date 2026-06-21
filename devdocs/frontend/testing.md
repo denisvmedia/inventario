@@ -9,17 +9,25 @@ frontend/src/test/
 ├── setup.ts          # global hooks: jest-dom, jest-axe, MSW server, sonner mock, i18n boot, matchMedia stub
 ├── server.ts         # shared msw `setupServer()` instance
 ├── render.tsx        # `renderWithProviders()` helper
-└── handlers/         # per-endpoint MSW factories
+└── handlers/         # per-endpoint MSW factories (18 modules)
     ├── index.ts      # public surface — re-exports + apiUrl helper
+    ├── areas.ts
     ├── auth.ts
-    ├── groups.ts
+    ├── backoffice.ts
     ├── commodities.ts
-    ├── locations.ts
-    ├── files.ts
-    ├── tags.ts
+    ├── commodityScan.ts
+    ├── currencyMigrations.ts
     ├── exports.ts
+    ├── files.ts
+    ├── groups.ts
+    ├── loans.ts
+    ├── locations.ts
+    ├── maintenance.ts
     ├── members.ts
-    └── search.ts
+    ├── search.ts
+    ├── services.ts
+    ├── supplies.ts
+    └── tags.ts
 ```
 
 ## `renderWithProviders`
@@ -169,10 +177,10 @@ Enforced in `vitest.config.ts` — CI fails if coverage drops below:
 
 | Metric     | Threshold |
 | ---------- | --------- |
-| Statements | 80%       |
-| Lines      | 80%       |
-| Functions  | 80%       |
-| Branches   | 70%       |
+| Statements | 76%       |
+| Lines      | 79%       |
+| Functions  | 75%       |
+| Branches   | 67%       |
 
 Excluded paths:
 
@@ -182,7 +190,7 @@ Excluded paths:
 - `src/i18n/i18next.config.ts` — lazy backend for cs/ru exercised by the Settings page locale toggle (#1414).
 - `src/main.tsx`, `src/types/**`, `src/vite-env.d.ts` — entry / generated.
 
-Bump thresholds upward as feature pages land — never downward without a written reason in the PR body.
+Bump thresholds upward as feature pages land; only lower them with a written reason in the PR body (the current numbers reflect the #1629 Radix-Select coverage gap — see the rationale comment in `vitest.config.ts`).
 
 ## Snapshot policy
 

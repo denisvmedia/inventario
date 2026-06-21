@@ -14,7 +14,7 @@
 | **What does it give a contributor?** | Label a PR `preview` → within ~5 min the PR comment posts a hostname `inv-vcl01-prN`. Any tailnet member opens `https://inv-vcl01-prN.<tailnet>.ts.net/` and gets a fully-functional Inventario with that PR's code, demo Postgres/Redis/MinIO, and seeded sample data. Unlabel or close the PR → preview disappears within a poll cycle. |
 | **What is the cluster?** | A single-VM Kubernetes cluster on Proxmox (VM 101 @ host `your-proxmox-host`, Ubuntu 26.04) running [vcluster](https://www.vcluster.com) standalone with [ArgoCD](https://argo-cd.readthedocs.io) on top and the [Tailscale Kubernetes Operator](https://tailscale.com/kb/1236/kubernetes-operator) for tailnet-bound Ingresses. |
 | **How does a PR turn into a preview?** | ArgoCD's [ApplicationSet](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/) PR generator polls GitHub every 60 s, sees PRs labeled `preview`, spawns an `Application` per PR that templates the helm chart at the PR's head commit. ArgoCD syncs the chart into a per-PR namespace. The Tailscale Operator notices the chart's Ingress, provisions a tailnet proxy node with a `tailscale.com/hostname` annotation, and the URL becomes reachable. |
-| **What's NOT in scope (yet)?** | Auto-rollout when only the `master` tag's digest changes ([#1885](https://github.com/denisvmedia/inventario/issues/1885)); production-grade admin password from sops ([#1883](https://github.com/denisvmedia/inventario/issues/1883)); in-place migrations under ArgoCD upgrade ([#1884](https://github.com/denisvmedia/inventario/issues/1884)); chart-side `tls[].secretName` polish ([#1882](https://github.com/denisvmedia/inventario/issues/1882)); direct tailnet exposure of the ArgoCD UI and vcluster API ([#1892](https://github.com/denisvmedia/inventario/issues/1892)). |
+| **What's NOT in scope (yet)?** | Production-grade admin password from sops ([#1883](https://github.com/denisvmedia/inventario/issues/1883)); in-place migrations under ArgoCD upgrade ([#1884](https://github.com/denisvmedia/inventario/issues/1884)); chart-side `tls[].secretName` polish ([#1882](https://github.com/denisvmedia/inventario/issues/1882)); direct tailnet exposure of the ArgoCD UI and vcluster API ([#1892](https://github.com/denisvmedia/inventario/issues/1892)). |
 
 ---
 
@@ -134,14 +134,16 @@ Nothing in this layout is exposed to the public internet:
 flowchart TD
     appproj["AppProject 'previews'<br/>scoped to inv-vcl01-* namespaces<br/>(infra/argocd/appproject.yaml)"]
     appset["ApplicationSet 'inventario-pr-previews'<br/>PR generator + GH App auth<br/>(infra/argocd/applicationset-pr.yaml)"]
-    appmaster["Application 'inv-vcl01-master'<br/>static, tracks master branch<br/>(infra/argocd/application-master.yaml)"]
+    appsetmaster["ApplicationSet 'inventario-master-preview'<br/>git generator, SHA-pinned ({{ .sha }})<br/>(infra/argocd/applicationset-master.yaml)"]
+    appmaster["Application 'inv-vcl01-master'<br/>generated from the master pin file<br/>(spawned by ApplicationSet)"]
     appprN["Application 'inv-vcl01-prN'<br/>generated per PR with label 'preview'<br/>(spawned by ApplicationSet)"]
 
-    appproj --> appmaster
+    appproj --> appsetmaster
     appproj --> appset
+    appsetmaster --> appmaster
     appset --> appprN
 
-    appmaster -->|"sources: chart at master HEAD<br/>image.tag: master, pullPolicy: Always"| chartmaster["helm/inventario chart"]
+    appmaster -->|"sources: chart at master pin SHA<br/>image.tag: sha-&lt;7&gt;"| chartmaster["helm/inventario chart"]
     appprN -->|"sources: chart at PR head SHA<br/>image.tag: sha-&lt;7&gt;"| chartpr["helm/inventario chart"]
 
     chartmaster --> overlay["preview-base.values.yaml<br/>(shared overlay via $values multi-source)"]
@@ -153,7 +155,7 @@ Three ArgoCD resources land at bootstrap time (applied by `bootstrap.sh` via `ku
 | Resource | File | Purpose |
 |---|---|---|
 | `AppProject previews` | `infra/argocd/appproject.yaml` | Restricts both source repos (`denisvmedia/inventario` only) and destination namespaces (`inv-vcl01-*` only). Belt-and-suspenders so a malformed Application can't reach into `argocd`, `tailscale`, `inv-system`, etc. |
-| `Application inv-vcl01-master` | `infra/argocd/application-master.yaml` | Continuously deploys the master branch to namespace `inv-vcl01-master`. Image pinned to the moving `master` tag with `pullPolicy: Always`. |
+| `ApplicationSet inventario-master-preview` | `infra/argocd/applicationset-master.yaml` | Continuously deploys master to namespace `inv-vcl01-master`. A **git generator** reads the pin file `infra/argocd/master-image.json` (`{ "sha": ..., "imageTag": "sha-<7>" }`) off the dedicated CI-maintained orphan branch `argocd/master-pin` (`revision: argocd/master-pin`, **not** master), exposing `{{ .sha }}` / `{{ .imageTag }}`. Chart + `$values` are pinned to `{{ .sha }}` and the image to the immutable `{{ .imageTag }}` (`pullPolicy: IfNotPresent`) — a master push triggers `docker.yml`, which force-pushes the updated pin file to `argocd/master-pin`, moving the SHA the generator reads and triggering a sync ([#1885](https://github.com/denisvmedia/inventario/issues/1885)). |
 | `ApplicationSet inventario-pr-previews` | `infra/argocd/applicationset-pr.yaml` | Per-PR previews. `goTemplate: true` + `goTemplateOptions: [missingkey=error]`. Generates one Application per open PR labeled `preview`; image pinned to the PR's `sha-<7>` (immutable). |
 
 Both Applications layer the **shared overlay** `infra/helm-overlays/preview-base.values.yaml` via ArgoCD's multi-source `$values` mechanism — same demo deps (Postgres/Redis/MinIO), same `argocdMode: true` for the setup Job, same admin credentials. Per-Application bits (image tag, ingress hostname, FQDN) layer on top via inline `helm.values`.
@@ -281,26 +283,38 @@ flowchart LR
 
 **AppProject** scopes both source repo and destination namespaces — sourceRepos `denisvmedia/inventario` only, destinations `inv-vcl01-*` only. So an Application can't accidentally try to deploy into `argocd` or `tailscale`.
 
-**Application `inv-vcl01-master`** is static. Two sources via `$values` multi-source pattern:
+**ApplicationSet `inventario-master-preview`** deploys master. It is a **git generator** that reads the pin file `infra/argocd/master-image.json` off the dedicated CI-maintained orphan branch `argocd/master-pin` (`revision: argocd/master-pin` — the file does **not** live on `master`) and templates one `inv-vcl01-master` Application, pinned to the pinned SHA (chart + `$values` at `{{ .sha }}`, image at the immutable `{{ .imageTag }}`). A master push triggers `docker.yml`, which force-pushes the new `{ sha, imageTag }` pin file to `argocd/master-pin`; the SHA change on that branch is what ArgoCD diffs on and syncs ([#1885](https://github.com/denisvmedia/inventario/issues/1885)).
 
 ```yaml
-sources:
-  - repoURL: https://github.com/denisvmedia/inventario
-    targetRevision: master
-    path: helm/inventario
-    helm:
-      valueFiles:
-        - $values/infra/helm-overlays/preview-base.values.yaml
-      values: |
-        image:
-          tag: master
-          pullPolicy: Always
-        ingress:
-          annotations: { tailscale.com/hostname: inv-vcl01-master }
-          ...
-  - repoURL: https://github.com/denisvmedia/inventario
-    targetRevision: master
-    ref: values        # exposes the repo for $values lookups
+spec:
+  goTemplate: true
+  goTemplateOptions: [missingkey=error]
+  generators:
+    - git:
+        repoURL: https://github.com/denisvmedia/inventario
+        revision: argocd/master-pin              # CI-maintained orphan branch (NOT master)
+        files:
+          - path: infra/argocd/master-image.json   # { "sha": ..., "imageTag": "sha-<7>" }
+  template:
+    metadata:
+      name: inv-vcl01-master
+    spec:
+      project: previews
+      sources:
+        - repoURL: https://github.com/denisvmedia/inventario
+          targetRevision: '{{ .sha }}'
+          path: helm/inventario
+          helm:
+            valueFiles: [$values/infra/helm-overlays/preview-base.values.yaml]
+            values: |
+              image:
+                tag: '{{ .imageTag }}'   # immutable sha-<7>, pullPolicy: IfNotPresent
+              ingress:
+                annotations: { tailscale.com/hostname: inv-vcl01-master }
+                ...
+        - repoURL: https://github.com/denisvmedia/inventario
+          targetRevision: '{{ .sha }}'
+          ref: values        # exposes the repo for $values lookups
 ```
 
 **ApplicationSet `inventario-pr-previews`** is the live one for PR previews. Critical config:
@@ -354,7 +368,7 @@ The chart at `helm/inventario` is the same one shipped to production users (it's
 
 | Value | Why |
 |---|---|
-| `image.repository: ghcr.io/denisvmedia/inventario` | Pin registry. `image.tag` is layered per-Application (immutable sha-7 for PR, moving `master` for master). |
+| `image.repository: ghcr.io/denisvmedia/inventario` | Pin registry. `image.tag` is layered per-Application — the immutable `sha-<7>` in both cases (the PR's head SHA for previews, the pinned master SHA from `master-image.json` for the master preview). |
 | `run.all.enabled: true`, `replicaCount: 1` | Combined-mode Deployment (apiserver + workers in one pod). Single replica is right for ephemeral state. |
 | `demo.{postgresql,redis,minio}.enabled: true` | In-cluster sidecars instead of external databases. No persistence — preview wipes on rebuild by design. |
 | `setupJob.argocdMode: true` | See "argocdMode" below. |
@@ -540,7 +554,7 @@ selfHeal handles cluster-side drift continuously — `kubectl delete` anything A
 | ArgoCD ApplicationSet PR generator vs a custom Go controller / labels bot | Out-of-the-box, declarative, well-documented, multi-tenant by design (AppProject scopes). Custom controller would have to re-implement PR-list polling, GH auth, sync-on-change, prune-on-removal. Trade-off accepted: harder to do non-standard things like sticky comments (now done in a separate GH Actions workflow) or per-PR feature gating. See #1867 spike for the alternatives considered. |
 | Single VM (vcluster standalone) vs a managed k8s | Phase 1 is one-developer + occasional contributors. Managed k8s costs money continuously; a Hetzner-ish single VM is < €15/mo with snapshots for DR. vcluster standalone gives a real k8s without the operational overhead of kubeadm. |
 | Tailscale Operator Ingress vs cert-manager + public DNS | No public exposure of preview environments was a hard requirement (PRs touch real data shapes). Tailscale gives us tailnet-only HTTPS with automatic cert provisioning for free. cert-manager + public DNS would still need a tailnet-gated reverse proxy in front; more moving parts. |
-| `image.tag: master` mutable for master Application vs `sha-<7>` immutable | Master needs continuous deployment. With a moving tag, the rendered chart doesn't change between commits → ArgoCD sees no diff → no sync. This is a Phase 1 known limit, tracked under #1885 (the cleaner answer is a git-generator ApplicationSet with `head_sha`). PR Applications pin `sha-<7>` because reproducibility per-commit is what reviewers want. |
+| Git-generator pin file for master vs a moving `image.tag: master` | Master needs continuous deployment, but with a moving tag the rendered chart doesn't change between commits → ArgoCD sees no diff → no sync. The fix ([#1885](https://github.com/denisvmedia/inventario/issues/1885)) is the `inventario-master-preview` git-generator ApplicationSet: a master push triggers `docker.yml`, which force-pushes `infra/argocd/master-image.json` with the new `{ sha, imageTag }` to the dedicated orphan branch `argocd/master-pin` (the file is **not** on master); the generator reads it from there, ArgoCD diffs on the changed SHA and syncs the immutable `sha-<7>` image. PR Applications pin `sha-<7>` for the same per-commit reproducibility reviewers want. |
 | `argocdMode: true` (drop helm hook) for setup Job vs sync-wave -5 | First attempt (a4800814) used `sync-wave: -5` so the Job ran before the rest. That created a chicken-and-egg with the ServiceAccount + Secret + ConfigMap (also wave 0) — Job tried to spawn its pod before its own SA existed and FailedCreate. Dropping the wave lets the Job run alongside everything else; its existing `pg_isready` loop in the bootstrap init container handles the ordering against Postgres. |
 | Cleanup CronJob in cluster vs GH Actions step on PR-close | First attempt (3d44bff1) was a GH Actions step. Replaced with in-cluster CronJob (b31617e7) because: (1) single source of OAuth credentials (sops bundle, not duplicated into GH Actions secrets); (2) catches orphans from non-PR-event paths (snapshot rollback, `kubectl delete namespace`, operator restart); (3) survives GH Actions outages. Trade-off: up to 1 h delay vs immediate cleanup — acceptable since only the next deploy of the same PR number is gated on cleanup. |
 | `ttlSecondsAfterFinished` dropped on setup Job in argocdMode | Without dropping it: K8s GC's the completed Job after 24 h, ArgoCD selfHeal sees it missing in cluster + present in git, re-creates → migrations re-run every 24 h. Migrations are idempotent so it's harmless but noisy. Dropping TTL leaves the Completed Job in place; ArgoCD's Force=true,Replace=true delete-then-creates it on the next genuine sync triggered by a commit. |
@@ -597,6 +611,7 @@ selfHeal handles cluster-side drift continuously — `kubectl delete` anything A
 | Epic | [#1852](https://github.com/denisvmedia/inventario/issues/1852) — preview-env infrastructure |
 | Issues that landed | [#1853](https://github.com/denisvmedia/inventario/issues/1853), [#1854](https://github.com/denisvmedia/inventario/issues/1854), [#1855](https://github.com/denisvmedia/inventario/issues/1855), [#1856](https://github.com/denisvmedia/inventario/issues/1856), [#1858](https://github.com/denisvmedia/inventario/issues/1858), [#1890](https://github.com/denisvmedia/inventario/issues/1890) |
 | Spikes / decision threads | [#1867](https://github.com/denisvmedia/inventario/issues/1867) — vcluster + ArgoCD pivot discussion |
-| Open follow-ups | [#1882](https://github.com/denisvmedia/inventario/issues/1882) (chart TLS secretName), [#1883](https://github.com/denisvmedia/inventario/issues/1883) (admin password from sops), [#1884](https://github.com/denisvmedia/inventario/issues/1884) (in-place ArgoCD migrations), [#1885](https://github.com/denisvmedia/inventario/issues/1885) (master auto-rollout), [#1892](https://github.com/denisvmedia/inventario/issues/1892) (expose ArgoCD UI + vcluster API as tailnet services) |
+| Open follow-ups | [#1882](https://github.com/denisvmedia/inventario/issues/1882) (chart TLS secretName), [#1883](https://github.com/denisvmedia/inventario/issues/1883) (admin password from sops), [#1884](https://github.com/denisvmedia/inventario/issues/1884) (in-place ArgoCD migrations), [#1892](https://github.com/denisvmedia/inventario/issues/1892) (expose ArgoCD UI + vcluster API as tailnet services) |
+| Shipped follow-ups | [#1885](https://github.com/denisvmedia/inventario/issues/1885) (master auto-rollout via the git-generator `inventario-master-preview` ApplicationSet) |
 | User-facing README | [#1863](https://github.com/denisvmedia/inventario/issues/1863) (in flight) |
 | PR that landed everything described here | [#1881](https://github.com/denisvmedia/inventario/pull/1881) |

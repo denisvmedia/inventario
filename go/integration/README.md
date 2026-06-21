@@ -27,7 +27,7 @@ The thumbnail generation integration test validates the complete thumbnail workf
 4. **API Response**: Validate that signed URLs include thumbnail URLs
 5. **Cleanup**: Ensure thumbnails are deleted when original files are deleted
 
-This test requires the `INTEGRATION_TESTS` environment variable to be set and validates the complete image processing pipeline.
+This test runs unconditionally against in-memory registries (`memory.NewFactorySet`) and a temp-directory blob store (`t.TempDir()` + a `file://` upload location). It needs no PostgreSQL and is not gated on any environment variable, so it always executes and validates the complete image processing pipeline.
 
 ## Test Structure
 
@@ -73,9 +73,12 @@ func TestCLIWorkflowIntegration(t *testing.T)
 # Set the PostgreSQL DSN
 export POSTGRES_TEST_DSN="postgres://user:password@localhost:5432/test_db?sslmode=disable"
 
-# Run the integration test
+# Run the integration tests
 cd go
-go test -tags=integration ./integration_test/cli_workflow_integration_test.go -v
+go test ./integration/... -v
+
+# Or just the CLI workflow test
+go test ./integration/... -run TestCLIWorkflowIntegration -v
 ```
 
 #### Using the Test Scripts
@@ -190,7 +193,7 @@ Error: system info request failed with status: 403
 To enable verbose output and debugging:
 
 ```bash
-go test -tags=integration ./integration_test/cli_workflow_integration_test.go -v -test.v
+go test ./integration/... -run TestCLIWorkflowIntegration -v
 ```
 
 ## Integration with CI/CD

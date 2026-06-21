@@ -8,7 +8,7 @@ The script we use is `e2e/screenshots.mjs`.
 
 ## Prerequisites
 
-- Node.js 24.14.1, npm
+- Node.js 24.16.0, npm
 - Go 1.26+
 - Playwright browsers installed in `e2e/` (one-time):
   ```bash

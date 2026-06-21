@@ -17,7 +17,7 @@ requiring them to re-enter credentials every 15 minutes.
 | Storage (client) | `localStorage` | Browser cookie (not accessible via JS) |
 | Storage (server) | Stateless (validated by signature) | SHA-256 hash in DB |
 | Revocable | Yes (via blacklist) | Yes (DB `revoked_at` field) |
-| Scope | Any API endpoint | Auth endpoints only (`/api/v1/auth`) |
+| Scope | Any API endpoint | Cookie path `/api/v1` (covers `/api/v1/auth/*` + `/api/v1/admin/impersonation/end`) |
 
 The refresh token cookie is set with `HttpOnly`, `Secure`, and `SameSite=Strict` flags,
 which means JavaScript cannot read it and it will not be sent to third-party origins.
@@ -82,7 +82,7 @@ user interaction:
 ```mermaid
 sequenceDiagram
     participant C as Client (Browser)
-    participant I as Axios Interceptor
+    participant I as http.ts wrapper
     participant A as Auth API
     participant DB as Database
 
@@ -104,7 +104,7 @@ sequenceDiagram
     I->>C: Retry original request with new token
 ```
 
-Key properties of the refresh interceptor:
+Key properties of the refresh logic (`frontend/src/lib/http.ts`, fetch-based — no axios):
 - **Deduplication**: if multiple requests fail with 401 simultaneously, only one refresh
   call is made; other requests are queued and retried once the new token arrives.
 - **Loop prevention**: auth endpoint requests (`/auth/*`) are never retried to avoid
@@ -201,13 +201,19 @@ The JWT payload contains:
 
 ```
 {
-  "jti":     "<uuid>",        // unique token ID for blacklisting
-  "user_id": "<uuid>",        // user identifier
-  "role":    "admin|viewer",  // user role
-  "iat":     <unix timestamp>,
-  "exp":     <unix timestamp> // iat + 15 minutes
+  "jti":             "<uuid>",  // unique token ID for blacklisting
+  "user_id":         "<uuid>",  // user identifier
+  "is_system_admin": false,     // advisory FE hint (#1784); never the authz gate
+  "token_type":      "access",  // distinguishes access from mfa_token, etc.
+  "iat":             <unix timestamp>,
+  "exp":             <unix timestamp>, // iat + 15 minutes
+  "rti":             "<uuid>"   // optional: refresh-token row id (for /users/me/sessions)
 }
 ```
+
+See `issueAccessToken` in `go/apiserver/auth.go`. There is **no** `role` claim;
+authorization is enforced server-side (`is_system_admin` is re-checked against
+`system_admin_grants`, and per-group roles come from the membership tables).
 
 The token is signed with HMAC-SHA256 using the server's `--jwt-secret`.
 
@@ -276,17 +282,17 @@ Three implementations are provided:
 ### Request Pipeline
 
 ```
-┌──────────────┐   attach Bearer token   ┌──────────────────┐
-│  Vue component│ ──── API request ──────►│  Request          │
-│  / Pinia store│                         │  Interceptor      │
-└──────────────┘                         └─────────┬────────┘
+┌─────────────────┐   attach Bearer token   ┌──────────────────┐
+│  React component │ ──── API request ──────►│  http.ts wrapper  │
+│  / TanStack hook │                         │  (request stage)  │
+└─────────────────┘                         └─────────┬────────┘
                                                    │
                                           ┌────────▼────────┐
                                           │  Backend API     │
                                           └────────┬────────┘
                                                    │
                                           ┌────────▼────────────────────┐
-                                          │  Response Interceptor        │
+                                          │  http.ts (response stage)    │
                                           │                              │
                                           │  200 → pass through          │
                                           │                              │
@@ -337,7 +343,10 @@ unusable hashes; the raw token only ever exists in transit and in the browser co
 - `HttpOnly` — not readable by JavaScript
 - `Secure` — only sent over HTTPS
 - `SameSite=Strict` — not sent on cross-site requests; prevents CSRF
-- `Path=/api/v1/auth` — scope limited to auth endpoints only; not sent on regular API calls
+- `Path=/api/v1` — the common ancestor of the auth endpoints (`/api/v1/auth/*`)
+  and `POST /api/v1/admin/impersonation/end`, so the impersonation end-of-session
+  flow can read the cookie. A legacy cookie at `/api/v1/auth` is actively cleared
+  (`clearLegacyRefreshCookie`). See `refreshTokenCookiePath` in `go/apiserver/auth.go`.
 
 ### JTI and Immediate Revocation
 

@@ -154,9 +154,9 @@ it("has no axe violations", async () => {
 })
 ```
 
-End-to-end: import `runAxe` from `e2e/utils/axe.ts` and call it inside
-the relevant `test()` block. The default severity floor is `serious` +
-`critical`. See [testing.md](testing.md).
+End-to-end: import `axeAudit` from `e2e/utils/axe.ts` and call it
+(`await axeAudit(page)`) inside the relevant `test()` block. The default
+severity floor is `serious` + `critical`. See [testing.md](testing.md).
 
 ## Anti-patterns
 

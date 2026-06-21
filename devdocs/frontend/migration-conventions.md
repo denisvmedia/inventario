@@ -98,10 +98,12 @@ follow-up in the other, with the PR cross-linked. See
 
 ### Smoke test on the embed
 
-`go/apiserver/frontend_embed_test.go` asserts the bundled HTML's
-`<title>` and absence of Bolt artifacts. Predates cutover; survives as
-the cheapest tripwire for "did the build accidentally inline the wrong
-HTML?".
+`go/apiserver/frontend_embed_test.go`
+(`TestFrontendEmbed_UnderscorePrefixedFilesArePresent`) asserts the marker
+file `dist/_inventario-embed.txt` (copied from
+`frontend/public/_inventario-embed.txt`) made it into the embedded
+filesystem — the cheapest tripwire for "did `//go:embed all:dist` silently
+drop the underscore-prefixed Vite chunks?". Predates cutover.
 
 ## Cutover criteria (for the historical record)
 

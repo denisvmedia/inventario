@@ -55,7 +55,7 @@ The system implements enterprise-grade multi-tenancy with:
 ### Linting
 - `make lint` - Run all linters
 - `make lint-go` - Run golangci-lint on Go code
-- `make lint-frontend` - Run ESLint and Stylelint on frontend code
+- `make lint-frontend` - Run ESLint on frontend code (`eslint .`)
 
 ### Development Server
 - `make run-backend` - Run backend server on :3333
@@ -70,7 +70,7 @@ The system implements enterprise-grade multi-tenancy with:
   4. Review the generated SQL, run `go test ./schema/migrations/...` locally, then commit both files.
   If the generator output looks wrong, fix the **model annotations** and regenerate — don't edit the SQL by hand.
   **Hand-written migrations exception.** Some changes can't be expressed via model annotations (data backfills, view refactors, multi-step `ALTER`s, one-off custom DDL). In those rare cases — **STOP and ask the user for explicit permission before writing SQL by hand**. Do not improvise. The user will tell you whether to handcraft the migration or land it as a follow-up using a different approach (e.g. a runtime backfill worker). The CI check still has to pass afterward, so the user's approval includes the trade-off of suppressing drift detection for that specific file.
-- `curl http://localhost:3333/api/v1/seed` - Seed the database with test data (the route is gated off by default since #2039; run the server with `--enable-seed-endpoint` / `INVENTARIO_RUN_ENABLE_SEED_ENDPOINT=true` first)
+- `curl -X POST http://localhost:3333/api/v1/seed` - Seed the database with test data (POST only; the route is gated off by default since #2039; run the server with `--enable-seed-endpoint` / `INVENTARIO_RUN_ENABLE_SEED_ENDPOINT=true` first)
 - `./inventario tenants create` - Create tenants for initial setup
 - `./inventario tenants list` - List all tenants with filtering
 - `./inventario tenants get <id-or-slug>` - Get detailed tenant information
@@ -79,7 +79,7 @@ The system implements enterprise-grade multi-tenancy with:
 - `./inventario users create` - Create users for initial setup
 - `./inventario users list` - List all users with filtering
 - `./inventario users get <id-or-email>` - Get detailed user information
-- `./inventario users update <id-or-email>` - Update user properties
+- `./inventario users update <id-or-email>` - **Not yet implemented** (placeholder; prints a message and exits without changes)
 - `./inventario users delete <id-or-email>` - Delete users with confirmation
 - For PostgreSQL: Set POSTGRES_TEST_DSN environment variable for testing
 
@@ -191,10 +191,8 @@ Support for multiple database backends via DSN:
 - `memory://` - In-memory (development/testing)
 - `postgres://user:pass@host:port/db` - PostgreSQL (production)
 
-### Multi-Tenant Configuration
-- `--tenant-mode` - single, multi-header, multi-subdomain
-- `--jwt-secret` - Required for multi-tenant authentication
-- `--default-tenant-id` - For single-tenant mode
+### Authentication Configuration
+- `--jwt-secret` - JWT secret for authentication (minimum 32 characters; auto-generated if not provided)
 
 ### File Storage Configuration
 - `--upload-location` - Supports file://, s3://, azblob://, gs://

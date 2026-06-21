@@ -21,7 +21,7 @@ echo ""
 
 # Run the integration test
 echo "🧪 Running CLI workflow integration test..."
-go test -tags=integration ./integration_test/cli_workflow_integration_test.go -v -timeout=5m
+go test ./integration/... -run TestCLIWorkflowIntegration -v -timeout=5m
 
 echo ""
 echo "✅ CLI workflow integration test completed successfully!"

@@ -26,10 +26,10 @@ items, their locations, and associated metadata. Please follow these guidelines 
   - `go/registry/`: Data storage implementations (memory, postgres)
   - `go/models/`: Data models and entity definitions
   - `go/apiserver/`: HTTP API server implementation
-  - `go/internal/`: Internal packages (log, errormarshal, etc.)
+  - `go/internal/`: Internal packages (errormarshal, metrics, etc.)
 - `frontend/`: React 19 + TypeScript frontend (Tailwind v4 + shadcn/ui)
 - `e2e/`: End-to-end tests using Playwright
-- `docs/`: Swagger API documentation (auto-generated)
+- `go/docs/`: Swagger API documentation (auto-generated)
 - `bin/`: Build output directory
 
 ## Key Guidelines
@@ -37,8 +37,7 @@ items, their locations, and associated metadata. Please follow these guidelines 
 ### Go Development
 - `cd go` before operating on go code
 - Use `github.com/go-extras/errx` (and `github.com/go-extras/errx/stacktrace` imported as `errxtrace`) for error wrapping and stack traces. Define sentinel errors with `errx.NewSentinel(...)` (see `go/services/errors.go`); reach for the std `errors` package only for `errors.Is` / `errors.As` checks.
-- Use `github.com/denisvmedia/inventario/internal/log` for logging (never use std `log` package). Using `log/slog` is
-   acceptable but internal log is preferred
+- Use the standard library `log/slog` for structured logging (never use the std `log` package)
 - Use `github.com/frankban/quicktest` for tests, always imported with `qt` alias
 - Write table-driven unit tests when possible, separating happy and unhappy paths
 - Follow Go best practices and idiomatic patterns
@@ -48,7 +47,7 @@ items, their locations, and associated metadata. Please follow these guidelines 
 
 ### Go version and modern syntax (review-time guidance)
 
-**This module targets Go 1.26+** (`go/go.mod` declares `go 1.26.0`; CI runs Go 1.26.x).
+**This module targets Go 1.26+** (`go/go.mod` declares `go 1.26.3`; CI runs Go 1.26.x).
 Do **not** flag the following as compile errors or "doesn't compile in Go" — they are valid:
 
 - **Range over integer** — `for i := range n { ... }` where `n` is an `int` is valid since
@@ -95,9 +94,9 @@ For deeper Go-specific review guidance see [`.github/instructions/go.instruction
 - All tests must pass before committing
 
 ### API Documentation
-- When changing Go API entities, regenerate Swagger docs:
+- When changing Go API entities, regenerate Swagger docs (and the paired frontend codegen):
   ```bash
-  go tool swag init --output docs
+  make swagger
   ```
 
 ### Database Support

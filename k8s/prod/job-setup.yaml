@@ -31,7 +31,7 @@ spec:
             claimName: inventario-data
       initContainers:
         - name: bootstrap
-          image: ghcr.io/denisvmedia/inventario:latest
+          image: ghcr.io/denisvmedia/inventario:latest # replace :latest with a pinned, immutable release tag before applying to production (see k8s/README.md)
           imagePullPolicy: Always
           command: ["/bin/sh", "-ec"]
           args:
@@ -78,7 +78,7 @@ spec:
               drop: ["ALL"]
       containers:
         - name: init-data
-          image: ghcr.io/denisvmedia/inventario:latest
+          image: ghcr.io/denisvmedia/inventario:latest # replace :latest with a pinned, immutable release tag before applying to production (see k8s/README.md)
           imagePullPolicy: Always
           command: ["/bin/sh", "-ec"]
           args:

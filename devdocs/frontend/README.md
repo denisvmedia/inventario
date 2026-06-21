@@ -50,7 +50,9 @@ codebase uses.
 Hard bans live in [imports-and-bans.md](imports-and-bans.md). The short list:
 no `next-themes` (Vite SPA, not Next.js), no `@base-ui/react` (we lock to
 Radix), no FontAwesome / PrimeIcons (Lucide only), no leftover Bolt
-scaffolding artifacts (asserted by `go/apiserver/frontend_embed_test.go`).
+scaffolding artifacts (keep `<title>Inventario</title>`). The Go embed smoke
+test `go/apiserver/frontend_embed_test.go` separately guards that the build
+embeds underscore-prefixed assets via the `dist/_inventario-embed.txt` marker.
 
 ## How this differs from the design mock
 

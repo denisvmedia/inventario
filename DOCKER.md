@@ -45,9 +45,16 @@ The application can be configured using environment variables in the `.env` file
 | `POSTGRES_PASSWORD` | `inventario_password` | PostgreSQL password |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port (host mapping) |
 | `INVENTARIO_PORT` | `3333` | Inventario application port (host mapping) |
-| `INVENTARIO_ADDR` | `:3333` | Inventario bind address |
-| `INVENTARIO_UPLOAD_LOCATION` | `file:///app/uploads?create_dir=1` | Upload storage location |
+| `INVENTARIO_RUN_ADDR` | `:3333` | Inventario bind address |
+| `INVENTARIO_RUN_UPLOAD_LOCATION` | `file:///app/uploads?create_dir=1` | Upload storage location |
 | `TZ` | `UTC` | Timezone |
+
+> The `run` server reads its settings under the `INVENTARIO_RUN_` prefix
+> (`INVENTARIO_RUN_ADDR`, `INVENTARIO_RUN_UPLOAD_LOCATION`, …). The bundled
+> `docker-compose.yaml` still passes the un-prefixed `INVENTARIO_ADDR` /
+> `INVENTARIO_UPLOAD_LOCATION`, which the server ignores — it works only because
+> the built-in defaults happen to be the same values. Use the prefixed names for
+> anything you actually want to take effect.
 
 ### Data Persistence
 
@@ -55,7 +62,7 @@ Data is stored in the `.docker` directory:
 
 - **PostgreSQL data**: `.docker/postgresql/`
 - **Uploaded files**: `.docker/inventario/uploads/`
-- **Application data**: `.docker/inventario/data/`
+- **Init/seed state**: `.docker/init-state/` (mounted into the `inventario-init-data` service at `/app/state`)
 
 These directories are automatically created when you start the services.
 
@@ -113,7 +120,8 @@ docker-compose exec -T postgres psql -U inventario -d inventario < backup.sql
 ### Application Operations
 ```bash
 # Execute commands in the application container
-docker-compose exec inventario ./inventario --help
+# (the binary is on PATH at /usr/local/bin/inventario; WORKDIR is /app)
+docker-compose exec inventario inventario --help
 
 # Seed the database (handled automatically by the inventario-init-data
 # service; the long-running inventario service does NOT expose /api/v1/seed —
@@ -121,7 +129,7 @@ docker-compose exec inventario ./inventario --help
 # with SEED_DATABASE=true.
 
 # Run database migrations
-docker-compose exec inventario ./inventario migrate
+docker-compose exec inventario inventario db migrate up
 ```
 
 ## Development
@@ -142,7 +150,8 @@ Create a `docker-compose.override.yml` file for development-specific settings:
 services:
   inventario:
     environment:
-      INVENTARIO_LOG_LEVEL: debug
+      # The only logging knob is the output format; there is no log-level env var.
+      INVENTARIO_LOG_FORMAT: json
     volumes:
       - ./custom-config:/app/config
 ```
@@ -208,7 +217,7 @@ See [`deploy/monitoring/README.md`](deploy/monitoring/README.md) for the dashboa
 For production deployment, consider:
 
 1. **Use external PostgreSQL**: Set `INVENTARIO_DB_DSN` to point to your production database
-2. **Use cloud storage**: Set `INVENTARIO_UPLOAD_LOCATION` to S3, GCS, or Azure Blob
+2. **Use cloud storage**: Set `INVENTARIO_RUN_UPLOAD_LOCATION` to S3, GCS, or Azure Blob
 3. **Enable HTTPS**: Use a reverse proxy like nginx or Traefik
 4. **Set strong passwords**: Generate secure passwords for database access
 5. **Regular backups**: Implement automated database and file backups
@@ -220,7 +229,7 @@ services:
   inventario:
     environment:
       INVENTARIO_DB_DSN: "postgres://user:pass@prod-db:5432/inventario"
-      INVENTARIO_UPLOAD_LOCATION: "s3://my-bucket/uploads?region=us-east-1"
+      INVENTARIO_RUN_UPLOAD_LOCATION: "s3://my-bucket/uploads?region=us-east-1"
     deploy:
       resources:
         limits:

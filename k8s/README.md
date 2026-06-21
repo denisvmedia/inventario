@@ -18,14 +18,29 @@ Both baselines preserve the same startup flow used by `docker-compose.yaml`:
 
 ## Image and tag assumptions
 
-- The manifests currently reference `ghcr.io/denisvmedia/inventario:latest`.
-- `.goreleaser.yaml` publishes the multi-arch image set under:
-  - `ghcr.io/denisvmedia/inventario:<tag>`
-  - `ghcr.io/denisvmedia/inventario:v<major>.<minor>`
-  - `ghcr.io/denisvmedia/inventario:v<major>`
-  - `ghcr.io/denisvmedia/inventario:latest`
-  - `ghcr.io/denisvmedia/inventario:SNAPSHOT-<commit>` for snapshot builds
-- For production rollouts, prefer replacing `:latest` with a specific published release tag before applying.
+- **Production prerequisite (do this first):** the `k8s/prod` manifests ship with
+  `ghcr.io/denisvmedia/inventario:latest`. Before applying them to production,
+  replace every `image:` reference in `k8s/prod/deployment.yaml` and
+  `k8s/prod/job-setup.yaml` with a specific, immutable published image tag (a
+  released `v<major>.<minor>.<patch>` once one exists, or a `sha-<commit>` tag in
+  the meantime). `:latest` is a floating tag and is **not** safe for production.
+  - Note: there are **no released version tags yet** (tracked in #2088), so no
+    `vX.Y.Z` image exists to pin to today. Until the first release is published,
+    pin to an immutable `sha-<commit>` tag of a `master` build instead.
+- **For production, the Helm chart at `helm/inventario/` is the preferred deploy
+  path.** `k8s/prod` is a **hand-maintained reference baseline**: it is **not**
+  exercised by CI (only `k8s/dev` is — see the kind smoke workflow below), so it
+  can silently drift from the Helm chart and the application. Treat it as a
+  starting point to read and adapt, not as a CI-verified production target.
+- Container images are published by `.github/workflows/docker.yml` (a matrix
+  build on native amd64/arm64 runners merged into one multi-arch manifest list).
+  `.goreleaser.yaml` deliberately does **not** build Docker images — it owns the
+  binaries, archives, checksums, and the GitHub Release only. The image tags that
+  workflow publishes are:
+  - On a `v*` git tag: `ghcr.io/denisvmedia/inventario:v<major>.<minor>.<patch>`,
+    `:v<major>.<minor>`, `:v<major>`, and `:latest`.
+  - On a push to `master`: `:edge`, `:master`, and an immutable `:sha-<commit>`.
+  - On a pull request: `:pr-<number>` and an immutable `:sha-<commit>`.
 - The CI smoke workflow at `.github/workflows/kind-smoke-test.yml` does **not** push a registry image. It builds `inventario:kind-ci` locally, loads that image into the ephemeral kind cluster, and rewrites a temporary copy of `k8s/dev/inventario/job-setup.yaml` plus `k8s/dev/inventario/deployment.yaml` to use the loaded tag for that run.
 - The container image is built to run as the non-root `inventario` user (`uid: 1001`, `gid: 1001`) and the manifests match that runtime contract.
 
@@ -81,6 +96,10 @@ Prerequisites:
 - A cluster with dynamic PVC provisioning (or a matching pre-provisioned volume).
 - Reachable external PostgreSQL and Redis endpoints.
 - Edited values in `k8s/prod/secret.yaml` and `k8s/prod/configmap.yaml`.
+- Replaced the floating `:latest` image tag in `k8s/prod/deployment.yaml` and
+  `k8s/prod/job-setup.yaml` with a pinned, immutable tag (see "Image and tag
+  assumptions" above). For a CI-verified production deploy, prefer the Helm chart
+  at `helm/inventario/` instead of this baseline.
 
 Apply the baseline:
 

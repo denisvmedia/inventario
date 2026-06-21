@@ -114,7 +114,7 @@ test-go-postgres:
 		echo "   Example: export POSTGRES_TEST_DSN='postgres://user:password@localhost:5432/inventario_test?sslmode=disable'"; \
 		exit 1; \
 	fi
-	cd $(BACKEND_DIR) && $(GO_CMD) test -v ./registry/postgres/... ./services/files_backfill/...
+	cd $(BACKEND_DIR) && $(GO_CMD) test -v ./registry/postgres/...
 
 # Run all Go tests including PostgreSQL
 .PHONY: test-go-all

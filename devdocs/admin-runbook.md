@@ -198,7 +198,8 @@ Operational constraints:
   A `support_agent` is rejected with `403` and
   `admin.role_required`.
 - Default TTL is **30 minutes**, configurable via
-  `INVENTARIO_IMPERSONATION_TTL` (capped at 30 minutes).
+  `INVENTARIO_RUN_IMPERSONATION_TTL` (or `--impersonation-ttl`; capped at
+  30 minutes).
 - The impersonation token carries `is_system_admin = false` and the
   cross-plane operator claims
   `impersonator_id = <backoffice_users.id>` and
@@ -338,9 +339,10 @@ The pausable worker types (stable identifiers used by the CLI, the API,
 and the `worker_control.worker_type` column):
 
 `export`, `import`, `restore`, `thumbnail`, `refresh-token-cleanup`,
-`email-verification-cleanup`, `login-event-retention`, `group-purge`,
-`warranty-reminder`, `storage-quota-reminder`, `loan-reminder`,
-`maintenance-reminder`, `currency-migration`.
+`email-verification-cleanup`, `magic-link-token-cleanup`,
+`login-event-retention`, `group-purge`, `warranty-reminder`,
+`storage-quota-reminder`, `loan-reminder`, `maintenance-reminder`,
+`currency-migration`.
 
 > Email delivery is intentionally **not** in this set — it is a Redis
 > subscriber rather than a polling worker, with a separate pause story.

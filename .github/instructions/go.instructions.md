@@ -108,9 +108,9 @@ guides you may have been trained on.
   reverse.
 - **Comma-ok type assertions** required outside test code
   (`revive unchecked-type-assertion`).
-- **Filename format** `^[_a-z][_a-z0-9]*\.go$` — no camelCase, no dashes
-  (except generated migration files under `registry/postgres/migrations/`
-  which are exempt).
+- **Filename format** `^[_a-z][_a-z0-9]*\.go$` — no camelCase, no dashes.
+  (Generated SQL migrations live under `schema/migrations/_sqldata/` and are
+  `.sql`, so the Go filename rule never applies to them.)
 - **Function limits** (`funlen`): 240 lines / 160 statements. Cognitive
   complexity ≤ 30 (`gocognit`). Cyclomatic ≤ 20 (`gocyclo`). Nested-if depth
   ≤ 6 (`nestif`). Line length ≤ 240 (`lll`). Test files are exempt from these.
@@ -128,10 +128,9 @@ guides you may have been trained on.
 - **`gosec`** suppressions: `G117` (false positive on struct field names
   containing "Secret"/"Token") and `G706` (structured `slog` logging is not
   log-injection-vulnerable) are project-wide exclusions. Don't re-raise them.
-- **Structured logging** uses `log/slog` with key/value pairs:
-  `slog.Error("Security violation", "user_id", user.ID, ...)`. The repo's
-  internal `github.com/denisvmedia/inventario/internal/log` wrapper is also
-  fine. Never the std `log` package.
+- **Structured logging** uses the standard library `log/slog` with key/value
+  pairs: `slog.Error("Security violation", "user_id", user.ID, ...)`. Never the
+  std `log` package.
 - **Standard layout differs:** the module lives in `go/`, not at repo root.
   Sub-packages: `apiserver/` (HTTP handlers), `registry/` (data layer
   interface + memory/postgres implementations), `services/` (business
