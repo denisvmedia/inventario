@@ -168,7 +168,7 @@ func TestBuildMIMEMessage_EncodesNonASCIISubject(t *testing.T) {
 	}))
 	subject := mimeHeaderValue(c, raw, "Subject")
 	// Raw Cyrillic must NOT appear unencoded in the header...
-	c.Assert(strings.Contains(subject, "Подтвердите"), qt.IsFalse)
+	c.Assert(subject, qt.Not(qt.Contains), "Подтвердите")
 	c.Assert(strings.HasPrefix(subject, "=?utf-8?"), qt.IsTrue)
 	// ...and the encoded-word decodes back to the original.
 	decoded, err := new(mime.WordDecoder).DecodeHeader(subject)
@@ -188,7 +188,7 @@ func TestBuildMIMEMessage_StripsHeaderInjection(t *testing.T) {
 		HTML:    "<p>html</p>",
 	}))
 	// No injected Bcc header line is created.
-	c.Assert(strings.Contains(raw, "\r\nBcc:"), qt.IsFalse)
+	c.Assert(raw, qt.Not(qt.Contains), "\r\nBcc:")
 	// Everything collapses onto the single Subject line.
 	c.Assert(mimeHeaderValue(c, raw, "Subject"), qt.Equals, "HelloBcc: attacker@example.com")
 }
