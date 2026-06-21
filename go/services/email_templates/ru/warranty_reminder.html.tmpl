@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ru">
+<body>
+<p>Здравствуйте, {{.Name}}!</p>
+<p>Это ваше <strong>напоминание о гарантии за {{.ThresholdDays}} дн.</strong>
+для предмета <strong>{{.CommodityName}}</strong>.</p>
+<p>Гарантия истекает {{.ExpiryDate}}.</p>
+{{- if .CommodityURL}}
+<p>Вы можете посмотреть предмет здесь: <a href="{{.CommodityURL}}">{{.CommodityURL}}</a></p>
+{{- end}}
+<p>Inventario отправляет это напоминание, чтобы вы могли запланировать продление,
+обслуживание или замену до окончания действия гарантии.</p>
+</body>
+</html>

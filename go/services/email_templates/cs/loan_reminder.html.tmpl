@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="cs">
+<body>
+<p>Dobrý den, {{.Name}},</p>
+{{- if .LoanIsOverdue}}
+<p><strong>{{if .CommodityName}}{{.CommodityName}}{{else}}Vaše položka{{end}}</strong>
+je <strong>po termínu</strong> — měla být vrácena {{.DueBackAt}}{{if gt .LoanDaysDelta 0}}
+(před {{.LoanDaysDelta}} {{if ne .LoanDaysDelta 1}}dny{{else}}dnem{{end}}){{end}}.</p>
+{{- else if .LoanIsDueSoon}}
+<p><strong>{{if .CommodityName}}{{.CommodityName}}{{else}}Vaše položka{{end}}</strong>
+má být vrácena {{.DueBackAt}}{{if gt .LoanDaysDelta 0}}
+(za {{.LoanDaysDelta}} {{if ne .LoanDaysDelta 1}}dny{{else}}den{{end}}){{end}}.</p>
+{{- else}}
+<p>Máte připomenutí zápůjčky pro
+<strong>{{if .CommodityName}}{{.CommodityName}}{{else}}vaši položku{{end}}</strong>.</p>
+{{- end}}
+<p>Zapůjčeno osobě <strong>{{.BorrowerName}}</strong> dne {{.LentAt}}.</p>
+{{- if .CommodityURL}}
+<p>Otevřete položku a připomeňte ji vypůjčiteli nebo zaznamenejte vrácení:
+<a href="{{.CommodityURL}}">{{.CommodityURL}}</a></p>
+{{- end}}
+<p>Inventario tuto zprávu zasílá jednou za zápůjčku, abyste neztratili přehled
+o položkách, které jste zapůjčili.</p>
+</body>
+</html>

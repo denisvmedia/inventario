@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="cs">
+<body>
+<p>Dobrý den, {{.Name}},</p>
+<p>Skupina v Inventariu <strong>{{.GroupName}}</strong> využívá
+<strong>{{.UsedHuman}}</strong> ze svého úložného limitu
+<strong>{{.QuotaHuman}}</strong> — to je <strong>{{.UsagePercent}}%</strong>, tedy nad
+varovnou hranicí {{.ThresholdPercent}}%.</p>
+{{- if .BreakdownLines}}
+<p>Aktuální využití podle kategorie:</p>
+<ul>
+{{- range .BreakdownLines}}
+<li>{{.}}</li>
+{{- end}}
+</ul>
+{{- end}}
+<p>Místo můžete uvolnit smazáním položek, exportů nebo souborů, které již
+nepotřebujete.</p>
+{{- if .FilesURL}}
+<p>Zkontrolovat soubory: <a href="{{.FilesURL}}">{{.FilesURL}}</a></p>
+{{- end}}
+{{- if .SettingsURL}}
+<p>Otevřít Nastavení → Data a úložiště: <a href="{{.SettingsURL}}">{{.SettingsURL}}</a></p>
+{{- end}}
+<p>Inventario tento e-mail odešle jednou, když je hranice poprvé překročena.
+Nový e-mail se odešle pouze v případě, že využití klesne zpět pod hranici a
+poté ji znovu překročí.</p>
+</body>
+</html>

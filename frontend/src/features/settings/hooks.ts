@@ -105,6 +105,9 @@ function applyOptimisticPatch(
     case "appearance.number_format_locale":
       next.appearanceNumberFormatLocale = value as string
       break
+    case "appearance.language":
+      next.appearanceLanguage = value as string
+      break
   }
   return next
 }

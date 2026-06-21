@@ -12329,6 +12329,11 @@ export type components = {
         "models.SettingsObject": {
             /** @description Per-user appearance preferences. */
             appearanceDefaultItemsView?: string;
+            /**
+             * @description AppearanceLanguage is the user's UI language (en/cs/ru) and the source
+             *     of truth for localizing transactional emails (#2090).
+             */
+            appearanceLanguage?: string;
             appearanceNumberFormatLocale?: string;
             appearancePreferredDisplayCurrency?: string;
             defaultDateFormat?: string;

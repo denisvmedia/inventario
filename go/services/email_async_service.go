@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/denisvmedia/inventario/appctx"
 	emailqueue "github.com/denisvmedia/inventario/email/queue"
 	mailsender "github.com/denisvmedia/inventario/email/sender"
 	"github.com/denisvmedia/inventario/internal/metrics"
@@ -284,11 +285,17 @@ func (s *AsyncEmailService) enqueue(ctx context.Context, job emailJob) error {
 	job.Name = strings.TrimSpace(job.Name)
 	job.CreatedAt = time.Now().UTC()
 	job.Attempt = max(job.Attempt, 0)
+	// Capture the recipient's resolved UI language from the send-site
+	// context so the worker renders the localized template + subject across
+	// the async queue boundary. Empty → English (renderer fallback). #2090
+	if job.Language == "" {
+		job.Language = appctx.EmailLanguageFromContext(ctx)
+	}
 
 	if job.To == "" {
 		return errors.New("email recipient is required")
 	}
-	if _, ok := subjectByTemplateType(job.TemplateType); !ok {
+	if _, ok := subjectByTemplateType(job.TemplateType, "en"); !ok {
 		return fmt.Errorf("unsupported template type: %q", job.TemplateType)
 	}
 

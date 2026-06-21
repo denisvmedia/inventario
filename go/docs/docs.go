@@ -13887,6 +13887,10 @@ const docTemplate = `{
                     "description": "Per-user appearance preferences.",
                     "type": "string"
                 },
+                "appearanceLanguage": {
+                    "description": "AppearanceLanguage is the user's UI language (en/cs/ru) and the source\nof truth for localizing transactional emails (#2090).",
+                    "type": "string"
+                },
                 "appearanceNumberFormatLocale": {
                     "type": "string"
                 },

@@ -278,7 +278,7 @@ func (s *MaintenanceReminderService) fanOutToRecipients(
 			continue
 		}
 		attempted++
-		sendErr := s.emailSvc.SendMaintenanceReminderEmail(ctx, r.email, r.name, commodity.Name, m.Title, dueDate, url, int(threshold))
+		sendErr := s.emailSvc.SendMaintenanceReminderEmail(withReminderLanguage(ctx, prefsCache, r.user), r.email, r.name, commodity.Name, m.Title, dueDate, url, int(threshold))
 		if sendErr != nil {
 			enqueueErrs++
 			if firstEnqueueErr == nil {

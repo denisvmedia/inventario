@@ -1,0 +1,16 @@
+Dobrý den, {{.Name}},
+
+{{if .LoanIsOverdue -}}
+{{if .CommodityName}}{{.CommodityName}}{{else}}Vaše položka{{end}} je PO TERMÍNU — měla být vrácena {{.DueBackAt}}{{if gt .LoanDaysDelta 0}} (před {{.LoanDaysDelta}} {{if ne .LoanDaysDelta 1}}dny{{else}}dnem{{end}}){{end}}.
+{{else if .LoanIsDueSoon -}}
+{{if .CommodityName}}{{.CommodityName}}{{else}}Vaše položka{{end}} má být vrácena {{.DueBackAt}}{{if gt .LoanDaysDelta 0}} (za {{.LoanDaysDelta}} {{if ne .LoanDaysDelta 1}}dny{{else}}den{{end}}){{end}}.
+{{else -}}
+Máte připomenutí zápůjčky pro {{if .CommodityName}}{{.CommodityName}}{{else}}vaši položku{{end}}.
+{{end}}
+Zapůjčeno osobě {{.BorrowerName}} dne {{.LentAt}}.
+{{if .CommodityURL}}
+Otevřete položku a připomeňte ji vypůjčiteli nebo zaznamenejte vrácení:
+{{.CommodityURL}}
+{{end}}
+Inventario tuto zprávu zasílá jednou za zápůjčku, abyste neztratili přehled o položkách,
+které jste zapůjčili.

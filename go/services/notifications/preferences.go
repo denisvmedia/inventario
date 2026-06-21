@@ -12,6 +12,7 @@ package notifications
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/denisvmedia/inventario/appctx"
@@ -210,6 +211,27 @@ func (s *Service) fetchSettings(ctx context.Context, user *models.User) (models.
 	return settings, true
 }
 
+// languageFromSettings extracts the user's chosen UI language from their
+// appearance settings, or "" when unset. #2090
+func languageFromSettings(s models.SettingsObject) string {
+	if s.AppearanceLanguage == nil {
+		return ""
+	}
+	return strings.TrimSpace(*s.AppearanceLanguage)
+}
+
+// Language returns the recipient's chosen UI language (e.g. "en"/"cs"/"ru")
+// from their appearance settings, or "" when unset — the email renderer
+// then falls back to English. Unlike IsEnabled this is not a gate; it is a
+// best-effort lookup used to localize the outbound email. #2090
+func (s *Service) Language(ctx context.Context, user *models.User) string {
+	settings, ok := s.fetchSettings(ctx, user)
+	if !ok {
+		return ""
+	}
+	return languageFromSettings(settings)
+}
+
 // decideEnabled is the pure decision function: given a SettingsObject,
 // the category and the channel, return true if a notification should
 // be delivered. Channel master switch overrides per-category toggle.
@@ -365,6 +387,22 @@ func (c *Cache) IsEnabled(ctx context.Context, user *models.User, category Categ
 		return defaultFor(category, channel)
 	}
 	return decideEnabled(settings, category, channel)
+}
+
+// Language is the per-sweep cached form of Service.Language: it reads the
+// recipient's UI language through the same memoised SettingsObject the
+// opt-out gate already loaded, so no extra DB round-trip is incurred when
+// it is called right after IsEnabled/IsEnabledForGroup in a send loop.
+// Returns "" when unset → the email renderer falls back to English. #2090
+func (c *Cache) Language(ctx context.Context, user *models.User) string {
+	if user == nil || user.ID == "" {
+		return ""
+	}
+	settings, ok := c.lookup(ctx, user)
+	if !ok {
+		return ""
+	}
+	return languageFromSettings(settings)
 }
 
 // IsEnabledForGroup is the per-sweep cached form of

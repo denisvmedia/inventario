@@ -14,10 +14,15 @@ type emailJob struct {
 	TemplateType emailTemplateType `json:"template_type"`
 	To           string            `json:"to"`
 	Name         string            `json:"name,omitempty"`
-	URL          string            `json:"url,omitempty"`
-	ChangedAt    *time.Time        `json:"changed_at,omitempty"`
-	Attempt      int               `json:"attempt"`
-	CreatedAt    time.Time         `json:"created_at"`
+	// Language is the recipient's resolved UI language (en/cs/ru), captured
+	// at the send site and persisted on the job so the worker renders the
+	// localized template + subject across the async queue boundary. Empty
+	// → English (renderer fallback). #2090
+	Language  string     `json:"language,omitempty"`
+	URL       string     `json:"url,omitempty"`
+	ChangedAt *time.Time `json:"changed_at,omitempty"`
+	Attempt   int        `json:"attempt"`
+	CreatedAt time.Time  `json:"created_at"`
 	// Warranty-reminder fields. Optional and only populated by
 	// AsyncEmailService.SendWarrantyReminderEmail — every other template
 	// ignores them. Keep them on the job rather than introducing a free-form

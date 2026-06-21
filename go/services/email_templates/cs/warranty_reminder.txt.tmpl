@@ -1,0 +1,10 @@
+Dobrý den {{.Name}},
+
+toto je vaše připomenutí záruky {{.ThresholdDays}} dní předem pro položku {{.CommodityName}}.
+
+Záruka vyprší {{.ExpiryDate}}.
+{{if .CommodityURL}}
+Položku si můžete prohlédnout zde: {{.CommodityURL}}
+{{end}}
+Inventario tuto zprávu zasílá, abyste mohli naplánovat prodloužení, servis nebo
+výměnu dříve, než záruka skončí.

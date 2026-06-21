@@ -1,0 +1,11 @@
+Dobrý den {{.Name}},
+
+{{if eq .ThresholdDays 0}}Úkol údržby u položky {{.CommodityName}} je nyní po termínu.{{else}}Toto je vaše upozornění na údržbu {{.ThresholdDays}} dní předem pro položku {{.CommodityName}}.{{end}}
+
+Úkol: {{.MaintenanceTitle}}
+Termín: {{.MaintenanceDueDate}}
+{{if .CommodityURL}}
+Položku si můžete prohlédnout zde: {{.CommodityURL}}
+{{end}}
+Inventario vám toto zasílá, abyste mohli údržbu naplánovat dříve,
+než se její termín ještě více zpozdí.
