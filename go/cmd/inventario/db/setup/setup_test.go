@@ -293,7 +293,7 @@ func TestDefaultSetupOptions(t *testing.T) {
 	c.Assert(opts.DefaultTenantSlug, qt.Equals, "default")
 	c.Assert(opts.DefaultTenantRegistrationMode, qt.Equals, models.RegistrationModeClosed)
 	c.Assert(opts.AdminEmail, qt.Equals, "admin@example.com")
-	c.Assert(opts.AdminPassword, qt.Equals, "admin123")
+	c.Assert(opts.AdminPassword, qt.Equals, "Admin123")
 	c.Assert(opts.AdminName, qt.Equals, "System Administrator")
 	c.Assert(opts.DryRun, qt.Equals, false)
 }

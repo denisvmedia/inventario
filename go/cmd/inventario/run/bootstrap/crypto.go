@@ -6,11 +6,57 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/go-extras/errx"
 
 	"github.com/denisvmedia/inventario/internal/backupsign"
 )
+
+// ErrPlaceholderSecret is returned when a JWT secret, file signing key, or
+// OAuth state key is set to a well-known public placeholder string (such as the
+// one shipped in .env.example / docker-compose). Accepting such a value would
+// be worse than no secret at all: anyone with the public repo could forge
+// tokens / signed URLs. We fail loudly rather than fall back to a random key so
+// the misconfiguration is impossible to miss; operators who want the
+// auto-generated ephemeral key must leave the value unset instead.
+var ErrPlaceholderSecret = errx.NewSentinel("configured secret is a well-known public placeholder; set a real secret (openssl rand -hex 32) or leave it unset for an auto-generated ephemeral key")
+
+// placeholderSecretMarkers lists case-insensitive substrings that identify a
+// known public placeholder secret shipped in this repo. Any configured secret
+// containing one of these is rejected by isPlaceholderSecret. Keep this list in
+// sync with the neutralized placeholders in .env.example, docker-compose.yaml,
+// and example/docker-compose.override.yaml.example.
+//
+// These are intentionally SPECIFIC instructional phrases, not broad words like
+// "change". A broad marker would false-positive on legitimate fixed secrets —
+// e.g. the labelled CI test secrets (`e2e-jwt-secret-please-change-for-prod`,
+// `e2e-file-signing-key-please-change`) or a real passphrase that happens to
+// contain a common word — and refuse to start. The goal is to catch the repo's
+// own placeholders, not to police secret content.
+var placeholderSecretMarkers = []string{
+	"please-change-this",  // root .env.example / docker-compose.yaml placeholder
+	"use-openssl-rand",    // root placeholder ("...-use-openssl-rand-hex-32")
+	"replace-this-value",  // example/docker-compose.override.yaml.example placeholders
+	"your-secure-32-byte", // example/docker-compose.override.yaml.example placeholders
+}
+
+// isPlaceholderSecret reports whether the supplied value is a known public
+// placeholder that must never be accepted as a real secret. The match is
+// case-insensitive and substring-based so trivial variations of the shipped
+// placeholders are still caught.
+func isPlaceholderSecret(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	if lower == "" {
+		return false
+	}
+	for _, marker := range placeholderSecretMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
 
 // ErrInvalidBackupSigningKey is returned when INVENTARIO_RUN_BACKUP_SIGNING_KEY
 // (or the config value) is set but is not a valid 32-byte Ed25519 seed (64 hex
@@ -26,9 +72,16 @@ var ErrInvalidBackupSigningKey = errx.NewSentinel("configured backup signing key
 // whose hex value is written once to stderr (outside the structured logger) so
 // operators can capture it on first boot without leaking the signing key into
 // log aggregators.
-func getJWTSecret(configSecret string) ([]byte, error) {
+func getJWTSecret(configSecret string) ([]byte, error) { //nolint:dupl // distinct secret resolvers (JWT / file-signing / OAuth-state) intentionally share shape; each has its own env var + messages
 	// Use the secret from config (which includes environment variables via cleanenv)
 	if configSecret != "" {
+		// Reject well-known public placeholder secrets outright. Accepting one
+		// would let anyone with the public repo forge tokens, so fail fatally
+		// rather than fall back to a random key (leave the value unset for that).
+		if isPlaceholderSecret(configSecret) {
+			slog.Error("Configured JWT secret is a well-known public placeholder; refusing to start. Set INVENTARIO_RUN_JWT_SECRET to a real secret (openssl rand -hex 32) or leave it unset for an auto-generated ephemeral key")
+			return nil, errx.Classify(ErrPlaceholderSecret, errx.Attrs("setting", "jwt-secret"))
+		}
 		// If provided as hex string, decode it
 		if decoded, err := hex.DecodeString(configSecret); err == nil && len(decoded) >= 32 {
 			slog.Info("Using JWT secret from configuration (hex decoded)")
@@ -63,9 +116,16 @@ func getJWTSecret(configSecret string) ([]byte, error) {
 
 // getFileSigningKey retrieves the file signing key from config/environment or
 // generates a secure random one with the same semantics as getJWTSecret.
-func getFileSigningKey(configKey string) ([]byte, error) {
+func getFileSigningKey(configKey string) ([]byte, error) { //nolint:dupl // distinct secret resolvers (JWT / file-signing / OAuth-state) intentionally share shape; each has its own env var + messages
 	// Use the key from config (which includes environment variables via cleanenv)
 	if configKey != "" {
+		// Reject well-known public placeholder keys outright. Accepting one would
+		// let anyone with the public repo forge signed file URLs, so fail fatally
+		// rather than fall back to a random key (leave the value unset for that).
+		if isPlaceholderSecret(configKey) {
+			slog.Error("Configured file signing key is a well-known public placeholder; refusing to start. Set INVENTARIO_RUN_FILE_SIGNING_KEY to a real key (openssl rand -hex 32) or leave it unset for an auto-generated ephemeral key")
+			return nil, errx.Classify(ErrPlaceholderSecret, errx.Attrs("setting", "file-signing-key"))
+		}
 		// If provided as hex string, decode it
 		if decoded, err := hex.DecodeString(configKey); err == nil && len(decoded) >= 32 {
 			slog.Info("Using file signing key from configuration (hex decoded)")
@@ -181,8 +241,15 @@ func resolveBackupSeed(configKey string) ([]byte, error) {
 // can capture and persist it. Multi-replica deployments MUST supply a
 // stable value or signed states won't survive a request that lands on
 // a different replica after the provider redirect.
-func getOAuthStateKey(configKey string) ([]byte, error) {
+func getOAuthStateKey(configKey string) ([]byte, error) { //nolint:dupl // distinct secret resolvers (JWT / file-signing / OAuth-state) intentionally share shape; each has its own env var + messages
 	if configKey != "" {
+		// Reject well-known public placeholder keys outright. Accepting one would
+		// let anyone with the public repo forge OAuth state, so fail fatally
+		// rather than fall back to a random key (leave the value unset for that).
+		if isPlaceholderSecret(configKey) {
+			slog.Error("Configured OAuth state key is a well-known public placeholder; refusing to start. Set INVENTARIO_RUN_OAUTH_STATE_KEY to a real key (openssl rand -hex 32) or leave it unset for an auto-generated ephemeral key")
+			return nil, errx.Classify(ErrPlaceholderSecret, errx.Attrs("setting", "oauth-state-key"))
+		}
 		if decoded, err := hex.DecodeString(configKey); err == nil && len(decoded) >= 32 {
 			slog.Info("Using OAuth state key from configuration (hex decoded)")
 			return decoded, nil

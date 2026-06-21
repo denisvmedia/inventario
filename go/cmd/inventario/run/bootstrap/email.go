@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 
@@ -105,6 +106,15 @@ func ValidateEmailPublicURLConfig(provider, publicURL string) error {
 
 	switch normalizedEmailProvider {
 	case services.EmailProviderStub:
+		// The stub provider is a legitimate choice for dev / preview, so this is
+		// a warning, not a fatal error. But a configured public URL strongly
+		// implies a real deployment where users will expect verification /
+		// reset / invite emails — none of which the stub ever sends. Warn loudly
+		// so a "users never receive any email" deployment is not silent.
+		if trimmedURL := strings.TrimSpace(publicURL); trimmedURL != "" {
+			slog.Warn("email provider is 'stub': verification/reset/invite emails will be silently dropped; set a real SMTP (or other) provider + email.from for any deployment real users will use",
+				"public_url", trimmedURL)
+		}
 		return nil
 	case services.EmailProviderSMTP,
 		services.EmailProviderSendGrid,

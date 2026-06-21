@@ -3,7 +3,7 @@ set -e
 
 if [ ! -f /app/state/data-initialized ]; then
   echo "=== RUNNING INITIAL DATA SETUP ==="
-  echo "Database DSN: $INVENTARIO_DB_DSN"
+  echo "Database DSN: [configured]"
 
   # Wait for database to be ready with retry mechanism
   echo "Waiting for database to be ready for initial data setup..."
@@ -25,7 +25,7 @@ if [ ! -f /app/state/data-initialized ]; then
 
         # Override DB_DSN to use app user (not migrator) for seeding
         export INVENTARIO_DB_DSN="${INVENTARIO_SEED_DB_DSN:-$INVENTARIO_DB_DSN}"
-        echo "Using DSN: $INVENTARIO_DB_DSN (for seeding)"
+        echo "Using DSN: [configured] (for seeding)"
 
         # Start server in background
         inventario run &

@@ -423,6 +423,10 @@ features:
 email:
   # Provider: stub | smtp | sendgrid | ses | mandrill | mailchimp
   # "stub" logs emails to stdout; no external service needed.
+  # ⚠️ WARNING: "stub" SILENTLY DROPS ALL MAIL — verification, invite, password-reset,
+  # and feedback emails are never delivered. This is fine for local evaluation only.
+  # For ANY deployment real users will sign in to, set a real provider (e.g. smtp) AND
+  # a non-empty email.from, or those flows will appear broken to users.
   # Env: INVENTARIO_RUN_EMAIL_PROVIDER
   provider: "stub"
 

@@ -9,6 +9,11 @@ This document describes how to run Inventario using Docker and Docker Compose wi
    cp .env.example .env
    ```
 
+   > `JWT_SECRET` and `FILE_SIGNING_KEY` are left unset by default, so the
+   > backend auto-generates an ephemeral random key on each start — fine for
+   > local dev only. For any real or network-exposed deployment, set both in
+   > `.env` to your own secrets (`openssl rand -hex 32`).
+
 2. **Start the services**:
    ```bash
    docker-compose up -d
