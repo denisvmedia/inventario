@@ -154,7 +154,7 @@ func (m *MaintenanceReminder) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&m.ScheduleID, rules.NotEmpty),
 		validation.Field(&m.ThresholdDays, validation.By(func(any) error {
 			if !MaintenanceReminderThreshold(m.ThresholdDays).IsValid() {
-				return validation.NewError("invalid_threshold", "invalid maintenance reminder threshold")
+				return validation.NewError("invalid_maintenance_threshold", "invalid maintenance reminder threshold")
 			}
 			return nil
 		})),

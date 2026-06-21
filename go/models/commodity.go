@@ -394,7 +394,7 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 		})),
 		validation.Field(&a.WarrantyNotes, validation.By(func(any) error {
 			if a.Count > 1 && a.WarrantyNotes != "" {
-				return validation.NewError("quantity_forbids_warranty",
+				return validation.NewError("quantity_forbids_warranty_notes",
 					"warranty notes cannot be set on commodities with quantity > 1")
 			}
 			return nil
