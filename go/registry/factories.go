@@ -194,6 +194,8 @@ type FactorySet struct {
 	GroupInviteAuditRegistry              GroupInviteAuditRegistry      // GroupInviteAuditRegistry is tenant-scoped, not user-aware
 	GroupNotificationPrefRegistry         GroupNotificationPrefRegistry // Per-group notification opt-outs (#1648); tenant-scoped, user-filtered in application logic
 	GroupPurger                           GroupPurger                   // GroupPurger hard-deletes group-scoped data during purge ticks
+	TenantPurger                          TenantPurger                  // TenantPurger hard-deletes every tenant-scoped dependent row during admin tenant hard-delete (#2115)
+	UserPurger                            UserPurger                    // UserPurger hard-deletes a user's auth/identity rows during admin user hard-delete (#2116)
 	WarrantyReminderRegistry              WarrantyReminderRegistry      // WarrantyReminderRegistry is the worker idempotency store; service-mode only
 	StorageQuotaReminderRegistry          StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the storage quota warning worker idempotency store; service-mode only (#1585)
 	MaintenanceReminderRegistry           MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the maintenance reminder worker idempotency store; service-mode only (#1368)

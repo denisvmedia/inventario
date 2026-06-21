@@ -2169,6 +2169,46 @@ type GroupPurger interface {
 	PurgeGroupDependents(ctx context.Context, tenantID, groupID string) error
 }
 
+// TenantPurger hard-deletes every tenant-scoped dependent row belonging to a
+// single Tenant, in a FK-safe order, before the tenants row itself is dropped
+// by the orchestration layer (#2115). It is the tenant-level analogue of
+// GroupPurger: where GroupPurger clears one group's subtree, TenantPurger
+// clears the union of every group's data PLUS the tenant-only rows GroupPurger
+// never touches (users, settings, refresh_tokens, login_events, the auth-token
+// tables, location_groups themselves, …).
+//
+// The tenants row itself is NOT touched here — the caller (services.admin
+// DeleteTenant) drops it after the dependents are gone, exactly as
+// GroupPurgeService handles the final location_groups DELETE separately so blob
+// cleanup and tenant removal remain explicit at the orchestration layer.
+type TenantPurger interface {
+	// PurgeTenantDependents deletes all dependent entities for the given
+	// tenant. Implementations must be idempotent — a second call on the same
+	// tenant after a partial failure must succeed and leave the database in
+	// the same state.
+	PurgeTenantDependents(ctx context.Context, tenantID string) error
+}
+
+// UserPurger hard-deletes a single user's auth / identity rows (and orphans the
+// nullable authorship back-refs) before the users row itself is dropped by the
+// orchestration layer (#2116). It exists because a bare DELETE FROM users is
+// rejected by the many NO ACTION child FKs pointing at users(id).
+//
+// PRECONDITION: the user must no longer OWN shared content
+// (commodities/files/areas/locations/exports/groups/tags/…). Those rows carry
+// NOT NULL user_id + NOT NULL created_by columns that cannot be orphaned, so
+// this purger deliberately does not touch them; the final DELETE FROM users
+// will fail loudly with an FK violation if any remain. The users row itself is
+// NOT touched here — the caller (services.admin DeleteUser) drops it after the
+// dependents are gone.
+type UserPurger interface {
+	// PurgeUserDependents deletes all auth/identity dependent rows for the
+	// given tenant/user pair. Implementations must be idempotent — a second
+	// call on the same user after a partial failure must succeed and leave the
+	// database in the same state.
+	PurgeUserDependents(ctx context.Context, tenantID, userID string) error
+}
+
 // Set contains ready-to-use registries that have been created with proper user or service context.
 // This is the result of calling CreateUserRegistrySet() or CreateServiceRegistrySet() on a FactorySet.
 type Set struct {

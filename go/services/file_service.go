@@ -262,6 +262,46 @@ func (s *FileService) DeletePhysicalFilesForGroup(ctx context.Context, tenantID,
 	return nil
 }
 
+// DeletePhysicalFilesForTenant deletes every physical blob (and its
+// thumbnails) that belongs to the given tenant. It is the tenant-level
+// analogue of DeletePhysicalFilesForGroup, intended for the admin tenant
+// hard-delete flow (#2115), and likewise uses a service-mode file registry to
+// bypass tenant/group RLS. Database rows are NOT touched here — that is the
+// responsibility of the TenantPurger.
+//
+// Unlike the group variant there is no ListByGroup-style narrowing index for a
+// whole tenant, so this lists every file in service mode and filters by
+// TenantID in application code (the same O(total_files) scan the group purger
+// avoids, but acceptable for a one-shot administrative hard-delete).
+//
+// The method is fail-fast: the first blob that fails to delete aborts the
+// entire sweep so the orchestration layer can leave the tenant intact and the
+// operator can retry once object storage is healthy.
+func (s *FileService) DeletePhysicalFilesForTenant(ctx context.Context, tenantID string) error {
+	if tenantID == "" {
+		return errxtrace.Wrap("tenantID is required", registry.ErrFieldRequired)
+	}
+
+	fileReg := s.factorySet.FileRegistryFactory.CreateServiceRegistry()
+	files, err := fileReg.List(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list files for tenant", err)
+	}
+
+	for _, file := range files {
+		if file == nil || file.TenantID != tenantID {
+			continue
+		}
+		if file.File == nil || file.File.OriginalPath == "" {
+			continue
+		}
+		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, file.ID, file.File.OriginalPath, file.File.MIMEType); err != nil {
+			return errxtrace.Wrap(fmt.Sprintf("failed to delete physical blobs for file %s", file.ID), err)
+		}
+	}
+	return nil
+}
+
 // deletePhysicalFileAndThumbnails deletes the physical file and all its
 // thumbnails. `tenantID` is the tenant that owns the row — used to
 // derive the canonical thumbnail blob keys (#1793). For legacy rows

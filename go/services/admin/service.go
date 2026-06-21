@@ -14,6 +14,7 @@ import (
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
+	"github.com/denisvmedia/inventario/services"
 )
 
 // ErrLastSystemAdmin is re-exported from the registry layer for callers
@@ -27,6 +28,31 @@ var ErrLastSystemAdmin = registry.ErrLastSystemAdmin
 type Service struct {
 	factorySet *registry.FactorySet
 	cleanup    func() error
+	// fileService is optional. When set (via SetFileService), DeleteTenant
+	// deletes the tenant's physical blobs before purging its DB rows. When
+	// nil, blob cleanup is skipped with a loud WARNING — the DB rows are
+	// still purged, but object-storage objects are orphaned (the caller must
+	// wire a fileService to get full cleanup). It is a setter rather than a
+	// constructor parameter so the 20-odd existing NewService(dbConfig)
+	// callers that never delete a tenant don't have to thread an upload
+	// location they don't need.
+	fileService *services.FileService
+}
+
+// SetFileService wires the optional file service used by DeleteTenant to
+// remove a tenant's physical blobs before its DB rows are purged. Callers that
+// perform a tenant hard-delete must call this (e.g. the tenants delete CLI,
+// which builds it from the --upload-location flag); other admin callers can
+// leave it unset.
+func (s *Service) SetFileService(fileService *services.FileService) {
+	s.fileService = fileService
+}
+
+// FactorySet exposes the underlying registry factory set so callers (e.g. the
+// tenants delete CLI) can construct a matching FileService bound to the same
+// backend before invoking DeleteTenant.
+func (s *Service) FactorySet() *registry.FactorySet {
+	return s.factorySet
 }
 
 // NewService creates a new admin service with proper registry abstraction
@@ -219,17 +245,48 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 	return updatedTenant, nil
 }
 
-// DeleteTenant deletes a tenant
+// DeleteTenant hard-deletes a tenant and every row that depends on it,
+// mirroring the GroupPurgeService orchestration order (#2115). Before this the
+// method issued a bare DELETE FROM tenants, which the ~35 NO ACTION child FKs
+// rejected — so deleting any tenant that had ever held data failed.
+//
+// Order (each step aborts the whole operation on error):
+//
+//	a) delete the tenant's physical blobs first, so a dead object store aborts
+//	   the operation before any DB row is touched (idempotent + retryable). If
+//	   no fileService was wired, blob cleanup is skipped with a loud WARNING and
+//	   the blobs are orphaned — the DB purge still proceeds.
+//	b) purge every tenant-scoped dependent row (TenantPurger), in FK-safe order.
+//	c) drop the now-childless tenants row itself.
 func (s *Service) DeleteTenant(ctx context.Context, idOrSlug string) error {
-	// Get existing tenant to validate it exists
+	// Validate the tenant exists (and resolve slug -> id).
 	tenant, err := s.GetTenant(ctx, idOrSlug)
 	if err != nil {
 		return err
 	}
 
-	// Delete tenant
+	// (a) Physical blobs first — fail fast so a down object store aborts
+	// before we mutate the database.
+	if s.fileService != nil {
+		if err := s.fileService.DeletePhysicalFilesForTenant(ctx, tenant.ID); err != nil {
+			return errxtrace.Wrap("failed to delete tenant physical blobs", err)
+		}
+	} else {
+		slog.Warn(
+			"DeleteTenant: no file service wired — skipping physical blob cleanup; object-storage blobs for this tenant will be orphaned",
+			"tenant_id", tenant.ID,
+			"tenant_slug", tenant.Slug,
+		)
+	}
+
+	// (b) Purge every tenant-scoped dependent row in FK-safe order.
+	if err := s.factorySet.TenantPurger.PurgeTenantDependents(ctx, tenant.ID); err != nil {
+		return errxtrace.Wrap("failed to purge tenant dependents", err)
+	}
+
+	// (c) Drop the now-childless tenants row.
 	if err := s.factorySet.TenantRegistry.Delete(ctx, tenant.ID); err != nil {
-		return fmt.Errorf("failed to delete tenant: %w", err)
+		return errxtrace.Wrap("failed to delete tenant row", err)
 	}
 
 	return nil
@@ -416,17 +473,49 @@ func (s *Service) UpdateUser(ctx context.Context, idOrEmail string, req UserUpda
 	return updatedUser, nil
 }
 
-// DeleteUser deletes a user
+// DeleteUser hard-deletes a user's account along with its auth / identity rows
+// (#2116). Before this the method issued a bare DELETE FROM users, which the
+// many NO ACTION child FKs pointing at users(id) rejected, so deleting any user
+// that had ever logged in failed.
+//
+// Order (each step aborts the whole operation on error):
+//
+//	a) purge the user's auth/identity dependent rows (UserPurger): refresh
+//	   tokens, login events, MFA secret, OAuth identities, memberships, …
+//	b) drop the users row itself.
+//
+// IMPORTANT: every content table (commodities/files/areas/locations/exports/
+// tags/…) carries a NOT NULL created_by_user_id (and a NOT NULL user_id RLS
+// owner), neither of which can be orphaned without a schema change. A user who
+// still OWNS content therefore CANNOT be hard-deleted today: the final
+// UserRegistry.Delete will fail with an FK violation. We surface that as a
+// clear, honest error rather than claiming success — full GDPR deletion of a
+// content-owning user needs ownership transfer or content purge first, which is
+// out of scope here.
 func (s *Service) DeleteUser(ctx context.Context, idOrEmail string) error {
-	// Get existing user to validate it exists
+	// Validate the user exists (and resolve email -> id + tenant).
 	user, err := s.GetUser(ctx, idOrEmail)
 	if err != nil {
 		return err
 	}
 
-	// Delete user
+	// (a) Purge the user's auth / identity dependent rows so the parent
+	// users row has no remaining NO ACTION children from those tables.
+	if err := s.factorySet.UserPurger.PurgeUserDependents(ctx, user.TenantID, user.ID); err != nil {
+		return errxtrace.Wrap("failed to purge user dependents", err)
+	}
+
+	// (b) Drop the users row. If the user still owns content, the NOT NULL
+	// created_by_user_id / user_id FKs reject this DELETE — report the real
+	// cause instead of a misleading generic failure.
 	if err := s.factorySet.UserRegistry.Delete(ctx, user.ID); err != nil {
-		return fmt.Errorf("failed to delete user: %w", err)
+		return errxtrace.Wrap(
+			fmt.Sprintf(
+				"cannot delete user %s (%s): they still own content (commodities, files, areas, locations, exports, tags, …) which cannot be orphaned — reassign or delete that content first",
+				user.ID, user.Email,
+			),
+			err,
+		)
 	}
 
 	return nil
