@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -28,19 +30,41 @@ import (
 // mockRefreshTokenRegistryForAuth implements registry.RefreshTokenRegistry for testing.
 // It records calls to RevokeByUserID and Update so tests can assert what was
 // invoked. When tokensByHash is non-nil the mock acts as a real registry for
-// GetByTokenHash / Update; when nil, GetByTokenHash returns ErrNotFound and
-// Update still records the call but does not persist anything — so existing
-// change-password tests, which only check RevokeByUserID, don't need to opt in.
+// GetByTokenHash / Create / RevokeByID / RevokeByUserID — enough for the #967
+// refresh-rotation + reuse-detection flow to behave like a real store; when
+// nil, GetByTokenHash returns ErrNotFound and Update still records the call but
+// does not persist anything — so existing change-password tests, which only
+// check RevokeByUserID, don't need to opt in.
+//
+// Create persists a fresh row (generated id, keyed by hash) so rotation's
+// persist-then-revoke ordering exercises real lookups; RevokeByID /
+// RevokeByUserID set RevokedAt on the stored rows so a subsequent
+// GetByTokenHash sees the revoked row UNFILTERED — the exact property
+// reuse detection depends on.
 type mockRefreshTokenRegistryForAuth struct {
 	revokeByUserIDCalled bool
 	revokeByUserIDArg    string
 
-	tokensByHash map[string]*models.RefreshToken
-	updates      []models.RefreshToken
+	tokensByHash  map[string]*models.RefreshToken
+	updates       []models.RefreshToken
+	createCount   int
+	createErr     error
+	revokeByIDErr error
 }
 
-func (m *mockRefreshTokenRegistryForAuth) Create(_ context.Context, _ models.RefreshToken) (*models.RefreshToken, error) {
-	return nil, nil
+func (m *mockRefreshTokenRegistryForAuth) Create(_ context.Context, rt models.RefreshToken) (*models.RefreshToken, error) {
+	if m.createErr != nil {
+		return nil, m.createErr
+	}
+	m.createCount++
+	if rt.ID == "" {
+		rt.ID = fmt.Sprintf("rt-created-%d", m.createCount)
+	}
+	stored := rt
+	if m.tokensByHash != nil {
+		m.tokensByHash[rt.TokenHash] = &stored
+	}
+	return &stored, nil
 }
 
 func (m *mockRefreshTokenRegistryForAuth) Get(_ context.Context, _ string) (*models.RefreshToken, error) {
@@ -86,11 +110,29 @@ func (m *mockRefreshTokenRegistryForAuth) ListActiveByUserID(_ context.Context, 
 func (m *mockRefreshTokenRegistryForAuth) RevokeByUserID(_ context.Context, userID string) error {
 	m.revokeByUserIDCalled = true
 	m.revokeByUserIDArg = userID
+	now := time.Now()
+	for _, rt := range m.tokensByHash {
+		if rt.UserID == userID && rt.RevokedAt == nil {
+			rt.RevokedAt = &now
+		}
+	}
 	return nil
 }
 
-func (m *mockRefreshTokenRegistryForAuth) RevokeByID(_ context.Context, _ string, _ string) error {
-	return nil
+func (m *mockRefreshTokenRegistryForAuth) RevokeByID(_ context.Context, userID, id string) error {
+	if m.revokeByIDErr != nil {
+		return m.revokeByIDErr
+	}
+	for _, rt := range m.tokensByHash {
+		if rt.ID == id && rt.UserID == userID {
+			if rt.RevokedAt == nil {
+				now := time.Now()
+				rt.RevokedAt = &now
+			}
+			return nil
+		}
+	}
+	return registry.ErrNotFound
 }
 
 func (m *mockRefreshTokenRegistryForAuth) RevokeAllExceptID(_ context.Context, _ string, _ string) error {
@@ -694,9 +736,10 @@ func TestAuthAPI_Refresh(t *testing.T) {
 		c.Assert(ok, qt.IsTrue)
 		c.Assert(claims["user_id"], qt.Equals, userID)
 
-		// last_used_at should be touched as a side-effect of a successful refresh.
-		c.Assert(refreshReg.updates, qt.HasLen, 1)
-		c.Assert(refreshReg.updates[0].LastUsedAt, qt.IsNotNil)
+		// Rotation (#967 H2): a fresh row is persisted and the consumed row is
+		// not bumped via Update — the new no-rotation-removed contract.
+		c.Assert(refreshReg.createCount, qt.Equals, 1)
+		c.Assert(refreshReg.updates, qt.HasLen, 0)
 	})
 
 	t.Run("missing refresh cookie returns 401", func(t *testing.T) {
@@ -950,6 +993,413 @@ func TestAuthAPI_Refresh_DeletesLegacyPathCookie(t *testing.T) {
 	c.Assert(legacyRefreshCookieDeleted(resp), qt.IsTrue,
 		qt.Commentf("refresh success path must emit a Set-Cookie deleting the legacy /api/v1/auth cookie; got %v",
 			resp.Header().Values("Set-Cookie")))
+}
+
+// refreshCookieValue extracts the value of the refresh_token cookie from a
+// response's Set-Cookie headers, or "" when the response does not set one (or
+// only clears it via Max-Age=0). Used by the #967 rotation tests to follow the
+// cookie chain across refreshes.
+func refreshCookieValue(resp *httptest.ResponseRecorder) string {
+	for _, c := range resp.Result().Cookies() {
+		if c.Name == "refresh_token" && c.MaxAge >= 0 && c.Value != "" {
+			return c.Value
+		}
+	}
+	return ""
+}
+
+// newRefreshTestUser builds a minimal active user for the #967 refresh tests.
+func newRefreshTestUser(userID, tenantID string) *models.User {
+	return &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: tenantID,
+		},
+		Email:    "rotate@example.com",
+		Name:     "Rotate User",
+		IsActive: true,
+	}
+}
+
+// seedRefreshRow creates a live refresh-token row in a real memory registry and
+// returns the raw cookie value the client would send. Mirrors how login()
+// persists the row, so the #967 rotation/reuse tests exercise the real
+// GetByTokenHash / Create / RevokeByID lockstep rather than a hand-rolled mock.
+func seedRefreshRow(t *testing.T, reg registry.RefreshTokenRegistry, userID, tenantID string) string {
+	t.Helper()
+	raw, hash, err := models.GenerateRefreshToken()
+	if err != nil {
+		t.Fatalf("GenerateRefreshToken: %v", err)
+	}
+	_, err = reg.Create(context.Background(), models.RefreshToken{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+			TenantID: tenantID,
+			UserID:   userID,
+		},
+		TokenHash: hash,
+		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("seed refresh row: %v", err)
+	}
+	return raw
+}
+
+// postRefresh fires POST /refresh with the given cookie value against a freshly
+// wired Auth router and returns the recorder.
+func postRefresh(params apiserver.AuthParams, cookieValue string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest("POST", "/refresh", nil)
+	if cookieValue != "" {
+		// #nosec G124 -- test-only cookie added to a httptest.NewRequest.
+		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: cookieValue})
+	}
+	resp := httptest.NewRecorder()
+	router := chi.NewRouter()
+	apiserver.Auth(params)(router)
+	router.ServeHTTP(resp, req)
+	return resp
+}
+
+// TestAuthAPI_Refresh_RotatesRefreshToken pins the #967 H2 rotation contract on
+// the tenant plane: a successful refresh issues a NEW refresh cookie (value !=
+// original) and a fresh access token; replaying the ORIGINAL cookie returns
+// 401 (it now hashes to a revoked row), while the ROTATED cookie still works.
+func TestAuthAPI_Refresh_RotatesRefreshToken(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-rotate", "tenant-rotate"
+
+	refreshReg := memreg.NewRefreshTokenRegistry()
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+	original := seedRefreshRow(t, refreshReg, userID, tenantID)
+
+	params := apiserver.AuthParams{UserRegistry: userReg, RefreshTokenRegistry: refreshReg, JWTSecret: jwtSecret}
+
+	// First refresh: 200, new cookie, fresh access token.
+	resp := postRefresh(params, original)
+	c.Assert(resp.Code, qt.Equals, http.StatusOK)
+	rotated := refreshCookieValue(resp)
+	c.Assert(rotated, qt.Not(qt.Equals), "")
+	c.Assert(rotated, qt.Not(qt.Equals), original)
+
+	var body apiserver.LoginResponse
+	c.Assert(json.Unmarshal(resp.Body.Bytes(), &body), qt.IsNil)
+	c.Assert(body.AccessToken, qt.Not(qt.Equals), "")
+
+	// The rotated cookie works on its first use (asserted BEFORE the replay
+	// below, which fires the H4 theft cascade and revokes everything).
+	again := postRefresh(params, rotated)
+	c.Assert(again.Code, qt.Equals, http.StatusOK)
+
+	// Replaying the ORIGINAL cookie now fails: it hashes to a revoked row.
+	replay := postRefresh(params, original)
+	c.Assert(replay.Code, qt.Equals, http.StatusUnauthorized)
+}
+
+// TestAuthAPI_Refresh_RevokesConsumedRowAndStampsNewRTI pins two #967 H2
+// invariants: after a refresh the consumed row carries RevokedAt, and the
+// minted access token's "rti" claim points at the NEW row id (never the old
+// one). The rti linkage is load-bearing for /users/me/sessions — stamping the
+// stale id would make the live session look non-current.
+func TestAuthAPI_Refresh_RevokesConsumedRowAndStampsNewRTI(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-rti", "tenant-rti"
+
+	refreshReg := memreg.NewRefreshTokenRegistry()
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+	original := seedRefreshRow(t, refreshReg, userID, tenantID)
+
+	// Capture the original row id before refresh.
+	originalRow, err := refreshReg.GetByTokenHash(context.Background(), models.HashRefreshToken(original))
+	c.Assert(err, qt.IsNil)
+	oldRowID := originalRow.ID
+
+	resp := postRefresh(apiserver.AuthParams{UserRegistry: userReg, RefreshTokenRegistry: refreshReg, JWTSecret: jwtSecret}, original)
+	c.Assert(resp.Code, qt.Equals, http.StatusOK)
+
+	// The consumed row must now be revoked.
+	consumed, err := refreshReg.GetByTokenHash(context.Background(), models.HashRefreshToken(original))
+	c.Assert(err, qt.IsNil)
+	c.Assert(consumed.RevokedAt, qt.IsNotNil)
+
+	// Resolve the new row id from the rotated cookie, then assert the access
+	// token's rti claim equals it (and not the old row id).
+	rotated := refreshCookieValue(resp)
+	newRow, err := refreshReg.GetByTokenHash(context.Background(), models.HashRefreshToken(rotated))
+	c.Assert(err, qt.IsNil)
+
+	var body apiserver.LoginResponse
+	c.Assert(json.Unmarshal(resp.Body.Bytes(), &body), qt.IsNil)
+	token, err := jwt.Parse(body.AccessToken, func(*jwt.Token) (any, error) { return jwtSecret, nil })
+	c.Assert(err, qt.IsNil)
+	claims, ok := token.Claims.(jwt.MapClaims)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(claims["rti"], qt.Equals, newRow.ID)
+	c.Assert(claims["rti"], qt.Not(qt.Equals), oldRowID)
+}
+
+// TestAuthAPI_Refresh_PersistFailurePreservesSession pins the #967 H2
+// crash-safety contract: persist-BEFORE-revoke means a transient Create error
+// during rotation returns 500 WITHOUT revoking the consumed row, so the
+// caller's existing session stays usable rather than half-rotated / signed out.
+func TestAuthAPI_Refresh_PersistFailurePreservesSession(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-persistfail", "tenant-persistfail"
+
+	raw, hash, err := models.GenerateRefreshToken()
+	c.Assert(err, qt.IsNil)
+	refreshReg := &mockRefreshTokenRegistryForAuth{
+		tokensByHash: map[string]*models.RefreshToken{
+			hash: {
+				TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+					TenantID: tenantID,
+					UserID:   userID,
+				},
+				TokenHash: hash,
+				ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+			},
+		},
+		createErr: errors.New("refresh_tokens insert failed"),
+	}
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+
+	resp := postRefresh(apiserver.AuthParams{UserRegistry: userReg, RefreshTokenRegistry: refreshReg, JWTSecret: jwtSecret}, raw)
+
+	c.Assert(resp.Code, qt.Equals, http.StatusInternalServerError)
+	c.Assert(resp.Body.String(), qt.Contains, "Failed to rotate session")
+	// The consumed row must NOT be revoked — a failed rotation leaves the
+	// existing session intact (no reuse cascade fired either).
+	c.Assert(refreshReg.tokensByHash[hash].RevokedAt, qt.IsNil)
+	c.Assert(refreshReg.revokeByUserIDCalled, qt.IsFalse)
+}
+
+// TestAuthAPI_Refresh_RevokeOldFailureStill200 pins that revoking the consumed
+// row is best-effort: a transient RevokeByID failure during rotation must NOT
+// sign the user out — the new token + cookie are already minted, so the
+// response stays 200 (a regression turning this into a 500 would log the user
+// out on a revoke flake).
+func TestAuthAPI_Refresh_RevokeOldFailureStill200(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-revokefail", "tenant-revokefail"
+
+	raw, hash, err := models.GenerateRefreshToken()
+	c.Assert(err, qt.IsNil)
+	refreshReg := &mockRefreshTokenRegistryForAuth{
+		tokensByHash: map[string]*models.RefreshToken{
+			hash: {
+				TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+					TenantID: tenantID,
+					UserID:   userID,
+				},
+				TokenHash: hash,
+				ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+			},
+		},
+		revokeByIDErr: errors.New("revoke consumed row flaked"),
+	}
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+
+	resp := postRefresh(apiserver.AuthParams{UserRegistry: userReg, RefreshTokenRegistry: refreshReg, JWTSecret: jwtSecret}, raw)
+
+	c.Assert(resp.Code, qt.Equals, http.StatusOK)
+	c.Assert(refreshCookieValue(resp), qt.Not(qt.Equals), "")
+}
+
+// TestAuthAPI_Refresh_ReuseDetectionRevokesAllSessions pins the #967 H4 theft
+// cascade: after one rotation, replaying the now-revoked original cookie is
+// treated as theft — it 401s with the SAME body as the expired branch, ALL of
+// the user's sessions are revoked (so even the legitimately-rotated cookie
+// 401s afterwards), and exactly one audit row is written with
+// Action=="refresh_token_reuse_detected", Success==false.
+func TestAuthAPI_Refresh_ReuseDetectionRevokesAllSessions(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-theft", "tenant-theft"
+
+	refreshReg := memreg.NewRefreshTokenRegistry()
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+	auditReg := memreg.NewAuditLogRegistry()
+	auditSvc := services.NewAuditService(auditReg)
+	original := seedRefreshRow(t, refreshReg, userID, tenantID)
+
+	params := apiserver.AuthParams{
+		UserRegistry:         userReg,
+		RefreshTokenRegistry: refreshReg,
+		AuditService:         auditSvc,
+		JWTSecret:            jwtSecret,
+	}
+
+	// Rotate once.
+	resp := postRefresh(params, original)
+	c.Assert(resp.Code, qt.Equals, http.StatusOK)
+	rotated := refreshCookieValue(resp)
+	c.Assert(rotated, qt.Not(qt.Equals), "")
+
+	// Replay the now-revoked original: theft detected. Body must be
+	// byte-identical to the plain-expired branch (opaque to the attacker).
+	theft := postRefresh(params, original)
+	c.Assert(theft.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(strings.TrimSpace(theft.Body.String()), qt.Equals, "Refresh token expired or revoked")
+
+	// Cascade: the rotated (legitimate) session row must ALSO be revoked now.
+	// Asserted via the registry rather than by replaying the cookie — a replay
+	// would itself be a second reuse event and inflate the audit count.
+	rotatedRow, err := refreshReg.GetByTokenHash(context.Background(), models.HashRefreshToken(rotated))
+	c.Assert(err, qt.IsNil)
+	c.Assert(rotatedRow.RevokedAt, qt.IsNotNil)
+
+	// Exactly one reuse audit row (from the single replay), marked unsuccessful.
+	logs, err := auditReg.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	reuseRows := 0
+	for _, l := range logs {
+		if l.Action == "refresh_token_reuse_detected" {
+			reuseRows++
+			c.Assert(l.Success, qt.IsFalse)
+		}
+	}
+	c.Assert(reuseRows, qt.Equals, 1)
+}
+
+// TestAuthAPI_Refresh_ExpiredStays401NoCascade pins the #967 H4 boundary: a
+// genuinely expired row (RevokedAt == nil, ExpiresAt in the past) must 401
+// WITHOUT triggering the theft cascade — the user's OTHER active sessions stay
+// live and no reuse audit row is written.
+func TestAuthAPI_Refresh_ExpiredStays401NoCascade(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-expired", "tenant-expired"
+
+	refreshReg := memreg.NewRefreshTokenRegistry()
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+	auditReg := memreg.NewAuditLogRegistry()
+	auditSvc := services.NewAuditService(auditReg)
+
+	// Seed one expired-but-active row (the cookie under test) and one healthy
+	// active row (to prove the cascade did NOT fire).
+	expiredRaw, expiredHash, err := models.GenerateRefreshToken()
+	c.Assert(err, qt.IsNil)
+	_, err = refreshReg.Create(context.Background(), models.RefreshToken{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: tenantID, UserID: userID},
+		TokenHash:               expiredHash,
+		ExpiresAt:               time.Now().Add(-time.Minute), // expired, not revoked
+	})
+	c.Assert(err, qt.IsNil)
+	healthyRaw := seedRefreshRow(t, refreshReg, userID, tenantID)
+
+	params := apiserver.AuthParams{
+		UserRegistry:         userReg,
+		RefreshTokenRegistry: refreshReg,
+		AuditService:         auditSvc,
+		JWTSecret:            jwtSecret,
+	}
+
+	resp := postRefresh(params, expiredRaw)
+	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(strings.TrimSpace(resp.Body.String()), qt.Equals, "Refresh token expired or revoked")
+
+	// No cascade: the healthy row is untouched and still refreshes.
+	healthyRow, err := refreshReg.GetByTokenHash(context.Background(), models.HashRefreshToken(healthyRaw))
+	c.Assert(err, qt.IsNil)
+	c.Assert(healthyRow.RevokedAt, qt.IsNil)
+
+	// No reuse audit row was written.
+	logs, err := auditReg.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	for _, l := range logs {
+		c.Assert(l.Action, qt.Not(qt.Equals), "refresh_token_reuse_detected")
+	}
+}
+
+// TestAuthAPI_Refresh_RateLimited429 pins the #967 H1 dedicated refresh budget:
+// hammering /auth/refresh past refreshAttemptsLimit from one IP returns 429
+// with a Retry-After header. Uses the real in-memory limiter so the sliding
+// window is exercised end-to-end.
+func TestAuthAPI_Refresh_RateLimited429(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-rl", "tenant-rl"
+
+	refreshReg := memreg.NewRefreshTokenRegistry()
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+	limiter := services.NewInMemoryAuthRateLimiter()
+
+	params := apiserver.AuthParams{
+		UserRegistry:         userReg,
+		RefreshTokenRegistry: refreshReg,
+		RateLimiter:          limiter,
+		JWTSecret:            jwtSecret,
+	}
+
+	router := chi.NewRouter()
+	apiserver.Auth(params)(router)
+
+	// The refresh budget is 60/15min; fire a few past that from one IP. Each
+	// request rotates, so re-seed a fresh cookie each loop to keep the handler
+	// past the limiter rather than 401-ing on a revoked cookie — but the
+	// limiter rejects before the handler runs once the budget is spent, so the
+	// cookie value is irrelevant on the rejected call.
+	var last *httptest.ResponseRecorder
+	for range 65 {
+		raw := seedRefreshRow(t, refreshReg, userID, tenantID)
+		req := httptest.NewRequest("POST", "/refresh", nil)
+		req.RemoteAddr = "203.0.113.7:54321"
+		// #nosec G124 -- test-only cookie.
+		req.AddCookie(&http.Cookie{Name: "refresh_token", Value: raw})
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		last = rec
+		if rec.Code == http.StatusTooManyRequests {
+			break
+		}
+	}
+	c.Assert(last.Code, qt.Equals, http.StatusTooManyRequests)
+	retryAfter, err := strconv.Atoi(last.Header().Get("Retry-After"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(retryAfter > 0, qt.IsTrue)
+}
+
+// TestAuthAPI_Refresh_ImpersonationNotRotated pins the #967 care point that the
+// impersonation guard stays FIRST: an impersonation-marker refresh cookie is
+// rejected with 401 ErrImpersonationTokenCannotRefresh before any cookie
+// lookup, so no new row is created, no cookie is rotated, and no reuse audit
+// row is written.
+func TestAuthAPI_Refresh_ImpersonationNotRotated(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-imp", "tenant-imp"
+
+	refreshReg := memreg.NewRefreshTokenRegistry()
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+	auditReg := memreg.NewAuditLogRegistry()
+	auditSvc := services.NewAuditService(auditReg)
+
+	params := apiserver.AuthParams{
+		UserRegistry:         userReg,
+		RefreshTokenRegistry: refreshReg,
+		AuditService:         auditSvc,
+		JWTSecret:            jwtSecret,
+	}
+
+	// The impersonation-start flow plants a marker value in the refresh cookie
+	// (impersonationRefreshCookieMarker). Its detectable prefix is "imp:".
+	resp := postRefresh(params, "imp:some-impersonation-marker-payload")
+	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(strings.TrimSpace(resp.Body.String()), qt.Equals, apiserver.ErrImpersonationTokenCannotRefresh.Error())
+
+	// No row was created and no cookie was rotated.
+	c.Assert(refreshCookieValue(resp), qt.Equals, "")
+	rows, err := refreshReg.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(rows, qt.HasLen, 0)
+
+	// No reuse audit row.
+	logs, err := auditReg.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(logs, qt.HasLen, 0)
 }
 
 // refreshCookieCleared reports whether the response includes a Set-Cookie

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -341,7 +342,8 @@ func populateUserSystemAdminFlagFromAccessToken(accessTokenString string, user *
 
 // refresh issues a new access token using a valid refresh token cookie.
 // @Summary Refresh access token
-// @Description Issue a new short-lived access token using the refresh token stored in the httpOnly cookie.
+// @Description Issue a new short-lived access token using the refresh token stored in the httpOnly cookie. Rotates the refresh token: the consumed cookie value is revoked and a new value is set.
+// @Description Replaying an already-rotated cookie is treated as theft and revokes all of the user's sessions.
 // @Tags auth
 // @Produce json
 // @Success 200 {object} LoginResponse "OK"
@@ -397,7 +399,36 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !refreshToken.IsValid() {
+	// Reuse detection (#967 H4). GetByTokenHash returns revoked rows
+	// UNFILTERED, so a presented cookie that hashes to an already-revoked
+	// row means one of two things: a legitimate client racing its own
+	// rotation (rare, and indistinguishable from theft), or — the case we
+	// must defend — an attacker replaying a refresh token that the
+	// legitimate session has since rotated away from (#967 H2). We treat any
+	// revoked-row presentation as theft and revoke ALL of the user's active
+	// sessions, so a stolen cookie can at most trigger one more rotation
+	// before the whole session family is invalidated. This runs BEFORE the
+	// user-active / blacklist checks so theft is caught even for a
+	// since-deactivated user. The 401 is byte-identical to the plain-expired
+	// branch below so the response is opaque to the attacker.
+	if refreshToken.RevokedAt != nil {
+		if err := api.refreshTokenRegistry.RevokeByUserID(r.Context(), refreshToken.UserID); err != nil {
+			slog.Error("Failed to revoke all sessions on refresh-token reuse", "user_id", refreshToken.UserID, "error", err)
+		}
+		slog.Warn("Refresh token reuse detected",
+			"user_id", refreshToken.UserID,
+			"token_id", refreshToken.ID,
+			"ip", clientIPTruncated(r),
+			"request_id", middleware.GetReqID(r.Context()))
+		uid := refreshToken.UserID
+		tid := refreshToken.TenantID
+		api.logAuth(r.Context(), "refresh_token_reuse_detected", &uid, &tid, false, r, nil)
+		clearRefreshCookie(w, r)
+		http.Error(w, "Refresh token expired or revoked", http.StatusUnauthorized)
+		return
+	} else if !refreshToken.IsValid() {
+		// Genuinely expired (RevokedAt == nil, past ExpiresAt): no theft, no
+		// cascade — keep the original behaviour and just clear the cookie.
 		slog.Warn("Expired or revoked refresh token", "token_id", refreshToken.ID)
 		clearRefreshCookie(w, r)
 		http.Error(w, "Refresh token expired or revoked", http.StatusUnauthorized)
@@ -428,31 +459,62 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Carry the refreshed-from row id as "rti" so /users/me/sessions can
-	// identify the caller's own session without the refresh cookie.
-	accessTokenString, _, err := api.issueAccessToken(r.Context(), user, refreshToken.ID)
+	// Rotate the refresh token (#967 H2). The tenant plane previously only
+	// bumped last_used_at and never re-issued the cookie, so a stolen refresh
+	// cookie stayed valid for its full 30-day TTL with no way to detect
+	// replay. Mirroring the back-office plane (#1785), we now:
+	//
+	//   1. persist a FRESH 30-day row BEFORE revoking the consumed one, so a
+	//      transient registry error leaves the operator's existing session
+	//      usable (vs. half-rotated and signed out);
+	//   2. mint the access token carrying the NEW row id as "rti" — see the
+	//      CRITICAL note below;
+	//   3. best-effort revoke the consumed row. Combined with reuse detection
+	//      above, the consumed cookie now hashes to a revoked row, so any
+	//      replay of it trips the theft cascade.
+	newRTI, newRawRefreshToken, err := api.persistRefreshToken(r.Context(), r, user)
+	if err != nil {
+		slog.Error("Failed to issue rotated refresh token", "user_id", user.ID, "error", err)
+		http.Error(w, "Failed to rotate session", http.StatusInternalServerError)
+		return
+	}
+
+	// CRITICAL: pass the NEW row id (newRTI), NOT refreshToken.ID, as the
+	// "rti" claim. /users/me/sessions resolves the caller's current session
+	// by this claim first; stamping the old (about-to-be-revoked) row id
+	// would make is_current false for the live session and let
+	// revokeAllOtherSessions nuke the caller's own session.
+	accessTokenString, _, err := api.issueAccessToken(r.Context(), user, newRTI)
 	if err != nil {
 		slog.Error("Failed to generate access token on refresh", "user_id", user.ID, "error", err)
+		// Roll back the freshly-persisted row so a failed mint doesn't leave
+		// an orphaned valid refresh row with no cookie ever handed out.
+		api.rollbackRefreshToken(r.Context(), user.ID, newRTI)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
 
-	// Update last-used timestamp on the refresh token (best-effort).
-	now := time.Now()
-	refreshToken.LastUsedAt = &now
-	if _, err := api.refreshTokenRegistry.Update(r.Context(), *refreshToken); err != nil {
-		slog.Error("Failed to update refresh token last_used_at", "token_id", refreshToken.ID, "error", err)
+	// Revoke the consumed row (best-effort). The access token is already
+	// minted and the new cookie will overwrite the old one in the browser,
+	// so a transient revoke failure must NOT 500 — but log loudly so a
+	// partial rotation is visible. We do NOT bump last_used_at on the new
+	// row: the tenant registry has no BumpLastUsedAt and login() leaves it
+	// nil on a fresh row too, so a freshly-rotated session reads the same as
+	// a freshly-logged-in one.
+	if err := api.refreshTokenRegistry.RevokeByID(r.Context(), user.ID, refreshToken.ID); err != nil {
+		slog.Error("Failed to revoke consumed refresh token (rotation partially completed)",
+			"old_token_id", refreshToken.ID, "new_token_id", newRTI, "user_id", user.ID, "error", err)
 	}
 
 	// Re-generate the CSRF token so it stays in sync with the new access token.
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
 
-	// refresh() does not rotate the refresh cookie (writeLoginResponse writes
-	// no cookie), so a session that only ever refreshes would never evict a
-	// stale pre-#1750 cookie left at the legacy /api/v1/auth path. Clear it
-	// explicitly here — cheap, idempotent, and closes the migration window
-	// for refresh-only sessions (#1750/#1771).
-	clearLegacyRefreshCookie(w, r)
+	// Write the NEW refresh cookie. setRefreshTokenCookie -> writeRefreshCookie
+	// emits the canonical flags (Path=/api/v1, HttpOnly, SameSite=Strict,
+	// Secure-on-HTTPS) and clears any stale legacy /api/v1/auth cookie
+	// internally, subsuming the explicit clearLegacyRefreshCookie the old
+	// no-rotation path needed.
+	api.setRefreshTokenCookie(w, r, newRawRefreshToken)
 
 	// Reuse the freshly-minted access-token claim instead of doing a
 	// second SystemAdminGrantRegistry.Exists lookup on the hot refresh
@@ -901,7 +963,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).Post("/login", api.login)
 		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).Post("/login/mfa", api.loginMFA)
-		r.Post("/refresh", api.refresh)
+		r.With(AuthRefreshRateLimitMiddleware(params.RateLimiter)).Post("/refresh", api.refresh)
 		r.Post("/logout", api.logout)
 		// Magic-link passwordless sign-in. Both routes are public/no-auth.
 		// The request route is per-email throttled (magic-link limiter) on
