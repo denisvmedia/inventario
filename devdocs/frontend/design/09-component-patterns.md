@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button"
 | `default` (filled primary) | The page's main CTA. Exactly one per surface. |
 | `outline` | Secondary actions, modal Cancel, "Save changes" inside a card. |
 | `ghost` | Tertiary actions, kebab triggers, sidebar items. |
-| `destructive` | Delete / discard / leave. Always paired with an `<AlertDialog>` confirmation. |
+| `destructive` | Delete / discard / leave. Always paired with a `useConfirm()` confirmation. |
 | `secondary` | Rare. Use `outline` first. |
 | `link` | Text-only inline, e.g. "Forgot password?" |
 
@@ -138,31 +138,33 @@ Width:
 Title icon: 28×28 tile (`size-7`) with a 16×16 (`size-4`) icon at
 `text-primary` over `bg-primary/10`. Optional but consistent.
 
-## AlertDialog
+## Confirmations (destructive flows)
+
+There is no separate `AlertDialog` primitive — confirmations reuse the
+generic `<Dialog>` (`src/components/ui/dialog.tsx`) through the
+`useConfirm()` hook (`src/hooks/useConfirm.tsx`). The hook mounts a
+single Dialog at the app root and exposes a promise-based API, so a
+destructive action is just:
 
 ```tsx
-<AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
-  <AlertDialogContent>
-    <AlertDialogHeader>
-      <AlertDialogTitle>Delete item</AlertDialogTitle>
-      <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
-    </AlertDialogHeader>
-    <AlertDialogFooter>
-      <AlertDialogCancel>Cancel</AlertDialogCancel>
-      <AlertDialogAction
-        onClick={handleDelete}
-        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-      >
-        Delete
-      </AlertDialogAction>
-    </AlertDialogFooter>
-  </AlertDialogContent>
-</AlertDialog>
+const { confirm } = useConfirm()
+
+async function onDelete() {
+  const ok = await confirm({
+    title: t("commodities:delete.title"),
+    description: t("commodities:delete.body"),
+    confirmLabel: t("common:actions.delete"),
+    destructive: true,
+  })
+  if (ok) await deleteItem(id)
+}
 ```
 
-Always for destructive flows. Always paired with a destructive `Button`
-trigger. The `useConfirm()` hook (`src/hooks/useConfirm.tsx`) wraps
-this in a promise — prefer it over re-implementing the open state.
+Always use `confirm()` for destructive flows rather than wiring open
+state by hand. `destructive: true` styles the confirm button with the
+destructive token. Resolving with `false` (Cancel, click-outside,
+Escape) means "don't proceed", so callers never handle a rejected
+promise.
 
 ## Sheet
 
@@ -350,7 +352,11 @@ See [16-notifications-and-trust.md](16-notifications-and-trust.md).
 
 ## Empty state (component family)
 
-`src/components/dashboard/EmptyState.tsx` etc. Shape:
+There is no shared `EmptyState` component — each list/page defines a
+small local `EmptyState` (e.g. inside
+`src/pages/commodities/CommoditiesListPage.tsx`,
+`src/pages/warranties/WarrantiesListPage.tsx`,
+`src/pages/SearchPage.tsx`) following the same shape:
 
 ```tsx
 <div className="flex flex-col items-center justify-center gap-3 py-16">
@@ -383,9 +389,11 @@ Shell composes:
 - `<TopBar>` (logo on mobile, title + actions on desktop).
 - `<Outlet>` (the routed page).
 
-Sidebar nav items come from a const array (`NAV_ENTRIES`) gated by
-permissions. Adding a route to nav = adding the entry + the
-translation under `common:nav.*`.
+Sidebar nav items come from per-section const arrays in
+`src/components/AppSidebar.tsx` (`INVENTORY`, `MANAGE`, `REPORTS`,
+`PERSONAL`, `ADMIN`, each typed `NavEntry[]`), gated by permissions.
+Adding a route to nav = adding the entry to the right section array +
+the translation under `common:nav.*`.
 
 ## Hard rules
 

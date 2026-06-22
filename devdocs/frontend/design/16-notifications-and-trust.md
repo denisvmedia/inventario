@@ -77,7 +77,7 @@ toast.success(t("commodities:toast.deleted"), {
 
 ## Confirmation
 
-`<AlertDialog>` for destructive flows. See [09-component-patterns.md](09-component-patterns.md),
+`useConfirm()` for destructive flows. See [09-component-patterns.md](09-component-patterns.md),
 [12-tone-of-voice-and-copy.md](12-tone-of-voice-and-copy.md) ("Destructive confirmations").
 
 Confirmations are NOT toasts; toasts are post-hoc, confirmations are

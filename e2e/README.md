@@ -18,7 +18,7 @@ e2e/
 
 ### Prerequisites
 
-- Node.js (v18 or later)
+- Node.js (v24.16.0, per `package.json` `engines`)
 - npm (v8 or later)
 - Go (v1.26 or later)
 

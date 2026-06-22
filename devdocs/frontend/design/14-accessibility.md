@@ -12,9 +12,10 @@ keyboard / screen-reader / low-vision / motor-impaired user.
 
 ### Keyboard
 
-Every interactive element is reachable by Tab in DOM order. Skip-to-content
-link at the top of every page (mounted in `Shell.tsx`). Modal focus
-trapped via Radix; closure restores focus to the trigger.
+Every interactive element is reachable by Tab in DOM order. Modal focus
+is trapped via Radix; closure restores focus to the trigger. A
+skip-to-content link is **not yet mounted** in `Shell.tsx` — adding one
+is a tracked accessibility gap, not a shipped guarantee.
 
 | Shortcut | Action | Where |
 | --- | --- | --- |
@@ -101,7 +102,7 @@ it earlier. See [../perf.md](../perf.md), [../testing.md](../testing.md).
 | Pattern | Primitive |
 | --- | --- |
 | Modal dialog | Radix `<Dialog>` — already wires `role="dialog"`, `aria-labelledby`, `aria-describedby`, focus trap |
-| Alert dialog (destructive) | Radix `<AlertDialog>` |
+| Alert dialog (destructive) | Radix `<Dialog>` via `useConfirm()` — no separate `AlertDialog` primitive |
 | Menu | Radix `<DropdownMenu>` |
 | Combobox | `cmdk` via shadcn `<Command>` |
 | Tabs | Radix `<Tabs>` |
@@ -154,7 +155,7 @@ Radix handles:
 
 Don't override `onPointerDownOutside` / `onEscapeKeyDown` to disable
 closure — that breaks user expectations. The legitimate exception: an
-unsaved-changes guard that opens a nested confirm AlertDialog before
+unsaved-changes guard that opens a nested `useConfirm()` dialog before
 the parent dialog closes.
 
 ## Reduced motion

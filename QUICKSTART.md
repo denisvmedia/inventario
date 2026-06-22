@@ -73,7 +73,7 @@ The docker-compose setup automatically:
 2. **Bootstrapped** database extensions and roles
 3. **Ran migrations** to create all database tables
 4. **Created initial data**:
-   - Default tenant: "Test Organization"
+   - Default tenant: "Default Organization"
    - Admin user: admin@example.com
 5. **Seeded example data** (enabled by default):
    - System settings (Main Currency: CZK)
@@ -150,7 +150,7 @@ docker-compose down -v
 | `FILE_SIGNING_KEY` | (see .env.example) | File URL signing key (32+ chars) |
 | `ADMIN_EMAIL` | `admin@example.com` | Initial admin email |
 | `ADMIN_PASSWORD` | `Admin123` | Initial admin password |
-| `DEFAULT_TENANT_NAME` | `Test Organization` | Organization name |
+| `DEFAULT_TENANT_NAME` | `Default Organization` | Organization name |
 | `SEED_DATABASE` | `true` | Seed with example data and settings (set to `false` for clean start) |
 
 See `.env.example` for all available options.

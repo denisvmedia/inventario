@@ -23,9 +23,11 @@ Used everywhere a list is genuinely empty. Anatomy in
 </div>
 ```
 
-The empty-state taxonomy (which icon, which copy, which CTA) is in
-`frontend/src/components/dashboard/EmptyState.tsx` and analogous files
-per feature.
+The empty-state taxonomy (which icon, which copy, which CTA) lives in
+the per-page local `EmptyState` components — e.g.
+`frontend/src/pages/commodities/CommoditiesListPage.tsx`,
+`frontend/src/pages/warranties/WarrantiesListPage.tsx`,
+`frontend/src/pages/SearchPage.tsx` — there is no shared component.
 
 ## 404 — page not found
 
@@ -213,4 +215,5 @@ itself is a backspace.
   - `frontend/src/pages/NotFound.tsx`
   - `frontend/src/pages/NoGroupPage.tsx`
   - `frontend/src/components/coming-soon/ComingSoonPage.tsx`
-  - `frontend/src/components/dashboard/EmptyState.tsx`
+  - Per-page local `EmptyState` components (e.g.
+    `frontend/src/pages/commodities/CommoditiesListPage.tsx`)

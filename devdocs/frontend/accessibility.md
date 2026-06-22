@@ -27,9 +27,9 @@ the test or weakening the threshold globally.
   keyboard users; mouse-clickers don't see the ring around a button they
   just pressed. shadcn does this correctly out of the box; mirror it
   when you write a new interactive element.
-- **Trap focus inside modals.** Radix `<Dialog>`, `<AlertDialog>`,
-  `<Sheet>`, `<DropdownMenu>` already do this. Don't roll your own
-  modal — use the primitive.
+- **Trap focus inside modals.** Radix `<Dialog>`, `<Sheet>`,
+  `<DropdownMenu>` already do this. Don't roll your own modal — use the
+  primitive.
 - **Initial focus.** Radix returns focus to the trigger when the modal
   closes. If you need a specific control to focus on open, use Radix's
   `onOpenAutoFocus` / `<DialogContent autoFocus={false}>` and ref the
@@ -63,7 +63,7 @@ Use Radix primitives:
 | Need | Primitive |
 | --- | --- |
 | Generic dialog with form | `Dialog` (`@/components/ui/dialog`) |
-| Destructive confirmation | `AlertDialog` (`@/components/ui/alert-dialog` via `useConfirm()`) |
+| Destructive confirmation | `useConfirm()` (`@/hooks/useConfirm`, built on `Dialog` — no `alert-dialog` primitive) |
 | Side-sheet (item detail, settings preview) | `Sheet` (`@/components/ui/sheet`) |
 | Popover (combobox, date picker) | `Popover` |
 | Dropdown menu (kebab actions) | `DropdownMenu` |
@@ -77,9 +77,8 @@ Rules:
 - **Close on Esc and backdrop click.** Radix does this; don't override
   `onPointerDownOutside` / `onEscapeKeyDown` to disable closure unless
   you have a reason (an unsaved-changes guard, e.g.).
-- **No `window.confirm()` / `alert()`.** Use `<AlertDialog>` or
-  `useConfirm()`. Native dialogs aren't styleable, aren't translatable,
-  and break in tests.
+- **No `window.confirm()` / `alert()`.** Use `useConfirm()`. Native
+  dialogs aren't styleable, aren't translatable, and break in tests.
 
 ## Color and contrast
 
