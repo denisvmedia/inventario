@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"strings"
 
@@ -118,7 +117,7 @@ func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 	}()
 
 	fmt.Fprintln(out, "=== UPDATE USER ===")
-	fmt.Fprintf(out, "Database: %s\n", redactDSN(dbConfig.DBDSN))
+	fmt.Fprintf(out, "Database: %s\n", shared.RedactDSN(dbConfig.DBDSN))
 	fmt.Fprintf(out, "Target: %s\n", idOrEmail)
 	if cfg.DryRun {
 		fmt.Fprintln(out, "Mode: DRY RUN (no changes will be made)")
@@ -277,23 +276,6 @@ func printCrossTenantWarning(out io.Writer) {
 	fmt.Fprintln(out, "    stay in the original tenant and will become inaccessible to them.")
 	fmt.Fprintln(out, "    See https://github.com/denisvmedia/inventario/issues/2179")
 	fmt.Fprintln(out)
-}
-
-// redactDSN masks the password embedded in a database DSN so credentials never
-// leak into terminal history or CI logs. The username is preserved to keep the
-// banner useful for troubleshooting; if the DSN can't be parsed or carries no
-// userinfo, it is returned unchanged (non-postgres DSNs reach here only in the
-// memory:// case, which is rejected earlier).
-func redactDSN(dsn string) string {
-	parsed, err := url.Parse(dsn)
-	if err != nil || parsed.User == nil {
-		return dsn
-	}
-	if _, hasPassword := parsed.User.Password(); !hasPassword {
-		return dsn
-	}
-	parsed.User = url.UserPassword(parsed.User.Username(), "xxxxxx")
-	return parsed.String()
 }
 
 // printUserInfo prints user information in a formatted way

@@ -92,7 +92,7 @@ func (c *Command) resetMFA(cfg *Config, dbConfig *shared.DatabaseConfig, idOrEma
 	}
 
 	fmt.Fprintln(out, "=== RESET USER MFA ===")
-	fmt.Fprintf(out, "Database: %s\n", dbConfig.DBDSN)
+	fmt.Fprintf(out, "Database: %s\n", shared.RedactDSN(dbConfig.DBDSN))
 	fmt.Fprintf(out, "Target: %s\n", idOrEmail)
 	if cfg.DryRun {
 		fmt.Fprintln(out, "Mode: DRY RUN (no changes will be made)")

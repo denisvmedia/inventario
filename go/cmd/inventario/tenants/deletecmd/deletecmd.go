@@ -98,7 +98,7 @@ func (c *Command) deleteTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 	}
 
 	fmt.Println("=== DELETE TENANT ===")
-	fmt.Printf("Database: %s\n", dbConfig.DBDSN)
+	fmt.Printf("Database: %s\n", shared.RedactDSN(dbConfig.DBDSN))
 	fmt.Printf("Target: %s\n", idOrSlug)
 	if cfg.DryRun {
 		fmt.Println("Mode: DRY RUN (no changes will be made)")
