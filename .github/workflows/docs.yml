@@ -1,0 +1,198 @@
+name: Docs
+
+# Builds the Astro Starlight user-docs site (docs/site) and deploys it to
+# GitHub Pages via the official GitHub Actions (artifact) flow — NO gh-pages
+# branch and NO deploy history (one copy of the site). Decided in #2146 / #2087.
+#
+# Versioning (mike-style, but BRANCHLESS): a Pages artifact replaces the whole
+# site on every deploy, so the build assembles ALL versions into one artifact:
+#   - master                   -> /inventario/edge/
+#   - newest N tags vX.Y.Z      -> /inventario/vX.Y.Z/  (N = MAX_DOC_TAG_VERSIONS,
+#                                  default 10; older tags are dropped)
+#   - root /inventario/         -> generated redirect to the default version
+#                                  (latest = highest semver tag, else edge)
+#                                  + versions.json
+# Trade-off of branchless: because the artifact is full-replace, every deploy
+# rebuilds edge + the kept tags (cheap now — no tags yet). A tag whose commit
+# has no docs/site is skipped.
+#
+# One-time setup by a maintainer: Settings -> Pages -> Source = "GitHub Actions".
+# Custom domain (#2146 open Q1): set astro.config base:'/' + docs/site/public/CNAME.
+
+on:
+  push:
+    # No `paths` on push: a paths filter would also gate tag pushes and could
+    # skip a release tag placed on a non-docs commit. master is path-gated by
+    # the `changes` job instead; tags always deploy.
+    branches: [master]
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'docs/site/**'
+      - '.github/workflows/docs.yml'
+
+# Least privilege: the workflow only needs read at the top level. The GitHub
+# Pages write + OIDC scopes are granted to the deploy job alone (see below), so
+# the PR build-gate and the changes/build jobs never hold deploy credentials.
+permissions:
+  contents: read
+
+# Never cancel an in-flight Pages deploy (avoids a half-published site).
+concurrency:
+  group: docs-pages
+  cancel-in-progress: false
+
+# How many historical tag versions to build + keep (the newest N by semver,
+# NOT counting `edge`). Bounds the rebuild-all cost. Override via a repo
+# variable: Settings -> Secrets and variables -> Actions -> Variables ->
+# MAX_DOC_TAG_VERSIONS.
+env:
+  MAX_DOC_TAG_VERSIONS: ${{ vars.MAX_DOC_TAG_VERSIONS || 10 }}
+
+jobs:
+  # Detect whether docs changed so master pushes that don't touch docs are
+  # skipped. Runs on every push (incl. tags); the build/deploy conditions below
+  # deploy tags regardless of this output.
+  changes:
+    name: Detect docs changes
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            docs:
+              - 'docs/site/**'
+              - '.github/workflows/docs.yml'
+
+  # Build the full versioned site into _site/. On PRs it builds edge only as a
+  # breakage gate (no tag loop, no artifact). On deploys it also builds every
+  # tag, generates the root redirect, and uploads the Pages artifact.
+  build:
+    name: Build versioned site
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' ||
+      ( github.event_name == 'push' &&
+        ( startsWith(github.ref, 'refs/tags/v') ||
+          (github.ref == 'refs/heads/master' && needs.changes.outputs.docs == 'true') ) )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # all tags, for the version loop + git worktree
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: docs/site/package-lock.json
+
+      - name: Self-test the version generator
+        # Pure, dependency-free unit test of the semver/ordering/redirect logic.
+        # Runs on every event (incl. PRs) so a regression is caught before deploy.
+        run: node docs/site/scripts/gen-versions.mjs --selftest
+
+      - name: Build edge from the current tree -> _site/edge
+        # On PRs (the build gate) and master pushes the checked-out tree IS
+        # edge. Tag pushes are handled by the next step — `edge` must always
+        # track master, never the tagged release.
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
+        env:
+          DOCS_VERSION: edge
+        run: |
+          set -euo pipefail
+          cd docs/site
+          npm ci
+          npm run build
+          mkdir -p "$GITHUB_WORKSPACE/_site/edge"
+          cp -r dist/. "$GITHUB_WORKSPACE/_site/edge/"
+
+      - name: Build edge from master -> _site/edge (tag pushes)
+        # A tag push checks out the tag, but `edge` must reflect master. Build
+        # it from a master worktree so publishing a release never clobbers the
+        # edge docs (the Pages artifact is a full replace). origin/master is
+        # available because checkout used fetch-depth: 0.
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          DOCS_VERSION: edge
+        run: |
+          set -euo pipefail
+          workdir="$(mktemp -d)"
+          git worktree add --force "$workdir" origin/master
+          ( cd "$workdir/docs/site" \
+            && DOCS_VERSION=edge npm ci \
+            && DOCS_VERSION=edge npm run build )
+          mkdir -p "$GITHUB_WORKSPACE/_site/edge"
+          cp -r "$workdir/docs/site/dist/." "$GITHUB_WORKSPACE/_site/edge/"
+          git worktree remove --force "$workdir" || true
+
+      - name: Build each released tag -> _site/<tag>
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          # Keep only the newest MAX_DOC_TAG_VERSIONS tags (by semver); older
+          # historical versions are dropped (not built, not listed, not served).
+          # Filter to the SAME shape gen-versions.mjs indexes (vX.Y[.Z], no
+          # pre-release/build metadata): a tag it can't index would never reach
+          # versions.json or the switcher, so building it only orphans a dead
+          # folder. `|| true` keeps the no-tags case (grep finds nothing under
+          # `set -o pipefail`) from failing the step.
+          for tag in $(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+(\.[0-9]+)?$' | sort -V | tail -n "${MAX_DOC_TAG_VERSIONS:-10}" || true); do
+            echo "::group::Building $tag"
+            workdir="$(mktemp -d)"
+            git worktree add --force "$workdir" "refs/tags/$tag"
+            # A single broken historical tag must NOT abort the whole publish:
+            # the branchless model rebuilds every kept tag on each deploy, so an
+            # old tag whose lockfile no longer resolves would otherwise block
+            # shipping new docs forever. Treat a per-tag failure as a warning and
+            # move on; worktree cleanup runs regardless so a failure can't leak.
+            if [ -f "$workdir/docs/site/package.json" ]; then
+              if ( cd "$workdir/docs/site" \
+                   && DOCS_VERSION="$tag" npm ci \
+                   && DOCS_VERSION="$tag" npm run build ); then
+                mkdir -p "$GITHUB_WORKSPACE/_site/$tag"
+                cp -r "$workdir/docs/site/dist/." "$GITHUB_WORKSPACE/_site/$tag/"
+              else
+                echo "::warning::$tag failed to build — skipping (edge + other versions still deploy)"
+              fi
+            else
+              echo "::warning::$tag has no docs/site — skipping"
+            fi
+            git worktree remove --force "$workdir" || true
+            echo "::endgroup::"
+          done
+
+      - name: Generate root version index + redirect
+        if: github.event_name == 'push'
+        run: node docs/site/scripts/gen-versions.mjs "$GITHUB_WORKSPACE/_site"
+
+      - name: Upload Pages artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: [changes, build]
+    if: >-
+      github.event_name == 'push' &&
+      ( startsWith(github.ref, 'refs/tags/v') ||
+        (github.ref == 'refs/heads/master' && needs.changes.outputs.docs == 'true') )
+    runs-on: ubuntu-latest
+    # The only job that touches GitHub Pages — confine the write scopes here.
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

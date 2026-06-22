@@ -129,6 +129,36 @@ maintainer for explicit approval before writing SQL by hand.**
 - Write tests for new behavior; add or update unit, integration, and e2e tests
   as appropriate for the layer you touched.
 
+## User documentation
+
+The end-user docs site is an [Astro Starlight](https://starlight.astro.build)
+project in [`docs/site/`](docs/site), deployed to GitHub Pages by
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml) (decided in #2146).
+To add or edit a page, edit the Markdown under `docs/site/src/content/docs/`.
+English is the default locale. To translate, create
+`docs/site/src/content/docs/cs/` (or `.../ru/`) and add pages there; until a
+page exists in a locale, Starlight serves the English fallback (so translating
+is additive). Screenshots live in
+`docs/site/src/assets/screenshots/` and are embedded with relative paths.
+
+The site is **versioned** (mike-style) and deployed via the GitHub Actions
+Pages flow — **no `gh-pages` branch, no deploy history** (one copy). Each
+version lives at its own sub-path:
+
+- `master` builds to `/edge/` (URL `…/inventario/edge/`).
+- The newest **N** `vX.Y.Z` tags build to `/vX.Y.Z/` (URL `…/inventario/vX.Y.Z/`);
+  `N` is `MAX_DOC_TAG_VERSIONS` (default 10, set via a repo variable), and older
+  tags are dropped.
+- The site root `…/inventario/` is a generated redirect to the **latest
+  release** (highest semver tag; currently `edge`, until the first tag exists).
+
+Because the Pages artifact replaces the whole site each deploy, the workflow
+rebuilds edge + the kept tags into one artifact per run; an in-page version
+switcher lets readers move between them. The version is chosen by the
+`DOCS_VERSION` env var (default `edge`), which drives the build's base path.
+
+Preview locally with `cd docs/site && npm install && DOCS_VERSION=edge npm run dev`.
+
 ## Questions
 
 If something here is unclear or out of date, open a regular issue (for

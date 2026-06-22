@@ -1,0 +1,38 @@
+---
+title: Inventario
+description: The home-inventory app that helps you track everything you own.
+template: splash
+hero:
+  title: Inventario
+  tagline: Catalogue everything you own — items, photos, warranties, and where it all lives.
+  image:
+    alt: Inventario logo
+    file: ../../assets/logo.svg
+  actions:
+    - text: Getting started
+      link: ./getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/denisvmedia/inventario
+      icon: external
+      variant: minimal
+---
+
+import { LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+## Explore the guide
+
+<CardGrid>
+  <LinkCard title="Getting started" href="./getting-started/" description="Add your first item and find your way around." />
+  <LinkCard title="Items" href="./items/" description="Record everything you own with photos, locations, tags, and prices." />
+  <LinkCard title="Locations & areas" href="./locations-and-areas/" description="Organise items into locations and areas." />
+  <LinkCard title="Tags" href="./tags/" description="Label and group items and files with flexible tags." />
+  <LinkCard title="Files & photos" href="./files-and-photos/" description="Attach receipts and manuals, and scan items with AI." />
+  <LinkCard title="Warranties, loans & maintenance" href="./warranties-loans-maintenance/" description="Stay ahead of expiries, returns, and service." />
+  <LinkCard title="Reports" href="./reports/" description="Generate an insurance report for an item or a whole location." />
+  <LinkCard title="Backup & restore" href="./backup-and-restore/" description="Export signed backups and restore on demand." />
+  <LinkCard title="Groups & sharing" href="./groups-and-sharing/" description="Share an inventory with people you trust." />
+  <LinkCard title="Settings & account" href="./settings-and-account/" description="Preferences, security, two-factor, and sessions." />
+  <LinkCard title="Self-hosting" href="./self-hosting/" description="Run Inventario on your own infrastructure." />
+</CardGrid>

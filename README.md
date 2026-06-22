@@ -440,6 +440,7 @@ This test validates:
 
 ## Documentation
 
+- [User Guide](https://denisvmedia.github.io/inventario/) - End-user documentation: items, locations, files & photos, warranties, reports, backups, and sharing
 - [Production Release & Deployment Runbook](PRODUCTION.md) - Cut a release and deploy to Kubernetes (k3s/GKE/DOKS), distribution-agnostic
 - [Production Deployment (bare-metal / systemd)](DEPLOYMENT.md) - Single-host install without Kubernetes
 - [System Admin Operations Runbook](devdocs/admin-runbook.md) - Bootstrapping system admins, audit-log inspection, lockout recovery

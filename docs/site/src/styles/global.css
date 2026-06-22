@@ -1,0 +1,52 @@
+/*
+  Tailwind v4 + Starlight global stylesheet.
+
+  Cascade layer order MUST be declared first so Tailwind's `theme`/`utilities`
+  layers and Starlight's `starlight` layer interleave correctly. This is the
+  current (2025/2026) recipe: @tailwindcss/vite + @astrojs/starlight-tailwind,
+  with Tailwind imported as cascade layers rather than a bare `@import
+  "tailwindcss"`.
+*/
+@layer base, starlight, theme, components, utilities;
+
+@import '@astrojs/starlight-tailwind';
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/*
+  Brand layer — reuses Inventario's accent.
+
+  The app's distinctive brand colour is the warm amber accent
+  (`--accent: oklch(0.85 0.12 75)` in frontend/src/index.css, also the favicon
+  fill). The app's `--primary` is a near-neutral dark brown, so we anchor
+  Starlight's accent ramp on the brand *hue* (~75) at varying lightness/chroma
+  to produce an accessible 50–950 scale. Keep this in lockstep with the app's
+  token if the brand hue ever changes.
+*/
+@theme {
+  /* Accent ramp — anchored on the Inventario brand hue (OKLCH hue ≈ 75). */
+  --color-accent-50: oklch(0.97 0.02 75);
+  --color-accent-100: oklch(0.94 0.04 75);
+  --color-accent-200: oklch(0.9 0.07 75);
+  --color-accent-300: oklch(0.85 0.1 75);
+  --color-accent-400: oklch(0.78 0.13 75);
+  --color-accent-500: oklch(0.7 0.14 70);
+  --color-accent-600: oklch(0.62 0.14 65);
+  --color-accent-700: oklch(0.52 0.12 62);
+  --color-accent-800: oklch(0.42 0.09 60);
+  --color-accent-900: oklch(0.34 0.06 60);
+  --color-accent-950: oklch(0.24 0.04 60);
+
+  /* Gray scale — warm-tinted to match the app's neutral palette (hue ≈ 60). */
+  --color-gray-50: oklch(0.985 0.004 75);
+  --color-gray-100: oklch(0.95 0.008 70);
+  --color-gray-200: oklch(0.9 0.008 70);
+  --color-gray-300: oklch(0.8 0.012 65);
+  --color-gray-400: oklch(0.65 0.016 62);
+  --color-gray-500: oklch(0.5 0.018 60);
+  --color-gray-600: oklch(0.4 0.018 60);
+  --color-gray-700: oklch(0.32 0.016 60);
+  --color-gray-800: oklch(0.24 0.014 60);
+  --color-gray-900: oklch(0.18 0.012 60);
+  --color-gray-950: oklch(0.13 0.01 60);
+}

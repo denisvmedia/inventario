@@ -70,12 +70,13 @@ import { APP_VERSION, shortAppVersion } from "@/lib/app-version"
 
 type SectionId = "account" | "appearance" | "notifications" | "privacy" | "help"
 
-// End-user "Getting started" guide. Opened in a new tab from the Help
-// section's Documentation row, which no longer points at the coming-soon
-// /help stub (#2104) — the /help route itself still exists. Hosted
-// alongside the source so it tracks the running version.
-const DOCS_URL =
-  "https://github.com/denisvmedia/inventario/blob/master/docs/user-guide/getting-started.md"
+// Published docs site ROOT (Astro Starlight on GitHub Pages, #2146). The root
+// is a generated redirect to the default version (latest stable tag, else
+// `edge`), so this single URL always lands on the current docs without us
+// pinning a version here. Opened in a new tab from the Help section's
+// Documentation row (no longer the coming-soon /help stub, #2104).
+// Update this if the docs move to a custom domain.
+const DOCS_URL = "https://denisvmedia.github.io/inventario/"
 
 // GitHub Releases page. Opened in a new tab from the Help section's
 // "What's new" row, which no longer points at the coming-soon /whats-new
