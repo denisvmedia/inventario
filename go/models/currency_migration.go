@@ -223,7 +223,7 @@ type CurrencyMigrationAuditRow struct {
 	//migrator:embedded mode="inline"
 	TenantGroupAwareEntityID
 
-	//migrator:schema:field name="migration_id" type="TEXT" not_null="true" foreign="currency_migrations(id)" foreign_key_name="fk_currency_migration_audit_migration"
+	//migrator:schema:field name="migration_id" type="TEXT" not_null="true" foreign="currency_migrations(id)" foreign_key_name="fk_currency_migration_audit_migration" on_delete="CASCADE"
 	MigrationID string `json:"migration_id" db:"migration_id"`
 
 	// CommodityID is nullable on purpose — see ON DELETE SET NULL on the
