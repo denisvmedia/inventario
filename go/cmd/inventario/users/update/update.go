@@ -196,6 +196,9 @@ func (c *Command) buildUpdateRequest(cfg *Config, adminService *admin.Service) (
 
 	if flags.Changed("email") {
 		email := strings.TrimSpace(cfg.Email)
+		if email == "" {
+			return admin.UserUpdateRequest{}, nil, fmt.Errorf("--email cannot be empty or whitespace-only")
+		}
 		req.Email = &email
 		changes = append(changes, fmt.Sprintf("email → %s", email))
 	}
