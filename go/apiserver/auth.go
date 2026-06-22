@@ -119,6 +119,15 @@ type AuthAPI struct {
 	// true only when the feature flag is on AND the email provider is not
 	// the stub. When false, both magic-link routes return 404.
 	magicLinkLoginEnabled bool
+	// userPurger hard-deletes a user's auth/identity dependent rows during
+	// self-service account deletion (#2147). May be nil in tests that don't
+	// exercise DELETE /auth/me.
+	userPurger registry.UserPurger
+	// accountDeletionService orchestrates self-service account hard-deletion
+	// (#2147): classify the user's groups, purge private ones, purge the
+	// user's dependent rows, then drop the users row. May be nil in tests that
+	// don't exercise DELETE /auth/me.
+	accountDeletionService *services.AccountDeletionService
 }
 
 func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
@@ -148,6 +157,13 @@ type LoginRequest struct {
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"current_password"`
 	NewPassword     string `json:"new_password"`
+}
+
+// DeleteAccountRequest is the body for DELETE /auth/me. The password is
+// re-verified before the irreversible hard-delete (#2147). OAuth-only users
+// (empty PasswordHash) omit it — the access token is the proof of identity.
+type DeleteAccountRequest struct {
+	Password string `json:"password"`
 }
 
 // LoginResponse is returned on successful login or token refresh.
@@ -936,6 +952,14 @@ type AuthParams struct {
 	MagicLinkRegistry     registry.MagicLinkTokenRegistry
 	PublicBaseURL         string
 	MagicLinkLoginEnabled bool
+
+	// UserPurger + AccountDeletionService back self-service account deletion
+	// (DELETE /auth/me, #2147). Both must be set together; leaving them nil
+	// leaves the handler unable to delete (it returns 500). UserPurger is the
+	// service-mode purger; AccountDeletionService is constructed with the same
+	// FactorySet + FileService the rest of the API uses.
+	UserPurger             registry.UserPurger
+	AccountDeletionService *services.AccountDeletionService
 }
 
 // Auth sets up the authentication API routes.
@@ -957,6 +981,8 @@ func Auth(params AuthParams) func(r chi.Router) {
 		magicLinkRegistry:        params.MagicLinkRegistry,
 		publicBaseURL:            strings.TrimSpace(params.PublicBaseURL),
 		magicLinkLoginEnabled:    params.MagicLinkLoginEnabled,
+		userPurger:               params.UserPurger,
+		accountDeletionService:   params.AccountDeletionService,
 	}
 
 	requireAuth := RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)
@@ -977,6 +1003,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		r.With(requireAuth).Get("/me", api.handleGetCurrentUser)
 		r.With(requireAuth).Put("/me", api.handleUpdateCurrentUser)
 		r.With(requireAuth).Post("/change-password", api.handleChangePassword)
+		r.With(requireAuth).Delete("/me", api.handleDeleteCurrentUser)
 		// MFA routes (#1645): all gated by the same auth middleware as /me
 		// so an existing access token is required to enroll, manage, and
 		// disable MFA. The login-completion endpoint (POST /login/mfa) is
@@ -1261,6 +1288,101 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	}); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+// handleDeleteCurrentUser hard-deletes the authenticated user's account
+// (GDPR right-to-erasure, #2147). The password is re-verified first; on
+// success the user's private groups and their content are purged, the user's
+// auth/identity rows are removed, the users row is dropped, and all active
+// sessions are torn down (refresh tokens revoked, access tokens blacklisted).
+// @Summary Delete account
+// @Description Permanently delete the authenticated user's account. Private groups and their content are purged.
+// @Description Password re-authentication is required for password-based accounts; OAuth-only accounts can omit it. All sessions are invalidated. Irreversible.
+// @Tags auth
+// @Accept json
+// @Param data body DeleteAccountRequest true "Account deletion request"
+// @Success 204 "No Content"
+// @Failure 400 {string} string "Bad Request"
+// @Failure 401 {string} string "Unauthorized"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
+// @Failure 500 {string} string "Internal Server Error"
+// @Router /auth/me [delete]
+func (api *AuthAPI) handleDeleteCurrentUser(w http.ResponseWriter, r *http.Request) {
+	user := appctx.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	var req DeleteAccountRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// OAuth-only users have an empty PasswordHash (#1394) and authenticate via
+	// the access token alone — skip the password re-check for them, exactly
+	// like handleChangePassword's initial-set branch. A password user MUST
+	// supply and pass the re-auth before the irreversible delete.
+	hasPassword := user.PasswordHash != ""
+	if hasPassword {
+		if req.Password == "" {
+			http.Error(w, "Password is required", http.StatusBadRequest)
+			return
+		}
+		if !user.CheckPassword(req.Password) {
+			slog.Warn("Account deletion failed: incorrect password", "user_id", user.ID, "tenant_id", user.TenantID)
+			errMsg := "incorrect password"
+			api.logAuth(r.Context(), "account_deletion", &user.ID, &user.TenantID, false, r, &errMsg)
+			_ = codedUnprocessableEntityError(w, r, ErrInvalidAccountDeletionPassword, "auth.delete.invalid_password")
+			return
+		}
+	}
+
+	if api.accountDeletionService == nil {
+		slog.Error("Account deletion service not configured", "user_id", user.ID)
+		http.Error(w, "Account deletion is not available", http.StatusInternalServerError)
+		return
+	}
+
+	if err := api.accountDeletionService.DeleteAccount(r.Context(), user.TenantID, user.ID); err != nil {
+		switch {
+		case errors.Is(err, services.ErrAccountSoleOwnerOfSharedGroup),
+			errors.Is(err, services.ErrAccountStillOwnsContent):
+			// Business-rule rejections (transfer ownership / still owns shared
+			// content). Mapped to 422 + a dotted JSON:API code by toJSONAPIError.
+			errMsg := err.Error()
+			api.logAuth(r.Context(), "account_deletion", &user.ID, &user.TenantID, false, r, &errMsg)
+			_ = renderEntityError(w, r, err)
+		default:
+			slog.Error("Account deletion failed", "user_id", user.ID, "error", err)
+			errMsg := "account deletion failed"
+			api.logAuth(r.Context(), "account_deletion", &user.ID, &user.TenantID, false, r, &errMsg)
+			http.Error(w, "Failed to delete account", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Tear down every active session for the (now-deleted) user so a stolen
+	// access token cannot outlive the account — mirrors handleChangePassword.
+	if api.refreshTokenRegistry != nil {
+		if err := api.refreshTokenRegistry.RevokeByUserID(r.Context(), user.ID); err != nil {
+			slog.Error("Failed to revoke refresh tokens after account deletion", "user_id", user.ID, "error", err)
+		}
+	}
+	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+		api.blacklistAccessToken(r.Context(), authHeader)
+	}
+	if api.blacklistService != nil {
+		if err := api.blacklistService.BlacklistUserTokens(r.Context(), user.ID, 2*accessTokenExpiration); err != nil {
+			slog.Error("Failed to blacklist user tokens after account deletion", "user_id", user.ID, "error", err)
+		}
+	}
+
+	slog.Info("Account deleted", "user_id", user.ID, "tenant_id", user.TenantID)
+	api.logAuth(r.Context(), "account_deletion", &user.ID, &user.TenantID, true, r, nil)
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // userMFAEnabled reports whether user has a fully-enrolled TOTP row in

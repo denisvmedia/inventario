@@ -41,7 +41,7 @@ func TestSeedData(t *testing.T) {
 	c.Assert(tenant.Slug, qt.Equals, "test-org")
 	c.Assert(tenant.Status, qt.Equals, models.TenantStatusActive)
 
-	// Seven well-known users land in the test-org tenant:
+	// Eleven well-known users land in the test-org tenant:
 	//   admin / user2 — currency-different default groups (CZK + EUR);
 	//                   user2 stays in its OWN group so user-isolation
 	//                   e2e specs keep working.
@@ -54,9 +54,16 @@ func TestSeedData(t *testing.T) {
 	//                  admin-section e2e suite (issue #1758).
 	//   blocktarget  — disposable plain user the block/unblock spec
 	//                  deactivates then reactivates (issue #1758).
+	//   delete-solo / delete-wrongpass — sole members of their own private
+	//                  groups; delete-account.spec.ts erases the former
+	//                  (happy path) and bounces the latter on a bad
+	//                  password (issue #2147).
+	//   delete-lastowner + delete-lastowner-member — sole owner of a SHARED
+	//                  group plus its second member, so a valid-creds delete
+	//                  is blocked with auth.delete.last_owner (issue #2147).
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(users, qt.HasLen, 7)
+	c.Assert(users, qt.HasLen, 11)
 
 	for _, user := range users {
 		c.Assert(user.TenantID, qt.Equals, tenant.ID)
@@ -115,6 +122,49 @@ func TestSeedData(t *testing.T) {
 	blockTargetAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(ctx, blockTarget.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(blockTargetAdmin, qt.IsFalse)
+
+	// #2147 self-service-deletion fixtures (delete-account.spec.ts). The
+	// happy-path target must be the sole member + owner of its own private
+	// group so the purge succeeds; the last-owner target must be the SOLE
+	// owner of a SHARED group (a second member) so the delete is blocked.
+	deleteSolo := emails["delete-solo@test-org.com"]
+	c.Assert(deleteSolo, qt.IsNotNil)
+	c.Assert(deleteSolo.IsActive, qt.IsTrue)
+	soloMemberships, err := registrySet.GroupMembershipRegistry.ListByUser(ctx, tenant.ID, deleteSolo.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(soloMemberships, qt.HasLen, 1)
+	c.Assert(soloMemberships[0].Role, qt.Equals, models.GroupRoleOwner)
+	soloMembers, err := registrySet.GroupMembershipRegistry.ListByGroup(ctx, soloMemberships[0].GroupID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(soloMembers, qt.HasLen, 1,
+		qt.Commentf("delete-solo must be the only member of its private group"))
+
+	deleteWrongPass := emails["delete-wrongpass@test-org.com"]
+	c.Assert(deleteWrongPass, qt.IsNotNil)
+	c.Assert(deleteWrongPass.IsActive, qt.IsTrue)
+
+	deleteLastOwner := emails["delete-lastowner@test-org.com"]
+	c.Assert(deleteLastOwner, qt.IsNotNil)
+	c.Assert(deleteLastOwner.IsActive, qt.IsTrue)
+	lastOwnerMemberships, err := registrySet.GroupMembershipRegistry.ListByUser(ctx, tenant.ID, deleteLastOwner.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(lastOwnerMemberships, qt.HasLen, 1)
+	c.Assert(lastOwnerMemberships[0].Role, qt.Equals, models.GroupRoleOwner)
+	lastOwnerMembers, err := registrySet.GroupMembershipRegistry.ListByGroup(ctx, lastOwnerMemberships[0].GroupID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(lastOwnerMembers, qt.HasLen, 2,
+		qt.Commentf("delete-lastowner's group must be shared (a second member)"))
+	owners := 0
+	for _, m := range lastOwnerMembers {
+		if m.Role == models.GroupRoleOwner {
+			owners++
+		}
+	}
+	c.Assert(owners, qt.Equals, 1, qt.Commentf("delete-lastowner must be the SOLE owner"))
+
+	deleteLastOwnerMember := emails["delete-lastowner-member@test-org.com"]
+	c.Assert(deleteLastOwnerMember, qt.IsNotNil)
+	c.Assert(deleteLastOwnerMember.IsActive, qt.IsTrue)
 }
 
 // TestSeedDataSurfaceCoverage asserts that every feature surface called
@@ -329,7 +379,7 @@ func TestSeedDataIdempotent(t *testing.T) {
 
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(users, qt.HasLen, 7)
+	c.Assert(users, qt.HasLen, 11)
 
 	locations, err := registrySet.LocationRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)

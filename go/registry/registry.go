@@ -2192,7 +2192,9 @@ type TenantPurger interface {
 // UserPurger hard-deletes a single user's auth / identity rows (and orphans the
 // nullable authorship back-refs) before the users row itself is dropped by the
 // orchestration layer (#2116). It exists because a bare DELETE FROM users is
-// rejected by the many NO ACTION child FKs pointing at users(id).
+// rejected by the many NO ACTION child FKs pointing at users(id). This includes
+// the user's group_invites_audit references (created_by / used_by), which are
+// NOT NULL FKs that nothing else clears (#2147).
 //
 // PRECONDITION: the user must no longer OWN shared content
 // (commodities/files/areas/locations/exports/groups/tags/…). Those rows carry
@@ -2207,6 +2209,31 @@ type UserPurger interface {
 	// call on the same user after a partial failure must succeed and leave the
 	// database in the same state.
 	PurgeUserDependents(ctx context.Context, tenantID, userID string) error
+}
+
+// UserContentOwnershipChecker answers, without mutating anything, whether a user
+// still OWNS content that survives a self-service account deletion (#2147). It
+// is the read-only pre-check the account-deletion orchestration runs BEFORE any
+// purge, so the "you still own shared content" rejection aborts cleanly instead
+// of being discovered at the final DELETE FROM users (which would leave a
+// half-erased account).
+//
+// "Owned content" means any row that carries a NOT NULL FK to users(id) which
+// cannot be orphaned without a schema change:
+//   - content authored by the user (created_by_user_id) in a group that is NOT
+//     being purged (commodities/files/areas/locations/exports/tags), and
+//   - location_groups the user created (created_by) that are NOT being purged.
+//
+// purgedGroupIDs is the set of PRIVATE group IDs the caller will delete wholesale
+// (the user's content there disappears with the group, so it does not count).
+// The check is tenant-scoped as defense-in-depth.
+type UserContentOwnershipChecker interface {
+	// HasRetainedOwnedContent reports whether the user owns any content (or
+	// created any location group) that would survive deleting only the
+	// purgedGroupIDs groups. It performs no writes. A true result means the
+	// account cannot be erased unilaterally; false means the purge sequence is
+	// safe to run.
+	HasRetainedOwnedContent(ctx context.Context, tenantID, userID string, purgedGroupIDs []string) (bool, error)
 }
 
 // Set contains ready-to-use registries that have been created with proper user or service context.

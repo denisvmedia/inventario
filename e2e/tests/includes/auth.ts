@@ -75,6 +75,43 @@ export const BLOCK_TARGET_TEST_CREDENTIALS = {
 };
 
 /**
+ * Self-service account-deletion fixtures (#2147). Seeded by debug/seeddata
+ * (seeddata_delete_targets.go) for the well-known `test-org` tenant. Each is
+ * referenced ONLY by delete-account.spec.ts so a parallel run never observes
+ * one mid-deletion. NEVER use the shared TEST_CREDENTIALS admin as a deletion
+ * target — erasing it would break every other spec.
+ *
+ * Sole member of its own PRIVATE group, so the happy-path purge succeeds and
+ * the account is erased (204). The spec re-login afterwards is expected to
+ * FAIL because the row is gone; a re-seed re-creates it.
+ */
+export const DELETE_SOLO_TARGET_TEST_CREDENTIALS = {
+  email: 'delete-solo@test-org.com',
+  password: 'TestPassword123'
+};
+
+/**
+ * Also sole member of its own group, but the wrong-password scenario submits
+ * a bad password — the BE rejects with auth.delete.invalid_password before any
+ * purge, so this account survives untouched across runs. Distinct from the
+ * solo target so neither scenario can clobber the other under parallelism.
+ */
+export const DELETE_WRONG_PASSWORD_TEST_CREDENTIALS = {
+  email: 'delete-wrongpass@test-org.com',
+  password: 'TestPassword123'
+};
+
+/**
+ * Sole OWNER of a SHARED group (a second, non-owner member exists), so a
+ * valid-credentials delete is blocked with auth.delete.last_owner. The dialog
+ * stays open and the user stays signed in — nothing is purged.
+ */
+export const DELETE_LAST_OWNER_TEST_CREDENTIALS = {
+  email: 'delete-lastowner@test-org.com',
+  password: 'TestPassword123'
+};
+
+/**
  * Check if the current page is the login page
  */
 export async function isLoginPage(page: Page): Promise<boolean> {

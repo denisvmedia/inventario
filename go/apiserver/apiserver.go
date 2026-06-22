@@ -550,6 +550,15 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		if err != nil {
 			panic("init MFA service: " + err.Error())
 		}
+		// Self-service account deletion (#2147) reuses the per-group purge
+		// machinery: the AccountDeletionService classifies the user's groups,
+		// purges the private ones via GroupPurgeService, then drops the user's
+		// auth rows + the users row.
+		accountDeletionFileSvc := services.NewFileService(params.FactorySet, params.UploadLocation)
+		accountDeletionSvc := services.NewAccountDeletionService(
+			params.FactorySet,
+			services.NewGroupPurgeService(params.FactorySet, accountDeletionFileSvc),
+		)
 		r.Route("/auth", Auth(AuthParams{
 			UserRegistry:             params.FactorySet.UserRegistry,
 			RefreshTokenRegistry:     params.FactorySet.RefreshTokenRegistry,
@@ -570,6 +579,8 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			MagicLinkRegistry:        params.FactorySet.MagicLinkTokenRegistry,
 			PublicBaseURL:            params.PublicURL,
 			MagicLinkLoginEnabled:    params.MagicLinkLoginEnabled,
+			UserPurger:               params.FactorySet.UserPurger,
+			AccountDeletionService:   accountDeletionSvc,
 		}))
 
 		// Back-office auth plane (issue #1785, Phase 2). Completely
