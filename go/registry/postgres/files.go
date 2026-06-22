@@ -138,6 +138,18 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 	return &file, nil
 }
 
+// Delete removes ONLY the file row. It does NOT touch the physical blob or its
+// thumbnails, and it does NOT break the thumbnail_generation_jobs FK chain.
+//
+// INVARIANT (#2121): user-initiated file deletes MUST go through
+// services.FileService.DeleteFileWithPhysical, which deletes the thumbnail-job
+// chain, deletes this row, and then best-effort removes the blob + thumbnails.
+// Calling this method directly orphans the physical blob (the bytes stay in the
+// bucket with no row pointing at them). The only legitimate callers of the bare
+// row delete are flows that delete the blobs separately and in bulk — e.g. the
+// group/tenant purgers, which sweep every blob for the (tenant, group) up front
+// via FileService.DeletePhysicalFilesForGroup / ...ForTenant before dropping the
+// rows. New code that deletes a user's file should not call this.
 func (r *FileRegistry) Delete(ctx context.Context, id string) error {
 	reg := r.newSQLRegistry()
 	err := reg.Delete(ctx, id, nil)

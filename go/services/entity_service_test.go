@@ -496,6 +496,52 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 	}
 }
 
+// TestEntityService_DeleteExport_CleansPendingImportSourceBlob is the #2121
+// regression: an imported export carries its uploaded source `.inb` blob under
+// FilePath until import processing promotes it into a FileEntity (FileID). While
+// the export is still pending (FileID == nil) that blob has no owning file row,
+// so neither the single-file delete nor the group/tenant file sweep (both
+// iterate `files` rows) would ever clean it up. Deleting such an export must
+// best-effort remove its source blob so it doesn't leak permanently.
+func TestEntityService_DeleteExport_CleansPendingImportSourceBlob(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	// Write the uploaded source blob a pending imported export would point at.
+	sourceKey := "t/test-tenant/restores/uploaded-backup.inb"
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, sourceKey, []byte("signed-inb-bytes"), nil), qt.IsNil)
+	c.Assert(must.Must(b.Exists(ctx, sourceKey)), qt.IsTrue)
+
+	// A pending imported export: FilePath set, FileID still nil.
+	export := must.Must(registrySet.ExportRegistry.Create(ctx, models.Export{
+		Type:        models.ExportTypeImported,
+		Status:      models.ExportStatusPending,
+		Description: "Pending import",
+		FilePath:    sourceKey,
+		Imported:    true,
+	}))
+
+	c.Assert(service.DeleteExportWithFile(ctx, export.ID), qt.IsNil)
+
+	// The export row is gone…
+	_, err := registrySet.ExportRegistry.Get(ctx, export.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// …and its orphaned source blob was cleaned up, not leaked.
+	c.Assert(must.Must(b.Exists(ctx, sourceKey)), qt.IsFalse,
+		qt.Commentf("pending imported-export source blob %s must not leak", sourceKey))
+}
+
 // TestDeleteFileWithPhysical_DeletesThumbnailJob asserts the #2117 cleanup
 // order: deleting a file also removes the thumbnail-generation job that
 // references it and the concurrency slot that references that job, so the

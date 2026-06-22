@@ -772,8 +772,45 @@ func (l *RestoreOperationProcessor) ensureCommodityTags(ctx context.Context, com
 	return nil
 }
 
+// fileAction is the create/update/skip decision a restore strategy makes for a
+// single file, given whether the file already exists. It is the single source
+// of truth shared by the persistence step (applyStrategyForFileModel) and the
+// `.inb` walker's pre-stream gate, so the blob-write decision and the row-write
+// decision can never disagree (issue #2125).
+type fileAction int
+
+const (
+	fileActionCreate fileAction = iota
+	fileActionUpdate
+	fileActionSkip
+)
+
+// decideFileStrategyAction maps (strategy, existing-file) to the create/update/
+// skip action. existingFile is nil when no matching row is present. This is the
+// non-dry-run decision; dry-run is handled by the caller (the persist functions
+// short-circuit their writes, and the `.inb` walker drains bytes regardless).
+func decideFileStrategyAction(strategy types.RestoreStrategy, existingFile *models.FileEntity) fileAction {
+	switch strategy {
+	case types.RestoreStrategyMergeAdd:
+		if existingFile != nil {
+			return fileActionSkip
+		}
+		return fileActionCreate
+	case types.RestoreStrategyMergeUpdate:
+		if existingFile != nil {
+			return fileActionUpdate
+		}
+		return fileActionCreate
+	case types.RestoreStrategyFullReplace:
+		return fileActionCreate
+	}
+	return fileActionCreate
+}
+
 // applyStrategyForFileModel persists a decoded file row per strategy. The blob
-// bytes were already streamed to the bucket by the per-build decode pass.
+// bytes were already streamed to the bucket by the per-build decode pass (which
+// also gates the write on the same decideFileStrategyAction decision, so a
+// MergeAdd-skip never leaves an orphan blob behind — issue #2125).
 func (l *RestoreOperationProcessor) applyStrategyForFileModel(
 	ctx context.Context,
 	fileEntity *models.FileEntity,
@@ -785,20 +822,16 @@ func (l *RestoreOperationProcessor) applyStrategyForFileModel(
 ) error {
 	existingFile := existing.Files[originalID]
 
-	switch options.Strategy {
-	case types.RestoreStrategyFullReplace, types.RestoreStrategyMergeAdd:
-		if options.Strategy == types.RestoreStrategyMergeAdd && existingFile != nil {
-			stats.SkippedCount++
-			return nil
-		}
-		return l.createFile(ctx, fileEntity, originalID, stats, existing, idMapping, options)
-	case types.RestoreStrategyMergeUpdate:
-		if existingFile == nil {
-			return l.createFile(ctx, fileEntity, originalID, stats, existing, idMapping, options)
-		}
+	switch decideFileStrategyAction(options.Strategy, existingFile) {
+	case fileActionSkip:
+		stats.SkippedCount++
+		return nil
+	case fileActionUpdate:
 		fileEntity.SetID(existingFile.ID)
 		fileEntity.UUID = existingFile.UUID
 		return l.updateFile(ctx, fileEntity, originalID, stats, existing, options)
+	case fileActionCreate:
+		return l.createFile(ctx, fileEntity, originalID, stats, existing, idMapping, options)
 	}
 	return nil
 }

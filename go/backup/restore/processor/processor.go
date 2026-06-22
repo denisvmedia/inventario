@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"sort"
@@ -618,6 +619,18 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 		)
 	}
 
+	// Decide the create/update/skip action BEFORE streaming so a MergeAdd-skip
+	// never writes a blob that has no owning row to clean it up (issue #2125).
+	// The decision depends only on the strategy and whether the file already
+	// exists — both known here — so the bytes can be drained (skip) instead of
+	// committed to blobKey. This mirrors the legacy XML path's
+	// shouldWriteFileBlob guard, which already gates the blob write.
+	action := decideFileStrategyAction(w.options.Strategy, w.existing.Files[pending.ref.ID])
+
+	if action == fileActionSkip {
+		return w.skipFileMember(r, hdr.Size, blobKey)
+	}
+
 	written, err := w.streamFileBytes(blobKey, r, hdr.Size)
 	if err != nil {
 		return err
@@ -636,11 +649,64 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 		fileEntity.GroupID = group.ID
 	}
 
+	// On update, capture the existing row's blob key so a superseded blob can be
+	// removed after the row is re-pointed (resolved before the row update so the
+	// old OriginalPath is still readable).
+	staleBlobKey := w.staleBlobKeyForUpdate(action, pending.ref.ID)
+
 	if err := w.proc.applyStrategyForFileModel(w.ctx, fileEntity, pending.ref.ID, w.stats, w.existing, w.idMapping, w.options); err != nil {
 		return err
 	}
+
+	w.deleteSupersededBlob(staleBlobKey, blobKey)
+
 	w.incBucketStat(pending.bucket)
 	return nil
+}
+
+// skipFileMember drains a file member's bytes (so the byte count still flows
+// into stats and the tar stream advances) WITHOUT writing them to the bucket,
+// for a MergeAdd-skip. This is what prevents the orphan blob a pre-decision
+// stream would leave behind (issue #2125).
+func (w *inbWalker) skipFileMember(r io.Reader, size int64, blobKey string) error {
+	drained, err := io.Copy(io.Discard, io.LimitReader(r, size))
+	if err != nil {
+		return errxtrace.Wrap("failed to drain skipped file member", err, errx.Attrs("blob_key", blobKey))
+	}
+	w.stats.BinaryDataSize += drained
+	w.stats.SkippedCount++
+	return nil
+}
+
+// staleBlobKeyForUpdate returns the existing row's blob key on a MergeUpdate so
+// it can be cleaned up after the row is re-pointed, or "" when there is nothing
+// to clean (not an update, or no existing blob). blobKey is deterministic from
+// the (tenant, file-UUID, ext) tuple, so it usually equals the existing key and
+// the bytes overwrite in place; but when the existing row stored a different key
+// (an upload-time basename key, a different ext) the old blob would dangle
+// without this (issue #2125).
+func (w *inbWalker) staleBlobKeyForUpdate(action fileAction, refID string) string {
+	if action != fileActionUpdate {
+		return ""
+	}
+	if existingFile := w.existing.Files[refID]; existingFile != nil && existingFile.File != nil {
+		return existingFile.File.OriginalPath
+	}
+	return ""
+}
+
+// deleteSupersededBlob best-effort removes the old blob after a MergeUpdate
+// re-pointed the row to newBlobKey. A no-op when the key is unchanged, empty, or
+// no bucket is configured. Swallow+log: a failed cleanup must never fail an
+// otherwise-successful restore (issue #2125).
+func (w *inbWalker) deleteSupersededBlob(staleBlobKey, newBlobKey string) {
+	if staleBlobKey == "" || staleBlobKey == newBlobKey || w.bucket == nil {
+		return
+	}
+	if err := w.bucket.Delete(w.ctx, staleBlobKey); err != nil {
+		slog.WarnContext(w.ctx, "failed to delete superseded file blob after merge-update restore (best-effort)",
+			"stale_blob_key", staleBlobKey, "new_blob_key", newBlobKey, "error", err.Error())
+	}
 }
 
 // streamFileBytes copies a file member's bytes into the destination blob key,

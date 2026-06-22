@@ -2,24 +2,67 @@ package apiserver_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"image"
 	"image/color"
 	"image/jpeg"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/internal/backupsign"
 	"github.com/denisvmedia/inventario/internal/blobkeys"
 	"github.com/denisvmedia/inventario/internal/inb"
 )
+
+// countBucketKeys returns the total number of blob keys in the bucket at
+// uploadLocation. Used by the orphan-blob regression tests to assert that a
+// rejected upload leaves the bucket exactly as it found it.
+func countBucketKeys(c *qt.C, uploadLocation string) int {
+	ctx := context.Background()
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+
+	count := 0
+	iter := b.List(nil)
+	for {
+		obj, err := iter.Next(ctx)
+		if err == io.EOF {
+			break
+		}
+		// A non-EOF error means the List itself failed; fail loudly rather than
+		// silently treating it as end-of-iteration, which would let a broken
+		// listing masquerade as an empty bucket and pass the orphan assertion.
+		c.Assert(err, qt.IsNil)
+		if obj.IsDir {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
+// tempUploadLocation returns a file:// bucket URL backed by a fresh temp dir so
+// a test can enumerate every key without contaminating the package-shared
+// memfs bucket.
+func tempUploadLocation(c *qt.C) string {
+	tempDir := c.TempDir()
+	if runtime.GOOS == "windows" {
+		return "file:///" + tempDir + "?create_dir=1"
+	}
+	return "file://" + tempDir + "?create_dir=1"
+}
 
 // buildMinimalINB builds a tiny, validly-framed `.inb` container for upload
 // tests. The bytes are binary (sniffed as octet-stream, which the restore-upload
@@ -148,6 +191,100 @@ func TestUploads_restores_invalid(t *testing.T) {
 
 	// Verify the response - should be rejected due to invalid content type
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+}
+
+// TestUploads_restores_invalid_noOrphanBlob is the #2125 regression: a restore
+// upload whose body fails MIME validation (the restore endpoint only accepts
+// signed `.inb` archives) must NOT leave a partially-written blob behind. The
+// MIME reader returns the sniffed bytes alongside ErrInvalidContentType, so
+// io.Copy has already streamed them into the writer; the deferred Close commits
+// them. Without the saveFile cleanup that commit is an orphan with no owning
+// file row. This test points the upload at a fresh temp bucket so it can
+// enumerate every key and assert the rejected upload left the bucket empty.
+func TestUploads_restores_invalid_noOrphanBlob(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	params.UploadLocation = tempUploadLocation(c)
+
+	// A fresh temp bucket starts empty.
+	c.Assert(countBucketKeys(c, params.UploadLocation), qt.Equals, 0)
+
+	bodyBuf := &bytes.Buffer{}
+	bodyWriter := multipart.NewWriter(bodyBuf)
+	// text/plain is rejected by the restore endpoint's INB-only guard.
+	h := CreateFormFileMIME("files", "not-a-backup.txt", "text/plain")
+	fileWriter, err := bodyWriter.CreatePart(h)
+	c.Assert(err, qt.IsNil)
+	_, err = fileWriter.Write([]byte("this is plainly not a signed .inb backup archive"))
+	c.Assert(err, qt.IsNil)
+	contentType := bodyWriter.FormDataContentType()
+	bodyWriter.Close()
+
+	req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/uploads/restores", bodyBuf)
+	c.Assert(err, qt.IsNil)
+	req.Header.Set("Content-Type", contentType)
+	addTestUserAuthHeader(req, testUser.ID)
+
+	rr := httptest.NewRecorder()
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+
+	// The rejected upload left no orphan blob in the bucket.
+	c.Assert(countBucketKeys(c, params.UploadLocation), qt.Equals, 0)
+}
+
+// TestUploads_file_tooLarge_noOrphanBlob is the #2125 + #2101 regression: a
+// /uploads/file body that exceeds the per-file size cap is rejected with 413
+// AND leaves no orphan blob. The oversize error surfaces mid-stream after the
+// writer has already buffered/committed some bytes; the saveFile cleanup must
+// remove them. A fresh temp bucket lets the test enumerate every key.
+func TestUploads_file_tooLarge_noOrphanBlob(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	params.UploadLocation = tempUploadLocation(c)
+	params.MaxUploadBytes = 16 // tiny cap so a small JPEG trips it
+
+	c.Assert(countBucketKeys(c, params.UploadLocation), qt.Equals, 0)
+
+	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for x := range 64 {
+		for y := range 64 {
+			img.Set(x, y, color.RGBA{R: uint8(x), G: uint8(y), B: 128, A: 255})
+		}
+	}
+	var imgBuf bytes.Buffer
+	c.Assert(jpeg.Encode(&imgBuf, img, &jpeg.Options{Quality: 90}), qt.IsNil)
+	c.Assert(imgBuf.Len() > 16, qt.IsTrue)
+
+	bodyBuf := &bytes.Buffer{}
+	bodyWriter := multipart.NewWriter(bodyBuf)
+	h := CreateFormFileMIME("file", "big-photo.jpg", "image/jpeg")
+	fileWriter, err := bodyWriter.CreatePart(h)
+	c.Assert(err, qt.IsNil)
+	_, err = fileWriter.Write(imgBuf.Bytes())
+	c.Assert(err, qt.IsNil)
+	contentType := bodyWriter.FormDataContentType()
+	bodyWriter.Close()
+
+	req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/uploads/file", bodyBuf)
+	c.Assert(err, qt.IsNil)
+	req.Header.Set("Content-Type", contentType)
+	addTestUserAuthHeader(req, testUser.ID)
+
+	rr := httptest.NewRecorder()
+	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+	handler := apiserver.APIServer(params, mockRestoreWorker)
+	handler.ServeHTTP(rr, req)
+
+	c.Assert(rr.Code, qt.Equals, http.StatusRequestEntityTooLarge, qt.Commentf("body=%s", rr.Body.String()))
+
+	// The rejected (oversize) upload left no orphan blob.
+	c.Assert(countBucketKeys(c, params.UploadLocation), qt.Equals, 0)
 }
 
 // TestUploads_file_tenantPrefixedKey is the #1793 regression test: a

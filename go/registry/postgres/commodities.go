@@ -615,6 +615,19 @@ func clonePtrCurrency(c *models.Currency) *models.Currency {
 	return &cp
 }
 
+// Delete removes ONLY the commodity row. Its DB children (loans, services,
+// supply-links) CASCADE and cover_file_id is ON DELETE SET NULL, so the row
+// delete itself is FK-safe — but the files LINKED to the commodity
+// (linked_entity_type='commodity') are NOT cascaded, and their physical blobs
+// are not touched here.
+//
+// INVARIANT (#2121): user-initiated commodity deletes MUST go through
+// services.EntityService.DeleteCommodityRecursive, which collects the linked
+// file IDs, drops this row, and then removes each linked file (row + best-effort
+// blob) via FileService.DeleteFileWithPhysical. Calling this bare row delete
+// directly leaves every linked file's blob orphaned in the bucket. The only
+// legitimate direct callers are tests and the group/tenant purgers, which sweep
+// all of the (tenant, group)'s blobs separately before dropping rows.
 func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	reg := r.newSQLRegistry()
 	err := reg.Delete(ctx, id, nil)

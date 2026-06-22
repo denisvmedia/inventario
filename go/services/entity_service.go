@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -350,6 +351,19 @@ func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) err
 		fileIDToDelete = export.FileID
 	}
 
+	// An imported export carries its uploaded source `.inb` blob under
+	// FilePath until import processing promotes it into a FileEntity row and
+	// sets FileID (#2121). While the export is still pending (FileID == nil)
+	// that blob has no owning file row, so neither the single-file delete here
+	// nor the group sweep (which iterates `files` rows) would ever clean it up
+	// — deleting such an export would leak the source blob permanently. When
+	// there is no linked FileID, remember FilePath so it can be cleaned up
+	// after the row delete.
+	var sourceBlobToDelete string
+	if fileIDToDelete == nil && export.FilePath != "" {
+		sourceBlobToDelete = export.FilePath
+	}
+
 	// Delete the export first to avoid foreign key constraint violation
 	err = expReg.Delete(ctx, id)
 	if err != nil {
@@ -361,6 +375,17 @@ func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) err
 		err = s.fileService.DeleteFileWithPhysical(ctx, *fileIDToDelete)
 		if err != nil && !errors.Is(err, registry.ErrNotFound) {
 			return errxtrace.Wrap("failed to delete export file", err)
+		}
+	}
+
+	// Best-effort clean up the orphaned source blob of a pending imported
+	// export. Swallow+log: the export row is already gone, so a failed blob
+	// delete must not resurrect an error for a successful logical delete (the
+	// same row-first / blob-best-effort contract as DeleteFileWithPhysical).
+	if sourceBlobToDelete != "" {
+		if delErr := s.fileService.DeletePhysicalFile(ctx, sourceBlobToDelete); delErr != nil {
+			slog.WarnContext(ctx, "failed to delete pending imported-export source blob (best-effort)",
+				"export_id", id, "source_blob_key", sourceBlobToDelete, "error", delErr.Error())
 		}
 	}
 

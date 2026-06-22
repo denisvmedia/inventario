@@ -235,6 +235,14 @@ func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, erro
 	return commodities, nil
 }
 
+// Delete removes ONLY the commodity row (and untracks it from its parent
+// area's in-memory index). It does NOT delete the files linked to the commodity
+// or their physical blobs.
+//
+// INVARIANT (#2121): user-initiated commodity deletes MUST go through
+// services.EntityService.DeleteCommodityRecursive, which also removes the linked
+// files (row + best-effort blob). See the postgres twin for the full rationale;
+// the two backends behave identically.
 func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	// Pre-fetch so we know the parent area to untrack once the row is gone.
 	commodity, err := r.Registry.Get(ctx, id)
