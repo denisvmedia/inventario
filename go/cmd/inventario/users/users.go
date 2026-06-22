@@ -34,7 +34,7 @@ USAGE EXAMPLES:
     inventario users create
 
   Create user with flags:
-    inventario users create --email="admin@acme.com" --tenant="acme" --role="admin"
+    inventario users create --email="admin@acme.com" --tenant="acme"
 
   Preview user creation:
     inventario users create --dry-run --email="test@example.com" --tenant="acme"
