@@ -155,13 +155,6 @@ To clean up all test artifacts:
 npm run clean:artifacts
 ```
 
-### Example Files
-
-- `screenshots-example.spec.ts` - Examples of taking manual screenshots
-- `recorder-example.spec.ts` - Examples of using the TestRecorder helper
-- `fixture-recorder.spec.ts` - Examples of using the recorder fixture
-- `conditional-screenshots.spec.ts` - Examples of taking screenshots based on conditions
-
 ## Email delivery tests (Mailpit)
 
 `tests/mailpit-email.spec.ts` (issue #1282) asserts the full transactional
