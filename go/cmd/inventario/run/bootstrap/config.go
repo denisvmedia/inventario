@@ -36,6 +36,7 @@ type Config struct {
 	RefreshTokenCleanupInterval      string `yaml:"refresh_token_cleanup_interval" env:"REFRESH_TOKEN_CLEANUP_INTERVAL" env-default:""`
 	EmailVerificationCleanupInterval string `yaml:"email_verification_cleanup_interval" env:"EMAIL_VERIFICATION_CLEANUP_INTERVAL" env-default:""`
 	MagicLinkTokenCleanupInterval    string `yaml:"magic_link_token_cleanup_interval" env:"MAGIC_LINK_TOKEN_CLEANUP_INTERVAL" env-default:""`
+	OperationSlotCleanupInterval     string `yaml:"operation_slot_cleanup_interval" env:"OPERATION_SLOT_CLEANUP_INTERVAL" env-default:""`
 	GroupPurgeInterval               string `yaml:"group_purge_interval" env:"GROUP_PURGE_INTERVAL" env-default:""`
 	WarrantyReminderInterval         string `yaml:"warranty_reminder_interval" env:"WARRANTY_REMINDER_INTERVAL" env-default:""`
 	StorageQuotaReminderInterval     string `yaml:"storage_quota_reminder_interval" env:"STORAGE_QUOTA_REMINDER_INTERVAL" env-default:""`
@@ -309,6 +310,9 @@ func (c *Config) setWorkerDefaults() {
 	}
 	if c.MagicLinkTokenCleanupInterval == "" {
 		c.MagicLinkTokenCleanupInterval = defaults.GetMagicLinkTokenCleanupInterval()
+	}
+	if c.OperationSlotCleanupInterval == "" {
+		c.OperationSlotCleanupInterval = defaults.GetOperationSlotCleanupInterval()
 	}
 	if c.GroupPurgeInterval == "" {
 		c.GroupPurgeInterval = defaults.GetGroupPurgeInterval()

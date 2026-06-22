@@ -106,6 +106,7 @@ func TestConfigSetDefaults_WorkerTunablesAppliedFromDefaults(t *testing.T) {
 	c.Assert(cfg.RestorePollInterval, qt.Equals, "10s")
 	c.Assert(cfg.RefreshTokenCleanupInterval, qt.Equals, "1h")
 	c.Assert(cfg.EmailVerificationCleanupInterval, qt.Equals, "1h")
+	c.Assert(cfg.OperationSlotCleanupInterval, qt.Equals, "5m")
 	c.Assert(cfg.ThumbnailBatchSize, qt.Equals, 10)
 	c.Assert(cfg.ThumbnailPollInterval, qt.Equals, "5s")
 	c.Assert(cfg.ThumbnailCleanupInterval, qt.Equals, "5m")
