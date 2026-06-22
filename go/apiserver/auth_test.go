@@ -45,10 +45,11 @@ type mockRefreshTokenRegistryForAuth struct {
 	revokeByUserIDCalled bool
 	revokeByUserIDArg    string
 
-	tokensByHash map[string]*models.RefreshToken
-	updates      []models.RefreshToken
-	createCount  int
-	createErr    error
+	tokensByHash  map[string]*models.RefreshToken
+	updates       []models.RefreshToken
+	createCount   int
+	createErr     error
+	revokeByIDErr error
 }
 
 func (m *mockRefreshTokenRegistryForAuth) Create(_ context.Context, rt models.RefreshToken) (*models.RefreshToken, error) {
@@ -119,6 +120,9 @@ func (m *mockRefreshTokenRegistryForAuth) RevokeByUserID(_ context.Context, user
 }
 
 func (m *mockRefreshTokenRegistryForAuth) RevokeByID(_ context.Context, userID, id string) error {
+	if m.revokeByIDErr != nil {
+		return m.revokeByIDErr
+	}
 	for _, rt := range m.tokensByHash {
 		if rt.ID == id && rt.UserID == userID {
 			if rt.RevokedAt == nil {
@@ -1169,6 +1173,39 @@ func TestAuthAPI_Refresh_PersistFailurePreservesSession(t *testing.T) {
 	// existing session intact (no reuse cascade fired either).
 	c.Assert(refreshReg.tokensByHash[hash].RevokedAt, qt.IsNil)
 	c.Assert(refreshReg.revokeByUserIDCalled, qt.IsFalse)
+}
+
+// TestAuthAPI_Refresh_RevokeOldFailureStill200 pins that revoking the consumed
+// row is best-effort: a transient RevokeByID failure during rotation must NOT
+// sign the user out — the new token + cookie are already minted, so the
+// response stays 200 (a regression turning this into a 500 would log the user
+// out on a revoke flake).
+func TestAuthAPI_Refresh_RevokeOldFailureStill200(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-revokefail", "tenant-revokefail"
+
+	raw, hash, err := models.GenerateRefreshToken()
+	c.Assert(err, qt.IsNil)
+	refreshReg := &mockRefreshTokenRegistryForAuth{
+		tokensByHash: map[string]*models.RefreshToken{
+			hash: {
+				TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+					TenantID: tenantID,
+					UserID:   userID,
+				},
+				TokenHash: hash,
+				ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+			},
+		},
+		revokeByIDErr: errors.New("revoke consumed row flaked"),
+	}
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+
+	resp := postRefresh(apiserver.AuthParams{UserRegistry: userReg, RefreshTokenRegistry: refreshReg, JWTSecret: jwtSecret}, raw)
+
+	c.Assert(resp.Code, qt.Equals, http.StatusOK)
+	c.Assert(refreshCookieValue(resp), qt.Not(qt.Equals), "")
 }
 
 // TestAuthAPI_Refresh_ReuseDetectionRevokesAllSessions pins the #967 H4 theft

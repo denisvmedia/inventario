@@ -124,6 +124,11 @@ back-office plane (#1785):
   **new** row id as its `rti` claim so `/users/me/sessions` keeps resolving the caller's
   current session. A stolen cookie is therefore valid only until the legitimate client's
   next refresh (≈ the access-token lifetime, 15 min).
+  - Sessions-list effect: because each refresh **replaces** the row, a refresh-only session
+    shows `last_used_at` as null on `GET /users/me/sessions` (the FE falls back to
+    `created_at`, which advances each rotation), and the active row's id / IP / user-agent
+    now reflect the **latest** refresh rather than the original login. `is_current` is
+    unaffected — it is resolved from the access token's `rti` claim, not the cookie hash.
 - **Reuse detection (H4).** `GetByTokenHash` returns revoked rows unfiltered, so a cookie
   that hashes to an already-revoked row means the legitimate session has rotated past it —
   i.e. a replay. The handler revokes **all** of that user's refresh tokens
