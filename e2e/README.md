@@ -69,13 +69,6 @@ npm run test:record
 
 This will run all tests with video and screenshot recording enabled. The artifacts will be saved in the `test-results` directory.
 
-### Running Specific Test Examples
-
-```bash
-npm run test:screenshots   # Run screenshot examples
-npm run test:recorder      # Run recorder fixture examples
-```
-
 ### Running Tests with UI
 
 ```bash

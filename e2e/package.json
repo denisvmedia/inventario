@@ -8,8 +8,6 @@
     "stack": "cross-env START_STACK=true tsx setup/run-stack.ts",
     "test": "playwright test",
     "test:record": "playwright test --config=playwright.config.ts",
-    "test:recorder": "playwright test fixture-recorder.spec.ts",
-    "test:screenshots": "playwright test screenshots-example.spec.ts",
     "test:commodity-crud": "playwright test commodity-simple-crud.spec.ts --project=chromium",
     "install-browsers": "playwright install",
     "ui": "playwright test --ui",

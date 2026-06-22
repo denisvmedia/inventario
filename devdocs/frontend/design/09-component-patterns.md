@@ -147,7 +147,7 @@ single Dialog at the app root and exposes a promise-based API, so a
 destructive action is just:
 
 ```tsx
-const { confirm } = useConfirm()
+const confirm = useConfirm()
 
 async function onDelete() {
   const ok = await confirm({
@@ -391,7 +391,8 @@ Shell composes:
 
 Sidebar nav items come from per-section const arrays in
 `src/components/AppSidebar.tsx` (`INVENTORY`, `MANAGE`, `REPORTS`,
-`PERSONAL`, `ADMIN`, each typed `NavEntry[]`), gated by permissions.
+`PERSONAL` typed `NavEntry[]`; `ADMIN` typed `AdminNavEntry[]`), gated by
+permissions.
 Adding a route to nav = adding the entry to the right section array +
 the translation under `common:nav.*`.
 
