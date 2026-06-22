@@ -24,24 +24,21 @@ import { Page, expect } from '@playwright/test';
 import { test } from '../fixtures/app-fixture.js';
 import {
   login,
+  logout,
   DELETE_SOLO_TARGET_TEST_CREDENTIALS,
   DELETE_WRONG_PASSWORD_TEST_CREDENTIALS,
   DELETE_LAST_OWNER_TEST_CREDENTIALS,
 } from './includes/auth.js';
 
-// loginAs switches the session to a specific disposable seed user. It mirrors
-// the proven user-switch pattern used by no-group-redirect.spec.ts and
-// settings-default-group.spec.ts: navigate to /login and log in as the target,
-// letting that fresh login replace whatever session the app-fixture planted.
-//
-// IMPORTANT: do NOT clear localStorage/CSRF before navigating. The access token
-// lives in localStorage but the refresh token is an httpOnly cookie — clearing
-// only the token leaves the cookie valid, so the unauthenticated boot silently
-// refreshes the session and RootGate redirects away from /login before the form
-// renders, hanging waitForSelector('input[type="email"]'). login() itself waits
-// for the email field, so no explicit pre-wait is needed.
+// loginAs switches the session to a specific disposable seed user. The
+// app-fixture authenticates as the shared admin before every test, and an
+// authenticated visit to /login is bounced back into the app by the router —
+// so the login form never renders and a bare login() hangs on the email field.
+// We therefore sign out first (the mfa.spec user-switch pattern): logout() ends
+// on /login with the access token AND the httpOnly refresh cookie cleared, so
+// the subsequent login() sees a real, unauthenticated login form.
 async function loginAs(page: Page, credentials: { email: string; password: string }): Promise<void> {
-  await page.goto('/login');
+  await logout(page);
   await login(page, undefined, credentials);
 }
 
@@ -69,7 +66,7 @@ test.describe('Self-service account deletion (#2147)', () => {
     await expect(page.locator('[data-testid="delete-confirm-email-error"]')).toBeVisible();
     // Still on /settings, dialog still open — no DELETE was issued.
     await expect(page.locator('[data-testid="delete-account-dialog"]')).toBeVisible();
-    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page).toHaveURL(/\/settings(\?.*)?$/);
 
     // Correct email + correct password → the real delete fires.
     await page.fill('[data-testid="delete-confirm-email"]', target.email);
@@ -119,7 +116,7 @@ test.describe('Self-service account deletion (#2147)', () => {
     // Inline password error visible; dialog stays open; still on /settings.
     await expect(page.locator('[data-testid="delete-password-error"]')).toBeVisible();
     await expect(page.locator('[data-testid="delete-account-dialog"]')).toBeVisible();
-    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page).toHaveURL(/\/settings(\?.*)?$/);
     // Token survived — the user is still authenticated.
     expect(await page.evaluate(() => localStorage.getItem('inventario_token'))).not.toBeNull();
   });
@@ -144,7 +141,7 @@ test.describe('Self-service account deletion (#2147)', () => {
     await expect(banner).toBeVisible();
     await expect(banner).toContainText(/transfer ownership/i);
     await expect(page.locator('[data-testid="delete-account-dialog"]')).toBeVisible();
-    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page).toHaveURL(/\/settings(\?.*)?$/);
     expect(await page.evaluate(() => localStorage.getItem('inventario_token'))).not.toBeNull();
   });
 });
