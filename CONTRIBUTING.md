@@ -140,15 +140,19 @@ English is the default locale; `cs` / `ru` live under
 missing (so translating is additive). Screenshots live in
 `docs/site/src/assets/screenshots/` and are embedded with relative paths.
 
-The site is **versioned** (mike-style). Each version is published into its own
-folder on the orphan `gh-pages` branch and served from its own sub-path:
+The site is **versioned** (mike-style) and deployed via the GitHub Actions
+Pages flow — **no `gh-pages` branch, no deploy history** (one copy). Each
+version lives at its own sub-path:
 
-- `master` deploys to `/edge/` (URL `…/inventario/edge/`).
-- A `vX.Y.Z` tag deploys to `/vX.Y.Z/` (URL `…/inventario/vX.Y.Z/`).
+- `master` builds to `/edge/` (URL `…/inventario/edge/`).
+- The newest **N** `vX.Y.Z` tags build to `/vX.Y.Z/` (URL `…/inventario/vX.Y.Z/`);
+  `N` is `MAX_DOC_TAG_VERSIONS` (default 10, set via a repo variable), and older
+  tags are dropped.
 - The site root `…/inventario/` is a generated redirect to the **latest
-  release** (currently `edge`, until the first tag exists).
+  release** (highest semver tag; currently `edge`, until the first tag exists).
 
-Publishing one version never deletes the others, and an in-page version
+Because the Pages artifact replaces the whole site each deploy, the workflow
+rebuilds edge + the kept tags into one artifact per run; an in-page version
 switcher lets readers move between them. The version is chosen by the
 `DOCS_VERSION` env var (default `edge`), which drives the build's base path.
 
