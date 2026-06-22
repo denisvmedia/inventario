@@ -244,6 +244,7 @@ Support for multiple database backends via DSN:
 - shadcn/ui components (Radix primitives) for consistent UI
 
 ### Git Worktrees
+- **By default, every change happens in a dedicated worktree branched off fresh `master` — never directly in the main checkout.** Unless the user *explicitly* says otherwise (e.g. "edit in place", "use the current branch"), the first step of any task that writes code, docs, or config is: update `master` to the latest origin (fetch / fast-forward), then create the worktree off that freshly-updated `master`. This default applies to everything — features, fixes, refactors, chores, and even one-line doc edits like this rule itself. The only things that may skip a worktree are read-only investigation and work the user has explicitly scoped to the main checkout.
 - **All git worktrees MUST be created inside the main project under `.claude/worktrees/<name>/`.** This is a hard requirement, not a suggestion — never create a worktree as a sibling directory of the repository (e.g. `../inventario-1748`) or anywhere else outside `.claude/worktrees/`.
 - Example: `git worktree add .claude/worktrees/issue-1748-admin-groups -b feat/1748-admin-groups-endpoints master`.
 - Keeping every worktree under `.claude/worktrees/` ensures tooling (SocratiCode indexing, linters, the file watcher) resolves a single canonical project root and that stray worktrees are never indexed or linted as if they were separate projects.
