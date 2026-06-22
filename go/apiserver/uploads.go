@@ -403,21 +403,23 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 		return "", 0, errxtrace.Wrap("failed to create a new writer", err)
 	}
 
-	// Track whether the save ran to completion. gocloud's Writer has no
-	// Abort: a rejected upload (invalid MIME type, oversize 413, mid-stream
-	// copy error) has already streamed some bytes, and the deferred
-	// fw.Close() below COMMITS them as a durable blob. With no owning file
-	// row (the handler aborts before creating one) that blob is an orphan
-	// that nothing will ever clean up (issue #2125).
-	saved := false
-
-	// Two defers run LIFO. The fw.Close() defer is registered LAST so it
-	// runs FIRST, committing whatever was written; this cleanup defer is
-	// registered FIRST so it runs AFTER Close, deleting the just-committed
-	// blob on the failure path (the bucket is still open — b.Close() is the
-	// outermost, earliest-registered defer, so it runs last of all).
+	// gocloud's Writer has no Abort: a rejected upload (invalid MIME type,
+	// oversize 413, mid-stream copy error) has already streamed some bytes, and
+	// the deferred fw.Close() below COMMITS them as a durable blob. With no
+	// owning file row (the handler aborts before creating one) that blob is an
+	// orphan that nothing will ever clean up (issue #2125).
+	//
+	// Two defers run LIFO. The fw.Close() defer is registered LAST so it runs
+	// FIRST, folding its own result into err and committing whatever was
+	// written; this cleanup defer is registered FIRST so it runs AFTER Close,
+	// while the bucket is still open (b.Close() is the outermost,
+	// earliest-registered defer, so it runs last of all). Keying off the final
+	// err — not a "saved" flag set before Close — means the cleanup also covers
+	// the case where io.Copy succeeded but fw.Close() failed to commit: the
+	// caller sees an error and creates no row, so the committed-or-partial blob
+	// must still be removed.
 	defer func() {
-		if saved {
+		if err == nil {
 			return
 		}
 		// Best-effort orphan cleanup. Swallow+log any delete error: a
@@ -458,7 +460,6 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 		return "", 0, errxtrace.Wrap("failed when saving the file", err, errx.Attrs("filename", filename))
 	}
 
-	saved = true
 	return wrappedSrc.MIMEType(), written, nil
 }
 
