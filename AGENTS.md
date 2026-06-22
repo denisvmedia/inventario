@@ -151,6 +151,27 @@ Match the mock exactly unless there is an explicit, recorded reason to diverge.
 - [`devdocs/frontend/design-deviations.md`](devdocs/frontend/design-deviations.md) — current deviation log (read before designing a surface; append after landing one).
 - [`design-mocks/src/views/UIShowcaseView.tsx`](design-mocks/src/views/UIShowcaseView.tsx) — UI primitive catalog (consult when the mock is silent).
 
+## User-facing changes & documentation
+
+The end-user documentation site lives in [`docs/site/`](docs/site) (Astro Starlight, published to GitHub Pages — see the "User documentation" section of [CONTRIBUTING.md](CONTRIBUTING.md)). Its pages are grounded in the real UI, with embedded screenshots.
+
+**Any user-facing change MUST keep that documentation valid and complete.** This is part of "done": a PR that ships a user-facing change but leaves the docs stale, wrong, or missing is not finished. Backend changes count too — if they alter behavior a user can observe, they are user-facing.
+
+A change is **user-facing** if it alters what a user sees or does, including:
+
+- New, changed, or removed UI: pages, dialogs, fields, buttons, menus, labels, flows, defaults, empty/error states users read.
+- Changed behavior, limits, or validation a user can hit (e.g. a field's max length, a required→optional field, a status lifecycle, a rate limit).
+- New or changed settings, preferences, CLI subcommands, or user-facing API behavior.
+
+When you make such a change:
+
+1. **Find the affected page(s)** under `docs/site/src/content/docs/` (e.g. `items.md`, `settings-and-account.md`, `backup-and-restore.md`). Search the docs for the feature, field name, label, or limit you touched.
+2. **Make the docs match reality** — fix now-false claims, add missing steps/fields for new behavior, update labels and limits, and confirm cross-links plus the splash card grid (`index.mdx`) still cover the feature. Verify every claim against the actual app, not from memory.
+3. **Refresh screenshots** when a documented surface changed visually. Use the [`screenshot-review`](.claude/skills/screenshot-review/SKILL.md) skill / `e2e/screenshots.mjs`, then replace the matching file under `docs/site/src/assets/screenshots/`.
+4. **Validate**: `cd docs/site && DOCS_VERSION=edge npm run build` succeeds (no broken links/images), and `markdownlint-cli2` run with no args (the CI invocation) reports zero errors.
+
+If a user-facing change genuinely has **no** documentation impact, say so explicitly in the PR rather than silently skipping the check. If a new feature is large enough to warrant its own page, add one and wire it into both the sidebar (`astro.config.mjs`) and the splash grid (`index.mdx`). Translations (`cs`/`ru`) are additive and fall back to English, so English is the bar that must always stay current.
+
 ## Key Patterns and Conventions
 
 ### Registry Pattern
