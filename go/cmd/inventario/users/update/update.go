@@ -3,6 +3,8 @@ package update
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"strings"
 
@@ -83,9 +85,6 @@ func (c *Command) registerFlags() {
 	c.Cmd().Flags().BoolVar(&c.config.Active, "active", c.config.Active, "Whether the user is active")
 	c.Cmd().Flags().StringVar(&c.config.Tenant, "tenant", c.config.Tenant, "New tenant ID or slug")
 	c.Cmd().Flags().BoolVar(&c.config.Password, "password", c.config.Password, "Change the password (prompted securely)")
-
-	// Command behavior flags
-	c.Cmd().Flags().BoolVar(&c.config.Interactive, "interactive", c.config.Interactive, "Enable interactive prompts")
 }
 
 // updateUser handles the user update process
@@ -119,7 +118,7 @@ func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 	}()
 
 	fmt.Fprintln(out, "=== UPDATE USER ===")
-	fmt.Fprintf(out, "Database: %s\n", dbConfig.DBDSN)
+	fmt.Fprintf(out, "Database: %s\n", redactDSN(dbConfig.DBDSN))
 	fmt.Fprintf(out, "Target: %s\n", idOrEmail)
 	if cfg.DryRun {
 		fmt.Fprintln(out, "Mode: DRY RUN (no changes will be made)")
@@ -160,6 +159,14 @@ func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 	}
 	fmt.Fprintln(out)
 
+	// Loudly warn about the partial nature of a cross-tenant move: only the
+	// users row is reassigned, so the user's content and group memberships stay
+	// behind and become inaccessible. Printed for both dry-run and live runs so
+	// the operator sees it before deciding to proceed.
+	if c.Cmd().Flags().Changed("tenant") {
+		printCrossTenantWarning(out)
+	}
+
 	// Handle dry run
 	if cfg.DryRun {
 		fmt.Fprintln(out, "💡 This is a dry run. To perform the actual update, run the command without --dry-run")
@@ -195,7 +202,10 @@ func (c *Command) buildUpdateRequest(cfg *Config, adminService *admin.Service) (
 	}
 
 	if flags.Changed("name") {
-		name := cfg.Name
+		name := strings.TrimSpace(cfg.Name)
+		if name == "" {
+			return admin.UserUpdateRequest{}, nil, fmt.Errorf("--name cannot be empty or whitespace-only")
+		}
 		req.Name = &name
 		changes = append(changes, fmt.Sprintf("name → %s", name))
 	}
@@ -257,6 +267,33 @@ func (c *Command) collectPassword() (string, error) {
 		return "", fmt.Errorf("unexpected type returned from password field")
 	}
 	return passwordStr, nil
+}
+
+// printCrossTenantWarning emits a prominent warning that a --tenant move only
+// reassigns the users row, leaving the user's content and memberships behind.
+func printCrossTenantWarning(out io.Writer) {
+	fmt.Fprintln(out, "⚠️  WARNING: --tenant moves only the users row. The user's existing content")
+	fmt.Fprintln(out, "    (commodities, files, areas, locations, exports, tags) and group memberships")
+	fmt.Fprintln(out, "    stay in the original tenant and will become inaccessible to them.")
+	fmt.Fprintln(out, "    See https://github.com/denisvmedia/inventario/issues/2179")
+	fmt.Fprintln(out)
+}
+
+// redactDSN masks the password embedded in a database DSN so credentials never
+// leak into terminal history or CI logs. The username is preserved to keep the
+// banner useful for troubleshooting; if the DSN can't be parsed or carries no
+// userinfo, it is returned unchanged (non-postgres DSNs reach here only in the
+// memory:// case, which is rejected earlier).
+func redactDSN(dsn string) string {
+	parsed, err := url.Parse(dsn)
+	if err != nil || parsed.User == nil {
+		return dsn
+	}
+	if _, hasPassword := parsed.User.Password(); !hasPassword {
+		return dsn
+	}
+	parsed.User = url.UserPassword(parsed.User.Username(), "xxxxxx")
+	return parsed.String()
 }
 
 // printUserInfo prints user information in a formatted way

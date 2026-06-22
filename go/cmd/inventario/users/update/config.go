@@ -12,6 +12,5 @@ type Config struct {
 	Password bool   `yaml:"password" env:"USER_PASSWORD" env-default:"false"`
 
 	// Command options
-	DryRun      bool `yaml:"dry_run" env:"DRY_RUN" env-default:"false"`
-	Interactive bool `yaml:"interactive" env:"INTERACTIVE" env-default:"false"`
+	DryRun bool `yaml:"dry_run" env:"DRY_RUN" env-default:"false"`
 }

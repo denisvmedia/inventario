@@ -82,6 +82,20 @@ func readUser(c *qt.C, fs *registry.FactorySet, id string) *models.User {
 	return user
 }
 
+// seedSecondTenant adds an additional active tenant to the same store backing
+// fs so cross-tenant move tests have a destination to move the user into. The
+// server-generated tenant ID is returned because TenantRegistry.Create ignores
+// any caller-supplied ID; the slug stays stable for --tenant resolution.
+func seedSecondTenant(c *qt.C, fs *registry.FactorySet, slug string) (tenantID string) {
+	created, err := fs.CreateServiceRegistrySet().TenantRegistry.Create(context.Background(), models.Tenant{
+		Name:   "Other Tenant",
+		Slug:   slug,
+		Status: models.TenantStatusActive,
+	})
+	c.Assert(err, qt.IsNil)
+	return created.ID
+}
+
 func TestCommand_New(t *testing.T) {
 	c := qt.New(t)
 
@@ -109,7 +123,6 @@ func TestCommand_Flags(t *testing.T) {
 		"active",
 		"tenant",
 		"password",
-		"interactive",
 	}
 	for _, flagName := range expectedFlags {
 		flag := cobraCmd.Flags().Lookup(flagName)
@@ -118,6 +131,8 @@ func TestCommand_Flags(t *testing.T) {
 
 	// The dead --role flag must NOT exist.
 	c.Assert(cobraCmd.Flags().Lookup("role"), qt.IsNil)
+	// The dead --interactive flag was never consumed and must NOT exist.
+	c.Assert(cobraCmd.Flags().Lookup("interactive"), qt.IsNil)
 }
 
 // TestCommand_LiveUpdate_Mutates is the regression guard against the old no-op
@@ -146,6 +161,32 @@ func TestCommand_LiveUpdate_Mutates(t *testing.T) {
 	c.Assert(updated.IsActive, qt.IsFalse)
 	// Untouched fields are preserved.
 	c.Assert(updated.Email, qt.Equals, "user@example.com")
+}
+
+// TestCommand_LiveUpdate_MovesTenant verifies that a live --tenant update
+// actually reassigns the user's tenant_id (and prints the cross-tenant warning).
+func TestCommand_LiveUpdate_MovesTenant(t *testing.T) {
+	c := qt.New(t)
+
+	fs, userID := seededRegistry(c)
+	otherTenantID := seedSecondTenant(c, fs, "other-tenant")
+
+	cmd := update.New(&shared.DatabaseConfig{DBDSN: testDSN})
+	cobraCmd := cmd.Cmd()
+
+	var out bytes.Buffer
+	cobraCmd.SetOut(&out)
+	cobraCmd.SetArgs([]string{
+		"user@example.com",
+		"--tenant=other-tenant",
+	})
+
+	err := cobraCmd.Execute()
+	c.Assert(err, qt.IsNil)
+	c.Assert(out.String(), qt.Contains, "WARNING: --tenant moves only the users row")
+
+	moved := readUser(c, fs, userID)
+	c.Assert(moved.TenantID, qt.Equals, otherTenantID)
 }
 
 // TestCommand_DryRun_MutatesNothing verifies the dry-run path reports the
