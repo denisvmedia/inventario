@@ -402,6 +402,32 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 	if err != nil {
 		return "", 0, errxtrace.Wrap("failed to create a new writer", err)
 	}
+
+	// Track whether the save ran to completion. gocloud's Writer has no
+	// Abort: a rejected upload (invalid MIME type, oversize 413, mid-stream
+	// copy error) has already streamed some bytes, and the deferred
+	// fw.Close() below COMMITS them as a durable blob. With no owning file
+	// row (the handler aborts before creating one) that blob is an orphan
+	// that nothing will ever clean up (issue #2125).
+	saved := false
+
+	// Two defers run LIFO. The fw.Close() defer is registered LAST so it
+	// runs FIRST, committing whatever was written; this cleanup defer is
+	// registered FIRST so it runs AFTER Close, deleting the just-committed
+	// blob on the failure path (the bucket is still open — b.Close() is the
+	// outermost, earliest-registered defer, so it runs last of all).
+	defer func() {
+		if saved {
+			return
+		}
+		// Best-effort orphan cleanup. Swallow+log any delete error: a
+		// failure to remove the partial blob must never mask the real
+		// upload error the caller is about to render.
+		if delErr := b.Delete(ctx, filename); delErr != nil {
+			slog.WarnContext(ctx, "failed to delete partial upload blob after rejected upload (best-effort)",
+				"filename", filename, "error", delErr.Error())
+		}
+	}()
 	defer func() {
 		err = errors.Join(err, fw.Close())
 	}()
@@ -432,6 +458,7 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 		return "", 0, errxtrace.Wrap("failed when saving the file", err, errx.Attrs("filename", filename))
 	}
 
+	saved = true
 	return wrappedSrc.MIMEType(), written, nil
 }
 
