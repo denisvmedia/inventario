@@ -112,8 +112,12 @@ jobs:
           file: ./Dockerfile
           target: production
           platforms: ${{ matrix.platform }}
-          provenance: false
-          sbom: false
+          # Supply-chain attestations: SLSA provenance + SBOM, attached to the
+          # per-arch image on push so consumers can verify build origin and
+          # enumerate components (#2097). `mode=max` records full build
+          # metadata in the provenance predicate.
+          provenance: mode=max
+          sbom: true
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ env.CACHE_SCOPE_PREFIX }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE_PREFIX }}-${{ matrix.arch }}
@@ -346,6 +350,83 @@ jobs:
             [ -z "$tag" ] && continue
             docker buildx imagetools inspect "$tag"
           done <<< "${{ steps.meta.outputs.tags }}"
+
+  scan-image:
+    name: Scan image for vulnerabilities
+    needs: merge
+    # `merge` is skipped on fork PRs and on PRs that change no image input
+    # (its `build` dependency is gated), so this job is skipped with it. Gate
+    # to PR and master-push events: tag releases reuse master HEAD's already
+    # scanned layers, and the SARIF upload is only meaningful for PRs / the
+    # default branch.
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.action != 'closed')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required to publish results to the GitHub Security > Code scanning tab.
+      security-events: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      # The merge job tags every commit's manifest list with an immutable
+      # sha-<7> tag — pull that exact ref so the scan can't race onto a stale
+      # pr-N / edge pointer. Mirrors _wait-for-docker-image.yml's tag logic.
+      COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout code
+        # Brings .trivyignore (repo-root allowlist) into the workspace so the
+        # scanner honours documented, time-boxed CVE exceptions.
+        uses: actions/checkout@v7
+
+      - name: Compute image ref
+        id: ref
+        run: |
+          set -euo pipefail
+          echo "image=${IMAGE}:sha-${COMMIT_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan image with Trivy (SARIF report)
+        # exit-code 0: this pass only produces the SARIF for the Security tab;
+        # the gating happens in the next step. Pinned Trivy DB is fetched at
+        # run time. `.trivyignore` in the workspace is auto-discovered.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.ref.outputs.image }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+          # Image scan only — ignore unfixed advisories so we don't block on
+          # CVEs with no available upstream fix (they still appear in the
+          # report); use .trivyignore for everything else.
+          ignore-unfixed: true
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        # Surface findings even when the gating step below fails the job.
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image
+
+      - name: Fail on HIGH/CRITICAL vulnerabilities
+        # Second pass with exit-code 1 turns unignored HIGH/CRITICAL findings
+        # into a job failure. DB is cached from the SARIF pass (--skip-db-update
+        # via the action's `skip-setup-trivy`/cache is implicit on the runner).
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.ref.outputs.image }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
 
   # Pin the just-published master image SHA for the master ArgoCD
   # ApplicationSet (infra/argocd/applicationset-master.yaml). That appset

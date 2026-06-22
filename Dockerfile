@@ -100,10 +100,19 @@ WORKDIR /app/go
 CMD ["go", "test", "-v", "./..."]
 
 # Stage 5: Production runtime
-FROM alpine:latest AS production
+# Pinned to an explicit version + multi-arch digest (matches the precision of
+# the node:/golang: base pins above) so the runtime base layer is reproducible
+# and can't drift to a newly-published `latest`. Renovate's `docker` manager
+# keeps the digest current; bump both the tag and the @sha256 together.
+FROM alpine:3.22@sha256:310c62b5e7ca5b08167e4384c68db0fd2905dd9c7493756d356e893909057601 AS production
 
-# Install runtime dependencies
-RUN apk --no-cache add ca-certificates tzdata curl
+# Install runtime dependencies. `apk upgrade` first so base-image packages pick
+# up security patches at build time even when the pinned digest lags a CVE fix
+# — otherwise the image scan (Trivy, #2097) flags a fixed-but-not-yet-repinned
+# OS CVE as HIGH and fails the build (e.g. CVE-2026-45447 in libssl3/libcrypto3,
+# fixed in openssl 3.5.7-r0). Keeps the digest pin for the base layer while
+# staying current on patches; --no-cache leaves no apk index behind.
+RUN apk --no-cache upgrade && apk --no-cache add ca-certificates tzdata curl
 
 # Create non-root user
 RUN addgroup -g 1001 -S inventario && \

@@ -399,9 +399,78 @@ manually:
   from `deploy/monitoring/prometheus/rules/inventario.rules.yml` — `InventarioTargetDown`,
   `InventarioHighErrorRate` (5xx > 5%), `InventarioHighLatencyP95` (p95 > 1s)) and point
   Alertmanager at a real receiver (email/Slack/PagerDuty).
-- [ ] ⚠️ **Keep `/metrics` off the public internet.** It is unauthenticated and exposes
-  installation-wide aggregate gauges (tenant/user/commodity counts, storage bytes). Scrape
-  it only from the in-cluster Prometheus — never route it through the public ingress.
+- [ ] ⚠️ **Protect `/metrics` with the bearer token and keep it off the public internet.**
+  It exposes installation-wide aggregate gauges (tenant/user/commodity counts, storage
+  bytes). Configure the token per **§B10a** below, scrape it only from the in-cluster
+  Prometheus, and never route it through the public ingress.
+
+### B10a. Metrics authentication — required security hardening (#2102)
+
+⚠️ **`/metrics` (API `:3333` and each worker `:3334`) leaks installation-wide gauges**
+(`inventario_tenants`, `inventario_users`, `inventario_commodities`,
+`inventario_file_storage_bytes`). When no token is configured the endpoint is **open** and
+the app logs a one-time startup warning. Gate it with a bearer token:
+
+- [ ] **Generate a metrics token** (strong random, ≥ 32 bytes):
+
+  ```bash
+  openssl rand -hex 32   # → INVENTARIO_RUN_METRICS_TOKEN
+  ```
+
+- [ ] **Store it in the runtime Secret** (alongside `INVENTARIO_RUN_JWT_SECRET`,
+  `INVENTARIO_RUN_FILE_SIGNING_KEY`, …) under the key `INVENTARIO_RUN_METRICS_TOKEN`
+  (see Appendix B). The chart loads the whole Secret as env vars, so every workload
+  (`run.all` / `run.apiserver` / workers) receives the token and enforces
+  `Authorization: Bearer <token>` on `/metrics`, rejecting mismatches with HTTP 401.
+
+- [ ] **Or set it inline** with `metrics.token` (mirrored into the chart-managed Secret as
+  `INVENTARIO_RUN_METRICS_TOKEN`). Use the Secret key when `secrets.existingSecret` is set —
+  `metrics.token` is ignored in that mode.
+
+- [ ] **Wire the Prometheus Operator to send the token.** With
+  `metrics.serviceMonitor.enabled=true` and a token configured (inline **or** the
+  `INVENTARIO_RUN_METRICS_TOKEN` key in `secrets.existingSecret`), the chart automatically adds
+  an `authorization` stanza to the ServiceMonitor pointing at the runtime Secret:
+
+  ```yaml
+  metrics:
+    token: ""                  # leave empty when using secrets.existingSecret;
+                               # supply INVENTARIO_RUN_METRICS_TOKEN in that Secret
+    serviceMonitor:
+      enabled: true
+      labels:
+        release: kps           # match your Prometheus Operator instance
+  ```
+
+  The Secret must live in the **same namespace** as the ServiceMonitor.
+
+- [ ] **Vanilla (operator-less) Prometheus** discovers pods via
+  `metrics.podAnnotations.enabled=true`, but pod annotations cannot carry a token — add the
+  header in your scrape job's `scrape_config`:
+
+  ```yaml
+  authorization:
+    type: Bearer
+    credentials_file: /etc/prometheus/secrets/inventario-runtime/INVENTARIO_RUN_METRICS_TOKEN
+  ```
+
+- [ ] **Defense-in-depth: also block `/metrics` at the ingress controller.** The chart does
+  NOT route it through its own ingress, but the default rule is `path: /` — block the path
+  explicitly. ingress-nginx:
+  `nginx.ingress.kubernetes.io/server-snippet: |` then `location = /metrics { return 401; }`.
+  Traefik: attach a Middleware rejecting `/metrics`.
+
+- [ ] **Verify** Prometheus scrapes successfully with the token — check the Prometheus UI
+  `Targets` tab for the inventario ServiceMonitor endpoint showing **UP**, and confirm an
+  unauthenticated `curl` to `/metrics` returns `401`.
+
+### B10b. Disable the API docs UI in production (#2102)
+
+- [ ] ⚠️ **Keep the interactive Swagger/OpenAPI docs off in production.** The chart defaults
+  `app.enableApiDocs=false`, which sets `INVENTARIO_RUN_ENABLE_API_DOCS=false` and removes the
+  `/swagger` UI so the full API surface is not advertised to anonymous callers. Leave it at
+  the default for prod; only flip `app.enableApiDocs=true` on dev/preview overlays if you
+  want the docs UI. Confirm `GET /swagger` returns 404 after deploy.
 
 ### B11. Backups & disaster recovery
 
@@ -464,6 +533,7 @@ app:
   publicUrl: "https://inventario.example.com"
   uploadLocation: "s3://inventario-prod?prefix=uploads/&region=auto&endpoint=https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com"
   allowedOrigins: ""           # SPA is same-origin; leave empty to deny cross-origin
+  enableApiDocs: false         # keep /swagger off in prod (chart default; shown for clarity)
 
 email:
   provider: smtp
@@ -513,6 +583,8 @@ setupJob:
     # adminPassword comes from the Secret key SETUP_ADMIN_PASSWORD
 
 metrics:
+  # token: ""                  # leave empty here; INVENTARIO_RUN_METRICS_TOKEN comes
+                               # from the runtime Secret (Appendix B). See §B10a.
   serviceMonitor:
     enabled: true              # turn on once kube-prometheus-stack is installed
     labels:
@@ -534,6 +606,7 @@ kubectl -n inventario create secret generic inventario-runtime \
   --from-literal=MIGRATOR_DB_DSN='postgres://inventario_migrator:PASS@PGHOST:5432/inventario?sslmode=require' \
   --from-literal=INVENTARIO_RUN_JWT_SECRET='<openssl rand -hex 32>' \
   --from-literal=INVENTARIO_RUN_FILE_SIGNING_KEY='<openssl rand -hex 32>' \
+  --from-literal=INVENTARIO_RUN_METRICS_TOKEN='<openssl rand -hex 32>' \
   --from-literal=SETUP_ADMIN_PASSWORD='<initial admin password>' \
   --from-literal=INVENTARIO_RUN_SMTP_PASSWORD='<mailtrap smtp password>' \
   --from-literal=INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY='<anthropic api key>' \

@@ -1,0 +1,33 @@
+name: Dependency Review
+
+# Scans the dependency diff (added / updated manifest + lockfile entries) on
+# every pull request and fails when a HIGH/CRITICAL-severity advisory is
+# introduced. Runs unconditionally — it's security-critical and cheap, and a
+# new vulnerable dependency can ride in on a PR that touches no Go/JS source
+# (e.g. a lockfile-only bump), so it deliberately does NOT use the path
+# filters that gate the per-ecosystem checks.
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: dependency-review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@v5
+        with:
+          # Block the PR only on HIGH/CRITICAL advisories; lower severities
+          # are surfaced in the PR summary without failing the check.
+          fail-on-severity: high

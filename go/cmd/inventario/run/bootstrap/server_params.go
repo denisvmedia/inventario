@@ -187,6 +187,13 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 	// off in production and is opted into only on dev / e2e / the init-data
 	// seed server.
 	params.SeedEndpointEnabled = cfg.SeedEndpointEnabled
+	// /metrics bearer-token gate (#2102). Empty leaves /metrics open and the
+	// apiserver logs a one-time startup warning; a non-empty token requires
+	// "Authorization: Bearer <token>" on every scrape.
+	params.MetricsToken = cfg.MetricsToken
+	// /swagger docs gate (#2102 / L-5). Default true so dev/e2e keep the
+	// interactive docs; production flips it off to hide the API surface.
+	params.EnableAPIDocs = cfg.EnableAPIDocs
 
 	emailLifecycle, err := buildEmailService(cfg)
 	if err != nil {

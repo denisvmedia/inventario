@@ -1,3 +1,24 @@
+{{- /*
+SECURITY NOTE (#2102): /metrics leaks installation-wide gauges (tenant/user/
+commodity counts, storage bytes). It is gated at the APP layer by the bearer
+token (metrics.token → INVENTARIO_RUN_METRICS_TOKEN); when that token is unset the
+endpoint is OPEN. For defense-in-depth, do NOT route /metrics through the public
+ingress. This chart's default rule is `path: /` (Prefix), which would otherwise
+forward /metrics to the backend — block it at the ingress controller:
+
+  ingress-nginx:
+    ingress.annotations:
+      nginx.ingress.kubernetes.io/server-snippet: |
+        location = /metrics { return 401; }
+
+  Traefik: attach a Middleware that rejects the /metrics path (or scope the
+  rule's `path` away from /metrics).
+
+  GCE: add a URL-map rule blocking /metrics.
+
+Scrape /metrics only from the in-cluster Prometheus (ServiceMonitor / pod
+discovery), which targets the Service directly and never traverses this ingress.
+*/ -}}
 {{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress

@@ -20,21 +20,28 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable auto-merge for patch and minor updates
-        if: |
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+      - name: Enable auto-merge for patch updates only
+        # PATCH-ONLY (#2097). `gh pr merge --auto` only completes once every
+        # required status check passes, so branch protection on master is what
+        # actually gates this on the new security checks (go-govulncheck,
+        # dependency-review, the docker.yml image scan). Minor and major
+        # updates are held for manual review — a minor bump can still pull in
+        # behavioural changes that lint/typecheck/unit tests miss.
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Comment on major updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+      - name: Comment on minor and major updates
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-major'
         run: |
-          gh pr comment "$PR_URL" --body "⚠️ This is a **major version update**. Please review the changelog before merging."
+          gh pr comment "$PR_URL" --body "⚠️ This is a **${UPDATE_TYPE#version-update:semver-} version update**. Auto-merge is restricted to patch updates — please review the changelog and CI results before merging."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   renovate:
@@ -54,32 +61,41 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check if major update
-        id: check-major
+      - name: Classify update type
+        id: classify
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_LABELS: ${{ steps.pr-labels.outputs.labels }}
         run: |
-          # Check if this is a major update based on title or labels
-          if echo "$PR_TITLE" | grep -qiE '\bmajor\b'; then
-            echo "is_major=true" >> $GITHUB_OUTPUT
-          elif echo "$PR_LABELS" | grep -qi 'major'; then
-            echo "is_major=true" >> $GITHUB_OUTPUT
-          else
-            echo "is_major=false" >> $GITHUB_OUTPUT
+          # PATCH-ONLY auto-merge (#2097). Renovate doesn't expose a
+          # structured update-type to the PR event, so derive it from the
+          # title/labels it stamps. Anything that isn't unambiguously a patch
+          # (major, minor, or unclassifiable) is held for manual review.
+          # renovate.json's packageRules also restrict automerge to patch, so
+          # this is defence-in-depth, not the sole gate.
+          is_patch=false
+          if echo "$PR_TITLE" | grep -qiE '\b(major|minor)\b'; then
+            is_patch=false
+          elif echo "$PR_LABELS" | grep -qiE 'major|minor'; then
+            is_patch=false
+          elif echo "$PR_TITLE" | grep -qiE '\bpatch\b' || echo "$PR_LABELS" | grep -qi 'patch'; then
+            is_patch=true
           fi
+          echo "is_patch=$is_patch" >> "$GITHUB_OUTPUT"
 
-      - name: Enable auto-merge for patch and minor updates
-        if: steps.check-major.outputs.is_major != 'true'
+      - name: Enable auto-merge for patch updates only
+        # `gh pr merge --auto` waits for required status checks, so branch
+        # protection on master gates this on the new security checks.
+        if: steps.classify.outputs.is_patch == 'true'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Comment on major updates
-        if: steps.check-major.outputs.is_major == 'true'
+      - name: Comment on non-patch updates
+        if: steps.classify.outputs.is_patch != 'true'
         run: |
-          gh pr comment "$PR_URL" --body "⚠️ This is a **major version update**. Please review the changelog before merging."
+          gh pr comment "$PR_URL" --body "⚠️ Auto-merge is restricted to **patch** updates. This update is minor/major or could not be classified as a patch — please review the changelog and CI results before merging."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
