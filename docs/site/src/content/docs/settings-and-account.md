@@ -58,8 +58,9 @@ change applies immediately.
   you.
 - **Default view** — whether the Items list opens in **Grid** or **List**. You
   can still flip the layout per session from the toolbar.
-- **Preferred currency** — your personal preference for how currency is
-  displayed.
+- **Preferred currency** — a saved preference for how currency should be
+  displayed. It's stored on your account, but display conversion isn't wired up
+  yet, so amounts still show in their stored currency for now.
 - **Region & formatting** — how numbers, dates, and currencies are formatted
   (separators, symbol placement). This is independent of the UI language, so you
   can keep the interface in English while formatting numbers the Czech way, for

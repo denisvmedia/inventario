@@ -32,11 +32,11 @@ on:
       - 'docs/site/**'
       - '.github/workflows/docs.yml'
 
-# Permissions for the GitHub Pages deployment.
+# Least privilege: the workflow only needs read at the top level. The GitHub
+# Pages write + OIDC scopes are granted to the deploy job alone (see below), so
+# the PR build-gate and the changes/build jobs never hold deploy credentials.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Never cancel an in-flight Pages deploy (avoids a half-published site).
 concurrency:
@@ -109,7 +109,12 @@ jobs:
           set -euo pipefail
           # Keep only the newest MAX_DOC_TAG_VERSIONS tags (by semver); older
           # historical versions are dropped (not built, not listed, not served).
-          for tag in $(git tag -l 'v*' | sort -V | tail -n "${MAX_DOC_TAG_VERSIONS:-10}"); do
+          # Filter to the SAME shape gen-versions.mjs indexes (vX.Y[.Z], no
+          # pre-release/build metadata): a tag it can't index would never reach
+          # versions.json or the switcher, so building it only orphans a dead
+          # folder. `|| true` keeps the no-tags case (grep finds nothing under
+          # `set -o pipefail`) from failing the step.
+          for tag in $(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+(\.[0-9]+)?$' | sort -V | tail -n "${MAX_DOC_TAG_VERSIONS:-10}" || true); do
             echo "::group::Building $tag"
             workdir="$(mktemp -d)"
             git worktree add --force "$workdir" "refs/tags/$tag"
@@ -144,6 +149,10 @@ jobs:
       ( startsWith(github.ref, 'refs/tags/v') ||
         (github.ref == 'refs/heads/master' && needs.changes.outputs.docs == 'true') )
     runs-on: ubuntu-latest
+    # The only job that touches GitHub Pages — confine the write scopes here.
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

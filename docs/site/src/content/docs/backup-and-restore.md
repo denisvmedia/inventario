@@ -1,6 +1,6 @@
 ---
 title: Backup and restore
-description: Export your inventory as a signed .inb backup, then import and restore it safely into your own account.
+description: Export your inventory as a signed .inb backup, then import and restore it safely into your own group.
 ---
 
 Inventario can package up your inventory into a downloadable backup so you always have your own copy — and bring that copy back later, whether to recover from a mistake or to move your data to another Inventario instance. Everything lives under **Backup** in the sidebar, on a page titled **Backup & Restore**.
@@ -66,8 +66,8 @@ If you have an `.inb` file from before — perhaps from another Inventario insta
 
 The file is staged on the server first and only inspected when you start the restore. After a successful upload, Inventario sends you straight to the restore form so you can finish the job. The imported export shows an **Imported** badge in the list and a note on its detail page.
 
-:::caution[Backups stay with your account]
-A backup imports only into **your own account**. Inventario confines an uploaded backup to the account that uploaded it — you can't import or restore someone else's backup into your group, and yours can't be pulled into theirs.
+:::caution[Backups stay with your group]
+A backup restores only into the current group. Inventario confines an uploaded backup to the group that owns it — you can't import or restore someone else's backup into your group, and yours can't be pulled into theirs.
 :::
 
 ## Restore a backup

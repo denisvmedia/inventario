@@ -128,7 +128,7 @@ On the [Files](../files-and-photos/) page there's a row of tag-filter pills in t
 
 ### Items
 
-On the [Items](../items/) list, each item shows its tags as small badges so you can spot them at a glance. The Items list filters by **Type**, **Status**, **area**, and **warranty** rather than by tag, so to gather items by a single tag, look for that tag's badge on the cards, or use search.
+On the [Items](../items/) list, each item shows its tags as small badges so you can spot them at a glance. The Items list filters by **Type**, **Status**, **area**, and **warranty** rather than by tag, so to gather items by a single tag, look for that tag's badge on the cards.
 
 ## Related
 
