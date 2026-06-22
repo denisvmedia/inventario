@@ -29,19 +29,19 @@ import {
   DELETE_LAST_OWNER_TEST_CREDENTIALS,
 } from './includes/auth.js';
 
-// loginAs switches the session away from the auto-logged-in admin (planted by
-// app-fixture's page setup) to a specific disposable seed user. We clear the
-// stored token + CSRF and reload so the router lands us back on /login as an
-// unauthenticated session, then log in as the target. Mirrors the user-switch
-// pattern used by the orphan/mfa specs, but keeps the app-fixture import so
-// the stack-readiness wait + "Settings Required" guard still run.
+// loginAs switches the session to a specific disposable seed user. It mirrors
+// the proven user-switch pattern used by no-group-redirect.spec.ts and
+// settings-default-group.spec.ts: navigate to /login and log in as the target,
+// letting that fresh login replace whatever session the app-fixture planted.
+//
+// IMPORTANT: do NOT clear localStorage/CSRF before navigating. The access token
+// lives in localStorage but the refresh token is an httpOnly cookie — clearing
+// only the token leaves the cookie valid, so the unauthenticated boot silently
+// refreshes the session and RootGate redirects away from /login before the form
+// renders, hanging waitForSelector('input[type="email"]'). login() itself waits
+// for the email field, so no explicit pre-wait is needed.
 async function loginAs(page: Page, credentials: { email: string; password: string }): Promise<void> {
-  await page.evaluate(() => {
-    localStorage.removeItem('inventario_token');
-    sessionStorage.removeItem('inventario_csrf_token');
-  });
   await page.goto('/login');
-  await page.waitForSelector('input[type="email"]', { timeout: 30000 });
   await login(page, undefined, credentials);
 }
 
