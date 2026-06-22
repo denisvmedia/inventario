@@ -10,7 +10,7 @@
 //
 // versions.json lives one level ABOVE the per-version base. base is
 // `/inventario/<ver>/`, so `new URL('../versions.json', BASE_URL)` resolves to
-// `/inventario/versions.json` (served from the gh-pages branch root).
+// `/inventario/versions.json` (served from the site root).
 import Default from '@astrojs/starlight/components/SiteTitle.astro';
 
 // BASE_URL is `/inventario/<ver>/`. The current version is the last non-empty
@@ -24,8 +24,13 @@ const currentVersion = segments[segments.length - 1] || 'edge';
 // the trailing `<ver>/` segment yields the root `/inventario/` and the file
 // sits at `/inventario/versions.json`. (We avoid `new URL(rel, base)` because
 // base is a path, not an absolute URL, and `new URL` throws on it at build
-// time — this string form is equivalent and SSR-safe.)
-const versionsRoot = base.replace(new RegExp(`${currentVersion}/$`), '');
+// time.) We strip the literal `<ver>/` suffix rather than via a RegExp so a
+// version label with regex-special chars (the dots in `v1.2.3`) can't become
+// wildcards — SSR-safe.
+const versionSuffix = `${currentVersion}/`;
+const versionsRoot = base.endsWith(versionSuffix)
+  ? base.slice(0, -versionSuffix.length)
+  : base;
 const versionsJsonUrl = `${versionsRoot}versions.json`;
 ---
 
@@ -92,8 +97,11 @@ const versionsJsonUrl = `${versionsRoot}versions.json`;
     // base is `/<...>/<current>/`. Everything up to and including the version
     // segment is the prefix we strip to recover the page-relative path.
     const base = import.meta.env.BASE_URL; // ends with `/<current>/`
-    // Root that contains all version folders, e.g. `/inventario/`.
-    const versionsRoot = base.replace(new RegExp(`${current}/$`), '');
+    // Root that contains all version folders, e.g. `/inventario/`. Strip the
+    // literal `<current>/` suffix (not via RegExp, so regex-special chars in a
+    // version label can't become wildcards).
+    const suffix = `${current}/`;
+    const versionsRoot = base.endsWith(suffix) ? base.slice(0, -suffix.length) : base;
 
     // Page path relative to the current version base (no leading slash).
     // e.g. base `/inventario/edge/`, location `/inventario/edge/items/`

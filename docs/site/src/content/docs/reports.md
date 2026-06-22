@@ -107,7 +107,7 @@ A few tips for a clean result:
 
 ## Good to know
 
-- **Currencies.** Totals and estimated values are shown in your **group currency**. An item's purchase price is shown in the currency you recorded it in. You can set your group currency in [Settings & account](../settings-and-account/).
+- **Currencies.** Totals and estimated values are shown in your **group currency**. An item's purchase price is shown in the currency you recorded it in. You set your group currency when you create a group, and change it later via **Group settings → Info** — see [Groups & sharing](../groups-and-sharing/).
 - **Estimated value** is the item's current replacement estimate, separate from what you originally paid. Keeping it up to date makes the report more useful at claim time.
 - **Sold, lost, or disposed items** are left out of reports, which only cover items you currently own.
 - **Share a report.** Saving as a PDF (above) is the simplest way to hand a copy to an insurer. To export your underlying data instead, see [Backup & restore](../backup-and-restore/).

@@ -92,7 +92,16 @@ jobs:
           cache: 'npm'
           cache-dependency-path: docs/site/package-lock.json
 
-      - name: Build edge (current branch) -> _site/edge
+      - name: Self-test the version generator
+        # Pure, dependency-free unit test of the semver/ordering/redirect logic.
+        # Runs on every event (incl. PRs) so a regression is caught before deploy.
+        run: node docs/site/scripts/gen-versions.mjs --selftest
+
+      - name: Build edge from the current tree -> _site/edge
+        # On PRs (the build gate) and master pushes the checked-out tree IS
+        # edge. Tag pushes are handled by the next step — `edge` must always
+        # track master, never the tagged release.
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
         env:
           DOCS_VERSION: edge
         run: |
@@ -102,6 +111,25 @@ jobs:
           npm run build
           mkdir -p "$GITHUB_WORKSPACE/_site/edge"
           cp -r dist/. "$GITHUB_WORKSPACE/_site/edge/"
+
+      - name: Build edge from master -> _site/edge (tag pushes)
+        # A tag push checks out the tag, but `edge` must reflect master. Build
+        # it from a master worktree so publishing a release never clobbers the
+        # edge docs (the Pages artifact is a full replace). origin/master is
+        # available because checkout used fetch-depth: 0.
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          DOCS_VERSION: edge
+        run: |
+          set -euo pipefail
+          workdir="$(mktemp -d)"
+          git worktree add --force "$workdir" origin/master
+          ( cd "$workdir/docs/site" \
+            && DOCS_VERSION=edge npm ci \
+            && DOCS_VERSION=edge npm run build )
+          mkdir -p "$GITHUB_WORKSPACE/_site/edge"
+          cp -r "$workdir/docs/site/dist/." "$GITHUB_WORKSPACE/_site/edge/"
+          git worktree remove --force "$workdir" || true
 
       - name: Build each released tag -> _site/<tag>
         if: github.event_name == 'push'
@@ -118,16 +146,24 @@ jobs:
             echo "::group::Building $tag"
             workdir="$(mktemp -d)"
             git worktree add --force "$workdir" "refs/tags/$tag"
+            # A single broken historical tag must NOT abort the whole publish:
+            # the branchless model rebuilds every kept tag on each deploy, so an
+            # old tag whose lockfile no longer resolves would otherwise block
+            # shipping new docs forever. Treat a per-tag failure as a warning and
+            # move on; worktree cleanup runs regardless so a failure can't leak.
             if [ -f "$workdir/docs/site/package.json" ]; then
-              ( cd "$workdir/docs/site" \
-                && DOCS_VERSION="$tag" npm ci \
-                && DOCS_VERSION="$tag" npm run build )
-              mkdir -p "$GITHUB_WORKSPACE/_site/$tag"
-              cp -r "$workdir/docs/site/dist/." "$GITHUB_WORKSPACE/_site/$tag/"
+              if ( cd "$workdir/docs/site" \
+                   && DOCS_VERSION="$tag" npm ci \
+                   && DOCS_VERSION="$tag" npm run build ); then
+                mkdir -p "$GITHUB_WORKSPACE/_site/$tag"
+                cp -r "$workdir/docs/site/dist/." "$GITHUB_WORKSPACE/_site/$tag/"
+              else
+                echo "::warning::$tag failed to build — skipping (edge + other versions still deploy)"
+              fi
             else
               echo "::warning::$tag has no docs/site — skipping"
             fi
-            git worktree remove --force "$workdir"
+            git worktree remove --force "$workdir" || true
             echo "::endgroup::"
           done
 

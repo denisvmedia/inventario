@@ -48,7 +48,7 @@ You don't have to create tags up front on the Tags page — most of the time you
 
 **On a file:**
 
-1. Open a file's detail view, or edit a file, and find its tags field.
+1. Edit the file — open its detail panel and choose **Edit metadata** (or set tags while uploading, in the **Adjust** step) — and find its tags field.
 2. Type a label and press **Enter** (or comma) to add it; **Backspace** on an empty field removes the last chip. Suggestions here are drawn from your file tags.
 3. Save your changes.
 

@@ -163,8 +163,8 @@ suspicious. Each entry shows the outcome (for example **Success**, **Failed:
 bad password**, or **MFA required**), the sign-in method, the time, and the IP
 address and device where available.
 
-If there have been several failed attempts in the last seven days, a banner at
-the top points it out. If you don't recognise the activity, change your password
+If there have been several failed attempts (more than three) in the last seven
+days, a banner at the top points it out. If you don't recognise the activity, change your password
 and revoke any sessions you don't trust.
 
 ## Connected accounts

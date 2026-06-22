@@ -60,7 +60,7 @@ Storing your `.inb` files somewhere outside Inventario (a synced folder, an exte
 If you have an `.inb` file from before — perhaps from another Inventario instance, or a download you saved — you can bring it back in.
 
 1. Go to **Backup** and click **Import backup**.
-2. Drop the backup file onto the dropzone, or click to choose one. Only `.inb` files are accepted; anything else is rejected with "Choose a backup (.inb) file."
+2. Click the dropzone to choose a backup file. Only `.inb` files are accepted; anything else is rejected with "Choose a backup (.inb) file."
 3. Optionally add a **Description** so you can find the import in the list later.
 4. Click **Upload and continue**.
 

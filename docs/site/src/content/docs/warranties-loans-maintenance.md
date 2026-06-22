@@ -50,6 +50,10 @@ When you lend something to a friend, family member, or colleague, you can record
 
 ![The Lent out page showing a table of loans with item, borrower, lent and due dates, and a status badge per row](../../assets/screenshots/lent-out.png)
 
+:::note
+Like warranties and maintenance, lending can't be tracked on a bundle (an item with a quantity greater than 1). If the **Lend out…** button is missing, split the item into separate units to lend one out.
+:::
+
 ### Lend an item out
 
 1. Open the item and go to its **Lend** tab.

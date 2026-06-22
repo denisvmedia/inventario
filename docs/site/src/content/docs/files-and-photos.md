@@ -42,8 +42,8 @@ The upload dialog itself runs in three quick steps:
    (**Images**, **Documents**, or **Other**), and add **Tags**. Inventario
    pre-fills the title from the filename and guesses the category from the file
    type, so you can usually skip straight ahead.
-3. **Upload** — a progress bar tracks each file. When everything finishes, click
-   **Close**.
+3. **Progress** — a progress bar tracks each file. When everything finishes,
+   click **Close**.
 
 ![The upload dialog with files queued and ready to upload](../../assets/screenshots/file-upload.png)
 

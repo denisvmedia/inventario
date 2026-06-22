@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// gen-versions.mjs — generate the docs version index for the gh-pages root.
+// gen-versions.mjs — generate the docs version index for the site root.
 //
-// Given a directory (the gh-pages checkout containing one folder per published
-// version), this:
+// Given a directory (the assembled `_site/` artifact containing one folder per
+// published version), this:
 //   (a) lists immediate subdirs that look like a version: `edge` or
 //       `vX.Y` / `vX.Y.Z` (semver-ish, optional patch),
 //   (b) computes the default = highest stable semver tag, else `edge`,
@@ -13,15 +13,15 @@
 // output. Node built-ins only — no dependencies.
 //
 // Usage:
-//   node scripts/gen-versions.mjs <gh-pages-dir>
+//   node scripts/gen-versions.mjs <site-dir>
 //   node scripts/gen-versions.mjs --selftest   # runs the in-process tests
 //
 // versions.json shape:
 //   { "default": "edge", "versions": [ { "slug": "edge", "label": "edge" }, ... ] }
 //
 // Folder/URL mapping (must match astro.config.mjs `base`):
-//   gh-pages/<ver>/  ->  https://denisvmedia.github.io/inventario/<ver>/
-// so the redirect target and versions.json both live at the gh-pages ROOT,
+//   _site/<ver>/  ->  https://denisvmedia.github.io/inventario/<ver>/
+// so the redirect target and versions.json both live at the site ROOT,
 // served from https://denisvmedia.github.io/inventario/.
 
 import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -205,7 +205,7 @@ function main() {
     return;
   }
   if (!arg) {
-    console.error('usage: node scripts/gen-versions.mjs <gh-pages-dir> | --selftest');
+    console.error('usage: node scripts/gen-versions.mjs <site-dir> | --selftest');
     process.exitCode = 2;
     return;
   }

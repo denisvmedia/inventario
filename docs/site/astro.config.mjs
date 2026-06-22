@@ -4,27 +4,30 @@ import starlight from '@astrojs/starlight';
 import tailwindcss from '@tailwindcss/vite';
 
 // ---------------------------------------------------------------------------
-// Deployment target — GitHub Pages PROJECT site, VERSIONED (mike-style).
+// Deployment target — GitHub Pages PROJECT site, VERSIONED (mike-style),
+// BRANCHLESS.
 //
 // The repo is denisvmedia/inventario, so the project site is served from
 //   https://denisvmedia.github.io/inventario/
-// We publish EACH version into its OWN top-level folder on an orphan
-// `gh-pages` branch (Pages Source = "Deploy from a branch"):
+// Deployment is the official GitHub Actions artifact flow (Pages Source =
+// "GitHub Actions") — NO `gh-pages` branch and no deploy history. Each version
+// is built into its OWN top-level folder; CI assembles them all into one
+// `_site/` artifact and publishes it (full replace) on every deploy:
 //
-//   git ref         DOCS_VERSION   gh-pages folder   served URL
+//   git ref         DOCS_VERSION   _site folder      served URL
 //   ------------    ------------   ---------------   --------------------------
-//   master          edge           gh-pages/edge/    /inventario/edge/
-//   tag v1.2.3      v1.2.3         gh-pages/v1.2.3/  /inventario/v1.2.3/
+//   master          edge           _site/edge/       /inventario/edge/
+//   tag v1.2.3      v1.2.3         _site/v1.2.3/      /inventario/v1.2.3/
 //
 // `DOCS_VERSION` (env, default 'edge') therefore drives `base` so every
 // internal link Starlight emits is prefixed with the version folder and the
-// built `dist/` can be dropped straight into `gh-pages/<DOCS_VERSION>/`.
+// built `dist/` is copied straight into `_site/<DOCS_VERSION>/`.
 // `site` stays the bare GitHub Pages origin.
 //
 // The site ROOT (`/inventario/`) holds a generated `versions.json` + an
 // `index.html` redirect to the default version (latest stable tag, else
 // `edge`); both are produced by scripts/gen-versions.mjs against the
-// gh-pages checkout — see .github/workflows/docs.yml.
+// assembled `_site/` dir — see .github/workflows/docs.yml.
 //
 // Local preview:  DOCS_VERSION=edge npm run dev   (base => /inventario/edge/)
 //
@@ -37,7 +40,7 @@ import tailwindcss from '@tailwindcss/vite';
 const site = 'https://denisvmedia.github.io';
 // Which version we are building. `edge` tracks master; a tag build sets this
 // to the tag name (e.g. `v1.2.3`). Drives the per-version sub-path so the
-// build can be dropped into gh-pages/<DOCS_VERSION>/ verbatim.
+// build can be copied into _site/<DOCS_VERSION>/ verbatim.
 const DOCS_VERSION = process.env.DOCS_VERSION || 'edge';
 const base = `/inventario/${DOCS_VERSION}/`;
 

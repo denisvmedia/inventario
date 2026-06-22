@@ -13,7 +13,7 @@ how to find, sort, and bulk-edit items on the **All Items** page.
 
 ## Add an item
 
-1. Click **Add item** (the button is on the Dashboard and on the **Items**
+1. Click **Add item** (the button is on the Dashboard and on the **All Items**
    page).
 2. The **Add item** dialog opens. If AI scanning is enabled on your server, it
    starts on the **Fill with AI** screen; otherwise it opens straight on the
@@ -233,7 +233,7 @@ button so you can put it back into active use at any time.
 
 ## The All Items page: search, filter, sort
 
-The **Items** page lists every item in your group. Across the top you have:
+The **All Items** page lists every item in your group. Across the top you have:
 
 - **Search** — type in the search box to match by name or short name.
 - **Type** — filter by one or more item types.
@@ -257,7 +257,7 @@ filtered view.
 
 ## Select, move, and delete in bulk
 
-On the **Items** page you can act on several items at once:
+On the **All Items** page you can act on several items at once:
 
 1. Tick the checkbox on each item you want, or use **Select all visible** to
    grab everything on the page.
