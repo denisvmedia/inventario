@@ -79,8 +79,9 @@ func NewTenantPurgerWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *T
 // and no children, so their position within the data block is unconstrained.
 var tenantPurgeOrder = []func(t store.TableNames) string{
 	// Restore pipeline (deepest children first): steps -> operations ->
-	// exports. exports.file_id -> files is NO ACTION, so exports drop before
-	// files (which is later in this slice).
+	// exports. exports.file_id -> files is ON DELETE SET NULL (#2180); exports
+	// still drop before files here — the order is no longer FK-forced but is
+	// harmless and keeps the pipeline grouped.
 	func(t store.TableNames) string { return string(t.RestoreSteps()) },
 	func(t store.TableNames) string { return string(t.RestoreOperations()) },
 	func(t store.TableNames) string { return string(t.Exports()) },
@@ -92,8 +93,9 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.ThumbnailGenerationJobs()) },
 
 	// Generic polymorphic files (linked by entity_type/id, no FK chain). Must
-	// drop after exports + the thumbnail chain (both FK to files NO ACTION) and
-	// after commodities.cover_file_id (SET NULL — harmless either way).
+	// drop after the thumbnail chain (jobs.file_id -> files NO ACTION);
+	// exports.file_id (SET NULL, #2180) and commodities.cover_file_id (SET NULL)
+	// are harmless either way.
 	func(t store.TableNames) string { return string(t.Files()) },
 
 	// Commodity audit timelines (#1450). FK to commodities is CASCADE; explicit
