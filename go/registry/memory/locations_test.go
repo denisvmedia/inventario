@@ -91,9 +91,11 @@ func TestLocationRegistry_Areas(t *testing.T) {
 }
 
 // TestLocationRegistry_AddArea_Dedup pins the relationship-index dedup
-// fix: a double AddArea used to append twice, inflating the area count
-// the delete-guard reads so that removing the area once still left a
-// phantom entry and Delete wrongly returned ErrCannotDelete.
+// fix: a double AddArea used to append twice, so GetAreas (and any
+// count-based delete-guard reading it) saw two entries for one area. The
+// discriminating assertion below is the HasLen(1) on the index; the
+// trailing remove+Delete passes on both old and new code (DeleteArea uses
+// slices.DeleteFunc, which strips every duplicate).
 func TestLocationRegistry_AddArea_Dedup(t *testing.T) {
 	c := qt.New(t)
 

@@ -142,9 +142,11 @@ func TestAreaRegistry_Commodities(t *testing.T) {
 }
 
 // TestAreaRegistry_AddCommodity_Dedup pins the relationship-index dedup
-// fix: a double AddCommodity used to append twice, inflating the count
-// the delete-guard reads so that removing the commodity once still left
-// a phantom entry and Delete wrongly returned ErrCannotDelete.
+// fix: a double AddCommodity used to append twice, so GetCommodities (and
+// any count-based delete-guard reading it) saw two entries for one
+// commodity. The discriminating assertion below is the HasLen(1) on the
+// index; the trailing remove+Delete passes on both old and new code
+// (DeleteCommodity uses slices.DeleteFunc, which strips every duplicate).
 func TestAreaRegistry_AddCommodity_Dedup(t *testing.T) {
 	c := qt.New(t)
 

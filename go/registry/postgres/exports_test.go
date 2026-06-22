@@ -62,6 +62,40 @@ func TestExportRegistry_Postgres_DeleteClearsRestorePipeline(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
+	// Seed a SECOND export with its own restore pipeline (same tenant/group).
+	// This exercises the export_id-subquery scoping the production comment
+	// claims: deleting the first export must NOT touch the second export's
+	// restore_operation/restore_step. Without this sibling the test would
+	// still pass even if the export_id bound were dropped from the DELETEs,
+	// because there would be no other rows to wrongly remove.
+	otherExport, err := set.ExportRegistry.Create(ctx, models.Export{
+		Type:        models.ExportTypeFullDatabase,
+		Status:      models.ExportStatusCompleted,
+		Description: "Sibling export that must survive",
+		CreatedDate: models.PNow(),
+	})
+	c.Assert(err, qt.IsNil)
+
+	otherOp, err := set.RestoreOperationRegistry.Create(ctx, models.RestoreOperation{
+		ExportID:    otherExport.ID,
+		Description: "Restore from sibling export",
+		Status:      models.RestoreStatusCompleted,
+		Options: models.RestoreOptions{
+			Strategy: "full_replace",
+		},
+		CreatedDate: models.PNow(),
+	})
+	c.Assert(err, qt.IsNil)
+
+	otherStep, err := set.RestoreStepRegistry.Create(ctx, models.RestoreStep{
+		RestoreOperationID: otherOp.ID,
+		Name:               "restore-locations",
+		Result:             models.RestoreStepResultSuccess,
+		CreatedDate:        models.PNow(),
+		UpdatedDate:        models.PNow(),
+	})
+	c.Assert(err, qt.IsNil)
+
 	// Delete the export. Before the fix this returned a foreign-key violation;
 	// the fix clears the restore pipeline in FK-safe order first.
 	err = set.ExportRegistry.Delete(ctx, export.ID)
@@ -78,4 +112,13 @@ func TestExportRegistry_Postgres_DeleteClearsRestorePipeline(t *testing.T) {
 	// The referencing restore_step is gone.
 	_, err = set.RestoreStepRegistry.Get(ctx, restoreStep.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// The sibling export's pipeline is untouched: the export_id-scoped
+	// DELETEs only cleared the deleted export's restore rows.
+	_, err = set.ExportRegistry.Get(ctx, otherExport.ID)
+	c.Assert(err, qt.IsNil)
+	_, err = set.RestoreOperationRegistry.Get(ctx, otherOp.ID)
+	c.Assert(err, qt.IsNil)
+	_, err = set.RestoreStepRegistry.Get(ctx, otherStep.ID)
+	c.Assert(err, qt.IsNil)
 }

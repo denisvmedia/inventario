@@ -149,6 +149,16 @@ func (r *TxExecutor[T]) ScanOneByField(ctx context.Context, field FieldValue, en
 	defer rows.Close()
 
 	if !rows.Next() {
+		// Next() returns false for both an empty result AND a mid-query
+		// error (conn drop, statement_timeout firing before the first
+		// row, decode failure). Surface the real error instead of masking
+		// it as ErrNotFound — mirrors the rows.Err() guard the multi-row
+		// Scan/ScanByField iterators carry (#2123). Without this a
+		// transient DB fault on a Get(id) becomes a misleading 404, and a
+		// delete-guard could treat an existing row as absent.
+		if err := rows.Err(); err != nil {
+			return err
+		}
 		return ErrNotFound
 	}
 
@@ -180,6 +190,16 @@ func (r *TxExecutor[T]) ScanOneByFields(ctx context.Context, field []FieldValue,
 	defer rows.Close()
 
 	if !rows.Next() {
+		// Next() returns false for both an empty result AND a mid-query
+		// error (conn drop, statement_timeout firing before the first
+		// row, decode failure). Surface the real error instead of masking
+		// it as ErrNotFound — mirrors the rows.Err() guard the multi-row
+		// Scan/ScanByField iterators carry (#2123). Without this a
+		// transient DB fault on a Get(id) becomes a misleading 404, and a
+		// delete-guard could treat an existing row as absent.
+		if err := rows.Err(); err != nil {
+			return err
+		}
 		return ErrNotFound
 	}
 

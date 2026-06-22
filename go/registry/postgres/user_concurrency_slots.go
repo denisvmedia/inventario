@@ -157,16 +157,21 @@ func (r *UserConcurrencySlotRegistry) AcquireSlot(ctx context.Context, userID, j
 	var result *models.UserConcurrencySlot
 
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Per-(tenant, user) advisory lock serializes concurrent
-		// acquires for the same user so the COUNT+INSERT below is
-		// atomic — without it two callers can both read a stale count
-		// and both insert, blowing past maxSlots (the unique index is
-		// only on job_id, so it doesn't enforce the per-user cap).
-		// xact-scoped, released on COMMIT/ROLLBACK. Mirrors
-		// GroupMembershipRegistry.CreateUnderCap.
+		// Per-user advisory lock serializes concurrent acquires for the
+		// same user so the COUNT+INSERT below is atomic — without it two
+		// callers can both read a stale count and both insert, blowing
+		// past maxSlots (the unique index is only on job_id, so it
+		// doesn't enforce the per-user cap). The cap is enforced over the
+		// user-global COUNT (WHERE user_id = $1, no tenant filter —
+		// AcquireSlot runs in service mode with no tenant RLS GUC), so
+		// the lock must key on the user, not the tenant. A literal
+		// namespace string is used as key1 (rather than r.tenantID, which
+		// is always "" on the service path) so this lock can never share
+		// the advisory keyspace with GroupMembershipRegistry.CreateUnderCap.
+		// xact-scoped, released on COMMIT/ROLLBACK.
 		if _, lockErr := tx.ExecContext(ctx,
 			`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
-			r.tenantID, userID,
+			"user_concurrency_slot_acquire", userID,
 		); lockErr != nil {
 			return errxtrace.Wrap("failed to acquire concurrency slot lock", lockErr)
 		}

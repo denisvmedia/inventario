@@ -57,6 +57,13 @@ func (r *GroupNotificationPrefRegistry) ListByUserGroup(_ context.Context, tenan
 // `time.Now().UTC()`) — keeping in-memory tests deterministic and
 // directly comparable to integration runs.
 func (r *GroupNotificationPrefRegistry) Upsert(_ context.Context, pref models.GroupNotificationPref) (*models.GroupNotificationPref, error) {
+	// Mirror the postgres twin's required-field guard (and the
+	// ListByUserGroup/DeleteByGroup siblings in this file) so a memory
+	// test of Upsert doesn't silently accept an empty tuple field that
+	// the production postgres path rejects with ErrFieldRequired.
+	if pref.TenantID == "" || pref.GroupID == "" || pref.UserID == "" || pref.Category == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "tenant_id|group_id|user_id|category"))
+	}
 	now := time.Now().UTC()
 	// Hold the write lock across the scan AND the insert: releasing it
 	// between "not found" and Create opens a window where a concurrent

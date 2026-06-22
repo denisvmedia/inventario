@@ -140,9 +140,11 @@ func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Ar
 	}
 
 	// Handle location registry tracking - only when the location actually
-	// changed. The previous unconditional `oldLocationID == ""` fallback
-	// re-added the area on every Update, inflating the parent location's
-	// area index and tripping the delete-guard's false ErrCannotDelete.
+	// changed. The previous `else if oldLocationID == ""` fallback re-added
+	// the area whenever the existing record had no LocationID; Create
+	// already performs the initial AddArea (areas.go), so that fallback was
+	// a redundant re-add that inflated the parent location's area index and
+	// tripped the delete-guard's false ErrCannotDelete.
 	if oldLocationID != "" && oldLocationID != updatedArea.LocationID {
 		// Remove from old location
 		_ = r.locationRegistry.DeleteArea(ctx, oldLocationID, updatedArea.GetID())
