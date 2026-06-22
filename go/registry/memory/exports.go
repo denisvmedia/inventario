@@ -135,6 +135,16 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 	// postgres cleanup. RestoreOperationRegistry.Delete cascades to the
 	// operation's steps; a service-scoped registry is used because
 	// ListByExport already bounds the work to this (globally unique) export.
+	//
+	// Two intentional differences from the postgres path, both benign here:
+	// (1) postgres additionally bounds its DELETEs by the transaction's
+	// tenant+group RLS GUCs, whereas memory relies solely on the unique
+	// export id plus the user-scoped ownership gate above — equivalent
+	// because a restore op always co-resides in its export's group. (2) The
+	// postgres delete is a single transaction; this loop is best-effort and
+	// non-atomic. In practice it cannot partially fail: the memory
+	// RestoreOperationRegistry.Delete only ever returns nil/ErrNotFound for a
+	// row ListByExport just returned, so there is no mid-loop rollback case.
 	restoreOps := r.restoreOperationFactory.CreateServiceRegistry()
 	ops, err := restoreOps.ListByExport(ctx, id)
 	if err != nil {
