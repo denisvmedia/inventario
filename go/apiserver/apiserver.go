@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"log/slog"
 	"net"
@@ -197,6 +198,20 @@ type Params struct {
 	SupportEmail            string                // Destination for /api/v1/feedback submissions (issue #1387). Empty leaves the route mounted but it returns 503.
 	RedisPinger             RedisPinger           // Optional Redis dependency check for /readyz
 
+	// MetricsToken is the optional shared-secret bearer token for GET
+	// /metrics (issue #2102). When non-empty, /metrics requires the header
+	// "Authorization: Bearer <token>", compared with
+	// crypto/subtle.ConstantTimeCompare. When empty, /metrics is open
+	// (legacy behaviour) and APIServer() logs a one-time startup warning so
+	// operators know the installation-wide business gauges are exposed.
+	MetricsToken string
+
+	// EnableAPIDocs gates GET /swagger/* (Swagger UI + doc.json) (issue
+	// #2102 / L-5). Default true preserves dev / e2e; production sets it
+	// false so the API surface is not served publicly. When false the
+	// /swagger routes are not mounted (404).
+	EnableAPIDocs bool
+
 	// FeatureCurrencyMigration gates the /currency-migrations endpoints
 	// and the requireGroupNotMigrating lock middleware (issue #202 / #1551).
 	// Default true now that the feature shipped under #1604 — flipping
@@ -354,6 +369,42 @@ func (p *Params) Validate() error {
 	return nil
 }
 
+// MetricsTokenMiddleware enforces optional bearer-token authentication on
+// GET /metrics (issue #2102). When token is non-empty it requires the header
+// "Authorization: Bearer <token>" and compares it with
+// crypto/subtle.ConstantTimeCompare to keep the check constant-time. When the
+// token is empty the middleware is a no-op, preserving the legacy "open
+// /metrics" behaviour that keeps local development frictionless — the one-time
+// "open metrics" warning is emitted by APIServer() at startup, not here.
+func MetricsTokenMiddleware(token string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		// Build the expected header once per construction, not per request.
+		expected := []byte("Bearer " + token)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if token == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			got := []byte(r.Header.Get("Authorization"))
+			// ConstantTimeCompare returns 0 on a length mismatch, so the
+			// explicit length guard is only to keep the comparison's timing
+			// independent of where the first differing byte falls.
+			if len(got) != len(expected) || subtle.ConstantTimeCompare(got, expected) != 1 {
+				slog.Warn("Unauthorized /metrics access attempt",
+					"remote_addr", r.RemoteAddr,
+					"user_agent", r.UserAgent(),
+					"path", r.URL.Path,
+				)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	renderDecodeOnce.Do(func() {
 		render.Decode = JSONAPIAwareDecoder
@@ -389,12 +440,28 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	//	w.Write([]byte("Welcome to Inventario!"))
 	// })
 	//
-	// RESTy routes for "swagger" resource
-	r.Mount("/swagger", swagger.Handler(
-		swagger.URL("/swagger/doc.json"),
-	))
+	// RESTy routes for "swagger" resource. Gated behind EnableAPIDocs
+	// (issue #2102 / L-5): default on for dev/e2e, production sets it false
+	// so the API documentation surface is not served publicly. When off the
+	// routes are simply not mounted and 404 like any unknown path.
+	if params.EnableAPIDocs {
+		r.Mount("/swagger", swagger.Handler(
+			swagger.URL("/swagger/doc.json"),
+		))
+	}
 	r.Group(Health(params.FactorySet, params.RedisPinger))
-	r.Method(http.MethodGet, "/metrics", promhttp.Handler())
+	// GET /metrics (issue #2102): gated behind an optional bearer token. When
+	// params.MetricsToken is empty the middleware is a no-op (legacy open
+	// behaviour) and the one-time warning below fires so operators notice the
+	// installation-wide gauges are exposed; when set, /metrics requires
+	// "Authorization: Bearer <token>".
+	if params.MetricsToken == "" {
+		slog.Warn("GET /metrics is unauthenticated (no metrics token configured). " +
+			"This is acceptable for local development but exposes installation-wide business gauges " +
+			"(inventario_tenants/users/commodities/file_storage_bytes). " +
+			"Set INVENTARIO_RUN_METRICS_TOKEN (or --metrics-token) to a strong random value to require bearer-token auth.")
+	}
+	r.With(MetricsTokenMiddleware(params.MetricsToken)).Method(http.MethodGet, "/metrics", promhttp.Handler())
 
 	// Resolve blacklister: default to in-memory if not provided.
 	blacklist := params.TokenBlacklister
@@ -528,7 +595,18 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			RateLimiter:      rateLimiter,
 			AuditService:     auditSvc,
 			JWTSecret:        params.JWTSecret,
+			// Public URL drives the Origin/Referer CSRF check on
+			// /backoffice/auth/refresh (#2113, L-1). Empty leaves the
+			// check off (dev / single-host setups rely on SameSite=Strict).
+			PublicURL: params.PublicURL,
 		}))
+
+		// Create user aware middlewares for protected routes. Defined here
+		// (before the public group below) because /invites — whose
+		// POST /invites/{token}/accept leg is authenticated — is mounted
+		// inside the global-rate-limit group so its public GET leg is also
+		// rate-limited (issue #2113, L-3).
+		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc)
 
 		// Unauthenticated public routes: apply the global per-IP rate limit as a
 		// defence-in-depth layer on top of their dedicated rate limiters.
@@ -586,10 +664,16 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			if params.SeedEndpointEnabled {
 				r.With(defaultAPIMiddlewares...).Route("/seed", Seed(params.FactorySet, params.UploadLocation))
 			}
+			// Invites are mounted WITHOUT userMiddlewares so that
+			// GET /invites/{token} remains public (the invitee is typically
+			// unauthenticated at first). It lives inside this global
+			// rate-limit group (issue #2113, L-3) so the unauthenticated
+			// token-lookup leg gets per-IP rate limiting as defence-in-depth
+			// against invite-token enumeration. POST /invites/{token}/accept
+			// is wrapped with the userMiddlewares chain inside the Invites
+			// router itself.
+			r.Route("/invites", Invites(groupService, userMiddlewares))
 		})
-
-		// Create user aware middlewares for protected routes
-		userMiddlewares := createUserAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc)
 
 		// Protected routes (authentication required).
 		// Authenticated users are not subject to the global per-IP rate limit; a
@@ -599,7 +683,10 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// System requires a settings registry.
 		// Non-group-scoped routes (system, debug, users, groups management)
 		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
-		r.With(userMiddlewares...).Route("/debug", Debug(params))
+		// GET /debug moved to /admin/debug behind the back-office plane
+		// (issue #2113, L-4): it leaks operational config (storage/db driver,
+		// OS) and must not be readable by an ordinary tenant user. Wired into
+		// AdminParams.DebugInfo below.
 		// Backup-signing public key (#534): server-global, any authenticated
 		// user may read the public half so the FE / CLI can verify .inb archives.
 		r.With(userMiddlewares...).Route("/backup", BackupSigning(params))
@@ -626,6 +713,8 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			// refresh token when an impersonation session is ended via
 			// logout rather than POST /admin/impersonation/end (#1750).
 			ImpersonationStore: impersonationStore,
+			// #2113 L-4: GET /admin/debug now lives on the back-office plane.
+			DebugInfo: params.DebugInfo,
 		}))
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives
@@ -650,11 +739,8 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			EmailService: emailSvc,
 			SupportEmail: params.SupportEmail,
 		}, rateLimiter))
-		// Invites are mounted WITHOUT userMiddlewares so that GET /invites/{token}
-		// remains public (the invitee is typically unauthenticated at first).
-		// POST /invites/{token}/accept is wrapped with the userMiddlewares chain
-		// inside the Invites router itself.
-		r.Route("/invites", Invites(groupService, userMiddlewares))
+		// (/invites is mounted above, inside the global rate-limit group —
+		// issue #2113, L-3.)
 
 		// Group-scoped data routes: /api/v1/g/{groupSlug}/...
 		// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the

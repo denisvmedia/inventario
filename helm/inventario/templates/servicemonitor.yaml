@@ -38,6 +38,17 @@ spec:
       path: /metrics
       interval: {{ .Values.metrics.serviceMonitor.interval }}
       scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+      {{- if (include "inventario.metricsTokenEnabled" .) }}
+      # Bearer token wiring (#2102): the operator reads INVENTARIO_RUN_METRICS_TOKEN
+      # from the runtime Secret and sends `Authorization: Bearer <token>`. The
+      # Secret must live in the SAME namespace as this ServiceMonitor. When
+      # secrets.existingSecret is set we assume that Secret carries the key.
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ include "inventario.secretName" . }}
+          key: INVENTARIO_RUN_METRICS_TOKEN
+      {{- end }}
 {{- end }}
 {{- end }}
 {{- /*

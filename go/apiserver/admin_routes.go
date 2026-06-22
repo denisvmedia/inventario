@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/denisvmedia/inventario/csrf"
+	"github.com/denisvmedia/inventario/debug"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
 )
@@ -113,6 +114,14 @@ type AdminParams struct {
 	// (#1750). Zero falls back to the 30-min default; values above the
 	// 30-min ceiling are clamped down inside the handler.
 	ImpersonationTTL time.Duration
+
+	// DebugInfo backs GET /admin/debug (issue #2113, L-4). The debug
+	// endpoint exposes operational configuration (file-storage driver,
+	// database driver, OS) and so was moved off the tenant surface — where
+	// any authenticated tenant user could read it — onto the back-office
+	// plane, gated by RequireBackofficeAuth like every other admin route.
+	// May be nil; the handler then reports zero-valued debug info.
+	DebugInfo *debug.Info
 }
 
 // Admin returns the router configurator for /api/v1/admin/*. Mounted
@@ -200,6 +209,12 @@ func Admin(params AdminParams) func(r chi.Router) {
 		factorySet:   params.FactorySet,
 		auditService: params.AuditService,
 	}
+	// #2113 L-4: GET /admin/debug — moved off the tenant surface onto the
+	// back-office plane. DebugInfo may be nil; the handler then encodes the
+	// zero value (same as the legacy /debug behaviour with a nil info).
+	debugAPIInst := &debugAPI{
+		debugInfo: params.DebugInfo,
+	}
 	// #1785 Phase 5 removed the legacy `RequireSystemAdmin` gate from
 	// every admin route: the CRUD subtree is gated by RequireBackofficeAuth
 	// (Phase 3), impersonation/start is gated by RequirePlatformAdmin
@@ -263,7 +278,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		// tokens (and vice versa).
 		r.Group(func(r chi.Router) {
 			r.Use(backofficeAuth)
-			adminBackofficeRoutes(r, tenantsAPI, usersAPI, groupsAPI, groupMembersAPI, impersonationAPI, workersAPI)
+			adminBackofficeRoutes(r, tenantsAPI, usersAPI, groupsAPI, groupMembersAPI, impersonationAPI, workersAPI, debugAPIInst)
 		})
 	}
 }
@@ -289,8 +304,14 @@ func adminBackofficeRoutes(
 	groupMembersAPI *adminGroupMembersAPI,
 	impersonationAPI *adminImpersonationAPI,
 	workersAPI *adminWorkersAPI,
+	debugAPIInst *debugAPI,
 ) {
 	r.Get("/_ping", adminPing)
+
+	// #2113 L-4: operational debug info, back-office-gated. Previously at
+	// /api/v1/debug behind only tenant JWT auth (any authenticated tenant
+	// user could read it); now restricted to the back-office plane.
+	r.Get("/debug", debugAPIInst.getDebugInfo)
 
 	// #1746: tenants + users listing endpoints. Each handler
 	// audit-logs via params.AuditService and bypasses RLS at the

@@ -149,6 +149,32 @@ type Config struct {
 	// to curl /seed.
 	SeedEndpointEnabled bool `yaml:"enable_seed_endpoint" env:"ENABLE_SEED_ENDPOINT" env-default:"false"`
 
+	// MetricsToken is the optional shared-secret bearer token that gates
+	// GET /metrics (issue #2102). When set (≥ 32 bytes recommended), the
+	// endpoint requires the header "Authorization: Bearer <token>",
+	// compared with crypto/subtle.ConstantTimeCompare. When empty (the
+	// default) /metrics stays open — the legacy behaviour that keeps local
+	// dev working — and the server logs a one-time startup warning so an
+	// operator knows the installation-wide business gauges
+	// (inventario_tenants/users/commodities/file_storage_bytes) are exposed.
+	// Wired via env INVENTARIO_RUN_METRICS_TOKEN / --metrics-token. Keep
+	// /metrics off the public internet regardless; this is defence-in-depth
+	// for the in-cluster scrape path. NEVER ship production without setting
+	// this to a strong random value (e.g. openssl rand -hex 32).
+	MetricsToken string `yaml:"metrics_token" env:"METRICS_TOKEN" env-default:""`
+
+	// EnableAPIDocs gates the GET /swagger/* Swagger UI + doc.json endpoints
+	// (issue #2102 / L-5). Default TRUE so dev / e2e keep the interactive
+	// docs; production deployments set it false (env
+	// INVENTARIO_RUN_ENABLE_API_DOCS=false / --enable-api-docs=false) so the
+	// API surface (endpoint signatures, parameter names, error codes) is not
+	// served publicly for reconnaissance. When false the /swagger routes are
+	// not mounted and return 404. NOTE: a bool defaulting true that is
+	// omitted from a YAML config reads as false (cleanenv applies env-default
+	// only on env reads) — mirrors MagicLinkLoginEnabled / the operator must
+	// set the key explicitly in a YAML deploy to keep docs on.
+	EnableAPIDocs bool `yaml:"enable_api_docs" env:"ENABLE_API_DOCS" env-default:"true"`
+
 	// WorkersOnly / WorkersExclude restrict which background workers run in
 	// `inventario run workers`. See the run/workers package for the accepted
 	// syntax and mutual-exclusion rules. Both fields default to empty, meaning

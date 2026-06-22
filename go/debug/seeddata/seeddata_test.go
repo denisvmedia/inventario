@@ -360,7 +360,14 @@ func TestSeedDataIdempotent(t *testing.T) {
 // security gate on the well-known-password fixture users: orphan,
 // user2 (when planted via the email path), and family. They must
 // never land outside the test-org tenant.
-func TestSeedDataDoesNotCreateFixturesInNonTestTenant(t *testing.T) {
+// TestSeedDataRefusesFreshSeedIntoPreExistingNonTestTenant pins the #2113 L-2
+// hardening: the first seed of a PRE-EXISTING non-test-org tenant (no opt-in)
+// is refused outright. Previously the seed merely withheld the privileged
+// fixtures (sysadmin / blob uploads) but still populated the tenant — which
+// let an unauthenticated /api/v1/seed?tenant_slug=<real-tenant> call pollute
+// production data. The refusal is strictly stronger than the old "no fixtures
+// leak" guarantee.
+func TestSeedDataRefusesFreshSeedIntoPreExistingNonTestTenant(t *testing.T) {
 	c := qt.New(t)
 
 	factorySet := memory.NewFactorySet()
@@ -373,25 +380,17 @@ func TestSeedDataDoesNotCreateFixturesInNonTestTenant(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	// SeedSystemAdmin is opted in here on purpose: the tenant.Slug gate
-	// must still keep the sysadmin fixture (and every other well-known
-	// fixture) out of a non-test-org tenant even when the flag is set.
+	// SeedSystemAdmin is opted in on purpose: the L-2 refusal fires
+	// regardless, so a misconfigured opt-in cannot smuggle the dataset in.
 	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{TenantSlug: "acme", SeedSystemAdmin: true})
-	c.Assert(err, qt.IsNil)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "refusing to seed into pre-existing tenant 'acme'")
 
+	// No users were minted in the pre-existing tenant.
 	ctx := context.Background()
 	users, err := registrySet.UserRegistry.List(ctx)
 	c.Assert(err, qt.IsNil)
-	for _, u := range users {
-		c.Assert(u.Email, qt.Not(qt.Equals), "orphan@test-org.com")
-		c.Assert(u.Email, qt.Not(qt.Equals), "family@test-org.com")
-		c.Assert(u.Email, qt.Not(qt.Equals), "teammate@test-org.com")
-		c.Assert(u.Email, qt.Not(qt.Equals), "sysadmin@test-org.com")
-		c.Assert(u.Email, qt.Not(qt.Equals), "blocktarget@test-org.com")
-		isAdmin, err := registrySet.SystemAdminGrantRegistry.Exists(ctx, u.ID)
-		c.Assert(err, qt.IsNil)
-		c.Assert(isAdmin, qt.IsFalse)
-	}
+	c.Assert(users, qt.HasLen, 0)
 }
 
 // TestSeedDataSystemAdminGate asserts the sysadmin fixture is NOT

@@ -11,11 +11,18 @@
   ],
   "packageRules": [
     {
-      "description": "Auto-merge patch and minor updates",
-      "matchUpdateTypes": ["patch", "minor"],
+      "description": "Auto-merge patch updates only (#2097). Minor and major are held for manual review. Auto-merge waits for branch-protection required checks (go-govulncheck, dependency-review, image scan) via platformAutomerge — those checks are the real gate, not Renovate. minimumReleaseAge adds a soak buffer against freshly-published-and-yanked patches.",
+      "matchUpdateTypes": ["patch"],
       "automerge": true,
       "automergeType": "pr",
-      "automergeStrategy": "squash"
+      "automergeStrategy": "squash",
+      "platformAutomerge": true,
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Never auto-merge minor or major updates (#2097) — review the changelog and CI results manually.",
+      "matchUpdateTypes": ["minor", "major"],
+      "automerge": false
     },
     {
       "description": "Group Cloud SDKs updates",

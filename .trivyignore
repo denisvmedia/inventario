@@ -1,0 +1,17 @@
+# Trivy vulnerability allowlist for the production container image scan
+# (see the `scan-image` job in .github/workflows/docker.yml).
+#
+# The image scan fails the Docker workflow on any unignored HIGH/CRITICAL
+# finding. Add a CVE here ONLY as a deliberate, time-boxed exception — e.g.
+# an advisory with no fixed version yet, or one that is not reachable in our
+# usage. Every entry MUST carry an expiry date and a justification so stale
+# suppressions surface for review.
+#
+# Format (one finding id per line; trailing comments are ignored by Trivy):
+#   CVE-2024-12345  # exp:2025-01-01 — no upstream fix yet; not reachable, <reason>
+#
+# Trivy also honours an inline `exp:` directive, after which the suppression
+# is automatically ignored:
+#   CVE-2024-12345 exp:2025-01-01
+#
+# Keep this file empty unless an exception is actively required.

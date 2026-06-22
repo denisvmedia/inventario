@@ -100,7 +100,11 @@ WORKDIR /app/go
 CMD ["go", "test", "-v", "./..."]
 
 # Stage 5: Production runtime
-FROM alpine:latest AS production
+# Pinned to an explicit version + multi-arch digest (matches the precision of
+# the node:/golang: base pins above) so the runtime base is reproducible and
+# can't drift to a newly-published `latest`. Renovate's `docker` manager keeps
+# the digest current; bump both the tag and the @sha256 together.
+FROM alpine:3.22@sha256:310c62b5e7ca5b08167e4384c68db0fd2905dd9c7493756d356e893909057601 AS production
 
 # Install runtime dependencies
 RUN apk --no-cache add ca-certificates tzdata curl

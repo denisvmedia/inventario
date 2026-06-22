@@ -4562,6 +4562,26 @@ paths:
       summary: Back-office ping
       tags:
       - admin
+  /admin/debug:
+    get:
+      consumes:
+      - application/json
+      description: get debug information about file storage, database driver, and
+        operating system (back-office only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/debug.Info'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get debug information
+      tags:
+      - admin
   /admin/groups:
     get:
       description: Returns every location group with computed member_count and an
@@ -6073,22 +6093,6 @@ paths:
       summary: Get supported currencies
       tags:
       - currencies
-  /debug:
-    get:
-      consumes:
-      - application/json
-      description: get debug information about file storage, database driver, and
-        operating system
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/debug.Info'
-      summary: Get debug information
-      tags:
-      - debug
   /feature-flags:
     get:
       description: Returns the deployment-scoped feature-flag state. Public (no auth)

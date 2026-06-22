@@ -18,7 +18,8 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-// errCSRFService is a CSRFService that always returns an error (to test fail-open behaviour).
+// errCSRFService is a CSRFService that always returns an error (to test the
+// fail-closed behaviour on state-changing requests, issue #2113 L-6).
 type errCSRFService struct{}
 
 func (errCSRFService) GenerateToken(_ context.Context, _ string) (string, error) {
@@ -225,8 +226,11 @@ func TestCSRFMiddleware_NilServiceDisablesCSRF(t *testing.T) {
 	c.Assert(w.Code, qt.Equals, http.StatusOK)
 }
 
-func TestCSRFMiddleware_ServiceErrorFailsOpen(t *testing.T) {
-	c := qt.New(t)
+// TestCSRFMiddleware_ServiceErrorFailsClosedOnMutatingMethods verifies that
+// a CSRF backend outage rejects every state-changing request with 403 rather
+// than silently bypassing validation (issue #2113, L-6). A fail-open store
+// outage would expose every mutating endpoint to forgery while degraded.
+func TestCSRFMiddleware_ServiceErrorFailsClosedOnMutatingMethods(t *testing.T) {
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 	user, tokenString := makeCSRFTestUser(t, jwtSecret)
 
@@ -234,17 +238,50 @@ func TestCSRFMiddleware_ServiceErrorFailsOpen(t *testing.T) {
 		users: map[string]*models.User{user.ID: user},
 	}
 
-	// Use the error service — GetToken will always return an error.
+	// ValidateToken always errors → the middleware must fail closed.
 	router := makeCSRFRouter(jwtSecret, userReg, errCSRFService{})
 
-	req := httptest.NewRequest(http.MethodPost, "/test", nil)
-	req.Header.Set("Authorization", "Bearer "+tokenString)
-	req.Header.Set("X-CSRF-Token", "some-token")
-	w := httptest.NewRecorder()
+	mutatingMethods := []string{
+		http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete,
+	}
+	for _, method := range mutatingMethods {
+		t.Run(method, func(t *testing.T) {
+			c := qt.New(t)
+			req := httptest.NewRequest(method, "/test", nil)
+			req.Header.Set("Authorization", "Bearer "+tokenString)
+			req.Header.Set("X-CSRF-Token", "some-token")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			c.Assert(w.Code, qt.Equals, http.StatusForbidden)
+		})
+	}
+}
 
-	router.ServeHTTP(w, req)
-	// Fail-open: backend errors must not block valid requests.
-	c.Assert(w.Code, qt.Equals, http.StatusOK)
+// TestCSRFMiddleware_ServiceErrorAllowsSafeMethods verifies that a CSRF
+// backend outage does NOT block safe reads (issue #2113, L-6): GET/HEAD/OPTIONS
+// short-circuit before the validation call, so a degraded store never affects
+// them.
+func TestCSRFMiddleware_ServiceErrorAllowsSafeMethods(t *testing.T) {
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	user, tokenString := makeCSRFTestUser(t, jwtSecret)
+
+	userReg := &mockUserRegistryForSecurityTests{
+		users: map[string]*models.User{user.ID: user},
+	}
+
+	router := makeCSRFRouter(jwtSecret, userReg, errCSRFService{})
+
+	safeMethods := []string{http.MethodGet, http.MethodHead, http.MethodOptions}
+	for _, method := range safeMethods {
+		t.Run(method, func(t *testing.T) {
+			c := qt.New(t)
+			req := httptest.NewRequest(method, "/test", nil)
+			req.Header.Set("Authorization", "Bearer "+tokenString)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			c.Assert(w.Code, qt.Equals, http.StatusOK)
+		})
+	}
 }
 
 // TestCSRFMiddleware_MultipleSessionsShareUser verifies that multiple tokens

@@ -23,9 +23,14 @@ const (
 // Passing a nil csrfService disables CSRF validation entirely; this is
 // intended only for test environments.
 //
-// On backend errors the middleware fails open: a Redis/storage outage must
-// not take down the API. Operators should monitor CSRF service errors and
-// ensure backend availability.
+// On backend errors the middleware fails CLOSED for state-changing requests
+// (issue #2113, L-6): a Redis/storage outage must not silently bypass CSRF
+// validation on POST/PUT/PATCH/DELETE — that would expose every mutating
+// endpoint to forgery while the backend is degraded. Safe methods
+// (GET/HEAD/OPTIONS) are short-circuited above and never reach the validation
+// call, so the fail-closed path only ever affects mutating requests.
+// Operators should monitor CSRF service errors and ensure backend
+// availability.
 func CSRFMiddleware(csrfService csrf.Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -63,14 +68,18 @@ func CSRFMiddleware(csrfService csrf.Service) func(http.Handler) http.Handler {
 
 			valid, err := csrfService.ValidateToken(r.Context(), user.ID, tokenFromHeader)
 			if err != nil {
-				// Fail-open: a storage outage must not block all writes.
-				slog.Error("CSRF service error; allowing request (fail-open)",
+				// Fail-closed (issue #2113, L-6): a CSRF store outage must
+				// not silently bypass validation on a state-changing request.
+				// Only mutating methods reach this point — the safe-method
+				// switch above already returned — so rejecting here cannot
+				// block reads.
+				slog.Error("CSRF service error; rejecting state-changing request (fail-closed)",
 					"error", err,
 					"user_id", user.ID,
 					"method", r.Method,
 					"path", r.URL.Path,
 				)
-				next.ServeHTTP(w, r)
+				http.Error(w, "CSRF validation unavailable", http.StatusForbidden)
 				return
 			}
 

@@ -18,7 +18,7 @@ Inventario implements comprehensive CSRF protection for all state-changing opera
 2. **CSRF Middleware** (`go/apiserver/csrf_middleware.go`)
    - Validates CSRF tokens for state-changing HTTP requests
    - Bypasses safe methods (GET, HEAD, OPTIONS)
-   - Implements fail-open design for backend errors
+   - Fails **closed** on backend errors for state-changing requests (#2113, L-6): a CSRF store outage rejects POST/PUT/PATCH/DELETE with `403` rather than silently bypassing validation. Safe methods are unaffected (they never reach the validation call).
 
 3. **Frontend Integration** (`frontend/src/lib/http.ts`)
    - The single fetch-based HTTP wrapper (no axios) stores the CSRF token in memory
@@ -149,7 +149,7 @@ The CORS configuration automatically includes:
 - Invalid token rejection
 - Expired token handling
 - Nil service disables CSRF
-- Service error fail-open behavior
+- Service error fail-closed behavior for state-changing requests (safe methods still allowed)
 - All mutating methods require tokens
 
 ### Running Tests
@@ -197,7 +197,7 @@ go test -v ./csrf/inmemory -run TestService_GenerateToken
 - [ ] Monitor CSRF service errors in logs
 - [ ] Ensure Redis has proper backup/replication
 - [ ] Test CSRF protection with security scanning tools
-- [ ] Verify fail-open behavior is acceptable for your use case
+- [ ] Ensure the CSRF store (Redis) is highly available: state-changing requests fail **closed** (403) on a store outage
 - [ ] Document CSRF token handling for API consumers
 
 ## References
