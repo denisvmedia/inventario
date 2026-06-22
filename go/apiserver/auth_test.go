@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -47,9 +48,13 @@ type mockRefreshTokenRegistryForAuth struct {
 	tokensByHash map[string]*models.RefreshToken
 	updates      []models.RefreshToken
 	createCount  int
+	createErr    error
 }
 
 func (m *mockRefreshTokenRegistryForAuth) Create(_ context.Context, rt models.RefreshToken) (*models.RefreshToken, error) {
+	if m.createErr != nil {
+		return nil, m.createErr
+	}
 	m.createCount++
 	if rt.ID == "" {
 		rt.ID = fmt.Sprintf("rt-created-%d", m.createCount)
@@ -1130,6 +1135,42 @@ func TestAuthAPI_Refresh_RevokesConsumedRowAndStampsNewRTI(t *testing.T) {
 	c.Assert(claims["rti"], qt.Not(qt.Equals), oldRowID)
 }
 
+// TestAuthAPI_Refresh_PersistFailurePreservesSession pins the #967 H2
+// crash-safety contract: persist-BEFORE-revoke means a transient Create error
+// during rotation returns 500 WITHOUT revoking the consumed row, so the
+// caller's existing session stays usable rather than half-rotated / signed out.
+func TestAuthAPI_Refresh_PersistFailurePreservesSession(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-persistfail", "tenant-persistfail"
+
+	raw, hash, err := models.GenerateRefreshToken()
+	c.Assert(err, qt.IsNil)
+	refreshReg := &mockRefreshTokenRegistryForAuth{
+		tokensByHash: map[string]*models.RefreshToken{
+			hash: {
+				TenantUserAwareEntityID: models.TenantUserAwareEntityID{
+					TenantID: tenantID,
+					UserID:   userID,
+				},
+				TokenHash: hash,
+				ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+			},
+		},
+		createErr: errors.New("refresh_tokens insert failed"),
+	}
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+
+	resp := postRefresh(apiserver.AuthParams{UserRegistry: userReg, RefreshTokenRegistry: refreshReg, JWTSecret: jwtSecret}, raw)
+
+	c.Assert(resp.Code, qt.Equals, http.StatusInternalServerError)
+	c.Assert(resp.Body.String(), qt.Contains, "Failed to rotate session")
+	// The consumed row must NOT be revoked — a failed rotation leaves the
+	// existing session intact (no reuse cascade fired either).
+	c.Assert(refreshReg.tokensByHash[hash].RevokedAt, qt.IsNil)
+	c.Assert(refreshReg.revokeByUserIDCalled, qt.IsFalse)
+}
+
 // TestAuthAPI_Refresh_ReuseDetectionRevokesAllSessions pins the #967 H4 theft
 // cascade: after one rotation, replaying the now-revoked original cookie is
 // treated as theft — it 401s with the SAME body as the expired branch, ALL of
@@ -1279,7 +1320,9 @@ func TestAuthAPI_Refresh_RateLimited429(t *testing.T) {
 		}
 	}
 	c.Assert(last.Code, qt.Equals, http.StatusTooManyRequests)
-	c.Assert(last.Header().Get("Retry-After"), qt.Not(qt.Equals), "")
+	retryAfter, err := strconv.Atoi(last.Header().Get("Retry-After"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(retryAfter > 0, qt.IsTrue)
 }
 
 // TestAuthAPI_Refresh_ImpersonationNotRotated pins the #967 care point that the
