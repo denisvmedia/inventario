@@ -483,7 +483,14 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	file.Tags = models.StringSlice(tagSlugs)
-	file.Path = textutils.CleanFilename(input.Data.Attributes.Path)
+	// Preserve the persisted path when the client omits it. Link-only PUTs
+	// (the commodity-attach flow, #1983 Part A / PR #2032) send no `path`;
+	// blanking it here would orphan the file's display name and break the
+	// download filename (file.Path+file.Ext). Only overwrite when the client
+	// actually supplied a new filename. (#2033)
+	if cleaned := textutils.CleanFilename(input.Data.Attributes.Path); cleaned != "" {
+		file.Path = cleaned
+	}
 
 	// Only update entity linking for non-export files or if values haven't changed
 	if file.LinkedEntityType != "export" {
