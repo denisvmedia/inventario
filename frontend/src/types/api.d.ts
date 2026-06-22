@@ -2608,7 +2608,8 @@ export type paths = {
         put?: never;
         /**
          * Refresh access token
-         * @description Issue a new short-lived access token using the refresh token stored in the httpOnly cookie.
+         * @description Issue a new short-lived access token using the refresh token stored in the httpOnly cookie. Rotates the refresh token: the consumed cookie value is revoked and a new value is set.
+         *     Replaying an already-rotated cookie is treated as theft and revokes all of the user's sessions.
          */
         post: {
             parameters: {

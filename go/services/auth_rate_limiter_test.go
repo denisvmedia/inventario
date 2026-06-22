@@ -80,6 +80,42 @@ func TestInMemoryAuthRateLimiter_AccountLockout(t *testing.T) {
 	c.Assert(lim.ClearFailedLogins(ctx, email), qt.IsNil)
 }
 
+// TestInMemoryAuthRateLimiter_CheckRefreshAttempt_PerIP pins the #967 H1
+// dedicated refresh budget: per-IP, generous (refreshAttemptsLimit), and
+// independent of the login budget. The (refreshAttemptsLimit+1)-th call from
+// one IP is denied while a different IP keeps its own bucket.
+func TestInMemoryAuthRateLimiter_CheckRefreshAttempt_PerIP(t *testing.T) {
+	c := qt.New(t)
+
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := start
+
+	lim := NewInMemoryAuthRateLimiter()
+	lim.now = func() time.Time { return now }
+
+	ctx := context.Background()
+	ip := "7.7.7.7"
+
+	for i := range refreshAttemptsLimit {
+		res, err := lim.CheckRefreshAttempt(ctx, ip)
+		c.Assert(err, qt.IsNil)
+		c.Assert(res.Allowed, qt.IsTrue)
+		c.Assert(res.Limit, qt.Equals, refreshAttemptsLimit)
+		c.Assert(res.Remaining, qt.Equals, refreshAttemptsLimit-1-i)
+		now = now.Add(time.Second)
+	}
+
+	res, err := lim.CheckRefreshAttempt(ctx, ip)
+	c.Assert(err, qt.IsNil)
+	c.Assert(res.Allowed, qt.IsFalse)
+	c.Assert(res.Remaining, qt.Equals, 0)
+
+	// A different IP keeps its own bucket.
+	res, err = lim.CheckRefreshAttempt(ctx, "6.6.6.6")
+	c.Assert(err, qt.IsNil)
+	c.Assert(res.Allowed, qt.IsTrue)
+}
+
 func TestInMemoryAuthRateLimiter_CheckPublicScanAttempt_PerIP(t *testing.T) {
 	c := qt.New(t)
 

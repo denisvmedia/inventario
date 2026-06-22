@@ -197,6 +197,48 @@ func AuthLoginRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Ha
 	}
 }
 
+// AuthRefreshRateLimitMiddleware enforces per-IP rate limiting on the
+// /auth/refresh endpoint (#967). It deliberately uses a dedicated, generous
+// refresh budget (CheckRefreshAttempt) rather than the tight login budget:
+// /auth/refresh is hit periodically and concurrently by every open tab, so
+// the login limit would lock out honest multi-tab sessions. Keying is
+// remoteAddrIP (proxy headers ignored) so a forged X-Forwarded-For can't
+// move the bucket — identical to AuthLoginRateLimitMiddleware. Fails open on
+// a limiter backend error, consistent with the other limiters here; the real
+// theft defences are refresh-token rotation and reuse detection (#967 H2/H4).
+func AuthRefreshRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if limiter == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			ip := remoteAddrIP(r)
+			res, err := limiter.CheckRefreshAttempt(r.Context(), ip)
+			if err != nil {
+				// Fail-open: do not make refresh unavailable due to limiter backend outages.
+				slog.Error("Auth refresh rate limiter error", "error", err, "ip", ip)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", res.Limit))
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", res.Remaining))
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", res.ResetAt.Unix()))
+
+			if !res.Allowed {
+				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				slog.Warn("Refresh rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
+				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // RegistrationRateLimitMiddleware enforces per-IP rate limiting on registration endpoints.
 func RegistrationRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

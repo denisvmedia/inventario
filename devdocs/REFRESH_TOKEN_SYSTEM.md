@@ -91,14 +91,15 @@ sequenceDiagram
     I->>I: Is a refresh already in progress? → queue request
     I->>A: POST /api/v1/auth/refresh (sends refresh_token cookie automatically)
     A->>A: Hash the cookie value
-    A->>DB: Look up token by hash
+    A->>DB: Look up token by hash (revoked rows ARE returned, not filtered)
     DB-->>A: RefreshToken record
-    A->>A: Check IsValid() (not expired, not revoked)
+    A->>A: Revoked? → reuse detected (#967 H4): revoke ALL the user's tokens + audit-warn → 401
+    A->>A: Else IsValid()? (revoked_at nil, not expired)
     A->>DB: Look up user
     DB-->>A: User record
-    A->>A: Issue new JWT access token (15 min)
-    A->>DB: Update refresh token last_used_at
-    A-->>I: 200 {access_token, ...}
+    A->>DB: Rotate (#967 H2): INSERT a fresh 30-day row, then revoke the consumed row
+    A->>A: Issue new JWT access token (15 min), rti = NEW row id
+    A-->>I: 200 {access_token, ...} + Set-Cookie: rotated refresh_token
     I->>I: Store new access_token in localStorage
     I->>I: Notify all queued requests with new token
     I->>C: Retry original request with new token
@@ -111,6 +112,33 @@ Key properties of the refresh logic (`frontend/src/lib/http.ts`, fetch-based —
   infinite loops on credential failures.
 - **Graceful degradation**: if the refresh call itself fails (cookie missing, token
   expired, revoked), the interceptor clears local auth state and redirects to `/login`.
+
+### Server-side hardening (#967)
+
+`POST /api/v1/auth/refresh` rotates and self-defends; the tenant plane now mirrors the
+back-office plane (#1785):
+
+- **Rotation (H2).** Every successful refresh persists a fresh 30-day refresh-token row
+  (BEFORE revoking the consumed one, so a transient DB error leaves the existing session
+  usable) and sets a new `refresh_token` cookie. The minted access token carries the
+  **new** row id as its `rti` claim so `/users/me/sessions` keeps resolving the caller's
+  current session. A stolen cookie is therefore valid only until the legitimate client's
+  next refresh (≈ the access-token lifetime, 15 min).
+- **Reuse detection (H4).** `GetByTokenHash` returns revoked rows unfiltered, so a cookie
+  that hashes to an already-revoked row means the legitimate session has rotated past it —
+  i.e. a replay. The handler revokes **all** of that user's refresh tokens
+  (`RevokeByUserID`), emits a `slog.Warn("Refresh token reuse detected", …)` plus a durable
+  audit row (`Action="refresh_token_reuse_detected"`), and returns a `401` byte-identical to
+  the plain-expired response (opaque to the attacker). A genuinely *expired* (never-revoked)
+  token is **not** treated as theft — no cascade.
+  - Trade-off: a benign stale tab replaying after logout/rotation also trips the cascade
+    (one extra "reuse detected" log + an idempotent revoke-all). The FE single-flights
+    refresh per tab, so this only happens across tabs racing the same expiry; it is the
+    intended, safe H4 semantics, not a real incident.
+- **Rate limit (H1).** `/refresh` has its own generous per-IP budget
+  (`CheckRefreshAttempt`, 60 / 15 min) — deliberately NOT the tight login budget, since
+  periodic multi-tab refresh is normal traffic and refresh tokens (256-bit) are
+  unbrute-forceable. Exceeding it returns `429` with `Retry-After`. `/logout` is unlimited.
 
 > **Impersonation sessions are not refreshable.** When an admin starts an impersonation
 > session (`POST /api/v1/admin/users/{userID}/impersonate`), the server replaces the admin's
@@ -227,7 +255,8 @@ refresh_tokens table
 ├── token_hash   (VARCHAR 128) — SHA-256 of the raw token, URL-safe base64
 ├── expires_at   (TIMESTAMP)   — 30 days from creation
 ├── created_at   (TIMESTAMP)
-├── last_used_at (TIMESTAMP)   — updated on each successful refresh
+├── last_used_at (TIMESTAMP)   — set on login; refresh now ROTATES (revokes this row,
+│                                 inserts a fresh one) rather than bumping this in place (#967)
 ├── ip_address   (VARCHAR 45)  — client IP at creation
 ├── user_agent   (TEXT)        — browser UA at creation
 └── revoked_at   (TIMESTAMP)   — set on logout; NULL = active

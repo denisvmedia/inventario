@@ -14,6 +14,18 @@ const (
 	loginAttemptsLimit  = 5
 	loginAttemptsWindow = 15 * time.Minute
 
+	// refresh-token endpoint throttling (#967). Deliberately NOT the login
+	// budget (5/15min): /auth/refresh is hit periodically and concurrently
+	// by every open tab (a multi-tab user with a short access-token TTL can
+	// legitimately fire a handful of refreshes a minute), so reusing the
+	// tight login budget would lock out honest sessions. Per-IP, generous
+	// (60/15min) — enough headroom for legitimate multi-tab refresh, tight
+	// enough that a credential-stuffing loop replaying stolen cookies is
+	// still bounded. The refresh-token rotation + reuse-detection (#967 H2/H4)
+	// are the real theft defences; this limiter just caps brute-force volume.
+	refreshAttemptsLimit  = 60
+	refreshAttemptsWindow = 15 * time.Minute
+
 	registrationAttemptsLimit  = 3
 	registrationAttemptsWindow = time.Hour
 
@@ -91,6 +103,13 @@ type RateLimitResult struct {
 //   - Fail-open behavior on backend errors (Redis outage must not take API down).
 type AuthRateLimiter interface {
 	CheckLoginAttempt(ctx context.Context, ip string) (RateLimitResult, error)
+	// CheckRefreshAttempt throttles the /auth/refresh endpoint (#967) on a
+	// per-IP basis. The endpoint takes no body and reads only the httpOnly
+	// refresh cookie, so the source IP is the only stable key. The budget is
+	// deliberately generous (see refreshAttemptsLimit) — far looser than the
+	// login budget — so periodic multi-tab refresh is never throttled while a
+	// stolen-cookie replay loop is still capped.
+	CheckRefreshAttempt(ctx context.Context, ip string) (RateLimitResult, error)
 	CheckRegistrationAttempt(ctx context.Context, ip string) (RateLimitResult, error)
 	CheckPasswordResetAttempt(ctx context.Context, email string) (RateLimitResult, error)
 	// CheckMagicLinkAttempt throttles passwordless sign-in ("magic link")
@@ -193,6 +212,11 @@ func NewRedisAuthRateLimiterFromURL(redisURL string) (*RedisAuthRateLimiter, err
 func (l *RedisAuthRateLimiter) CheckLoginAttempt(ctx context.Context, ip string) (RateLimitResult, error) {
 	key := fmt.Sprintf("rate:auth:login:ip:%s", hashKeyPart(ip))
 	return l.checkRate(ctx, key, loginAttemptsLimit, loginAttemptsWindow)
+}
+
+func (l *RedisAuthRateLimiter) CheckRefreshAttempt(ctx context.Context, ip string) (RateLimitResult, error) {
+	key := fmt.Sprintf("rate:auth:refresh:ip:%s", hashKeyPart(ip))
+	return l.checkRate(ctx, key, refreshAttemptsLimit, refreshAttemptsWindow)
 }
 
 func (l *RedisAuthRateLimiter) CheckRegistrationAttempt(ctx context.Context, ip string) (RateLimitResult, error) {
@@ -377,6 +401,11 @@ func (l *InMemoryAuthRateLimiter) CheckLoginAttempt(_ context.Context, ip string
 	return l.checkRate(key, loginAttemptsLimit, loginAttemptsWindow), nil
 }
 
+func (l *InMemoryAuthRateLimiter) CheckRefreshAttempt(_ context.Context, ip string) (RateLimitResult, error) {
+	key := fmt.Sprintf("rate:auth:refresh:ip:%s", hashKeyPart(ip))
+	return l.checkRate(key, refreshAttemptsLimit, refreshAttemptsWindow), nil
+}
+
 func (l *InMemoryAuthRateLimiter) CheckRegistrationAttempt(_ context.Context, ip string) (RateLimitResult, error) {
 	key := fmt.Sprintf("rate:auth:register:ip:%s", hashKeyPart(ip))
 	return l.checkRate(key, registrationAttemptsLimit, registrationAttemptsWindow), nil
@@ -540,6 +569,10 @@ type NoOpAuthRateLimiter struct{}
 
 func (NoOpAuthRateLimiter) CheckLoginAttempt(_ context.Context, _ string) (RateLimitResult, error) {
 	return RateLimitResult{Allowed: true, Limit: loginAttemptsLimit, Remaining: loginAttemptsLimit, ResetAt: time.Now().Add(loginAttemptsWindow)}, nil
+}
+
+func (NoOpAuthRateLimiter) CheckRefreshAttempt(_ context.Context, _ string) (RateLimitResult, error) {
+	return RateLimitResult{Allowed: true, Limit: refreshAttemptsLimit, Remaining: refreshAttemptsLimit, ResetAt: time.Now().Add(refreshAttemptsWindow)}, nil
 }
 
 func (NoOpAuthRateLimiter) CheckRegistrationAttempt(_ context.Context, _ string) (RateLimitResult, error) {
