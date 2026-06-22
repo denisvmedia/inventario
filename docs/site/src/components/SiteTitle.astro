@@ -1,0 +1,167 @@
+---
+// Override of Starlight's `SiteTitle` (rendered at the start of the site
+// header). We render the DEFAULT site title unchanged, then a small version
+// switcher next to it.
+//
+// The switcher is dependency-free: a server-rendered <select> seeded with the
+// current version (derived from BASE_URL at build time) plus a vanilla client
+// script that hydrates the real version list from a `versions.json` published
+// at the SITE ROOT and wires navigation.
+//
+// versions.json lives one level ABOVE the per-version base. base is
+// `/inventario/<ver>/`, so `new URL('../versions.json', BASE_URL)` resolves to
+// `/inventario/versions.json` (served from the gh-pages branch root).
+import Default from '@astrojs/starlight/components/SiteTitle.astro';
+
+// BASE_URL is `/inventario/<ver>/`. The current version is the last non-empty
+// path segment. Used to (a) preselect the dropdown and (b) strip the version
+// prefix from the page path client-side.
+const base = import.meta.env.BASE_URL; // e.g. "/inventario/edge/"
+const segments = base.split('/').filter(Boolean); // ["inventario", "edge"]
+const currentVersion = segments[segments.length - 1] || 'edge';
+
+// Path of the root version index. base is `/inventario/<ver>/`, so dropping
+// the trailing `<ver>/` segment yields the root `/inventario/` and the file
+// sits at `/inventario/versions.json`. (We avoid `new URL(rel, base)` because
+// base is a path, not an absolute URL, and `new URL` throws on it at build
+// time — this string form is equivalent and SSR-safe.)
+const versionsRoot = base.replace(new RegExp(`${currentVersion}/$`), '');
+const versionsJsonUrl = `${versionsRoot}versions.json`;
+---
+
+<div class="site-title-with-versions">
+  <Default><slot /></Default>
+
+  <div class="version-switcher" data-current={currentVersion} data-versions-url={versionsJsonUrl}>
+    <label class="sr-only" for="docs-version-switcher">Select documentation version</label>
+    <select id="docs-version-switcher" aria-label="Select documentation version">
+      <option value={currentVersion} selected>{currentVersion}</option>
+    </select>
+  </div>
+</div>
+
+<style>
+  .site-title-with-versions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .version-switcher select {
+    appearance: auto;
+    font-size: var(--sl-text-xs);
+    line-height: 1.2;
+    padding: 0.15rem 0.3rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--sl-color-gray-5);
+    background-color: var(--sl-color-black);
+    color: var(--sl-color-white);
+    cursor: pointer;
+    max-width: 9rem;
+  }
+  .version-switcher select:hover {
+    border-color: var(--sl-color-gray-4);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>
+
+<script>
+  // Hydrate the version switcher.
+  //
+  // Degrades gracefully: if versions.json is missing (dev / PR build) the
+  // server-rendered single-option <select> is left untouched, so the control
+  // simply shows the current version (e.g. "edge") and does nothing on change.
+  (() => {
+    const root = document.querySelector<HTMLElement>('.version-switcher');
+    if (!root) return;
+    const select = root.querySelector<HTMLSelectElement>('select');
+    if (!select) return;
+
+    const current = root.dataset.current || 'edge';
+    const versionsUrl = root.dataset.versionsUrl;
+    // base is `/<...>/<current>/`. Everything up to and including the version
+    // segment is the prefix we strip to recover the page-relative path.
+    const base = import.meta.env.BASE_URL; // ends with `/<current>/`
+    // Root that contains all version folders, e.g. `/inventario/`.
+    const versionsRoot = base.replace(new RegExp(`${current}/$`), '');
+
+    // Page path relative to the current version base (no leading slash).
+    // e.g. base `/inventario/edge/`, location `/inventario/edge/items/`
+    //      -> `items/`
+    function relativePagePath(): string {
+      let path = window.location.pathname;
+      if (path.startsWith(base)) path = path.slice(base.length);
+      // Trim a stray leading slash if base did not match (defensive).
+      return path.replace(/^\//, '');
+    }
+
+    async function hydrate() {
+      if (!versionsUrl) return;
+      let data: { default?: string; versions?: Array<{ slug: string; label?: string }> };
+      try {
+        const res = await fetch(versionsUrl, { headers: { Accept: 'application/json' } });
+        if (!res.ok) return; // leave the fallback single-option select
+        data = await res.json();
+      } catch {
+        return; // network / parse error -> keep fallback
+      }
+      const versions = Array.isArray(data.versions) ? data.versions : [];
+      if (versions.length === 0) return;
+
+      // Rebuild the option list from versions.json.
+      select.innerHTML = '';
+      let matchedCurrent = false;
+      for (const v of versions) {
+        if (!v || typeof v.slug !== 'string') continue;
+        const opt = document.createElement('option');
+        opt.value = v.slug;
+        opt.textContent = v.label || v.slug;
+        if (v.slug === current) {
+          opt.selected = true;
+          matchedCurrent = true;
+        }
+        select.appendChild(opt);
+      }
+      // If the current build's version is not yet in versions.json (e.g. a
+      // brand-new edge before the first publish), surface it anyway.
+      if (!matchedCurrent) {
+        const opt = document.createElement('option');
+        opt.value = current;
+        opt.textContent = current;
+        opt.selected = true;
+        select.insertBefore(opt, select.firstChild);
+      }
+    }
+
+    select.addEventListener('change', async () => {
+      const target = select.value;
+      if (!target || target === current) return;
+      const page = relativePagePath();
+      const targetBase = `${versionsRoot}${target}/`;
+      const candidate = `${targetBase}${page}`;
+
+      // Navigate to the same page under the chosen version if it exists,
+      // otherwise fall back to that version's home.
+      let dest = candidate;
+      try {
+        const head = await fetch(candidate, { method: 'HEAD' });
+        if (!head.ok) dest = targetBase;
+      } catch {
+        dest = targetBase;
+      }
+      window.location.assign(dest);
+    });
+
+    hydrate();
+  })();
+</script>

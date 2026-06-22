@@ -4,27 +4,42 @@ import starlight from '@astrojs/starlight';
 import tailwindcss from '@tailwindcss/vite';
 
 // ---------------------------------------------------------------------------
-// Deployment target — GitHub Pages PROJECT site (default).
+// Deployment target — GitHub Pages PROJECT site, VERSIONED (mike-style).
 //
 // The repo is denisvmedia/inventario, so the project site is served from
 //   https://denisvmedia.github.io/inventario/
-// Hence `site` is the GitHub Pages origin and `base` is the repo sub-path.
-// Every internal link Starlight emits is prefixed with `base`, so this MUST
-// match the path the site is actually served from.
+// We publish EACH version into its OWN top-level folder on an orphan
+// `gh-pages` branch (Pages Source = "Deploy from a branch"):
+//
+//   git ref         DOCS_VERSION   gh-pages folder   served URL
+//   ------------    ------------   ---------------   --------------------------
+//   master          edge           gh-pages/edge/    /inventario/edge/
+//   tag v1.2.3      v1.2.3         gh-pages/v1.2.3/  /inventario/v1.2.3/
+//
+// `DOCS_VERSION` (env, default 'edge') therefore drives `base` so every
+// internal link Starlight emits is prefixed with the version folder and the
+// built `dist/` can be dropped straight into `gh-pages/<DOCS_VERSION>/`.
+// `site` stays the bare GitHub Pages origin.
+//
+// The site ROOT (`/inventario/`) holds a generated `versions.json` + an
+// `index.html` redirect to the default version (latest stable tag, else
+// `edge`); both are produced by scripts/gen-versions.mjs against the
+// gh-pages checkout — see .github/workflows/docs.yml.
+//
+// Local preview:  DOCS_VERSION=edge npm run dev   (base => /inventario/edge/)
 //
 // >>> To switch to a CUSTOM DOMAIN later (issue #2146 open question) <<<
-//   1. Change `base` to '/' (a custom domain serves from the root).
-//   2. Change `site` to the custom origin, e.g. 'https://docs.example.com'.
-//   3. Add a CNAME file containing the bare domain so GitHub Pages keeps it
-//      across deploys. With this Astro layout, put it at:
-//        docs/site/public/CNAME   ->   docs.example.com
-//      (files in public/ are copied verbatim into dist/.)
-//   4. Configure the domain's DNS (CNAME -> denisvmedia.github.io) and enable
-//      "Enforce HTTPS" in the repo Pages settings.
-// No domain is invented here — pick one when #2146 is decided.
+//   With a custom domain the versioned layout still works: keep `base` as
+//   `/<DOCS_VERSION>/` (drop the `/inventario` prefix), point `site` at the
+//   custom origin, add docs/site/public/CNAME, and adjust the redirect/links
+//   in scripts/gen-versions.mjs (PAGES_PREFIX) + the version switcher.
 // ---------------------------------------------------------------------------
 const site = 'https://denisvmedia.github.io';
-const base = '/inventario/';
+// Which version we are building. `edge` tracks master; a tag build sets this
+// to the tag name (e.g. `v1.2.3`). Drives the per-version sub-path so the
+// build can be dropped into gh-pages/<DOCS_VERSION>/ verbatim.
+const DOCS_VERSION = process.env.DOCS_VERSION || 'edge';
+const base = `/inventario/${DOCS_VERSION}/`;
 
 // https://astro.build/config
 export default defineConfig({
@@ -42,6 +57,12 @@ export default defineConfig({
       // Tailwind v4 base styles + brand layer. The single global stylesheet
       // imports Tailwind and sets Starlight's accent to the app's brand token.
       customCss: ['./src/styles/global.css'],
+      // Component overrides. We wrap the default `SiteTitle` (header start) so
+      // the brand wordmark renders unchanged with a version switcher beside
+      // it. See src/components/SiteTitle.astro.
+      components: {
+        SiteTitle: './src/components/SiteTitle.astro',
+      },
       // Source repo, surfaced as the header GitHub icon.
       social: [
         {

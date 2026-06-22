@@ -139,7 +139,20 @@ English is the default locale; `cs` / `ru` live under
 `docs/site/src/content/docs/{cs,ru}/` and fall back to English when a page is
 missing (so translating is additive). Screenshots live in
 `docs/site/src/assets/screenshots/` and are embedded with relative paths.
-Preview locally with `cd docs/site && npm install && npm run dev`.
+
+The site is **versioned** (mike-style). Each version is published into its own
+folder on the orphan `gh-pages` branch and served from its own sub-path:
+
+- `master` deploys to `/edge/` (URL `…/inventario/edge/`).
+- A `vX.Y.Z` tag deploys to `/vX.Y.Z/` (URL `…/inventario/vX.Y.Z/`).
+- The site root `…/inventario/` is a generated redirect to the **latest
+  release** (currently `edge`, until the first tag exists).
+
+Publishing one version never deletes the others, and an in-page version
+switcher lets readers move between them. The version is chosen by the
+`DOCS_VERSION` env var (default `edge`), which drives the build's base path.
+
+Preview locally with `cd docs/site && npm install && DOCS_VERSION=edge npm run dev`.
 
 ## Questions
 

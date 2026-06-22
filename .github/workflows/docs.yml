@@ -1,41 +1,84 @@
 name: Docs
 
-# Builds the Astro Starlight user-docs site (docs/site) and deploys it to
-# GitHub Pages on merge to master. On pull requests it only builds, as a
-# breakage gate (no deploy). Decided in #2146.
+# Builds the Astro Starlight user-docs site (docs/site) and publishes it to a
+# VERSIONED GitHub Pages site (mike-style). Decided in #2146 / #2087.
 #
-# One-time setup by a maintainer: repo Settings → Pages → Source = "GitHub
-# Actions". For a custom domain, set astro.config `base: '/'`, add
-# docs/site/public/CNAME, and the DNS CNAME record (#2146 open question 1).
+# Versioning model:
+#   - Each version lives in its OWN top-level folder on the orphan `gh-pages`
+#     branch and is served from its own sub-path:
+#         master       -> DOCS_VERSION=edge   -> gh-pages/edge/   -> /inventario/edge/
+#         tag vX.Y.Z   -> DOCS_VERSION=vX.Y.Z -> gh-pages/vX.Y.Z/ -> /inventario/vX.Y.Z/
+#   - Publishing a version NEVER deletes the sibling version folders.
+#   - The gh-pages ROOT holds a generated versions.json + an index.html that
+#     redirects to the default version (latest stable tag, else edge), produced
+#     by docs/site/scripts/gen-versions.mjs.
+#
+# One-time setup by a maintainer: repo Settings -> Pages -> Source = "Deploy
+# from a branch", Branch = `gh-pages` / `(root)`.
+#
+# Deploy mechanism — explicit git-worktree + scoped rsync (NOT a marketplace
+# action). Rationale: the hard requirement is "drop dist/ into <version>/ with
+# --delete WITHOUT touching sibling folders, then regenerate the root index".
+# A worktree checkout of gh-pages lets us rsync into exactly one subfolder
+# (--delete is scoped to that target dir only), run the Node generator against
+# the same checkout, and commit/push in one place. This is more transparent and
+# auditable than threading clean-exclude globs through a third-party action, and
+# has no external dependency to pin/trust.
 
 on:
   push:
+    # No `paths` here on purpose: a `paths` filter on a push that also matches
+    # tags would skip a release tag placed on a commit that didn't touch docs.
+    # Tag deploys must always run; master deploys are path-gated by the
+    # `changes` job below instead.
     branches: [master]
-    paths:
-      - 'docs/site/**'
-      - '.github/workflows/docs.yml'
+    tags:
+      - 'v*'
   pull_request:
     paths:
       - 'docs/site/**'
       - '.github/workflows/docs.yml'
 
-# Permissions needed for the GitHub Pages deployment.
+# Deploys write to the gh-pages branch via the built-in token.
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
+# Serialize deploys so two pushes don't race the single gh-pages branch.
+# PR build-only runs are keyed per-ref so they don't block each other.
 concurrency:
-  group: docs-${{ github.ref }}
-  cancel-in-progress: true
+  group: docs-deploy-${{ (github.event_name == 'pull_request') && github.ref || 'gh-pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # On master pushes, detect whether the docs actually changed so we don't
+  # rebuild/redeploy edge on every unrelated merge. Tags bypass this (the
+  # deploy job's condition deploys tags regardless of this output).
+  changes:
+    name: Detect docs changes
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            docs:
+              - 'docs/site/**'
+              - '.github/workflows/docs.yml'
+
+  # PR check: build only (DOCS_VERSION=edge), no deploy — a breakage gate.
   build:
-    name: Build (Astro)
+    name: Build (Astro, PR check)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: docs/site
+    env:
+      DOCS_VERSION: edge
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -45,22 +88,90 @@ jobs:
           cache-dependency-path: docs/site/package-lock.json
       - run: npm ci
       - run: npm run build
-      # Publish the built site only on master; PRs build as a check only.
-      - name: Upload Pages artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/site/dist
 
+  # Deploy: master -> edge, or a v* tag -> that tag. Publishes into the
+  # version's folder on gh-pages and regenerates the root version index.
   deploy:
-    name: Deploy to GitHub Pages
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: build
+    name: Build & publish version
+    needs: changes
+    # Always deploy a v* tag; deploy master (edge) only when docs changed.
+    if: >-
+      github.event_name == 'push' &&
+      ( startsWith(github.ref, 'refs/tags/v') ||
+        (github.ref == 'refs/heads/master' && needs.changes.outputs.docs == 'true') )
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          # Full history so `git worktree add` for the orphan gh-pages branch
+          # works against the same repo clone.
+          fetch-depth: 0
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ "${GITHUB_REF}" = "refs/heads/master" ]; then
+            echo "version=edge" >> "$GITHUB_OUTPUT"
+          else
+            # refs/tags/vX.Y.Z -> vX.Y.Z
+            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: docs/site/package-lock.json
+
+      - name: Build site for this version
+        working-directory: docs/site
+        env:
+          DOCS_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish to gh-pages
+        env:
+          DOCS_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Fetch gh-pages if it exists; otherwise create it as an orphan.
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages
+            git worktree add gh-pages origin/gh-pages
+          else
+            git worktree add --detach gh-pages
+            git -C gh-pages checkout --orphan gh-pages
+            git -C gh-pages reset --hard
+            git -C gh-pages clean -fdx
+          fi
+
+          # Sync the freshly built dist/ into ONLY this version's folder.
+          # --delete is scoped to the target dir, so sibling version folders
+          # (and the root versions.json/index.html) are untouched.
+          mkdir -p "gh-pages/${DOCS_VERSION}"
+          rsync -a --delete docs/site/dist/ "gh-pages/${DOCS_VERSION}/"
+
+          # GitHub Pages "Deploy from a branch" runs Jekyll by default, which
+          # ignores files/dirs starting with `_` (Astro emits `_astro/`).
+          # `.nojekyll` disables that so assets resolve.
+          touch gh-pages/.nojekyll
+
+          # (Re)generate the root version index + redirect from the folders now
+          # present in the gh-pages checkout.
+          node docs/site/scripts/gen-versions.mjs gh-pages
+
+          # Commit + push only if something changed (idempotent re-runs).
+          cd gh-pages
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to publish."
+          else
+            git commit -m "docs: publish ${DOCS_VERSION} [skip ci]"
+            git push origin HEAD:gh-pages
+          fi
