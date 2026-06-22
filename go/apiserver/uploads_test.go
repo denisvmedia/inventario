@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -37,9 +38,13 @@ func countBucketKeys(c *qt.C, uploadLocation string) int {
 	iter := b.List(nil)
 	for {
 		obj, err := iter.Next(ctx)
-		if err != nil {
+		if err == io.EOF {
 			break
 		}
+		// A non-EOF error means the List itself failed; fail loudly rather than
+		// silently treating it as end-of-iteration, which would let a broken
+		// listing masquerade as an empty bucket and pass the orphan assertion.
+		c.Assert(err, qt.IsNil)
 		if obj.IsDir {
 			continue
 		}
