@@ -1976,7 +1976,8 @@ export type paths = {
         post?: never;
         /**
          * Delete account
-         * @description Permanently delete the authenticated user's account. Private groups and their content are purged; re-authentication via password is required. All sessions are invalidated. Irreversible.
+         * @description Permanently delete the authenticated user's account. Private groups and their content are purged.
+         *     Password re-authentication is required for password-based accounts; OAuth-only accounts can omit it. All sessions are invalidated. Irreversible.
          */
         delete: {
             parameters: {
@@ -2024,6 +2025,15 @@ export type paths = {
                     };
                     content: {
                         "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
                     };
                 };
             };

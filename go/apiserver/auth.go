@@ -1296,7 +1296,8 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 // auth/identity rows are removed, the users row is dropped, and all active
 // sessions are torn down (refresh tokens revoked, access tokens blacklisted).
 // @Summary Delete account
-// @Description Permanently delete the authenticated user's account. Private groups and their content are purged; re-authentication via password is required. All sessions are invalidated. Irreversible.
+// @Description Permanently delete the authenticated user's account. Private groups and their content are purged.
+// @Description Password re-authentication is required for password-based accounts; OAuth-only accounts can omit it. All sessions are invalidated. Irreversible.
 // @Tags auth
 // @Accept json
 // @Param data body DeleteAccountRequest true "Account deletion request"
@@ -1304,6 +1305,7 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 // @Failure 400 {string} string "Bad Request"
 // @Failure 401 {string} string "Unauthorized"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity"
+// @Failure 500 {string} string "Internal Server Error"
 // @Router /auth/me [delete]
 func (api *AuthAPI) handleDeleteCurrentUser(w http.ResponseWriter, r *http.Request) {
 	user := appctx.UserFromContext(r.Context())
@@ -1329,7 +1331,7 @@ func (api *AuthAPI) handleDeleteCurrentUser(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		if !user.CheckPassword(req.Password) {
-			slog.Warn("Account deletion failed: incorrect password", "user_id", user.ID, "email", user.Email)
+			slog.Warn("Account deletion failed: incorrect password", "user_id", user.ID, "tenant_id", user.TenantID)
 			errMsg := "incorrect password"
 			api.logAuth(r.Context(), "account_deletion", &user.ID, &user.TenantID, false, r, &errMsg)
 			_ = codedUnprocessableEntityError(w, r, ErrInvalidAccountDeletionPassword, "auth.delete.invalid_password")
@@ -1377,7 +1379,7 @@ func (api *AuthAPI) handleDeleteCurrentUser(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	slog.Info("Account deleted", "user_id", user.ID, "email", user.Email)
+	slog.Info("Account deleted", "user_id", user.ID, "tenant_id", user.TenantID)
 	api.logAuth(r.Context(), "account_deletion", &user.ID, &user.TenantID, true, r, nil)
 
 	w.WriteHeader(http.StatusNoContent)

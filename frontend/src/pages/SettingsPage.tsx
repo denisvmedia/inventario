@@ -413,9 +413,14 @@ function DeleteAccountDialog({
       await deleteMutation.mutateAsync({ password: values.password })
       // 204: the BE has erased the account and torn down the session. Log
       // out locally (clears tokens, drops cached user) then land on /login.
+      // Always navigate even if logout() rejects — the account is already
+      // gone server-side, so the user must not be stranded on a dead session.
       onOpenChange(false)
-      await logout()
-      navigate("/login")
+      try {
+        await logout()
+      } finally {
+        navigate("/login")
+      }
     } catch (err) {
       // Dotted-code branch off the jsonapi.Errors envelope. The dialog stays
       // open and the user stays signed in on every arm.

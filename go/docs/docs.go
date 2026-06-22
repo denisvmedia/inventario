@@ -1507,7 +1507,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Permanently delete the authenticated user's account. Private groups and their content are purged; re-authentication via password is required. All sessions are invalidated. Irreversible.",
+                "description": "Permanently delete the authenticated user's account. Private groups and their content are purged.\nPassword re-authentication is required for password-based accounts; OAuth-only accounts can omit it. All sessions are invalidated. Irreversible.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1546,6 +1546,12 @@ const docTemplate = `{
                         "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }

@@ -180,12 +180,53 @@ func TestUserPurger_Postgres_ClearsGroupInvitesAuditReferences(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
+	// Single-column matches: the purge must remove a row where the user is the
+	// creator OR the accepter, not only when BOTH columns match. These guard
+	// against a regression to `created_by = $2 AND used_by = $2`.
+	createdByOnly, err := fs.GroupInviteAuditRegistry.Create(ctx, models.GroupInviteAudit{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		OriginalInviteID:    "orig-invite-created-only",
+		OriginalInviteUUID:  "orig-uuid-created-only",
+		OriginalGroupID:     "orig-group-created-only",
+		OriginalGroupSlug:   "orig-group-created-only-slug",
+		OriginalGroupName:   "Orig Group Created Only",
+		Token:               "token-created-only",
+		CreatedBy:           userID,
+		UsedBy:              other.ID,
+		OriginalCreatedAt:   now.Add(-time.Hour),
+		OriginalExpiresAt:   now.Add(time.Hour),
+		UsedAt:              now,
+	})
+	c.Assert(err, qt.IsNil)
+
+	usedByOnly, err := fs.GroupInviteAuditRegistry.Create(ctx, models.GroupInviteAudit{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		OriginalInviteID:    "orig-invite-used-only",
+		OriginalInviteUUID:  "orig-uuid-used-only",
+		OriginalGroupID:     "orig-group-used-only",
+		OriginalGroupSlug:   "orig-group-used-only-slug",
+		OriginalGroupName:   "Orig Group Used Only",
+		Token:               "token-used-only",
+		CreatedBy:           other.ID,
+		UsedBy:              userID,
+		OriginalCreatedAt:   now.Add(-time.Hour),
+		OriginalExpiresAt:   now.Add(time.Hour),
+		UsedAt:              now,
+	})
+	c.Assert(err, qt.IsNil)
+
 	// Purge the user.
 	err = fs.UserPurger.PurgeUserDependents(context.Background(), tenantID, userID)
 	c.Assert(err, qt.IsNil)
 
-	// The user's audit row is gone; the other user's survives.
+	// The user's audit rows are gone — both the both-columns match and each
+	// single-column (created_by-only / used_by-only) match; the other user's
+	// row survives.
 	_, err = fs.GroupInviteAuditRegistry.Get(context.Background(), userAudit.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = fs.GroupInviteAuditRegistry.Get(context.Background(), createdByOnly.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = fs.GroupInviteAuditRegistry.Get(context.Background(), usedByOnly.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	surviving, err := fs.GroupInviteAuditRegistry.Get(context.Background(), otherAudit.ID)

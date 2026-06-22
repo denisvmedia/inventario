@@ -85,7 +85,7 @@ func NewAccountDeletionService(factorySet *registry.FactorySet, purger *GroupPur
 // by the HTTP handler before this is called; this method owns only the
 // classification + purge + delete.
 func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, userID string) error {
-	if s.factorySet == nil || s.purger == nil {
+	if s.factorySet == nil || s.purger == nil || s.factorySet.UserContentOwnershipChecker == nil {
 		return errxtrace.Wrap("AccountDeletionService is not configured", registry.ErrFieldRequired)
 	}
 	if tenantID == "" {
@@ -112,14 +112,12 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 	// half-erased account). This mirrors the abort-before-mutate contract of the
 	// sole-owner-of-shared case above. The final-delete FK→sentinel mapping in
 	// step 4 remains a backstop for the TOCTOU window between here and there.
-	if s.factorySet.UserContentOwnershipChecker != nil {
-		owns, err := s.factorySet.UserContentOwnershipChecker.HasRetainedOwnedContent(ctx, tenantID, userID, privateGroupIDs)
-		if err != nil {
-			return errxtrace.Wrap("failed to pre-check retained owned content", err)
-		}
-		if owns {
-			return errxtrace.Classify(ErrAccountStillOwnsContent)
-		}
+	owns, err := s.factorySet.UserContentOwnershipChecker.HasRetainedOwnedContent(ctx, tenantID, userID, privateGroupIDs)
+	if err != nil {
+		return errxtrace.Wrap("failed to pre-check retained owned content", err)
+	}
+	if owns {
+		return errxtrace.Classify(ErrAccountStillOwnsContent)
 	}
 
 	// 2) Purge each PRIVATE group via the existing per-group sequence.
@@ -201,18 +199,26 @@ func (s *AccountDeletionService) classifyGroups(ctx context.Context, tenantID, u
 			return nil, errxtrace.Wrap("failed to list group members", err)
 		}
 
+		// Re-validate the user's membership against the freshly-listed members:
+		// it may have been revoked between ListByUser and ListByGroup. If the
+		// user is no longer a member, skip — don't classify (or purge) a group
+		// the caller just left.
+		current := membershipForUser(groupMembers, userID)
+		if current == nil {
+			continue
+		}
+
 		// PRIVATE group: the user is the only member -> purge the whole group.
-		if len(groupMembers) <= 1 {
+		if len(groupMembers) == 1 {
 			privateGroupIDs = append(privateGroupIDs, m.GroupID)
 			continue
 		}
 
 		// Shared group: only block when the user is its SOLE owner. A
 		// co-owner (≥2 owners) or a non-owner member leaves the group intact;
-		// the membership row is dropped by UserPurger. We already know the
-		// current user is an owner here, so an owner count of one means the
-		// user is that sole owner.
-		if m.Role != models.GroupRoleOwner {
+		// the membership row is dropped by UserPurger. Use the freshly-read
+		// role rather than the (possibly stale) ListByUser row.
+		if current.Role != models.GroupRoleOwner {
 			continue
 		}
 		if countOwners(groupMembers) <= 1 {
@@ -221,6 +227,18 @@ func (s *AccountDeletionService) classifyGroups(ctx context.Context, tenantID, u
 	}
 
 	return privateGroupIDs, nil
+}
+
+// membershipForUser returns the membership in members naming userID as the
+// member, or nil if the user is not currently a member (e.g. the membership
+// was revoked concurrently between ListByUser and ListByGroup).
+func membershipForUser(members []*models.GroupMembership, userID string) *models.GroupMembership {
+	for _, m := range members {
+		if m != nil && m.MemberUserID == userID {
+			return m
+		}
+	}
+	return nil
 }
 
 // countOwners returns the number of memberships with the owner role.
