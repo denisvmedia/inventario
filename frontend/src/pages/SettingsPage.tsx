@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, useNavigate } from "react-router-dom"
 import {
@@ -24,8 +26,19 @@ import { ConnectedAccountsCard } from "@/components/settings/ConnectedAccountsCa
 import { MFASettingsRow } from "@/components/settings/MFASettingsRow"
 import { useSessionsList } from "@/features/sessions/hooks"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Page, PageHeader } from "@/components/ui/page"
 import {
   Select,
@@ -37,7 +50,13 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/features/auth/AuthContext"
-import { useLogout, useUpdateProfile } from "@/features/auth/hooks"
+import {
+  useDeleteAccount,
+  useHasPassword,
+  useLogout,
+  useUpdateProfile,
+} from "@/features/auth/hooks"
+import { makeDeleteAccountSchema, type DeleteAccountInput } from "@/features/auth/schemas"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useKeyboardShortcutsDialog } from "@/features/shortcuts"
 import {
@@ -56,14 +75,13 @@ import {
 } from "@/features/settings/api"
 import { usePatchSetting, useUserSettings } from "@/features/settings/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
-import { useConfirm } from "@/hooks/useConfirm"
 import { useDensity, DENSITIES, type Density } from "@/hooks/useDensity"
 import { useTheme } from "@/components/theme-provider"
 import { i18next, SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/i18n"
 import { withGroupQuery } from "@/lib/group-aware-url"
 import { formatDate } from "@/lib/intl"
 import { NUMBER_FORMAT_LOCALE_OPTIONS } from "@/lib/numberFormatLocale"
-import { parseServerError } from "@/lib/server-error"
+import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { APP_VERSION, shortAppVersion } from "@/lib/app-version"
@@ -227,23 +245,10 @@ function AccountSection() {
   const { t } = useTranslation()
   const { user } = useAuth()
   const { groups, currentGroup, isLoading } = useCurrentGroup()
-  const confirm = useConfirm()
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const memberSince = user?.created_at
     ? formatDate(user.created_at, { style: "long" })
     : t("settings:account.memberSinceUnknown")
-
-  // Account deletion isn't backend-supported yet; render a danger-zone
-  // panel that opens a confirm dialog explaining the limitation rather
-  // than fake a destructive action that does nothing.
-  async function handleDeleteAccount() {
-    await confirm({
-      title: t("settings:account.dangerZone.deleteUnavailableTitle"),
-      description: t("settings:account.dangerZone.deleteUnavailableDescription"),
-      confirmLabel: t("settings:account.dangerZone.deleteUnavailableConfirm"),
-      cancelLabel: t("settings:profile.edit.cancel"),
-      destructive: false,
-    })
-  }
 
   // Wait for the membership list to load before deciding which surface to
   // render — a `groups === undefined` state would briefly show the empty-
@@ -322,14 +327,205 @@ function AccountSection() {
           variant="outline"
           size="sm"
           className="text-destructive border-destructive/40 hover:bg-destructive/10 gap-1.5"
-          onClick={handleDeleteAccount}
+          onClick={() => setDeleteOpen(true)}
           data-testid="delete-account-button"
         >
           <Trash2 className="size-3.5" aria-hidden="true" />
           {t("settings:account.dangerZone.deleteAccount")}
         </Button>
       </div>
+
+      <DeleteAccountDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        email={user?.email ?? ""}
+      />
     </div>
+  )
+}
+
+// DeleteAccountDialog — typed-confirmation destructive flow for #2147.
+// Modeled on GroupSettingsPage's DeleteGroupDialog: the user must retype
+// their own email (guards accidental clicks) and their password (the BE
+// re-authenticates, except for OAuth-only users with no hash on file).
+//
+// OAuth-only users (useHasPassword() === false) have no password to type —
+// the BE skips re-auth for them (the access token proves identity), so we
+// hide the password input entirely and drop the password.min(1) rule from
+// the resolver. Requiring a password in that case would make the form
+// unsubmittable and lock those users out of erasing their account,
+// contradicting the BE contract and GDPR intent. The DELETE then goes out
+// with an empty password, which the BE accepts.
+//
+// Error contract (apiserver, jsonapi.Errors with dotted codes):
+//   - auth.delete.invalid_password → field error on the password input.
+//   - auth.delete.last_owner       → banner: transfer group ownership first.
+//   - auth.delete.owns_content     → banner: you still own shared content.
+//   - anything else                → generic banner.
+// On every error the dialog stays open AND the user stays signed in — we
+// only log out + redirect after the 204 (by which point the BE has already
+// revoked the session server-side). We don't optimistically log out.
+function DeleteAccountDialog({
+  open,
+  onOpenChange,
+  email,
+}: {
+  open: boolean
+  onOpenChange: (next: boolean) => void
+  email: string
+}) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const { logout } = useAuth()
+  const deleteMutation = useDeleteAccount()
+  // OAuth-only users (#1394) carry no in-app password hash; the BE skips
+  // re-auth for them, so we relax the password rule + hide the input below.
+  const hasPassword = useHasPassword()
+  const [serverError, setServerError] = useState<string | null>(null)
+
+  const form = useForm<DeleteAccountInput>({
+    resolver: zodResolver(makeDeleteAccountSchema(hasPassword)),
+    defaultValues: { confirmEmail: "", password: "" },
+  })
+
+  // Reset the form whenever the dialog opens so a stale password / email
+  // doesn't linger across re-opens.
+  useEffect(() => {
+    if (open) {
+      form.reset({ confirmEmail: "", password: "" })
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setServerError(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only re-run on open changes; form is a stable RHF handle
+  }, [open])
+
+  async function onSubmit(values: DeleteAccountInput) {
+    setServerError(null)
+    // Client-side guard: the typed email must match the signed-in user's
+    // address (case-insensitive — email is case-insensitive in practice and
+    // a uppercase-mismatch typo shouldn't gate the destructive action). The
+    // BE doesn't re-check this; it's purely the accidental-click guard.
+    if (values.confirmEmail.trim().toLowerCase() !== email.trim().toLowerCase()) {
+      form.setError("confirmEmail", { message: "auth:validation.confirmEmailMismatch" })
+      return
+    }
+    try {
+      await deleteMutation.mutateAsync({ password: values.password })
+      // 204: the BE has erased the account and torn down the session. Log
+      // out locally (clears tokens, drops cached user) then land on /login.
+      onOpenChange(false)
+      await logout()
+      navigate("/login")
+    } catch (err) {
+      // Dotted-code branch off the jsonapi.Errors envelope. The dialog stays
+      // open and the user stays signed in on every arm.
+      const code = getServerErrorCode(err)
+      if (code === "auth.delete.invalid_password") {
+        form.setError("password", {
+          message: t("settings:account.dangerZone.deleteDialog.wrongPassword"),
+        })
+        return
+      }
+      if (code === "auth.delete.last_owner") {
+        setServerError(t("settings:account.dangerZone.deleteDialog.lastOwner"))
+        return
+      }
+      if (code === "auth.delete.owns_content") {
+        setServerError(t("settings:account.dangerZone.deleteDialog.ownsContent"))
+        return
+      }
+      setServerError(
+        parseServerError(err, t("settings:account.dangerZone.deleteDialog.errorGeneric"))
+      )
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="delete-account-dialog">
+        <DialogHeader>
+          <DialogTitle>{t("settings:account.dangerZone.deleteDialog.title")}</DialogTitle>
+          <DialogDescription>
+            {t("settings:account.dangerZone.deleteDialog.body")}
+          </DialogDescription>
+        </DialogHeader>
+        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
+          <div className="space-y-1.5">
+            <Label htmlFor="delete-account-email">
+              {t("settings:account.dangerZone.deleteDialog.confirmEmailLabel")}
+            </Label>
+            <Input
+              id="delete-account-email"
+              type="email"
+              autoComplete="off"
+              placeholder={email}
+              disabled={deleteMutation.isPending}
+              aria-invalid={!!form.formState.errors.confirmEmail}
+              data-testid="delete-confirm-email"
+              {...form.register("confirmEmail")}
+            />
+            {form.formState.errors.confirmEmail ? (
+              <p className="text-xs text-destructive" data-testid="delete-confirm-email-error">
+                {t(form.formState.errors.confirmEmail.message ?? "")}
+              </p>
+            ) : null}
+          </div>
+          {hasPassword ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="delete-account-password">
+                {t("settings:account.dangerZone.deleteDialog.passwordLabel")}
+              </Label>
+              <Input
+                id="delete-account-password"
+                type="password"
+                autoComplete="current-password"
+                disabled={deleteMutation.isPending}
+                aria-invalid={!!form.formState.errors.password}
+                data-testid="delete-password"
+                {...form.register("password")}
+              />
+              {form.formState.errors.password ? (
+                <p className="text-xs text-destructive" data-testid="delete-password-error">
+                  {t(form.formState.errors.password.message ?? "")}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            // OAuth-only account: nothing to re-authenticate with. A short
+            // note replaces the password field so the dialog doesn't look
+            // like it's missing a step.
+            <p className="text-xs text-muted-foreground" data-testid="delete-no-password-note">
+              {t("settings:account.dangerZone.deleteDialog.noPasswordNote")}
+            </p>
+          )}
+          {serverError ? (
+            <Alert variant="destructive" data-testid="delete-server-error">
+              <AlertDescription>{serverError}</AlertDescription>
+            </Alert>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              disabled={deleteMutation.isPending}
+            >
+              {t("settings:account.dangerZone.deleteDialog.cancel")}
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              data-testid="delete-account-submit"
+            >
+              {deleteMutation.isPending
+                ? t("settings:account.dangerZone.deleteDialog.deleting")
+                : t("settings:account.dangerZone.deleteDialog.confirm")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 

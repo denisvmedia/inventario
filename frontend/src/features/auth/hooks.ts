@@ -5,6 +5,7 @@ import { getAccessToken } from "@/lib/auth-storage"
 import {
   changePassword,
   completeLoginMFA,
+  deleteAccount,
   disableMFA,
   forgotPassword,
   getCurrentUser,
@@ -238,6 +239,21 @@ export function useUpdateProfile() {
 export function useChangePassword() {
   return useMutation<string, Error, ChangePasswordRequest>({
     mutationFn: (req) => changePassword(req),
+  })
+}
+
+// useDeleteAccount permanently erases the signed-in user (#2147). The BE
+// returns 204 on success and a dotted-code 422 on failure
+// (auth.delete.invalid_password / .last_owner / .owns_content). We
+// deliberately do NOT log out optimistically or touch the cache here — on
+// any error the user must stay signed in with the dialog open so they can
+// correct the password or read the blocking-reason banner. The call site
+// (DeleteAccountDialog) is responsible for the logout() + /login redirect
+// once the 204 resolves, since by then the BE has already revoked the
+// session server-side.
+export function useDeleteAccount() {
+  return useMutation<void, Error, { password: string }>({
+    mutationFn: ({ password }) => deleteAccount(password),
   })
 }
 

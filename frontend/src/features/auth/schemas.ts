@@ -122,3 +122,33 @@ export const setPasswordSchema = z
     }
   })
 export type SetPasswordInput = z.infer<typeof setPasswordSchema>
+
+// Self-service account deletion (#2147) — /settings → Account danger zone.
+// Mirrors deleteGroupSchema's split of concerns: the schema only enforces
+// the gating "non-empty" rules, while the typed-confirmation match
+// (confirmEmail must equal the signed-in user's address) is checked in the
+// dialog handler since the schema doesn't know the user's email.
+//
+// The password rule is conditional on whether the user has an in-app
+// password hash. Password-backed users must re-authenticate (the BE
+// re-verifies via user.CheckPassword), so the field is required. OAuth-only
+// users (#1394) have an empty hash and the BE skips re-auth — for them the
+// access token already proves identity, so requiring a password here would
+// lock them out of self-deletion entirely (there's nothing to type). The
+// dialog builds its resolver from the right variant via
+// `makeDeleteAccountSchema(hasPassword)` and the password input is hidden in
+// the no-password case. The inferred input type always carries `password`
+// (an empty string in the OAuth case) so the form shape stays stable.
+function makeDeleteAccountSchema(hasPassword: boolean) {
+  return z.object({
+    confirmEmail: z.string().trim().min(1, "auth:validation.confirmEmailRequired"),
+    password: hasPassword ? z.string().min(1, "auth:validation.passwordRequired") : z.string(),
+  })
+}
+
+// Default (has-password) variant, kept as a named export for the inferred
+// type and for any consumer that doesn't need the conditional shape.
+export const deleteAccountSchema = makeDeleteAccountSchema(true)
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>
+
+export { makeDeleteAccountSchema }

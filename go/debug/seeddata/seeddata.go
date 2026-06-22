@@ -292,11 +292,19 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 //     INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE by the seed handler — see
 //     apiserver/seed.go). It is OFF by default; only the e2e harness
 //     turns it on.
+//   - delete-solo / delete-wrongpass / delete-lastowner@test-org.com —
+//     disposable self-service-account-deletion fixtures (#2147). Each owns
+//     its own group; the last-owner fixture's group also carries a second
+//     member so the sole-owner block path fires. See
+//     seeddata_delete_targets.go and e2e/tests/delete-account.spec.ts.
 func seedTestOrgFixtures(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User, opts SeedOptions) error {
 	if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
 		return err
 	}
 	if err := ensureBlockTargetUser(ctx, registrySet, tenant, users); err != nil {
+		return err
+	}
+	if err := ensureDeleteTargetFixtures(ctx, registrySet, tenant, users); err != nil {
 		return err
 	}
 	if opts.SeedSystemAdmin {

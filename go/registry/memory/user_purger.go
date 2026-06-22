@@ -13,6 +13,8 @@ var _ registry.UserPurger = (*UserPurger)(nil)
 // UserPurger is the in-memory counterpart to postgres.UserPurger (#2116). It
 // hard-deletes a single user's auth / identity rows via the existing
 // service-mode registries, mirroring the postgres DELETE-by-user_id sequence.
+// Since #2147 it also clears the user's group_invites_audit references
+// (created_by / used_by), matching postgres.
 //
 // Unlike the postgres variant these deletes are NOT one transaction — memory
 // mode is only used in tests where partial failure is acceptable.
@@ -43,6 +45,7 @@ type UserPurger struct {
 	magicLink     registry.MagicLinkTokenRegistry
 	memberships   registry.GroupMembershipRegistry
 	adminGrants   registry.SystemAdminGrantRegistry
+	inviteAudit   registry.GroupInviteAuditRegistry
 }
 
 // NewUserPurger wires a UserPurger to the registries that own the shared
@@ -56,6 +59,7 @@ func NewUserPurger(
 	magicLink registry.MagicLinkTokenRegistry,
 	memberships registry.GroupMembershipRegistry,
 	adminGrants registry.SystemAdminGrantRegistry,
+	inviteAudit registry.GroupInviteAuditRegistry,
 ) *UserPurger {
 	return &UserPurger{
 		refreshTokens: refreshTokens,
@@ -66,6 +70,7 @@ func NewUserPurger(
 		magicLink:     magicLink,
 		memberships:   memberships,
 		adminGrants:   adminGrants,
+		inviteAudit:   inviteAudit,
 	}
 }
 
@@ -95,6 +100,9 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		{"user_mfa_secrets", func() error { return r.mfaSecrets.DeleteByUser(ctx, tenantID, userID) }},
 		{"user_oauth_identities", func() error { return r.purgeOAuthIdentities(ctx, tenantID, userID) }},
 		{"group_memberships", func() error { return r.purgeMemberships(ctx, tenantID, userID) }},
+		// group_invites_audit rows the user created or accepted (both NOT NULL FK
+		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.
+		{"group_invites_audit", func() error { return r.purgeGroupInvitesAudit(ctx, tenantID, userID) }},
 		// System-admin grant the user HOLDS. RevokeAtomic(allowZero=true)
 		// removes it idempotently. The granted_by back-ref is nulled only on
 		// the postgres side; the memory grant registry has no granted_by index
@@ -161,6 +169,30 @@ func (r *UserPurger) purgeOAuthIdentities(ctx context.Context, tenantID, userID 
 			continue
 		}
 		if err := r.oauth.DeleteByUserAndProvider(ctx, tenantID, userID, id.Provider); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// purgeGroupInvitesAudit deletes every group_invites_audit row that names the
+// user as the invite creator (CreatedBy) OR the accepter (UsedBy) within the
+// tenant. ListByTenant returns the tenant's rows; each match is deleted by id.
+// Mirrors the postgres DELETE so a user who ever created or used an invite can
+// be removed without tripping the NOT NULL FKs (#2147).
+func (r *UserPurger) purgeGroupInvitesAudit(ctx context.Context, tenantID, userID string) error {
+	rows, err := r.inviteAudit.ListByTenant(ctx, tenantID)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		if row.CreatedBy != userID && row.UsedBy != userID {
+			continue
+		}
+		if err := r.inviteAudit.Delete(ctx, row.GetID()); err != nil {
 			return err
 		}
 	}

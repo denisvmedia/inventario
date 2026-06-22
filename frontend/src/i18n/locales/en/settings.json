@@ -4,9 +4,20 @@
     "changePasswordDescription": "Update the password used to sign in to your account.",
     "dangerZone": {
       "deleteAccount": "Delete account",
-      "deleteUnavailableConfirm": "Got it",
-      "deleteUnavailableDescription": "Self-service account deletion is on the roadmap. For now, contact support to remove your account.",
-      "deleteUnavailableTitle": "Account deletion is not yet available",
+      "deleteDialog": {
+        "body": "This permanently erases your account and the inventory you own. Export or back up anything you want to keep first — this can't be undone. Type your email and password to confirm.",
+        "cancel": "Cancel",
+        "confirm": "Delete my account",
+        "confirmEmailLabel": "Confirm your email",
+        "deleting": "Deleting…",
+        "errorGeneric": "Couldn't delete your account. Please try again.",
+        "lastOwner": "You're the only owner of a shared group that still has other members. Transfer ownership to someone else, then try again.",
+        "noPasswordNote": "Your account signs in with a social login, so no password is needed to confirm.",
+        "ownsContent": "You still own content shared with other people. Hand it over or remove it from the shared group first, then try again.",
+        "passwordLabel": "Your password",
+        "title": "Delete your account?",
+        "wrongPassword": "That password is incorrect."
+      },
       "description": "Once your account is deleted, all data is permanently removed.",
       "title": "Danger zone"
     },

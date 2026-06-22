@@ -4,9 +4,20 @@
     "changePasswordDescription": "Aktualizujte heslo používané k přihlášení k vašemu účtu.",
     "dangerZone": {
       "deleteAccount": "Smazat účet",
-      "deleteUnavailableConfirm": "Rozumím",
-      "deleteUnavailableDescription": "Smazání účtu vlastními silami je v plánu. Zatím se prosím obraťte na podporu, která váš účet odstraní.",
-      "deleteUnavailableTitle": "Smazání účtu zatím není k dispozici",
+      "deleteDialog": {
+        "body": "Tímto trvale smažete svůj účet i inventář, který vlastníte. Nejprve si vyexportujte nebo zazálohujte vše, co si chcete ponechat — tuto akci nelze vrátit zpět. Pro potvrzení zadejte svůj e-mail a heslo.",
+        "cancel": "Zrušit",
+        "confirm": "Smazat můj účet",
+        "confirmEmailLabel": "Potvrďte svůj e-mail",
+        "deleting": "Mažu…",
+        "errorGeneric": "Účet se nepodařilo smazat. Zkuste to prosím znovu.",
+        "lastOwner": "Jste jediným vlastníkem sdílené skupiny, která má stále další členy. Předejte vlastnictví někomu jinému a zkuste to znovu.",
+        "noPasswordNote": "Do vašeho účtu se přihlašujete přes sociální síť, takže k potvrzení není potřeba žádné heslo.",
+        "ownsContent": "Stále vlastníte obsah sdílený s ostatními lidmi. Nejprve jej předejte nebo odeberte ze sdílené skupiny a poté to zkuste znovu.",
+        "passwordLabel": "Vaše heslo",
+        "title": "Smazat váš účet?",
+        "wrongPassword": "Toto heslo je nesprávné."
+      },
       "description": "Jakmile bude váš účet smazán, budou všechna data trvale odstraněna.",
       "title": "Nebezpečná zóna"
     },
