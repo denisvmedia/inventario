@@ -116,7 +116,12 @@ func (r *LocationRegistry) Update(ctx context.Context, location models.Location)
 
 func (r *LocationRegistry) AddArea(_ context.Context, locationID, areaID string) error {
 	r.areasLock.Lock()
-	r.areas[locationID] = append(r.areas[locationID], areaID)
+	// Dedup before appending: a double-add inflates the relationship
+	// index, which the delete-guard counts as "still has areas" and
+	// wrongly raises ErrCannotDelete on a location that's actually empty.
+	if !slices.Contains(r.areas[locationID], areaID) {
+		r.areas[locationID] = append(r.areas[locationID], areaID)
+	}
 	r.areasLock.Unlock()
 
 	return nil

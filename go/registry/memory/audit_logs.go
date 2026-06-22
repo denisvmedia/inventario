@@ -113,10 +113,18 @@ func (r *AuditLogRegistry) DeleteOlderThan(_ context.Context, cutoff time.Time) 
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
+	// Collect first, then delete: Delete(pair.Key) mid-iteration unlinks
+	// the current node, so pair.Next() returns nil and the loop stops
+	// after the first match — leaving every older row past the first one
+	// undeleted.
+	var victims []string
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		if pair.Value.Timestamp.Before(cutoff) {
-			r.items.Delete(pair.Key)
+			victims = append(victims, pair.Key)
 		}
+	}
+	for _, key := range victims {
+		r.items.Delete(key)
 	}
 	return nil
 }

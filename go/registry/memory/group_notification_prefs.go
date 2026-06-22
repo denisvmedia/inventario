@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	"github.com/google/uuid"
 
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -55,28 +56,42 @@ func (r *GroupNotificationPrefRegistry) ListByUserGroup(_ context.Context, tenan
 // `default_expr="CURRENT_TIMESTAMP"`, and the postgres Upsert sets
 // `time.Now().UTC()`) — keeping in-memory tests deterministic and
 // directly comparable to integration runs.
-func (r *GroupNotificationPrefRegistry) Upsert(ctx context.Context, pref models.GroupNotificationPref) (*models.GroupNotificationPref, error) {
+func (r *GroupNotificationPrefRegistry) Upsert(_ context.Context, pref models.GroupNotificationPref) (*models.GroupNotificationPref, error) {
 	now := time.Now().UTC()
+	// Hold the write lock across the scan AND the insert: releasing it
+	// between "not found" and Create opens a window where a concurrent
+	// Upsert for the same (tenant, group, user, category) tuple also
+	// sees "not found" and both insert duplicate rows. The CreateOnce
+	// pattern (see MaintenanceReminderRegistry.CreateOnce) does the
+	// find-or-insert under a single Lock; mint IDs ourselves here
+	// because base Create would re-acquire the lock we still hold.
 	r.lock.Lock()
+	defer r.lock.Unlock()
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		p := pair.Value
 		if p.TenantID == pref.TenantID && p.GroupID == pref.GroupID && p.UserID == pref.UserID && p.Category == pref.Category {
 			p.Enabled = pref.Enabled
 			p.UpdatedAt = now
 			v := *p
-			r.lock.Unlock()
 			return &v, nil
 		}
 	}
-	r.lock.Unlock()
-	// Insert path: stamp the timestamps explicitly before delegating
-	// to base Create — the base path doesn't populate them, and the
-	// postgres equivalent does so via the schema default.
+	// Insert path: stamp the timestamps explicitly — the postgres
+	// equivalent populates them via the schema default.
 	if pref.CreatedAt.IsZero() {
 		pref.CreatedAt = now
 	}
 	pref.UpdatedAt = now
-	return r.baseGroupNotificationPrefRegistry.Create(ctx, pref)
+	row := pref
+	if row.ID == "" {
+		row.ID = uuid.New().String()
+	}
+	if row.UUID == "" {
+		row.UUID = uuid.New().String()
+	}
+	r.items.Set(row.ID, &row)
+	v := row
+	return &v, nil
 }
 
 // DeleteByGroup removes every per-user notification override for the

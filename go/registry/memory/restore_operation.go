@@ -93,22 +93,29 @@ func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID st
 
 	var operations []*models.RestoreOperation
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
-		operation := pair.Value
-		if operation.ExportID == exportID {
-			// Load associated steps
-			steps, err := r.restoreStepRegistry.ListByRestoreOperation(ctx, operation.ID)
-			if err != nil {
-				return nil, errxtrace.Wrap("failed to load restore steps", err)
-			}
-
-			// Convert to slice of values instead of pointers for JSON serialization
-			operation.Steps = make([]models.RestoreStep, len(steps))
-			for i, step := range steps {
-				operation.Steps[i] = *step
-			}
-
-			operations = append(operations, operation)
+		if pair.Value.ExportID != exportID {
+			continue
 		}
+
+		// Copy the stored value before populating Steps. pair.Value is a
+		// shared pointer into the backing map; writing op.Steps directly
+		// would mutate the stored entry under RLock — a data race plus
+		// permanent corruption of the canonical record.
+		op := *pair.Value
+
+		// Load associated steps
+		steps, err := r.restoreStepRegistry.ListByRestoreOperation(ctx, op.ID)
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to load restore steps", err)
+		}
+
+		// Convert to slice of values instead of pointers for JSON serialization
+		op.Steps = make([]models.RestoreStep, len(steps))
+		for i, step := range steps {
+			op.Steps[i] = *step
+		}
+
+		operations = append(operations, &op)
 	}
 
 	return operations, nil

@@ -258,9 +258,20 @@ func (r *CommodityLoanRegistry) MarkReminderSent(ctx context.Context, loanID str
 	if r.userID != "" {
 		return false, errxtrace.Wrap("MarkReminderSent requires service-mode registry", registry.ErrInvalidInput)
 	}
-	loan, err := r.Get(ctx, loanID)
-	if err != nil {
-		return false, nil //nolint:nilerr // already-gone is a stable no-op for the worker.
+
+	// Hold the write lock across the read-check-write. Calling Get
+	// (RLock) then Update (Lock) leaves a gap where two sweep workers
+	// can both observe the flag unset and both send the reminder. Mutate
+	// the stored pointer in place under a single Lock so the
+	// check-and-flip is atomic; the (false, nil) returns keep the
+	// already-sent and already-gone outcomes indistinguishable for the
+	// worker.
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	loan, ok := r.items.Get(loanID)
+	if !ok {
+		return false, nil // already-gone is a stable no-op for the worker.
 	}
 	switch kind {
 	case registry.LoanReminderKindOverdue:
@@ -273,9 +284,6 @@ func (r *CommodityLoanRegistry) MarkReminderSent(ctx context.Context, loanID str
 			return false, nil
 		}
 		loan.ReminderSentDueSoon = true
-	}
-	if _, err := r.Update(ctx, *loan); err != nil {
-		return false, errxtrace.Wrap("failed to flip reminder flag", err)
 	}
 	return true, nil
 }

@@ -43,6 +43,12 @@ func (r *TxExecutor[T]) Scan(ctx context.Context) iter.Seq2[T, error] {
 				return
 			}
 		}
+
+		if err := rows.Err(); err != nil {
+			var zero T
+			yield(zero, err)
+			return
+		}
 	}
 }
 
@@ -64,6 +70,12 @@ func (r *TxExecutor[T]) ScanByField(ctx context.Context, field FieldValue) iter.
 			if !yield(entity, err) {
 				return
 			}
+		}
+
+		if err := rows.Err(); err != nil {
+			var zero T
+			yield(zero, err)
+			return
 		}
 	}
 }

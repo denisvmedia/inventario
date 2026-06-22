@@ -18,8 +18,12 @@ type baseUserConcurrencySlotRegistry = Registry[models.UserConcurrencySlot, *mod
 
 type UserConcurrencySlotRegistry struct {
 	*baseUserConcurrencySlotRegistry
-	// Additional mutex for concurrency slot operations
-	slotMutex sync.Mutex
+	// slotMutex serializes AcquireSlot/ReleaseSlot/CleanupExpiredSlots
+	// across every per-request registry the factory hands out. It MUST
+	// be the factory's shared *sync.Mutex — a per-instance mutex gives
+	// each caller its own lock and serializes nothing, letting two
+	// concurrent acquires both pass the cap check.
+	slotMutex *sync.Mutex
 }
 
 // UserConcurrencySlotRegistryFactory creates UserConcurrencySlotRegistry instances with proper context
@@ -50,7 +54,7 @@ func (f *UserConcurrencySlotRegistryFactory) CreateUserRegistry(ctx context.Cont
 
 	return &UserConcurrencySlotRegistry{
 		baseUserConcurrencySlotRegistry: userRegistry,
-		slotMutex:                       sync.Mutex{}, // Create new mutex for this instance
+		slotMutex:                       f.slotMutex, // Share the factory's mutex so acquires serialize
 	}, nil
 }
 
@@ -72,7 +76,7 @@ func (f *UserConcurrencySlotRegistryFactory) CreateServiceRegistry() registry.Us
 
 	return &UserConcurrencySlotRegistry{
 		baseUserConcurrencySlotRegistry: serviceRegistry,
-		slotMutex:                       sync.Mutex{}, // Create new mutex for this instance
+		slotMutex:                       f.slotMutex, // Share the factory's mutex so acquires serialize
 	}
 }
 

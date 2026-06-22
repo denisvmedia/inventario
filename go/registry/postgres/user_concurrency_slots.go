@@ -157,6 +157,20 @@ func (r *UserConcurrencySlotRegistry) AcquireSlot(ctx context.Context, userID, j
 	var result *models.UserConcurrencySlot
 
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Per-(tenant, user) advisory lock serializes concurrent
+		// acquires for the same user so the COUNT+INSERT below is
+		// atomic — without it two callers can both read a stale count
+		// and both insert, blowing past maxSlots (the unique index is
+		// only on job_id, so it doesn't enforce the per-user cap).
+		// xact-scoped, released on COMMIT/ROLLBACK. Mirrors
+		// GroupMembershipRegistry.CreateUnderCap.
+		if _, lockErr := tx.ExecContext(ctx,
+			`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+			r.tenantID, userID,
+		); lockErr != nil {
+			return errxtrace.Wrap("failed to acquire concurrency slot lock", lockErr)
+		}
+
 		// Check current slot counts for the user
 		var activeCount int
 		countQuery := fmt.Sprintf(`
