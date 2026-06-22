@@ -9,7 +9,9 @@ import (
 
 	"github.com/denisvmedia/inventario/cmd/internal/command"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"github.com/denisvmedia/inventario/internal/defaults"
 	"github.com/denisvmedia/inventario/models"
+	"github.com/denisvmedia/inventario/services"
 	"github.com/denisvmedia/inventario/services/admin"
 )
 
@@ -74,6 +76,8 @@ func (c *Command) registerFlags() {
 
 	// Delete options
 	c.Cmd().Flags().BoolVar(&c.config.Force, "force", c.config.Force, "Skip confirmation prompts")
+	c.Cmd().Flags().StringVar(&c.config.UploadLocation, "upload-location", c.config.UploadLocation,
+		"Object-store location of the tenant's uploaded files; required to remove physical blobs (defaults to the configured upload location)")
 }
 
 // deleteTenant handles the tenant deletion process
@@ -113,6 +117,15 @@ func (c *Command) deleteTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 			fmt.Printf("Warning: failed to close admin service: %v\n", closeErr)
 		}
 	}()
+
+	// Wire a FileService bound to the same backend so the hard-delete also
+	// removes the tenant's physical blobs (#2115). Falls back to the configured
+	// default upload location when --upload-location is not given.
+	uploadLocation := strings.TrimSpace(cfg.UploadLocation)
+	if uploadLocation == "" {
+		uploadLocation = defaults.GetUploadLocation()
+	}
+	adminService.SetFileService(services.NewFileService(adminService.FactorySet(), uploadLocation))
 
 	// Find the tenant to delete
 	tenant, err := adminService.GetTenant(context.Background(), idOrSlug)

@@ -135,6 +135,19 @@ func NewFactorySet() *registry.FactorySet {
 		fs.GroupNotificationPrefRegistry,
 		fs.GroupMembershipRegistry,
 	)
+	// UserPurger (#2116): clears a single user's auth/identity rows during the
+	// admin user hard-delete. Takes the plain singleton registries that own the
+	// shared in-memory maps; all eight are set above, so it can be wired here.
+	fs.UserPurger = NewUserPurger(
+		fs.RefreshTokenRegistry,
+		fs.UserMFASecretRegistry,
+		fs.OAuthIdentityRegistry,
+		fs.PasswordResetRegistry,
+		fs.EmailVerificationRegistry,
+		fs.MagicLinkTokenRegistry,
+		fs.GroupMembershipRegistry,
+		fs.SystemAdminGrantRegistry,
+	)
 	// SystemStats (#843): the memory backend is dev/test only and its
 	// data registries are tenant/group-scoped behind the per-request
 	// context, with no cheap installation-wide roll-up. Rather than range
@@ -148,6 +161,10 @@ func NewFactorySet() *registry.FactorySet {
 		return registry.SystemStats{}, nil
 	}
 	fs.PingFn = func(context.Context) error { return nil }
+
+	// TenantPurger (#2115) reads almost every registry off the FactorySet, so
+	// it MUST be wired LAST — after every other fs.* field is populated above.
+	fs.TenantPurger = NewTenantPurger(fs)
 
 	return fs
 }
