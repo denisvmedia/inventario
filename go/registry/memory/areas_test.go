@@ -141,6 +141,46 @@ func TestAreaRegistry_Commodities(t *testing.T) {
 	c.Assert(commodities, qt.Contains, "commodity2")
 }
 
+// TestAreaRegistry_AddCommodity_Dedup pins the relationship-index dedup
+// fix: a double AddCommodity used to append twice, so GetCommodities (and
+// any count-based delete-guard reading it) saw two entries for one
+// commodity. The discriminating assertion below is the HasLen(1) on the
+// index; the trailing remove+Delete passes on both old and new code
+// (DeleteCommodity uses slices.DeleteFunc, which strips every duplicate).
+func TestAreaRegistry_AddCommodity_Dedup(t *testing.T) {
+	c := qt.New(t)
+
+	userID := "test-user-123"
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: userID},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	locationRegistryFactory := memory.NewLocationRegistryFactory()
+	locationRegistry := locationRegistryFactory.MustCreateUserRegistry(ctx)
+	areaRegistryFactory := memory.NewAreaRegistryFactory(locationRegistryFactory)
+	areaRegistry := areaRegistryFactory.MustCreateUserRegistry(ctx).(*memory.AreaRegistry)
+
+	createdLocation, err := locationRegistry.Create(ctx, models.Location{})
+	c.Assert(err, qt.IsNil)
+	createdArea, err := areaRegistry.Create(ctx, models.Area{LocationID: createdLocation.GetID(), Name: "area1"})
+	c.Assert(err, qt.IsNil)
+
+	// Add the same commodity twice — the index must hold a single entry.
+	c.Assert(areaRegistry.AddCommodity(ctx, createdArea.ID, "commodity1"), qt.IsNil)
+	c.Assert(areaRegistry.AddCommodity(ctx, createdArea.ID, "commodity1"), qt.IsNil)
+
+	commodities, err := areaRegistry.GetCommodities(ctx, createdArea.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(commodities, qt.HasLen, 1)
+
+	// Removing it once must clear the guard so Delete is allowed.
+	c.Assert(areaRegistry.DeleteCommodity(ctx, createdArea.ID, "commodity1"), qt.IsNil)
+	c.Assert(areaRegistry.Delete(ctx, createdArea.ID), qt.IsNil)
+}
+
 func TestAreaRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
 

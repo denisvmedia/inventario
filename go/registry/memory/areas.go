@@ -139,14 +139,16 @@ func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Ar
 		return nil, errxtrace.Wrap("failed to update area", err)
 	}
 
-	// Handle location registry tracking - location changed
+	// Handle location registry tracking - only when the location actually
+	// changed. The previous `else if oldLocationID == ""` fallback re-added
+	// the area whenever the existing record had no LocationID; Create
+	// already performs the initial AddArea (areas.go), so that fallback was
+	// a redundant re-add that inflated the parent location's area index and
+	// tripped the delete-guard's false ErrCannotDelete.
 	if oldLocationID != "" && oldLocationID != updatedArea.LocationID {
 		// Remove from old location
 		_ = r.locationRegistry.DeleteArea(ctx, oldLocationID, updatedArea.GetID())
 		// Add to new location
-		_ = r.locationRegistry.AddArea(ctx, updatedArea.LocationID, updatedArea.GetID())
-	} else if oldLocationID == "" {
-		// This is a fallback case - add to location if not already tracked
 		_ = r.locationRegistry.AddArea(ctx, updatedArea.LocationID, updatedArea.GetID())
 	}
 
@@ -180,7 +182,12 @@ func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 
 func (r *AreaRegistry) AddCommodity(_ context.Context, areaID, commodityID string) error {
 	r.commoditiesLock.Lock()
-	r.commodities[areaID] = append(r.commodities[areaID], commodityID)
+	// Dedup before appending: a double-add inflates the relationship
+	// index, which the delete-guard counts as "still has commodities"
+	// and wrongly raises ErrCannotDelete on an area that's actually empty.
+	if !slices.Contains(r.commodities[areaID], commodityID) {
+		r.commodities[areaID] = append(r.commodities[areaID], commodityID)
+	}
 	r.commoditiesLock.Unlock()
 
 	return nil

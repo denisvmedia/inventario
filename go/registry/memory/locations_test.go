@@ -90,6 +90,50 @@ func TestLocationRegistry_Areas(t *testing.T) {
 	c.Assert(retrievedLocation.GetID(), qt.Equals, createdLocation.GetID())
 }
 
+// TestLocationRegistry_AddArea_Dedup pins the relationship-index dedup
+// fix: a double AddArea used to append twice, so GetAreas (and any
+// count-based delete-guard reading it) saw two entries for one area. The
+// discriminating assertion below is the HasLen(1) on the index; the
+// trailing remove+Delete passes on both old and new code (DeleteArea uses
+// slices.DeleteFunc, which strips every duplicate).
+func TestLocationRegistry_AddArea_Dedup(t *testing.T) {
+	c := qt.New(t)
+
+	factorySet := memory.NewFactorySet()
+	user := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-123"},
+			TenantID: "test-tenant-id",
+		},
+		Email: "test@example.com",
+		Name:  "Test User",
+	}
+
+	userReg := factorySet.CreateServiceRegistrySet().UserRegistry
+	u, err := userReg.Create(context.Background(), user)
+	c.Assert(err, qt.IsNil)
+
+	ctx := appctx.WithUser(context.Background(), u)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	locationRegistry := registrySet.LocationRegistry.(*memory.LocationRegistry)
+
+	createdLocation, err := locationRegistry.Create(ctx, models.Location{})
+	c.Assert(err, qt.IsNil)
+
+	// Add the same area twice — the index must hold a single entry.
+	c.Assert(locationRegistry.AddArea(ctx, createdLocation.GetID(), "area1"), qt.IsNil)
+	c.Assert(locationRegistry.AddArea(ctx, createdLocation.GetID(), "area1"), qt.IsNil)
+
+	areas, err := locationRegistry.GetAreas(ctx, createdLocation.GetID())
+	c.Assert(err, qt.IsNil)
+	c.Assert(areas, qt.HasLen, 1)
+
+	// Removing it once must clear the guard so Delete is allowed.
+	c.Assert(locationRegistry.DeleteArea(ctx, createdLocation.GetID(), "area1"), qt.IsNil)
+	c.Assert(locationRegistry.Delete(ctx, createdLocation.GetID()), qt.IsNil)
+}
+
 func TestLocationRegistry_Delete(t *testing.T) {
 	c := qt.New(t)
 

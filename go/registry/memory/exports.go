@@ -15,21 +15,27 @@ import (
 // ExportRegistryFactory creates ExportRegistry instances with proper context
 type ExportRegistryFactory struct {
 	baseExportRegistry *Registry[models.Export, *models.Export]
+	// restoreOperationFactory lets Delete clear the restore pipeline that
+	// references an export before the export row is removed, mirroring the
+	// postgres backend (#2118).
+	restoreOperationFactory *RestoreOperationRegistryFactory
 }
 
 // ExportRegistry is a context-aware registry that can only be created through the factory
 type ExportRegistry struct {
 	*Registry[models.Export, *models.Export]
 
-	userID string
+	restoreOperationFactory *RestoreOperationRegistryFactory
+	userID                  string
 }
 
 var _ registry.ExportRegistry = (*ExportRegistry)(nil)
 var _ registry.ExportRegistryFactory = (*ExportRegistryFactory)(nil)
 
-func NewExportRegistryFactory() *ExportRegistryFactory {
+func NewExportRegistryFactory(restoreOperationFactory *RestoreOperationRegistryFactory) *ExportRegistryFactory {
 	return &ExportRegistryFactory{
-		baseExportRegistry: NewRegistry[models.Export, *models.Export](),
+		baseExportRegistry:      NewRegistry[models.Export, *models.Export](),
+		restoreOperationFactory: restoreOperationFactory,
 	}
 }
 
@@ -55,8 +61,9 @@ func (f *ExportRegistryFactory) CreateUserRegistry(ctx context.Context) (registr
 	}
 
 	return &ExportRegistry{
-		Registry: userRegistry,
-		userID:   user.ID,
+		Registry:                userRegistry,
+		restoreOperationFactory: f.restoreOperationFactory,
+		userID:                  user.ID,
 	}, nil
 }
 
@@ -69,8 +76,9 @@ func (f *ExportRegistryFactory) CreateServiceRegistry() registry.ExportRegistry 
 	}
 
 	return &ExportRegistry{
-		Registry: serviceRegistry,
-		userID:   "", // Clear userID to bypass user filtering
+		Registry:                serviceRegistry,
+		restoreOperationFactory: f.restoreOperationFactory,
+		userID:                  "", // Clear userID to bypass user filtering
 	}
 }
 
@@ -115,6 +123,37 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 
 	if export.IsDeleted() {
 		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("reason", "export already deleted"))
+	}
+
+	// Clear the restore pipeline that references this export before the
+	// export row is removed, mirroring the postgres ExportRegistry.Delete
+	// (#2118). Postgres MUST do this because restore_operations.export_id is
+	// a NOT NULL NO ACTION FK; memory has no FK enforcement, but the two
+	// backends have to behave identically — otherwise the in-memory store is
+	// left with restore operations orphaned to a deleted export, and a
+	// memory-backed test of export deletion would pass regardless of the
+	// postgres cleanup. RestoreOperationRegistry.Delete cascades to the
+	// operation's steps; a service-scoped registry is used because
+	// ListByExport already bounds the work to this (globally unique) export.
+	//
+	// Two intentional differences from the postgres path, both benign here:
+	// (1) postgres additionally bounds its DELETEs by the transaction's
+	// tenant+group RLS GUCs, whereas memory relies solely on the unique
+	// export id plus the user-scoped ownership gate above — equivalent
+	// because a restore op always co-resides in its export's group. (2) The
+	// postgres delete is a single transaction; this loop is best-effort and
+	// non-atomic. In practice it cannot partially fail: the memory
+	// RestoreOperationRegistry.Delete only ever returns nil/ErrNotFound for a
+	// row ListByExport just returned, so there is no mid-loop rollback case.
+	restoreOps := r.restoreOperationFactory.CreateServiceRegistry()
+	ops, err := restoreOps.ListByExport(ctx, id)
+	if err != nil {
+		return errxtrace.Wrap("failed to list restore operations for export", err)
+	}
+	for _, op := range ops {
+		if err := restoreOps.Delete(ctx, op.ID); err != nil {
+			return errxtrace.Wrap("failed to delete restore operation for export", err)
+		}
 	}
 
 	// Hard delete the export

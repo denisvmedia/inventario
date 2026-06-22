@@ -173,6 +173,35 @@ func (r *ExportRegistry) Delete(ctx context.Context, id string) error {
 			return errxtrace.Wrap("failed to get export", err)
 		}
 
+		// Clear the restore pipeline that references this export before the
+		// export row is deleted (#2118). restore_operations.export_id is a
+		// NOT NULL NO ACTION FK to exports(id), so a bare DELETE FROM exports
+		// trips a foreign-key violation (500) for any user who ran a restore
+		// from this export. Mirror the GroupPurger thumbnail-chain pattern:
+		// clear the referencing rows in FK-safe order (deepest child first)
+		// inside this same transaction. Both DELETEs are RLS-scoped to the
+		// current tenant + group via the session GUCs set on the transaction,
+		// and additionally bounded to this export through the export_id
+		// subquery, so they can't touch another export's restore pipeline.
+		//
+		// restore_steps.restore_operation_id is also a NO ACTION FK to
+		// restore_operations(id) (no ON DELETE CASCADE), so the explicit
+		// restore_steps DELETE is mandatory, not merely belt-and-suspenders.
+		deleteRestoreStepsQuery := fmt.Sprintf(
+			"DELETE FROM %s WHERE restore_operation_id IN (SELECT id FROM %s WHERE export_id = $1)",
+			r.tableNames.RestoreSteps(), r.tableNames.RestoreOperations(),
+		)
+		if _, err := tx.ExecContext(ctx, deleteRestoreStepsQuery, id); err != nil {
+			return errxtrace.Wrap("failed to delete restore steps for export", err)
+		}
+
+		deleteRestoreOperationsQuery := fmt.Sprintf(
+			"DELETE FROM %s WHERE export_id = $1", r.tableNames.RestoreOperations(),
+		)
+		if _, err := tx.ExecContext(ctx, deleteRestoreOperationsQuery, id); err != nil {
+			return errxtrace.Wrap("failed to delete restore operations for export", err)
+		}
+
 		// Hard delete the export
 		deleteExportQuery := fmt.Sprintf("DELETE FROM %s WHERE id = $1", r.tableNames.Exports())
 		result, err := tx.ExecContext(ctx, deleteExportQuery, id)
