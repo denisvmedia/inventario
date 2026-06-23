@@ -107,7 +107,7 @@ func (c *Command) setupData(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 	}
 
 	fmt.Println("=== INITIAL DATASET SETUP ===")
-	fmt.Printf("Database: %s\n", dsn)
+	fmt.Printf("Database: %s\n", shared.RedactDSN(dsn))
 	if cfg.DryRun {
 		fmt.Println("Mode: DRY RUN (no changes will be made)")
 	} else {

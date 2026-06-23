@@ -63,7 +63,7 @@ func (c *Command) migrateReset(cfg *Config, dbConfig *shared.DatabaseConfig) err
 	migr := migrator.NewWithFallback(dsn, c.config.MigrationsDir)
 
 	fmt.Println("=== MIGRATE RESET ===")
-	fmt.Printf("Database: %s\n", dsn)
+	fmt.Printf("Database: %s\n", shared.RedactDSN(dsn))
 	fmt.Println()
 
 	migratorArgs := migrator.Args{

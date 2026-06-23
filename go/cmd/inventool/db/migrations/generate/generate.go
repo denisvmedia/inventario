@@ -61,7 +61,7 @@ func (c *Command) migrateGenerate(cfg *Config, dbConfig *shared.DatabaseConfig, 
 	dsn := dbConfig.DBDSN
 
 	fmt.Println("=== MIGRATE GENERATE ===")
-	fmt.Printf("Database: %s\n", dsn)
+	fmt.Printf("Database: %s\n", shared.RedactDSN(dsn))
 	fmt.Println()
 
 	gen, err := generator.New(dsn, cfg.GoEntitiesDir)
