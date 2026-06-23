@@ -17,6 +17,11 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
       # Ensure proper initialization
       PGUSER: ${POSTGRES_USER:-inventario}
+      # Postgres 18+ images default PGDATA to a version-specific subdir and refuse
+      # to start when data is bind-mounted directly at /var/lib/postgresql/data
+      # ("unused mount/volume"). Pin PGDATA to a subdirectory of the mount so the
+      # bind mount keeps working (data lands in ./data/postgres/pgdata).
+      PGDATA: /var/lib/postgresql/data/pgdata
 
     volumes:
       # Persistent PostgreSQL data storage (host mount for easy access)
@@ -37,7 +42,11 @@ services:
     image: redis:8-alpine
     restart: unless-stopped
     volumes:
-      - ./data/redis:/data
+      # Named volume (not a ./data bind mount): the redis image's WORKDIR is /data,
+      # so a bind mount there makes every healthcheck/exec fail 'chdir /data' if the
+      # host dir is ever recreated (a known Docker Desktop staleness footgun). The
+      # token blacklist is a cache, so host-side access isn't needed.
+      - redis-data:/data
     networks:
       - inventario-internal
     healthcheck:
@@ -120,6 +129,16 @@ services:
       # ADMIN_PASSWORD in .env (see .env.example).
       INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env before first run (see .env.example)}"
       INVENTARIO_MIGRATE_DATA_ADMIN_NAME: ${ADMIN_NAME:-System Administrator}
+      # Back-office (platform operator) — auto-provisioned on first run, idempotent.
+      # Authenticates at /backoffice/login, OUTSIDE the tenant model.
+      BACKOFFICE_EMAIL: ${BACKOFFICE_EMAIL:-backoffice@example.com}
+      BACKOFFICE_NAME: ${BACKOFFICE_NAME:-Platform Admin}
+      # Fail closed like ADMIN_PASSWORD: setup.sh writes a real value; the manual
+      # path must set BACKOFFICE_PASSWORD in .env (see .env.example).
+      BACKOFFICE_PASSWORD: "${BACKOFFICE_PASSWORD:?set BACKOFFICE_PASSWORD in .env before first run (see .env.example)}"
+      # Demo default: password-only login. For production set true and enrol TOTP
+      # via 'inventario backoffice mfa setup' before the operator can sign in.
+      BACKOFFICE_MFA_ENFORCED: ${BACKOFFICE_MFA_ENFORCED:-false}
     volumes:
       # Track initialization state to prevent re-running (host mount for easy access)
       - ./data/init-state:/app/state
@@ -195,3 +214,8 @@ networks:
   inventario-internal:
     driver: bridge
     internal: false  # Allow outbound internet access for the application
+
+# Named volumes. Redis uses one (see the redis service) so its /data WORKDIR is
+# always present in the container regardless of host ./data state.
+volumes:
+  redis-data:

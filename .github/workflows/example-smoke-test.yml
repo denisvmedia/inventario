@@ -1,0 +1,117 @@
+name: Example Smoke Test
+
+# Exercises example/setup.sh and the whole example/ deployment kit. Deliberately
+# PR-only and path-scoped: it runs ONLY on pull requests that touch example/** or
+# this workflow file, and never on master (no `push:` trigger) — the example is a
+# convenience kit, not a release gate, so master CI shouldn't pay for it.
+on:
+  pull_request:
+    paths:
+      - 'example/**'
+      - '.github/workflows/example-smoke-test.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  example-smoke:
+    name: setup.sh + example stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: example
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Lint setup.sh + init scripts
+        run: |
+          set -euo pipefail
+          bash -n setup.sh
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y shellcheck
+          fi
+          shellcheck -S warning setup.sh scripts/*.sh
+
+      - name: setup.sh --help
+        run: ./setup.sh --help
+
+      - name: Validate both modes (config only)
+        run: |
+          set -euo pipefail
+          # Source mode: keeps the 4 build blocks; wires BACKOFFICE_* into init-data.
+          ./setup.sh --mode source -y --no-start --force
+          docker compose config -q
+          test "$(docker compose config | grep -c 'build:')" = "4"
+          docker compose config | grep -q 'BACKOFFICE_PASSWORD'
+          # Image mode: drops build via `build: !reset null` (0 build keys, edge image).
+          ./setup.sh --mode image -y --no-start --force
+          docker compose config -q
+          test "$(docker compose config | grep -c 'build:')" = "0"
+          docker compose config --images | grep -q 'inventario:edge'
+
+      - name: Bring up the example stack with seeding (image mode)
+        run: |
+          set -euo pipefail
+          # The non-root (uid 1001) app/init containers write these bind mounts.
+          mkdir -p data/init-state data/uploads
+          chmod 777 data/init-state data/uploads
+          # image mode: pull edge, start, seed demo data, then disable the seed endpoint.
+          # NOTE: tests the kit wiring against the published edge image. Source-mode
+          # builds are covered by the root docker-compose-smoke-test workflow.
+          ./setup.sh --mode image -y --seed --force
+
+      - name: Smoke test — tenant login, backoffice login, seed, endpoint disabled
+        run: |
+          set -euo pipefail
+          # Read every value from the generated .env so the test never drifts from setup.sh defaults.
+          PORT=$(grep '^INVENTARIO_HOST_PORT=' .env | cut -d= -f2-)
+          ADMIN_EMAIL=$(grep '^ADMIN_EMAIL=' .env | cut -d= -f2-)
+          ADMIN_PW=$(grep '^ADMIN_PASSWORD=' .env | cut -d= -f2-)
+          BO_EMAIL=$(grep '^BACKOFFICE_EMAIL=' .env | cut -d= -f2-)
+          BO_PW=$(grep '^BACKOFFICE_PASSWORD=' .env | cut -d= -f2-)
+          BASE="http://localhost:${PORT}"
+
+          echo "--- postgres 18 data landed in the pgdata subdir (PGDATA fix) ---"
+          sudo test -f data/postgres/pgdata/PG_VERSION
+
+          echo "--- tenant admin login (expect access_token) ---"
+          curl -fsS -X POST "$BASE/api/v1/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PW}\"}" \
+            | jq -e '.access_token' >/dev/null
+
+          echo "--- backoffice operator login (auto-provisioned; expect access_token) ---"
+          curl -fsS -X POST "$BASE/api/v1/backoffice/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"email\":\"${BO_EMAIL}\",\"password\":\"${BO_PW}\"}" \
+            | jq -e '.access_token' >/dev/null
+
+          echo "--- seed endpoint must be DISABLED again after seeding (expect 404) ---"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/v1/seed" \
+            -H 'Content-Type: application/json' -d '{}')
+          test "$code" = "404" || { echo "expected 404, got $code"; exit 1; }
+
+          echo "--- seeded demo data present (expect commodities > 0) ---"
+          n=$(docker compose exec -T postgres psql -U inventario -d inventario -tA \
+            -c 'select count(*) from commodities;')
+          echo "commodities=$n"
+          test "$n" -gt 0
+
+          echo "--- override left clean (no seed env in steady state) ---"
+          test "$(grep -c 'ENABLE_SEED_ENDPOINT' docker-compose.override.yaml)" = "0"
+
+          echo "=== all example smoke checks passed ==="
+
+      - name: Print service logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
