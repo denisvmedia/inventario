@@ -170,9 +170,9 @@ When the override repeats 3+ times, extract a thin wrapper (still in
 - **Re-implementing a primitive.** If `<Button>` exists, don't write `<button
   className="border rounded …">`. Same for `<Input>`, `<Dialog>`,
   `<DropdownMenu>`.
-- **`window.confirm()`.** Use `<AlertDialog>` for destructive flows, or
-  `useConfirm()` (`src/hooks/useConfirm.tsx`) which wraps an
-  `AlertDialog` in a promise.
+- **`window.confirm()`.** Use `useConfirm()`
+  (`src/hooks/useConfirm.tsx`) for destructive flows, which wraps the
+  generic `<Dialog>` in a promise (there is no `AlertDialog` primitive).
 - **Pulling DOM refs to coerce focus.** Radix primitives expose
   `onOpenChange`, `onSelect`, `onCloseAutoFocus`, etc. Read the primitive's
   props before reaching for an imperative ref.

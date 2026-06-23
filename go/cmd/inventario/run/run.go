@@ -75,7 +75,7 @@ PREREQUISITES:
 SERVER ENDPOINTS:
   Once running, the server provides:
   • Web Interface: http://localhost:3333 (or your specified address)
-  • API Documentation: http://localhost:3333/api/docs (Swagger UI)
+  • API Documentation: http://localhost:3333/swagger (Swagger UI)
   • Liveness Probe: http://localhost:3333/healthz
   • Readiness Probe: http://localhost:3333/readyz
 

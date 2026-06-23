@@ -4,18 +4,18 @@ This directory contains end-to-end tests that perform Create, Read, Update, and 
 
 ## Test Files
 
-### Original CRUD Tests (Complex)
+The CRUD coverage that remains as standalone "simple CRUD" specs is:
 
-- `location-crud.spec.ts`: Tests CRUD operations for locations
-- `area-crud.spec.ts`: Tests CRUD operations for areas
-- `commodity-crud.spec.ts`: Tests CRUD operations for commodities
+- `commodity-simple-crud.spec.ts`: CRUD operations for commodities
+- `locations-crud.spec.ts`: CRUD operations for locations
 
-### Simplified CRUD Tests (Recommended)
-
-- `location-simple-crud.spec.ts`: Simplified CRUD operations for locations
-- `area-simple-crud.spec.ts`: Simplified CRUD operations for areas
-- `commodity-simple-crud.spec.ts`: Simplified CRUD operations for commodities
-- `basic-crud.spec.ts`: Basic create operations for all entities
+> Earlier iterations of this suite also shipped `location-crud`,
+> `area-crud`, `commodity-crud`, `location-simple-crud`,
+> `area-simple-crud`, and `basic-crud` specs. Those files have been
+> removed; their scenarios are now covered by the broader feature specs
+> in this directory (e.g. `commodity-bulk-and-filter.spec.ts`,
+> `bulk-actions.spec.ts`, `groups.spec.ts`). Don't expect the old
+> filenames to exist.
 
 ## Running the Tests
 
@@ -28,38 +28,24 @@ Make sure you have the application stack running:
 npm run stack
 ```
 
-### Running All CRUD Tests
+### Running the CRUD specs
 
 ```bash
 # From the e2e directory
-# Run original CRUD tests
-npm run test:crud
 
-# Run simplified CRUD tests (recommended)
-npm run test:simple-crud
-```
-
-### Running Individual CRUD Tests
-
-```bash
-# Run only location CRUD tests
-npm run test:location-crud
-
-# Run only area CRUD tests
-npm run test:area-crud
-
-# Run only commodity CRUD tests
+# Commodity CRUD (chromium only)
 npm run test:commodity-crud
 
-# Run only basic CRUD tests
-npm run test:basic-crud
+# Or run any spec directly
+npx playwright test commodity-simple-crud.spec.ts --project=chromium
+npx playwright test locations-crud.spec.ts --project=chromium
 ```
 
 ### Running with UI Mode
 
 ```bash
 # From the e2e directory
-npx playwright test location-crud.spec.ts --ui
+npx playwright test commodity-simple-crud.spec.ts --ui
 ```
 
 ## Test Artifacts

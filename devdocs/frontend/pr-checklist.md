@@ -60,7 +60,7 @@ genuinely don't apply.
 
 - [ ] All form fields have `<Label htmlFor>` or `aria-label` (devdocs/frontend/accessibility.md).
 - [ ] Icon-only buttons have `aria-label`.
-- [ ] Modals use `<Dialog>` / `<AlertDialog>` / `<Sheet>` — never `window.confirm()` or hand-rolled overlays.
+- [ ] Modals use `<Dialog>` / `useConfirm()` / `<Sheet>` — never `window.confirm()` or hand-rolled overlays.
 - [ ] Focus-visible rings preserved (no naked `outline: none`).
 - [ ] Color is paired with icon + text for any error / success state.
 - [ ] Page-level test runs `axe(container)` and is clean.

@@ -21,7 +21,7 @@ matters more than wall-time.
 
 1. `.github/filters.yml` defines named filters (`go`, `frontend`, `e2e`,
    `image_inputs`, etc.). Each filter is a list of path globs.
-2. Each PR-event workflow has a `changes` job that runs `dorny/paths-filter@v3`
+2. Each PR-event workflow has a `changes` job that runs `dorny/paths-filter@v4`
    against that file and exposes the result as job outputs.
 3. Every existing job in the workflow gains a `needs: changes` dependency and
    an `if:` predicate of the form:
