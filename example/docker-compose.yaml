@@ -115,7 +115,10 @@ services:
       INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME: ${DEFAULT_TENANT_NAME:-Default Organization}
       INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG: ${DEFAULT_TENANT_SLUG:-default}
       INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
-      INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin123}
+      # Fail closed: refuse to start rather than seed a public default admin
+      # password. setup.sh always writes a real value; the manual path must set
+      # ADMIN_PASSWORD in .env (see .env.example).
+      INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD: "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env before first run (see .env.example)}"
       INVENTARIO_MIGRATE_DATA_ADMIN_NAME: ${ADMIN_NAME:-System Administrator}
     volumes:
       # Track initialization state to prevent re-running (host mount for easy access)
