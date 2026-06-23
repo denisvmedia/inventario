@@ -73,9 +73,18 @@ TENANT_NAME="Default Organization"
 TENANT_SLUG="default"
 EPHEMERAL_SECRETS=0
 START=""                      # "" => prompt ; 1 => start ; 0 => no-start
+SEED=""                       # "" => prompt ; 1 => seed ; 0 => no-seed
+SEEDED=0                      # 1 once demo data has been seeded this run
 ASSUME_YES=0
 FORCE=0
 ENV_FLAGS_SUPPLIED=0          # 1 if any .env-only value flag was passed
+
+# Back-office (platform operator) — auto-provisioned by init-data on first run.
+BACKOFFICE_EMAIL="backoffice@example.com"
+BACKOFFICE_NAME="Platform Admin"
+BACKOFFICE_PASSWORD=""        # empty => generate
+BACKOFFICE_PASSWORD_GENERATED=0
+BACKOFFICE_MFA_ENFORCED="false"   # demo default: password-only login
 
 usage() {
   cat >&2 <<EOF
@@ -101,12 +110,19 @@ ${C_BOLD}Options:${C_RESET}
                             password is generated and printed once at the end.
   --tenant-name <name>      Default organization name. Default: "Default Organization".
   --tenant-slug <slug>      Default tenant slug. Default: default.
+  --backoffice-email <e>    Back-office (platform operator) email. Default: backoffice@example.com.
+  --backoffice-password <p> Back-office password. If omitted, a strong random one
+                            is generated and printed once at the end.
   --ephemeral-secrets       Do NOT persist JWT/file-signing secrets; leave them
                             empty so the app auto-generates throwaway keys per
                             restart (fine for local testing, not production).
   --start                   Bring the stack up after preparing.
   --no-start                Do not start the stack (just prepare files).
                             Default: prompt; with -y defaults to --no-start.
+  --seed                    After start, seed the database with demo data so the
+                            app is not empty. Enables the seed endpoint only for
+                            the seeding step, then disables it again. Implies --start.
+  --no-seed                 Do not seed. Default: prompt when starting; no with -y.
   -y, --yes                 Non-interactive; accept all defaults.
   --force                   Overwrite existing .env/override, backing up the old
                             file to <file>.bak.<n> first.
@@ -155,12 +171,22 @@ parse_args() {
       --tenant-slug)
         if [ "$has_val" -eq 0 ]; then [ "$#" -ge 2 ] || die "Option '$key' requires a value."; val="$2"; shift; fi
         TENANT_SLUG="$val"; ENV_FLAGS_SUPPLIED=1 ;;
+      --backoffice-email)
+        if [ "$has_val" -eq 0 ]; then [ "$#" -ge 2 ] || die "Option '$key' requires a value."; val="$2"; shift; fi
+        BACKOFFICE_EMAIL="$val"; ENV_FLAGS_SUPPLIED=1 ;;
+      --backoffice-password)
+        if [ "$has_val" -eq 0 ]; then [ "$#" -ge 2 ] || die "Option '$key' requires a value."; val="$2"; shift; fi
+        BACKOFFICE_PASSWORD="$val"; ENV_FLAGS_SUPPLIED=1 ;;
       --ephemeral-secrets)
         EPHEMERAL_SECRETS=1 ;;
       --start)
         START=1 ;;
       --no-start)
         START=0 ;;
+      --seed)
+        SEED=1 ;;
+      --no-seed)
+        SEED=0 ;;
       -y|--yes)
         ASSUME_YES=1 ;;
       --force)
@@ -368,10 +394,14 @@ write_env() {
   # User-supplied values may contain '$'; escape them so Compose does not
   # interpolate them away. Generated secrets/passwords are alnum/hex (no-op).
   local env_tenant_name env_tenant_slug env_admin_email env_admin_password
+  local env_bo_email env_bo_name env_bo_password
   env_tenant_name="$(esc_env "$TENANT_NAME")"
   env_tenant_slug="$(esc_env "$TENANT_SLUG")"
   env_admin_email="$(esc_env "$ADMIN_EMAIL")"
   env_admin_password="$(esc_env "$ADMIN_PASSWORD")"
+  env_bo_email="$(esc_env "$BACKOFFICE_EMAIL")"
+  env_bo_name="$(esc_env "$BACKOFFICE_NAME")"
+  env_bo_password="$(esc_env "$BACKOFFICE_PASSWORD")"
 
   # Default DB credentials match .env.example (fine for a single-host example).
   # Subshell with a tight umask so the secrets file is 0600 from the first byte
@@ -422,6 +452,12 @@ DEFAULT_TENANT_SLUG=${env_tenant_slug}
 ADMIN_EMAIL=${env_admin_email}
 ADMIN_PASSWORD=${env_admin_password}
 ADMIN_NAME=System Administrator
+
+# Back-office (platform operator) — auto-provisioned on first run (/backoffice/login).
+BACKOFFICE_EMAIL=${env_bo_email}
+BACKOFFICE_NAME=${env_bo_name}
+BACKOFFICE_PASSWORD=${env_bo_password}
+BACKOFFICE_MFA_ENFORCED=${BACKOFFICE_MFA_ENFORCED}
 EOF
   )
 
@@ -507,6 +543,19 @@ services:
 EOF
   fi
 
+  # Opt-in DB seeding (setup.sh --seed): enable the public, unauthenticated,
+  # RLS-bypassing seed endpoint + bundled blob fixtures on the main service.
+  # These lines append under the inventario service's environment: block (the
+  # last block in both modes). setup.sh enables them ONLY to seed, then
+  # regenerates this override WITHOUT them and recreates the container, so the
+  # endpoint is OFF in the steady state.
+  if [ "${SEED:-0}" = "1" ]; then
+    {
+      printf '      %s\n' 'INVENTARIO_RUN_ENABLE_SEED_ENDPOINT: "true"'
+      printf '      %s\n' 'INVENTARIO_SEED_ALLOW_BLOB_UPLOADS: "true"'
+    } >> "$tmp"
+  fi
+
   if [ -f "$OVERRIDE_FILE" ] && cmp -s "$tmp" "$OVERRIDE_FILE"; then
     rm -f "$tmp"
     success "docker-compose.override.yaml already current (${MODE} mode) — left unchanged."
@@ -566,6 +615,34 @@ prepare_data_dirs() {
 }
 
 # ---------------------------------------------------------------------------
+# Seed demo data via the (transiently enabled) seed endpoint. The caller is
+# responsible for disabling the endpoint again afterwards.
+# ---------------------------------------------------------------------------
+seed_database() {
+  section "Seed demo data"
+  local port email slug body
+  port="$(unesc_env "$(read_env_value INVENTARIO_HOST_PORT)")"; port="${port:-$PORT}"
+  email="$(unesc_env "$(read_env_value ADMIN_EMAIL)")"; email="${email:-$ADMIN_EMAIL}"
+  slug="$(unesc_env "$(read_env_value DEFAULT_TENANT_SLUG)")"; slug="${slug:-$TENANT_SLUG}"
+
+  if ! command -v curl >/dev/null 2>&1; then
+    warn "curl not found on host; skipping seeding. Seed manually: POST http://localhost:${port}/api/v1/seed"
+    return 0
+  fi
+
+  body="$(printf '{"user_email":"%s","tenant_slug":"%s"}' "$email" "$slug")"
+  log "Seeding demo data into tenant '${slug}' (user ${email}) ..."
+  if curl -fsS --max-time 120 -X POST "http://localhost:${port}/api/v1/seed" \
+       -H 'Content-Type: application/json' -d "$body" >/dev/null 2>&1; then
+    SEEDED=1
+    success "Database seeded with demo data."
+  else
+    warn "Seed request failed. The stack is up; retry with:"
+    warn "  curl -X POST http://localhost:${port}/api/v1/seed -H 'Content-Type: application/json' -d '${body}'"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Start the stack.
 # ---------------------------------------------------------------------------
 start_stack() {
@@ -587,6 +664,16 @@ start_stack() {
     "${COMPOSE[@]}" up -d --build "${wait_flag[@]+"${wait_flag[@]}"}"
   fi
   success "Stack is up."
+
+  # Seed demo data, then disable the seed endpoint again for a secure steady state.
+  if [ "${SEED:-0}" = "1" ]; then
+    seed_database
+    log "Disabling the seed endpoint ..."
+    SEED=0
+    write_override
+    "${COMPOSE[@]}" up -d --no-build "${wait_flag[@]+"${wait_flag[@]}"}"
+    success "Seed endpoint disabled."
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -611,14 +698,26 @@ print_access_info() {
   else
     info "Admin password: (as supplied via --admin-password)"
   fi
+  info "Backoffice:  ${BACKOFFICE_EMAIL}  (sign in at /backoffice/login)"
+  if [ "$BACKOFFICE_PASSWORD_GENERATED" -eq 1 ]; then
+    printf '%s\n' "    Backoffice password (generated, shown once): ${C_BOLD}${BACKOFFICE_PASSWORD}${C_RESET}" >&2
+  elif [ "$ENV_REUSED" -eq 1 ]; then
+    info "Backoffice password: (unchanged — grep '^BACKOFFICE_PASSWORD=' \"$ENV_FILE\")"
+  else
+    info "Backoffice password: (as supplied via --backoffice-password)"
+  fi
   info ".env:        $ENV_FILE"
   info "override:    $OVERRIDE_FILE"
 
   if [ "$started" -eq 1 ]; then
     printf '\n%s\n' "${C_GREEN}${C_BOLD}Inventario is starting.${C_RESET}" >&2
-    info "Web UI:   http://localhost:${PORT}"
-    info "Swagger:  http://localhost:${PORT}/swagger  (if enabled by the app build)"
+    info "Web UI:    http://localhost:${PORT}"
+    info "Backoffice: http://localhost:${PORT}/backoffice/login"
+    info "Swagger:   http://localhost:${PORT}/swagger  (if enabled by the app build)"
     info "Readiness: http://localhost:${PORT}/readyz"
+    if [ "$SEEDED" -eq 1 ]; then
+      info "Demo data: seeded (the app is pre-populated)."
+    fi
     printf '\n%s\n' "    Follow logs:  ${compose_str} logs -f inventario" >&2
     info "Stop:         ${compose_str} down"
     info "Stop + wipe:  ${compose_str} down && rm -rf ./data"
@@ -648,6 +747,8 @@ main() {
   reject_ctrl "$ADMIN_EMAIL" "--admin-email"
   reject_ctrl "$TENANT_NAME" "--tenant-name"
   reject_ctrl "$TENANT_SLUG" "--tenant-slug"
+  reject_ctrl "$BACKOFFICE_EMAIL" "--backoffice-email"
+  reject_ctrl "$BACKOFFICE_PASSWORD" "--backoffice-password"
 
   [ -f "$COMPOSE_FILE" ] || die "docker-compose.yaml not found in $SCRIPT_DIR — run this from the example directory."
 
@@ -721,12 +822,18 @@ main() {
     will_write_env=1
   fi
   if [ "$will_write_env" -eq 1 ]; then
+    # Fail fast on a weak supplied password instead of aborting later in init-data.
     if [ -z "$ADMIN_PASSWORD" ]; then
       ADMIN_PASSWORD="$(gen_password)"
       ADMIN_PASSWORD_GENERATED=1
     elif [ "${#ADMIN_PASSWORD}" -lt 8 ] || ! password_meets_policy "$ADMIN_PASSWORD"; then
-      # Fail fast on a weak --admin-password instead of aborting later in init-data.
       die "--admin-password must be >= 8 chars with an upper-case letter, a lower-case letter, and a digit."
+    fi
+    if [ -z "$BACKOFFICE_PASSWORD" ]; then
+      BACKOFFICE_PASSWORD="$(gen_password)"
+      BACKOFFICE_PASSWORD_GENERATED=1
+    elif [ "${#BACKOFFICE_PASSWORD}" -lt 8 ] || ! password_meets_policy "$BACKOFFICE_PASSWORD"; then
+      die "--backoffice-password must be >= 8 chars with an upper-case letter, a lower-case letter, and a digit."
     fi
   fi
 
@@ -745,11 +852,11 @@ main() {
     fi
   fi
 
-  write_override
-  validate_config
-  prepare_data_dirs
-
-  # Resolve start decision.
+  # Resolve start + seed decisions BEFORE writing the override (seeding adds env
+  # to it). --seed implies starting unless --no-start was explicit.
+  if [ "${SEED:-}" = "1" ] && [ -z "$START" ]; then
+    START=1
+  fi
   if [ -z "$START" ]; then
     if [ "$ASSUME_YES" -eq 1 ]; then
       START=0
@@ -759,6 +866,23 @@ main() {
       START=0
     fi
   fi
+  # Seeding only makes sense once the app is running.
+  if [ -z "$SEED" ]; then
+    if [ "$START" -eq 1 ] && [ "$ASSUME_YES" -eq 0 ] && \
+       prompt_yes_no "Seed the database with demo data (so it is not empty)?" "n"; then
+      SEED=1
+    else
+      SEED=0
+    fi
+  fi
+  if [ "$SEED" -eq 1 ] && [ "$START" -ne 1 ]; then
+    warn "--seed requires starting the stack; skipping seeding (start it, then re-run with --seed)."
+    SEED=0
+  fi
+
+  write_override
+  validate_config
+  prepare_data_dirs
 
   if [ "$START" -eq 1 ]; then
     start_stack
