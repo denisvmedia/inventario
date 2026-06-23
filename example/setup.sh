@@ -347,6 +347,10 @@ write_env() {
   fi
 
   if [ -f "$ENV_FILE" ]; then
+    if [ -e "$SCRIPT_DIR/data/init-state/data-initialized" ]; then
+      warn "Stack already initialized: a regenerated ADMIN_PASSWORD will NOT replace the seeded admin,"
+      warn "and rotated JWT/FILE_SIGNING keys will invalidate existing sessions and signed file URLs."
+    fi
     backup_file "$ENV_FILE"
   fi
 
@@ -692,14 +696,38 @@ main() {
     esac
   fi
 
+  # Image mode's 'build: !reset null' needs Docker Compose >= v2.24.4. Reject an
+  # older / legacy v1 Compose up front, instead of failing later in validate_config
+  # with an opaque YAML merge error.
+  if [ "$MODE" = "image" ]; then
+    local cver rest cmaj cmin cpat cnum
+    cver="$("${COMPOSE[@]}" version --short 2>/dev/null | tr -dc '0-9.')"
+    cmaj="${cver%%.*}"; rest="${cver#*.}"
+    cmin="${rest%%.*}"; cpat="${rest#*.}"; cpat="${cpat%%.*}"
+    case "${cmaj:-x}" in
+      ''|*[!0-9]*)
+        warn "Could not parse the Docker Compose version; image mode needs >= v2.24.4 for 'build: !reset null'." ;;
+      *)
+        cnum=$(( cmaj * 1000000 + ${cmin:-0} * 1000 + ${cpat:-0} ))
+        if [ "$cnum" -lt 2024004 ]; then
+          die "Image mode needs Docker Compose >= v2.24.4 (for 'build: !reset null'); found v${cmaj}.${cmin:-0}.${cpat:-0}. Use --mode source, or upgrade Compose."
+        fi ;;
+    esac
+  fi
+
   # Resolve admin password (generate if omitted) — only matters when we (re)write .env.
   local will_write_env=0
   if [ ! -f "$ENV_FILE" ] || [ "$FORCE" -eq 1 ]; then
     will_write_env=1
   fi
-  if [ "$will_write_env" -eq 1 ] && [ -z "$ADMIN_PASSWORD" ]; then
-    ADMIN_PASSWORD="$(gen_password)"
-    ADMIN_PASSWORD_GENERATED=1
+  if [ "$will_write_env" -eq 1 ]; then
+    if [ -z "$ADMIN_PASSWORD" ]; then
+      ADMIN_PASSWORD="$(gen_password)"
+      ADMIN_PASSWORD_GENERATED=1
+    elif [ "${#ADMIN_PASSWORD}" -lt 8 ] || ! password_meets_policy "$ADMIN_PASSWORD"; then
+      # Fail fast on a weak --admin-password instead of aborting later in init-data.
+      die "--admin-password must be >= 8 chars with an upper-case letter, a lower-case letter, and a digit."
+    fi
   fi
 
   write_env

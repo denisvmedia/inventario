@@ -119,7 +119,7 @@ If you want full control instead of the script, configure the two files by hand.
        image: ghcr.io/denisvmedia/inventario:edge
    ```
 
-   > `build: !reset null` requires Docker Compose v2.24.0 or newer. It removes the build context entirely from the resolved config (verify with `docker compose config --images`), so a bare `docker compose up` can never rebuild.
+   > `build: !reset null` requires Docker Compose v2.24.4 or newer. It removes the build context entirely from the resolved config (verify with `docker compose config --images`), so a bare `docker compose up` can never rebuild. `setup.sh` checks this and refuses image mode on an older/legacy Compose with a clear message.
 
 5. **Validate and start.**
 
@@ -303,8 +303,11 @@ ls -la ./data/postgres/
 # Check initialization state
 cat ./data/init-state/data-initialized
 
-# Back up the whole data directory
+# Back up the whole data directory (crash-consistent: stop services first, since
+# hot-copying the live PostgreSQL/Redis data dirs can produce a non-restorable snapshot)
+docker compose down
 tar -czf backup-$(date +%Y%m%d).tar.gz ./data/
+docker compose up -d
 ```
 
 ## Troubleshooting
