@@ -89,6 +89,14 @@ type Config struct {
 	// path) without rebuilding. Helm's `features.currencyMigration` value
 	// owns the operator-facing toggle. The flag is removed entirely once
 	// the rollout settles (see §8 in #202).
+	//
+	// #1618: the kill-switch is the env var INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION=false
+	// (the `run` section is read with an INVENTARIO_RUN_ prefix, so the bare
+	// FEATURE_CURRENCY_MIGRATION the env tag spells is never read on its own).
+	// A YAML `feature_currency_migration: false` does NOT disable it: false is
+	// the zero value, and cleanenv re-applies env-default to zero fields, so the
+	// "true" default wins back. Disable via the env var only (this field has no
+	// CLI flag).
 	FeatureCurrencyMigration bool `yaml:"feature_currency_migration" env:"FEATURE_CURRENCY_MIGRATION" env-default:"true"`
 
 	// MagicLinkLoginEnabled toggles the passwordless "magic link" sign-in
@@ -170,10 +178,14 @@ type Config struct {
 	// INVENTARIO_RUN_ENABLE_API_DOCS=false / --enable-api-docs=false) so the
 	// API surface (endpoint signatures, parameter names, error codes) is not
 	// served publicly for reconnaissance. When false the /swagger routes are
-	// not mounted and return 404. NOTE: a bool defaulting true that is
-	// omitted from a YAML config reads as false (cleanenv applies env-default
-	// only on env reads) — mirrors MagicLinkLoginEnabled / the operator must
-	// set the key explicitly in a YAML deploy to keep docs on.
+	// not mounted and return 404. NOTE (#1618): env-default DOES fire for an
+	// omitted key (a fresh run with no env and no YAML key resolves true), so
+	// docs are on by default. The catch is the off-switch: a YAML
+	// `enable_api_docs: false` does NOT turn docs off — false is the zero value
+	// and cleanenv re-applies the "true" env-default to zero fields. To disable
+	// in production you MUST use the env var or the flag
+	// (INVENTARIO_RUN_ENABLE_API_DOCS=false / --enable-api-docs=false), not a
+	// YAML key.
 	EnableAPIDocs bool `yaml:"enable_api_docs" env:"ENABLE_API_DOCS" env-default:"true"`
 
 	// WorkersOnly / WorkersExclude restrict which background workers run in

@@ -369,7 +369,10 @@ func StartMaintenanceReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *
 // the apiserver endpoints stay live.
 func StartCurrencyMigrationWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
 	if !cfg.FeatureCurrencyMigration {
-		slog.Info("Currency migration worker disabled; FEATURE_CURRENCY_MIGRATION is off")
+		// Name the variable an operator can ACTUALLY set: shared.ReadSection
+		// wraps the run section with an INVENTARIO_RUN_ env-prefix, so the bare
+		// `env:"FEATURE_CURRENCY_MIGRATION"` tag is never read on its own (#1618).
+		slog.Info("Currency migration worker disabled; set INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION=true (or feature_currency_migration in config.yaml) to enable")
 		return func() {}
 	}
 	pgFactory, ok := rs.FactorySet.CurrencyMigrationRegistryFactory.(*postgres.CurrencyMigrationRegistryFactory)
