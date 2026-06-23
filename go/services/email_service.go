@@ -125,6 +125,7 @@ const (
 	defaultSMTPPort               = 587
 	defaultSendGridBaseURL        = "https://api.sendgrid.com"
 	defaultMandrillBaseURL        = "https://mandrillapp.com"
+	defaultSMTP2GOBaseURL         = "https://api.smtp2go.com"
 )
 
 // EmailConfig is the control-plane configuration for AsyncEmailService.
@@ -227,6 +228,9 @@ func (c *EmailConfig) normalize() {
 	}
 	if c.MandrillBaseURL == "" {
 		c.MandrillBaseURL = defaultMandrillBaseURL
+	}
+	if c.SMTP2GOBaseURL == "" {
+		c.SMTP2GOBaseURL = defaultSMTP2GOBaseURL
 	}
 }
 
