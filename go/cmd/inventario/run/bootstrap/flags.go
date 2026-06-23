@@ -69,7 +69,9 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.PublicURL, "public-url", cfg.PublicURL, "Public base URL used in transactional email links (e.g., https://inventario.example.com)")
 	flags.BoolVar(&cfg.MagicLinkLoginEnabled, "magic-link-login-enabled", cfg.MagicLinkLoginEnabled, "Enable passwordless magic-link sign-in (auto-inert when the email provider is stub)")
 
-	flags.StringVar(&cfg.EmailProvider, "email-provider", cfg.EmailProvider, "Email provider: stub, smtp, sendgrid, ses, mandrill, or mailchimp")
+	flags.StringVar(&cfg.EmailProvider, "email-provider", cfg.EmailProvider, "Email provider: stub, smtp, sendgrid, ses, mandrill, mailchimp, or smtp2go")
+	//nolint:lll
+	flags.BoolVar(&cfg.AllowStubEmail, "allow-stub-email", cfg.AllowStubEmail, "Allow the no-op 'stub' email provider even when --public-url is set (dev/eval only; by default that combination is rejected at startup because verification/reset/invite mail would be silently dropped)")
 	flags.BoolVar(&cfg.LogEmailURLs, "log-email-urls", cfg.LogEmailURLs, "Log full verification/password-reset URLs in stub email mode (includes sensitive tokens; unsafe for shared logs)")
 	flags.StringVar(&cfg.EmailFrom, "email-from", cfg.EmailFrom, "From address for transactional emails")
 	flags.StringVar(&cfg.EmailReplyTo, "email-reply-to", cfg.EmailReplyTo, "Reply-To address for transactional emails")
@@ -91,6 +93,9 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 
 	flags.StringVar(&cfg.MandrillAPIKey, "mandrill-api-key", cfg.MandrillAPIKey, "Mandrill/Mailchimp Transactional API key")
 	flags.StringVar(&cfg.MandrillBaseURL, "mandrill-base-url", cfg.MandrillBaseURL, "Mandrill API base URL")
+
+	flags.StringVar(&cfg.SMTP2GOAPIKey, "smtp2go-api-key", cfg.SMTP2GOAPIKey, "SMTP2GO API key")
+	flags.StringVar(&cfg.SMTP2GOBaseURL, "smtp2go-base-url", cfg.SMTP2GOBaseURL, "SMTP2GO API base URL")
 
 	// AI vision photo-scan tunables (issue #1720).
 	flags.StringVar(&cfg.AIVisionProvider, "ai-vision-provider", cfg.AIVisionProvider, "AI vision provider: none, mock, anthropic, openai")

@@ -20,7 +20,8 @@ import (
 type Config struct {
 	// APIKey authenticates calls to the Mandrill API.
 	APIKey string
-	// BaseURL overrides the API host (useful for tests/proxies).
+	// BaseURL overrides the API host (useful for tests/proxies); must be https
+	// so the API key (sent in the request body) is never transmitted in plaintext.
 	BaseURL string
 	// HTTPClient optionally overrides the default timeout-configured client.
 	HTTPClient *http.Client
@@ -138,8 +139,11 @@ func normalizeBaseURL(rawBaseURL, defaultBaseURL string) (string, error) {
 	if parsed.Scheme == "" || parsed.Host == "" {
 		return "", fmt.Errorf("invalid mandrill base URL %q: scheme and host are required", baseURL)
 	}
-	if parsed.Scheme != "https" && parsed.Scheme != "http" {
-		return "", fmt.Errorf("invalid mandrill base URL %q: unsupported scheme %q", baseURL, parsed.Scheme)
+	// HTTPS only: the API key is sent in the request body, so a plaintext base
+	// URL would leak it. The default host is https; an override (tests/proxies)
+	// must be https too. Tests use an httptest TLS server.
+	if parsed.Scheme != "https" {
+		return "", fmt.Errorf("invalid mandrill base URL %q: only https is supported", baseURL)
 	}
 
 	return parsed.String(), nil

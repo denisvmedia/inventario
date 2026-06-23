@@ -112,6 +112,7 @@ const (
 	EmailProviderSES       EmailProvider = "ses"
 	EmailProviderMandrill  EmailProvider = "mandrill"
 	EmailProviderMailchimp EmailProvider = "mailchimp"
+	EmailProviderSMTP2GO   EmailProvider = "smtp2go"
 )
 
 const (
@@ -124,6 +125,7 @@ const (
 	defaultSMTPPort               = 587
 	defaultSendGridBaseURL        = "https://api.sendgrid.com"
 	defaultMandrillBaseURL        = "https://mandrillapp.com"
+	defaultSMTP2GOBaseURL         = "https://api.smtp2go.com"
 )
 
 // EmailConfig is the control-plane configuration for AsyncEmailService.
@@ -179,6 +181,10 @@ type EmailConfig struct {
 	// Mandrill/Mailchimp Transactional settings.
 	MandrillAPIKey  string
 	MandrillBaseURL string
+
+	// SMTP2GO-specific settings.
+	SMTP2GOAPIKey  string
+	SMTP2GOBaseURL string
 }
 
 // normalize canonicalizes provider values and applies service defaults.
@@ -222,6 +228,9 @@ func (c *EmailConfig) normalize() {
 	}
 	if c.MandrillBaseURL == "" {
 		c.MandrillBaseURL = defaultMandrillBaseURL
+	}
+	if c.SMTP2GOBaseURL == "" {
+		c.SMTP2GOBaseURL = defaultSMTP2GOBaseURL
 	}
 }
 

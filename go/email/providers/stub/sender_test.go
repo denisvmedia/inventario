@@ -1,4 +1,4 @@
-package stub
+package stub_test
 
 import (
 	"context"
@@ -6,18 +6,19 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/email/providers/stub"
 	"github.com/denisvmedia/inventario/email/sender"
 )
 
 func TestNew(t *testing.T) {
 	c := qt.New(t)
-	s := New()
+	s := stub.New()
 	c.Assert(s, qt.IsNotNil)
 }
 
 func TestSender_Send(t *testing.T) {
 	c := qt.New(t)
-	s := New()
+	s := stub.New()
 
 	err := s.Send(context.Background(), sender.Message{
 		To:      "user@example.com",

@@ -7,6 +7,7 @@ import (
 	"github.com/denisvmedia/inventario/email/providers/sendgrid"
 	"github.com/denisvmedia/inventario/email/providers/ses"
 	"github.com/denisvmedia/inventario/email/providers/smtp"
+	"github.com/denisvmedia/inventario/email/providers/smtp2go"
 	"github.com/denisvmedia/inventario/email/providers/stub"
 	"github.com/denisvmedia/inventario/email/sender"
 )
@@ -38,6 +39,11 @@ func newEmailSenderFromConfig(cfg EmailConfig) (emailSender, error) {
 		return mandrill.New(mandrill.Config{
 			APIKey:  cfg.MandrillAPIKey,
 			BaseURL: cfg.MandrillBaseURL,
+		})
+	case EmailProviderSMTP2GO:
+		return smtp2go.New(smtp2go.Config{
+			APIKey:  cfg.SMTP2GOAPIKey,
+			BaseURL: cfg.SMTP2GOBaseURL,
 		})
 	default:
 		return nil, fmt.Errorf("unsupported email provider: %q", cfg.Provider)

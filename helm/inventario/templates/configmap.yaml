@@ -63,9 +63,11 @@ data:
   INVENTARIO_RUN_EMAIL_QUEUE_WORKERS: {{ .Values.email.queueWorkers | quote }}
   INVENTARIO_RUN_EMAIL_QUEUE_MAX_RETRIES: {{ .Values.email.queueMaxRetries | quote }}
   INVENTARIO_RUN_LOG_EMAIL_URLS: {{ .Values.email.logUrls | quote }}
+  INVENTARIO_RUN_ALLOW_STUB_EMAIL: {{ .Values.email.allowStub | default false | quote }}
   INVENTARIO_RUN_SENDGRID_BASE_URL: {{ .Values.email.sendgrid.baseUrl | quote }}
   INVENTARIO_RUN_AWS_REGION: {{ .Values.email.aws.region | quote }}
   INVENTARIO_RUN_MANDRILL_BASE_URL: {{ .Values.email.mandrill.baseUrl | quote }}
+  INVENTARIO_RUN_SMTP2GO_BASE_URL: {{ .Values.email.smtp2go.baseUrl | quote }}
   # AI-vision photo-scan (#1720). Non-secret knobs; the per-provider API keys
   # live in the Secret (templates/secret.yaml). See values.yaml `aivision:`.
   INVENTARIO_RUN_AI_VISION_PROVIDER: {{ .Values.aivision.provider | quote }}

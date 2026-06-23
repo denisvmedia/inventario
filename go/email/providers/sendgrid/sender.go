@@ -21,7 +21,8 @@ import (
 type Config struct {
 	// APIKey is the bearer token used for SendGrid API authentication.
 	APIKey string
-	// BaseURL overrides the API host (primarily for tests/proxies).
+	// BaseURL overrides the API host (primarily for tests/proxies); must be
+	// https so the bearer API key is never sent in plaintext.
 	BaseURL string
 	// HTTPClient optionally overrides the default timeout-configured client.
 	HTTPClient *http.Client
@@ -120,8 +121,11 @@ func normalizeBaseURL(rawBaseURL, defaultBaseURL string) (string, error) {
 	if parsed.Scheme == "" || parsed.Host == "" {
 		return "", fmt.Errorf("invalid sendgrid base URL %q: scheme and host are required", baseURL)
 	}
-	if parsed.Scheme != "https" && parsed.Scheme != "http" {
-		return "", fmt.Errorf("invalid sendgrid base URL %q: unsupported scheme %q", baseURL, parsed.Scheme)
+	// HTTPS only: the API key is sent as an Authorization: Bearer header, so a
+	// plaintext base URL would leak it. The default host is https; an override
+	// (tests/proxies) must be https too. Tests use an httptest TLS server.
+	if parsed.Scheme != "https" {
+		return "", fmt.Errorf("invalid sendgrid base URL %q: only https is supported", baseURL)
 	}
 
 	return parsed.String(), nil

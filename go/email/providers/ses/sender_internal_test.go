@@ -1,5 +1,10 @@
 package ses
 
+// White-box: constructs Sender with a fake client wired into the unexported
+// `client sesAPI` field and asserts on the SDK SendEmailInput it builds. The
+// SES SDK call cannot be intercepted through the exported New/Send API without
+// a live AWS endpoint, so the request-mapping logic is only observable here.
+
 import (
 	"context"
 	"errors"

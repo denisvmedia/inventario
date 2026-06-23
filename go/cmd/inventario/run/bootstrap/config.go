@@ -201,8 +201,14 @@ type Config struct {
 	ProbeAddr string `yaml:"probe_addr" env:"PROBE_ADDR" env-default:":3334"`
 
 	EmailProvider string `yaml:"email_provider" env:"EMAIL_PROVIDER" env-default:"stub"`
-	EmailFrom     string `yaml:"email_from" env:"EMAIL_FROM" env-default:""`
-	EmailReplyTo  string `yaml:"email_reply_to" env:"EMAIL_REPLY_TO" env-default:""`
+	// AllowStubEmail opts into running the no-op "stub" email provider even
+	// when a public URL is configured. By default that combination is rejected
+	// at startup because verification/reset/invite mail would be silently
+	// dropped on a real deployment (#2093); this flag is the explicit dev/eval
+	// escape hatch and downgrades the rejection to a loud warning.
+	AllowStubEmail bool   `yaml:"allow_stub_email" env:"ALLOW_STUB_EMAIL" env-default:"false"`
+	EmailFrom      string `yaml:"email_from" env:"EMAIL_FROM" env-default:""`
+	EmailReplyTo   string `yaml:"email_reply_to" env:"EMAIL_REPLY_TO" env-default:""`
 	// SupportEmail is the destination address for in-app feedback
 	// submissions (issue #1387). Empty leaves the POST /feedback
 	// endpoint mounted but it returns a typed 503 (feedback.not_configured)
@@ -221,6 +227,8 @@ type Config struct {
 	AWSRegion            string `yaml:"aws_region" env:"AWS_REGION" env-default:""`
 	MandrillAPIKey       string `yaml:"mandrill_api_key" env:"MANDRILL_API_KEY" env-default:""`
 	MandrillBaseURL      string `yaml:"mandrill_base_url" env:"MANDRILL_BASE_URL" env-default:"https://mandrillapp.com"`
+	SMTP2GOAPIKey        string `yaml:"smtp2go_api_key" env:"SMTP2GO_API_KEY" env-default:""`
+	SMTP2GOBaseURL       string `yaml:"smtp2go_base_url" env:"SMTP2GO_BASE_URL" env-default:"https://api.smtp2go.com"`
 
 	// OAuth* settings drive the third-party sign-in flow (#1394). Each
 	// provider is enabled only when its (client_id, client_secret) pair

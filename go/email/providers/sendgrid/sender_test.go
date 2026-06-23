@@ -1,4 +1,4 @@
-package sendgrid
+package sendgrid_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/email/providers/sendgrid"
 	"github.com/denisvmedia/inventario/email/sender"
 )
 
@@ -24,16 +25,28 @@ type sendgridRecordedRequest struct {
 func TestNew_RequiresAPIKey(t *testing.T) {
 	c := qt.New(t)
 
-	_, err := New(Config{})
+	_, err := sendgrid.New(sendgrid.Config{})
 	c.Assert(err, qt.IsNotNil)
 }
 
 func TestNew_InvalidBaseURL(t *testing.T) {
 	c := qt.New(t)
 
-	_, err := New(Config{
+	_, err := sendgrid.New(sendgrid.Config{
 		APIKey:  "key",
 		BaseURL: "://bad",
+	})
+	c.Assert(err, qt.IsNotNil)
+}
+
+func TestNew_RejectsPlaintextHTTP(t *testing.T) {
+	c := qt.New(t)
+
+	// The bearer API key would be sent over plaintext, so an http base URL
+	// must be refused outright.
+	_, err := sendgrid.New(sendgrid.Config{
+		APIKey:  "key",
+		BaseURL: "http://api.sendgrid.com",
 	})
 	c.Assert(err, qt.IsNotNil)
 }
@@ -42,7 +55,7 @@ func TestSend_Success(t *testing.T) {
 	c := qt.New(t)
 
 	recCh := make(chan sendgridRecordedRequest, 1)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		_ = r.Body.Close()
 
@@ -57,7 +70,7 @@ func TestSend_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := New(Config{
+	s, err := sendgrid.New(sendgrid.Config{
 		APIKey:     "key-1",
 		BaseURL:    srv.URL,
 		HTTPClient: srv.Client(),
@@ -92,13 +105,13 @@ func TestSend_Success(t *testing.T) {
 func TestSend_Non2xx(t *testing.T) {
 	c := qt.New(t)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 		_, _ = w.Write([]byte("upstream down"))
 	}))
 	defer srv.Close()
 
-	s, err := New(Config{
+	s, err := sendgrid.New(sendgrid.Config{
 		APIKey:     "key-1",
 		BaseURL:    srv.URL,
 		HTTPClient: srv.Client(),
