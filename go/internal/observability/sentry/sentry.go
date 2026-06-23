@@ -66,23 +66,7 @@ func Init(cfg Config) (flush func(timeout time.Duration) bool, err error) {
 		slog.Info("Sentry disabled (SENTRY_DSN not set)")
 		return noop, nil
 	}
-	// Data-exfiltration controls. SendDefaultPII is left at its false default,
-	// which makes the SDK scrub sensitive request headers (Authorization, Cookie,
-	// api-key, …), drop the cookie value, and omit the client IP — so the JWT
-	// bearer and the httpOnly refresh-token cookie are safe. BUT the SDK attaches
-	// the request BODY and QUERY STRING UNCONDITIONALLY (not gated by
-	// SendDefaultPII), and its sensitive-header list misses Inventario's
-	// X-CSRF-Token spelling. scrubRequestData (wired as both BeforeSend and
-	// BeforeSendTransaction) strips those so no request secret reaches Sentry.
-	// Do NOT enable SendDefaultPII without revisiting scrubRequestData.
-	if initErr := sentrygo.Init(sentrygo.ClientOptions{
-		Dsn:                   cfg.DSN,
-		Environment:           cfg.Environment,
-		EnableTracing:         cfg.TracesSampleRate > 0,
-		TracesSampleRate:      cfg.TracesSampleRate,
-		BeforeSend:            scrubRequestData,
-		BeforeSendTransaction: scrubRequestData,
-	}); initErr != nil {
+	if initErr := sentrygo.Init(clientOptions(cfg)); initErr != nil {
 		return noop, initErr
 	}
 	enabled.Store(true)
@@ -90,6 +74,28 @@ func Init(cfg Config) (flush func(timeout time.Duration) bool, err error) {
 		"environment", cfg.Environment,
 		"traces_sample_rate", cfg.TracesSampleRate)
 	return sentrygo.Flush, nil
+}
+
+// clientOptions builds the Sentry SDK options for cfg. Extracted from Init so
+// the data-exfiltration controls are unit-testable without binding a global
+// client: SendDefaultPII is left at its false default — which makes the SDK
+// scrub sensitive request headers (Authorization, Cookie, api-key, …), drop the
+// cookie value and omit the client IP, so the JWT bearer and the httpOnly
+// refresh-token cookie are safe — and scrubRequestData is wired as BOTH
+// BeforeSend and BeforeSendTransaction because the SDK attaches the request
+// body, query string and URL path unconditionally (not gated by SendDefaultPII)
+// and its sensitive-header list misses Inventario's X-CSRF-Token spelling. Do
+// NOT enable SendDefaultPII, or drop either hook, without revisiting
+// scrubRequestData.
+func clientOptions(cfg Config) sentrygo.ClientOptions {
+	return sentrygo.ClientOptions{
+		Dsn:                   cfg.DSN,
+		Environment:           cfg.Environment,
+		EnableTracing:         cfg.TracesSampleRate > 0,
+		TracesSampleRate:      cfg.TracesSampleRate,
+		BeforeSend:            scrubRequestData,
+		BeforeSendTransaction: scrubRequestData,
+	}
 }
 
 // csrfHeaderName is Inventario's CSRF request header (apiserver/csrf_middleware.go).
@@ -102,18 +108,25 @@ const csrfHeaderName = "X-CSRF-Token"
 // scrubRequestData is the BeforeSend / BeforeSendTransaction hook. The Sentry
 // SDK gates request headers and cookies behind SendDefaultPII (false here, so
 // the Authorization bearer and refresh cookie are stripped), but it attaches
-// the request BODY (event.Request.Data, up to 10 KiB) and QUERY STRING
-// UNCONDITIONALLY. Inventario auth bodies carry plaintext credentials (password,
-// TOTP/MFA code, reset/new password) and several query strings carry secrets
-// (email-verify ?token=, signed-URL ?sig=). This hook clears those, and also
-// drops the X-CSRF-Token header the SDK's scrubber misses. It never drops the
-// event itself — only the sensitive sub-fields.
+// the request BODY (event.Request.Data, up to 10 KiB), QUERY STRING, and URL
+// (scheme://host + the CONCRETE path) UNCONDITIONALLY. Inventario carries
+// secrets in all three: auth bodies (password, TOTP/MFA code, reset/new
+// password), query strings (email-verify ?token=, signed-URL ?sig=), AND a path
+// segment — the single-use invite bearer token at /api/v1/invites/{token}. This
+// hook clears all three plus the X-CSRF-Token header the SDK's scrubber misses.
+// The endpoint is still identifiable for triage via event.Transaction (the
+// templated chi route, e.g. /invites/{token}), which the SDK builds from the
+// route pattern and is safe. It never drops the event itself — only the
+// sensitive sub-fields.
 func scrubRequestData(event *sentrygo.Event, _ *sentrygo.EventHint) *sentrygo.Event {
 	if event == nil || event.Request == nil {
 		return event
 	}
 	event.Request.Data = ""
 	event.Request.QueryString = ""
+	// URL is the concrete path and can carry a bearer secret in a path segment
+	// (invite token). Drop it; event.Transaction keeps the templated route.
+	event.Request.URL = ""
 	for k := range event.Request.Headers {
 		if strings.EqualFold(k, csrfHeaderName) {
 			delete(event.Request.Headers, k)

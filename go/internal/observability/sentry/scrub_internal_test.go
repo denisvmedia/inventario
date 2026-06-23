@@ -17,6 +17,7 @@ func TestScrubRequestData_StripsBodyQueryAndCSRF(t *testing.T) {
 
 	event := &sentrygo.Event{
 		Request: &sentrygo.Request{
+			URL:         "https://host/api/v1/invites/secret-invite-token",
 			Data:        `{"email":"a@b.com","password":"hunter2"}`,
 			QueryString: "token=secret-verify-token&sig=deadbeef",
 			Headers: map[string]string{
@@ -32,6 +33,7 @@ func TestScrubRequestData_StripsBodyQueryAndCSRF(t *testing.T) {
 	c.Assert(got, qt.Equals, event) // event kept, not dropped
 	c.Assert(got.Request.Data, qt.Equals, "")
 	c.Assert(got.Request.QueryString, qt.Equals, "")
+	c.Assert(got.Request.URL, qt.Equals, "") // invite token in the path is dropped
 	_, hasCSRF := got.Request.Headers["X-Csrf-Token"]
 	c.Assert(hasCSRF, qt.IsFalse)
 	// Non-sensitive headers are retained for debugging value.
@@ -46,4 +48,44 @@ func TestScrubRequestData_NilSafe(t *testing.T) {
 
 	ev := &sentrygo.Event{} // nil Request must not panic
 	c.Assert(scrubRequestData(ev, nil), qt.Equals, ev)
+}
+
+// TestClientOptions_WiresScrubAndPIIControls pins the #844 data-safety guarantee
+// at the wiring level: that the scrubber is actually installed as BOTH
+// BeforeSend and BeforeSendTransaction (a typo dropping one would leak the body
+// on the transaction path with no other failing test) and that SendDefaultPII
+// stays off. It also pins that tracing is enabled iff the sample rate is > 0.
+func TestClientOptions_WiresScrubAndPIIControls(t *testing.T) {
+	c := qt.New(t)
+
+	opts := clientOptions(Config{DSN: "https://pub@example.com/1", Environment: "prod", TracesSampleRate: 0.2})
+
+	c.Assert(opts.Dsn, qt.Equals, "https://pub@example.com/1")
+	c.Assert(opts.Environment, qt.Equals, "prod")
+	c.Assert(opts.TracesSampleRate, qt.Equals, 0.2)
+	c.Assert(opts.EnableTracing, qt.IsTrue) // rate > 0
+	c.Assert(opts.SendDefaultPII, qt.IsFalse)
+
+	// Both hooks must be wired AND must scrub. Drive a secret-bearing event
+	// through each and assert the sensitive fields are cleared — this fails if
+	// either hook is nil or points at the wrong function.
+	c.Assert(opts.BeforeSend, qt.IsNotNil)
+	c.Assert(opts.BeforeSendTransaction, qt.IsNotNil)
+	for _, hook := range []func(*sentrygo.Event, *sentrygo.EventHint) *sentrygo.Event{opts.BeforeSend, opts.BeforeSendTransaction} {
+		ev := hook(&sentrygo.Event{Request: &sentrygo.Request{
+			URL:         "https://host/api/v1/invites/secret",
+			Data:        "password=hunter2",
+			QueryString: "token=abc",
+		}}, nil)
+		c.Assert(ev.Request.Data, qt.Equals, "")
+		c.Assert(ev.Request.QueryString, qt.Equals, "")
+		c.Assert(ev.Request.URL, qt.Equals, "")
+	}
+}
+
+func TestClientOptions_TracingDisabledWhenRateZero(t *testing.T) {
+	c := qt.New(t)
+
+	opts := clientOptions(Config{DSN: "https://pub@example.com/1", TracesSampleRate: 0})
+	c.Assert(opts.EnableTracing, qt.IsFalse)
 }

@@ -42,7 +42,7 @@ func TestLoadConfig_DefaultsSampleRateWhenUnset(t *testing.T) {
 	c.Assert(cfg.TracesSampleRate, qt.Equals, 0.2)
 }
 
-func TestInit_NoDSNReturnsNoopFlushAndStaysDisabled(t *testing.T) {
+func TestInit_NoDSNReturnsNoopFlush(t *testing.T) {
 	c := qt.New(t)
 
 	flush, err := sentry.Init(sentry.Config{})

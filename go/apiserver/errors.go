@@ -563,10 +563,18 @@ func renderEntityError(w http.ResponseWriter, r *http.Request, err error) error 
 	// report those (and any explicit 5xx) to Sentry (#844). Mapped 4xx — the
 	// common case — are expected business outcomes and are not captured. No-op
 	// when Sentry is disabled.
-	if jsErr.HTTPStatusCode >= http.StatusInternalServerError {
+	if shouldCaptureStatus(jsErr.HTTPStatusCode) {
 		sentry.CaptureError(r.Context(), err, map[string]string{"component": "apiserver"})
 	}
 	return render.Render(w, r, jsonapi.NewErrors(jsErr))
+}
+
+// shouldCaptureStatus reports whether a rendered HTTP status should be reported
+// to Sentry (#844): only server errors (5xx). 4xx are expected business
+// outcomes (validation, auth, not-found) and would drown real incidents in
+// noise, so they are never captured.
+func shouldCaptureStatus(code int) bool {
+	return code >= http.StatusInternalServerError
 }
 
 func badRequest(w http.ResponseWriter, r *http.Request, err error) error {
