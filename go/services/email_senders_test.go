@@ -19,6 +19,7 @@ func TestNewEmailSenderFromConfig(t *testing.T) {
 		// mailchimp intentionally reuses the Mandrill transport (shared switch
 		// arm in newEmailSenderFromConfig), so it reads the same MandrillAPIKey.
 		{name: "mailchimp", cfg: EmailConfig{Provider: EmailProviderMailchimp, MandrillAPIKey: "md-test"}},
+		{name: "smtp2go", cfg: EmailConfig{Provider: EmailProviderSMTP2GO, SMTP2GOAPIKey: "api-test"}},
 	}
 
 	for _, tc := range cases {

@@ -62,6 +62,8 @@ func buildEmailService(cfg *Config) (EmailServiceLifecycle, error) {
 		AWSRegion:       cfg.AWSRegion,
 		MandrillAPIKey:  cfg.MandrillAPIKey,
 		MandrillBaseURL: cfg.MandrillBaseURL,
+		SMTP2GOAPIKey:   cfg.SMTP2GOAPIKey,
+		SMTP2GOBaseURL:  cfg.SMTP2GOBaseURL,
 	})
 	if err != nil {
 		return EmailServiceLifecycle{}, err
@@ -129,7 +131,8 @@ func ValidateEmailPublicURLConfig(provider, publicURL string, allowStub bool) er
 		services.EmailProviderSendGrid,
 		services.EmailProviderSES,
 		services.EmailProviderMandrill,
-		services.EmailProviderMailchimp:
+		services.EmailProviderMailchimp,
+		services.EmailProviderSMTP2GO:
 		if err := ValidatePublicURLForTransactionalEmails(publicURL); err != nil {
 			return fmt.Errorf("invalid --public-url for email provider %q: %w", normalizedEmailProvider, err)
 		}

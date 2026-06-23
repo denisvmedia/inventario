@@ -112,6 +112,7 @@ const (
 	EmailProviderSES       EmailProvider = "ses"
 	EmailProviderMandrill  EmailProvider = "mandrill"
 	EmailProviderMailchimp EmailProvider = "mailchimp"
+	EmailProviderSMTP2GO   EmailProvider = "smtp2go"
 )
 
 const (
@@ -179,6 +180,10 @@ type EmailConfig struct {
 	// Mandrill/Mailchimp Transactional settings.
 	MandrillAPIKey  string
 	MandrillBaseURL string
+
+	// SMTP2GO-specific settings.
+	SMTP2GOAPIKey  string
+	SMTP2GOBaseURL string
 }
 
 // normalize canonicalizes provider values and applies service defaults.

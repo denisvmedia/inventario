@@ -452,7 +452,7 @@ features:
 # Email — non-sensitive settings (go into ConfigMap)
 # ============================================================
 email:
-  # Provider: stub | smtp | sendgrid | ses | mandrill | mailchimp
+  # Provider: stub | smtp | sendgrid | ses | mandrill | mailchimp | smtp2go
   # "stub" logs emails to stdout; no external service needed.
   # ⚠️ WARNING: "stub" SILENTLY DROPS ALL MAIL — verification, invite, password-reset,
   # and feedback emails are never delivered. This is fine for local evaluation only.
@@ -518,6 +518,10 @@ email:
 
   mandrill:
     # Env: INVENTARIO_RUN_MANDRILL_BASE_URL (leave empty for default)
+    baseUrl: ""
+
+  smtp2go:
+    # Env: INVENTARIO_RUN_SMTP2GO_BASE_URL (leave empty for default https://api.smtp2go.com)
     baseUrl: ""
 
 # ============================================================
@@ -615,6 +619,7 @@ secrets:
   #   INVENTARIO_RUN_SMTP_PASSWORD               (required for smtp provider)
   #   INVENTARIO_RUN_SENDGRID_API_KEY            (required for sendgrid provider)
   #   INVENTARIO_RUN_MANDRILL_API_KEY            (required for mandrill/mailchimp provider)
+  #   INVENTARIO_RUN_SMTP2GO_API_KEY             (required for smtp2go provider)
   #   INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY (required when aivision.provider=anthropic)
   #   INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY    (required when aivision.provider=openai)
   #   INVENTARIO_RUN_METRICS_TOKEN                   (optional; bearer token for GET /metrics — strongly recommended in production, see metrics.token)
@@ -663,6 +668,7 @@ secrets:
   smtpPassword: ""               # Env: INVENTARIO_RUN_SMTP_PASSWORD
   sendgridApiKey: ""             # Env: INVENTARIO_RUN_SENDGRID_API_KEY
   mandrillApiKey: ""             # Env: INVENTARIO_RUN_MANDRILL_API_KEY
+  smtp2goApiKey: ""              # Env: INVENTARIO_RUN_SMTP2GO_API_KEY
 
   # AI-vision provider secrets (#1720). Required only for the matching
   # aivision.provider; empty otherwise. See the `aivision:` block above.
