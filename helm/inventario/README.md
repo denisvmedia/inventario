@@ -154,6 +154,7 @@ Expected secret keys when using `secrets.existingSecret`:
 - `INVENTARIO_RUN_SMTP_PASSWORD`, `INVENTARIO_RUN_SENDGRID_API_KEY`, `INVENTARIO_RUN_MANDRILL_API_KEY` (provider-specific)
 - `INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY` (required when `aivision.provider=anthropic`), `INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY` (required when `aivision.provider=openai`)
 - `INVENTARIO_RUN_METRICS_TOKEN` (optional; bearer token for `GET /metrics` — strongly recommended in production. When present, the ServiceMonitor `authorization` stanza is wired automatically.)
+- `SENTRY_DSN` (optional; enables Sentry error tracking when present. ⚠️ **BARE name** — unlike every other key here it has **no `INVENTARIO_RUN_` prefix**, because the app reads it via `cleanenv.ReadEnv` with no prefix. Absent → Sentry stays disabled.)
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (required for `s3://` upload targets)
 
 Example existing Secret install:
@@ -262,6 +263,9 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `aivision.provider` | `none` | AI photo-scan provider: `none` (off, 503), `mock` (canned), `anthropic`, or `openai`. A real provider **requires** the matching `secrets.aiVision*ApiKey`, or the apiserver fails to boot. |
 | `aivision.anthropicModel` / `aivision.openaiModel` | `claude-sonnet-4-6` / `gpt-4o` | Model id used for the selected provider. |
 | `secrets.aiVisionAnthropicApiKey` / `secrets.aiVisionOpenaiApiKey` | `""` | Provider API key; required for the matching `aivision.provider` unless supplied via `secrets.existingSecret`. |
+| `sentry.dsn` | `""` | Sentry DSN. Empty → Sentry **disabled** (app no-ops). When set, the chart adds the `SENTRY_DSN` **Secret** key (it's a credential). ⚠️ **BARE env name** — emitted as `SENTRY_DSN`, NOT `INVENTARIO_RUN_SENTRY_DSN`. With `secrets.existingSecret`, supply `SENTRY_DSN` in that Secret instead. |
+| `sentry.environment` | `""` | Logical environment tag on Sentry events (e.g. `production`). Non-secret → ConfigMap; emitted as bare `SENTRY_ENVIRONMENT` only when set. |
+| `sentry.tracesSampleRate` | `"0.2"` | Performance-tracing sample rate (`0.0`–`1.0`; `0` disables tracing). Non-secret → ConfigMap, always emitted as bare `SENTRY_TRACES_SAMPLE_RATE`. |
 | `secrets.existingSecret` | `""` | Use an externally managed Secret instead of chart-managed secret data. |
 | `secrets.dbDsn` | `""` | Required for production-style installs unless `secrets.existingSecret` is used. |
 | `secrets.migratorDbDsn` | `""` | Set when schema migrations need a different DB user than the app runtime. |
@@ -338,6 +342,30 @@ A typical upgrade looks like:
 ```
 
 Run `helm template ... --debug | grep -E 'replicas|resources|nodeSelector|tolerations|affinity'` after rewriting your values to confirm the new render still reflects your overrides.
+
+## Sentry error tracking
+
+Inventario can report panics and captured errors to [Sentry](https://sentry.io) (#844, PR #2183). It is **OFF by default**: with an empty `sentry.dsn` the app logs `Sentry disabled (SENTRY_DSN not set)` at startup and every capture path is a no-op. Set a real DSN to turn it on.
+
+⚠️ **Bare-name gotcha.** Unlike every other `run` setting (which the chart emits under the `INVENTARIO_RUN_` prefix), the three Sentry settings are read by the app with **bare env names** — `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`. The Go config reads them via `cleanenv.ReadEnv` with no prefix, so the chart emits them verbatim, the same way it emits `AWS_*` / `TZ`. Do **not** prefix them.
+
+The DSN is treated as a **credential**: it flows through the chart-managed Secret (`templates/secret.yaml`) and the `SENTRY_DSN` Secret key is rendered **only** when `sentry.dsn` is non-empty — so disabled-by-default holds and no empty credential is created. The non-secret knobs (`environment`, `tracesSampleRate`) go in the ConfigMap; `SENTRY_ENVIRONMENT` is emitted only when set, `SENTRY_TRACES_SAMPLE_RATE` always (defaulting to `0.2`).
+
+| Value | Default | Effect |
+| --- | --- | --- |
+| `sentry.dsn` | `""` | Sentry DSN. Empty → disabled. Non-empty → rendered as the bare `SENTRY_DSN` key in the chart-managed Secret. With `secrets.existingSecret`, supply `SENTRY_DSN` in that Secret instead. |
+| `sentry.environment` | `""` | Bare `SENTRY_ENVIRONMENT` ConfigMap entry; emitted only when set. |
+| `sentry.tracesSampleRate` | `"0.2"` | Bare `SENTRY_TRACES_SAMPLE_RATE` ConfigMap entry; `0` disables tracing. |
+
+```bash
+# Enable Sentry on a combined install.
+helm upgrade --install inventario ./helm/inventario \
+  --namespace inventario \
+  --set-string sentry.dsn='https://<public-key>@<host>/<project-id>' \
+  --set-string sentry.environment=production
+```
+
+Both the apiserver and every worker Deployment `envFrom` the shared ConfigMap **and** Secret, so all pods receive the Sentry configuration automatically.
 
 ## Metrics & scraping
 

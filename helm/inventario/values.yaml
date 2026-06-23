@@ -299,6 +299,39 @@ metrics:
     labels: {}
 
 # ============================================================
+# Sentry — error tracking / performance (#844, PR #2183)
+# ============================================================
+# Reports panics + captured errors to Sentry. OFF by default: with an empty
+# `dsn` the app logs "Sentry disabled (SENTRY_DSN not set)" at startup and every
+# capture path is a no-op — set a real DSN to turn it on.
+#
+# ⚠️ BARE ENV NAMES — divergence from every other setting. The Go app reads these
+# three via cleanenv.ReadEnv with NO prefix, so the env vars are the BARE names
+# SENTRY_DSN / SENTRY_ENVIRONMENT / SENTRY_TRACES_SAMPLE_RATE — NOT under the
+# INVENTARIO_RUN_ prefix that wraps `run` config. The chart emits them verbatim
+# (see templates/configmap.yaml + templates/secret.yaml), mirroring how
+# AWS_*/TZ are emitted bare. When secrets.existingSecret is set, supply the
+# SENTRY_DSN key in that Secret instead (see secrets.existingSecret notes below).
+sentry:
+  # Sentry DSN (https://<public-key>@<host>/<project-id>). The DSN is treated as
+  # a CREDENTIAL: it flows through the chart-managed Secret (templates/secret.yaml),
+  # NOT the ConfigMap, and the SENTRY_DSN Secret key is emitted ONLY when this is
+  # non-empty — so disabled-by-default holds and no empty credential is created.
+  # Env: SENTRY_DSN (bare name)
+  dsn: ""
+
+  # Logical environment tag attached to every Sentry event (e.g. "production",
+  # "staging"). Non-secret → ConfigMap. Emitted only when non-empty.
+  # Env: SENTRY_ENVIRONMENT (bare name)
+  environment: ""
+
+  # Performance-tracing sample rate (0.0–1.0). 0 disables tracing entirely; the
+  # app's own default is 0.2 (SENTRY_TRACES_SAMPLE_RATE env-default). Non-secret
+  # → ConfigMap, always emitted. String value is fine — Helm renders it quoted.
+  # Env: SENTRY_TRACES_SAMPLE_RATE (bare name)
+  tracesSampleRate: "0.2"
+
+# ============================================================
 # Service (targets the apiserver endpoint — run.all or run.apiserver).
 # ============================================================
 service:
@@ -611,6 +644,7 @@ secrets:
   #   INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY (required when aivision.provider=anthropic)
   #   INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY    (required when aivision.provider=openai)
   #   INVENTARIO_RUN_METRICS_TOKEN                   (optional; bearer token for GET /metrics — strongly recommended in production, see metrics.token)
+  #   SENTRY_DSN                                 (optional; BARE name — NOT INVENTARIO_RUN_ prefixed; enables Sentry error tracking when set, see sentry.dsn)
   #   SETUP_ADMIN_PASSWORD                       (required by job-setup if setupJob.enabled)
   #   BACKOFFICE_USER_PASSWORD                   (required by setup/init-data Job when backofficeUser.enabled; maps to setupJob.initData.backofficeUserPassword; min 8 chars + upper + lower + digit)
   #   BACKOFFICE_USER_EMAIL                      (optional; when backofficeUser.enabled, overrides backofficeUser.email so the operator login identity comes from the Secret/sops bundle instead of the overlay; falls back to backofficeUser.email when absent)
