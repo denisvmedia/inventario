@@ -32,6 +32,7 @@ import (
 	"github.com/denisvmedia/inventario/internal/backupsign"
 	_ "github.com/denisvmedia/inventario/internal/fileblob" // register the in-memory + file blob drivers
 	"github.com/denisvmedia/inventario/internal/metrics"
+	"github.com/denisvmedia/inventario/internal/observability/sentry"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
@@ -435,6 +436,12 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// self-skips "/metrics".
 	r.Use(metrics.HTTPMiddleware)
 	r.Use(middleware.Recoverer)
+	// Sentry panic capture (#844): registered AFTER Recoverer so it sits INSIDE
+	// it. With Repanic, it reports the panic to Sentry and re-panics; Recoverer
+	// then catches the re-panic and writes the 500. It also attaches a
+	// per-request Sentry hub to the context for the non-panic 5xx capture in
+	// errors.go. No-op pass-through when SENTRY_DSN is unset.
+	r.Use(sentry.Middleware())
 
 	// r.Get("/", func(w http.ResponseWriter, _r *http.Request) {
 	//	w.Write([]byte("Welcome to Inventario!"))

@@ -41,4 +41,13 @@ data:
   INVENTARIO_MIGRATE_DATA_ADMIN_NAME: "System Administrator"
   SEED_DATABASE: "true"
   AWS_REGION: "us-east-1"
+  # Sentry error tracking (#844, PR #2183). BARE names — the app reads SENTRY_*
+  # via cleanenv.ReadEnv with NO INVENTARIO_RUN_ prefix (the only such
+  # divergence), so they sit here alongside AWS_REGION/TZ. Empty SENTRY_DSN keeps
+  # Sentry DISABLED (the app logs "Sentry disabled (SENTRY_DSN not set)") — dev
+  # has no DSN by default; set one to enable. tracesSampleRate mirrors the app's
+  # 0.2 default.
+  SENTRY_DSN: ""
+  SENTRY_ENVIRONMENT: "dev"
+  SENTRY_TRACES_SAMPLE_RATE: "0.2"
   TZ: "UTC"

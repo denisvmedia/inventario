@@ -180,6 +180,17 @@ spec:
                 secretKeyRef:
                   name: inventario-secrets
                   key: smtp-password
+            # Sentry error tracking (#844, PR #2183) — OPTIONAL, disabled by
+            # default. ⚠️ BARE env name: SENTRY_DSN has NO INVENTARIO_RUN_ prefix
+            # (the only such divergence). The non-secret SENTRY_ENVIRONMENT /
+            # SENTRY_TRACES_SAMPLE_RATE knobs come from the ConfigMap above and
+            # are inert until this DSN is wired. To enable Sentry: set the
+            # sentry-dsn key in secret.yaml, then uncomment the mapping below.
+            # - name: SENTRY_DSN
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: inventario-secrets
+            #       key: sentry-dsn
           volumeMounts:
             - name: app-data
               mountPath: /data

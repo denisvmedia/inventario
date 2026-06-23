@@ -14,6 +14,7 @@ import (
 
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"github.com/denisvmedia/inventario/internal/observability/sentry"
 	"github.com/denisvmedia/inventario/models"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/schema/migrations/migrator"
@@ -47,6 +48,11 @@ type RuntimeSetup struct {
 	EmailLifecycle            EmailServiceLifecycle
 	WorkerDurations           WorkerDurations
 	CloseReadinessRedisPinger func()
+
+	// SentryFlush drains buffered Sentry events on shutdown (#844). It is
+	// always non-nil — a no-op when SENTRY_DSN is unset — so subcommands can
+	// defer it unconditionally.
+	SentryFlush func(timeout time.Duration) bool
 
 	// PauseController polls the worker_control rows and exposes the
 	// soft-pause check the workers consult each tick (#1308). It is built
@@ -109,6 +115,22 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 		return nil, err
 	}
 
+	// Initialise Sentry error tracking (#844). Read from the BARE SENTRY_* env
+	// vars (no INVENTARIO_RUN_ prefix — see the sentry package doc). A malformed
+	// DSN fails fast here; an unset DSN leaves Sentry disabled with a no-op
+	// flush. Done last so it covers the serving lifetime of every run mode;
+	// startup failures above are fatal and already logged to stderr.
+	sentryCfg, err := sentry.LoadConfig()
+	if err != nil {
+		serverSetup.closeReadinessRedisPinger()
+		return nil, fmt.Errorf("loading sentry config: %w", err)
+	}
+	sentryFlush, err := sentry.Init(sentryCfg)
+	if err != nil {
+		serverSetup.closeReadinessRedisPinger()
+		return nil, fmt.Errorf("initialising sentry: %w", err)
+	}
+
 	rs := &RuntimeSetup{
 		DSN:                       dsn,
 		FactorySet:                factorySet,
@@ -116,6 +138,7 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 		EmailLifecycle:            serverSetup.emailLifecycle,
 		WorkerDurations:           durations,
 		CloseReadinessRedisPinger: serverSetup.closeReadinessRedisPinger,
+		SentryFlush:               sentryFlush,
 	}
 
 	// Build the soft-pause controller only in worker-bearing modes (#1308).

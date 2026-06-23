@@ -83,4 +83,15 @@ data:
   # Public, unauthenticated photo-scan endpoint (#1988). Default false; spends
   # real vendor tokens with no auth wall — opt in deliberately.
   INVENTARIO_RUN_PUBLIC_AI_VISION_SCAN_ENABLED: {{ .Values.aivision.publicScanEnabled | quote }}
+  # Sentry error tracking (#844, PR #2183). ⚠️ BARE names — the app reads these
+  # via cleanenv.ReadEnv with NO prefix, so they are NOT under INVENTARIO_RUN_
+  # (the only `run`-config divergence; emitted bare like AWS_REGION/TZ). The DSN
+  # itself is a credential and lives in the Secret (templates/secret.yaml); only
+  # the non-secret knobs are here. SENTRY_ENVIRONMENT is emitted only when set;
+  # SENTRY_TRACES_SAMPLE_RATE is always set (defaults to 0.2 from values.yaml).
+  # See values.yaml `sentry:`.
+  {{- if .Values.sentry.environment }}
+  SENTRY_ENVIRONMENT: {{ .Values.sentry.environment | quote }}
+  {{- end }}
+  SENTRY_TRACES_SAMPLE_RATE: {{ .Values.sentry.tracesSampleRate | quote }}
   TZ: {{ .Values.app.tz | quote }}

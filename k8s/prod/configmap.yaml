@@ -37,4 +37,13 @@ data:
   INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL: "admin@example.com"
   INVENTARIO_MIGRATE_DATA_ADMIN_NAME: "System Administrator"
   SEED_DATABASE: "false"
+  # Sentry error tracking (#844, PR #2183). BARE names — the app reads SENTRY_*
+  # via cleanenv.ReadEnv with NO INVENTARIO_RUN_ prefix (the only such
+  # divergence), so the non-secret knobs sit here alongside TZ. The DSN is a
+  # CREDENTIAL: it is NOT set here. Sentry stays DISABLED until an operator wires
+  # SENTRY_DSN — keep it in the Secret and add a secretKeyRef in deployment.yaml
+  # (a commented stub is provided there). These two non-secret knobs are inert
+  # while SENTRY_DSN is unset. tracesSampleRate mirrors the app's 0.2 default.
+  SENTRY_ENVIRONMENT: "production"
+  SENTRY_TRACES_SAMPLE_RATE: "0.2"
   TZ: "UTC"

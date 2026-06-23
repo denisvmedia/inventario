@@ -472,6 +472,31 @@ the app logs a one-time startup warning. Gate it with a bearer token:
   the default for prod; only flip `app.enableApiDocs=true` on dev/preview overlays if you
   want the docs UI. Confirm `GET /swagger` returns 404 after deploy.
 
+### B10c. Sentry error tracking — optional (#844, PR #2183)
+
+Inventario can report panics + captured errors to [Sentry](https://sentry.io). **OFF by
+default**: with no DSN the app logs `Sentry disabled (SENTRY_DSN not set)` and every capture
+path is a no-op. Wire it only if you run a Sentry project.
+
+⚠️ **Bare env names — the one divergence from every other setting.** The three Sentry vars are
+read by the app via `cleanenv.ReadEnv` with **no prefix**, so they are the **bare** names
+`SENTRY_DSN` / `SENTRY_ENVIRONMENT` / `SENTRY_TRACES_SAMPLE_RATE` — **NOT** under the
+`INVENTARIO_RUN_` prefix that wraps every other `run` setting. The chart emits them verbatim
+(like `AWS_*` / `TZ`). Do not add a prefix.
+
+- [ ] **Enable it** by setting the DSN. The DSN is a **credential** → it goes in the Secret
+  (or `secrets.existingSecret`) under the **bare key `SENTRY_DSN`**, never the ConfigMap.
+  Inline alternative: `--set-string sentry.dsn='https://<public-key>@<host>/<project-id>'`
+  (the chart then renders the `SENTRY_DSN` Secret key only because the value is non-empty —
+  an empty DSN renders no key, so Sentry stays disabled and no empty credential is created).
+- [ ] **Tag the environment** with `sentry.environment=production` (bare `SENTRY_ENVIRONMENT`,
+  ConfigMap, emitted only when set).
+- [ ] **(Optional) tune tracing** with `sentry.tracesSampleRate` (bare
+  `SENTRY_TRACES_SAMPLE_RATE`, ConfigMap, default `0.2`; `0` disables tracing).
+- [ ] Both the apiserver and worker Deployments load the shared ConfigMap + Secret, so all
+  pods pick up Sentry automatically. Confirm a deliberate test error surfaces in the Sentry
+  project, or check pod logs for `Sentry enabled` instead of the disabled message.
+
 ### B11. Backups & disaster recovery
 
 Use independent layers — at least the first two are required:
@@ -591,6 +616,13 @@ metrics:
       release: kps
   podAnnotations:
     enabled: true
+
+sentry:
+  # dsn: ""                    # leave empty to keep Sentry OFF; or set the BARE
+                               # SENTRY_DSN key in the runtime Secret (Appendix B).
+                               # See §B10c. ⚠️ BARE name — no INVENTARIO_RUN_ prefix.
+  environment: production      # bare SENTRY_ENVIRONMENT (ConfigMap)
+  tracesSampleRate: "0.2"      # bare SENTRY_TRACES_SAMPLE_RATE (ConfigMap)
 ```
 
 ## Appendix B — Create the runtime Secret
@@ -615,6 +647,8 @@ kubectl -n inventario create secret generic inventario-runtime \
   # If R2 uploads fail with HTTP 501, add:
   #   --from-literal=AWS_REQUEST_CHECKSUM_CALCULATION='when_required' \
   #   --from-literal=AWS_RESPONSE_CHECKSUM_VALIDATION='when_required'
+  # To enable Sentry (§B10c), add the BARE-named key (NO INVENTARIO_RUN_ prefix):
+  #   --from-literal=SENTRY_DSN='https://<public-key>@<host>/<project-id>' \
 ```
 
 If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (or set
