@@ -29,6 +29,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.RefreshTokenCleanupInterval, "refresh-token-cleanup-interval", cfg.RefreshTokenCleanupInterval, "Interval between refresh token cleanup runs (e.g., 1h, 30m)")
 	flags.StringVar(&cfg.EmailVerificationCleanupInterval, "email-verification-cleanup-interval", cfg.EmailVerificationCleanupInterval, "Interval between email verification token cleanup runs (e.g., 1h, 30m)")
 	flags.StringVar(&cfg.MagicLinkTokenCleanupInterval, "magic-link-token-cleanup-interval", cfg.MagicLinkTokenCleanupInterval, "Interval between magic-link sign-in token cleanup runs (e.g., 1h, 30m)")
+	flags.StringVar(&cfg.OperationSlotCleanupInterval, "operation-slot-cleanup-interval", cfg.OperationSlotCleanupInterval, "Interval between expired operation-slot cleanup runs (e.g., 5m, 1m)")
 	flags.StringVar(&cfg.GroupPurgeInterval, "group-purge-interval", cfg.GroupPurgeInterval, "Interval between group purge sweeps (hard-deletes pending_deletion groups and expired unused invites; e.g., 5m, 15m)")
 	flags.StringVar(&cfg.WarrantyReminderInterval, "warranty-reminder-interval", cfg.WarrantyReminderInterval, "Interval between warranty reminder sweeps (60/30/7-day expiry emails; e.g., 1h)")
 	flags.StringVar(&cfg.StorageQuotaReminderInterval, "storage-quota-reminder-interval", cfg.StorageQuotaReminderInterval, "Interval between storage quota warning sweeps (90% threshold emails; e.g., 1h)")

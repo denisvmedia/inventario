@@ -92,6 +92,9 @@ func (c *Command) run() error {
 	stopMagicLinkTokenCleanup := bootstrap.StartMagicLinkTokenCleanupWorker(ctx, rs, c.cfg)
 	defer stopMagicLinkTokenCleanup()
 
+	stopOperationSlotCleanup := bootstrap.StartOperationSlotCleanupWorker(ctx, rs, c.cfg)
+	defer stopOperationSlotCleanup()
+
 	stopLoginEventRetention := bootstrap.StartLoginEventRetentionWorker(ctx, rs, c.cfg)
 	defer stopLoginEventRetention()
 

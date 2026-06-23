@@ -156,6 +156,24 @@ func StartMagicLinkTokenCleanupWorker(ctx context.Context, rs *RuntimeSetup, _ *
 	return worker.Stop
 }
 
+// StartOperationSlotCleanupWorker wires and starts the operation-slot cleanup
+// worker (#2122 F4), which deletes expired operation-slot rows on the
+// configured interval, and returns its stop function. It uses the service-mode
+// registry because the sweep spans all tenants/users (no request context).
+func StartOperationSlotCleanupWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	opts := []services.OperationSlotCleanupOption{
+		services.WithOperationSlotCleanupInterval(rs.WorkerDurations.OperationSlotCleanupInterval),
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithOperationSlotCleanupPauseController(rs.PauseController))
+	}
+	worker := services.NewOperationSlotCleanupWorker(
+		rs.FactorySet.OperationSlotRegistryFactory.CreateServiceRegistry(), opts...,
+	)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
 // StartLoginEventRetentionWorker wires and starts the login_events
 // retention worker (#1379). The retention window and sweep interval
 // are not currently surfaced as flags — the defaults (90d retention,

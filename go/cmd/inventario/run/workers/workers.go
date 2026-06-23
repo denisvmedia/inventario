@@ -152,6 +152,7 @@ func (c *Command) run() error {
 			bootstrap.StartRefreshTokenCleanupWorker,
 			bootstrap.StartEmailVerificationCleanupWorker,
 			bootstrap.StartMagicLinkTokenCleanupWorker,
+			bootstrap.StartOperationSlotCleanupWorker,
 			bootstrap.StartLoginEventRetentionWorker,
 			bootstrap.StartGroupPurgeWorker,
 			bootstrap.StartWarrantyReminderWorker,

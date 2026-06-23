@@ -308,18 +308,24 @@ func (w *ThumbnailGenerationWorker) processPendingJobs(ctx context.Context) {
 	}
 }
 
-// performCleanup cleans up old jobs and expired slots
+// performCleanup cleans up expired concurrency slots and old jobs.
+//
+// Order matters (#2122 F5): expired concurrency slots are deleted FIRST so
+// that the user_concurrency_slots.job_id -> thumbnail_generation_jobs(id) FK
+// (NO ACTION) is already broken before CleanupCompletedJobs tries to delete
+// the job rows. The two run in separate transactions, so doing it the other
+// way round let an orphan slot still reference a completed job and block its
+// deletion.
 func (w *ThumbnailGenerationWorker) performCleanup(ctx context.Context) {
-	// Cleanup completed jobs
-	err := w.thumbnailService.CleanupCompletedJobs(ctx, w.retentionPeriod)
-	if err != nil {
-		slog.Error("Failed to cleanup completed thumbnail jobs", "error", err)
+	// Cleanup expired concurrency slots first to free the FK referencing
+	// completed jobs.
+	if err := w.thumbnailService.CleanupExpiredSlots(ctx); err != nil {
+		slog.Error("Failed to cleanup expired concurrency slots", "error", err)
 	}
 
-	// Cleanup expired concurrency slots
-	err = w.thumbnailService.CleanupExpiredSlots(ctx)
-	if err != nil {
-		slog.Error("Failed to cleanup expired concurrency slots", "error", err)
+	// Cleanup completed jobs now that no expired slot references them.
+	if err := w.thumbnailService.CleanupCompletedJobs(ctx, w.retentionPeriod); err != nil {
+		slog.Error("Failed to cleanup completed thumbnail jobs", "error", err)
 	}
 }
 
