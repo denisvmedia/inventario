@@ -35,9 +35,17 @@ IMAGE_REPO="ghcr.io/denisvmedia/inventario"
 
 # Track temp files for guaranteed cleanup on any exit (set -u safe on bash 3.2).
 TMP_FILES=()
+# Set to 1 while the (unauthenticated) seed endpoint is enabled on the running
+# stack, so an interrupted/failed run never silently leaves it live.
+SEED_ENDPOINT_LIVE=0
 cleanup() {
   if [ "${#TMP_FILES[@]}" -gt 0 ]; then
     rm -f "${TMP_FILES[@]+"${TMP_FILES[@]}"}"
+  fi
+  if [ "${SEED_ENDPOINT_LIVE:-0}" = "1" ]; then
+    err "WARNING: the seed endpoint may still be ENABLED on the running stack"
+    err "(POST /api/v1/seed is unauthenticated + RLS-bypassing). Disable it with:"
+    err "  ${COMPOSE[*]:-docker compose} up -d --no-build   (after re-running setup.sh, which regenerates a clean override)"
   fi
 }
 trap cleanup EXIT
@@ -368,6 +376,23 @@ write_env() {
   if [ -f "$ENV_FILE" ] && [ "$FORCE" -eq 0 ]; then
     ENV_REUSED=1
     success "Existing .env found — reusing it untouched (use --force to regenerate)."
+    # Self-heal: a .env from before this version lacks BACKOFFICE_PASSWORD, which
+    # the base compose now requires (fail-closed). Append the back-office block so
+    # `git pull && ./setup.sh` on an existing deployment doesn't fail at validate.
+    if [ -z "$(read_env_value BACKOFFICE_PASSWORD)" ]; then
+      local bo_pw; bo_pw="$(gen_password)"
+      {
+        printf '\n# Back-office (platform operator) — added by a setup.sh upgrade.\n'
+        printf 'BACKOFFICE_EMAIL=%s\n' "$(esc_env "$BACKOFFICE_EMAIL")"
+        printf 'BACKOFFICE_NAME=%s\n' "$(esc_env "$BACKOFFICE_NAME")"
+        printf 'BACKOFFICE_PASSWORD=%s\n' "$(esc_env "$bo_pw")"
+        printf 'BACKOFFICE_MFA_ENFORCED=%s\n' "$BACKOFFICE_MFA_ENFORCED"
+      } >> "$ENV_FILE"
+      BACKOFFICE_PASSWORD="$bo_pw"
+      BACKOFFICE_PASSWORD_GENERATED=1
+      warn "Existing .env lacked BACKOFFICE_PASSWORD — appended back-office settings (generated password)."
+      warn "The operator is auto-created only on first init; on an already-initialized stack, see README 'Upgrading an existing deployment'."
+    fi
     info "Secrets, ports and credentials already in .env are preserved."
     return 0
   fi
@@ -647,9 +672,11 @@ seed_database() {
 # ---------------------------------------------------------------------------
 start_stack() {
   section "Start"
+  # The seed endpoint is live from the moment the seed-enabled override comes up.
+  if [ "${SEED:-0}" = "1" ]; then SEED_ENDPOINT_LIVE=1; fi
   local wait_flag=()
   if compose_supports_wait; then
-    wait_flag=(--wait)
+    wait_flag=(--wait --wait-timeout 180)
   fi
 
   if [ "$MODE" = "image" ]; then
@@ -671,7 +698,12 @@ start_stack() {
     log "Disabling the seed endpoint ..."
     SEED=0
     write_override
-    "${COMPOSE[@]}" up -d --no-build "${wait_flag[@]+"${wait_flag[@]}"}"
+    if ! "${COMPOSE[@]}" up -d --no-build "${wait_flag[@]+"${wait_flag[@]}"}"; then
+      err "Failed to recreate the app to disable the seed endpoint."
+      err "The override on disk is clean, but the RUNNING container may still expose the unauthenticated POST /api/v1/seed."
+      die "Recover by re-running: ${COMPOSE[*]} up -d --no-build"
+    fi
+    SEED_ENDPOINT_LIVE=0
     success "Seed endpoint disabled."
   fi
 }
@@ -842,11 +874,13 @@ main() {
   # When an existing .env is reused, .env-only flags (port/admin/tenant) are NOT
   # applied. Report the values actually in effect and warn if flags were passed.
   if [ "$ENV_REUSED" -eq 1 ]; then
-    local eff_port eff_email
+    local eff_port eff_email eff_bo_email
     eff_port="$(unesc_env "$(read_env_value INVENTARIO_HOST_PORT)")"
     eff_email="$(unesc_env "$(read_env_value ADMIN_EMAIL)")"
+    eff_bo_email="$(unesc_env "$(read_env_value BACKOFFICE_EMAIL)")"
     [ -n "$eff_port" ] && PORT="$eff_port"
     [ -n "$eff_email" ] && ADMIN_EMAIL="$eff_email"
+    [ -n "$eff_bo_email" ] && BACKOFFICE_EMAIL="$eff_bo_email"
     if [ "$ENV_FLAGS_SUPPLIED" -eq 1 ]; then
       warn "Existing .env reused — --port/--admin-email/--admin-password/--tenant-* were ignored. Re-run with --force to apply them."
     fi

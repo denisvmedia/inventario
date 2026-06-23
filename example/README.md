@@ -34,7 +34,7 @@ The first run auto-provisions two independent accounts (created by the `inventar
 | **Tenant admin** (the app) | `http://localhost:3333/` | `admin@example.com` | `ADMIN_PASSWORD` |
 | **Back-office operator** (platform admin) | `http://localhost:3333/backoffice/login` | `backoffice@example.com` | `BACKOFFICE_PASSWORD` |
 
-Back-office users live **outside** the tenant model (no tenant, no group scoping) and manage the platform. The example provisions the operator with **MFA disabled** (`BACKOFFICE_MFA_ENFORCED=false`) so you can sign in with just a password. For production, set `BACKOFFICE_MFA_ENFORCED=true` and enrol TOTP via `inventario backoffice mfa setup` before the first sign-in.
+Back-office users live **outside** the tenant model (no tenant, no group scoping) and manage the platform. The example provisions the operator with **MFA disabled** (`BACKOFFICE_MFA_ENFORCED=false`) so you can sign in with just a password. For production, set `BACKOFFICE_MFA_ENFORCED=true` and enroll TOTP via `inventario backoffice mfa setup` before the first sign-in.
 
 ### Seeding demo data
 
@@ -169,14 +169,14 @@ If you want full control instead of the script, configure the two files by hand.
 1. **PostgreSQL starts** and creates the migration user via the init script.
 2. **Bootstrap service** runs `db bootstrap apply` to set up extensions and roles (idempotent — safe to run repeatedly).
 3. **Migration service** runs `db migrate up` to apply schema changes.
-4. **Init data service** (first deployment only, gated by `./data/init-state/data-initialized`) seeds the default tenant + tenant admin (`db migrate data`) and provisions the back-office operator (`backoffice bootstrap --ensure`).
+4. **Init data service** (first deployment only, gated by `./data/init-state/data-initialized`) seeds the default tenant + tenant admin (`db migrate data`) and provisions the back-office operator (`backoffice bootstrap --ensure`). The marker is written only after **both** succeed.
 5. **Main application** starts and serves requests.
 
 ### Data Persistence
 
 All data is stored in host-mounted directories for easy access:
 
-- **./data/postgres**: PostgreSQL database files (in the `pgdata/` subdirectory — Postgres 18 requires `PGDATA` to be a subdir of the bind mount).
+- **./data/postgres**: PostgreSQL database files (in the `pgdata/` subdirectory — the Postgres 18 image refuses to start with data bind-mounted directly at the mount root, so the compose sets `PGDATA` to a subdir).
 - **./data/redis**: Redis persistence (token-blacklist data).
 - **./data/uploads**: Application file uploads.
 - **./data/init-state**: Tracks initialization state to prevent data re-setup.
@@ -233,7 +233,7 @@ example/
 | `BACKOFFICE_EMAIL` | `backoffice@example.com` | Back-office operator email (first run only). |
 | `BACKOFFICE_NAME` | `Platform Admin` | Back-office operator display name (first run only). |
 | `BACKOFFICE_PASSWORD` | generated / **required** | Back-office operator password (first run only). `setup.sh` generates one; the manual path must set it (fails closed if empty). Same complexity policy as `ADMIN_PASSWORD`. |
-| `BACKOFFICE_MFA_ENFORCED` | `false` | Demo default: password-only back-office login. Set `true` for production, then enrol TOTP via `inventario backoffice mfa setup`. |
+| `BACKOFFICE_MFA_ENFORCED` | `false` | Demo default: password-only back-office login. Set `true` for production, then enroll TOTP via `inventario backoffice mfa setup`. |
 
 > Build-time only (source mode): `VERSION`, `COMMIT`, and `BUILD_DATE` are optional image-label build args (defaults `dev` / `unknown` / `unknown`, auto-detected if unset) — see the commented block in `.env.example`. They are ignored in image mode.
 
@@ -250,6 +250,42 @@ example/
 7. **Keep `.env` private.** `setup.sh` writes it mode `0600` (and its `.bak.*` backups too); it holds cleartext secrets (`JWT_SECRET`, `FILE_SIGNING_KEY`, DB, admin and back-office passwords). On a shared host, do not loosen its permissions. If you create `.env` by hand, `chmod 600 .env`.
 8. **Enable back-office MFA** for production (`BACKOFFICE_MFA_ENFORCED=true` + `inventario backoffice mfa setup`). The example ships it disabled for convenience.
 9. **The seed endpoint** (`POST /api/v1/seed`) is unauthenticated and RLS-bypassing. `setup.sh --seed` enables it only transiently and disables it again; never enable it in production.
+
+## Upgrading an existing deployment
+
+Some changes are **not** applied automatically to a stack that was already initialized (the init-data step runs once, gated by `./data/init-state/data-initialized`):
+
+### PostgreSQL 18 data directory (⚠ back up first)
+
+This kit runs **PostgreSQL 18**, which stores data in a version-specific layout; the compose pins `PGDATA` to `./data/postgres/pgdata`. If you have an older cluster whose data sits directly in `./data/postgres` (e.g. a previous Postgres 17 setup), Postgres 18 starts a **fresh, empty** cluster in `pgdata/` and leaves the old files untouched — so the app looks like it lost its data. A major-version bump (17 → 18) needs a logical dump/restore regardless. **Back up `./data` first**, then:
+
+```bash
+# With the OLD stack running, dump everything:
+docker compose exec -T postgres pg_dumpall -U inventario > dump.sql
+# Upgrade (git pull) and start the new stack so Postgres 18 initializes ./data/postgres/pgdata, then restore:
+docker compose exec -T postgres psql -U inventario -d postgres < dump.sql
+```
+
+### Add the back-office operator to an already-initialized stack
+
+The back-office operator is auto-provisioned only on the **first** init. On a stack initialized before it was added, create it manually (idempotent):
+
+```bash
+docker compose run --rm --no-deps inventario backoffice bootstrap \
+  --email backoffice@example.com --name "Platform Admin" --mfa-enforced=false
+# Omit --password to get a strong generated one printed once.
+```
+
+### Enable back-office MFA (recommended for production)
+
+```bash
+docker compose run --rm --no-deps inventario backoffice mfa setup \
+  --email backoffice@example.com \
+  --jwt-secret "$(grep '^JWT_SECRET=' .env | cut -d= -f2-)"
+# Prints a TOTP secret + otpauth:// URL + backup codes ONCE. --jwt-secret MUST
+# match the server's JWT_SECRET or the enrollment is undecryptable at login.
+# Then set BACKOFFICE_MFA_ENFORCED=true.
+```
 
 ## Maintenance
 

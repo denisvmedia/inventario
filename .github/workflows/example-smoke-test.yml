@@ -69,21 +69,27 @@ jobs:
       - name: Smoke test — tenant login, backoffice login, seed, endpoint disabled
         run: |
           set -euo pipefail
+          # Read every value from the generated .env so the test never drifts from setup.sh defaults.
           PORT=$(grep '^INVENTARIO_HOST_PORT=' .env | cut -d= -f2-)
+          ADMIN_EMAIL=$(grep '^ADMIN_EMAIL=' .env | cut -d= -f2-)
           ADMIN_PW=$(grep '^ADMIN_PASSWORD=' .env | cut -d= -f2-)
+          BO_EMAIL=$(grep '^BACKOFFICE_EMAIL=' .env | cut -d= -f2-)
           BO_PW=$(grep '^BACKOFFICE_PASSWORD=' .env | cut -d= -f2-)
           BASE="http://localhost:${PORT}"
+
+          echo "--- postgres 18 data landed in the pgdata subdir (PGDATA fix) ---"
+          sudo test -f data/postgres/pgdata/PG_VERSION
 
           echo "--- tenant admin login (expect access_token) ---"
           curl -fsS -X POST "$BASE/api/v1/auth/login" \
             -H 'Content-Type: application/json' \
-            -d "{\"email\":\"admin@example.com\",\"password\":\"${ADMIN_PW}\"}" \
+            -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PW}\"}" \
             | jq -e '.access_token' >/dev/null
 
           echo "--- backoffice operator login (auto-provisioned; expect access_token) ---"
           curl -fsS -X POST "$BASE/api/v1/backoffice/auth/login" \
             -H 'Content-Type: application/json' \
-            -d "{\"email\":\"backoffice@example.com\",\"password\":\"${BO_PW}\"}" \
+            -d "{\"email\":\"${BO_EMAIL}\",\"password\":\"${BO_PW}\"}" \
             | jq -e '.access_token' >/dev/null
 
           echo "--- seed endpoint must be DISABLED again after seeding (expect 404) ---"
