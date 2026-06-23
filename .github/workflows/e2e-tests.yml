@@ -267,6 +267,10 @@ jobs:
       INVENTARIO_RUN_JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
       INVENTARIO_RUN_FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
       INVENTARIO_RUN_PUBLIC_URL: "http://localhost:3333"
+      # This lane runs the host binary with the stub provider (no Mailpit) while
+      # a public URL is set, so opt into the #2093 guard — otherwise the backend
+      # treats stub+public-URL as a fatal misconfiguration and refuses to start.
+      INVENTARIO_RUN_ALLOW_STUB_EMAIL: "true"
       # Feedback (#1387) needs a destination address or the handler 503s.
       # The 503 propagates as MaintenancePage on the FE (lib/http.ts),
       # which masks the toast assertion. The stub email provider doesn't

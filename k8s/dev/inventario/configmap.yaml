@@ -28,6 +28,10 @@ data:
   INVENTARIO_RUN_THUMBNAIL_RATE_LIMIT_PER_MINUTE: "50"
   INVENTARIO_RUN_THUMBNAIL_SLOT_DURATION: "30m"
   INVENTARIO_RUN_EMAIL_PROVIDER: "stub"
+  # This dev/smoke stack intentionally uses the no-op stub provider while a
+  # public URL is set, so opt into the #2093 guard (otherwise the backend
+  # refuses to start, treating stub+public-URL as a fatal misconfiguration).
+  INVENTARIO_RUN_ALLOW_STUB_EMAIL: "true"
   INVENTARIO_RUN_EMAIL_FROM: "inventario@inventario-dev.local"
   INVENTARIO_RUN_LOG_EMAIL_URLS: "true"
   # Feature flags. Mirror the Helm chart's `features:` block. Default
