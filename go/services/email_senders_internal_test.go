@@ -1,5 +1,11 @@
 package services
 
+// White-box: TestNewEmailSenderFromConfig exercises the unexported
+// newEmailSenderFromConfig dispatch switch directly. There is no exported entry
+// point that maps an EmailProvider to its concrete sender without also building
+// the full async service and its queue, so the provider-routing table cannot be
+// asserted through the public API alone.
+
 import (
 	"testing"
 

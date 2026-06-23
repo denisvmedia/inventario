@@ -1,4 +1,4 @@
-package mandrill
+package mandrill_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/email/providers/mandrill"
 	"github.com/denisvmedia/inventario/email/sender"
 )
 
@@ -22,14 +23,14 @@ type mandrillRecordedRequest struct {
 func TestNew_RequiresAPIKey(t *testing.T) {
 	c := qt.New(t)
 
-	_, err := New(Config{})
+	_, err := mandrill.New(mandrill.Config{})
 	c.Assert(err, qt.IsNotNil)
 }
 
 func TestNew_InvalidBaseURL(t *testing.T) {
 	c := qt.New(t)
 
-	_, err := New(Config{
+	_, err := mandrill.New(mandrill.Config{
 		APIKey:  "key",
 		BaseURL: "://bad",
 	})
@@ -54,7 +55,7 @@ func TestSend_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := New(Config{
+	s, err := mandrill.New(mandrill.Config{
 		APIKey:     "key-1",
 		BaseURL:    srv.URL,
 		HTTPClient: srv.Client(),
@@ -88,7 +89,7 @@ func TestSend_Non2xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := New(Config{
+	s, err := mandrill.New(mandrill.Config{
 		APIKey:     "key-1",
 		BaseURL:    srv.URL,
 		HTTPClient: srv.Client(),
@@ -115,7 +116,7 @@ func TestSend_RejectedByProvider(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := New(Config{
+	s, err := mandrill.New(mandrill.Config{
 		APIKey:     "key-1",
 		BaseURL:    srv.URL,
 		HTTPClient: srv.Client(),

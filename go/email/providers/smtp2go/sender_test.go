@@ -1,4 +1,4 @@
-package smtp2go
+package smtp2go_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/denisvmedia/inventario/email/providers/smtp2go"
 	"github.com/denisvmedia/inventario/email/sender"
 )
 
@@ -23,16 +24,28 @@ type smtp2goRecordedRequest struct {
 func TestNew_RequiresAPIKey(t *testing.T) {
 	c := qt.New(t)
 
-	_, err := New(Config{})
+	_, err := smtp2go.New(smtp2go.Config{})
 	c.Assert(err, qt.IsNotNil)
 }
 
 func TestNew_InvalidBaseURL(t *testing.T) {
 	c := qt.New(t)
 
-	_, err := New(Config{
+	_, err := smtp2go.New(smtp2go.Config{
 		APIKey:  "key",
 		BaseURL: "://bad",
+	})
+	c.Assert(err, qt.IsNotNil)
+}
+
+func TestNew_RejectsPlaintextHTTP(t *testing.T) {
+	c := qt.New(t)
+
+	// The API key rides in the X-Smtp2go-Api-Key header, so a plaintext base
+	// URL must be refused outright to avoid leaking it.
+	_, err := smtp2go.New(smtp2go.Config{
+		APIKey:  "key",
+		BaseURL: "http://api.smtp2go.com",
 	})
 	c.Assert(err, qt.IsNotNil)
 }
@@ -41,7 +54,7 @@ func TestSend_Success(t *testing.T) {
 	c := qt.New(t)
 
 	recCh := make(chan smtp2goRecordedRequest, 1)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		_ = r.Body.Close()
 
@@ -56,7 +69,7 @@ func TestSend_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := New(Config{
+	s, err := smtp2go.New(smtp2go.Config{
 		APIKey:     "key-1",
 		BaseURL:    srv.URL,
 		HTTPClient: srv.Client(),
@@ -94,13 +107,13 @@ func TestSend_Success(t *testing.T) {
 func TestSend_ProviderFailure(t *testing.T) {
 	c := qt.New(t)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"request_id":"r1","data":{"succeeded":0,"failed":1,"failures":["bad recipient"]}}`))
 	}))
 	defer srv.Close()
 
-	s, err := New(Config{
+	s, err := smtp2go.New(smtp2go.Config{
 		APIKey:     "key-1",
 		BaseURL:    srv.URL,
 		HTTPClient: srv.Client(),
@@ -120,13 +133,13 @@ func TestSend_ProviderFailure(t *testing.T) {
 func TestSend_HTTPError(t *testing.T) {
 	c := qt.New(t)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"request_id":"r1","data":{"error_code":"E_X","error":"bad"}}`))
 	}))
 	defer srv.Close()
 
-	s, err := New(Config{
+	s, err := smtp2go.New(smtp2go.Config{
 		APIKey:     "key-1",
 		BaseURL:    srv.URL,
 		HTTPClient: srv.Client(),
