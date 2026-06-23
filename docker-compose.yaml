@@ -229,13 +229,21 @@ services:
       INVENTARIO_RUN_AI_VISION_OPENAI_MODEL: ${AI_VISION_OPENAI_MODEL:-gpt-4o}
 
       # Feature flags
-      # Currency migration is on by default. Set FEATURE_CURRENCY_MIGRATION=false
-      # in .env to disable the wizard, lock middleware, and worker.
-      # The binary reads the env-prefixed name (run section → INVENTARIO_RUN_):
-      # see ReadSection in go/cmd/inventario/shared/config.go. The plain log
-      # message "FEATURE_CURRENCY_MIGRATION is off" in
-      # go/cmd/inventario/run/bootstrap/workers.go is misleading.
+      # Currency migration is on by default. To disable the wizard, lock
+      # middleware, and worker, set FEATURE_CURRENCY_MIGRATION=false in .env;
+      # compose forwards it as the env-prefixed INVENTARIO_RUN_ name the binary
+      # reads (run section → INVENTARIO_RUN_; see ReadSection in
+      # go/cmd/inventario/shared/config.go). A YAML config key cannot turn it off
+      # (false re-defaults to true) — the env var is the only off-switch (#1618).
       INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: ${FEATURE_CURRENCY_MIGRATION:-true}
+
+      # Error tracking (#844). Optional; an empty SENTRY_DSN disables Sentry and
+      # no events are sent. NOTE: unlike every other run-section var above, the
+      # SENTRY_* settings are read with BARE env names (no INVENTARIO_RUN_
+      # prefix), matching Sentry's own conventions.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.2}
 
       # System configuration
       TZ: ${TZ:-UTC}

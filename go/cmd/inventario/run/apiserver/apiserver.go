@@ -6,6 +6,8 @@
 package apiserver
 
 import (
+	"time"
+
 	"github.com/spf13/cobra"
 
 	"github.com/denisvmedia/inventario/backup/restore"
@@ -63,6 +65,8 @@ func (c *Command) run() error {
 		return err
 	}
 	defer rs.CloseReadinessRedisPinger()
+	// Flush buffered Sentry events on shutdown (#844); no-op when disabled.
+	defer rs.SentryFlush(2 * time.Second)
 
 	restoreStatus := restore.NewRegistryStatusQuerier(rs.FactorySet.CreateServiceRegistrySet())
 	srv, errCh := bootstrap.StartAPIServer(c.cfg, rs, restoreStatus)

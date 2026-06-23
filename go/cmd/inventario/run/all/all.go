@@ -6,6 +6,7 @@ package all
 
 import (
 	"context"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -58,6 +59,8 @@ func (c *Command) run() error {
 		return err
 	}
 	defer rs.CloseReadinessRedisPinger()
+	// Flush buffered Sentry events on shutdown (#844); no-op when disabled.
+	defer rs.SentryFlush(2 * time.Second)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

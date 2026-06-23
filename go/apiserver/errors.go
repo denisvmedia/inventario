@@ -9,6 +9,7 @@ import (
 	"github.com/go-extras/errx"
 
 	"github.com/denisvmedia/inventario/internal/errormarshal"
+	"github.com/denisvmedia/inventario/internal/observability/sentry"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/registry"
 	"github.com/denisvmedia/inventario/services"
@@ -222,6 +223,8 @@ func NewTooManyRequestsError(err error) jsonapi.Error {
 
 func internalServerError(w http.ResponseWriter, r *http.Request, err error) error {
 	slog.Error("internal server error", "error", err)
+	// Report the unexpected 5xx to Sentry (#844). No-op when Sentry is disabled.
+	sentry.CaptureError(r.Context(), err, map[string]string{"component": "apiserver"})
 	return render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
 }
 
@@ -555,7 +558,15 @@ func toJSONAPIError(err error) jsonapi.Error {
 }
 
 func renderEntityError(w http.ResponseWriter, r *http.Request, err error) error {
-	return render.Render(w, r, jsonapi.NewErrors(toJSONAPIError(err)))
+	jsErr := toJSONAPIError(err)
+	// The default arm of toJSONAPIError maps any unrecognised error to a 500;
+	// report those (and any explicit 5xx) to Sentry (#844). Mapped 4xx — the
+	// common case — are expected business outcomes and are not captured. No-op
+	// when Sentry is disabled.
+	if jsErr.HTTPStatusCode >= http.StatusInternalServerError {
+		sentry.CaptureError(r.Context(), err, map[string]string{"component": "apiserver"})
+	}
+	return render.Render(w, r, jsonapi.NewErrors(jsErr))
 }
 
 func badRequest(w http.ResponseWriter, r *http.Request, err error) error {
