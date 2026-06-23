@@ -1,18 +1,21 @@
-# Docker Compose Override Example for Inventario Production Deployment
+# Docker Compose Override — ILLUSTRATIVE REFERENCE (advanced / custom production)
 #
-# Copy this file to docker-compose.override.yaml and customize the values
-# for your specific production environment.
+# This file demonstrates a fully customized production deployment: a renamed
+# database/user, resource limits, and reverse-proxy labels. It is NOT a drop-in
+# for the bundled .env — it renames the database and ships "your-secure-*"
+# placeholder secrets that the app REJECTS at boot, so copying it verbatim
+# yields a non-booting or mis-wired stack.
 #
-# Usage:
-#   cp docker-compose.override.yaml.example docker-compose.override.yaml
-#   # Edit docker-compose.override.yaml with your values
-#   docker-compose up -d --build
+# For a working deployment, prefer ./setup.sh (it generates a correct override),
+# or hand-write the minimal override documented in README.md "Manual setup".
+# Use the snippets here only as a reference for the optional pieces you want
+# (deploy.resources, reverse-proxy labels, a separate production database).
 #
-# IMPORTANT NOTES:
-# - All services use the same database DSN for consistency
-# - The default tenant ID is set to "test-tenant-id" to match the application code
-# - Environment variables for init-data use the INVENTARIO_MIGRATE_DATA_ prefix
-# - Make sure to change all "your-secure-*" placeholders with actual secure values
+# NOTES:
+# - init-data variables use the INVENTARIO_MIGRATE_DATA_ prefix.
+# - The app reads INVENTARIO_RUN_* / POSTGRES_* names; bare keys like
+#   MAX_CONCURRENT_EXPORTS placed directly under a service's environment are inert.
+# - Replace every "your-secure-*" placeholder with a real value before use.
 
 services:
   # Override Inventario application configuration
@@ -32,9 +35,12 @@ services:
       # Optional: Customize file URL expiration (default: 15m)
       INVENTARIO_RUN_FILE_URL_EXPIRATION: "15m"
 
-      # Optional: Customize worker limits based on your server capacity
-      MAX_CONCURRENT_EXPORTS: "5"
-      MAX_CONCURRENT_IMPORTS: "2"
+      # Optional: Customize worker limits based on your server capacity.
+      # Use the INVENTARIO_RUN_ prefix — the app reads the prefixed names, so a
+      # bare MAX_CONCURRENT_EXPORTS here would be inert. (Or set MAX_CONCURRENT_*
+      # in .env, which the base compose maps to these.)
+      INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS: "5"
+      INVENTARIO_RUN_MAX_CONCURRENT_IMPORTS: "2"
 
       # Optional: Set timezone for your location
       TZ: "America/New_York"

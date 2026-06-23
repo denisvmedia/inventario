@@ -11,3 +11,7 @@ docker-compose.override.yaml
 *.sql
 *.tar.gz
 backup-*
+
+# Ignore setup.sh backups of .env / override (may contain secrets)
+.env.bak.*
+docker-compose.override.yaml.bak.*
