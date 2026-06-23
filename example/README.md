@@ -177,9 +177,9 @@ If you want full control instead of the script, configure the two files by hand.
 All data is stored in host-mounted directories for easy access:
 
 - **./data/postgres**: PostgreSQL database files (in the `pgdata/` subdirectory — the Postgres 18 image refuses to start with data bind-mounted directly at the mount root, so the compose sets `PGDATA` to a subdir).
-- **./data/redis**: Redis persistence (token-blacklist data).
 - **./data/uploads**: Application file uploads.
 - **./data/init-state**: Tracks initialization state to prevent data re-setup.
+- **`redis-data`** (named volume, not under `./data`): Redis token-blacklist cache. It uses a named volume because the redis image's working dir is `/data`; a host bind mount there makes healthchecks fail if the host dir is recreated. Remove it with `docker compose down -v`.
 
 **Directory Structure:**
 
@@ -187,7 +187,6 @@ All data is stored in host-mounted directories for easy access:
 example/
 ├── data/
 │   ├── postgres/          # PostgreSQL data files (under pgdata/ — PGDATA subdir)
-│   ├── redis/             # Redis token-blacklist persistence
 │   ├── uploads/           # Application file uploads
 │   └── init-state/        # Initialization tracking
 ├── docker-compose.yaml
@@ -343,8 +342,8 @@ Migrations run automatically on startup in either case.
 ### Reset Data (Development Only)
 
 ```bash
-# WARNING: this deletes all data
-docker compose down
+# WARNING: this deletes all data (-v also removes the redis named volume)
+docker compose down -v
 rm -rf ./data/
 docker compose up -d
 ```

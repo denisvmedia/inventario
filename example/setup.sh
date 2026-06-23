@@ -630,7 +630,8 @@ compose_supports_wait() {
 # aborts the whole `up`. Pre-own the inventario-owned mounts to the image user.
 # ---------------------------------------------------------------------------
 prepare_data_dirs() {
-  mkdir -p data/postgres data/redis data/init-state data/uploads
+  # redis uses a named volume (see docker-compose.yaml), so no ./data/redis here.
+  mkdir -p data/postgres data/init-state data/uploads
   if [ "$(uname -s)" = "Linux" ]; then
     if ! chown -R 1001:1001 data/init-state data/uploads 2>/dev/null; then
       warn "Could not chown data/init-state, data/uploads to uid 1001. If 'up' fails with"
@@ -752,7 +753,7 @@ print_access_info() {
     fi
     printf '\n%s\n' "    Follow logs:  ${compose_str} logs -f inventario" >&2
     info "Stop:         ${compose_str} down"
-    info "Stop + wipe:  ${compose_str} down && rm -rf ./data"
+    info "Stop + wipe:  ${compose_str} down -v && rm -rf ./data   (-v also clears the redis volume)"
   else
     printf '\n%s\n' "${C_GREEN}${C_BOLD}Preparation complete.${C_RESET} To start the stack, run:" >&2
     if [ "$MODE" = "image" ]; then

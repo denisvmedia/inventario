@@ -42,7 +42,11 @@ services:
     image: redis:8-alpine
     restart: unless-stopped
     volumes:
-      - ./data/redis:/data
+      # Named volume (not a ./data bind mount): the redis image's WORKDIR is /data,
+      # so a bind mount there makes every healthcheck/exec fail 'chdir /data' if the
+      # host dir is ever recreated (a known Docker Desktop staleness footgun). The
+      # token blacklist is a cache, so host-side access isn't needed.
+      - redis-data:/data
     networks:
       - inventario-internal
     healthcheck:
@@ -210,3 +214,8 @@ networks:
   inventario-internal:
     driver: bridge
     internal: false  # Allow outbound internet access for the application
+
+# Named volumes. Redis uses one (see the redis service) so its /data WORKDIR is
+# always present in the container regardless of host ./data state.
+volumes:
+  redis-data:
