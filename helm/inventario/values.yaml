@@ -461,6 +461,13 @@ email:
   # Env: INVENTARIO_RUN_EMAIL_PROVIDER
   provider: "stub"
 
+  # Opt into the no-op "stub" provider even when app.publicUrl is set. By
+  # default (false) that combination is REJECTED at startup (#2093) because
+  # verification/invite/reset mail would be silently dropped on a real deploy.
+  # Set true ONLY for local evaluation where you knowingly accept dropped mail.
+  # Env: INVENTARIO_RUN_ALLOW_STUB_EMAIL
+  allowStub: false
+
   # Sender address for all transactional emails
   # Env: INVENTARIO_RUN_EMAIL_FROM
   from: ""

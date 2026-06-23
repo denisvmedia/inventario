@@ -176,7 +176,7 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 	}
 
 	params.PublicURL = strings.TrimSpace(cfg.PublicURL)
-	if err = ValidateEmailPublicURLConfig(cfg.EmailProvider, params.PublicURL); err != nil {
+	if err = ValidateEmailPublicURLConfig(cfg.EmailProvider, params.PublicURL, cfg.AllowStubEmail); err != nil {
 		return serverSetup{}, err
 	}
 

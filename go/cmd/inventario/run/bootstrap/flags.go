@@ -70,6 +70,8 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.BoolVar(&cfg.MagicLinkLoginEnabled, "magic-link-login-enabled", cfg.MagicLinkLoginEnabled, "Enable passwordless magic-link sign-in (auto-inert when the email provider is stub)")
 
 	flags.StringVar(&cfg.EmailProvider, "email-provider", cfg.EmailProvider, "Email provider: stub, smtp, sendgrid, ses, mandrill, or mailchimp")
+	//nolint:lll
+	flags.BoolVar(&cfg.AllowStubEmail, "allow-stub-email", cfg.AllowStubEmail, "Allow the no-op 'stub' email provider even when --public-url is set (dev/eval only; by default that combination is rejected at startup because verification/reset/invite mail would be silently dropped)")
 	flags.BoolVar(&cfg.LogEmailURLs, "log-email-urls", cfg.LogEmailURLs, "Log full verification/password-reset URLs in stub email mode (includes sensitive tokens; unsafe for shared logs)")
 	flags.StringVar(&cfg.EmailFrom, "email-from", cfg.EmailFrom, "From address for transactional emails")
 	flags.StringVar(&cfg.EmailReplyTo, "email-reply-to", cfg.EmailReplyTo, "Reply-To address for transactional emails")

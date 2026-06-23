@@ -651,6 +651,7 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
 | apiserver crashes on boot | `aivision.provider` real but API key empty | set the key, or `aivision.provider=none` (§B7) |
 | Setup Job hangs / sync wedged | image tag missing from registry | fix the tag; `setupJob.activeDeadlineSeconds` caps the hang |
 | Emails never arrive | `email.provider=stub` (default) | set a real provider + `email.from` (§B5) |
+| Backend refuses to start: "verification/reset/invite emails would be silently dropped" | `email.provider=stub` while `app.publicUrl` is set (#2093) | set a real provider + `email.from` (§B5), or `email.allowStub=true` for eval-only |
 
 ## Appendix F — Per-distro quick reference
 

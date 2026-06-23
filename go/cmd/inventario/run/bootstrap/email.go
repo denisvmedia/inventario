@@ -100,19 +100,28 @@ func ValidatePublicURLForTransactionalEmails(publicURL string) error {
 
 // ValidateEmailPublicURLConfig returns an error when the combination of the
 // configured email provider and public URL would result in broken transactional
-// links. The stub provider is exempt because it never sends real email.
-func ValidateEmailPublicURLConfig(provider, publicURL string) error {
+// links. The stub provider with a configured public URL is rejected as a fatal
+// misconfiguration (#2093) unless allowStub is true, in which case the rejection
+// is downgraded to a loud warning for dev/eval use.
+//
+//revive:disable-next-line:flag-parameter
+func ValidateEmailPublicURLConfig(provider, publicURL string, allowStub bool) error {
 	normalizedEmailProvider := normalizeEmailProvider(provider)
 
 	switch normalizedEmailProvider {
 	case services.EmailProviderStub:
-		// The stub provider is a legitimate choice for dev / preview, so this is
-		// a warning, not a fatal error. But a configured public URL strongly
-		// implies a real deployment where users will expect verification /
-		// reset / invite emails — none of which the stub ever sends. Warn loudly
-		// so a "users never receive any email" deployment is not silent.
+		// A configured public URL means a real deployment where users will
+		// expect verification / reset / invite emails — none of which the stub
+		// provider ever sends. Without an explicit opt-in this is a fatal
+		// misconfiguration (#2093): fail fast at startup instead of silently
+		// dropping every transactional email. allowStub (--allow-stub-email) is
+		// the dev/eval escape hatch and downgrades the failure to a loud warning.
 		if trimmedURL := strings.TrimSpace(publicURL); trimmedURL != "" {
-			slog.Warn("email provider is 'stub': verification/reset/invite emails will be silently dropped; set a real SMTP (or other) provider + email.from for any deployment real users will use",
+			if !allowStub {
+				//nolint:lll
+				return fmt.Errorf("email provider is %q but a public URL is set (%s): verification/reset/invite emails would be silently dropped. Configure a real email provider (e.g. --email-provider=smtp) plus --email-from, or pass --allow-stub-email to override for dev/eval", normalizedEmailProvider, trimmedURL)
+			}
+			slog.Warn("email provider is 'stub' with --allow-stub-email set: verification/reset/invite emails will be silently dropped; set a real SMTP (or other) provider + email.from for any deployment real users will use",
 				"public_url", trimmedURL)
 		}
 		return nil

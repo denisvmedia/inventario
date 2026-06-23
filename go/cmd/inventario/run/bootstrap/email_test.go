@@ -52,16 +52,18 @@ func TestValidateEmailPublicURLConfig_Valid(t *testing.T) {
 		name      string
 		provider  string
 		publicURL string
+		allowStub bool
 	}{
-		{name: "stub provider does not require public url", provider: "stub", publicURL: ""},
-		{name: "supported provider with valid public url", provider: "smtp", publicURL: "https://inventario.example.com"},
-		{name: "empty provider defaults to stub", provider: "", publicURL: ""},
+		{name: "stub provider does not require public url", provider: "stub", publicURL: "", allowStub: false},
+		{name: "supported provider with valid public url", provider: "smtp", publicURL: "https://inventario.example.com", allowStub: false},
+		{name: "empty provider defaults to stub", provider: "", publicURL: "", allowStub: false},
+		{name: "stub with public url and allow-stub flag passes with warning", provider: "stub", publicURL: "https://inventario.example.com", allowStub: true},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			err := bootstrap.ValidateEmailPublicURLConfig(tc.provider, tc.publicURL)
+			err := bootstrap.ValidateEmailPublicURLConfig(tc.provider, tc.publicURL, tc.allowStub)
 			c.Assert(err, qt.IsNil)
 		})
 	}
@@ -72,26 +74,36 @@ func TestValidateEmailPublicURLConfig_Invalid(t *testing.T) {
 		name            string
 		provider        string
 		publicURL       string
+		allowStub       bool
 		wantErrContains string
 	}{
 		{
 			name:            "supported provider with invalid public url",
 			provider:        "smtp",
 			publicURL:       "",
+			allowStub:       false,
 			wantErrContains: "invalid --public-url for email provider",
 		},
 		{
 			name:            "unknown provider returns provider error",
 			provider:        "unknown-provider",
 			publicURL:       "",
+			allowStub:       false,
 			wantErrContains: "unsupported email provider",
+		},
+		{
+			name:            "stub with public url and no allow flag is fatal",
+			provider:        "stub",
+			publicURL:       "https://inventario.example.com",
+			allowStub:       false,
+			wantErrContains: "would be silently dropped",
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			err := bootstrap.ValidateEmailPublicURLConfig(tc.provider, tc.publicURL)
+			err := bootstrap.ValidateEmailPublicURLConfig(tc.provider, tc.publicURL, tc.allowStub)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.wantErrContains)
 		})
