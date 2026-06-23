@@ -226,6 +226,59 @@ Support for multiple database backends via DSN:
 - Comprehensive model validation testing
 - Registry pattern testing with mock implementations
 
+### Test package layout — black-box by default
+
+- **Black-box is the default.** Put tests in `*_test.go` using the external test
+  package (`package <pkg>_test`) and exercise only the exported API. This keeps
+  tests honest about the package's public contract.
+
+  ```go
+  // file: widget_test.go
+  package widget_test
+
+  import (
+  	"testing"
+
+  	qt "github.com/frankban/quicktest"
+
+  	"github.com/denisvmedia/inventario/internal/widget"
+  )
+
+  func TestWidget_Process(t *testing.T) {
+  	c := qt.New(t)
+  	w := widget.New(widget.Config{})
+  	c.Assert(w.Process("in"), qt.Equals, "out")
+  }
+  ```
+
+- **White-box is the exception**, permitted ONLY when (1) an unexported function
+  is critical for correctness, (2) internal state cannot be observed through the
+  public API, or (3) there is a clear technical justification. Requirements:
+    - file name ends in `*_internal_test.go`;
+    - package name has no `_test` suffix (`package <pkg>`);
+    - a comment at the top of the file states the justification.
+
+  ```go
+  // file: parser_internal_test.go
+  package widget
+
+  // White-box: drives the unexported parse() state machine directly; its
+  // branches cannot be fully exercised through the exported API alone.
+
+  import (
+  	"testing"
+
+  	qt "github.com/frankban/quicktest"
+  )
+
+  func Test_parse(t *testing.T) {
+  	c := qt.New(t)
+  	got, err := parse([]byte("3:foo"))
+  	c.Assert(err, qt.IsNil)
+  	c.Assert(got, qt.Equals, "foo")
+  }
+  ```
+
 ### Integration Tests  
 - Multi-tenant isolation testing
 - Database transaction testing

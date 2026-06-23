@@ -67,6 +67,7 @@ data:
   INVENTARIO_RUN_SENDGRID_BASE_URL: {{ .Values.email.sendgrid.baseUrl | quote }}
   INVENTARIO_RUN_AWS_REGION: {{ .Values.email.aws.region | quote }}
   INVENTARIO_RUN_MANDRILL_BASE_URL: {{ .Values.email.mandrill.baseUrl | quote }}
+  INVENTARIO_RUN_SMTP2GO_BASE_URL: {{ .Values.email.smtp2go.baseUrl | quote }}
   # AI-vision photo-scan (#1720). Non-secret knobs; the per-provider API keys
   # live in the Secret (templates/secret.yaml). See values.yaml `aivision:`.
   INVENTARIO_RUN_AI_VISION_PROVIDER: {{ .Values.aivision.provider | quote }}

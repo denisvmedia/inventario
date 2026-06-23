@@ -64,7 +64,7 @@ Fill these in before you start; they parameterize the rest of the runbook.
 | Kubernetes distro | k3s (GKE / DOKS notes inline) |
 | PostgreSQL | **External** — managed or in-cluster operator (your choice; see §B3) |
 | Object storage | **Cloudflare R2** (S3-compatible) |
-| Email provider | **Mailtrap** (SMTP) |
+| Email provider | **SMTP2GO** (HTTP API) |
 | AI vision | **Anthropic** |
 | Redis | **In-cluster** (chart's bundled Redis) |
 | Public scan endpoint | Off (enable deliberately — see §B7) |
@@ -231,18 +231,22 @@ than one replica (set `persistence.enabled=false`).
 
   Try without them first; add if uploads fail.
 
-### B5. Email — Mailtrap (SMTP)
+### B5. Email — SMTP2GO
 
-- [ ] In Mailtrap, use a **Sending** stream (not the Sandbox) and copy its SMTP
-  credentials. Set:
-  - `email.provider=smtp`, `email.smtp.host=live.smtp.mailtrap.io`, `email.smtp.port=587`,
-    `email.smtp.useTls=true`, `email.smtp.username=<user>`.
+- [ ] In SMTP2GO, create an **API key** (Settings → API Keys) and verify a sender
+  domain / address. Set:
+  - `email.provider=smtp2go`.
   - `email.from=<verified sender>` (must be a non-empty address on a domain you verified
-    in Mailtrap).
+    in SMTP2GO).
   - `app.publicUrl=https://<DOMAIN>` so links inside emails resolve.
-  - SMTP password → Secret key `INVENTARIO_RUN_SMTP_PASSWORD`.
+  - API key → Secret key `INVENTARIO_RUN_SMTP2GO_API_KEY` (Helm `secrets.smtp2goApiKey`).
 - [ ] (Optional) `email.replyTo`. Leave `email.logUrls=false` in production (tokens in
   logs).
+- [ ] **Alternative — SMTP relay:** if you prefer SMTP over the HTTP API, set
+  `email.provider=smtp`, `email.smtp.host=mail.smtp2go.com`, `email.smtp.port=587`
+  (or `2525`), `email.smtp.useTls=true` (our provider uses STARTTLS — do NOT use the
+  `465`/`443` implicit-TLS ports), `email.smtp.username=<SMTP user>`, and the SMTP
+  password → Secret key `INVENTARIO_RUN_SMTP_PASSWORD`.
 
 ### B6. Redis — in-cluster
 
@@ -506,7 +510,7 @@ Use independent layers — at least the first two are required:
 - [ ] Register or log in; create an item.
 - [ ] Upload a file/photo → confirm it lands in R2 (and renders back).
 - [ ] Run an AI scan (Anthropic) on the add-item form.
-- [ ] Trigger a password reset → confirm the email arrives via Mailtrap.
+- [ ] Trigger a password reset → confirm the email arrives via SMTP2GO.
 - [ ] Confirm the Grafana dashboard shows live traffic and a test alert routes to your
   channel.
 
@@ -514,7 +518,7 @@ Use independent layers — at least the first two are required:
 
 ## Appendix A — Worked `values-prod.yaml` (k3s)
 
-External Postgres + Cloudflare R2 + Mailtrap + Anthropic + in-cluster Redis, combined
+External Postgres + Cloudflare R2 + SMTP2GO + Anthropic + in-cluster Redis, combined
 mode, no uploads PVC. Sensitive values come from the existing Secret in Appendix B; this
 file holds only non-secret configuration.
 
@@ -536,13 +540,9 @@ app:
   enableApiDocs: false         # keep /swagger off in prod (chart default; shown for clarity)
 
 email:
-  provider: smtp
+  provider: smtp2go
   from: "no-reply@example.com"
-  smtp:
-    host: live.smtp.mailtrap.io
-    port: 587
-    username: "<mailtrap-smtp-user>"
-    useTls: true
+  # API key → Secret key INVENTARIO_RUN_SMTP2GO_API_KEY (Appendix B).
 
 aivision:
   provider: anthropic
@@ -608,7 +608,7 @@ kubectl -n inventario create secret generic inventario-runtime \
   --from-literal=INVENTARIO_RUN_FILE_SIGNING_KEY='<openssl rand -hex 32>' \
   --from-literal=INVENTARIO_RUN_METRICS_TOKEN='<openssl rand -hex 32>' \
   --from-literal=SETUP_ADMIN_PASSWORD='<initial admin password>' \
-  --from-literal=INVENTARIO_RUN_SMTP_PASSWORD='<mailtrap smtp password>' \
+  --from-literal=INVENTARIO_RUN_SMTP2GO_API_KEY='<smtp2go api key>' \
   --from-literal=INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY='<anthropic api key>' \
   --from-literal=AWS_ACCESS_KEY_ID='<r2 access key id>' \
   --from-literal=AWS_SECRET_ACCESS_KEY='<r2 secret access key>'

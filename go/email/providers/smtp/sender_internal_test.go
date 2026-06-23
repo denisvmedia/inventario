@@ -1,5 +1,9 @@
 package smtp
 
+// White-box: exercises the unexported buildMIMEMessage MIME assembler (and its
+// header-encoding helpers) directly; the produced MIME bytes are not observable
+// through the exported Sender API without a live SMTP conversation.
+
 import (
 	"bufio"
 	"context"

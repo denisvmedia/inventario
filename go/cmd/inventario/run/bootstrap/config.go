@@ -215,6 +215,8 @@ type Config struct {
 	AWSRegion            string `yaml:"aws_region" env:"AWS_REGION" env-default:""`
 	MandrillAPIKey       string `yaml:"mandrill_api_key" env:"MANDRILL_API_KEY" env-default:""`
 	MandrillBaseURL      string `yaml:"mandrill_base_url" env:"MANDRILL_BASE_URL" env-default:"https://mandrillapp.com"`
+	SMTP2GOAPIKey        string `yaml:"smtp2go_api_key" env:"SMTP2GO_API_KEY" env-default:""`
+	SMTP2GOBaseURL       string `yaml:"smtp2go_base_url" env:"SMTP2GO_BASE_URL" env-default:"https://api.smtp2go.com"`
 
 	// OAuth* settings drive the third-party sign-in flow (#1394). Each
 	// provider is enabled only when its (client_id, client_secret) pair
