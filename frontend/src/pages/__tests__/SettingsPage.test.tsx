@@ -205,13 +205,173 @@ describe("<SettingsPage />", () => {
     expect(screen.queryByTestId("connected-accounts-card")).not.toBeInTheDocument()
   })
 
-  it("account danger zone's delete button opens a confirm dialog explaining unavailability", async () => {
+  // #2147 — self-service account deletion. The danger-zone button now
+  // opens a typed-confirmation dialog (email + password) wired to
+  // DELETE /auth/me, replacing the old "not yet available" confirm stub.
+  it("account danger zone's delete button opens the delete-account dialog", async () => {
     server.use(...baseHandlers)
     const user = userEvent.setup()
     renderSettings()
     await user.click(await screen.findByTestId("settings-nav-account"))
     await user.click(screen.getByTestId("delete-account-button"))
-    expect(await screen.findByText(/account deletion is not yet available/i)).toBeInTheDocument()
+    expect(await screen.findByTestId("delete-account-dialog")).toBeInTheDocument()
+    expect(screen.getByTestId("delete-confirm-email")).toBeInTheDocument()
+    expect(screen.getByTestId("delete-password")).toBeInTheDocument()
+  })
+
+  it("delete-account dialog blocks submit on an email mismatch (client-side)", async () => {
+    let deleteCalls = 0
+    server.use(
+      ...baseHandlers,
+      msw.delete(api("/auth/me"), () => {
+        deleteCalls++
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+    const user = userEvent.setup()
+    renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-account"))
+    await user.click(screen.getByTestId("delete-account-button"))
+    await screen.findByTestId("delete-account-dialog")
+    await user.type(screen.getByTestId("delete-confirm-email"), "wrong@example.com")
+    await user.type(screen.getByTestId("delete-password"), "secret-pw")
+    await user.click(screen.getByTestId("delete-account-submit"))
+    expect(await screen.findByTestId("delete-confirm-email-error")).toBeInTheDocument()
+    // The mismatch is caught before the request goes out.
+    expect(deleteCalls).toBe(0)
+    // Dialog stays open, user stays on /settings.
+    expect(screen.getByTestId("delete-account-dialog")).toBeInTheDocument()
+  })
+
+  // #2147 follow-up — OAuth-only users have no in-app password hash; the BE
+  // skips re-auth for them (the access token proves identity). The dialog
+  // must hide the password input + drop the password requirement, otherwise
+  // the form is unsubmittable and they can never erase their account.
+  it("delete-account dialog hides the password field + still deletes for OAuth-only users", async () => {
+    let deleteBody: { password?: string } | null = null
+    let logoutCalls = 0
+    server.use(
+      // /auth/me carries has_password:false for an OAuth-only account →
+      // useHasPassword() resolves false once the boot probe lands.
+      msw.get(api("/auth/me"), () =>
+        HttpResponse.json({
+          id: "u1",
+          email: "alex@example.com",
+          name: "Alex",
+          created_at: "2024-01-15T00:00:00Z",
+          has_password: false,
+        })
+      ),
+      msw.get(api("/groups"), () => HttpResponse.json({ data: [] })),
+      msw.get(api("/auth/oauth/providers"), () => HttpResponse.json({ providers: [] })),
+      msw.get(api("/auth/oauth/identities"), () => HttpResponse.json({ identities: [] })),
+      msw.delete(api("/auth/me"), async ({ request }) => {
+        deleteBody = (await request.json()) as typeof deleteBody
+        return new HttpResponse(null, { status: 204 })
+      }),
+      msw.post(api("/auth/logout"), () => {
+        logoutCalls++
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+    const user = userEvent.setup()
+    renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-account"))
+    await user.click(screen.getByTestId("delete-account-button"))
+    await screen.findByTestId("delete-account-dialog")
+    // The password input must NOT exist for the OAuth-only case; the
+    // social-login note stands in for it instead.
+    await waitFor(() => expect(screen.queryByTestId("delete-password")).not.toBeInTheDocument())
+    expect(screen.getByTestId("delete-no-password-note")).toBeInTheDocument()
+    // Email confirmation still gates the destructive action.
+    await user.type(screen.getByTestId("delete-confirm-email"), "alex@example.com")
+    await user.click(screen.getByTestId("delete-account-submit"))
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/login")
+    )
+    // DELETE fired with an empty password (the BE accepts it for OAuth-only),
+    // then logout + redirect ran on the 204.
+    expect(deleteBody).toEqual({ password: "" })
+    expect(logoutCalls).toBe(1)
+  })
+
+  it("delete-account dialog surfaces a wrong-password field error on auth.delete.invalid_password", async () => {
+    server.use(
+      ...baseHandlers,
+      msw.delete(api("/auth/me"), () =>
+        HttpResponse.json(
+          { errors: [{ code: "auth.delete.invalid_password", detail: "re-auth failed" }] },
+          { status: 422 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-account"))
+    await user.click(screen.getByTestId("delete-account-button"))
+    await screen.findByTestId("delete-account-dialog")
+    await user.type(screen.getByTestId("delete-confirm-email"), "alex@example.com")
+    await user.type(screen.getByTestId("delete-password"), "wrong-pw")
+    await user.click(screen.getByTestId("delete-account-submit"))
+    expect(await screen.findByTestId("delete-password-error")).toBeInTheDocument()
+    // Stays open + on /settings; no redirect to /login (the LocationProbe
+    // only mounts on a non-/settings route, so its absence proves we never
+    // navigated away).
+    expect(screen.getByTestId("delete-account-dialog")).toBeInTheDocument()
+    expect(screen.queryByTestId("loc")).not.toBeInTheDocument()
+  })
+
+  it("delete-account dialog shows a server-error banner on auth.delete.last_owner", async () => {
+    server.use(
+      ...baseHandlers,
+      msw.delete(api("/auth/me"), () =>
+        HttpResponse.json(
+          { errors: [{ code: "auth.delete.last_owner", detail: "sole owner" }] },
+          { status: 422 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-account"))
+    await user.click(screen.getByTestId("delete-account-button"))
+    await screen.findByTestId("delete-account-dialog")
+    await user.type(screen.getByTestId("delete-confirm-email"), "alex@example.com")
+    await user.type(screen.getByTestId("delete-password"), "secret-pw")
+    await user.click(screen.getByTestId("delete-account-submit"))
+    expect(await screen.findByTestId("delete-server-error")).toHaveTextContent(
+      /transfer ownership/i
+    )
+    expect(screen.getByTestId("delete-account-dialog")).toBeInTheDocument()
+  })
+
+  it("delete-account dialog logs out + navigates to /login on a 204 success", async () => {
+    let deleteBody: { password?: string } | null = null
+    let logoutCalls = 0
+    server.use(
+      ...baseHandlers,
+      msw.delete(api("/auth/me"), async ({ request }) => {
+        deleteBody = (await request.json()) as typeof deleteBody
+        return new HttpResponse(null, { status: 204 })
+      }),
+      msw.post(api("/auth/logout"), () => {
+        logoutCalls++
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+    const user = userEvent.setup()
+    renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-account"))
+    await user.click(screen.getByTestId("delete-account-button"))
+    await screen.findByTestId("delete-account-dialog")
+    await user.type(screen.getByTestId("delete-confirm-email"), "alex@example.com")
+    await user.type(screen.getByTestId("delete-password"), "secret-pw")
+    await user.click(screen.getByTestId("delete-account-submit"))
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/login")
+    )
+    expect(deleteBody).toEqual({ password: "secret-pw" })
+    expect(logoutCalls).toBe(1)
   })
 
   it("sign out POSTs /auth/logout and navigates to /login", async () => {

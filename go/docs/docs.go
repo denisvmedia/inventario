@@ -54,6 +54,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/debug": {
+            "get": {
+                "description": "get debug information about file storage, database driver, and operating system (back-office only)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get debug information",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/debug.Info"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/groups": {
             "get": {
                 "description": "Returns every location group with computed member_count and an owning-tenant chip (id, name, slug). Paginate via ?page\u0026per_page; ?q ILIKE-matches name/slug; ?tenantID/?status filter exactly; ?sort/?order set ordering.",
@@ -1505,6 +1534,56 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "delete": {
+                "description": "Permanently delete the authenticated user's account. Private groups and their content are purged.\nPassword re-authentication is required for password-based accounts; OAuth-only accounts can omit it. All sessions are invalidated. Irreversible.",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Delete account",
+                "parameters": [
+                    {
+                        "description": "Account deletion request",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.DeleteAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
             }
         },
         "/auth/mfa/disable": {
@@ -2185,29 +2264,6 @@ const docTemplate = `{
                             "items": {
                                 "type": "string"
                             }
-                        }
-                    }
-                }
-            }
-        },
-        "/debug": {
-            "get": {
-                "description": "get debug information about file storage, database driver, and operating system",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "debug"
-                ],
-                "summary": "Get debug information",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/debug.Info"
                         }
                     }
                 }
@@ -8521,6 +8577,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "new_password": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.DeleteAccountRequest": {
+            "type": "object",
+            "properties": {
+                "password": {
                     "type": "string"
                 }
             }

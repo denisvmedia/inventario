@@ -315,7 +315,17 @@ func (fd *FileUpdateRequestData) ValidateWithContext(ctx context.Context) error 
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
 		validation.Field(&fd.Type, validation.Required, validation.In("files")),
-		validation.Field(&fd.Attributes, validation.Required),
+		// Attributes is a struct VALUE, and FileUpdateRequestFileData implements
+		// ValidatableWithContext on a POINTER receiver. ozzo's Field() dereferences
+		// the pointer to a value before type-asserting against
+		// ValidatableWithContext, so the nested validator would be silently
+		// skipped (issue #2033). Invoke it explicitly so the path / linked-entity
+		// rules actually run.
+		validation.Field(&fd.Attributes, validation.Required, validation.WithContext(
+			func(ctx context.Context, _ any) error {
+				return fd.Attributes.ValidateWithContext(ctx)
+			},
+		)),
 	)
 	return validation.ValidateStructWithContext(ctx, fd, fields...)
 }
@@ -336,37 +346,65 @@ func (fur *FileUpdateRequestFileData) Validate() error {
 }
 
 // ValidateWithContext validates the FileUpdateRequest with context.
+//
+// ENFORCED CONTRACT (#2033). This validator was previously dead — the parent
+// FileUpdateRequestData.ValidateWithContext passed Attributes by value, so
+// ozzo never invoked this pointer-receiver method (see that method's comment).
+// Now that it runs, the rules are deliberately calibrated so that bad values
+// are rejected WITHOUT breaking the live "attach uploaded file to commodity"
+// flow (#1983 Part A / PR #2032), which sends a metadata-only PUT carrying
+// NO `path` and NO `linked_entity_meta` and relies on the server preserving
+// the path (apiserver/files.go::updateFile) and deriving the bucket:
+//
+//   - `path` is NOT required. On a link-only PUT the client omits it; the
+//     handler preserves the persisted path instead of blanking it. We only
+//     bound its length here.
+//   - `linked_entity_meta` is validated against the per-type enum ONLY WHEN
+//     it is present (non-empty). It is NOT required, because the server
+//     derives the bucket from the file category / MIME when the client omits
+//     it. A non-empty bad value (e.g. "BOGUS") is still rejected.
+//   - `linked_entity_id` IS required whenever `linked_entity_type` is set —
+//     both live attach flows always send it, and a link without a target is
+//     meaningless.
+//
+// Note (#1989): the commodity meta enum here is still the legacy
+// images|invoices|manuals set. #1989 will migrate it to images|documents;
+// because this validator is now live, that swap can target this single spot.
 func (fur *FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
 		validation.Field(&fur.Title, validation.Length(0, 255)), // Title is now optional
 		validation.Field(&fur.Description, validation.Length(0, 1000)),
-		validation.Field(&fur.Path, validation.Required),
+		// Path is intentionally NOT Required: link-only PUTs omit it and the
+		// handler preserves the persisted path. Bound length only.
+		validation.Field(&fur.Path, validation.Length(0, 1024)),
 		validation.Field(&fur.Tags, validation.Length(0, 100)),                                                // Allow up to 100 tags
 		validation.Field(&fur.LinkedEntityType, validation.In("", "commodity", "export", "location", "area")), // Allow export/location/area for existing files
 		validation.Field(&fur.LinkedEntityID, validation.Length(0, 255)),
 		validation.Field(&fur.LinkedEntityMeta, validation.Length(0, 255)),
 	)
 
-	// If linked entity type is specified, validate the linked entity ID and meta
+	// If a linked entity type is specified, require the ID and — WHEN PRESENT —
+	// validate the meta against the per-type enum. Meta is left optional so the
+	// server can derive the bucket; only a non-empty invalid value is rejected.
 	switch fur.LinkedEntityType {
 	case "commodity":
 		fields = append(fields,
 			validation.Field(&fur.LinkedEntityID, validation.Required),
-			validation.Field(&fur.LinkedEntityMeta, validation.Required, validation.In("images", "invoices", "manuals")),
+			validation.Field(&fur.LinkedEntityMeta, validation.In("", "images", "invoices", "manuals")),
 		)
 	case "export":
 		fields = append(fields,
 			validation.Field(&fur.LinkedEntityID, validation.Required),
-			validation.Field(&fur.LinkedEntityMeta, validation.Required, validation.In("xml-1.0")),
+			validation.Field(&fur.LinkedEntityMeta, validation.In("", "xml-1.0")),
 		)
 	case "location", "area":
 		// Same meta buckets for both ("images" / "files") — see the
 		// model-level validator in models.go for the rationale.
 		fields = append(fields,
 			validation.Field(&fur.LinkedEntityID, validation.Required),
-			validation.Field(&fur.LinkedEntityMeta, validation.Required, validation.In("images", "files")),
+			validation.Field(&fur.LinkedEntityMeta, validation.In("", "images", "files")),
 		)
 	}
 

@@ -298,3 +298,20 @@ export async function changePassword(req: ChangePasswordRequest): Promise<string
   const body = await http.post<MessageResponse>("/auth/change-password", req)
   return body.message ?? ""
 }
+
+// deleteAccount permanently erases the authenticated user (#2147). The BE
+// re-verifies `password` via user.CheckPassword (skipped for OAuth-only
+// users with an empty hash) and replies 204 No Content on success, after
+// which it has already torn down every active session (refresh tokens
+// revoked, access tokens blacklisted). Failures arrive as a jsonapi.Errors
+// envelope with a dotted code (auth.delete.invalid_password /
+// auth.delete.last_owner / auth.delete.owns_content) the caller branches on.
+//
+// We use `http.request` rather than `http.del` because the BE re-auth check
+// reads the password from the DELETE body, and `http.del` strips the body
+// (mirrors features/group/api.ts deleteGroup). The CSRF header is added by
+// the http layer for every mutating method, so the X-CSRF-Token the BE
+// requires under requireAuth rides along automatically.
+export async function deleteAccount(password: string): Promise<void> {
+  await http.request<void>("/auth/me", { method: "DELETE", body: { password } })
+}

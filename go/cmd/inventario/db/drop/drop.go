@@ -63,7 +63,7 @@ func (c *Command) migrateDrop(cfg *Config, dbConfig *shared.DatabaseConfig) erro
 	migr := migrator.New(dsn, fstest.MapFS{})
 
 	fmt.Println("=== MIGRATE DROP ===")
-	fmt.Printf("Database: %s\n", dsn)
+	fmt.Printf("Database: %s\n", shared.RedactDSN(dsn))
 	fmt.Println()
 
 	return migr.DropDatabase(context.Background(), dryRun, confirm)

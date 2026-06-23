@@ -15,6 +15,10 @@ import (
 	"github.com/denisvmedia/inventario/registry/memory"
 )
 
+// GET /debug moved to /admin/debug behind the back-office auth plane
+// (issue #2113, L-4). The endpoint leaks operational config (storage/db
+// driver, OS) and must not be readable by an ordinary tenant user.
+
 func TestDebugAPI(t *testing.T) {
 	c := qt.New(t)
 
@@ -51,21 +55,21 @@ func TestDebugAPI(t *testing.T) {
 			c := qt.New(t)
 
 			// Create API server with test parameters
-			params, testUser, _ := newParams()
+			params, _, _ := newParams()
 			params.UploadLocation = tc.uploadLocation
 			params.DebugInfo = tc.debugInfo
 
-			// Mock workers for testing
+			// A back-office admin is required to read /admin/debug.
+			_, token := WithBackofficeAdmin(t, params)
+
 			mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 			server := apiserver.APIServer(params, mockRestoreWorker)
 
-			// Create test request
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/debug", nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/debug", nil)
 			req = req.WithContext(context.Background())
-			addTestUserAuthHeader(req, testUser.ID)
+			addBackofficeAuthHeader(req, token)
 			w := httptest.NewRecorder()
 
-			// Execute request
 			server.ServeHTTP(w, req)
 
 			// Check response status
@@ -95,21 +99,20 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 	c.Assert(factorySet, qt.IsNotNil)
 
 	// Test with invalid URLs
-	params, testUser, _ := newParams()
+	params, _, _ := newParams()
 	params.UploadLocation = "://invalid-url"
 	params.DebugInfo = debug.NewInfo("://invalid-dsn", "://invalid-url")
 
-	// Mock workers for testing
+	_, token := WithBackofficeAdmin(t, params)
+
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	server := apiserver.APIServer(params, mockRestoreWorker)
 
-	// Create test request
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/debug", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/debug", nil)
 	req = req.WithContext(context.Background())
-	addTestUserAuthHeader(req, testUser.ID)
+	addBackofficeAuthHeader(req, token)
 	w := httptest.NewRecorder()
 
-	// Execute request
 	server.ServeHTTP(w, req)
 
 	// Check response status
@@ -125,4 +128,39 @@ func TestDebugAPI_InvalidURLs(t *testing.T) {
 	c.Assert(debugInfo.DatabaseDriver, qt.Equals, "")
 	c.Assert(debugInfo.OperatingSystem, qt.Equals, runtime.GOOS)
 	c.Assert(debugInfo.Error, qt.IsNotNil)
+}
+
+// TestDebugAPI_DeniesTenantUser asserts a plain tenant JWT cannot reach the
+// back-office-gated debug endpoint (issue #2113, L-4).
+func TestDebugAPI_DeniesTenantUser(t *testing.T) {
+	c := qt.New(t)
+
+	params, user, _ := newParams()
+	params.DebugInfo = debug.NewInfo("memory://", uploadLocation)
+	server := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/debug", nil)
+	// Tenant JWT — RequireBackofficeAuth rejects it (audience mismatch /
+	// missing admin_id).
+	addTestUserAuthHeader(req, user.ID)
+	w := httptest.NewRecorder()
+	server.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusUnauthorized)
+}
+
+// TestDebugAPI_DeniesUnauthenticated asserts an anonymous caller cannot reach
+// the debug endpoint.
+func TestDebugAPI_DeniesUnauthenticated(t *testing.T) {
+	c := qt.New(t)
+
+	params, _, _ := newParams()
+	params.DebugInfo = debug.NewInfo("memory://", uploadLocation)
+	server := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/debug", nil)
+	w := httptest.NewRecorder()
+	server.ServeHTTP(w, req)
+
+	c.Assert(w.Code, qt.Equals, http.StatusUnauthorized)
 }

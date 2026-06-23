@@ -15,20 +15,20 @@ Language), the helpers re-construct on the next render.
 
 ## Numbers
 
-```ts
-import { formatNumber } from "@/lib/intl"
-
-formatNumber(1234)         // "1,234" (en) · "1 234" (cs) · "1 234" (ru)
-formatNumber(1234.5)       // "1,234.5" / "1 234,5" / "1 234,5"
-formatNumber(0.42, { style: "percent" })  // "42%" (all)
-formatNumber(1024, { unit: "byte", unitDisplay: "narrow" })  // "1,024B"
-```
+`intl.ts` exposes purpose-built helpers — `formatCurrency`,
+`formatBytes`, `formatPartialDate` — rather than a single generic
+`formatNumber`. Each wraps a cached `Intl.NumberFormat` /
+`Intl.DateTimeFormat` keyed on the resolved locale (see the
+`getNumberFormatter` helper in `frontend/src/lib/intl.ts`). Reach for
+the helper that matches the value's meaning; don't hand-roll number
+formatting in a component.
 
 - **Tabular nums in columns.** `font-mono tabular-nums` (or
   `tabular-nums` on a sans face) so columns align. See [02-typography.md](02-typography.md).
 - **Don't `.toFixed()` in components.** Always go through a formatter.
 - **Don't `Intl.NumberFormat` inline** — the constructor is expensive
-  and the locale is mutable.
+  and the locale is mutable. The cached formatters in `intl.ts` exist
+  precisely so callers never construct one ad hoc.
 
 ## Currency
 
@@ -49,13 +49,18 @@ formatCurrency(-50, "EUR")     // "-€50.00" / "-50,00 €" / "-50,00 €"
 ## Dates and times
 
 ```ts
-import { formatDate, formatTime, formatDateTime, formatRelative } from "@/lib/intl"
+import { formatDate, formatDateTime, formatRelative, formatPartialDate } from "@/lib/intl"
 
 formatDate("2026-04-28")           // "Apr 28, 2026" / "28. 4. 2026" / "28 апреля 2026 г."
-formatTime("2026-04-28T10:00:00")  // "10:00 AM" / "10:00" / "10:00"
 formatDateTime("2026-04-28T10:00") // "Apr 28, 2026, 10:00 AM" / …
 formatRelative(date)               // "2 days ago" / "before 2 days" / "2 дня назад"
+formatPartialDate({ year: 2026, month: 4 })  // "April 2026" — year/month/day in any combo
 ```
+
+There is no standalone `formatTime`: a time always renders through
+`formatDateTime` (pass `dateStyle`/`timeStyle` to tune it). Use
+`formatPartialDate` for backend `PDate` shapes where only some of
+year/month/day are present.
 
 Conventions:
 
@@ -86,28 +91,35 @@ catalog provides them — see the en bundle for the canonical key shapes.
 
 ## Lists
 
-```ts
-import { formatList } from "@/lib/intl"
+`intl.ts` does not yet ship a list-join helper. When a surface needs
+locale-correct "A, B, and C" joining, reach for `Intl.ListFormat`
+directly:
 
-formatList(["Kitchen", "Bedroom", "Garage"])  // "Kitchen, Bedroom, and Garage" (en)
-                                              // "Kitchen, Bedroom a Garage" (cs)
-                                              // "Kitchen, Bedroom и Garage" (ru)
+```ts
+new Intl.ListFormat("en", { type: "conjunction" }).format(
+  ["Kitchen", "Bedroom", "Garage"]
+) // "Kitchen, Bedroom, and Garage" (en)
+  // "Kitchen, Bedroom a Garage" (cs) · "Kitchen, Bedroom и Garage" (ru)
 ```
 
-For "X, Y, and 3 others" surfaces, build the truncation in code, then
-join with `formatList`.
+For "X, Y, and 3 others" surfaces, build the truncation in code first,
+then join. If a list join becomes common, promote it to a cached
+`formatList` helper in `intl.ts` (mirroring the existing formatters)
+rather than scattering `Intl.ListFormat` constructions.
 
 ## File sizes
 
 ```ts
 import { formatBytes } from "@/lib/intl"
 
-formatBytes(1024)        // "1.0 KB"
-formatBytes(1_500_000)   // "1.4 MB"
+formatBytes(1024)        // "1.00 KiB"
+formatBytes(1_500_000)   // "1.43 MiB"
 ```
 
-Always SI (1024-stepped). One decimal. Don't write "1,500,000 bytes"
-in user-facing copy.
+Always binary (IEC) units — 1024-stepped suffixes `B`/`KiB`/`MiB`/
+`GiB`/`TiB`, matching OS file managers. The fraction-digit count
+adapts to the magnitude (2 below 10, 1 below 100, 0 otherwise). Don't
+write "1,500,000 bytes" in user-facing copy.
 
 ## Identifiers
 
@@ -165,7 +177,7 @@ brief; see [00-positioning.md](00-positioning.md)'s "Out of scope" list.
 - `value.toFixed(2)` for currency — locale-blind, drops the symbol.
 - `new Date().toLocaleDateString()` — same locale-blindness.
 - `${count} item${count === 1 ? "" : "s"}` — i18next handles this.
-- Concatenating `formatDate` and `formatTime` instead of
+- Concatenating `formatDate` with a hand-built time string instead of
   `formatDateTime` — the joiner ("at", " · ") is locale-specific.
 
 ## Cross-refs

@@ -153,6 +153,7 @@ Expected secret keys when using `secrets.existingSecret`:
 - `INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL`, `INVENTARIO_RUN_AUTH_RATE_LIMIT_REDIS_URL`, `INVENTARIO_RUN_GLOBAL_RATE_LIMIT_REDIS_URL`, `INVENTARIO_RUN_CSRF_REDIS_URL`, `INVENTARIO_RUN_EMAIL_QUEUE_REDIS_URL` (optional)
 - `INVENTARIO_RUN_SMTP_PASSWORD`, `INVENTARIO_RUN_SENDGRID_API_KEY`, `INVENTARIO_RUN_MANDRILL_API_KEY` (provider-specific)
 - `INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY` (required when `aivision.provider=anthropic`), `INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY` (required when `aivision.provider=openai`)
+- `INVENTARIO_RUN_METRICS_TOKEN` (optional; bearer token for `GET /metrics` — strongly recommended in production. When present, the ServiceMonitor `authorization` stanza is wired automatically.)
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (required for `s3://` upload targets)
 
 Example existing Secret install:
@@ -340,12 +341,15 @@ Run `helm template ... --debug | grep -E 'replicas|resources|nodeSelector|tolera
 
 ## Metrics & scraping
 
-Inventario always serves Prometheus metrics at `/metrics` — on the API HTTP port (`:3333`, served by `run.all` and `run.apiserver`) and on each worker's probe port (`:3334`, alongside `/healthz` and `/readyz`). The endpoint is unconditional; the `metrics.*` values only control how an external Prometheus *discovers* the pods. Everything below is **OFF by default** and does not change rendered output unless explicitly enabled.
+Inventario always serves Prometheus metrics at `/metrics` — on the API HTTP port (`:3333`, served by `run.all` and `run.apiserver`) and on each worker's probe port (`:3334`, alongside `/healthz` and `/readyz`). The endpoint is unconditional; the `metrics.*` discovery values only control how an external Prometheus *discovers* the pods. Everything below is **OFF by default** and does not change rendered output unless explicitly enabled.
+
+⚠️ **`/metrics` leaks installation-wide gauges** (tenant/user/commodity counts, storage bytes). Gate it with `metrics.token` (#2102) and do not route it through the public ingress — see [PRODUCTION.md §B10a](../../PRODUCTION.md). When the token is unset the endpoint is **open** and the app logs a one-time startup warning.
 
 | Value | Default | Effect |
 | ----- | ------- | ------ |
-| `metrics.podAnnotations.enabled` | `false` | Adds `prometheus.io/scrape`, `prometheus.io/port`, and `prometheus.io/path=/metrics` annotations to the API and worker pods. Use this for a vanilla, **operator-less** Prometheus running a `kubernetes_sd_configs` (role: pod) discovery job. The port is role-aware: `3333` on API/combined pods, the worker's probe port (`3334`) on worker pods. |
-| `metrics.serviceMonitor.enabled` | `false` | Renders a `monitoring.coreos.com/v1` ServiceMonitor selecting the API Service's `http` port at `/metrics`. **Requires the Prometheus Operator** — the template is additionally guarded by a CRD-capability check (`.Capabilities.APIVersions.Has "monitoring.coreos.com/v1"`), so enabling it on a cluster without the operator is a no-op rather than a render error. Tune `interval`, `scrapeTimeout`, and `labels` (e.g. `release: kube-prometheus-stack` so the operator selects it). |
+| `metrics.token` | `""` | Bearer token for `GET /metrics`. When set, the app requires `Authorization: Bearer <token>` (HTTP 401 on mismatch). Injected as `INVENTARIO_RUN_METRICS_TOKEN` via the chart-managed Secret on every workload, and — when `serviceMonitor.enabled` — wired into the ServiceMonitor's `authorization` stanza automatically. With `secrets.existingSecret`, leave this empty and supply the `INVENTARIO_RUN_METRICS_TOKEN` key in that Secret instead. Generate: `openssl rand -hex 32`. |
+| `metrics.podAnnotations.enabled` | `false` | Adds `prometheus.io/scrape`, `prometheus.io/port`, and `prometheus.io/path=/metrics` annotations to the API and worker pods. Use this for a vanilla, **operator-less** Prometheus running a `kubernetes_sd_configs` (role: pod) discovery job. The port is role-aware: `3333` on API/combined pods, the worker's probe port (`3334`) on worker pods. Pod annotations cannot carry the bearer token — add `authorization` to the scrape job out of band when `metrics.token` is set. |
+| `metrics.serviceMonitor.enabled` | `false` | Renders a `monitoring.coreos.com/v1` ServiceMonitor selecting the API Service's `http` port at `/metrics`. **Requires the Prometheus Operator** — the template is additionally guarded by a CRD-capability check (`.Capabilities.APIVersions.Has "monitoring.coreos.com/v1"`), so enabling it on a cluster without the operator is a no-op rather than a render error. Tune `interval`, `scrapeTimeout`, and `labels` (e.g. `release: kube-prometheus-stack` so the operator selects it). When a metrics token is configured, an `authorization` stanza referencing the runtime Secret is added so the operator sends the token. |
 
 ```bash
 # Operator-less discovery: annotate API + worker pods.

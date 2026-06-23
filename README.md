@@ -160,18 +160,25 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 # Get detailed user information
 ./inventario users get admin@acme.com
 
+# Update a user (only the flags you pass are changed)
+./inventario users update admin@acme.com --name="New Name"
+./inventario users update admin@acme.com --active=false      # block / deactivate
+./inventario users update admin@acme.com --password          # prompts securely
+
 # Delete user with confirmation
 ./inventario users delete admin@acme.com
 
 # Preview operations without making changes
 ./inventario users create --dry-run --email="test@example.com" --tenant="acme"
+./inventario users update admin@acme.com --name="New Name" --dry-run
 ./inventario users delete admin@acme.com --dry-run
 ```
 
-> **Note:** `users update` is **not yet implemented** — the command currently
-> prints a placeholder message and exits 0 without modifying anything. To grant
-> platform-wide system-admin privileges, use `admin grant-system-admin` (see
-> [System Administrators](#system-administrators) below).
+> **Note:** `users update` changes user-row fields only (email, name, active
+> status, tenant, password). To grant platform-wide system-admin privileges,
+> use `admin grant-system-admin` (see
+> [System Administrators](#system-administrators) below) — that privilege is
+> not a user-row field.
 
 **Important**: User and tenant commands only work with PostgreSQL databases. Memory databases are not supported for persistent operations.
 
@@ -245,7 +252,7 @@ canonical worker types, the equivalent admin REST API, and the
 - `create`: Create new users with secure password input and validation
 - `list`: List users with filtering by tenant, active status, and search
 - `get`: Get detailed user information including tenant details
-- `update`: Not yet implemented (placeholder — exits without modifying anything)
+- `update`: Update user-row fields (email, name, active status, tenant, password); only the flags you pass are changed
 - `delete`: Delete users with confirmation prompts
 
 **Common Flags:**

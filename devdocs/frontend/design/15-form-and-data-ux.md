@@ -41,7 +41,7 @@ into a single string. See [../forms.md](../forms.md). UX-side:
 Confirm before:
 
 - **Delete** anything the user can't undo within 30 seconds.
-  Use `<AlertDialog>` (or `useConfirm()`).
+  Use `useConfirm()`.
 - **Leaving an unsaved form**. Use the same dialog.
 - **Bulk action ≥ 5 items**. The user might have miss-selected.
 

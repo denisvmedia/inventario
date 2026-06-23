@@ -11,6 +11,12 @@ data:
   # os.Getenv("INVENTARIO_DEBUG_UI") (NOT an INVENTARIO_RUN_ config key).
   # Off by default; the preview/demo overlay sets app.debugUI=true.
   INVENTARIO_DEBUG_UI: {{ .Values.app.debugUI | default false | quote }}
+  # Swagger/OpenAPI docs UI toggle (#2113 L-5). Off by default so production does
+  # not expose the interactive /swagger surface. The Go config reader (cleanenv)
+  # reads `run` config under the INVENTARIO_RUN_ prefix, so the `ENABLE_API_DOCS`
+  # env tag in cmd/inventario/run/bootstrap/config.go resolves at runtime to
+  # INVENTARIO_RUN_ENABLE_API_DOCS.
+  INVENTARIO_RUN_ENABLE_API_DOCS: {{ .Values.app.enableApiDocs | default false | quote }}
   INVENTARIO_RUN_UPLOAD_LOCATION: {{ include "inventario.uploadLocation" . | quote }}
   INVENTARIO_RUN_FILE_URL_EXPIRATION: {{ .Values.app.fileUrlExpiration | quote }}
   INVENTARIO_RUN_MAX_CONCURRENT_EXPORTS: {{ .Values.app.maxConcurrentExports | quote }}

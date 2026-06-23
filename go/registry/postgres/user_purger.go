@@ -26,8 +26,11 @@ var _ registry.UserPurger = (*UserPurger)(nil)
 //     tokens, login events, email verifications, password resets, magic-link
 //     tokens, MFA secret, OAuth identities, system-admin grant (user_id),
 //     settings, group memberships, operation slots, commodity scan audits,
-//     and the user_concurrency_slots / thumbnail_generation_jobs the user
-//     created.
+//     the user_concurrency_slots / thumbnail_generation_jobs the user created,
+//     and the group_invites_audit rows that reference the user as the invite
+//     creator (created_by) or accepter (used_by) — both NOT NULL FK -> users(id)
+//     NO ACTION, so they must be cleared here or the final users delete is
+//     rejected (#2147).
 //   - SET NULL the authorship back-refs that are NULLABLE: login_events.user_id
 //     (already nulled by the DELETE-by-user above — see note), and
 //     system_admin_grants.granted_by (the *operator* who granted someone else's
@@ -161,6 +164,18 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			)
 		}
 
+		// group_invites_audit immortalises who created and who used each invite.
+		// Both created_by and used_by are NOT NULL FK -> users(id) with NO ACTION,
+		// so nothing else clears them — a user whose group ever had a USED invite
+		// would otherwise block the final DELETE FROM users with an FK violation
+		// (this is also the latent break in the admin Service.DeleteUser path).
+		// The user can appear as creator, as accepter, or both, so the DELETE
+		// matches either column. The table has no children, so order is free; it
+		// rides the tenant_id template as defense-in-depth.
+		if err := r.purgeGroupInvitesAudit(ctx, tx, tenantID, userID); err != nil {
+			return err
+		}
+
 		// system_admin_grants is NON-RLS and carries NO tenant_id column, so it
 		// can't ride the tenant_id template. Two FKs point at users(id):
 		//   user_id    -> ON DELETE CASCADE (the granted user) — DELETE the row.
@@ -215,6 +230,27 @@ func (r *UserPurger) purgeThumbnailChain(ctx context.Context, tx *sqlx.Tx, tenan
 		)
 	}
 
+	return nil
+}
+
+// purgeGroupInvitesAudit removes every group_invites_audit row that names the
+// user as the invite creator (created_by) OR the accepter (used_by). Both are
+// NOT NULL FK -> users(id) NO ACTION, so they must be cleared before the
+// orchestration layer drops the users row. tenant_id is added as
+// defense-in-depth. Idempotent: a user who never touched an invite matches zero
+// rows.
+func (r *UserPurger) purgeGroupInvitesAudit(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+	audit := string(r.tableNames.GroupInvitesAudit())
+	query := fmt.Sprintf(
+		"DELETE FROM %s WHERE tenant_id = $1 AND (created_by = $2 OR used_by = $2)", audit,
+	)
+	if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
+		return errxtrace.Wrap(
+			"failed to purge user group_invites_audit references",
+			err,
+			errx.Attrs("table", audit, "tenant_id", tenantID, "user_id", userID),
+		)
+	}
 	return nil
 }
 

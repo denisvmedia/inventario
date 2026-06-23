@@ -25,7 +25,7 @@ This directory contains a production-ready Docker Compose configuration for depl
 
 4. **Access the application:**
    - Web Interface: http://localhost:3333 (or your configured port)
-   - API Documentation: http://localhost:3333/api/docs
+   - API Documentation: http://localhost:3333/swagger
    - Liveness Check: http://localhost:3333/healthz
    - Readiness Check: http://localhost:3333/readyz
 

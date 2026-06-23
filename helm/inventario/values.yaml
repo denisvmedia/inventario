@@ -256,17 +256,40 @@ run:
 # ============================================================
 # Metrics / scraping (#843)
 # ============================================================
-# Prometheus metrics / scraping (#843). The app always serves /metrics on the
-# API port (3333) and each worker's probe port (3334); these toggles only
-# control how an external Prometheus discovers the pods. Both default OFF.
+# Prometheus metrics / scraping (#843, hardened in #2102). The app always serves
+# /metrics on the API port (3333) and each worker's probe port (3334); the
+# discovery toggles below only control how an external Prometheus finds the pods.
+# Discovery is OFF by default. The `token` field gates the endpoint itself.
 metrics:
+  # Optional shared-secret bearer token for GET /metrics (#2102). When set, the
+  # app requires the header `Authorization: Bearer <token>` on every /metrics
+  # request (API :3333 and worker :3334) and rejects mismatches with HTTP 401.
+  # The chart injects it as the INVENTARIO_RUN_METRICS_TOKEN env var (via the runtime
+  # Secret) on every workload and, when serviceMonitor.enabled, wires the
+  # Prometheus Operator to send it automatically.
+  #
+  # Leave empty to keep the legacy OPEN behaviour (the app logs a one-time
+  # startup warning). STRONGLY recommended for production: when empty, anyone with
+  # network access to the HTTP port can read installation-wide gauges
+  # (inventario_tenants / _users / _commodities / _file_storage_bytes).
+  # Generate a strong value (>= 32 bytes): openssl rand -hex 32
+  #
+  # When secrets.existingSecret is set, leave this empty and instead provide the
+  # key INVENTARIO_RUN_METRICS_TOKEN in that Secret.
+  token: ""
+
   # Add prometheus.io/* scrape annotations to API + worker pods so a vanilla
-  # (operator-less) Prometheus kubernetes_sd job can discover them.
+  # (operator-less) Prometheus kubernetes_sd job can discover them. NOTE: pod
+  # annotations cannot carry a bearer token — a vanilla Prometheus pod-discovery
+  # job must add `authorization` to its scrape_config out of band (see
+  # PRODUCTION.md §B10a) when metrics.token is set.
   podAnnotations:
     enabled: false
   # ServiceMonitor for the Prometheus Operator. OFF by default and additionally
   # guarded by a CRD-capability check, so enabling it without the operator is a
-  # no-op rather than a render error.
+  # no-op rather than a render error. When metrics.token is set (inline OR via the
+  # existing Secret's INVENTARIO_RUN_METRICS_TOKEN key), the ServiceMonitor is wired
+  # with an `authorization` stanza so the operator sends the bearer token.
   serviceMonitor:
     enabled: false
     interval: 15s
@@ -333,6 +356,14 @@ app:
   # (NOT under the INVENTARIO_RUN_ prefix).
   # Env: INVENTARIO_DEBUG_UI
   debugUI: false
+
+  # Expose the interactive Swagger/OpenAPI docs UI at /swagger (#2113 L-5).
+  # OFF by default so production installs do not advertise the full API surface
+  # to anonymous callers. Flip to true on dev/preview overlays if you want the
+  # docs UI. Read by the app as a `run`-section bool, so cleanenv resolves the
+  # `ENABLE_API_DOCS` env tag under the INVENTARIO_RUN_ prefix.
+  # Env: INVENTARIO_RUN_ENABLE_API_DOCS
+  enableApiDocs: false
 
   # File upload storage location. Supports:
   #   file:///app/uploads?create_dir=1  (local; requires persistence.enabled=true)
@@ -579,6 +610,7 @@ secrets:
   #   INVENTARIO_RUN_MANDRILL_API_KEY            (required for mandrill/mailchimp provider)
   #   INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY (required when aivision.provider=anthropic)
   #   INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY    (required when aivision.provider=openai)
+  #   INVENTARIO_RUN_METRICS_TOKEN                   (optional; bearer token for GET /metrics — strongly recommended in production, see metrics.token)
   #   SETUP_ADMIN_PASSWORD                       (required by job-setup if setupJob.enabled)
   #   BACKOFFICE_USER_PASSWORD                   (required by setup/init-data Job when backofficeUser.enabled; maps to setupJob.initData.backofficeUserPassword; min 8 chars + upper + lower + digit)
   #   BACKOFFICE_USER_EMAIL                      (optional; when backofficeUser.enabled, overrides backofficeUser.email so the operator login identity comes from the Secret/sops bundle instead of the overlay; falls back to backofficeUser.email when absent)
@@ -629,6 +661,14 @@ secrets:
   # aivision.provider; empty otherwise. See the `aivision:` block above.
   aiVisionAnthropicApiKey: ""    # Env: INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY
   aiVisionOpenaiApiKey: ""       # Env: INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY
+
+  # Metrics bearer token (#2102). Convenience alias for metrics.token: when
+  # metrics.token is set it is mirrored into the chart-managed Secret as
+  # INVENTARIO_RUN_METRICS_TOKEN automatically, so you normally do NOT set this
+  # directly. Provided for completeness / explicit overrides. Ignored when
+  # secrets.existingSecret is set (supply INVENTARIO_RUN_METRICS_TOKEN there instead).
+  # Env: INVENTARIO_RUN_METRICS_TOKEN
+  metricsToken: ""
 
   # S3/MinIO credentials (required when app.uploadLocation uses s3://)
   # Automatically set from demo.minio.* when demo.minio.enabled=true.

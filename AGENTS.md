@@ -79,7 +79,7 @@ The system implements enterprise-grade multi-tenancy with:
 - `./inventario users create` - Create users for initial setup
 - `./inventario users list` - List all users with filtering
 - `./inventario users get <id-or-email>` - Get detailed user information
-- `./inventario users update <id-or-email>` - **Not yet implemented** (placeholder; prints a message and exits without changes)
+- `./inventario users update <id-or-email>` - Update user-row fields (email, name, active status, tenant, password); only the flags you pass are changed
 - `./inventario users delete <id-or-email>` - Delete users with confirmation
 - For PostgreSQL: Set POSTGRES_TEST_DSN environment variable for testing
 

@@ -255,6 +255,31 @@ whichever Deployment (all or apiserver) is currently enabled.
 {{- default (printf "%s-secret" (include "inventario.fullname" .)) .Values.secrets.existingSecret -}}
 {{- end -}}
 
+{{/*
+Effective metrics bearer token (#2102). metrics.token is the primary knob;
+secrets.metricsToken is an explicit alias/override. Empty when neither is set,
+which means /metrics stays open (the app logs a one-time warning). Ignored when
+secrets.existingSecret is used — the operator supplies INVENTARIO_RUN_METRICS_TOKEN
+in that Secret instead.
+*/}}
+{{- define "inventario.metricsToken" -}}
+{{- default .Values.metrics.token .Values.secrets.metricsToken -}}
+{{- end -}}
+
+{{/*
+Whether a bearer token guards /metrics. True when secrets.existingSecret is set
+(we cannot read its contents, so we assume the operator provided
+INVENTARIO_RUN_METRICS_TOKEN and wire the ServiceMonitor's authorization stanza),
+or when an inline metrics token resolves to a non-empty value.
+*/}}
+{{- define "inventario.metricsTokenEnabled" -}}
+{{- if .Values.secrets.existingSecret -}}
+true
+{{- else if (include "inventario.metricsToken" .) -}}
+true
+{{- end -}}
+{{- end -}}
+
 {{- define "inventario.demoPostgresName" -}}
 {{- printf "%s-demo-postgres" (include "inventario.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}

@@ -55,6 +55,12 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
+// testOrgTenantSlug is the well-known sentinel slug for the seed's own
+// throwaway test tenant. The seed treats it as the ONLY slug it is allowed to
+// (re)seed into when the row already exists — every other pre-existing slug is
+// presumed to be real (production) data and is refused (issue #2113, L-2).
+const testOrgTenantSlug = "test-org"
+
 // SeedOptions contains optional parameters for seeding.
 type SeedOptions struct {
 	UserEmail  string // Optional: email of user to seed for
@@ -120,8 +126,10 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 	ctx := context.Background()
 	registrySet := factorySet.CreateServiceRegistrySet()
 
-	// Find or create tenant.
-	tenant, err := findOrCreateTenant(ctx, registrySet, opts)
+	// Find or create tenant. tenantPreExisted reports whether the row was
+	// already present before this call — the L-2 fresh-seed guard below uses
+	// it to refuse the first seed into an unrelated production tenant.
+	tenant, tenantPreExisted, err := findOrCreateTenant(ctx, registrySet, opts)
 	if err != nil {
 		return false, err
 	}
@@ -130,6 +138,16 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 	users, err := registrySet.UserRegistry.List(ctx)
 	if err != nil {
 		return false, err
+	}
+
+	// Fail-closed (issue #2113, L-2): refuse the first seed into a
+	// pre-existing tenant the seed doesn't own. Runs before any rows are
+	// created, so a rejected call is a clean no-op. Only pre-existing tenants
+	// can be polluted this way; a tenant the seed just created is always fine.
+	if tenantPreExisted {
+		if err := guardPreExistingTenant(ctx, registrySet, tenant, opts); err != nil {
+			return false, err
+		}
 	}
 
 	user1, user2, err := findOrCreateUsers(ctx, registrySet, tenant, users, opts.UserEmail)
@@ -292,11 +310,19 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 //     INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE by the seed handler — see
 //     apiserver/seed.go). It is OFF by default; only the e2e harness
 //     turns it on.
+//   - delete-solo / delete-wrongpass / delete-lastowner@test-org.com —
+//     disposable self-service-account-deletion fixtures (#2147). Each owns
+//     its own group; the last-owner fixture's group also carries a second
+//     member so the sole-owner block path fires. See
+//     seeddata_delete_targets.go and e2e/tests/delete-account.spec.ts.
 func seedTestOrgFixtures(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, users []*models.User, opts SeedOptions) error {
 	if err := ensureOrphanUser(ctx, registrySet, tenant, users); err != nil {
 		return err
 	}
 	if err := ensureBlockTargetUser(ctx, registrySet, tenant, users); err != nil {
+		return err
+	}
+	if err := ensureDeleteTargetFixtures(ctx, registrySet, tenant, users); err != nil {
 		return err
 	}
 	if opts.SeedSystemAdmin {
@@ -307,6 +333,40 @@ func seedTestOrgFixtures(ctx context.Context, registrySet *registry.Set, tenant 
 	return nil
 }
 
+// guardPreExistingTenant enforces the #2113 L-2 fail-closed rule for a tenant
+// that already existed before this seed call: the public, unauthenticated
+// /api/v1/seed endpoint must not be coaxed into seeding the demo dataset into a
+// tenant it doesn't own — that would let any caller pollute real production
+// data via /api/v1/seed?tenant_slug=<theirs>. It returns an error (the caller
+// aborts before creating any rows) unless one of the exemptions holds:
+//   - the slug is the well-known `test-org` sentinel the seed owns;
+//   - the explicit env-gated opt-in (CreateTenantIfMissing, from
+//     INVENTARIO_SEED_ALLOW_CREATE_TENANT) is set; or
+//   - the tenant already owns users — the idempotent reconcile/reseed path
+//     (#1931), which must keep working to backfill blobs on a later run.
+//
+// The tenant-scoped ListByTenant is used deliberately: the service-registry
+// UserRegistry.List is GLOBAL (RLS-bypassed, all tenants) and so cannot tell
+// whether THIS tenant has users — using it would defeat the guard in a real
+// multi-tenant deployment.
+func guardPreExistingTenant(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, opts SeedOptions) error {
+	if tenant.Slug == testOrgTenantSlug || opts.CreateTenantIfMissing {
+		return nil
+	}
+	tenantUsers, err := registrySet.UserRegistry.ListByTenant(ctx, tenant.ID)
+	if err != nil {
+		return fmt.Errorf("failed to check existing users for tenant '%s': %w", tenant.Slug, err)
+	}
+	if len(tenantUsers) > 0 {
+		// Already-seeded tenant: the reconcile/reseed path is allowed.
+		return nil
+	}
+	return fmt.Errorf(
+		"refusing to seed into pre-existing tenant '%s': the demo dataset is only seeded into the '%s' sentinel, a freshly created tenant, or one already seeded (set INVENTARIO_SEED_ALLOW_CREATE_TENANT to override for trusted fixtures)",
+		tenant.Slug, testOrgTenantSlug,
+	)
+}
+
 // findOrCreateTenant finds an existing tenant by slug or creates a new
 // test tenant. When opts.TenantSlug is non-empty and the row is
 // missing, opts.CreateTenantIfMissing decides whether to fail-closed
@@ -314,11 +374,16 @@ func seedTestOrgFixtures(ctx context.Context, registrySet *registry.Set, tenant 
 // create-then-seed (e2e cross-tenant fixture path, #1851; the seed
 // handler binds opts.CreateTenantIfMissing to
 // INVENTARIO_SEED_ALLOW_CREATE_TENANT).
-func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, opts SeedOptions) (*models.Tenant, error) {
+//
+// The second return value (preExisted) reports whether the resolved tenant
+// row already existed before this call — the L-2 fresh-seed guard in SeedData
+// uses it to refuse the FIRST seed into an unrelated pre-existing tenant while
+// still allowing idempotent reconcile reseeds.
+func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, opts SeedOptions) (_ *models.Tenant, preExisted bool, _ error) {
 	if opts.TenantSlug != "" {
 		tenant, err := registrySet.TenantRegistry.GetBySlug(ctx, opts.TenantSlug)
 		if err == nil {
-			return tenant, nil
+			return tenant, true, nil
 		}
 		// Only fall through to create-if-missing on the explicit "not
 		// found" sentinel. Any other lookup error (DB down, RLS
@@ -328,10 +393,10 @@ func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, opts See
 		// the row already exists but the read failed for a transient
 		// reason.
 		if !errors.Is(err, registry.ErrNotFound) {
-			return nil, fmt.Errorf("tenant lookup for slug '%s' failed: %w", opts.TenantSlug, err)
+			return nil, false, fmt.Errorf("tenant lookup for slug '%s' failed: %w", opts.TenantSlug, err)
 		}
 		if !opts.CreateTenantIfMissing {
-			return nil, fmt.Errorf("tenant with slug '%s' not found: %w", opts.TenantSlug, err)
+			return nil, false, fmt.Errorf("tenant with slug '%s' not found: %w", opts.TenantSlug, err)
 		}
 		// Create-if-missing: provision a new active tenant with a
 		// human-friendly name derived from the slug. Slug stays as
@@ -344,22 +409,23 @@ func findOrCreateTenant(ctx context.Context, registrySet *registry.Set, opts See
 		}
 		created, createErr := registrySet.TenantRegistry.Create(ctx, newTenant)
 		if createErr != nil {
-			return nil, fmt.Errorf("create tenant '%s': %w", opts.TenantSlug, createErr)
+			return nil, false, fmt.Errorf("create tenant '%s': %w", opts.TenantSlug, createErr)
 		}
-		return created, nil
+		return created, false, nil
 	}
 
 	existingTenants, err := registrySet.TenantRegistry.List(ctx)
 	if err == nil && len(existingTenants) > 0 {
-		return existingTenants[0], nil
+		return existingTenants[0], true, nil
 	}
 
 	testTenant := models.Tenant{
 		Name:   "Test Organization",
-		Slug:   "test-org",
+		Slug:   testOrgTenantSlug,
 		Status: models.TenantStatusActive,
 	}
-	return registrySet.TenantRegistry.Create(ctx, testTenant)
+	created, createErr := registrySet.TenantRegistry.Create(ctx, testTenant)
+	return created, false, createErr
 }
 
 // findOrCreateUsers finds existing users or creates test users based on options.

@@ -1,6 +1,6 @@
 module github.com/denisvmedia/inventario
 
-go 1.26.3
+go 1.26.4
 
 tool (
 	github.com/go-extras/nolintguard/cmd/nolintguard
@@ -43,7 +43,7 @@ require (
 	github.com/shopspring/decimal v1.4.0
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/cobra v1.10.2
-	github.com/stokaro/ptah v0.0.0-20260616125223-86a407bb5108
+	github.com/stokaro/ptah v0.0.0-20260622204233-3fac142ebf40
 	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6
 	github.com/wk8/go-ordered-map/v2 v2.1.8

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -238,6 +239,12 @@ type BackofficeAuthAPI struct {
 	rateLimiter            services.AuthRateLimiter
 	auditService           services.AuditLogger
 	jwtSecret              []byte
+	// publicHost is the host[:port] of the deployment's public URL,
+	// derived from BackofficeAuthParams.PublicURL. Used by refresh() to
+	// reject cross-origin POSTs (issue #2113, L-1) as defence-in-depth on
+	// top of the cookie's SameSite=Strict attribute. Empty (dev / tests
+	// without PublicURL wired) disables the check.
+	publicHost string
 }
 
 // BackofficeAuthParams holds the wiring for the back-office auth router.
@@ -250,6 +257,11 @@ type BackofficeAuthParams struct {
 	RateLimiter                     services.AuthRateLimiter
 	AuditService                    services.AuditLogger
 	JWTSecret                       []byte
+	// PublicURL is the deployment's public base URL (e.g.
+	// https://app.example.com). When set, refresh() enforces that the
+	// request's Origin/Referer host matches it (issue #2113, L-1). Empty
+	// leaves the check off — the cookie's SameSite=Strict still applies.
+	PublicURL string
 }
 
 // BackofficeAuth mounts the back-office auth routes. The login, refresh,
@@ -271,6 +283,7 @@ func BackofficeAuth(params BackofficeAuthParams) func(r chi.Router) {
 		rateLimiter:            params.RateLimiter,
 		auditService:           params.AuditService,
 		jwtSecret:              params.JWTSecret,
+		publicHost:             publicHostFromURL(params.PublicURL),
 	}
 
 	requireBackofficeAuth := RequireBackofficeAuth(
@@ -290,7 +303,9 @@ func BackofficeAuth(params BackofficeAuthParams) func(r chi.Router) {
 		r.Post("/logout", api.logout)
 		// /me is the only route that requires a back-office bearer
 		// token — every other route is unauthenticated by design (login
-		// runs before authentication, refresh runs on cookie + Bearer).
+		// runs before authentication; refresh runs on the refresh cookie
+		// alone, with an Origin/Referer CSRF check when the public host is
+		// configured — see refresh()).
 		r.With(requireBackofficeAuth).Get("/me", api.handleGetCurrentUser)
 	}
 }
@@ -599,6 +614,21 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	if api.refreshTokenRegistry == nil {
 		http.Error(w, "Refresh tokens not supported", http.StatusNotImplemented)
 		return
+	}
+
+	// CSRF defence-in-depth (issue #2113, L-1): /backoffice/auth/refresh is
+	// a state-changing POST that runs on the refresh cookie alone — it never
+	// sees the CSRF token middleware (which gates bearer-authenticated
+	// routes). The cookie is already SameSite=Strict, but when the public
+	// host is configured we additionally reject any request whose
+	// Origin/Referer host doesn't match it. Skipped when publicHost is empty
+	// (dev / tests) so the cookie's SameSite=Strict remains the sole guard.
+	if api.publicHost != "" {
+		if err := validateBackofficeRefreshOrigin(r, api.publicHost); err != nil {
+			slog.Warn("Backoffice refresh: Origin/Referer validation failed", "error", err)
+			http.Error(w, "Invalid origin", http.StatusForbidden)
+			return
+		}
 	}
 
 	cookie, err := r.Cookie(backofficeRefreshTokenCookieName)
@@ -997,6 +1027,50 @@ func (api *BackofficeAuthAPI) maybeRecordFailedLogin(ctx context.Context, email 
 // -----------------------------------------------------------------------
 // Free-function helpers
 // -----------------------------------------------------------------------
+
+// publicHostFromURL extracts the host[:port] component of a configured
+// public base URL (e.g. "https://app.example.com:8443" → "app.example.com:8443").
+// Returns "" for an empty or unparseable URL so the caller treats the
+// Origin/Referer check as disabled rather than enforcing against a bogus host.
+func publicHostFromURL(publicURL string) string {
+	publicURL = strings.TrimSpace(publicURL)
+	if publicURL == "" {
+		return ""
+	}
+	u, err := url.Parse(publicURL)
+	if err != nil {
+		return ""
+	}
+	return u.Host
+}
+
+// validateBackofficeRefreshOrigin checks that the request's Origin (preferred)
+// or Referer (fallback) header host matches the configured public host. Used
+// on POST /backoffice/auth/refresh (issue #2113, L-1) to defend the
+// cookie-only, state-changing endpoint against cross-origin replay. A request
+// with neither header, or whose host doesn't match, is rejected.
+func validateBackofficeRefreshOrigin(r *http.Request, publicHost string) error {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		referer := r.Header.Get("Referer")
+		if referer == "" {
+			return errors.New("Origin or Referer header required")
+		}
+		origin = referer
+	}
+
+	originURL, err := url.Parse(origin)
+	if err != nil {
+		return fmt.Errorf("invalid Origin/Referer %q: %w", origin, err)
+	}
+	if originURL.Host == "" {
+		return fmt.Errorf("Origin/Referer %q has no host", origin)
+	}
+	if originURL.Host != publicHost {
+		return fmt.Errorf("origin mismatch: got %q, expected %q", originURL.Host, publicHost)
+	}
+	return nil
+}
 
 // generateBackofficeRefreshToken mints a fresh cryptographically-random
 // refresh token + its SHA-256 hash. Mirrors models.GenerateRefreshToken

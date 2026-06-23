@@ -156,7 +156,7 @@ tense; the subject is implicit (the thing the user just acted on).
 
 ### Destructive confirmations
 
-`<AlertDialog>` body — always answer "what's happening, what gets
+`useConfirm()` body — always answer "what's happening, what gets
 deleted, can you undo?":
 
 - Title: `Delete this item?`

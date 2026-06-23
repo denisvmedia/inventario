@@ -66,7 +66,7 @@ func (c *Command) migrateDown(cfg *Config, dbConfig *shared.DatabaseConfig, targ
 	migr := migrator.NewWithFallback(dsn, c.config.MigrationsDir)
 
 	fmt.Println("=== MIGRATE DOWN ===")
-	fmt.Printf("Database: %s\n", dsn)
+	fmt.Printf("Database: %s\n", shared.RedactDSN(dsn))
 	fmt.Printf("Target version: %d\n", targetVersion)
 	fmt.Println()
 

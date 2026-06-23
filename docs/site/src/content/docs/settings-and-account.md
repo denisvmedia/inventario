@@ -37,9 +37,17 @@ A couple of things to know:
 
 - Your **email address** is shown but can't be edited here. To change the email
   on your account, contact support.
-- Self-service **account deletion** isn't available yet. The **Account** section
-  has a "Danger zone" with a **Delete account** button, but it currently just
-  explains the limitation and points you to support.
+- You can **delete your account** yourself from the **Account** section's
+  "Danger zone". Clicking **Delete account** opens a confirmation dialog where
+  you type your email address to confirm and — for password accounts — re-enter
+  your password. (Accounts that sign in only with Google or another social
+  provider don't need to enter a password.) Deletion is **permanent and can't be
+  undone**: it erases your account together with the inventory you own, so
+  export or back up anything you want to keep first. A couple of cases are
+  blocked with an explanation instead of deleting: if you're the **only owner**
+  of a group that still has other members, hand ownership to someone else first;
+  and if you still own items shared inside a group someone else owns, those need
+  to be removed first. Once deletion succeeds you're signed out immediately.
 
 For more on groups, roles, and inviting people, see
 [Groups & sharing](../groups-and-sharing/).

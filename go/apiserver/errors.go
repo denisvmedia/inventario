@@ -24,6 +24,13 @@ var (
 	ErrMissingUploadSlot      = errx.NewSentinel("missing X-Upload-Slot header")
 	ErrInvalidUploadSlot      = errx.NewSentinel("invalid or expired upload slot")
 	ErrNotFound               = errx.NewSentinel("not found", registry.ErrNotFound)
+	// ErrInvalidAccountDeletionPassword is raised by handleDeleteCurrentUser
+	// (#2147) when re-authentication for a self-service account delete fails.
+	// The handler answers 422 directly via codedUnprocessableEntityError with
+	// JSON:API code auth.delete.invalid_password — a handler-local re-auth
+	// failure rather than a service sentinel — so it needs no toJSONAPIError
+	// mapping.
+	ErrInvalidAccountDeletionPassword = errx.NewSentinel("incorrect password")
 	// errInvalidDeleteStrategy is returned when a DELETE request carries an
 	// unknown `?strategy=` value (#2137). The handler answers 422 directly via
 	// unprocessableEntityError, so it does not need a toJSONAPIError mapping.
@@ -287,6 +294,35 @@ func adminMemberTenantMismatchError(err error) jsonapi.Error {
 	}
 }
 
+// accountDeletionSentinelJSONAPIError maps the two self-service account-
+// deletion sentinels (#2147) to their 422 + code wire shape. Extracted as a
+// single early-return helper called before the toJSONAPIError switch — like
+// adminSentinelJSONAPIError — so the switch stays under the gocyclo budget;
+// ok=false when err is not an account-deletion sentinel, leaving the switch to
+// handle it. The dotted codes let the Settings FE render targeted copy
+// ("transfer ownership first" / "you still own shared content") instead of a
+// generic 422 toast. (The third account-deletion code,
+// auth.delete.invalid_password, is raised directly by the handler from a
+// re-auth failure — not a service sentinel — so it has no case here.)
+func accountDeletionSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
+	var code string
+	switch {
+	case errors.Is(err, services.ErrAccountSoleOwnerOfSharedGroup):
+		code = "auth.delete.last_owner"
+	case errors.Is(err, services.ErrAccountStillOwnsContent):
+		code = "auth.delete.owns_content"
+	default:
+		return jsonapi.Error{}, false
+	}
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusUnprocessableEntity,
+		StatusText:     "Unprocessable Entity",
+		Code:           code,
+	}, true
+}
+
 // inviteAcceptRejectionError maps the invite-accept business-rule
 // sentinels (expired, already used, already a member, #1221 email
 // mismatch) to their 422 wire shape. The email-mismatch case carries
@@ -386,8 +422,26 @@ func adminSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	}
 }
 
-func toJSONAPIError(err error) jsonapi.Error {
+// preSwitchSentinelJSONAPIError dispatches to the extracted sentinel-family
+// helpers (admin guards, account-deletion) before the toJSONAPIError switch.
+// Collapsing them into a single early-return call keeps toJSONAPIError under
+// the gocyclo budget. ok=false when err matches none of them.
+func preSwitchSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	if jsErr, ok := adminSentinelJSONAPIError(err); ok {
+		return jsErr, true
+	}
+	if jsErr, ok := accountDeletionSentinelJSONAPIError(err); ok {
+		return jsErr, true
+	}
+	return jsonapi.Error{}, false
+}
+
+func toJSONAPIError(err error) jsonapi.Error {
+	// Sentinel families extracted into early-return helpers so this switch
+	// stays under the gocyclo budget (admin guards #1745/#1747/#1750,
+	// account-deletion #2147). Each returns ok=false when err isn't one of
+	// its sentinels, leaving the switch to handle it.
+	if jsErr, ok := preSwitchSentinelJSONAPIError(err); ok {
 		return jsErr
 	}
 	switch {

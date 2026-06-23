@@ -101,7 +101,7 @@ token swap.
 | `prefers-color-scheme: light` | Mode `system` resolves to light |
 | `prefers-reduced-motion: reduce` | `tw-animate-css` and `motion-reduce:` honor it (per [05-motion.md](05-motion.md)) |
 | `prefers-contrast: more` | Not yet honored — TBD. Tokens have headroom for an "AAA-only" variant when we wire it. |
-| Touch vs. pointer | `useIsTouch()` (`src/hooks/use-mobile.ts`) detects; surfaces use it for adjusted hover state. |
+| Touch vs. pointer | `useIsMobile()` (`src/hooks/use-mobile.ts`) detects the mobile breakpoint; surfaces use it for adjusted hover/layout state. |
 
 ## Switching at runtime
 

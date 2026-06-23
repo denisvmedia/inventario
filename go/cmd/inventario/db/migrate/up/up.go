@@ -56,7 +56,7 @@ func (c *Command) migrateUp(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 	migr := migrator.NewWithFallback(dsn, c.config.MigrationsDir)
 
 	fmt.Println("=== MIGRATE UP ===")
-	fmt.Printf("Database: %s\n", dsn)
+	fmt.Printf("Database: %s\n", shared.RedactDSN(dsn))
 	fmt.Println()
 
 	migratorArgs := migrator.Args{

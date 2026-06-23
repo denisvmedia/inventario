@@ -18,7 +18,7 @@ e2e/
 
 ### Prerequisites
 
-- Node.js (v18 or later)
+- Node.js (v24.16.0, per `package.json` `engines`)
 - npm (v8 or later)
 - Go (v1.26 or later)
 
@@ -68,13 +68,6 @@ npm run test:record
 ```
 
 This will run all tests with video and screenshot recording enabled. The artifacts will be saved in the `test-results` directory.
-
-### Running Specific Test Examples
-
-```bash
-npm run test:screenshots   # Run screenshot examples
-npm run test:recorder      # Run recorder fixture examples
-```
 
 ### Running Tests with UI
 
@@ -161,13 +154,6 @@ To clean up all test artifacts:
 ```bash
 npm run clean:artifacts
 ```
-
-### Example Files
-
-- `screenshots-example.spec.ts` - Examples of taking manual screenshots
-- `recorder-example.spec.ts` - Examples of using the TestRecorder helper
-- `fixture-recorder.spec.ts` - Examples of using the recorder fixture
-- `conditional-screenshots.spec.ts` - Examples of taking screenshots based on conditions
 
 ## Email delivery tests (Mailpit)
 
