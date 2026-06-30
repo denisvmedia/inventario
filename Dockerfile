@@ -104,7 +104,7 @@ CMD ["go", "test", "-v", "./..."]
 # the node:/golang: base pins above) so the runtime base layer is reproducible
 # and can't drift to a newly-published `latest`. Renovate's `docker` manager
 # keeps the digest current; bump both the tag and the @sha256 together.
-FROM alpine:3.22@sha256:310c62b5e7ca5b08167e4384c68db0fd2905dd9c7493756d356e893909057601 AS production
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS production
 
 # Install runtime dependencies. `apk upgrade` first so base-image packages pick
 # up security patches at build time even when the pinned digest lags a CVE fix
