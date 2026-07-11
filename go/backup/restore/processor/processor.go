@@ -173,10 +173,20 @@ func checkInbFormatVersion(payload io.Reader) error {
 	if err != nil {
 		return errxtrace.Wrap("failed to read inner tar", err)
 	}
-	if hdr.Name != types.INBManifestMember || hdr.Size < 0 || hdr.Size > maxInbManifestBytes {
-		// No manifest up front (or an implausibly large one) — leave it to the
-		// walk, which drains unknown members and caps every one it parses.
+	if hdr.Name != types.INBManifestMember {
+		// No manifest up front. Pre-manifest archives are still readable, and the
+		// walk drains unknown members, so this is not itself a violation — there
+		// is simply no declared version to gate on.
 		return nil
+	}
+	if hdr.Size < 0 || hdr.Size > maxInbManifestBytes {
+		// An implausibly-sized manifest is a framing violation, and it must NOT
+		// fall through to "no constraint": that would let a crafted archive skip
+		// the version gate entirely and reach prepareRestore, where full_replace
+		// wipes the target before a format this build cannot read is even parsed.
+		// Fail while the target is still intact.
+		return errx.Classify(ErrJSONDocTooLarge,
+			errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxInbManifestBytes))
 	}
 
 	data, err := io.ReadAll(io.LimitReader(tr, hdr.Size))

@@ -6,6 +6,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -571,6 +572,29 @@ func TestINBRestore_RejectsUnsupportedFormatMajor(t *testing.T) {
 
 	final, err := restoreInb(c, f, signer, key)
 	c.Assert(err, qt.ErrorIs, processor.ErrUnsupportedFormatVersion)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusFailed)
+
+	locReg := must.Must(f.fs.LocationRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Assert(must.Must(locReg.List(f.ctx)), qt.HasLen, 1)
+}
+
+// TestINBRestore_RejectsOversizedManifest closes the bypass around the version
+// gate: an implausibly large manifest must NOT be waved through as "no version to
+// gate on". If it were, a crafted archive could pad its manifest past the cap,
+// skip the MAJOR check entirely, and reach prepareRestore — where full_replace
+// wipes the target before a format this build cannot read is ever parsed. The
+// pre-existing location must survive.
+func TestINBRestore_RejectsOversizedManifest(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	// A syntactically valid manifest padded past the 4 MiB pre-scan cap.
+	manifest := `{"version":"3.0","pad":"` + strings.Repeat("A", 5<<20) + `"}`
+	key := versionGateArchive(c, f, signer, manifest)
+
+	final, err := restoreInb(c, f, signer, key)
+	c.Assert(err, qt.ErrorIs, processor.ErrJSONDocTooLarge)
 	c.Assert(final.Status, qt.Equals, models.RestoreStatusFailed)
 
 	locReg := must.Must(f.fs.LocationRegistryFactory.CreateUserRegistry(f.ctx))

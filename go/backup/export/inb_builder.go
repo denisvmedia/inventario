@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
+	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/backup/export/types"
 	"github.com/denisvmedia/inventario/internal/blobkeys"
@@ -326,17 +328,23 @@ func (b *inbBuilder) indexFiles() error {
 		if file == nil || file.File == nil {
 			continue
 		}
+		// A blob probe that cannot determine a file's state aborts the export:
+		// an incomplete-but-successful backup is worse than a failed one.
+		var indexErr error
 		switch file.LinkedEntityType {
 		case "commodity":
-			b.indexCommodityFile(file)
+			indexErr = b.indexCommodityFile(file)
 		case "location", "area":
-			b.indexEntityFile(file)
+			indexErr = b.indexEntityFile(file)
 		case "":
-			b.indexStandaloneFile(file)
+			indexErr = b.indexStandaloneFile(file)
 		default:
 			// "export" (and any future type this build does not know) is not
 			// user inventory — skip it.
 			continue
+		}
+		if indexErr != nil {
+			return indexErr
 		}
 	}
 	return nil
@@ -345,10 +353,10 @@ func (b *inbBuilder) indexFiles() error {
 // indexCommodityFile files one commodity attachment under its commodity + bucket.
 // A bucket outside images/invoices/manuals cannot pass model validation, so such
 // a row is skipped rather than emitted.
-func (b *inbBuilder) indexCommodityFile(file *models.FileEntity) {
+func (b *inbBuilder) indexCommodityFile(file *models.FileEntity) error {
 	bucket := file.LinkedEntityMeta
 	if !isCommodityFileBucket(bucket) {
-		return
+		return nil
 	}
 
 	// Record the DB-id → UUID mapping for EVERY commodity-attached file,
@@ -358,11 +366,14 @@ func (b *inbBuilder) indexCommodityFile(file *models.FileEntity) {
 	// target file never lands).
 	b.fileUUIDByDBID[file.ID] = file.UUID
 
-	size, ok := b.resolveFileSize(file)
-	if !ok {
-		// A missing/unsized blob (orphan row, manual delete) is dropped so
-		// it is excluded from both the doc and the statistics.
-		return
+	size, present, err := b.resolveFileSize(file)
+	if err != nil {
+		return err
+	}
+	if !present {
+		// A confirmed-missing/unsized blob (orphan row, manual delete) is dropped
+		// so it is excluded from both the doc and the statistics.
+		return nil
 	}
 
 	byBucket := b.filesByCommodityID[file.LinkedEntityID]
@@ -371,6 +382,7 @@ func (b *inbBuilder) indexCommodityFile(file *models.FileEntity) {
 		b.filesByCommodityID[file.LinkedEntityID] = byBucket
 	}
 	byBucket[bucket] = append(byBucket[bucket], &candidateFile{file: file, size: size})
+	return nil
 }
 
 // indexEntityFile collects one location-/area-linked file (issue #2235),
@@ -378,9 +390,9 @@ func (b *inbBuilder) indexCommodityFile(file *models.FileEntity) {
 // UUID. A file whose linked entity does not resolve (dangling link, out of RLS
 // scope) or whose bucket is outside images/files is skipped rather than emitted
 // with a reference the restore side could not map.
-func (b *inbBuilder) indexEntityFile(file *models.FileEntity) {
+func (b *inbBuilder) indexEntityFile(file *models.FileEntity) error {
 	if !isEntityFileBucket(file.LinkedEntityMeta) {
-		return
+		return nil
 	}
 
 	var entityUUID string
@@ -391,58 +403,89 @@ func (b *inbBuilder) indexEntityFile(file *models.FileEntity) {
 		entityUUID = b.areaUUIDByDBID[file.LinkedEntityID]
 	}
 	if entityUUID == "" {
-		return
+		return nil
 	}
 
-	size, ok := b.resolveFileSize(file)
-	if !ok {
-		return
+	size, present, err := b.resolveFileSize(file)
+	if err != nil {
+		return err
+	}
+	if !present {
+		return nil
 	}
 	b.entityFiles = append(b.entityFiles, &entityCandidateFile{
 		candidateFile: candidateFile{file: file, size: size},
 		linkedType:    file.LinkedEntityType,
 		entityUUID:    entityUUID,
 	})
+	return nil
 }
 
 // indexStandaloneFile collects one unlinked file (issue #2235). linkedType and
 // entityUUID stay empty — model validation requires all three link fields empty
 // for a standalone row.
-func (b *inbBuilder) indexStandaloneFile(file *models.FileEntity) {
-	size, ok := b.resolveFileSize(file)
-	if !ok {
-		return
+func (b *inbBuilder) indexStandaloneFile(file *models.FileEntity) error {
+	size, present, err := b.resolveFileSize(file)
+	if err != nil {
+		return err
+	}
+	if !present {
+		return nil
 	}
 	b.standaloneFiles = append(b.standaloneFiles, &entityCandidateFile{
 		candidateFile: candidateFile{file: file, size: size},
 	})
+	return nil
 }
 
 // resolveFileSize returns the byte size to declare for a file member: the
-// recorded SizeBytes when >0, else a single bucket attributes probe. ok=false
-// when the blob is missing/unsized so the caller skips it (orphan).
-func (b *inbBuilder) resolveFileSize(file *models.FileEntity) (int64, bool) {
-	if size := fileSizeHint(file); size > 0 {
+// recorded SizeBytes when >0, else a single bucket attributes probe.
+//
+// present=false means the blob is CONFIRMED absent (an orphan row: a manual
+// delete, a seed fixture that never wrote bytes) — the caller drops the file from
+// both the document and the statistics. Dropping it here is deliberate: a
+// declared member whose bytes never land would abort the WHOLE export in
+// flushPendingFile (the streaming exporter cannot recover once the document
+// referencing the member has been emitted), and would hard-fail every restore of
+// the resulting archive with ErrMissingFileMembers.
+//
+// A non-nil error means the probe could NOT determine the blob's state (a
+// transient bucket failure: network, throttling, a 5xx). That must NOT be
+// conflated with "absent": treating it as an orphan would silently drop a live
+// file and hand the user a backup that looks successful but is incomplete —
+// exactly the failure class this format change exists to eliminate. So it fails
+// the export instead.
+func (b *inbBuilder) resolveFileSize(file *models.FileEntity) (size int64, present bool, err error) {
+	if hint := fileSizeHint(file); hint > 0 {
 		// Trust the recorded size for the tar header, but still confirm the blob
-		// actually exists before committing the file to the plan. A row can carry
-		// a SizeBytes hint while its bytes were never written (seed fixtures) or
-		// were manually deleted; without this probe the missing blob isn't caught
-		// until flushPendingFile streams it, which aborts the WHOLE export instead
-		// of dropping the single orphan here (the streaming exporter cannot recover
-		// once the location JSON referencing the member has already been emitted).
+		// actually exists before committing the file to the plan. Exists reports
+		// (false, nil) only when the blob is definitively missing; any error means
+		// the state is unknown, so it propagates.
 		exists, err := b.bucket.Exists(b.ctx, file.OriginalPath)
-		if err != nil || !exists {
-			return 0, false
+		if err != nil {
+			return 0, false, errxtrace.Wrap("failed to probe file blob", err,
+				errx.Attrs("file_id", file.ID, "blob_key", file.OriginalPath))
 		}
-		return size, true
+		if !exists {
+			return 0, false, nil
+		}
+		return hint, true, nil
 	}
-	// Probe the bucket for the exact size — the tar header needs it. A missing
-	// blob fails the probe and the file is treated as an orphan.
+	// No usable size hint — probe the bucket for the exact size, which the tar
+	// header needs. Only a NotFound is an orphan; every other failure is unknown
+	// state and fails the export.
 	attrs, err := b.bucket.Attributes(b.ctx, file.OriginalPath)
-	if err != nil || attrs.Size <= 0 {
-		return 0, false
+	if err != nil {
+		if gcerrors.Code(err) == gcerrors.NotFound {
+			return 0, false, nil
+		}
+		return 0, false, errxtrace.Wrap("failed to read file blob attributes", err,
+			errx.Attrs("file_id", file.ID, "blob_key", file.OriginalPath))
 	}
-	return attrs.Size, true
+	if attrs.Size <= 0 {
+		return 0, false, nil
+	}
+	return attrs.Size, true, nil
 }
 
 // inScopeLocations returns the locations to emit. For selected_items it also
