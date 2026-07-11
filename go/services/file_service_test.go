@@ -273,6 +273,107 @@ func TestFileService_DeleteLinkedFiles(t *testing.T) {
 	}
 }
 
+// TestFileService_DeleteLinkedFiles_AreaAndLocation pins #2119 at the
+// primitive level: DeleteLinkedFiles handles the 'area' and 'location' link
+// types exactly like 'commodity' — file rows AND physical blobs are removed.
+// The area case uses an image MIME so the canonical thumbnail-key cleanup is
+// exercised for these link types too.
+func TestFileService_DeleteLinkedFiles_AreaAndLocation(t *testing.T) {
+	tests := []struct {
+		name       string
+		entityType string
+		mimeType   string
+		ext        string
+	}{
+		{
+			name:       "area-linked image file",
+			entityType: "area",
+			mimeType:   "image/jpeg",
+			ext:        ".jpg",
+		},
+		{
+			name:       "location-linked document file",
+			entityType: "location",
+			mimeType:   "application/pdf",
+			ext:        ".pdf",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx := newTestContext()
+
+			tempDir := c.TempDir()
+			var uploadLocation string
+			if runtime.GOOS == "windows" {
+				uploadLocation = "file:///" + tempDir + "?create_dir=1"
+			} else {
+				uploadLocation = "file://" + tempDir + "?create_dir=1"
+			}
+
+			factorySet := memory.NewFactorySet()
+			registrySet, err := factorySet.CreateUserRegistrySet(ctx)
+			c.Assert(err, qt.IsNil)
+
+			service := NewFileService(factorySet, uploadLocation)
+
+			b, err := blob.OpenBucket(ctx, uploadLocation)
+			c.Assert(err, qt.IsNil)
+			defer b.Close()
+
+			blobKey := "linked-" + tt.entityType + tt.ext
+			c.Assert(b.WriteAll(ctx, blobKey, []byte("test content"), nil), qt.IsNil)
+
+			entityID := "test-" + tt.entityType + "-id"
+			createdFile, err := registrySet.FileRegistry.Create(ctx, models.FileEntity{
+				Title:            "Linked File",
+				Type:             models.FileTypeFromMIME(tt.mimeType),
+				LinkedEntityType: tt.entityType,
+				LinkedEntityID:   entityID,
+				LinkedEntityMeta: "images",
+				File: &models.File{
+					Path:         "linked-" + tt.entityType,
+					OriginalPath: blobKey,
+					Ext:          tt.ext,
+					MIMEType:     tt.mimeType,
+				},
+			})
+			c.Assert(err, qt.IsNil)
+
+			// For the image case, pre-write the canonical thumbnail blobs the
+			// file would own so their cleanup is asserted too.
+			thumbnailPaths := service.GetThumbnailPaths(createdFile.TenantID, createdFile.ID)
+			if tt.mimeType == "image/jpeg" {
+				for _, p := range thumbnailPaths {
+					c.Assert(b.WriteAll(ctx, p, []byte("thumb"), nil), qt.IsNil)
+				}
+			}
+
+			err = service.DeleteLinkedFiles(ctx, tt.entityType, entityID)
+			c.Assert(err, qt.IsNil)
+
+			// File row is gone.
+			_, err = registrySet.FileRegistry.Get(ctx, createdFile.ID)
+			c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+			// Physical blob is gone.
+			exists, err := b.Exists(ctx, blobKey)
+			c.Assert(err, qt.IsNil)
+			c.Assert(exists, qt.IsFalse)
+
+			// Thumbnail blobs are gone for the image case.
+			if tt.mimeType == "image/jpeg" {
+				for size, p := range thumbnailPaths {
+					exists, err := b.Exists(ctx, p)
+					c.Assert(err, qt.IsNil)
+					c.Assert(exists, qt.IsFalse, qt.Commentf("thumbnail %s at %s should be deleted", size, p))
+				}
+			}
+		})
+	}
+}
+
 func TestFileService_DeleteLinkedFiles_NoFiles(t *testing.T) {
 	c := qt.New(t)
 	ctx := newTestContext()

@@ -187,6 +187,21 @@ func (r *LocationRegistry) Update(ctx context.Context, location models.Location)
 	return &location, nil
 }
 
+// Delete removes ONLY the location row (after the in-tx empty-check below
+// rejects a location that still holds areas with ErrCannotDelete). The files
+// LINKED to the location (linked_entity_type='location') are NOT cascaded —
+// the link is polymorphic, there is no FK — and their physical blobs are not
+// touched here.
+//
+// INVARIANT (#2119, mirroring the #2121 commodity note): user-initiated
+// location deletes MUST go through services.EntityService (DeleteLocation /
+// DeleteLocationRecursive / UnlinkAndDeleteLocation), which drop this row and
+// then remove each linked file (row + best-effort blob) via
+// FileService.DeleteLinkedFiles. Calling this bare row delete directly leaves
+// every location-linked file row and blob orphaned. The only legitimate direct
+// callers are tests; the group/tenant purgers never call this method — they
+// bypass it entirely with raw `DELETE FROM <table>` sweeps that also wipe the
+// (tenant, group)'s files table.
 func (r *LocationRegistry) Delete(ctx context.Context, id string) error {
 	reg := r.newSQLRegistry()
 	err := reg.Delete(ctx, id, func(ctx context.Context, tx *sqlx.Tx) error {

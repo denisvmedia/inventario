@@ -318,10 +318,55 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
+	// Files linked to the area and its location (#2119). The polymorphic link
+	// carries no FK, so nothing forces these rows out before the areas /
+	// locations DELETEs — the group purge (which sweeps the whole files table
+	// for the group) is the backstop for any orphaned area/location
+	// attachment, and these fixtures pin that it actually reaches both types.
+	areaRow, err := set.AreaRegistry.Get(ctx, areaID)
+	c.Assert(err, qt.IsNil)
+	areaLinkedFile, err := set.FileRegistry.Create(ctx, models.FileEntity{
+		Title:            "area-attachment",
+		Type:             models.FileTypeDocument,
+		Category:         models.FileCategoryDocuments,
+		LinkedEntityType: "area",
+		LinkedEntityID:   areaID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "area-attachment",
+			OriginalPath: "area-attachment.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	})
+	c.Assert(err, qt.IsNil)
+	locationLinkedFile, err := set.FileRegistry.Create(ctx, models.FileEntity{
+		Title:            "location-attachment",
+		Type:             models.FileTypeDocument,
+		Category:         models.FileCategoryDocuments,
+		LinkedEntityType: "location",
+		LinkedEntityID:   areaRow.LocationID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "location-attachment",
+			OriginalPath: "location-attachment.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	})
+	c.Assert(err, qt.IsNil)
+
 	// -- purge, then prove the group row can finally be removed -------------
 
 	err = fs.GroupPurger.PurgeGroupDependents(context.Background(), tenantID, groupID)
 	c.Assert(err, qt.IsNil)
+
+	// The area- and location-linked file rows (#2119) were purged with the
+	// rest of the group's files.
+	_, err = set.FileRegistry.Get(ctx, areaLinkedFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = set.FileRegistry.Get(ctx, locationLinkedFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// The final location_groups DELETE is what was blocked before the fix:
 	// any orphaned dependent (loan/tag/currency/thumbnail chain) would trip a
