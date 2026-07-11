@@ -482,8 +482,16 @@ func (b *inbBuilder) resolveFileSize(file *models.FileEntity) (size int64, prese
 		return 0, false, errxtrace.Wrap("failed to read file blob attributes", err,
 			errx.Attrs("file_id", file.ID, "blob_key", file.OriginalPath))
 	}
-	if attrs.Size <= 0 {
-		return 0, false, nil
+	// A ZERO size is a real file, not an orphan: the upload path stores whatever
+	// the multipart part carried and never rejects an empty one, so a 0-byte row
+	// is legitimate — and tar members may be zero-length. Dropping it here would
+	// silently omit the file from the backup and lose the row on a full_replace
+	// restore. Only a negative size is impossible; that is a corrupt attribute
+	// and would produce an invalid tar header, so it fails the export.
+	if attrs.Size < 0 {
+		return 0, false, errxtrace.Wrap("blob reported a negative size",
+			errx.NewSentinel("corrupt blob attributes"),
+			errx.Attrs("file_id", file.ID, "blob_key", file.OriginalPath, "size", attrs.Size))
 	}
 	return attrs.Size, true, nil
 }

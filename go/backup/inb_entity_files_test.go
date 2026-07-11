@@ -578,6 +578,50 @@ func TestINBRestore_RejectsUnsupportedFormatMajor(t *testing.T) {
 	c.Assert(must.Must(locReg.List(f.ctx)), qt.HasLen, 1)
 }
 
+// TestINBRoundTrip_EmptyFileSurvives pins that a legitimately EMPTY file is
+// backed up, not silently dropped. The upload path stores whatever the multipart
+// part carried and never rejects a 0-byte one, so an empty row is a real user
+// file. The exporter used to treat a zero size as "orphan" and skip it — which,
+// because full_replace sweeps every file first, meant the row was destroyed by a
+// restore. Tar members may be zero-length; the file rides along like any other.
+func TestINBRoundTrip_EmptyFileSurvives(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	// Zero-byte rows on both new paths: linked to an entity, and standalone.
+	emptyLocDoc := f.attachEntityFile(c, "location", f.locID, "files", "blank-form", ".pdf", "application/pdf", 0)
+	emptyStandalone := f.attachStandaloneFile(c, "empty-note", ".txt", "text/plain", 0)
+
+	blobKey, _ := f.runExport(c, signer)
+
+	final, err := restoreInb(c, f, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Assert(final.ErrorCount, qt.Equals, 0)
+
+	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
+	defer bucket.Close()
+
+	for _, tc := range []struct {
+		uuid string
+		ext  string
+	}{
+		{uuid: emptyLocDoc, ext: ".pdf"},
+		{uuid: emptyStandalone, ext: ".txt"},
+	} {
+		c.Run(tc.uuid, func(c *qt.C) {
+			restored := f.fileByUUID(c, tc.uuid)
+			c.Assert(restored.File, qt.IsNotNil)
+			c.Assert(restored.File.SizeBytes, qt.Equals, int64(0))
+
+			key := "t/tenant-a/files/" + tc.uuid + tc.ext
+			c.Assert(restored.File.OriginalPath, qt.Equals, key)
+			c.Assert(must.Must(bucket.ReadAll(f.ctx, key)), qt.HasLen, 0)
+		})
+	}
+}
+
 // TestINBRestore_RejectsOversizedManifest closes the bypass around the version
 // gate: an implausibly large manifest must NOT be waved through as "no version to
 // gate on". If it were, a crafted archive could pad its manifest past the cap,

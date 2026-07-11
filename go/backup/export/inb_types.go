@@ -50,8 +50,12 @@ const INBFilesPrefix = "files/"
 // that carries no location — and on full_replace that happens AFTER the existing
 // data was already wiped. Under `files/` the same reader routes it to its file
 // handler, which finds no matching reference, counts one error, and carries on.
-// The depth also guarantees no collision with real file members (always 6
-// segments).
+//
+// It cannot collide with a file-BYTES member either: every byte member nests at
+// least one level deeper under `files/` — commodity attachments under
+// `<location-slug>/<commodity-uuid>/<bucket>/<file-uuid>/`, non-commodity ones
+// under `_entity/…` or `_standalone/<file-uuid>/` — so no byte member is ever a
+// direct `files/<name>` child, which is exactly what this document is.
 //
 // Written ONLY when at least one non-commodity file is in scope, so an archive
 // without any stays byte-stable (no empty member, no manifest pointer).
