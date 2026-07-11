@@ -112,7 +112,10 @@ func TestLocationsDelete_NonEmptyRejected(t *testing.T) {
 
 // TestLocationsDelete_CascadeStrategy covers #2137: DELETE ?strategy=cascade on
 // a non-empty location returns 204 and removes the location, its areas and the
-// commodities under them.
+// commodities under them — and (#2119) the files attached directly to the
+// location, the files attached to its child AREAS (pinning that the cascade
+// delegates through DeleteAreaRecursive rather than bare-row-deleting the
+// areas), and the files attached to the cascaded commodities (GET file → 404).
 func TestLocationsDelete_CascadeStrategy(t *testing.T) {
 	c := qt.New(t)
 
@@ -125,6 +128,41 @@ func TestLocationsDelete_CascadeStrategy(t *testing.T) {
 	c.Assert(areaIDs, qt.Not(qt.HasLen), 0)
 	commodityIDs := must.Must(registrySet.AreaRegistry.GetCommodities(c.Context(), areaIDs[0]))
 	c.Assert(commodityIDs, qt.Not(qt.HasLen), 0)
+
+	// A seeded file linked to the location's commodity, plus a file attached
+	// directly to the location and a file attached to one of its child areas —
+	// all three must be removed by the cascade.
+	files := must.Must(registrySet.FileRegistry.List(c.Context()))
+	var commodityFileID string
+	for _, f := range files {
+		if f.LinkedEntityType == "commodity" && f.LinkedEntityID == commodityIDs[0] {
+			commodityFileID = f.ID
+			break
+		}
+	}
+	c.Assert(commodityFileID, qt.Not(qt.Equals), "")
+	locationFile := must.Must(registrySet.FileRegistry.Create(c.Context(), models.FileEntity{
+		LinkedEntityType: "location",
+		LinkedEntityID:   location.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "loc-doc",
+			OriginalPath: "loc-doc.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+	areaFile := must.Must(registrySet.FileRegistry.Create(c.Context(), models.FileEntity{
+		LinkedEntityType: "area",
+		LinkedEntityID:   areaIDs[0],
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "area-doc",
+			OriginalPath: "area-doc.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
 
 	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID+"?strategy=cascade", nil)
 	c.Assert(err, qt.IsNil)
@@ -148,12 +186,25 @@ func TestLocationsDelete_CascadeStrategy(t *testing.T) {
 		_, err = registrySet.CommodityRegistry.Get(c.Context(), id)
 		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	}
+
+	// The location-attached, area-attached and commodity-attached files are
+	// all gone (#2119).
+	for _, fileID := range []string{locationFile.ID, areaFile.ID, commodityFileID} {
+		req, err = http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/files/"+fileID, nil)
+		c.Assert(err, qt.IsNil)
+		addTestUserAuthHeader(req, testUser.ID)
+		rr = httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	}
 }
 
 // TestLocationsDelete_UnlinkStrategy covers #2137: DELETE ?strategy=unlink on a
 // non-empty location returns 204, removes the location and its areas, and keeps
 // the commodities — left area-less (AreaID == nil); a GET on a surviving
-// commodity still returns 200.
+// commodity still returns 200. File fate (#2119): the file attached directly
+// to the location is removed (GET → 404) while the surviving commodity's file
+// survives (GET → 200).
 func TestLocationsDelete_UnlinkStrategy(t *testing.T) {
 	c := qt.New(t)
 
@@ -166,6 +217,29 @@ func TestLocationsDelete_UnlinkStrategy(t *testing.T) {
 	c.Assert(areaIDs, qt.Not(qt.HasLen), 0)
 	commodityIDs := must.Must(registrySet.AreaRegistry.GetCommodities(c.Context(), areaIDs[0]))
 	c.Assert(commodityIDs, qt.Not(qt.HasLen), 0)
+
+	// A seeded file linked to a commodity that will SURVIVE the unlink, plus a
+	// file attached directly to the location that must be removed with it.
+	files := must.Must(registrySet.FileRegistry.List(c.Context()))
+	var commodityFileID string
+	for _, f := range files {
+		if f.LinkedEntityType == "commodity" && f.LinkedEntityID == commodityIDs[0] {
+			commodityFileID = f.ID
+			break
+		}
+	}
+	c.Assert(commodityFileID, qt.Not(qt.Equals), "")
+	locationFile := must.Must(registrySet.FileRegistry.Create(c.Context(), models.FileEntity{
+		LinkedEntityType: "location",
+		LinkedEntityID:   location.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "loc-doc",
+			OriginalPath: "loc-doc.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
 
 	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/"+location.ID+"?strategy=unlink", nil)
 	c.Assert(err, qt.IsNil)
@@ -198,6 +272,22 @@ func TestLocationsDelete_UnlinkStrategy(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 		c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	}
+
+	// The location-attached file is gone (#2119)…
+	req, err = http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/files/"+locationFile.ID, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+
+	// …while the surviving commodity's file is untouched.
+	req, err = http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/files/"+commodityFileID, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 }
 
 // TestLocationsDelete_BogusStrategy covers #2137: an unknown `?strategy=` value
@@ -224,6 +314,32 @@ func TestLocationsDelete_BogusStrategy(t *testing.T) {
 
 	// The location survives — nothing was removed.
 	c.Assert(must.Must(registrySet.LocationRegistry.Get(c.Context(), location.ID)), qt.IsNotNil)
+}
+
+// TestLocationsDelete_MissingLocation_WithStrategy pins that a missing
+// location id returns 404 regardless of the ?strategy= value: the locationCtx
+// middleware resolves the entity before the handler runs, so the
+// service-level idempotency of the cascade/unlink paths (#2137) never turns a
+// missing id into a 204 at the API surface.
+func TestLocationsDelete_MissingLocation_WithStrategy(t *testing.T) {
+	for _, strategy := range []string{"cascade", "unlink"} {
+		t.Run(strategy, func(t *testing.T) {
+			c := qt.New(t)
+
+			params, testUser, testGroup := newParams()
+
+			req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/locations/missing-id?strategy="+strategy, nil)
+			c.Assert(err, qt.IsNil)
+			addTestUserAuthHeader(req, testUser.ID)
+			rr := httptest.NewRecorder()
+
+			mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+			handler := apiserver.APIServer(params, mockRestoreWorker)
+			handler.ServeHTTP(rr, req)
+
+			c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+		})
+	}
 }
 
 func TestLocationsCreate(t *testing.T) {

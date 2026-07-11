@@ -77,6 +77,8 @@ func (s *EntityService) DeleteCommodityRecursive(ctx context.Context, id string)
 }
 
 // DeleteAreaRecursive deletes an area and all its commodities recursively
+//
+//nolint:dupl // deliberately mirrors DeleteLocationRecursive one level up the hierarchy; extracting a generic helper would obscure the per-entity delete contracts documented inline
 func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) error {
 	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
@@ -87,7 +89,13 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 	_, err = areaReg.Get(ctx, id)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
-			// Area is already deleted, nothing to do
+			// Area is already deleted. Still sweep files linked to it so a
+			// retry self-heals after a crash (or transient error) between the
+			// row delete below and its file cleanup: any file still linked to
+			// a nonexistent area id is garbage by definition. Normally a no-op.
+			if err := s.fileService.DeleteLinkedFiles(ctx, "area", id); err != nil && !errors.Is(err, registry.ErrNotFound) {
+				return errxtrace.Wrap("failed to delete files of already-deleted area", err, errx.Attrs("areaID", id))
+			}
 			return nil
 		}
 		return errxtrace.Wrap("failed to get area", err)
@@ -109,27 +117,49 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 		}
 	}
 
-	// Delete files attached directly to the area (#2119) before the area row
-	// is removed, mirroring the commodity path. ErrNotFound is tolerated so a
-	// concurrently-removed file doesn't abort the cascade.
+	// Delete the area row first — a rejected delete (ErrCannotDelete from a
+	// commodity added concurrently after the scan above, or ErrNotFound from a
+	// concurrent delete) must leave the area's files intact, mirroring the
+	// row-first contract of DeleteCommodityRecursive (#2120).
+	if err := areaReg.Delete(ctx, id); err != nil {
+		return errxtrace.Wrap("failed to delete area", err)
+	}
+
+	// The area row is gone; remove the files attached directly to it (#2119).
+	// ListByLinkedEntity still finds them after the row delete — the link is
+	// polymorphic (no FK). ErrNotFound is tolerated so a concurrently-removed
+	// file doesn't abort the cleanup.
 	if err := s.fileService.DeleteLinkedFiles(ctx, "area", id); err != nil && !errors.Is(err, registry.ErrNotFound) {
 		return errxtrace.Wrap("failed to delete area files", err, errx.Attrs("areaID", id))
 	}
 
-	// Finally delete the area itself
-	return areaReg.Delete(ctx, id)
+	return nil
 }
 
 // DeleteLocationRecursive deletes a location and all its areas and commodities recursively
+//
+//nolint:dupl // deliberately mirrors DeleteAreaRecursive one level down the hierarchy; extracting a generic helper would obscure the per-entity delete contracts documented inline
 func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) error {
 	locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create location registry", err)
 	}
 
-	// Get the location to ensure it exists
+	// Check if location exists first - if it's already deleted, that's fine
+	// (idempotency parity with DeleteAreaRecursive).
 	_, err = locReg.Get(ctx, id)
 	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			// Location is already deleted. Still sweep files linked to it so a
+			// retry self-heals after a crash (or transient error) between the
+			// row delete below and its file cleanup: any file still linked to
+			// a nonexistent location id is garbage by definition. Normally a
+			// no-op.
+			if err := s.fileService.DeleteLinkedFiles(ctx, "location", id); err != nil && !errors.Is(err, registry.ErrNotFound) {
+				return errxtrace.Wrap("failed to delete files of already-deleted location", err, errx.Attrs("locationID", id))
+			}
+			return nil
+		}
 		return errxtrace.Wrap("failed to get location", err)
 	}
 
@@ -149,15 +179,23 @@ func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) 
 		}
 	}
 
-	// Delete files attached directly to the location (#2119) before the
-	// location row is removed, mirroring the commodity path. ErrNotFound is
-	// tolerated so a concurrently-removed file doesn't abort the cascade.
+	// Delete the location row first — a rejected delete (ErrCannotDelete from
+	// an area added concurrently after the scan above, or ErrNotFound from a
+	// concurrent delete) must leave the location's files intact, mirroring the
+	// row-first contract of DeleteCommodityRecursive (#2120).
+	if err := locReg.Delete(ctx, id); err != nil {
+		return errxtrace.Wrap("failed to delete location", err)
+	}
+
+	// The location row is gone; remove the files attached directly to it
+	// (#2119). ListByLinkedEntity still finds them after the row delete — the
+	// link is polymorphic (no FK). ErrNotFound is tolerated so a
+	// concurrently-removed file doesn't abort the cleanup.
 	if err := s.fileService.DeleteLinkedFiles(ctx, "location", id); err != nil && !errors.Is(err, registry.ErrNotFound) {
 		return errxtrace.Wrap("failed to delete location files", err, errx.Attrs("locationID", id))
 	}
 
-	// Finally delete the location itself
-	return locReg.Delete(ctx, id)
+	return nil
 }
 
 // DeleteArea deletes an EMPTY area together with the files attached directly to
@@ -224,17 +262,24 @@ func (s *EntityService) DeleteLocation(ctx context.Context, id string) error {
 // so no other field is wiped. Like the recursive path this is NOT a single
 // transaction (matching the codebase's recursive-delete precedent); it is
 // idempotent / re-runnable: a commodity that has already been removed
-// (ErrNotFound) is skipped, and DeleteArea no-ops when the area is already gone.
+// (ErrNotFound) is skipped, an already-gone area is treated as success by the
+// guard below, and an ErrNotFound from the final DeleteArea (concurrent delete
+// after the guard) is tolerated.
 func (s *EntityService) UnlinkAndDeleteArea(ctx context.Context, id string) error {
 	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create area registry", err)
 	}
 
-	// If the area is already gone there is nothing to unlink — treat as success.
+	// If the area is already gone there is nothing to unlink — treat as
+	// success, after sweeping any files still linked to it so a retry
+	// self-heals an interrupted earlier delete (see DeleteAreaRecursive).
 	_, err = areaReg.Get(ctx, id)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
+			if err := s.fileService.DeleteLinkedFiles(ctx, "area", id); err != nil && !errors.Is(err, registry.ErrNotFound) {
+				return errxtrace.Wrap("failed to delete files of already-deleted area", err, errx.Attrs("areaID", id))
+			}
 			return nil
 		}
 		return errxtrace.Wrap("failed to get area", err)
@@ -271,7 +316,9 @@ func (s *EntityService) UnlinkAndDeleteArea(ctx context.Context, id string) erro
 	}
 
 	// The area is now empty; DeleteArea removes it together with its own files.
-	if err := s.DeleteArea(ctx, id); err != nil {
+	// ErrNotFound is tolerated: a concurrent delete between the guard above and
+	// this call must not fail the (documented) idempotent contract.
+	if err := s.DeleteArea(ctx, id); err != nil && !errors.Is(err, registry.ErrNotFound) {
 		return errxtrace.Wrap("failed to delete unlinked area", err, errx.Attrs("areaID", id))
 	}
 
@@ -290,18 +337,25 @@ func (s *EntityService) UnlinkAndDeleteArea(ctx context.Context, id string) erro
 // commodities too.
 //
 // Like the recursive path this is NOT a single transaction; it is idempotent /
-// re-runnable: an area already removed is skipped by UnlinkAndDeleteArea, and
-// DeleteLocation no-ops when the location is already gone.
+// re-runnable: an area already removed is skipped by UnlinkAndDeleteArea, an
+// already-gone location is treated as success by the guard below, and an
+// ErrNotFound from the final DeleteLocation (concurrent delete after the
+// guard) is tolerated.
 func (s *EntityService) UnlinkAndDeleteLocation(ctx context.Context, id string) error {
 	locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create location registry", err)
 	}
 
-	// If the location is already gone there is nothing to unlink — success.
+	// If the location is already gone there is nothing to unlink — success,
+	// after sweeping any files still linked to it so a retry self-heals an
+	// interrupted earlier delete (see DeleteLocationRecursive).
 	_, err = locReg.Get(ctx, id)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
+			if err := s.fileService.DeleteLinkedFiles(ctx, "location", id); err != nil && !errors.Is(err, registry.ErrNotFound) {
+				return errxtrace.Wrap("failed to delete files of already-deleted location", err, errx.Attrs("locationID", id))
+			}
 			return nil
 		}
 		return errxtrace.Wrap("failed to get location", err)
@@ -324,8 +378,10 @@ func (s *EntityService) UnlinkAndDeleteLocation(ctx context.Context, id string) 
 	}
 
 	// The location is now empty; DeleteLocation removes it together with its
-	// own files.
-	if err := s.DeleteLocation(ctx, id); err != nil {
+	// own files. ErrNotFound is tolerated: a concurrent delete between the
+	// guard above and this call must not fail the (documented) idempotent
+	// contract.
+	if err := s.DeleteLocation(ctx, id); err != nil && !errors.Is(err, registry.ErrNotFound) {
 		return errxtrace.Wrap("failed to delete unlinked location", err, errx.Attrs("locationID", id))
 	}
 

@@ -211,6 +211,20 @@ func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Ar
 	return &area, nil
 }
 
+// Delete removes ONLY the area row (after the in-tx empty-check below rejects
+// an area that still holds commodities with ErrCannotDelete). The files LINKED
+// to the area (linked_entity_type='area') are NOT cascaded — the link is
+// polymorphic, there is no FK — and their physical blobs are not touched here.
+//
+// INVARIANT (#2119, mirroring the #2121 commodity note): user-initiated area
+// deletes MUST go through services.EntityService (DeleteArea /
+// DeleteAreaRecursive / UnlinkAndDeleteArea), which drop this row and then
+// remove each linked file (row + best-effort blob) via
+// FileService.DeleteLinkedFiles. Calling this bare row delete directly leaves
+// every area-linked file row and blob orphaned. The only legitimate direct
+// callers are tests; the group/tenant purgers never call this method — they
+// bypass it entirely with raw `DELETE FROM <table>` sweeps that also wipe the
+// (tenant, group)'s files table.
 func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 	reg := r.newSQLRegistry()
 	err := reg.Delete(ctx, id, func(ctx context.Context, tx *sqlx.Tx) error {

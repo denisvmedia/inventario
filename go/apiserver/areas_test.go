@@ -281,7 +281,9 @@ func TestAreaDelete_NonEmptyRejected(t *testing.T) {
 }
 
 // TestAreaDelete_CascadeStrategy covers #2137: DELETE ?strategy=cascade on a
-// non-empty area returns 204 and removes the area together with its commodities.
+// non-empty area returns 204 and removes the area together with its
+// commodities — and (#2119) the files attached to the area itself as well as
+// the files attached to the cascaded commodities (GET file → 404).
 func TestAreaDelete_CascadeStrategy(t *testing.T) {
 	c := qt.New(t)
 
@@ -292,6 +294,29 @@ func TestAreaDelete_CascadeStrategy(t *testing.T) {
 	area := expectedAreas[0]
 	commodityIDs := must.Must(registrySet.AreaRegistry.GetCommodities(context.Background(), area.ID))
 	c.Assert(commodityIDs, qt.Not(qt.HasLen), 0)
+
+	// A seeded file linked to the area's commodity, plus a file attached
+	// directly to the area — both must be removed by the cascade.
+	files := must.Must(registrySet.FileRegistry.List(context.Background()))
+	var commodityFileID string
+	for _, f := range files {
+		if f.LinkedEntityType == "commodity" && f.LinkedEntityID == commodityIDs[0] {
+			commodityFileID = f.ID
+			break
+		}
+	}
+	c.Assert(commodityFileID, qt.Not(qt.Equals), "")
+	areaFile := must.Must(registrySet.FileRegistry.Create(context.Background(), models.FileEntity{
+		LinkedEntityType: "area",
+		LinkedEntityID:   area.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "area-doc",
+			OriginalPath: "area-doc.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
 
 	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/areas/"+area.ID+"?strategy=cascade", nil)
 	c.Assert(err, qt.IsNil)
@@ -313,11 +338,23 @@ func TestAreaDelete_CascadeStrategy(t *testing.T) {
 		_, err = registrySet.CommodityRegistry.Get(context.Background(), id)
 		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	}
+
+	// The area-attached file and the commodity-attached file are gone (#2119).
+	for _, fileID := range []string{areaFile.ID, commodityFileID} {
+		req, err = http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/files/"+fileID, nil)
+		c.Assert(err, qt.IsNil)
+		addTestUserAuthHeader(req, testUser.ID)
+		rr = httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	}
 }
 
 // TestAreaDelete_UnlinkStrategy covers #2137: DELETE ?strategy=unlink on a
 // non-empty area returns 204, removes the area, and keeps its commodities — left
 // area-less (AreaID == nil); a GET on a surviving commodity still returns 200.
+// File fate (#2119): the file attached directly to the area is removed
+// (GET → 404) while the surviving commodity's file survives (GET → 200).
 func TestAreaDelete_UnlinkStrategy(t *testing.T) {
 	c := qt.New(t)
 
@@ -328,6 +365,29 @@ func TestAreaDelete_UnlinkStrategy(t *testing.T) {
 	area := expectedAreas[0]
 	commodityIDs := must.Must(registrySet.AreaRegistry.GetCommodities(context.Background(), area.ID))
 	c.Assert(commodityIDs, qt.Not(qt.HasLen), 0)
+
+	// A seeded file linked to a commodity that will SURVIVE the unlink, plus a
+	// file attached directly to the area that must be removed with it.
+	files := must.Must(registrySet.FileRegistry.List(context.Background()))
+	var commodityFileID string
+	for _, f := range files {
+		if f.LinkedEntityType == "commodity" && f.LinkedEntityID == commodityIDs[0] {
+			commodityFileID = f.ID
+			break
+		}
+	}
+	c.Assert(commodityFileID, qt.Not(qt.Equals), "")
+	areaFile := must.Must(registrySet.FileRegistry.Create(context.Background(), models.FileEntity{
+		LinkedEntityType: "area",
+		LinkedEntityID:   area.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "area-doc",
+			OriginalPath: "area-doc.pdf",
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
 
 	req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/areas/"+area.ID+"?strategy=unlink", nil)
 	c.Assert(err, qt.IsNil)
@@ -356,6 +416,22 @@ func TestAreaDelete_UnlinkStrategy(t *testing.T) {
 		handler.ServeHTTP(rr, req)
 		c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	}
+
+	// The area-attached file is gone (#2119)…
+	req, err = http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/files/"+areaFile.ID, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+
+	// …while the surviving commodity's file is untouched.
+	req, err = http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/files/"+commodityFileID, nil)
+	c.Assert(err, qt.IsNil)
+	addTestUserAuthHeader(req, testUser.ID)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 }
 
 // TestAreaDelete_BogusStrategy covers #2137: an unknown `?strategy=` value is
@@ -495,6 +571,32 @@ func TestAreaDelete_MissingArea(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+}
+
+// TestAreaDelete_MissingArea_WithStrategy pins that a missing area id returns
+// 404 regardless of the ?strategy= value: the areaCtx middleware resolves the
+// entity before the handler runs, so the service-level idempotency of the
+// cascade/unlink paths (#2137) never turns a missing id into a 204 at the API
+// surface.
+func TestAreaDelete_MissingArea_WithStrategy(t *testing.T) {
+	for _, strategy := range []string{"cascade", "unlink"} {
+		t.Run(strategy, func(t *testing.T) {
+			c := qt.New(t)
+
+			params, testUser, testGroup := newParams()
+
+			req, err := http.NewRequest("DELETE", "/api/v1/g/"+testGroup.Slug+"/areas/missing-id?strategy="+strategy, nil)
+			c.Assert(err, qt.IsNil)
+			addTestUserAuthHeader(req, testUser.ID)
+			rr := httptest.NewRecorder()
+
+			mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
+			handler := apiserver.APIServer(params, mockRestoreWorker)
+			handler.ServeHTTP(rr, req)
+
+			c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+		})
+	}
 }
 
 func TestAreaUpdate_WrongIDInRequestBody(t *testing.T) {

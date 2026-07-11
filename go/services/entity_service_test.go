@@ -749,8 +749,8 @@ func TestDeleteCommodityRecursive_RowFirst(t *testing.T) {
 }
 
 // TestDeleteAreaRecursive_DeletesAttachedFiles asserts #2119: files attached
-// directly to an area (not via a commodity) are removed when the area is
-// recursively deleted.
+// directly to an area (not via a commodity) are removed — DB row AND physical
+// blob — when the area is recursively deleted.
 func TestDeleteAreaRecursive_DeletesAttachedFiles(t *testing.T) {
 	c := qt.New(t)
 
@@ -766,13 +766,19 @@ func TestDeleteAreaRecursive_DeletesAttachedFiles(t *testing.T) {
 	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
 	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
 
+	// Write the physical blob backing the area-attached file.
+	blobKey := "area-doc.pdf"
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, blobKey, []byte("pdf bytes"), nil), qt.IsNil)
+
 	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
 		LinkedEntityType: "area",
 		LinkedEntityID:   area.ID,
 		LinkedEntityMeta: "images",
 		File: &models.File{
 			Path:         "area-doc",
-			OriginalPath: "area-doc.pdf",
+			OriginalPath: blobKey,
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
@@ -786,11 +792,17 @@ func TestDeleteAreaRecursive_DeletesAttachedFiles(t *testing.T) {
 
 	_, err = registrySet.FileRegistry.Get(ctx, areaFile.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// The physical blob is gone too — not just the row.
+	c.Assert(must.Must(b.Exists(ctx, blobKey)), qt.IsFalse)
 }
 
 // TestDeleteLocationRecursive_DeletesAttachedFiles asserts #2119: files
-// attached directly to a location are removed when the location is recursively
-// deleted.
+// attached directly to a location AND files attached to its child areas are
+// removed — DB rows AND physical blobs — when the location is recursively
+// deleted. The area-attached fixture pins that the location cascade reaches
+// area files through DeleteAreaRecursive delegation (a refactor that
+// bare-row-deletes the emptied areas would re-orphan them).
 func TestDeleteLocationRecursive_DeletesAttachedFiles(t *testing.T) {
 	c := qt.New(t)
 
@@ -804,6 +816,15 @@ func TestDeleteLocationRecursive_DeletesAttachedFiles(t *testing.T) {
 	service := services.NewEntityService(factorySet, uploadLocation)
 
 	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
+
+	// Write the physical blobs backing the location- and area-attached files.
+	locationBlobKey := "loc-doc.pdf"
+	areaBlobKey := "area-doc.pdf"
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, locationBlobKey, []byte("pdf bytes"), nil), qt.IsNil)
+	c.Assert(b.WriteAll(ctx, areaBlobKey, []byte("pdf bytes"), nil), qt.IsNil)
 
 	locationFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
 		LinkedEntityType: "location",
@@ -811,7 +832,18 @@ func TestDeleteLocationRecursive_DeletesAttachedFiles(t *testing.T) {
 		LinkedEntityMeta: "images",
 		File: &models.File{
 			Path:         "loc-doc",
-			OriginalPath: "loc-doc.pdf",
+			OriginalPath: locationBlobKey,
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "area",
+		LinkedEntityID:   area.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "area-doc",
+			OriginalPath: areaBlobKey,
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
@@ -822,9 +854,17 @@ func TestDeleteLocationRecursive_DeletesAttachedFiles(t *testing.T) {
 
 	_, err = registrySet.LocationRegistry.Get(ctx, location.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = registrySet.AreaRegistry.Get(ctx, area.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	_, err = registrySet.FileRegistry.Get(ctx, locationFile.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = registrySet.FileRegistry.Get(ctx, areaFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// The physical blobs are gone too — not just the rows.
+	c.Assert(must.Must(b.Exists(ctx, locationBlobKey)), qt.IsFalse)
+	c.Assert(must.Must(b.Exists(ctx, areaBlobKey)), qt.IsFalse)
 }
 
 // TestDeleteArea_DeletesLinkedFiles asserts #2119: the non-recursive DeleteArea
@@ -845,17 +885,31 @@ func TestDeleteArea_DeletesLinkedFiles(t *testing.T) {
 	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
 	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
 
+	// Image file so the thumbnail-key cleanup path is exercised for the
+	// 'area' link type too, not just for commodities.
+	blobKey := "area-photo.jpg"
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, blobKey, []byte("jpeg bytes"), nil), qt.IsNil)
+
 	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
 		LinkedEntityType: "area",
 		LinkedEntityID:   area.ID,
 		LinkedEntityMeta: "images",
 		File: &models.File{
-			Path:         "area-doc",
-			OriginalPath: "area-doc.pdf",
-			Ext:          ".pdf",
-			MIMEType:     "application/pdf",
+			Path:         "area-photo",
+			OriginalPath: blobKey,
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
 		},
 	}))
+
+	// Pre-write the canonical thumbnail blobs the file would own.
+	fileService := services.NewFileService(factorySet, uploadLocation)
+	thumbnailPaths := fileService.GetThumbnailPaths(areaFile.TenantID, areaFile.ID)
+	for _, p := range thumbnailPaths {
+		c.Assert(b.WriteAll(ctx, p, []byte("thumb bytes"), nil), qt.IsNil)
+	}
 
 	err := service.DeleteArea(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
@@ -868,11 +922,20 @@ func TestDeleteArea_DeletesLinkedFiles(t *testing.T) {
 
 	linked := must.Must(registrySet.FileRegistry.ListByLinkedEntity(ctx, "area", area.ID))
 	c.Assert(linked, qt.HasLen, 0)
+
+	// The physical blob AND its thumbnails are gone — not just the rows.
+	c.Assert(must.Must(b.Exists(ctx, blobKey)), qt.IsFalse)
+	for size, p := range thumbnailPaths {
+		c.Assert(must.Must(b.Exists(ctx, p)), qt.IsFalse,
+			qt.Commentf("thumbnail %s at %s must be deleted with the area file", size, p))
+	}
 }
 
 // TestDeleteArea_NonEmptyRejected asserts #2119: DeleteArea is non-recursive —
 // an area that still holds a commodity is rejected with ErrCannotDelete and
-// nothing is removed.
+// nothing is removed. The area-attached file (row + blob) surviving the
+// rejection pins the row-first ordering: a rejected delete never destroys
+// user files (#2120 contract).
 func TestDeleteArea_NonEmptyRejected(t *testing.T) {
 	c := qt.New(t)
 
@@ -892,12 +955,33 @@ func TestDeleteArea_NonEmptyRejected(t *testing.T) {
 		AreaID: new(area.ID),
 	}))
 
+	blobKey := "area-doc.pdf"
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, blobKey, []byte("pdf bytes"), nil), qt.IsNil)
+
+	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "area",
+		LinkedEntityID:   area.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "area-doc",
+			OriginalPath: blobKey,
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
 	err := service.DeleteArea(ctx, area.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrCannotDelete)
 
 	// The area and its commodity survive.
 	c.Assert(must.Must(registrySet.AreaRegistry.Get(ctx, area.ID)), qt.IsNotNil)
 	c.Assert(must.Must(registrySet.CommodityRegistry.Get(ctx, commodity.ID)), qt.IsNotNil)
+
+	// The area-attached file survives the rejection — row and blob.
+	c.Assert(must.Must(registrySet.FileRegistry.Get(ctx, areaFile.ID)), qt.IsNotNil)
+	c.Assert(must.Must(b.Exists(ctx, blobKey)), qt.IsTrue)
 }
 
 // TestDeleteLocation_DeletesLinkedFiles asserts #2119: the non-recursive
@@ -917,13 +1001,18 @@ func TestDeleteLocation_DeletesLinkedFiles(t *testing.T) {
 
 	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
 
+	blobKey := "loc-doc.pdf"
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, blobKey, []byte("pdf bytes"), nil), qt.IsNil)
+
 	locationFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
 		LinkedEntityType: "location",
 		LinkedEntityID:   location.ID,
 		LinkedEntityMeta: "images",
 		File: &models.File{
 			Path:         "loc-doc",
-			OriginalPath: "loc-doc.pdf",
+			OriginalPath: blobKey,
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
@@ -940,11 +1029,16 @@ func TestDeleteLocation_DeletesLinkedFiles(t *testing.T) {
 
 	linked := must.Must(registrySet.FileRegistry.ListByLinkedEntity(ctx, "location", location.ID))
 	c.Assert(linked, qt.HasLen, 0)
+
+	// The physical blob is gone too — not just the row.
+	c.Assert(must.Must(b.Exists(ctx, blobKey)), qt.IsFalse)
 }
 
 // TestDeleteLocation_NonEmptyRejected asserts #2119: DeleteLocation is
 // non-recursive — a location that still holds an area is rejected with
-// ErrCannotDelete and nothing is removed.
+// ErrCannotDelete and nothing is removed. The location-attached file (row +
+// blob) surviving the rejection pins the row-first ordering: a rejected
+// delete never destroys user files (#2120 contract).
 func TestDeleteLocation_NonEmptyRejected(t *testing.T) {
 	c := qt.New(t)
 
@@ -960,17 +1054,39 @@ func TestDeleteLocation_NonEmptyRejected(t *testing.T) {
 	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
 	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
 
+	blobKey := "loc-doc.pdf"
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, blobKey, []byte("pdf bytes"), nil), qt.IsNil)
+
+	locationFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "location",
+		LinkedEntityID:   location.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "loc-doc",
+			OriginalPath: blobKey,
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
 	err := service.DeleteLocation(ctx, location.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrCannotDelete)
 
 	// The location and its area survive.
 	c.Assert(must.Must(registrySet.LocationRegistry.Get(ctx, location.ID)), qt.IsNotNil)
 	c.Assert(must.Must(registrySet.AreaRegistry.Get(ctx, area.ID)), qt.IsNotNil)
+
+	// The location-attached file survives the rejection — row and blob.
+	c.Assert(must.Must(registrySet.FileRegistry.Get(ctx, locationFile.ID)), qt.IsNotNil)
+	c.Assert(must.Must(b.Exists(ctx, blobKey)), qt.IsTrue)
 }
 
 // TestUnlinkAndDeleteArea_KeepsCommodities asserts #2137: the "unlink" strategy
-// removes a non-empty area (and the files attached directly to it) while
-// keeping its commodities — left area-less (AreaID == nil) rather than deleted.
+// removes a non-empty area (and the files attached directly to it — rows +
+// blobs, #2119) while keeping its commodities — left area-less (AreaID == nil)
+// rather than deleted — AND the files attached to those surviving commodities.
 func TestUnlinkAndDeleteArea_KeepsCommodities(t *testing.T) {
 	c := qt.New(t)
 
@@ -994,13 +1110,33 @@ func TestUnlinkAndDeleteArea_KeepsCommodities(t *testing.T) {
 		AreaID: new(area.ID),
 	}))
 
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+
+	areaBlobKey := "area-doc.pdf"
+	c.Assert(b.WriteAll(ctx, areaBlobKey, []byte("area pdf"), nil), qt.IsNil)
 	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
 		LinkedEntityType: "area",
 		LinkedEntityID:   area.ID,
 		LinkedEntityMeta: "images",
 		File: &models.File{
 			Path:         "area-doc",
-			OriginalPath: "area-doc.pdf",
+			OriginalPath: areaBlobKey,
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	// A file attached to a surviving commodity — unlink must NOT touch it.
+	commodityBlobKey := "com-doc.pdf"
+	c.Assert(b.WriteAll(ctx, commodityBlobKey, []byte("com pdf"), nil), qt.IsNil)
+	commodityFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   commodity1.ID,
+		LinkedEntityMeta: "manuals",
+		File: &models.File{
+			Path:         "com-doc",
+			OriginalPath: commodityBlobKey,
 			Ext:          ".pdf",
 			MIMEType:     "application/pdf",
 		},
@@ -1009,22 +1145,29 @@ func TestUnlinkAndDeleteArea_KeepsCommodities(t *testing.T) {
 	err := service.UnlinkAndDeleteArea(ctx, area.ID)
 	c.Assert(err, qt.IsNil)
 
-	// The area and the file attached directly to it are gone.
+	// The area and the file attached directly to it are gone — row and blob.
 	_, err = registrySet.AreaRegistry.Get(ctx, area.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	_, err = registrySet.FileRegistry.Get(ctx, areaFile.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	c.Assert(must.Must(b.Exists(ctx, areaBlobKey)), qt.IsFalse)
 
 	// Both commodities survive, now area-less.
 	got1 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity1.ID))
 	c.Assert(got1.AreaID, qt.IsNil)
 	got2 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity2.ID))
 	c.Assert(got2.AreaID, qt.IsNil)
+
+	// The surviving commodity's file survives too — row and blob.
+	c.Assert(must.Must(registrySet.FileRegistry.Get(ctx, commodityFile.ID)), qt.IsNotNil)
+	c.Assert(must.Must(b.Exists(ctx, commodityBlobKey)), qt.IsTrue)
 }
 
 // TestUnlinkAndDeleteLocation_KeepsCommodities asserts #2137: the "unlink"
 // strategy removes a non-empty location and all its areas while keeping the
-// commodities filed under those areas — left area-less (AreaID == nil).
+// commodities filed under those areas — left area-less (AreaID == nil). Files
+// attached directly to the location AND to its areas are removed (rows +
+// blobs, #2119); files attached to the surviving commodities are NOT.
 func TestUnlinkAndDeleteLocation_KeepsCommodities(t *testing.T) {
 	c := qt.New(t)
 
@@ -1049,6 +1192,52 @@ func TestUnlinkAndDeleteLocation_KeepsCommodities(t *testing.T) {
 		AreaID: new(area2.ID),
 	}))
 
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+
+	locationBlobKey := "loc-doc.pdf"
+	c.Assert(b.WriteAll(ctx, locationBlobKey, []byte("loc pdf"), nil), qt.IsNil)
+	locationFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "location",
+		LinkedEntityID:   location.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "loc-doc",
+			OriginalPath: locationBlobKey,
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	areaBlobKey := "area-doc.pdf"
+	c.Assert(b.WriteAll(ctx, areaBlobKey, []byte("area pdf"), nil), qt.IsNil)
+	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "area",
+		LinkedEntityID:   area1.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "area-doc",
+			OriginalPath: areaBlobKey,
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
+	// A file attached to a surviving commodity — unlink must NOT touch it.
+	commodityBlobKey := "com-doc.pdf"
+	c.Assert(b.WriteAll(ctx, commodityBlobKey, []byte("com pdf"), nil), qt.IsNil)
+	commodityFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   commodity2.ID,
+		LinkedEntityMeta: "manuals",
+		File: &models.File{
+			Path:         "com-doc",
+			OriginalPath: commodityBlobKey,
+			Ext:          ".pdf",
+			MIMEType:     "application/pdf",
+		},
+	}))
+
 	err := service.UnlinkAndDeleteLocation(ctx, location.ID)
 	c.Assert(err, qt.IsNil)
 
@@ -1060,9 +1249,198 @@ func TestUnlinkAndDeleteLocation_KeepsCommodities(t *testing.T) {
 	_, err = registrySet.AreaRegistry.Get(ctx, area2.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
+	// The location-attached and area-attached files are gone — rows and blobs.
+	_, err = registrySet.FileRegistry.Get(ctx, locationFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	c.Assert(must.Must(b.Exists(ctx, locationBlobKey)), qt.IsFalse)
+	_, err = registrySet.FileRegistry.Get(ctx, areaFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	c.Assert(must.Must(b.Exists(ctx, areaBlobKey)), qt.IsFalse)
+
 	// Both commodities survive, now area-less.
 	got1 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity1.ID))
 	c.Assert(got1.AreaID, qt.IsNil)
 	got2 := must.Must(registrySet.CommodityRegistry.Get(ctx, commodity2.ID))
 	c.Assert(got2.AreaID, qt.IsNil)
+
+	// The surviving commodity's file survives too — row and blob.
+	c.Assert(must.Must(registrySet.FileRegistry.Get(ctx, commodityFile.ID)), qt.IsNotNil)
+	c.Assert(must.Must(b.Exists(ctx, commodityBlobKey)), qt.IsTrue)
+}
+
+// TestEntityService_MissingEntityIsNoOp pins the idempotency contract shared
+// by the recursive (cascade, #2120) and unlink (#2137) delete paths: an
+// already-gone area/location is treated as success (nil), so retries and
+// parent cascades never fail on a concurrently-removed entity.
+// DeleteLocationRecursive historically errored here, unlike
+// DeleteAreaRecursive — this pins the restored parity (#2119). The orphan
+// sweep these branches also perform is covered separately by
+// TestEntityService_MissingEntitySweepsOrphanedFiles.
+func TestEntityService_MissingEntityIsNoOp(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(context.Context, *services.EntityService) error
+	}{
+		{
+			name: "DeleteAreaRecursive",
+			call: func(ctx context.Context, s *services.EntityService) error {
+				return s.DeleteAreaRecursive(ctx, "missing-id")
+			},
+		},
+		{
+			name: "DeleteLocationRecursive",
+			call: func(ctx context.Context, s *services.EntityService) error {
+				return s.DeleteLocationRecursive(ctx, "missing-id")
+			},
+		},
+		{
+			name: "UnlinkAndDeleteArea",
+			call: func(ctx context.Context, s *services.EntityService) error {
+				return s.UnlinkAndDeleteArea(ctx, "missing-id")
+			},
+		},
+		{
+			name: "UnlinkAndDeleteLocation",
+			call: func(ctx context.Context, s *services.EntityService) error {
+				return s.UnlinkAndDeleteLocation(ctx, "missing-id")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			factorySet := memory.NewFactorySet()
+			ctx := newTestContext(factorySet)
+			service := services.NewEntityService(factorySet, uploadLocationForTempDir(c.TempDir()))
+
+			c.Assert(tt.call(ctx, service), qt.IsNil)
+		})
+	}
+}
+
+// TestEntityService_MissingEntitySweepsOrphanedFiles pins the self-healing
+// retry contract (#2119): the already-gone (ErrNotFound → nil) branches of
+// the cascade and unlink delete paths still sweep files linked to the missing
+// entity id. A crash (or transient error) between the entity-row delete and
+// the file cleanup would otherwise strand those rows+blobs forever — the
+// entity row is gone, so every retry short-circuits before reaching the
+// cleanup. Any file still linked to a nonexistent entity id is garbage by
+// definition, so the sweep is safe; when nothing is linked it is a no-op
+// (pinned by TestEntityService_MissingEntityIsNoOp).
+func TestEntityService_MissingEntitySweepsOrphanedFiles(t *testing.T) {
+	tests := []struct {
+		name       string
+		entityType string
+		call       func(context.Context, *services.EntityService, string) error
+	}{
+		{
+			name:       "DeleteAreaRecursive",
+			entityType: "area",
+			call: func(ctx context.Context, s *services.EntityService, id string) error {
+				return s.DeleteAreaRecursive(ctx, id)
+			},
+		},
+		{
+			name:       "DeleteLocationRecursive",
+			entityType: "location",
+			call: func(ctx context.Context, s *services.EntityService, id string) error {
+				return s.DeleteLocationRecursive(ctx, id)
+			},
+		},
+		{
+			name:       "UnlinkAndDeleteArea",
+			entityType: "area",
+			call: func(ctx context.Context, s *services.EntityService, id string) error {
+				return s.UnlinkAndDeleteArea(ctx, id)
+			},
+		},
+		{
+			name:       "UnlinkAndDeleteLocation",
+			entityType: "location",
+			call: func(ctx context.Context, s *services.EntityService, id string) error {
+				return s.UnlinkAndDeleteLocation(ctx, id)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			tempDir := c.TempDir()
+			uploadLocation := uploadLocationForTempDir(tempDir)
+
+			factorySet := memory.NewFactorySet()
+			ctx := newTestContext(factorySet)
+			registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+			service := services.NewEntityService(factorySet, uploadLocation)
+
+			blobKey := "orphan-doc.pdf"
+			b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+			defer b.Close()
+			c.Assert(b.WriteAll(ctx, blobKey, []byte("pdf bytes"), nil), qt.IsNil)
+
+			// A file row still linked to an entity id whose row no longer
+			// exists — exactly what an interrupted earlier delete leaves.
+			orphan := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+				LinkedEntityType: tt.entityType,
+				LinkedEntityID:   "ghost-id",
+				LinkedEntityMeta: "images",
+				File: &models.File{
+					Path:         "orphan-doc",
+					OriginalPath: blobKey,
+					Ext:          ".pdf",
+					MIMEType:     "application/pdf",
+				},
+			}))
+
+			// Retrying the delete on the missing id still succeeds…
+			c.Assert(tt.call(ctx, service, "ghost-id"), qt.IsNil)
+
+			// …and sweeps the stranded file — row and blob.
+			_, err := registrySet.FileRegistry.Get(ctx, orphan.ID)
+			c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+			c.Assert(must.Must(b.Exists(ctx, blobKey)), qt.IsFalse)
+		})
+	}
+}
+
+// TestEntityService_MissingEntityNotFound pins the intentional CONTRAST with
+// TestEntityService_MissingEntityIsNoOp: the non-recursive DeleteArea /
+// DeleteLocation surface ErrNotFound for a missing id (the API maps it to
+// 404). The already-gone tolerance lives in their callers
+// (UnlinkAndDeleteArea/UnlinkAndDeleteLocation), not here (#2119).
+func TestEntityService_MissingEntityNotFound(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(context.Context, *services.EntityService) error
+	}{
+		{
+			name: "DeleteArea",
+			call: func(ctx context.Context, s *services.EntityService) error {
+				return s.DeleteArea(ctx, "missing-id")
+			},
+		},
+		{
+			name: "DeleteLocation",
+			call: func(ctx context.Context, s *services.EntityService) error {
+				return s.DeleteLocation(ctx, "missing-id")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			factorySet := memory.NewFactorySet()
+			ctx := newTestContext(factorySet)
+			service := services.NewEntityService(factorySet, uploadLocationForTempDir(c.TempDir()))
+
+			c.Assert(tt.call(ctx, service), qt.ErrorIs, registry.ErrNotFound)
+		})
+	}
 }
