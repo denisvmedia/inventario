@@ -36,8 +36,8 @@ Because the file is signed, Inventario can verify it hasn't been tampered with o
 
 1. Go to **Backup** and click **New export**.
 2. On the **What to export** step, choose a scope:
-   - **Full database** — everything: locations, areas, items, files, tags.
-   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing.
+   - **Full database** — everything: locations, areas, items, files, tags. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything.
+   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. Files attached to a location or area you selected come with it; standalone files are only included in a **Full database** export, since there's no parent to bring them along.
 3. Decide whether to **Include attached files (photos, invoices, manuals)**. Leave it on to bundle the actual files into the archive; turn it off for a smaller, metadata-only backup.
 4. Click **Next** to reach the **Confirm** step. Optionally add a **Description** to help you recognise the export later. If you leave it blank, Inventario names it for you (for example, "Backup · Full database · 2026-05-13 10:42 UTC").
 5. Review the summary and click **Create export**.
@@ -82,11 +82,11 @@ Restoring brings the contents of an export into your **current group**. Open an 
 | **Merge update** | Moderate | Inserts new rows and updates existing ones in place. |
 | **Full replace** | Destructive | Wipes existing data in the destination scope before importing. |
 
-**Full replace** removes your current data before importing, so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth.
+**Full replace** removes your current data before importing, so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth. It really does mean *everything*: items with no area assigned, files attached to a location or area, and standalone files are all wiped and then restored from the backup.
 
 ### Other options
 
-- **Restore attached files** — restore the actual photos, invoices, and manuals alongside the metadata. Turn it off to restore only the records. (This only has files to restore if the export was created with attachments included.)
+- **Restore attached files** — restore the actual files alongside the metadata: an item's photos, invoices and manuals, the files attached to a location or area, and standalone files. Turn it off to restore only the records. (This only has files to restore if the export was created with attachments included.)
 - **Dry run** — on by default. A dry run previews exactly what *would* change without modifying any data. Always worth running first.
 - **Description** — required. It's useful when you're comparing several dry-run reports.
 

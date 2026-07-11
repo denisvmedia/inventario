@@ -161,7 +161,13 @@ func (s *ExportService) writePayload(
 	if plan.unassigned.present {
 		unassignedMember = INBUnassignedName
 	}
-	if err := builder.writeManifest(plan.manifestLocs, unassignedMember); err != nil {
+	// Same rule for the non-commodity files member (issue #2235): named only
+	// when one will actually be written.
+	filesMember := ""
+	if plan.files.present {
+		filesMember = INBFilesName
+	}
+	if err := builder.writeManifest(plan.manifestLocs, unassignedMember, filesMember); err != nil {
 		return nil, nil, err
 	}
 
@@ -176,6 +182,14 @@ func (s *ExportService) writePayload(
 	// Then the area-less commodities member (issue #1986), same JSON-before-bytes
 	// ordering. Omitted entirely when no unassigned commodity is in scope.
 	if err := builder.writeUnassigned(plan.unassigned); err != nil {
+		return nil, nil, err
+	}
+
+	// Finally the non-commodity files member (issue #2235). It MUST come after
+	// every location member: restore resolves each ref's location/area link
+	// through the ID mapping, which is only populated as the location documents
+	// are applied. Omitted entirely when no such file is in scope.
+	if err := builder.writeFiles(plan.files); err != nil {
 		return nil, nil, err
 	}
 
@@ -267,8 +281,9 @@ func (b *inbBuilder) writeFileMember(archivePath, blobKey string, size int64) (i
 
 // writeManifest emits the manifest.json member from the accumulated stats and
 // the per-location index. unassignedMember names the area-less commodities member
-// (issue #1986), or "" when none is written (then the field is omitted).
-func (b *inbBuilder) writeManifest(locs []INBManifestLoc, unassignedMember string) error {
+// (issue #1986) and filesMember the non-commodity files member (issue #2235);
+// either is "" when that member is not written (then the field is omitted).
+func (b *inbBuilder) writeManifest(locs []INBManifestLoc, unassignedMember, filesMember string) error {
 	manifest := INBManifest{
 		ExportDate:  time.Now().UTC().Format(time.RFC3339),
 		ExportType:  string(b.export.Type),
@@ -282,6 +297,7 @@ func (b *inbBuilder) writeManifest(locs []INBManifestLoc, unassignedMember strin
 		},
 		Locations:      locs,
 		UnassignedFile: unassignedMember,
+		FilesFile:      filesMember,
 		Statistics: INBManifestStats{
 			LocationCount:  b.stats.LocationCount,
 			AreaCount:      b.stats.AreaCount,

@@ -308,10 +308,24 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	return nil
 }
 
-// clearExistingData removes all existing data for full replace strategy. See
-// the original comment chain — DeleteLocationRecursive cascades commodities and
-// commodity-linked files; a second sweep removes location-/area-/standalone
-// files (rows + blobs) so nothing orphans or collides on restore.
+// clearExistingData removes all existing data for full replace strategy. Three
+// passes, in this order:
+//
+//  1. DeleteLocationRecursive per location — cascades areas, their commodities,
+//     and the commodity-/area-/location-linked files of that subtree.
+//  2. DeleteCommodityRecursive per SURVIVING commodity. Commodities are
+//     enumerated DIRECTLY because commodity.area_id is nullable since #1986: an
+//     area-less commodity is not reachable through the location → area recursion
+//     above, so before #2236 its row survived a full_replace while the file sweep
+//     below still deleted its attachments (a zombie item with no files) — and its
+//     preserved UUID then collided with the archive's own copy on re-create.
+//  3. A type-agnostic sweep of the remaining files (rows + blobs), which catches
+//     standalone files and any orphan. linked_entity_type='export' is skipped:
+//     that is the archive being restored plus the backup history, not inventory.
+//
+// Pass 2 sits BETWEEN the other two on purpose: DeleteCommodityRecursive cleans a
+// commodity's own files (row + blob + thumbnails) instead of having them yanked
+// out from under a live row by the sweep.
 func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error {
 	// RLS-scoped registry: a full_replace restore must only wipe the restoring
 	// user's own locations. CreateServiceRegistry bypasses RLS and would
@@ -330,6 +344,10 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 		if err := l.entityService.DeleteLocationRecursive(ctx, location.ID); err != nil {
 			return errxtrace.Wrap("failed to delete location recursively", err, errx.Attrs("location_id", location.ID))
 		}
+	}
+
+	if err := l.clearSurvivingCommodities(ctx); err != nil {
+		return err
 	}
 
 	fileReg, err := l.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
@@ -353,6 +371,35 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 		}
 	}
 
+	return nil
+}
+
+// clearSurvivingCommodities deletes every commodity the location recursion did
+// not reach (issue #2236). Enumerating commodities DIRECTLY — rather than adding
+// an `area_id IS NULL` sweep — needs no new registry API and stays correct for the
+// next nullable-parent change. Most rows are already gone by now, so their
+// recursive delete short-circuits on ErrNotFound.
+//
+// RLS-scoped registry, for the same reason as the location list above: a service
+// registry here would recursively delete EVERY tenant's commodities.
+func (l *RestoreOperationProcessor) clearSurvivingCommodities(ctx context.Context) error {
+	comReg, err := l.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user commodity registry for clear", err)
+	}
+	commodities, err := comReg.List(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list commodities for deletion", err)
+	}
+	for _, commodity := range commodities {
+		if err := l.entityService.DeleteCommodityRecursive(ctx, commodity.ID); err != nil {
+			if errors.Is(err, registry.ErrNotFound) {
+				// Already removed by the location recursion.
+				continue
+			}
+			return errxtrace.Wrap("failed to delete commodity recursively", err, errx.Attrs("commodity_id", commodity.ID))
+		}
+	}
 	return nil
 }
 
