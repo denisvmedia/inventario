@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { http as msw, HttpResponse, delay } from "msw"
+import { http as msw, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -154,12 +154,18 @@ describe("<FeedbackDialog />", () => {
     // commodity_scan #1720 contract); the dialog must stay put.
     const navigate = vi.fn()
     setNavigateToMaintenance(navigate)
+    // The response is held on an explicit gate so the in-flight (disabled)
+    // window below lasts until the test releases it — a wall-clock delay
+    // (formerly 30ms) is a race on a loaded runner: waitFor's polling can
+    // miss the whole window and the toBeDisabled assertion flakes.
+    let releaseResponse!: () => void
+    const responseGate = new Promise<void>((resolve) => {
+      releaseResponse = resolve
+    })
     server.use(
       ...baseUserHandlers,
       msw.post(api("/feedback"), async () => {
-        // Small delay so the in-flight (disabled) → settled (enabled)
-        // transition on the submit button is observable below.
-        await delay(30)
+        await responseGate
         // Mirror the real jsonapi.Errors payload the BE emits for the
         // errx sentinel (see apiserver/feedback.go): `status` is a text
         // label, `error` is an errormarshal object, and `code` carries
@@ -193,10 +199,12 @@ describe("<FeedbackDialog />", () => {
     await user.click(submit)
 
     // Drive the full submit cycle so the negative assertion isn't vacuous:
-    // the button disables while the request is in flight, then re-enables
+    // the button disables while the request is in flight (the gate keeps it
+    // in flight, so the disabled state can't be missed), then re-enables
     // once the 503 has been received AND the global bounce decision (in
     // lib/http.ts) has run. Only then is "navigate not called" meaningful.
     await waitFor(() => expect(submit).toBeDisabled())
+    releaseResponse()
     await waitFor(() => expect(submit).not.toBeDisabled())
 
     // The typed product 503 must NOT bounce the shell to /maintenance…

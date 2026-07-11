@@ -1,6 +1,6 @@
 module github.com/denisvmedia/inventario
 
-go 1.26.4
+go 1.26.5
 
 tool (
 	github.com/go-extras/nolintguard/cmd/nolintguard
