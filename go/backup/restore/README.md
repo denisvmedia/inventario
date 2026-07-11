@@ -35,7 +35,7 @@ Every file reference carries its linked entity's **immutable UUID**, never a DB 
 
 ### 2. Memory-Safe Streaming
 - The verified payload is inflated and walked member-by-member; file bytes are streamed straight into blob storage, never buffered.
-- Per-member and total caps bound a hostile archive (`maxInbMembers`, `maxInbTotalUncompress` = 8 GiB, `maxLocationDocBytes` = 32 MiB).
+- Per-member and total caps bound a hostile archive (`maxInbMembers`, `maxInbTotalUncompress` = 8 GiB, `maxJSONDocBytes` = 32 MiB for every JSON document member, `maxInbManifestBytes` = 4 MiB for the manifest pre-scan).
 
 ### 3. Detailed Step Logging
 - Step-by-step logging of the restoration process with status updates per phase and per entity
@@ -201,7 +201,7 @@ options := types.RestoreOptions{
 
 ## Error Handling
 - **Graceful Degradation**: most per-item failures are tolerated and counted in `RestoreStats.Errors`
-- **Hard Failures**: signature verification failure, framing violations, missing file members (`ErrMissingFileMembers`), oversized members (`ErrLocationDocTooLarge`), and malformed entity fields (`ErrMalformedEntity`) abort the whole restore
+- **Hard Failures**: signature verification failure, framing violations, missing file members (`ErrMissingFileMembers`), oversized JSON members (`ErrJSONDocTooLarge` — including an implausibly large manifest, which must never let an archive skip the version gate), an unsupported format MAJOR (`ErrUnsupportedFormatVersion`), and malformed entity fields (`ErrMalformedEntity`) abort the whole restore
 - **Status Tracking**: failed restores marked with a detailed error message
 
 ## Performance Considerations
