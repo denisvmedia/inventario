@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/go-extras/errx"
@@ -38,15 +39,24 @@ import (
 const (
 	maxInbMembers         = 1_000_000
 	maxInbTotalUncompress = 8 << 30  // 8 GiB of inflated bytes
-	maxLocationDocBytes   = 32 << 20 // 32 MiB per location JSON member
+	maxJSONDocBytes       = 32 << 20 // 32 MiB per JSON document member
+	maxInbManifestBytes   = 4 << 20  // 4 MiB for the manifest pre-scan
 )
 
+// maxSupportedInbMajor is the highest `.inb` format MAJOR version this build can
+// read. MINOR bumps are additive-only (a new optional member dispatched by name),
+// so any 2.x archive restores here; a 3.x archive would carry shape changes this
+// reader cannot know about, so it is rejected outright rather than half-applied.
+const maxSupportedInbMajor = 2
+
 var (
-	// ErrLocationDocTooLarge is returned when a single location JSON member
-	// declares a size above maxLocationDocBytes. Without a per-member cap one
-	// location document could claim up to the 8 GiB total and OOM the worker via
-	// io.ReadAll.
-	ErrLocationDocTooLarge = errx.NewSentinel("backup location document exceeds the maximum allowed size")
+	// ErrJSONDocTooLarge is returned when a JSON document member (a location
+	// document, the area-less commodities document of #1986, or the
+	// non-commodity files document of #2235) declares a size above
+	// maxJSONDocBytes. Without a per-member cap one document could claim up to
+	// the 8 GiB total and OOM the worker via io.ReadAll. The failing member name
+	// is attached, so the message stays diagnosable across all three.
+	ErrJSONDocTooLarge = errx.NewSentinel("backup JSON document exceeds the maximum allowed size")
 
 	// ErrMissingFileMembers is returned when one or more declared commodity file
 	// references were never delivered as file members in the archive. Succeeding
@@ -59,6 +69,12 @@ var (
 	// and counts — a malformed field means the archive itself is corrupt, so it
 	// aborts the whole restore rather than silently coercing the bad value.
 	ErrMalformedEntity = errx.NewSentinel("backup archive contains a malformed entity field")
+
+	// ErrUnsupportedFormatVersion is returned when the archive's manifest
+	// declares a format MAJOR version above maxSupportedInbMajor. Checked BEFORE
+	// prepareRestore so a full_replace never wipes the target for an archive
+	// this build cannot read.
+	ErrUnsupportedFormatVersion = errx.NewSentinel("backup format version is not supported by this server")
 )
 
 // decodeAndRestore is the default `.inb` decode entry point (#534). It verifies
@@ -108,6 +124,18 @@ func (l *RestoreOperationProcessor) decodeAndRestore(ctx context.Context, reader
 		return stats, errxtrace.Wrap("failed to rewind temp payload", err)
 	}
 
+	// 5. Gate on the declared format version BEFORE prepareRestore: full_replace
+	//    wipes the existing data in prepareRestore, so an archive this build
+	//    cannot read must be rejected while the target is still intact. The
+	//    payload is already spooled to a temp file, so this costs one extra gzip
+	//    open + the first member (manifest.json is always written first).
+	if err := checkInbFormatVersion(tmp); err != nil {
+		return stats, err
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return stats, errxtrace.Wrap("failed to rewind temp payload", err)
+	}
+
 	prep, err := l.prepareRestore(ctx, options)
 	if err != nil {
 		return stats, err
@@ -117,6 +145,80 @@ func (l *RestoreOperationProcessor) decodeAndRestore(ctx context.Context, reader
 		return stats, err
 	}
 	return stats, nil
+}
+
+// checkInbFormatVersion inspects the archive's manifest and rejects a format
+// MAJOR version this build cannot read (ErrUnsupportedFormatVersion). Only the
+// FIRST inner-tar member is read: the exporter always writes manifest.json first
+// (pinned by TestINBExport_ManifestIsFirstMember), so this stays a cheap pre-scan
+// rather than a second full inflate.
+//
+// Deliberately permissive in the other direction — an absent, empty, or
+// unparseable version, and any MAJOR at or below maxSupportedInbMajor, is
+// accepted. MINOR bumps are additive-only (a new optional member dispatched by
+// name), which is what lets a 2.0 archive keep restoring on a 2.1 reader.
+func checkInbFormatVersion(payload io.Reader) error {
+	gzr, err := gzip.NewReader(payload)
+	if err != nil {
+		return errxtrace.Wrap("failed to open gzip reader", err)
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
+	hdr, err := tr.Next()
+	if err == io.EOF {
+		// An empty payload has nothing to gate; the walk reports it.
+		return nil
+	}
+	if err != nil {
+		return errxtrace.Wrap("failed to read inner tar", err)
+	}
+	if hdr.Name != types.INBManifestMember {
+		// No manifest up front. Pre-manifest archives are still readable, and the
+		// walk drains unknown members, so this is not itself a violation — there
+		// is simply no declared version to gate on.
+		return nil
+	}
+	if hdr.Size < 0 || hdr.Size > maxInbManifestBytes {
+		// An implausibly-sized manifest is a framing violation, and it must NOT
+		// fall through to "no constraint": that would let a crafted archive skip
+		// the version gate entirely and reach prepareRestore, where full_replace
+		// wipes the target before a format this build cannot read is even parsed.
+		// Fail while the target is still intact.
+		return errx.Classify(ErrJSONDocTooLarge,
+			errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxInbManifestBytes))
+	}
+
+	data, err := io.ReadAll(io.LimitReader(tr, hdr.Size))
+	if err != nil {
+		return errxtrace.Wrap("failed to read manifest member", err)
+	}
+	var manifest types.INBManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return errxtrace.Wrap("failed to decode manifest document", err)
+	}
+
+	major, ok := inbFormatMajor(manifest.Version)
+	if ok && major > maxSupportedInbMajor {
+		return errx.Classify(ErrUnsupportedFormatVersion,
+			errx.Attrs("version", manifest.Version, "max_supported_major", maxSupportedInbMajor))
+	}
+	return nil
+}
+
+// inbFormatMajor extracts the MAJOR component of a manifest format version
+// ("2.1" → 2). ok=false for an absent or unparseable value, which the caller
+// treats as "no constraint" rather than a failure.
+func inbFormatMajor(version string) (int, bool) {
+	if version == "" {
+		return 0, false
+	}
+	majorPart, _, _ := strings.Cut(version, ".")
+	major, err := strconv.Atoi(majorPart)
+	if err != nil {
+		return 0, false
+	}
+	return major, true
 }
 
 // applyInbPayload inflates the verified payload and walks the inner tar in
@@ -258,9 +360,24 @@ func (w *inbWalker) applyPendingCovers() error {
 
 // inbPendingFile records the metadata a file member needs once its bytes arrive.
 type inbPendingFile struct {
-	ref           types.INBFileRef
-	bucket        string // images / invoices / manuals
-	commodityUUID string
+	ref  types.INBFileRef
+	link inbFileLink
+}
+
+// inbFileLink is a file's ARCHIVE-side link: the linked entity's immutable UUID
+// plus its bucket, resolved to a destination DB id only when the bytes arrive
+// (the ID mapping is filled as the entity documents are applied).
+//
+// linkedType is "commodity" (nested under a commodity — the pre-#2235 shape),
+// "location"/"area" (from the files member), or "" for a standalone file.
+// fileType/category are carried by the files member and empty for a commodity
+// ref, which re-derives them from the bucket + MIME as before.
+type inbFileLink struct {
+	linkedType string
+	entityUUID string
+	meta       string
+	fileType   string
+	category   string
 }
 
 // inbPendingCover records a commodity → cover-photo cross-reference that can
@@ -303,9 +420,15 @@ type inbWalker struct {
 func (w *inbWalker) handleMember(hdr *tar.Header, r io.Reader) error {
 	switch {
 	case hdr.Name == types.INBManifestMember:
-		// Manifest is informational; drain it so the tar advances.
+		// Manifest is informational here — its format version was already gated
+		// in checkInbFormatVersion, before any data was touched. Drain it so the
+		// tar advances.
 		_, err := io.Copy(io.Discard, r)
 		return err
+	case hdr.Name == types.INBFilesMember:
+		// Non-commodity files document (issue #2235). It lives UNDER the `files/`
+		// prefix, so it must be matched before the file-bytes case below.
+		return w.handleFilesMember(hdr, r)
 	case strings.HasPrefix(hdr.Name, "files/"):
 		return w.handleFileMember(hdr, r)
 	case hdr.Name == types.INBUnassignedMember:
@@ -328,8 +451,8 @@ func (w *inbWalker) handleLocationMember(hdr *tar.Header, r io.Reader) error {
 	// Per-member cap: a location JSON is parsed whole via io.ReadAll, so without
 	// this a single member could declare up to the 8 GiB total and OOM the
 	// worker. 32 MiB is far above any realistic location document.
-	if hdr.Size < 0 || hdr.Size > maxLocationDocBytes {
-		return errx.Classify(ErrLocationDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxLocationDocBytes))
+	if hdr.Size < 0 || hdr.Size > maxJSONDocBytes {
+		return errx.Classify(ErrJSONDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxJSONDocBytes))
 	}
 	data, err := io.ReadAll(io.LimitReader(r, hdr.Size))
 	if err != nil {
@@ -387,8 +510,8 @@ func (w *inbWalker) applyLocationDoc(doc *types.INBLocationDoc) error {
 // #1986) and recreates each commodity with a nil area. The same per-member size
 // cap as location documents applies (a flat commodity list, no file bytes).
 func (w *inbWalker) handleUnassignedMember(hdr *tar.Header, r io.Reader) error {
-	if hdr.Size < 0 || hdr.Size > maxLocationDocBytes {
-		return errx.Classify(ErrLocationDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxLocationDocBytes))
+	if hdr.Size < 0 || hdr.Size > maxJSONDocBytes {
+		return errx.Classify(ErrJSONDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxJSONDocBytes))
 	}
 	data, err := io.ReadAll(io.LimitReader(r, hdr.Size))
 	if err != nil {
@@ -559,8 +682,78 @@ func (w *inbWalker) queueCoverPatch(c *types.INBCommodity) {
 func (w *inbWalker) registerFileRefs(commodityUUID, bucket string, refs []types.INBFileRef) {
 	for _, ref := range refs {
 		key := blobkeys.SanitizeArchivePath(ref.Path)
-		w.fileRefs[key] = inbPendingFile{ref: ref, bucket: bucket, commodityUUID: commodityUUID}
+		w.fileRefs[key] = inbPendingFile{
+			ref:  ref,
+			link: inbFileLink{linkedType: "commodity", entityUUID: commodityUUID, meta: bucket},
+		}
 	}
+}
+
+// handleFilesMember decodes the non-commodity files document (issue #2235) and
+// registers its references, so the file members that follow are matched exactly
+// like commodity attachments (same fileRefs map, so the missing-member check and
+// the JSON-before-bytes contract keep working unchanged). The same per-member size
+// cap as location documents applies — the document is parsed whole via io.ReadAll.
+func (w *inbWalker) handleFilesMember(hdr *tar.Header, r io.Reader) error {
+	if hdr.Size < 0 || hdr.Size > maxJSONDocBytes {
+		return errx.Classify(ErrJSONDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxJSONDocBytes))
+	}
+	data, err := io.ReadAll(io.LimitReader(r, hdr.Size))
+	if err != nil {
+		return errxtrace.Wrap("failed to read files member", err, errx.Attrs("member", hdr.Name))
+	}
+	var doc types.INBFilesDoc
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return errxtrace.Wrap("failed to decode files document", err, errx.Attrs("member", hdr.Name))
+	}
+	w.registerEntityFileRefs(doc.Files)
+	return nil
+}
+
+// registerEntityFileRefs indexes the non-commodity file references by their
+// archive path (issue #2235). Each ref carries its own link, so the later file
+// member recreates the row with the original linked_entity_type / meta instead of
+// assuming a commodity attachment.
+func (w *inbWalker) registerEntityFileRefs(refs []types.INBEntityFileRef) {
+	for _, ref := range refs {
+		key := blobkeys.SanitizeArchivePath(ref.Path)
+		w.fileRefs[key] = inbPendingFile{
+			ref: ref.INBFileRef,
+			link: inbFileLink{
+				linkedType: ref.LinkedEntityType,
+				entityUUID: ref.LinkedEntityID,
+				meta:       ref.LinkedEntityMeta,
+				fileType:   ref.Type,
+				category:   ref.Category,
+			},
+		}
+	}
+}
+
+// resolveLinkedDBID maps a file's archived link to the destination entity's DB id.
+// A standalone file (empty type) resolves to an empty id, which is correct — the
+// row is persisted with no link at all. ok=false when the archive references an
+// entity that never landed (or an entity type this build does not know), in which
+// case the caller drops the file rather than persisting a dangling reference.
+func (w *inbWalker) resolveLinkedDBID(link inbFileLink) (string, bool) {
+	var dbID string
+	var found bool
+	switch link.linkedType {
+	case "":
+		return "", true
+	case "commodity":
+		dbID, found = w.idMapping.Commodities[link.entityUUID]
+	case "location":
+		dbID, found = w.idMapping.Locations[link.entityUUID]
+	case "area":
+		dbID, found = w.idMapping.Areas[link.entityUUID]
+	default:
+		return "", false
+	}
+	if !found || dbID == "" {
+		return "", false
+	}
+	return dbID, true
 }
 
 // handleFileMember streams a file member's bytes into a re-minted tenant blob
@@ -584,11 +777,15 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	// commodity isn't persisted, still delivers and consumes the member here).
 	delete(w.fileRefs, hdr.Name)
 
-	linkedDBID, resolved := w.idMapping.Commodities[pending.commodityUUID]
-	if !resolved || linkedDBID == "" {
+	// Resolve the archived link (commodity / location / area / standalone) to a
+	// destination DB id. A link whose entity never landed is dropped with a
+	// counted error — a dangling linked_entity_id must never be persisted.
+	linkedDBID, resolved := w.resolveLinkedDBID(pending.link)
+	if !resolved {
 		_, _ = io.Copy(io.Discard, r)
 		w.stats.ErrorCount++
-		w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("file %s references unmapped commodity %s", pending.ref.ID, pending.commodityUUID))
+		w.stats.Errors = append(w.stats.Errors,
+			fmt.Sprintf("file %s references unmapped %s %s", pending.ref.ID, pending.link.linkedType, pending.link.entityUUID))
 		return nil
 	}
 
@@ -608,7 +805,13 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	// Build the file entity BEFORE streaming the bytes: a malformed timestamp
 	// corrupts the restored metadata, so fail the restore (rather than coercing
 	// to time.Now()) without first writing a doomed blob.
-	fileEntity, err := pending.ref.ConvertToFileEntity(linkedDBID, pending.bucket, blobKey)
+	fileEntity, err := pending.ref.ConvertToFileEntity(types.INBFileLink{
+		Type:     pending.link.linkedType,
+		DBID:     linkedDBID,
+		Meta:     pending.link.meta,
+		FileType: pending.link.fileType,
+		Category: pending.link.category,
+	}, blobKey)
 	if err != nil {
 		// A malformed timestamp is archive corruption — drain the member and
 		// abort the restore (handleFileMember errors already propagate hard).
@@ -660,7 +863,7 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 
 	w.deleteSupersededBlob(staleBlobKey, blobKey)
 
-	w.incBucketStat(pending.bucket)
+	w.incBucketStat(pending.link)
 	return nil
 }
 
@@ -733,9 +936,15 @@ func (w *inbWalker) streamFileBytes(blobKey string, r io.Reader, size int64) (in
 	return n, nil
 }
 
-// incBucketStat increments the per-bucket file counter.
-func (w *inbWalker) incBucketStat(bucket string) {
-	switch bucket {
+// incBucketStat increments the per-bucket file counter. ImageCount/InvoiceCount/
+// ManualCount are legacy COMMODITY-scoped counters, so a location/area file (whose
+// buckets are images/files) or a standalone file must NOT inflate them — those
+// only feed the unified FileCount (issue #2235).
+func (w *inbWalker) incBucketStat(link inbFileLink) {
+	if link.linkedType != "commodity" {
+		return
+	}
+	switch link.meta {
 	case "images":
 		w.stats.ImageCount++
 	case "invoices":

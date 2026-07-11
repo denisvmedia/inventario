@@ -49,11 +49,12 @@ func testSigner(c *qt.C) *backupsign.Signer {
 // inbFixture builds an in-memory factory seeded with a tenant/user/group and a
 // location → area → commodity, returning the factory plus a user/group context.
 type inbFixture struct {
-	fs    *registry.FactorySet
-	ctx   context.Context
-	user  *models.User
-	group *models.LocationGroup
-	locID string
+	fs     *registry.FactorySet
+	ctx    context.Context
+	user   *models.User
+	group  *models.LocationGroup
+	locID  string
+	areaID string
 }
 
 func newInbFixture(c *qt.C) *inbFixture {
@@ -109,7 +110,7 @@ func newInbFixture(c *qt.C) *inbFixture {
 		Draft: true,
 	}))
 
-	return &inbFixture{fs: fs, ctx: uctx, user: user, group: group, locID: loc.ID}
+	return &inbFixture{fs: fs, ctx: uctx, user: user, group: group, locID: loc.ID, areaID: area.ID}
 }
 
 // attachCommodityFile creates an image FileEntity linked to the fixture's first
@@ -323,7 +324,7 @@ func TestINBExport_ContainerStructure(t *testing.T) {
 	// Manifest records the format, signature info, and stats.
 	var manifest map[string]any
 	c.Assert(json.Unmarshal(manifestData, &manifest), qt.IsNil)
-	c.Assert(manifest["version"], qt.Equals, "2.0")
+	c.Assert(manifest["version"], qt.Equals, "2.1")
 	c.Assert(manifest["format"], qt.Equals, "json")
 	sigBlock := manifest["signature"].(map[string]any)
 	c.Assert(sigBlock["algorithm"], qt.Equals, backupsign.Algorithm)

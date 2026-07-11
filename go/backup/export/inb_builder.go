@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
+	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/backup/export/types"
 	"github.com/denisvmedia/inventario/internal/blobkeys"
@@ -54,6 +56,20 @@ type inbBuilder struct {
 	// used to resolve a commodity's cover_file_id DB key to the stable UUID
 	// written into the archive). #534 / #1451.
 	fileUUIDByDBID map[string]string
+
+	// locUUIDByDBID / areaUUIDByDBID resolve a file's volatile
+	// linked_entity_id (a DB key) to the linked entity's IMMUTABLE UUID, which
+	// is the only identity that round-trips across databases (issue #2235). A
+	// file whose linked id resolves to nothing (dangling link, out of RLS
+	// scope) is dropped rather than emitted with a reference restore cannot
+	// map.
+	locUUIDByDBID  map[string]string
+	areaUUIDByDBID map[string]string
+	// entityFiles / standaloneFiles are the NON-commodity files (issue #2235),
+	// size-resolved and in list order (orphans already dropped). They are
+	// emitted in the dedicated files member, never nested under a commodity.
+	entityFiles     []*entityCandidateFile
+	standaloneFiles []*entityCandidateFile
 }
 
 // candidateFile is a commodity-attached file whose size has already been
@@ -63,6 +79,17 @@ type inbBuilder struct {
 type candidateFile struct {
 	file *models.FileEntity
 	size int64
+}
+
+// entityCandidateFile is a size-resolved NON-commodity file (issue #2235): one
+// linked to a location or an area, or a standalone (unlinked) file. linkedType is
+// "location", "area", or "" for standalone; entityUUID is the linked entity's
+// IMMUTABLE UUID (empty for standalone), already resolved from the row's volatile
+// linked_entity_id.
+type entityCandidateFile struct {
+	candidateFile
+	linkedType string
+	entityUUID string
 }
 
 // pendingFile records a commodity file whose bytes must be streamed into the tar
@@ -101,6 +128,17 @@ type plannedUnassigned struct {
 	pending []pendingFile
 }
 
+// plannedFiles is the in-memory plan for the non-commodity files member (issue
+// #2235): the JSON document (metadata only) plus the ordered file bytes to
+// stream after it. present is false when no location-/area-linked or standalone
+// file is in scope, so the member is omitted entirely (archive byte-stability —
+// see INBFilesName).
+type plannedFiles struct {
+	present bool
+	doc     INBFilesDoc
+	pending []pendingFile
+}
+
 // inbScope captures the selection filter for an export. For whole-class export
 // types every in-scope entity is included; for ExportTypeSelectedItems the
 // allow-sets restrict which locations/areas/commodities round-trip.
@@ -110,6 +148,12 @@ type plannedUnassigned struct {
 // locations, but only emits the areas/commodities the user asked for (and the
 // locations that contain them).
 type inbScope struct {
+	// wholeClass marks one of the four whole-class export types (as opposed to
+	// selected_items). Standalone files have no parent entity that could imply
+	// them into a selection, so they ride along with a whole-class export only —
+	// mirroring the legacy XML exporter's rule (issue #2235).
+	wholeClass bool
+
 	// allLocations/allAreas/allCommodities mean "no per-entity filter for
 	// this class" — include every row of that class that survives the other
 	// filters.
@@ -140,7 +184,7 @@ func (b *inbBuilder) resolveScope() (*inbScope, error) {
 		// formats behaviourally equivalent. The per-type distinction only
 		// mattered for the flat XML sectioning, which the location-centric
 		// JSON format collapses.
-		return &inbScope{allLocations: true, allAreas: true, allCommodities: true}, nil
+		return &inbScope{wholeClass: true, allLocations: true, allAreas: true, allCommodities: true}, nil
 	case models.ExportTypeSelectedItems:
 		return b.resolveSelectedScope()
 	default:
@@ -181,13 +225,22 @@ func (b *inbBuilder) preload() error {
 	}
 	b.locations = locations
 
+	// A file's linked_entity_id is a DB key; the archive may only carry the
+	// immutable UUID (issue #2235), so index both directions up front.
+	b.locUUIDByDBID = make(map[string]string, len(locations))
+	for _, loc := range locations {
+		b.locUUIDByDBID[loc.ID] = loc.UUID
+	}
+
 	areas, err := b.loadAreas()
 	if err != nil {
 		return err
 	}
 	b.areasByLocationID = make(map[string][]*models.Area, len(areas))
+	b.areaUUIDByDBID = make(map[string]string, len(areas))
 	for _, area := range areas {
 		b.areasByLocationID[area.LocationID] = append(b.areasByLocationID[area.LocationID], area)
+		b.areaUUIDByDBID[area.ID] = area.UUID
 	}
 
 	commodities, err := b.loadCommodities()
@@ -205,7 +258,7 @@ func (b *inbBuilder) preload() error {
 		}
 	}
 
-	if err := b.indexCommodityFiles(); err != nil {
+	if err := b.indexFiles(); err != nil {
 		return err
 	}
 	return nil
@@ -250,11 +303,16 @@ func (b *inbBuilder) loadCommodities() ([]*models.Commodity, error) {
 	return commodities, nil
 }
 
-// indexCommodityFiles lists files once and groups the commodity attachments by
-// commodity DB ID and bucket, resolving each file's size up front. Orphan rows
-// (missing/unsized blob) are dropped here so they never appear in the doc or the
-// statistics.
-func (b *inbBuilder) indexCommodityFiles() error {
+// indexFiles lists the group's files ONCE and routes every row to its home:
+// commodity attachments are grouped by commodity DB ID and bucket, while
+// location-/area-linked and standalone files are collected for the dedicated
+// files member (issue #2235). Export artifacts (linked_entity_type "export") are
+// skipped — a backup must never embed previous backups.
+//
+// Orphan rows (missing/unsized blob) are dropped in EVERY branch, so they never
+// reach a document or the statistics. That drop is mandatory: the restore side
+// hard-fails when a declared file reference has no member in the archive.
+func (b *inbBuilder) indexFiles() error {
 	fileReg, err := b.svc.factorySet.FileRegistryFactory.CreateUserRegistry(b.ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create file registry", err)
@@ -270,63 +328,172 @@ func (b *inbBuilder) indexCommodityFiles() error {
 		if file == nil || file.File == nil {
 			continue
 		}
-		if file.LinkedEntityType != "commodity" {
+		// A blob probe that cannot determine a file's state aborts the export:
+		// an incomplete-but-successful backup is worse than a failed one.
+		var indexErr error
+		switch file.LinkedEntityType {
+		case "commodity":
+			indexErr = b.indexCommodityFile(file)
+		case "location", "area":
+			indexErr = b.indexEntityFile(file)
+		case "":
+			indexErr = b.indexStandaloneFile(file)
+		default:
+			// "export" (and any future type this build does not know) is not
+			// user inventory — skip it.
 			continue
 		}
-		bucket := file.LinkedEntityMeta
-		if !isCommodityFileBucket(bucket) {
-			continue
+		if indexErr != nil {
+			return indexErr
 		}
-
-		// Record the DB-id → UUID mapping for EVERY commodity-attached file,
-		// before the orphan-size filter below: the cover-file cross-reference
-		// only needs the stable UUID, and resolving it for a file whose blob
-		// later proves missing is harmless (the restore drops the cover if its
-		// target file never lands).
-		b.fileUUIDByDBID[file.ID] = file.UUID
-
-		size, ok := b.resolveFileSize(file)
-		if !ok {
-			// A missing/unsized blob (orphan row, manual delete) is dropped so
-			// it is excluded from both the doc and the statistics.
-			continue
-		}
-
-		byBucket := b.filesByCommodityID[file.LinkedEntityID]
-		if byBucket == nil {
-			byBucket = map[string][]*candidateFile{}
-			b.filesByCommodityID[file.LinkedEntityID] = byBucket
-		}
-		byBucket[bucket] = append(byBucket[bucket], &candidateFile{file: file, size: size})
 	}
 	return nil
 }
 
+// indexCommodityFile files one commodity attachment under its commodity + bucket.
+// A bucket outside images/invoices/manuals cannot pass model validation, so such
+// a row is skipped rather than emitted.
+func (b *inbBuilder) indexCommodityFile(file *models.FileEntity) error {
+	bucket := file.LinkedEntityMeta
+	if !isCommodityFileBucket(bucket) {
+		return nil
+	}
+
+	// Record the DB-id → UUID mapping for EVERY commodity-attached file,
+	// before the orphan-size filter below: the cover-file cross-reference
+	// only needs the stable UUID, and resolving it for a file whose blob
+	// later proves missing is harmless (the restore drops the cover if its
+	// target file never lands).
+	b.fileUUIDByDBID[file.ID] = file.UUID
+
+	size, present, err := b.resolveFileSize(file)
+	if err != nil {
+		return err
+	}
+	if !present {
+		// A confirmed-missing/unsized blob (orphan row, manual delete) is dropped
+		// so it is excluded from both the doc and the statistics.
+		return nil
+	}
+
+	byBucket := b.filesByCommodityID[file.LinkedEntityID]
+	if byBucket == nil {
+		byBucket = map[string][]*candidateFile{}
+		b.filesByCommodityID[file.LinkedEntityID] = byBucket
+	}
+	byBucket[bucket] = append(byBucket[bucket], &candidateFile{file: file, size: size})
+	return nil
+}
+
+// indexEntityFile collects one location-/area-linked file (issue #2235),
+// resolving the row's volatile linked_entity_id to the linked entity's immutable
+// UUID. A file whose linked entity does not resolve (dangling link, out of RLS
+// scope) or whose bucket is outside images/files is skipped rather than emitted
+// with a reference the restore side could not map.
+func (b *inbBuilder) indexEntityFile(file *models.FileEntity) error {
+	if !isEntityFileBucket(file.LinkedEntityMeta) {
+		return nil
+	}
+
+	var entityUUID string
+	switch file.LinkedEntityType {
+	case "location":
+		entityUUID = b.locUUIDByDBID[file.LinkedEntityID]
+	case "area":
+		entityUUID = b.areaUUIDByDBID[file.LinkedEntityID]
+	}
+	if entityUUID == "" {
+		return nil
+	}
+
+	size, present, err := b.resolveFileSize(file)
+	if err != nil {
+		return err
+	}
+	if !present {
+		return nil
+	}
+	b.entityFiles = append(b.entityFiles, &entityCandidateFile{
+		candidateFile: candidateFile{file: file, size: size},
+		linkedType:    file.LinkedEntityType,
+		entityUUID:    entityUUID,
+	})
+	return nil
+}
+
+// indexStandaloneFile collects one unlinked file (issue #2235). linkedType and
+// entityUUID stay empty — model validation requires all three link fields empty
+// for a standalone row.
+func (b *inbBuilder) indexStandaloneFile(file *models.FileEntity) error {
+	size, present, err := b.resolveFileSize(file)
+	if err != nil {
+		return err
+	}
+	if !present {
+		return nil
+	}
+	b.standaloneFiles = append(b.standaloneFiles, &entityCandidateFile{
+		candidateFile: candidateFile{file: file, size: size},
+	})
+	return nil
+}
+
 // resolveFileSize returns the byte size to declare for a file member: the
-// recorded SizeBytes when >0, else a single bucket attributes probe. ok=false
-// when the blob is missing/unsized so the caller skips it (orphan).
-func (b *inbBuilder) resolveFileSize(file *models.FileEntity) (int64, bool) {
-	if size := fileSizeHint(file); size > 0 {
+// recorded SizeBytes when >0, else a single bucket attributes probe.
+//
+// present=false means the blob is CONFIRMED absent (an orphan row: a manual
+// delete, a seed fixture that never wrote bytes) — the caller drops the file from
+// both the document and the statistics. Dropping it here is deliberate: a
+// declared member whose bytes never land would abort the WHOLE export in
+// flushPendingFile (the streaming exporter cannot recover once the document
+// referencing the member has been emitted), and would hard-fail every restore of
+// the resulting archive with ErrMissingFileMembers.
+//
+// A non-nil error means the probe could NOT determine the blob's state (a
+// transient bucket failure: network, throttling, a 5xx). That must NOT be
+// conflated with "absent": treating it as an orphan would silently drop a live
+// file and hand the user a backup that looks successful but is incomplete —
+// exactly the failure class this format change exists to eliminate. So it fails
+// the export instead.
+func (b *inbBuilder) resolveFileSize(file *models.FileEntity) (size int64, present bool, err error) {
+	if hint := fileSizeHint(file); hint > 0 {
 		// Trust the recorded size for the tar header, but still confirm the blob
-		// actually exists before committing the file to the plan. A row can carry
-		// a SizeBytes hint while its bytes were never written (seed fixtures) or
-		// were manually deleted; without this probe the missing blob isn't caught
-		// until flushPendingFile streams it, which aborts the WHOLE export instead
-		// of dropping the single orphan here (the streaming exporter cannot recover
-		// once the location JSON referencing the member has already been emitted).
+		// actually exists before committing the file to the plan. Exists reports
+		// (false, nil) only when the blob is definitively missing; any error means
+		// the state is unknown, so it propagates.
 		exists, err := b.bucket.Exists(b.ctx, file.OriginalPath)
-		if err != nil || !exists {
-			return 0, false
+		if err != nil {
+			return 0, false, errxtrace.Wrap("failed to probe file blob", err,
+				errx.Attrs("file_id", file.ID, "blob_key", file.OriginalPath))
 		}
-		return size, true
+		if !exists {
+			return 0, false, nil
+		}
+		return hint, true, nil
 	}
-	// Probe the bucket for the exact size — the tar header needs it. A missing
-	// blob fails the probe and the file is treated as an orphan.
+	// No usable size hint — probe the bucket for the exact size, which the tar
+	// header needs. Only a NotFound is an orphan; every other failure is unknown
+	// state and fails the export.
 	attrs, err := b.bucket.Attributes(b.ctx, file.OriginalPath)
-	if err != nil || attrs.Size <= 0 {
-		return 0, false
+	if err != nil {
+		if gcerrors.Code(err) == gcerrors.NotFound {
+			return 0, false, nil
+		}
+		return 0, false, errxtrace.Wrap("failed to read file blob attributes", err,
+			errx.Attrs("file_id", file.ID, "blob_key", file.OriginalPath))
 	}
-	return attrs.Size, true
+	// A ZERO size is a real file, not an orphan: the upload path stores whatever
+	// the multipart part carried and never rejects an empty one, so a 0-byte row
+	// is legitimate — and tar members may be zero-length. Dropping it here would
+	// silently omit the file from the backup and lose the row on a full_replace
+	// restore. Only a negative size is impossible; that is a corrupt attribute
+	// and would produce an invalid tar header, so it fails the export.
+	if attrs.Size < 0 {
+		return 0, false, errxtrace.Wrap("blob reported a negative size",
+			errx.NewSentinel("corrupt blob attributes"),
+			errx.Attrs("file_id", file.ID, "blob_key", file.OriginalPath, "size", attrs.Size))
+	}
+	return attrs.Size, true, nil
 }
 
 // inScopeLocations returns the locations to emit. For selected_items it also
@@ -450,6 +617,125 @@ func (b *inbBuilder) planUnassigned(scope *inbScope) plannedUnassigned {
 		b.stats.CommodityCount++
 	}
 	return plannedUnassigned{present: true, doc: doc, pending: pending}
+}
+
+// planFiles builds the in-memory plan for the non-commodity files member (issue
+// #2235): every location-/area-linked and standalone file in scope, each carrying
+// its own polymorphic link so restore recreates the row with the original
+// linked_entity_type / linked_entity_id / linked_entity_meta.
+//
+// Scope (legacy XML parity): a whole-class export carries every entity file plus
+// the standalone files; a selected_items export carries only the files of the
+// locations/areas the user EXPLICITLY selected, and NO standalone files (they have
+// no parent that could imply them into the selection). See entityFileInScope.
+//
+// Statistics: these files bump FileCount + BinaryDataSize only. ImageCount /
+// InvoiceCount / ManualCount are legacy COMMODITY-scoped counters (see
+// export/types.ExportStats), so a location image must not inflate imageCount.
+func (b *inbBuilder) planFiles(scope *inbScope) plannedFiles {
+	var doc INBFilesDoc
+	var pending []pendingFile
+
+	appendCandidate := func(cand *entityCandidateFile) {
+		ref, pf := b.buildEntityFileRef(cand)
+		doc.Files = append(doc.Files, ref)
+		pending = append(pending, pf)
+		b.stats.FileCount++
+		b.stats.BinaryDataSize += cand.size
+	}
+
+	for _, cand := range b.entityFiles {
+		if !b.entityFileInScope(cand, scope) {
+			continue
+		}
+		appendCandidate(cand)
+	}
+	if scope.wholeClass {
+		for _, cand := range b.standaloneFiles {
+			appendCandidate(cand)
+		}
+	}
+
+	if len(doc.Files) == 0 {
+		return plannedFiles{present: false}
+	}
+	return plannedFiles{present: true, doc: doc, pending: pending}
+}
+
+// entityFileInScope reports whether a location-/area-linked file rides along with
+// this export: always for a whole-class export, and for selected_items only when
+// the user EXPLICITLY selected that location/area.
+//
+// The explicit-only rule is the legacy XML exporter's rule (selectedFileScope is
+// built from the selected item IDs — see service_legacy_xml.go), and the one the
+// user-facing docs promise ("files attached to a location or area you selected come
+// with it"). Scoping on "was the parent EMITTED" instead would silently bundle the
+// files of a parent that is only in the archive because it hosts a selected
+// commodity — e.g. selecting one item would leak the location's lease and floor
+// plans into a shared archive.
+//
+// An explicitly selected location/area is always emitted (inScopeLocations /
+// areasForLocation), so its files can never reference a missing parent document.
+func (*inbBuilder) entityFileInScope(cand *entityCandidateFile, scope *inbScope) bool {
+	if scope.wholeClass {
+		return true
+	}
+	// The row's linked_entity_id is a DB key, and so are the selection sets.
+	switch cand.linkedType {
+	case "location":
+		return scope.locationIDs[cand.file.LinkedEntityID]
+	case "area":
+		return scope.areaIDs[cand.file.LinkedEntityID]
+	}
+	return false
+}
+
+// buildEntityFileRef builds a non-commodity file reference + its pending stream
+// entry (issue #2235). The archive member keeps a <file-uuid> segment for the
+// same anti-collision reason as the commodity layout (two files of one entity can
+// share a basename), and the whole path goes through SanitizeArchivePath — the
+// restore side rejects any member whose sanitized form differs from its raw name.
+func (b *inbBuilder) buildEntityFileRef(cand *entityCandidateFile) (INBEntityFileRef, pendingFile) {
+	file := cand.file
+	name := blobkeys.SanitizeArchivePath(fileMemberName(file))
+
+	var archivePath string
+	if cand.linkedType == "" {
+		archivePath = fmt.Sprintf("%s%s/%s", INBStandaloneFilesPrefix, file.UUID, name)
+	} else {
+		archivePath = fmt.Sprintf("%s%s/%s/%s/%s/%s",
+			INBEntityFilesPrefix, cand.linkedType, cand.entityUUID, file.LinkedEntityMeta, file.UUID, name)
+	}
+	archivePath = blobkeys.SanitizeArchivePath(archivePath)
+
+	ref := INBEntityFileRef{
+		INBFileRef: INBFileRef{
+			ID:           file.UUID,
+			Path:         archivePath,
+			Name:         file.Path,
+			OriginalPath: file.OriginalPath,
+			Extension:    file.Ext,
+			MimeType:     file.MIMEType,
+			Title:        file.Title,
+			Description:  file.Description,
+			Tags:         []string(file.Tags),
+			CreatedAt:    file.CreatedAt.UTC().Format(time.RFC3339),
+			UpdatedAt:    file.UpdatedAt.UTC().Format(time.RFC3339),
+		},
+		LinkedEntityType: cand.linkedType,
+		LinkedEntityID:   cand.entityUUID,
+		LinkedEntityMeta: file.LinkedEntityMeta,
+		Type:             string(file.Type),
+		Category:         string(file.Category),
+	}
+	// A standalone file must carry NO link at all — model validation requires
+	// linked_entity_type/id/meta to be empty together.
+	if cand.linkedType == "" {
+		ref.LinkedEntityMeta = ""
+	}
+
+	pf := pendingFile{archivePath: archivePath, blobKey: file.OriginalPath, size: cand.size}
+	return ref, pf
 }
 
 // planLocation builds the in-memory plan for one location: its JSON document
@@ -635,6 +921,7 @@ type inbPlan struct {
 	locations    []plannedLocation
 	manifestLocs []INBManifestLoc
 	unassigned   plannedUnassigned
+	files        plannedFiles
 }
 
 // run returns the Pass-1 plan; it does NOT write anything itself, so writePayload
@@ -661,10 +948,13 @@ func (b *inbBuilder) run() (inbPlan, error) {
 		})
 	}
 
+	unassigned := b.planUnassigned(scope)
+
 	return inbPlan{
 		locations:    planned,
 		manifestLocs: manifestLocs,
-		unassigned:   b.planUnassigned(scope),
+		unassigned:   unassigned,
+		files:        b.planFiles(scope),
 	}, nil
 }
 
@@ -708,6 +998,30 @@ func (b *inbBuilder) writeUnassigned(pu plannedUnassigned) error {
 	return nil
 }
 
+// writeFiles writes the non-commodity files member (issue #2235): its JSON
+// document FIRST, then the referenced file bytes — the same JSON-before-bytes
+// ordering as the location members, so restore registers each file reference
+// before its bytes arrive. A no-op when no such file was in scope (present=false),
+// so the member is omitted and the archive stays byte-stable.
+//
+// Called LAST by writePayload: the restore side resolves each ref's location/area
+// link through the ID mapping, which is only populated as the location documents
+// are applied.
+func (b *inbBuilder) writeFiles(pf plannedFiles) error {
+	if !pf.present {
+		return nil
+	}
+	if err := b.writeJSONMember(INBFilesName, pf.doc); err != nil {
+		return err
+	}
+	for _, f := range pf.pending {
+		if err := b.flushPendingFile(f); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // flushPendingFile streams one collected file's bytes into the tar. The byte
 // count is informational here — the statistics were already accumulated in Pass
 // 1 from the resolved size, so a stream error fails the export rather than
@@ -730,6 +1044,19 @@ var commodityFileBuckets = []string{"images", "invoices", "manuals"}
 func isCommodityFileBucket(meta string) bool {
 	switch meta {
 	case "images", "invoices", "manuals":
+		return true
+	default:
+		return false
+	}
+}
+
+// isEntityFileBucket reports whether a linked_entity_meta value is one of the two
+// location/area attachment buckets (issue #2235). Anything else cannot pass model
+// validation for a location/area file, so such a row is dropped rather than
+// exported into an archive that would fail on restore.
+func isEntityFileBucket(meta string) bool {
+	switch meta {
+	case "images", "files":
 		return true
 	default:
 		return false

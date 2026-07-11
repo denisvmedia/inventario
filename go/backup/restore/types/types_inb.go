@@ -26,6 +26,15 @@ const INBManifestMember = "manifest.json"
 // backup/export.INBUnassignedName. Absent from archives with no unassigned items.
 const INBUnassignedMember = "unassigned-commodities.json"
 
+// INBFilesMember is the inner-tar member name of the non-commodity files document
+// (issue #2235): location-/area-linked and standalone files. Kept in sync with
+// backup/export.INBFilesName. Absent from 2.0 archives and from any archive that
+// carries no such file, so it must be dispatched by name and never required.
+//
+// It lives under the `files/` prefix on purpose (see backup/export.INBFilesName),
+// so the walker MUST match it before the generic `files/` byte-member case.
+const INBFilesMember = "files/_index.json"
+
 // INBManifest is the decoded manifest.json. Restore only reads the statistics
 // and the location index; the signature block is informational (verification
 // uses the server's own key, never this).
@@ -41,8 +50,12 @@ type INBManifest struct {
 	// when the archive carries none. Informational here — restore dispatches by
 	// member name (handleMember), so older archives without this field and the
 	// member round-trip unchanged.
-	UnassignedFile string           `json:"unassignedFile,omitempty"`
-	Statistics     INBManifestStats `json:"statistics"`
+	UnassignedFile string `json:"unassignedFile,omitempty"`
+	// FilesFile names the non-commodity files member (issue #2235), or "" when
+	// the archive carries none. Informational here — restore dispatches by
+	// member name, so a 2.0 archive without this field round-trips unchanged.
+	FilesFile  string           `json:"filesFile,omitempty"`
+	Statistics INBManifestStats `json:"statistics"`
 }
 
 // INBSignatureInfo is the informational signature descriptor.
@@ -167,6 +180,45 @@ type INBFileRef struct {
 	Tags         []string `json:"tags,omitempty"`
 	CreatedAt    string   `json:"createdAt,omitempty"`
 	UpdatedAt    string   `json:"updatedAt,omitempty"`
+}
+
+// INBFilesDoc is the decoded non-commodity files document (issue #2235): the
+// group's location-/area-linked and standalone files. Mirrors
+// backup/export.INBFilesDoc. Commodity attachments are NOT here — they stay
+// nested under their commodity.
+type INBFilesDoc struct {
+	Files []INBEntityFileRef `json:"files"`
+}
+
+// INBEntityFileRef is a file reference carrying its own polymorphic link (issue
+// #2235). LinkedEntityID is the linked location/area's IMMUTABLE UUID, which the
+// processor maps to the destination DB id; "" marks a standalone file. Type and
+// Category are carried verbatim because models.FileCategoryFromContext has no
+// "area" and no standalone branch — re-deriving them would silently rewrite the
+// user-visible category. MUST keep json tags identical to
+// backup/export.INBEntityFileRef.
+type INBEntityFileRef struct {
+	INBFileRef
+
+	LinkedEntityType string `json:"linkedEntityType,omitempty"`
+	LinkedEntityID   string `json:"linkedEntityId,omitempty"`
+	LinkedEntityMeta string `json:"linkedEntityMeta,omitempty"`
+	Type             string `json:"type,omitempty"`
+	Category         string `json:"category,omitempty"`
+}
+
+// INBFileLink is the resolved destination link for a restored file (issue #2235).
+// Type is "commodity" | "location" | "area" | "" (standalone); DBID is the
+// destination entity's DB id (already mapped from the archive UUID) and Meta its
+// bucket. FileType / Category are the archived models values, used verbatim when
+// present and re-derived from the linked context only for older archives that did
+// not carry them.
+type INBFileLink struct {
+	Type     string
+	DBID     string
+	Meta     string
+	FileType string
+	Category string
 }
 
 // ConvertToLocation converts an INBLocation to a models.Location. The ID is the
@@ -305,15 +357,22 @@ func (c *INBCommodity) RestoredAcquisition() (*decimal.Decimal, *models.Currency
 	return price, &currency, nil
 }
 
-// ConvertToFileEntity builds a models.FileEntity from an INBFileRef for a
-// commodity attachment. linkedDBID is the destination commodity DB ID; bucket
-// is the linked_entity_meta (images/invoices/manuals). blobKey is the re-minted
-// destination blob key (under the importing tenant). The file's immutable UUID
-// is preserved. A malformed createdAt/updatedAt timestamp surfaces an error
-// (tagged with the field name and the file UUID) rather than being coerced to
-// time.Now(), so a corrupt archive fails the restore instead of restoring wrong
-// metadata.
-func (r *INBFileRef) ConvertToFileEntity(linkedDBID, bucket, blobKey string) (*models.FileEntity, error) {
+// ConvertToFileEntity builds a models.FileEntity from an INBFileRef. link carries
+// the resolved destination link — a commodity attachment, a location/area
+// attachment, or a standalone file (issue #2235; before it, this always assumed
+// "commodity"). blobKey is the re-minted destination blob key (under the importing
+// tenant). The file's immutable UUID is preserved.
+//
+// A standalone file (link.Type == "") is persisted with linked_entity_type/id/meta
+// ALL empty — model validation requires that triple to be empty together.
+//
+// Type/Category come from the archive when it carried them and fall back to the
+// MIME/linked-context derivation for older archives that did not.
+//
+// A malformed createdAt/updatedAt timestamp surfaces an error (tagged with the
+// field name and the file UUID) rather than being coerced to time.Now(), so a
+// corrupt archive fails the restore instead of restoring wrong metadata.
+func (r *INBFileRef) ConvertToFileEntity(link INBFileLink, blobKey string) (*models.FileEntity, error) {
 	createdAt, err := parseInbTimestamp(r.CreatedAt)
 	if err != nil {
 		return nil, errxtrace.Wrap("invalid createdAt", err, errx.Attrs("file_id", r.ID))
@@ -323,8 +382,19 @@ func (r *INBFileRef) ConvertToFileEntity(linkedDBID, bucket, blobKey string) (*m
 		return nil, errxtrace.Wrap("invalid updatedAt", err, errx.Attrs("file_id", r.ID))
 	}
 
-	fileType := models.FileTypeFromMIME(r.MimeType)
-	category := models.FileCategoryFromContext("commodity", bucket, r.MimeType)
+	fileType := models.FileType(link.FileType)
+	if fileType == "" {
+		fileType = models.FileTypeFromMIME(r.MimeType)
+	}
+	category := models.FileCategory(link.Category)
+	if category == "" {
+		category = models.FileCategoryFromContext(link.Type, link.Meta, r.MimeType)
+	}
+
+	linkedDBID, linkedMeta := link.DBID, link.Meta
+	if link.Type == "" {
+		linkedDBID, linkedMeta = "", ""
+	}
 
 	return &models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
@@ -335,9 +405,9 @@ func (r *INBFileRef) ConvertToFileEntity(linkedDBID, bucket, blobKey string) (*m
 		Type:             fileType,
 		Category:         category,
 		Tags:             models.StringSlice(r.Tags),
-		LinkedEntityType: "commodity",
+		LinkedEntityType: link.Type,
 		LinkedEntityID:   linkedDBID,
-		LinkedEntityMeta: bucket,
+		LinkedEntityMeta: linkedMeta,
 		CreatedAt:        createdAt,
 		UpdatedAt:        updatedAt,
 		File: &models.File{

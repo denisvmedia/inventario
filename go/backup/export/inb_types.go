@@ -10,9 +10,16 @@ package export
 // UUID, never a volatile DB primary key, so a backup round-trips stably across
 // databases.
 
-// INBFormatVersion is the manifest `version` for the JSON `.inb` format. Bumped
-// only on a breaking change to the document shapes.
-const INBFormatVersion = "2.0"
+// INBFormatVersion is the manifest `version` for the JSON `.inb` format. The
+// MAJOR component is the compatibility contract the restore side enforces (see
+// backup/restore/processor.checkInbFormatVersion): a reader accepts any archive
+// whose major version it knows and rejects a higher one outright. MINOR bumps
+// are additive-only — a new OPTIONAL member plus an optional manifest pointer,
+// dispatched by member name — so a 2.0 archive still restores unchanged.
+//
+// 2.1 (#2235) added the non-commodity files member (INBFilesName): files linked
+// to locations and areas, plus standalone files.
+const INBFormatVersion = "2.1"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
@@ -24,9 +31,48 @@ const INBManifestName = "manifest.json"
 // keeping archives with no unassigned items byte-stable (no empty member).
 const INBUnassignedName = "unassigned-commodities.json"
 
-// INBFilesPrefix is the inner-tar path prefix under which commodity file bytes
-// are stored: `files/<loc-slug>/<commodity-uuid>/<bucket>/<sanitized-name>`.
+// INBFilesPrefix is the inner-tar path prefix under which file bytes are stored.
+// A commodity attachment lives at
+// `files/<loc-slug>/<commodity-uuid>/<bucket>/<file-uuid>/<sanitized-name>` —
+// the `<file-uuid>` segment is what keeps two same-named attachments of one
+// commodity from colliding on a single member name.
 const INBFilesPrefix = "files/"
+
+// INBFilesName is the inner-tar member holding the NON-commodity files document
+// (issue #2235): every group file that is not a commodity attachment — files
+// linked to a location or an area, and standalone (unlinked) files. Commodity
+// attachments are NOT repeated here; they stay nested under their commodity
+// (INBCommodity.Images/Invoices/Manuals).
+//
+// The member deliberately lives UNDER the `files/` prefix rather than at the top
+// level. An older reader dispatches any other top-level `*.json` member to its
+// location-document handler, which would fail the whole restore on a document
+// that carries no location — and on full_replace that happens AFTER the existing
+// data was already wiped. Under `files/` the same reader routes it to its file
+// handler, which finds no matching reference, counts one error, and carries on.
+//
+// It cannot collide with a file-BYTES member either: every byte member nests at
+// least one level deeper under `files/` — commodity attachments under
+// `<location-slug>/<commodity-uuid>/<bucket>/<file-uuid>/`, non-commodity ones
+// under `_entity/…` or `_standalone/<file-uuid>/` — so no byte member is ever a
+// direct `files/<name>` child, which is exactly what this document is.
+//
+// Written ONLY when at least one non-commodity file is in scope, so an archive
+// without any stays byte-stable (no empty member, no manifest pointer).
+const INBFilesName = INBFilesPrefix + "_index.json"
+
+// INBEntityFilesPrefix / INBStandaloneFilesPrefix are the archive homes of the
+// non-commodity file BYTES (issue #2235):
+//
+//	files/_entity/<linked-type>/<entity-uuid>/<bucket>/<file-uuid>/<name>
+//	files/_standalone/<file-uuid>/<name>
+//
+// Both keep a `<file-uuid>` segment for the same anti-collision reason as the
+// commodity layout, and both are run through blobkeys.SanitizeArchivePath.
+const (
+	INBEntityFilesPrefix     = INBFilesPrefix + "_entity/"
+	INBStandaloneFilesPrefix = INBFilesPrefix + "_standalone/"
+)
 
 // INBManifest is the top-level descriptor written as manifest.json. It records
 // the format, the signing key the archive was signed with (informational only —
@@ -49,8 +95,14 @@ type INBManifest struct {
 	// unassigned commodities (then the member is absent entirely). Restore
 	// keys off member names and tolerates its absence, so older archives
 	// without this field round-trip unchanged.
-	UnassignedFile string           `json:"unassignedFile,omitempty"`
-	Statistics     INBManifestStats `json:"statistics"`
+	UnassignedFile string `json:"unassignedFile,omitempty"`
+	// FilesFile names the inner-tar member holding the non-commodity files
+	// document (issue #2235), or "" when the archive carries no location-,
+	// area-linked or standalone file (then the member is absent entirely).
+	// Restore keys off member names, so a 2.0 archive without this field
+	// round-trips unchanged.
+	FilesFile  string           `json:"filesFile,omitempty"`
+	Statistics INBManifestStats `json:"statistics"`
 }
 
 // INBSignatureInfo records the signing algorithm + the public key (base64) and
@@ -187,4 +239,39 @@ type INBFileRef struct {
 	Tags         []string `json:"tags,omitempty"`
 	CreatedAt    string   `json:"createdAt,omitempty"`
 	UpdatedAt    string   `json:"updatedAt,omitempty"`
+}
+
+// INBFilesDoc is the document written as the INBFilesName member (issue #2235):
+// the group's NON-commodity files. Commodity attachments are not repeated here —
+// they stay nested under their commodity.
+type INBFilesDoc struct {
+	Files []INBEntityFileRef `json:"files"`
+}
+
+// INBEntityFileRef is a file reference that carries its OWN polymorphic link, so
+// the restore side can recreate the row with the original linked_entity_type /
+// linked_entity_id / linked_entity_meta instead of assuming a commodity
+// attachment (issue #2235).
+//
+// LinkedEntityID is the linked entity's IMMUTABLE UUID — never the volatile
+// files.linked_entity_id DB key, which is regenerated on restore. Restore maps
+// it back to the destination DB id through the location/area ID mapping.
+//
+// Type and Category are carried EXPLICITLY: models.FileCategoryFromContext has
+// no "area" and no standalone branch, so re-deriving them on the restore side
+// would silently rewrite the user-visible category.
+type INBEntityFileRef struct {
+	INBFileRef
+
+	// LinkedEntityType is "location", "area", or "" for a standalone file.
+	LinkedEntityType string `json:"linkedEntityType,omitempty"`
+	// LinkedEntityID is the linked location/area UUID; "" for a standalone file.
+	LinkedEntityID string `json:"linkedEntityId,omitempty"`
+	// LinkedEntityMeta is the location/area bucket ("images" or "files"); "" for
+	// a standalone file.
+	LinkedEntityMeta string `json:"linkedEntityMeta,omitempty"`
+	// Type / Category are the models.FileType / models.FileCategory values as
+	// stored, carried verbatim so they round-trip losslessly.
+	Type     string `json:"type,omitempty"`
+	Category string `json:"category,omitempty"`
 }

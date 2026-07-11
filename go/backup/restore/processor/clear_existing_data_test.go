@@ -140,3 +140,93 @@ func TestClearExistingData_SweepsAreaAndLocationLinkedFiles(t *testing.T) {
 	c.Assert(must.Must(registrySet.FileRegistry.Get(ctx, exportFile.ID)), qt.IsNotNil)
 	c.Assert(must.Must(b.Exists(ctx, exportBlobKey)), qt.IsTrue)
 }
+
+// TestClearExistingData_SweepsAreaLessCommodities pins #2236: commodity.area_id is
+// nullable since #1986, so an area-less commodity is NOT reachable through the
+// location → area recursion. Before the direct commodity enumeration, its row
+// survived a full_replace wipe while the type-agnostic file sweep still deleted
+// its attachments — leaving a zombie item with no files, whose preserved UUID then
+// collided with the archive's own copy on re-create. full_replace must really mean
+// full replace: after clearExistingData no commodity of any kind may remain.
+func TestClearExistingData_SweepsAreaLessCommodities(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := clearDataUploadLocation(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	testUser := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+		Email: "test@example.com",
+		Name:  "Test User",
+	}
+	user := must.Must(factorySet.UserRegistry.Create(context.Background(), testUser))
+	ctx := appctx.WithUser(context.Background(), user)
+	registrySet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+
+	location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Loc"}))
+	area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Area", LocationID: location.ID}))
+
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+
+	// An area-BOUND commodity (reached by the location recursion) and an
+	// area-LESS one (#1986 — reachable only by the direct enumeration).
+	boundCommodity := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:                  "Bound TV",
+		ShortName:             "btv",
+		Type:                  models.CommodityTypeElectronics,
+		AreaID:                new(area.ID),
+		Count:                 1,
+		Status:                models.CommodityStatusInUse,
+		OriginalPriceCurrency: "USD",
+		Draft:                 true,
+	}))
+	looseCommodity := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:      "Loose Gadget",
+		ShortName: "lg",
+		Type:      models.CommodityTypeElectronics,
+		// AreaID left nil — the #2236 survivor.
+		Count:                 1,
+		Status:                models.CommodityStatusInUse,
+		OriginalPriceCurrency: "USD",
+		Draft:                 true,
+	}))
+	c.Assert(looseCommodity.AreaID, qt.IsNil)
+
+	looseBlobKey := "loose-photo.jpg"
+	c.Assert(b.WriteAll(ctx, looseBlobKey, []byte("loose jpeg"), nil), qt.IsNil)
+	looseFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
+		Type:             models.FileTypeImage,
+		Category:         models.FileCategoryImages,
+		LinkedEntityType: "commodity",
+		LinkedEntityID:   looseCommodity.ID,
+		LinkedEntityMeta: "images",
+		File: &models.File{
+			Path:         "loose-photo",
+			OriginalPath: looseBlobKey,
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
+		},
+	}))
+
+	entityService := services.NewEntityService(factorySet, uploadLocation)
+	proc := NewRestoreOperationProcessor("test-restore-op", factorySet, entityService, uploadLocation, nil)
+
+	c.Assert(proc.clearExistingData(ctx), qt.IsNil)
+
+	// No commodity of either kind survives.
+	c.Assert(must.Must(registrySet.CommodityRegistry.List(ctx)), qt.HasLen, 0)
+	_, err := registrySet.CommodityRegistry.Get(ctx, boundCommodity.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = registrySet.CommodityRegistry.Get(ctx, looseCommodity.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// The area-less commodity's file went with it — row and blob.
+	_, err = registrySet.FileRegistry.Get(ctx, looseFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	c.Assert(must.Must(b.Exists(ctx, looseBlobKey)), qt.IsFalse)
+}
