@@ -131,7 +131,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Update sticky comment
-        uses: marocchino/sticky-pull-request-comment@v3.0.4
+        uses: marocchino/sticky-pull-request-comment@v3.0.5
         with:
           header: inventario-preview
           number: ${{ github.event.pull_request.number }}
