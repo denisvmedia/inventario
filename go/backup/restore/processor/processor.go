@@ -39,7 +39,7 @@ import (
 const (
 	maxInbMembers         = 1_000_000
 	maxInbTotalUncompress = 8 << 30  // 8 GiB of inflated bytes
-	maxLocationDocBytes   = 32 << 20 // 32 MiB per location JSON member
+	maxJSONDocBytes       = 32 << 20 // 32 MiB per JSON document member
 	maxInbManifestBytes   = 4 << 20  // 4 MiB for the manifest pre-scan
 )
 
@@ -50,11 +50,13 @@ const (
 const maxSupportedInbMajor = 2
 
 var (
-	// ErrLocationDocTooLarge is returned when a single location JSON member
-	// declares a size above maxLocationDocBytes. Without a per-member cap one
-	// location document could claim up to the 8 GiB total and OOM the worker via
-	// io.ReadAll.
-	ErrLocationDocTooLarge = errx.NewSentinel("backup location document exceeds the maximum allowed size")
+	// ErrJSONDocTooLarge is returned when a JSON document member (a location
+	// document, the area-less commodities document of #1986, or the
+	// non-commodity files document of #2235) declares a size above
+	// maxJSONDocBytes. Without a per-member cap one document could claim up to
+	// the 8 GiB total and OOM the worker via io.ReadAll. The failing member name
+	// is attached, so the message stays diagnosable across all three.
+	ErrJSONDocTooLarge = errx.NewSentinel("backup JSON document exceeds the maximum allowed size")
 
 	// ErrMissingFileMembers is returned when one or more declared commodity file
 	// references were never delivered as file members in the archive. Succeeding
@@ -439,8 +441,8 @@ func (w *inbWalker) handleLocationMember(hdr *tar.Header, r io.Reader) error {
 	// Per-member cap: a location JSON is parsed whole via io.ReadAll, so without
 	// this a single member could declare up to the 8 GiB total and OOM the
 	// worker. 32 MiB is far above any realistic location document.
-	if hdr.Size < 0 || hdr.Size > maxLocationDocBytes {
-		return errx.Classify(ErrLocationDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxLocationDocBytes))
+	if hdr.Size < 0 || hdr.Size > maxJSONDocBytes {
+		return errx.Classify(ErrJSONDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxJSONDocBytes))
 	}
 	data, err := io.ReadAll(io.LimitReader(r, hdr.Size))
 	if err != nil {
@@ -498,8 +500,8 @@ func (w *inbWalker) applyLocationDoc(doc *types.INBLocationDoc) error {
 // #1986) and recreates each commodity with a nil area. The same per-member size
 // cap as location documents applies (a flat commodity list, no file bytes).
 func (w *inbWalker) handleUnassignedMember(hdr *tar.Header, r io.Reader) error {
-	if hdr.Size < 0 || hdr.Size > maxLocationDocBytes {
-		return errx.Classify(ErrLocationDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxLocationDocBytes))
+	if hdr.Size < 0 || hdr.Size > maxJSONDocBytes {
+		return errx.Classify(ErrJSONDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxJSONDocBytes))
 	}
 	data, err := io.ReadAll(io.LimitReader(r, hdr.Size))
 	if err != nil {
@@ -683,8 +685,8 @@ func (w *inbWalker) registerFileRefs(commodityUUID, bucket string, refs []types.
 // the JSON-before-bytes contract keep working unchanged). The same per-member size
 // cap as location documents applies — the document is parsed whole via io.ReadAll.
 func (w *inbWalker) handleFilesMember(hdr *tar.Header, r io.Reader) error {
-	if hdr.Size < 0 || hdr.Size > maxLocationDocBytes {
-		return errx.Classify(ErrLocationDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxLocationDocBytes))
+	if hdr.Size < 0 || hdr.Size > maxJSONDocBytes {
+		return errx.Classify(ErrJSONDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxJSONDocBytes))
 	}
 	data, err := io.ReadAll(io.LimitReader(r, hdr.Size))
 	if err != nil {
