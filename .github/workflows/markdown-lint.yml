@@ -55,6 +55,6 @@ jobs:
       # `markdownlint-cli2` locally with no arguments produces the same
       # result as this CI job.
       - name: Run markdownlint-cli2
-        uses: DavidAnson/markdownlint-cli2-action@v23
+        uses: DavidAnson/markdownlint-cli2-action@v24
         with:
           globs: ''
