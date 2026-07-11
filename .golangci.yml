@@ -2,7 +2,7 @@ version: "2"
 
 run:
   concurrency: 8
-  go: "1.26.4"
+  go: "1.26.5"
 
 linters:
   default: none

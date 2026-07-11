@@ -50,7 +50,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: 1.26.4
+          go-version: 1.26.5
           cache: true
           cache-dependency-path: go/go.sum
 
@@ -61,5 +61,5 @@ jobs:
       # fetched fresh at run time, so a pinned binary stays current on data);
       # bump deliberately in its own PR like the golangci-lint pin.
       - name: Run govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.4.0 ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
         working-directory: go
