@@ -38,7 +38,7 @@ Because the file is signed, Inventario can verify it hasn't been tampered with o
 2. On the **What to export** step, choose a scope:
    - **Full database** — everything: locations, areas, items, files, tags. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything.
    - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. Files attached to a location or area you selected come with it; standalone files are only included in a **Full database** export, since there's no parent to bring them along.
-3. Decide whether to **Include attached files (photos, invoices, manuals)**. Leave it on to bundle the actual files into the archive; turn it off for a smaller, metadata-only backup.
+3. Decide whether to **Include attached files (photos, invoices, manuals)**. Despite the shorter label, this covers *every* file in scope — item attachments, files attached to a location or an area, and standalone files. Leave it on to bundle the actual files into the archive; turn it off for a smaller, metadata-only backup.
 4. Click **Next** to reach the **Confirm** step. Optionally add a **Description** to help you recognise the export later. If you leave it blank, Inventario names it for you (for example, "Backup · Full database · 2026-05-13 10:42 UTC").
 5. Review the summary and click **Create export**.
 
