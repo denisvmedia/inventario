@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import type { ListedFile } from "@/features/files/api"
 import { isImageMime, isPdfMime } from "@/features/files/constants"
+import { appendExt } from "@/lib/filename"
 import { formatBytes } from "@/lib/intl"
 
 // FilePreviewDialog mirrors `design-mocks/src/components/FilePreviewDialog.tsx`
@@ -42,14 +43,6 @@ export interface FilePreviewDialogProps {
   // responsible for the confirm + mutation; the dialog closes itself
   // straight after `onDelete` is invoked.
   onDelete?: (fileId: string) => void
-}
-
-// appendExt gives `name` the extension `ext`, unless it already ends with it.
-// Case-insensitive, because a user who typed "Receipt.PDF" gets one extension,
-// not two.
-function appendExt(name: string, ext: string | undefined | null): string {
-  if (!ext) return name
-  return name.toLowerCase().endsWith(ext.toLowerCase()) ? name : `${name}${ext}`
 }
 
 export function FilePreviewDialog({ file, onClose, onDelete }: FilePreviewDialogProps) {

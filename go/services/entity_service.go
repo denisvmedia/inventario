@@ -439,11 +439,84 @@ func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) err
 	// delete must not resurrect an error for a successful logical delete (the
 	// same row-first / blob-best-effort contract as DeleteFileWithPhysical).
 	if sourceBlobToDelete != "" {
-		if delErr := s.fileService.DeletePhysicalFile(ctx, sourceBlobToDelete); delErr != nil {
-			slog.WarnContext(ctx, "failed to delete pending imported-export source blob (best-effort)",
-				"export_id", id, "source_blob_key", sourceBlobToDelete, "error", delErr.Error())
+		// SHARED-KEY GUARD for a ROWLESS blob (#2250). This key has no owning file
+		// row at the moment of deletion, so the row-based guard in FileService is
+		// not enough on its own — and restore-upload keys minted before #2241 were
+		// `<name>-<unix SECONDS>.inb`, which two uploads of `backup.inb` collide on
+		// (no group segment, no randomness). Two pending imported exports can point
+		// at ONE blob, and deleting either would destroy the other's source archive.
+		//
+		// Two things this guard MUST do, and the first cut of it did neither:
+		//
+		//   1. Run SERVICE-MODE. `expReg` above is user-scoped (tenant AND group
+		//      RLS), so it cannot see the very sharer this exists to protect: a
+		//      colliding export in another group or tenant is invisible, the guard
+		//      concludes "sole owner", and deletes another user's archive. That is
+		//      the exact fail-open the whole #2250 effort is about.
+		//   2. Union BOTH owner tables — exports AND files. SourceFilePath is
+		//      REQUEST-CONTROLLED (apiserver/exports.go only checks the tenant
+		//      prefix), so a user can point a pending import at a pre-#2241 FILES
+		//      key belonging to another group, then delete the export to weaponise
+		//      this into a blob-delete against that file. Consulting only exports
+		//      leaves the files owner invisible; the delete proceeds.
+		shared, cerr := s.sourceBlobReferencedByOtherRows(ctx, sourceBlobToDelete)
+		switch {
+		case cerr != nil:
+			slog.WarnContext(ctx, "keeping pending imported-export source blob: could not establish sole ownership",
+				"export_id", id, "source_blob_key", sourceBlobToDelete, "error", cerr.Error())
+		case shared:
+			slog.WarnContext(ctx, "keeping pending imported-export source blob: another row references it",
+				"export_id", id, "source_blob_key", sourceBlobToDelete)
+		default:
+			if delErr := s.fileService.DeletePhysicalFile(ctx, sourceBlobToDelete); delErr != nil {
+				slog.WarnContext(ctx, "failed to delete pending imported-export source blob (best-effort)",
+					"export_id", id, "source_blob_key", sourceBlobToDelete, "error", delErr.Error())
+			}
 		}
 	}
 
 	return nil
+}
+
+// sourceBlobReferencedByOtherRows reports whether ANY row — a file OR an export —
+// still references blobKey (#2250). Our own export row is already deleted before
+// this runs, and a pending import has no file row, so any hit is somebody else's.
+//
+// Both lookups are SERVICE-MODE (RLS-bypassing) and deliberately not
+// tenant/group-scoped, for the same reason FileService.blobSharedOutsideBatch is:
+// a pre-#2241 key carries no group segment and a pre-#1793 key no tenant prefix,
+// so the sharer whose bytes are at stake can live in another group or tenant
+// entirely, and a scoped lookup would not see it.
+//
+// BOTH tables, because the two owner sets are disjoint and either can hold the
+// key: a rowless restore blob is owned by an export row (FilePath), a normal blob
+// by a file row (original_path), and SourceFilePath is request-controlled so a
+// caller can aim a pending export at either. ListWithDeleted, not List — a
+// soft-deleted export still owns its artifacts.
+//
+// Callers fail closed on error: without proof that nobody else holds the key, the
+// bytes stay.
+func (s *EntityService) sourceBlobReferencedByOtherRows(ctx context.Context, blobKey string) (bool, error) {
+	if blobKey == "" {
+		return false, nil
+	}
+
+	fileIDs, err := s.factorySet.FileRegistryFactory.CreateServiceRegistry().ListIDsByOriginalPath(ctx, blobKey)
+	if err != nil {
+		return false, err
+	}
+	if len(fileIDs) > 0 {
+		return true, nil
+	}
+
+	exports, err := s.factorySet.ExportRegistryFactory.CreateServiceRegistry().ListWithDeleted(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, e := range exports {
+		if e != nil && e.FilePath == blobKey {
+			return true, nil
+		}
+	}
+	return false, nil
 }

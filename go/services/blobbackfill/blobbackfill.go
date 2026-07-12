@@ -180,9 +180,21 @@ func (s *Service) processRow(
 
 	// Step 1: copy. If destination already exists, copyIfAbsent
 	// short-circuits — that's how interrupted runs become idempotent.
-	copied, err := copyIfAbsent(ctx, bucket, legacyKey, newKey)
+	copied, srcPresent, err := copyIfAbsent(ctx, bucket, legacyKey, newKey)
 	if err != nil {
 		logger.Warn("blobbackfill: copy failed", "file_id", file.ID, "err", err)
+		stats.RowsErrored++
+		return
+	}
+	if !srcPresent {
+		// The row claims bytes that the bucket does not have. DO NOT re-point it
+		// (#2250): the legacy key is the only record of where those bytes were
+		// supposed to be, and overwriting it with a destination that was never
+		// written turns "the blob is missing" into "the blob is missing AND we
+		// have forgotten where it lived" — with the row counted as successfully
+		// moved. Leave it alone, name it, and let the operator decide.
+		logger.Warn("blobbackfill: row claims a blob the bucket does not have; leaving the row untouched",
+			"file_id", file.ID, "tenant_id", file.TenantID, "legacy_key", legacyKey)
 		stats.RowsErrored++
 		return
 	}
@@ -200,12 +212,42 @@ func (s *Service) processRow(
 		return
 	}
 
-	// Step 3: delete the legacy blob. Failure here is non-fatal — the
-	// row already points at the new key, so the legacy blob is
-	// unreferenced; a later sweep can clean it up. NotFound is the
-	// expected state on a re-run (we already deleted it last time) or
-	// on a partially-pruned bucket where copyIfAbsent took the
-	// short-circuit path, so suppress it to keep the log quiet.
+	// Step 3: delete the legacy blob — but ONLY if this row was its last
+	// reference (#2250).
+	//
+	// A legacy flat key has no tenant prefix, so rows in DIFFERENT tenants can
+	// share one (that is what #1793 was fixing). Their destinations differ —
+	// `t/<T1>/files/K` vs `t/<T2>/files/K` — so each row needs its own copy, and
+	// a row that deletes the source after ITS copy leaves the next row's copy
+	// with nothing to read. The old code did exactly that, and then re-pointed
+	// the second row anyway: it ended up claiming a key that was never written,
+	// while the bytes sat under the first tenant's namespace with nothing
+	// linking them. Silent, permanent, and invisible in the stats.
+	//
+	// Our own row already points at newKey (step 2), so anything still holding
+	// legacyKey is somebody else. Whoever backfills LAST finds it unreferenced
+	// and reclaims it. Errors fail closed — an unswept legacy blob is a leak; a
+	// prematurely swept one is data loss.
+	refs, err := fileReg.ListIDsByOriginalPath(ctx, legacyKey)
+	if err != nil {
+		logger.Warn("blobbackfill: keeping legacy blob, could not establish sole ownership",
+			"file_id", file.ID, "legacy_key", legacyKey, "err", err)
+		s.maybeMigrateThumbs(ctx, bucket, file, opts.DryRun, logger, stats)
+		stats.RowsMoved++
+		return
+	}
+	if len(refs) > 0 {
+		logger.Info("blobbackfill: keeping legacy blob, another row still references it",
+			"file_id", file.ID, "legacy_key", legacyKey, "still_referenced_by", len(refs))
+		s.maybeMigrateThumbs(ctx, bucket, file, opts.DryRun, logger, stats)
+		stats.RowsMoved++
+		return
+	}
+
+	// Failure here is non-fatal — the row already points at the new key, so the
+	// legacy blob is unreferenced; a later sweep can clean it up. NotFound is the
+	// expected state on a re-run (we already deleted it last time) or on a
+	// partially-pruned bucket, so suppress it to keep the log quiet.
 	switch err := bucket.Delete(ctx, legacyKey); {
 	case err == nil:
 		stats.BlobsDeleted++
@@ -316,7 +358,7 @@ func migrateOneThumb(ctx context.Context, bucket *blob.Bucket, k thumbKeys) (mov
 		return 1, 0, nil
 	}
 
-	if _, err := copyIfAbsent(ctx, bucket, k.Legacy, k.Canonical); err != nil {
+	if _, _, err := copyIfAbsent(ctx, bucket, k.Legacy, k.Canonical); err != nil {
 		return 0, 0, errxtrace.Wrap("failed to copy legacy thumbnail", err)
 	}
 	_ = bucket.Delete(ctx, k.Legacy)
@@ -324,46 +366,55 @@ func migrateOneThumb(ctx context.Context, bucket *blob.Bucket, k thumbKeys) (mov
 }
 
 // copyIfAbsent copies from src to dst unless dst already exists.
-// Returns true if a copy happened, false otherwise. The bucket-level
-// Copy operation isn't always available on every gocloud backend so we
-// use a streaming reader→writer to stay portable.
-func copyIfAbsent(ctx context.Context, bucket *blob.Bucket, src, dst string) (bool, error) {
+//
+// Returns (copied, srcPresent, err). srcPresent is a SEPARATE signal from copied
+// (#2250): the old two-value shape collapsed "already at the destination" and
+// "the source does not exist" into one `false`, so the caller re-pointed a row
+// at a key it had never written and counted it as moved. Those are opposite
+// situations — one is idempotent success, the other is a row whose bytes are
+// missing — and a caller that cannot tell them apart will destroy the only
+// record of where the bytes were supposed to be.
+//
+// The bucket-level Copy operation isn't always available on every gocloud
+// backend so we use a streaming reader→writer to stay portable.
+func copyIfAbsent(ctx context.Context, bucket *blob.Bucket, src, dst string) (copied, srcPresent bool, err error) {
 	dstExists, err := bucket.Exists(ctx, dst)
 	if err != nil {
-		return false, errxtrace.Wrap("failed to probe destination", err)
+		return false, false, errxtrace.Wrap("failed to probe destination", err)
 	}
 	if dstExists {
-		return false, nil
+		// Already copied by an earlier (interrupted) run. The bytes are at the
+		// destination, so the row is safe to re-point regardless of the source.
+		return false, true, nil
 	}
 
 	srcExists, err := bucket.Exists(ctx, src)
 	if err != nil {
-		return false, errxtrace.Wrap("failed to probe source", err)
+		return false, false, errxtrace.Wrap("failed to probe source", err)
 	}
 	if !srcExists {
-		// The row claims a blob lives here but the bucket disagrees —
-		// not an error per se (an admin may have manually pruned the
-		// bucket), just nothing to copy. The row update step still
-		// runs so the row eventually points at the canonical location.
-		return false, nil
+		// The row claims a blob lives here but the bucket disagrees. Nothing to
+		// copy — and, crucially, nothing at the destination either, so the caller
+		// must NOT re-point the row.
+		return false, false, nil
 	}
 
 	reader, err := bucket.NewReader(ctx, src, nil)
 	if err != nil {
-		return false, errxtrace.Wrap("failed to open source reader", err)
+		return false, true, errxtrace.Wrap("failed to open source reader", err)
 	}
 	defer reader.Close()
 
 	writer, err := bucket.NewWriter(ctx, dst, nil)
 	if err != nil {
-		return false, errxtrace.Wrap("failed to open destination writer", err)
+		return false, true, errxtrace.Wrap("failed to open destination writer", err)
 	}
 	if _, err := io.Copy(writer, reader); err != nil {
 		_ = writer.Close()
-		return false, errxtrace.Wrap("failed to copy bytes", err)
+		return false, true, errxtrace.Wrap("failed to copy bytes", err)
 	}
 	if err := writer.Close(); err != nil {
-		return false, errxtrace.Wrap("failed to close destination writer", err)
+		return false, true, errxtrace.Wrap("failed to close destination writer", err)
 	}
-	return true, nil
+	return true, true, nil
 }

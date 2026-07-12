@@ -248,30 +248,12 @@ type exportFileMetaFields struct {
 	Tags             models.StringSlice
 }
 
-// DeleteExportFile is deprecated - export files are now managed through the
-// file entity system. Kept for backward compatibility.
-func (s *ExportService) DeleteExportFile(ctx context.Context, filePath string) error {
-	if filePath == "" {
-		return nil // Nothing to delete
-	}
-
-	b, err := blob.OpenBucket(ctx, s.uploadLocation)
-	if err != nil {
-		return errxtrace.Wrap("failed to open blob bucket", err)
-	}
-	defer func() {
-		if closeErr := b.Close(); closeErr != nil {
-			err = errxtrace.Wrap("failed to close blob bucket", closeErr)
-		}
-	}()
-
-	err = b.Delete(ctx, filePath)
-	if err != nil {
-		return errxtrace.Wrap("failed to delete export file", err)
-	}
-
-	return nil
-}
+// DeleteExportFile was REMOVED (#2250). It was a raw, unguarded blob delete by
+// key — "deprecated, kept for backward compatibility" — with no callers anywhere
+// in the tree. A blob key is not row-unique for rows written before #2241, so an
+// unguarded key delete is a loaded gun: it destroys the bytes of every other row
+// pointing at that key, irreversibly. Export blobs are deleted through the file
+// entity system, which asks who else owns the key first.
 
 // getFileSize gets the size of a file in blob storage.
 func (s *ExportService) getFileSize(ctx context.Context, filePath string) (int64, error) {

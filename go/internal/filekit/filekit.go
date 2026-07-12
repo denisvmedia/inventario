@@ -60,6 +60,27 @@ func Extension(filePath string) string {
 	return getMultiPartExtension(filePath)
 }
 
+// DownloadName is the filename the user gets on disk: the human-readable Path
+// with its extension, without doubling one that is already there.
+//
+// `files.path` is NOMINALLY the name without its extension, but nothing enforces
+// that and the API accepts one that carries it ("receipt.pdf" round-trips
+// through the update validator). Concatenating blindly produced
+// `Content-Disposition: filename="receipt.pdf.pdf"` — and since the header takes
+// priority over the browser's `download` attribute (RFC 6266), no amount of
+// fixing the frontend could change what was actually saved (#2250).
+//
+// Case-insensitive: a user who typed "Receipt.PDF" gets one extension, not two.
+func DownloadName(path, ext string) string {
+	if ext == "" {
+		return path
+	}
+	if strings.HasSuffix(strings.ToLower(path), strings.ToLower(ext)) {
+		return path
+	}
+	return path + ext
+}
+
 func getMultiPartExtension(filePath string) string {
 	ext := filepath.Ext(filePath)                 // Get the last element of the path
 	filename := strings.TrimSuffix(filePath, ext) // Remove the extension from the filename

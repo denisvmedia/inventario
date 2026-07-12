@@ -31,6 +31,7 @@ import { useDeleteFile, useFile } from "@/features/files/hooks"
 import { isImageMime, isPdfMime } from "@/features/files/constants"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
+import { appendExt } from "@/lib/filename"
 import { formatDateTime } from "@/lib/intl"
 
 // Entry point for the file detail surface. EVERY file — image, PDF, and
@@ -102,7 +103,7 @@ export function FileDetailSheet({
   // Backend may return path="" for files attached via the unified upload+linkage
   // flow (#1448), so gate on path being truthy — an empty path means we have no
   // displayable filename even if `ext` is set (otherwise we'd render a stray ".pdf").
-  const filename = file?.path ? `${file.path}${file.ext ?? ""}` : ""
+  const filename = file?.path ? appendExt(file.path, file.ext) : ""
 
   async function onDelete() {
     if (!file) return

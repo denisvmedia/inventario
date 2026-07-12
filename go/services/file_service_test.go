@@ -309,6 +309,79 @@ func TestFileService_DeletePhysicalFilesForTenant_SharedLegacyKeyAcrossTenants(t
 	c.Assert(string(got), qt.Equals, "tenant-2's only copy")
 }
 
+// blindFileRegistry answers "nobody references that key" for rows the caller is
+// holding — a lagging read replica, a concurrent delete, a registry bug.
+type blindFileRegistry struct {
+	registry.FileRegistry
+}
+
+func (blindFileRegistry) ListIDsByOriginalPath(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+// blindFileFactory hands out the blind registry in service mode, which is the
+// only mode the shared-key guard uses.
+type blindFileFactory struct {
+	registry.FileRegistryFactory
+}
+
+func (f blindFileFactory) CreateServiceRegistry() registry.FileRegistry {
+	return blindFileRegistry{f.FileRegistryFactory.CreateServiceRegistry()}
+}
+
+// FAIL CLOSED on an empty ownership answer when the caller is holding rows
+// (#2250).
+//
+// The group and tenant purges sweep blobs while their own rows are STILL in the
+// table, so a lookup that comes back empty has failed to see rows we have in our
+// hand. A lookup that cannot see our own rows is equally blind to the
+// cross-tenant sharer this guard exists to protect, and its silence is not
+// evidence that the bytes are free.
+//
+// (The same empty answer is CORRECT for DeleteFileWithPhysical, whose row is
+// already gone — which is exactly why the batch, not the count, decides. That
+// asymmetry is the point, and it is why this is not simply "empty means keep".)
+func TestFileService_PurgeFailsClosedWhenOwnershipIsUnknowable(t *testing.T) {
+	c := qt.New(t)
+	ctx := newTestContext()
+
+	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	}
+
+	factorySet := memory.NewFactorySet()
+	fileReg := factorySet.FileRegistryFactory.CreateServiceRegistry()
+
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+
+	const key = "t/tenant-1/files/receipt-1783824560.jpg"
+	c.Assert(b.WriteAll(ctx, key, []byte("bytes that may belong to someone else"), nil), qt.IsNil)
+
+	_, err = fileReg.Create(ctx, models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID: "tenant-1", GroupID: "group-1", CreatedByUserID: "user-1",
+		},
+		Title: "f", Type: models.FileTypeImage,
+		File: &models.File{Path: "f", OriginalPath: key, Ext: ".jpg", MIMEType: "image/jpeg"},
+	})
+	c.Assert(err, qt.IsNil)
+
+	// Same factory set, but the ownership lookup has gone blind.
+	factorySet.FileRegistryFactory = blindFileFactory{factorySet.FileRegistryFactory}
+	service := NewFileService(factorySet, uploadLocation)
+
+	c.Assert(service.DeletePhysicalFilesForGroup(ctx, "tenant-1", "group-1"), qt.IsNil)
+
+	exists, err := b.Exists(ctx, key)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsTrue,
+		qt.Commentf("the purge destroyed bytes whose ownership it could not establish"))
+}
+
 func TestFileService_DeleteFileWithPhysical_FileNotFound(t *testing.T) {
 	c := qt.New(t)
 	ctx := newTestContext()

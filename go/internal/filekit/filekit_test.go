@@ -68,3 +68,34 @@ func TestUploadFileNameWithCurrentTime(t *testing.T) {
 	ext := filepath.Ext(fileName)
 	c.Assert(filepath.Ext(result), qt.Equals, ext)
 }
+
+// The download filename is what the user gets on disk. `files.path` is nominally
+// the name WITHOUT its extension, but the API accepts one that carries it, and
+// concatenating blindly produced `receipt.pdf.pdf`.
+//
+// This is the server-side half, and it is the half that decides: the
+// Content-Disposition header takes priority over the browser's `download`
+// attribute (RFC 6266), so fixing only the frontend changed nothing a user could
+// see (#2250).
+func TestDownloadName(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		ext  string
+		want string
+	}{
+		{"appends a missing extension", "receipt", ".pdf", "receipt.pdf"},
+		{"does not double an extension already present", "receipt.pdf", ".pdf", "receipt.pdf"},
+		{"matches case-insensitively", "Receipt.PDF", ".pdf", "Receipt.PDF"},
+		{"a different extension is appended, not swallowed", "archive.tar", ".gz", "archive.tar.gz"},
+		{"multi-part extension already present", "archive.tar.gz", ".tar.gz", "archive.tar.gz"},
+		{"no extension to add", "receipt", "", "receipt"},
+		{"a name that merely contains the ext is not confused", "pdf-notes", ".pdf", "pdf-notes.pdf"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			c.Assert(filekit.DownloadName(tt.path, tt.ext), qt.Equals, tt.want)
+		})
+	}
+}

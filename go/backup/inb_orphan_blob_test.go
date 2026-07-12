@@ -148,3 +148,53 @@ func TestINBRestore_MergeUpdate_DeletesStaleBlob(t *testing.T) {
 	c.Assert(f.blobExists(c, srcKey), qt.IsFalse,
 		qt.Commentf("MergeUpdate must delete the superseded blob at the old key %s", srcKey))
 }
+
+// MergeUpdate must NOT delete the superseded blob when ANOTHER live file row
+// shares that stale key (#2250).
+//
+// The stale key is the EXISTING row's pre-#2241 key, which another row can
+// legitimately share (two same-named uploads in one second). Re-pointing the
+// restored row must not take the sharer's bytes with it — `files` has no
+// soft-delete.
+//
+// Without a test like this the guard is invisible: removing the whole
+// BlobSharedByOtherRows check from deleteSupersededBlob leaves every other
+// backup test green, because none of them plant a sharer on the stale key.
+func TestINBRestore_MergeUpdate_KeepsStaleBlobSharedByAnotherRow(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	const size = 4096
+	staleKey := "t/tenant-a/files/receipt-1783824560.jpg"
+	fileUUID, _ := f.attachCommodityFileAtKey(c, "images", staleKey, ".jpg", "image/jpeg", size)
+
+	// A SECOND live file row sharing the exact same blob key — the sharer whose
+	// bytes must survive. Service registry so it can carry a different group.
+	sharerReg := f.fs.FileRegistryFactory.CreateServiceRegistry()
+	sharer := must.Must(sharerReg.Create(f.ctx, models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID: "tenant-a", GroupID: "another-group", CreatedByUserID: f.user.ID,
+		},
+		Title: "sharer", Type: models.FileTypeImage,
+		File: &models.File{Path: "receipt", OriginalPath: staleKey, Ext: ".jpg", MIMEType: "image/jpeg"},
+	}))
+
+	blobKey, _ := f.runExport(c, signer)
+
+	final, err := restoreInbWithOptions(c, f, signer, blobKey, models.RestoreOptions{
+		Strategy: string(types.RestoreStrategyMergeUpdate),
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+
+	// The restored row moved to its canonical key…
+	canonicalKey := blobkeys.BuildFileBlobKey("tenant-a", fileUUID, ".jpg")
+	restored := f.fileByUUID(c, fileUUID)
+	c.Assert(restored.File.OriginalPath, qt.Equals, canonicalKey)
+
+	// …but the stale key's bytes SURVIVE, because the sharer still points there.
+	c.Assert(f.blobExists(c, staleKey), qt.IsTrue,
+		qt.Commentf("MergeUpdate destroyed the bytes of a live file sharing the stale key %s", staleKey))
+	c.Assert(must.Must(sharerReg.Get(f.ctx, sharer.ID)).File.OriginalPath, qt.Equals, staleKey)
+}

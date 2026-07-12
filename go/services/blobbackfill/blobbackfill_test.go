@@ -69,6 +69,47 @@ func seedRow(c *qt.C, ctx context.Context, factorySet *registry.FactorySet, uplo
 	return created.ID, tenant.ID
 }
 
+// An interrupted run must resume, not brick the row (#2250). copyIfAbsent's
+// three-value contract exists for exactly this: if the destination blob is
+// already present (a previous run copied it, then died before updating the row),
+// srcPresent must be TRUE so the re-run re-points the row — even though the
+// SOURCE may already be gone.
+//
+// This pins the `dstExists ⇒ srcPresent=true` branch. Flip it to false and the
+// re-run treats the row as "bytes missing", leaves it on the legacy key forever,
+// and the migration never completes for that row — silently.
+func TestBackfill_ResumesWhenDestinationAlreadyCopied(t *testing.T) {
+	c := qt.New(t)
+
+	uploadLocation := "file://" + c.TempDir() + "?create_dir=1"
+	factorySet := memory.NewFactorySet()
+	ctx := context.Background()
+
+	fileID, tenantID := seedRow(c, ctx, factorySet, uploadLocation, "half-migrated.jpg", "image/jpeg")
+	canonical := blobkeys.RewriteForTenant("half-migrated.jpg", tenantID)
+
+	// Simulate a run that copied the bytes to the canonical key and then died
+	// before updating the row OR deleting the source: the destination exists AND
+	// the source is already gone.
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	c.Assert(b.Copy(ctx, canonical, "half-migrated.jpg", nil), qt.IsNil)
+	c.Assert(b.Delete(ctx, "half-migrated.jpg"), qt.IsNil)
+	b.Close()
+
+	stats, err := blobbackfill.New(factorySet, uploadLocation).Run(ctx, blobbackfill.Options{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.RowsErrored, qt.Equals, 0,
+		qt.Commentf("a resumable row was treated as broken — the dstExists branch reported the source missing"))
+	c.Assert(stats.RowsMoved, qt.Equals, 1)
+
+	// The row is re-pointed to the canonical key, whose bytes are present.
+	row := must.Must(factorySet.FileRegistryFactory.CreateServiceRegistry().Get(ctx, fileID))
+	c.Assert(row.OriginalPath, qt.Equals, canonical)
+	b2 := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b2.Close()
+	c.Assert(must.Must(b2.Exists(ctx, canonical)), qt.IsTrue)
+}
+
 func TestBackfill_RewritesLegacyFileKeys(t *testing.T) {
 	c := qt.New(t)
 
@@ -165,17 +206,115 @@ func TestBackfill_DryRunDoesNotMutate(t *testing.T) {
 	c.Assert(must.Must(b.Exists(ctx, "legacy-photo.jpg")), qt.IsTrue)
 }
 
-func TestBackfill_SurvivesMissingBlob(t *testing.T) {
-	// A row claims a blob that the bucket doesn't have. The backfill
-	// should still update the row to the canonical key (so future
-	// uploads + reads land at the new location) and report no error.
+// seedRowInTenant is seedRow with the tenant named explicitly, so two rows in
+// two DIFFERENT tenants can be given the SAME legacy key — the collision that
+// #1793 (flat, un-prefixed keys) makes possible and that #2250 is about.
+func seedRowInTenant(c *qt.C, ctx context.Context, factorySet *registry.FactorySet, uploadLocation, tenantSlug, legacyKey string) (fileID, tenantID string) {
+	c.Helper()
+
+	tenant := must.Must(factorySet.TenantRegistry.Create(ctx, models.Tenant{
+		Name: tenantSlug, Slug: tenantSlug, Status: models.TenantStatusActive,
+	}))
+	user := must.Must(factorySet.UserRegistry.Create(ctx, models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenant.ID},
+		Email:               "u@" + tenantSlug + ".example.com",
+		Name:                "u",
+		IsActive:            true,
+	}))
+	group := must.Must(factorySet.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenant.ID},
+		Name:                "g", Slug: "g-" + tenantSlug, CreatedBy: user.ID,
+	}))
+
+	fileReg := factorySet.FileRegistryFactory.CreateServiceRegistry()
+	created := must.Must(fileReg.Create(ctx, models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID: tenant.ID, GroupID: group.ID, CreatedByUserID: user.ID,
+		},
+		Title: "legacy", Type: models.FileTypeImage, Category: models.FileCategoryImages,
+		Tags: models.StringSlice{},
+		File: &models.File{
+			Path: "legacy", OriginalPath: legacyKey, Ext: ".jpg", MIMEType: "image/jpeg",
+		},
+	}))
+
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, legacyKey, []byte{0xff, 0xd8, 0xff, 0xe0}, nil), qt.IsNil)
+	return created.ID, tenant.ID
+}
+
+// TWO TENANTS, ONE LEGACY KEY (#2250). A flat key has no tenant prefix — that is
+// exactly what #1793 was fixing — so rows in different tenants can reference one.
+//
+// Their destinations differ (`t/<T1>/files/K` vs `t/<T2>/files/K`), so each row
+// needs its own copy of the bytes. The old backfill deleted the source right
+// after ITS copy, which left the second row's copy with nothing to read — and
+// then re-pointed that row anyway, at a key it had never written. The row ended
+// up claiming a location that has never existed, its bytes stranded under the
+// first tenant's namespace with nothing linking them, and the run reported it as
+// successfully moved. Silent, permanent, invisible in the stats.
+//
+// Whoever backfills LAST is the one who reclaims the legacy blob.
+func TestBackfill_SharedLegacyKeyAcrossTenants(t *testing.T) {
 	c := qt.New(t)
 
 	uploadLocation := "file://" + c.TempDir() + "?create_dir=1"
 	factorySet := memory.NewFactorySet()
 	ctx := context.Background()
 
-	fileID, tenantID := seedRow(c, ctx, factorySet, uploadLocation, "missing-photo.jpg", "image/jpeg")
+	const shared = "receipt-1783824560.jpg"
+	idA, tenantA := seedRowInTenant(c, ctx, factorySet, uploadLocation, "tenant-a", shared)
+	idB, tenantB := seedRowInTenant(c, ctx, factorySet, uploadLocation, "tenant-b", shared)
+
+	svc := blobbackfill.New(factorySet, uploadLocation)
+	stats, err := svc.Run(ctx, blobbackfill.Options{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.RowsErrored, qt.Equals, 0,
+		qt.Commentf("a row lost its bytes to the other tenant's backfill"))
+	c.Assert(stats.RowsMoved, qt.Equals, 2)
+
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	fileReg := factorySet.FileRegistryFactory.CreateServiceRegistry()
+
+	// BOTH rows must point at their own tenant-namespaced key, and both keys must
+	// actually hold bytes. A row pointing at a key that was never written is the
+	// failure this test exists for.
+	for _, tc := range []struct{ id, tenant string }{{idA, tenantA}, {idB, tenantB}} {
+		row := must.Must(fileReg.Get(ctx, tc.id))
+		want := blobkeys.RewriteForTenant(shared, tc.tenant)
+		c.Assert(row.OriginalPath, qt.Equals, want)
+		c.Assert(must.Must(b.Exists(ctx, want)), qt.IsTrue,
+			qt.Commentf("row %s points at %q, which holds no bytes", tc.id, want))
+	}
+
+	// The legacy key is reclaimed — but only once nobody references it any more.
+	c.Assert(must.Must(b.Exists(ctx, shared)), qt.IsFalse,
+		qt.Commentf("the last owner did not reclaim the legacy blob"))
+}
+
+// A row claims a blob the bucket does not have. The backfill must NOT re-point
+// it (#2250).
+//
+// The old contract re-pointed the row anyway and counted it as moved, on the
+// theory that "future reads land at the canonical location". They don't — there
+// is nothing there to read, and there never was. What the rewrite actually
+// destroys is the legacy key, which is the ONLY record of where those bytes were
+// supposed to live: an operator restoring a pruned bucket from a snapshot can
+// put `missing-photo.jpg` back, but cannot know that the row now expects
+// `t/<tenant>/files/missing-photo.jpg`. And because the run reported RowsMoved=1
+// and RowsErrored=0, nobody would ever look.
+//
+// So: leave the row alone, count it as errored, and name it in the log.
+func TestBackfill_LeavesRowAloneWhenItsBlobIsMissing(t *testing.T) {
+	c := qt.New(t)
+
+	uploadLocation := "file://" + c.TempDir() + "?create_dir=1"
+	factorySet := memory.NewFactorySet()
+	ctx := context.Background()
+
+	fileID, _ := seedRow(c, ctx, factorySet, uploadLocation, "missing-photo.jpg", "image/jpeg")
 
 	// Delete the seeded blob to simulate an admin-pruned bucket.
 	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
@@ -184,13 +323,13 @@ func TestBackfill_SurvivesMissingBlob(t *testing.T) {
 
 	svc := blobbackfill.New(factorySet, uploadLocation)
 	stats, err := svc.Run(ctx, blobbackfill.Options{})
-	c.Assert(err, qt.IsNil)
-	c.Assert(stats.RowsErrored, qt.Equals, 0)
-	c.Assert(stats.RowsMoved, qt.Equals, 1)
-	c.Assert(stats.BlobsCopied, qt.Equals, 0) // nothing to copy
+	c.Assert(err, qt.IsNil) // a bad row must never abort the sweep
+	c.Assert(stats.RowsErrored, qt.Equals, 1)
+	c.Assert(stats.RowsMoved, qt.Equals, 0)
+	c.Assert(stats.BlobsCopied, qt.Equals, 0)
 
 	fileReg := factorySet.FileRegistryFactory.CreateServiceRegistry()
 	row := must.Must(fileReg.Get(ctx, fileID))
-	expected := blobkeys.RewriteForTenant("missing-photo.jpg", tenantID)
-	c.Assert(row.OriginalPath, qt.Equals, expected)
+	c.Assert(row.OriginalPath, qt.Equals, "missing-photo.jpg",
+		qt.Commentf("the row was re-pointed at a key that was never written, erasing where its bytes belonged"))
 }
