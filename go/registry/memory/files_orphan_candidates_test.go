@@ -186,11 +186,11 @@ func TestMemoryFileRegistry_ListOrphanCandidates_KeysetCursor(t *testing.T) {
 }
 
 // A blob key is NOT row-unique — there is no unique index on original_path, and
-// an upload key carries only a sanitized filename plus a unix SECOND. Two rows
-// in one tenant can legitimately share one key, and deleting one row's blob by
-// key destroys the other row's bytes. CountByOriginalPath is what lets the GC
-// see that, so it must count rows the caller cannot otherwise see: every tenant,
-// every group.
+// a pre-#2241 upload key carried only a sanitized filename plus a unix SECOND.
+// Two rows in one tenant can legitimately share one key, and deleting one row's
+// blob by key destroys the other row's bytes. ListIDsByOriginalPath is what lets
+// the delete paths (and the GC) see that: it returns the IDS of every row on the
+// key, across every tenant and group — rows the caller cannot otherwise see.
 func TestMemoryFileRegistry_ListIDsByOriginalPath(t *testing.T) {
 	c := qt.New(t)
 	fs := memory.NewFactorySet()

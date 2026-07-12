@@ -380,6 +380,19 @@ type FileIndexes struct {
 	// Trigram similarity index for file path search
 	//migrator:schema:index name="files_path_trgm_idx" fields="path" type="GIN" ops="gin_trgm_ops" table="files"
 	_ int
+
+	// original_path is looked up by EXACT value on the delete hot path: every
+	// blob delete asks "does another row still reference this key?" (#2241)
+	// before it removes any bytes. Without this index that question is a
+	// sequential scan of `files` on every single-file delete, every cascade,
+	// every purge, and every orphan-GC candidate.
+	//
+	// NOT unique, deliberately: rows written before #2241 can legitimately share
+	// a key (that IS the bug), so a unique index would fail to build on exactly
+	// the installations that need it most. Uniqueness is now enforced by
+	// construction at the key-minting site instead.
+	//migrator:schema:index name="files_original_path_idx" fields="original_path" table="files"
+	_ int
 }
 
 func (*FileEntity) Validate() error {
