@@ -371,9 +371,12 @@ func (s *FileService) deletePhysicalFileAndThumbnails(ctx context.Context, tenan
 	// in deployed databases can, forever. So the delete asks the question
 	// directly, every time: does a row OUTSIDE this caller's batch still
 	// reference this blob? If so the bytes stay, and the blob is simply left
-	// behind — an orphan the GC (#2237) will reclaim once the last owner is
-	// gone. Leaking a blob is recoverable; destroying a live file's bytes is
-	// not, so the guard fails in that direction on purpose.
+	// behind, and reclaimed by the LAST owner's delete (which finds no other
+	// row on the key and sweeps it). Note the orphan-file GC does NOT collect
+	// rowless ORIGINAL blobs — it sweeps file rows and thumbnails only — so the
+	// last owner is the reclaim path, not a backstop. Leaking a blob is
+	// recoverable; destroying a live file's bytes is not, so the guard fails in
+	// that direction on purpose.
 	shared, err := s.blobSharedOutsideBatch(ctx, filePath, batch)
 	if err != nil {
 		// FAIL CLOSED: if we cannot prove the key unshared, we do not delete
@@ -432,12 +435,50 @@ func (s *FileService) blobSharedOutsideBatch(ctx context.Context, blobKey string
 	if err != nil {
 		return false, err
 	}
+
+	// FAIL CLOSED when the answer is empty but the caller is holding rows
+	// (#2250). A non-empty batch means those rows are STILL in the table — the
+	// group and tenant purges sweep blobs before their rows are dropped — so a
+	// lookup that returns nothing has failed to see rows we have in our hand. A
+	// lookup that cannot see our own rows is equally blind to the cross-tenant
+	// sharer this guard exists to protect, and its silence is not evidence that
+	// the bytes are free.
+	//
+	// (An empty answer with an EMPTY batch is the opposite: that is
+	// DeleteFileWithPhysical, whose row is already gone, so "no ids" is exactly
+	// the sole-owner case. Same emptiness, opposite meaning — which is why the
+	// batch, not the count, decides.)
+	if len(batch) > 0 && len(ids) == 0 {
+		return true, nil
+	}
+
 	for _, id := range ids {
 		if !batch[id] {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+// BlobSharedByOtherRows reports whether any file row OTHER than excludeFileID
+// references blobKey (#2250). It is the guard for blob deletes that happen
+// OUTSIDE FileService — the restore importer superseding a re-pointed row's old
+// blob, the blob backfill dropping a legacy key — which is to say: outside
+// deletePhysicalFileAndThumbnails, where the #2241 guard lives.
+//
+// Those paths exist and they delete by key, so the invariant "no blob delete
+// destroys a live row's bytes" is only true if they ask this too. Pass "" for
+// excludeFileID when no row is exempt.
+//
+// Errors are the caller's to fail closed on: a caller that cannot prove the key
+// unshared must KEEP the bytes. Leaking a blob is recoverable; destroying a live
+// file's bytes is not.
+func (s *FileService) BlobSharedByOtherRows(ctx context.Context, blobKey, excludeFileID string) (bool, error) {
+	batch := map[string]bool{}
+	if excludeFileID != "" {
+		batch[excludeFileID] = true
+	}
+	return s.blobSharedOutsideBatch(ctx, blobKey, batch)
 }
 
 // deletePhysicalFile is the unified implementation for deleting physical files

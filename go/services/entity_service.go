@@ -439,11 +439,61 @@ func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) err
 	// delete must not resurrect an error for a successful logical delete (the
 	// same row-first / blob-best-effort contract as DeleteFileWithPhysical).
 	if sourceBlobToDelete != "" {
-		if delErr := s.fileService.DeletePhysicalFile(ctx, sourceBlobToDelete); delErr != nil {
-			slog.WarnContext(ctx, "failed to delete pending imported-export source blob (best-effort)",
-				"export_id", id, "source_blob_key", sourceBlobToDelete, "error", delErr.Error())
+		// SHARED-KEY GUARD for a ROWLESS blob (#2250). This key has no owning file
+		// row, so the row-based guard in FileService cannot see a sharer — and
+		// restore-upload keys minted before #2241 were `<name>-<unix SECONDS>.inb`,
+		// which two uploads of `backup.inb` in one second collide on. Two pending
+		// imported exports can therefore point at ONE blob, and deleting either
+		// export would destroy the other's source archive: the surviving import
+		// then restores nothing, or worse, is left pointing at bytes that are gone.
+		//
+		// The owner set for a rowless restore blob is the EXPORTS table, so that is
+		// what we ask. Our own export row is already deleted, so anything still
+		// carrying this FilePath is somebody else's. ListWithDeleted, not List: a
+		// soft-deleted export still owns its artifacts.
+		shared, cerr := s.restoreBlobSharedByOtherExports(ctx, expReg, sourceBlobToDelete)
+		switch {
+		case cerr != nil:
+			slog.WarnContext(ctx, "keeping pending imported-export source blob: could not establish sole ownership",
+				"export_id", id, "source_blob_key", sourceBlobToDelete, "error", cerr.Error())
+		case shared:
+			slog.WarnContext(ctx, "keeping pending imported-export source blob: another export still references it",
+				"export_id", id, "source_blob_key", sourceBlobToDelete)
+		default:
+			if delErr := s.fileService.DeletePhysicalFile(ctx, sourceBlobToDelete); delErr != nil {
+				slog.WarnContext(ctx, "failed to delete pending imported-export source blob (best-effort)",
+					"export_id", id, "source_blob_key", sourceBlobToDelete, "error", delErr.Error())
+			}
 		}
 	}
 
 	return nil
+}
+
+// restoreBlobSharedByOtherExports reports whether any export row still carries
+// blobKey as its FilePath (#2250).
+//
+// A pending imported export's source `.inb` blob is ROWLESS — it has no
+// FileEntity, which is why the file-row guard in FileService cannot protect it
+// (#2121). Its owner set is the exports table, so that is what gets asked.
+//
+// ListWithDeleted, not List: a soft-deleted export still owns its artifacts, and
+// treating one as gone is how you delete the artifacts out from under it.
+//
+// Callers must fail closed on error: without proof that nobody else holds the
+// key, the bytes stay.
+func (s *EntityService) restoreBlobSharedByOtherExports(ctx context.Context, expReg registry.ExportRegistry, blobKey string) (bool, error) {
+	if blobKey == "" {
+		return false, nil
+	}
+	exports, err := expReg.ListWithDeleted(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, e := range exports {
+		if e != nil && e.FilePath == blobKey {
+			return true, nil
+		}
+	}
+	return false, nil
 }

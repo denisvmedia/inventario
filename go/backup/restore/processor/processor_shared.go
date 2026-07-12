@@ -62,6 +62,21 @@ func NewRestoreOperationProcessor(restoreOperationID string, factorySet *registr
 	}
 }
 
+// fileService exposes the shared-key guard (#2250) to the restore importer.
+//
+// The importer deletes blobs directly — it supersedes the old blob of a row it
+// re-points during MergeUpdate — so it must ask the same question the
+// FileService delete paths ask before removing any bytes: does another file row
+// still reference this key? Pre-#2241 keys are shareable, and `files` has no
+// soft-delete, so the answer is the difference between reclaiming a blob and
+// destroying a live file.
+//
+// Constructed per call rather than cached: FileService is a thin façade over the
+// factory set, and the restore path builds one at most once per superseded blob.
+func (l *RestoreOperationProcessor) fileService() *services.FileService {
+	return services.NewFileService(l.factorySet, l.uploadLocation)
+}
+
 // Process drives the full restore lifecycle: status/step bookkeeping, blob open,
 // then the per-build decodeAndRestore (XML or `.inb`). The decode/verify/apply
 // body differs per format; everything around it is format-agnostic.

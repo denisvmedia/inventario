@@ -17,6 +17,7 @@ import (
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/backup/export"
 	"github.com/denisvmedia/inventario/internal/blobkeys"
+	"github.com/denisvmedia/inventario/internal/filekit"
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/jsonapi"
 	"github.com/denisvmedia/inventario/models"
@@ -298,7 +299,7 @@ func (api *exportsAPI) downloadExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set streaming headers
-	filename := fileEntity.Path + fileEntity.Ext
+	filename := filekit.DownloadName(fileEntity.Path, fileEntity.Ext)
 	downloadutils.SetStreamingHeaders(w, fileEntity.MIMEType, attrs.Size, filename)
 
 	// Open and stream the file

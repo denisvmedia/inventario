@@ -902,10 +902,42 @@ func (w *inbWalker) staleBlobKeyForUpdate(action fileAction, refID string) strin
 // re-pointed the row to newBlobKey. A no-op when the key is unchanged, empty, or
 // no bucket is configured. Swallow+log: a failed cleanup must never fail an
 // otherwise-successful restore (issue #2125).
+//
+// SHARED-KEY GUARD (#2250). staleBlobKey is whatever key the EXISTING row
+// carried, and for a pre-#2241 row that is `<sanitized-name>-<unix SECONDS><ext>`
+// — a key another row can legitimately share (two members of different groups
+// who uploaded the same filename in one second). The new key is UUID-minted, so
+// `stale != new` is the NORMAL case for such a row and this delete always fires.
+// Without the guard, restoring one file destroys the other, still-live file's
+// bytes: `files` has no soft-delete and there is no trash.
+//
+// The guard lives in FileService for the delete paths that go through it; this
+// path does not, so it must ask the same question itself. Fail closed on any
+// doubt — an unswept blob is recoverable, a destroyed one is not.
+//
+// NO row is exempt from the check, and that is load-bearing: this runs AFTER
+// applyStrategyForFileModel has already re-pointed our row to newBlobKey, so
+// anything still holding staleBlobKey is by definition somebody else. (Asking
+// before the re-point would be useless — our own row would answer every time.
+// Excluding our row by id would be worse than useless: it reads as if it
+// protects something while matching nothing.)
 func (w *inbWalker) deleteSupersededBlob(staleBlobKey, newBlobKey string) {
 	if staleBlobKey == "" || staleBlobKey == newBlobKey || w.bucket == nil {
 		return
 	}
+
+	shared, err := w.proc.fileService().BlobSharedByOtherRows(w.ctx, staleBlobKey, "")
+	if err != nil {
+		slog.WarnContext(w.ctx, "keeping superseded file blob: could not establish sole ownership (#2250)",
+			"stale_blob_key", staleBlobKey, "new_blob_key", newBlobKey, "error", err.Error())
+		return
+	}
+	if shared {
+		slog.WarnContext(w.ctx, "keeping superseded file blob: another file row still references it (#2250)",
+			"stale_blob_key", staleBlobKey, "new_blob_key", newBlobKey)
+		return
+	}
+
 	if err := w.bucket.Delete(w.ctx, staleBlobKey); err != nil {
 		slog.WarnContext(w.ctx, "failed to delete superseded file blob after merge-update restore (best-effort)",
 			"stale_blob_key", staleBlobKey, "new_blob_key", newBlobKey, "error", err.Error())

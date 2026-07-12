@@ -21,6 +21,7 @@ import (
 	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/assets"
+	"github.com/denisvmedia/inventario/internal/filekit"
 	"github.com/denisvmedia/inventario/internal/mimekit"
 	"github.com/denisvmedia/inventario/internal/textutils"
 	"github.com/denisvmedia/inventario/jsonapi"
@@ -777,7 +778,7 @@ func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request
 		disposition = services.DispositionInline
 	}
 
-	api.streamFileFromStorage(w, r, filePath, mimeType, file.Path+file.Ext, disposition)
+	api.streamFileFromStorage(w, r, filePath, mimeType, filekit.DownloadName(file.Path, file.Ext), disposition)
 }
 
 // downloadThumbnail downloads a thumbnail file (always JPEG) with deferred generation support
