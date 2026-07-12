@@ -76,7 +76,7 @@ func (s *stubFileRegistry) ListOrphanCandidates(context.Context, time.Time, regi
 	panic("not implemented")
 }
 
-func (s *stubFileRegistry) ListIDsByTenant(context.Context, string) ([]string, error) {
+func (s *stubFileRegistry) ExistingIDs(context.Context, []string) ([]string, error) {
 	panic("not implemented")
 }
 

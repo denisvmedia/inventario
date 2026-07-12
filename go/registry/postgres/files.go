@@ -551,7 +551,7 @@ func (r *FileRegistry) ListPendingSizeBackfill(ctx context.Context, limit int) (
 // The candidate predicate is a positive ALLOWLIST on linked_entity_type, never
 // a negation:
 //
-//   - ”        → a STANDALONE file. First-class since #2235 (exported in
+//   - ""       → a STANDALONE file. First-class since #2235 (exported in
 //     backups, swept as inventory by a full_replace restore). NOT an orphan,
 //     never a candidate.
 //   - 'export'  → owned by the backup subsystem's own lifecycle
@@ -643,20 +643,21 @@ func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.
 	return files, nil
 }
 
-// ListIDsByTenant returns the ids of every file row owned by tenantID, across
-// every group (#2237). Service-mode only; backs the orphan-file GC's thumbnail
-// sweep membership set. Ids only — the sweep never needs the rows.
-func (r *FileRegistry) ListIDsByTenant(ctx context.Context, tenantID string) ([]string, error) {
-	if tenantID == "" {
-		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+// ExistingIDs returns the subset of ids that still have a file row, in ONE
+// `id = ANY($1)` round-trip (#2237). Service-mode only; backs the orphan-file
+// GC's thumbnail sweep. Missing ids are simply absent from the result — see the
+// interface doc in registry.FileRegistry for the full contract.
+func (r *FileRegistry) ExistingIDs(ctx context.Context, ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
 	}
-	var ids []string
+	var existing []string
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf(`SELECT id FROM %s WHERE tenant_id = $1`, r.tableNames.Files())
-		rows, err := tx.QueryxContext(ctx, query, tenantID)
-		if err != nil {
-			return errxtrace.Wrap("failed to list file ids by tenant", err)
+		query := fmt.Sprintf(`SELECT id FROM %s WHERE id = ANY($1)`, r.tableNames.Files())
+		rows, qerr := tx.QueryxContext(ctx, query, ids)
+		if qerr != nil {
+			return errxtrace.Wrap("failed to batch-check file ids", qerr)
 		}
 		defer rows.Close()
 		for rows.Next() {
@@ -664,14 +665,14 @@ func (r *FileRegistry) ListIDsByTenant(ctx context.Context, tenantID string) ([]
 			if scanErr := rows.Scan(&id); scanErr != nil {
 				return errxtrace.Wrap("failed to scan file id", scanErr)
 			}
-			ids = append(ids, id)
+			existing = append(existing, id)
 		}
 		return rows.Err()
 	})
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to list file ids by tenant", err)
+		return nil, errxtrace.Wrap("failed to batch-check file ids", err)
 	}
-	return ids, nil
+	return existing, nil
 }
 
 // CountByOriginalPath counts the file rows that reference the given blob key,

@@ -22,7 +22,7 @@ import (
 // This worker DELETES USER DATA, so the assertions that matter are the ones
 // about what must NOT come back:
 //
-//   - a STANDALONE file (linked_entity_type = ”) — first-class since #2235;
+//   - a STANDALONE file (linked_entity_type = "") — first-class since #2235;
 //     "no link" must never mean "orphan";
 //   - an 'export'-linked file — the backup subsystem owns its lifecycle, and
 //     because the exports table is never probed, the `deleted_at IS NULL`
@@ -241,10 +241,10 @@ func TestFileRegistry_Postgres_CountByOriginalPath(t *testing.T) {
 	})
 }
 
-// TestFileRegistry_Postgres_ListIDsByTenant checks the membership set that
-// backs the thumbnail sweep: ids for the requested tenant only, across all its
-// groups.
-func TestFileRegistry_Postgres_ListIDsByTenant(t *testing.T) {
+// TestFileRegistry_Postgres_ExistingIDs checks the membership query that backs
+// the thumbnail sweep: a single ANY($1) round-trip answering, BY ID ALONE,
+// which of the ids the listed keys named still have a row.
+func TestFileRegistry_Postgres_ExistingIDs(t *testing.T) {
 	c := qt.New(t)
 
 	_, cleanup := setupTestRegistrySet(t)
@@ -286,21 +286,27 @@ func TestFileRegistry_Postgres_ListIDsByTenant(t *testing.T) {
 	a2 := mk(tenantA, groupA2, userA.ID)
 	b1 := mk(tenantB, groupB, userB.ID)
 
-	ids, err := svc.ListIDsByTenant(ctx, tenantA)
+	ids, err := svc.ExistingIDs(ctx, []string{a1, a2, b1, "no-such-file"})
 	c.Assert(err, qt.IsNil)
 
 	set := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		set[id] = true
 	}
+	// The service registry sees every row, so an id is "live" wherever it
+	// lives. That is the point: a thumbnail whose owning row sits in another
+	// group (or tenant) must never be read as an orphan.
 	c.Assert(set[a1], qt.IsTrue)
-	c.Assert(set[a2], qt.IsTrue, qt.Commentf("the set must span every group in the tenant"))
-	c.Assert(set[b1], qt.IsFalse, qt.Commentf("another tenant's file leaked into the membership set"))
+	c.Assert(set[a2], qt.IsTrue, qt.Commentf("a live row in another group was reported missing"))
+	c.Assert(set[b1], qt.IsTrue, qt.Commentf("a live row in another tenant was reported missing"))
+	c.Assert(set["no-such-file"], qt.IsFalse)
+	c.Assert(ids, qt.HasLen, 3)
 
-	t.Run("an empty tenant id is rejected", func(t *testing.T) {
+	t.Run("an empty id list never queries", func(t *testing.T) {
 		c := qt.New(t)
-		_, err := svc.ListIDsByTenant(ctx, "")
-		c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
+		got, err := svc.ExistingIDs(ctx, nil)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got, qt.HasLen, 0)
 	})
 }
 

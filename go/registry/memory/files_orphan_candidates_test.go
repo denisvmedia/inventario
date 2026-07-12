@@ -221,7 +221,7 @@ func TestMemoryFileRegistry_CountByOriginalPath(t *testing.T) {
 	c.Assert(n, qt.Equals, 0)
 }
 
-func TestMemoryFileRegistry_ListIDsByTenant(t *testing.T) {
+func TestMemoryFileRegistry_ExistingIDs(t *testing.T) {
 	c := qt.New(t)
 	fs := memory.NewFactorySet()
 
@@ -230,7 +230,11 @@ func TestMemoryFileRegistry_ListIDsByTenant(t *testing.T) {
 	b1 := seedOrphanFile(c, fs, "tenant-2", "group-3", "", "", time.Hour)
 
 	reg := fs.FileRegistryFactory.CreateServiceRegistry()
-	ids, err := reg.ListIDsByTenant(context.Background(), "tenant-1")
+
+	// Service mode answers by ID ALONE: an id is "live" wherever it lives, so a
+	// thumbnail whose owning row sits in another group is never mistaken for an
+	// orphan.
+	ids, err := reg.ExistingIDs(context.Background(), []string{a1, a2, b1, "no-such-file"})
 	c.Assert(err, qt.IsNil)
 
 	set := make(map[string]bool, len(ids))
@@ -238,9 +242,13 @@ func TestMemoryFileRegistry_ListIDsByTenant(t *testing.T) {
 		set[id] = true
 	}
 	c.Assert(set[a1], qt.IsTrue)
-	c.Assert(set[a2], qt.IsTrue, qt.Commentf("the set must span every group in the tenant"))
-	c.Assert(set[b1], qt.IsFalse, qt.Commentf("another tenant's file leaked into the membership set"))
+	c.Assert(set[a2], qt.IsTrue, qt.Commentf("a live row in another group of the tenant was reported missing"))
+	c.Assert(set[b1], qt.IsTrue, qt.Commentf("a live row in another tenant was reported missing"))
+	c.Assert(set["no-such-file"], qt.IsFalse)
+	c.Assert(ids, qt.HasLen, 3)
 
-	_, err = reg.ListIDsByTenant(context.Background(), "")
-	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
+	// Empty input never queries.
+	ids, err = reg.ExistingIDs(context.Background(), nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(ids, qt.HasLen, 0)
 }

@@ -238,7 +238,7 @@ func (p OrphanFileGCProbes) forLinkType(linkType string) EntityExistenceProbe {
 // the GC reads. Read-only: the worker adds no new write path anywhere.
 type OrphanFileGCFileRegistry interface {
 	ListOrphanCandidates(ctx context.Context, olderThan time.Time, after registry.OrphanCandidateCursor, limit int) ([]*models.FileEntity, error)
-	ListIDsByTenant(ctx context.Context, tenantID string) ([]string, error)
+	ExistingIDs(ctx context.Context, ids []string) ([]string, error)
 	CountByOriginalPath(ctx context.Context, originalPath string) (int, error)
 	Get(ctx context.Context, id string) (*models.FileEntity, error)
 }
@@ -471,11 +471,38 @@ func NewOrphanFileGCWorker(deps OrphanFileGCDeps, opts ...OrphanFileGCOption) *O
 	}
 }
 
-// Start launches the background sweep goroutine. No-op when the file registry
-// or the deleter is missing.
+// missingDeps names every dependency RunOnce dereferences unconditionally.
+// Checking only Files/Deleter would let a half-wired worker report a successful
+// startup and then panic inside the sweep goroutine — on a DESTRUCTIVE worker,
+// a nil Exports/Restores registry is not a crash to debug later, it is the
+// concurrency gate silently missing.
+func (d OrphanFileGCDeps) missingDeps() []string {
+	var missing []string
+	add := func(name string, ok bool) {
+		if !ok {
+			missing = append(missing, name)
+		}
+	}
+	add("Files", d.Files != nil)
+	add("Deleter", d.Deleter != nil)
+	add("Exports", d.Exports != nil)
+	add("Restores", d.Restores != nil)
+	add("Tenants", d.Tenants != nil)
+	add("Groups", d.Groups != nil)
+	add("Users", d.Users != nil)
+	add("UploadLocation", d.UploadLocation != "")
+	// A link type with no probe is not fatal — verifyRowCandidate keeps every
+	// candidate of that type (fail closed) — so probes are deliberately NOT
+	// required here. A worker with no probes at all simply collects nothing.
+	return missing
+}
+
+// Start launches the background sweep goroutine. Incomplete wiring is refused
+// outright rather than deferred to a panic mid-sweep.
 func (w *OrphanFileGCWorker) Start(ctx context.Context) {
-	if w.deps.Files == nil || w.deps.Deleter == nil {
-		slog.Warn("OrphanFileGCWorker: incomplete dependencies, skipping startup")
+	if missing := w.deps.missingDeps(); len(missing) > 0 {
+		slog.Error("OrphanFileGCWorker: incomplete dependencies, skipping startup",
+			"missing", strings.Join(missing, ","))
 		return
 	}
 	w.wg.Go(func() {
@@ -939,7 +966,7 @@ func (w *OrphanFileGCWorker) verifyRowCandidate(ctx context.Context, file *model
 // tenant). Returns the skip reason, or "" when the candidate survives them all.
 //
 // R1 is re-asserted here even though the candidate query already applied it, so
-// a future registry bug cannot widen the blast radius: ” (standalone, #2235),
+// a future registry bug cannot widen the blast radius: "" (standalone, #2235),
 // 'export', and any unknown/future link type are KEPT.
 func screenRowCandidate(file *models.FileEntity, gate orphanGCGate, cutoff time.Time) string {
 	if !orphanGCLinkAllowlist[file.LinkedEntityType] {
@@ -1177,29 +1204,42 @@ func (w *OrphanFileGCWorker) sweepTenantThumbnails(
 		return stats, nil
 	}
 
-	// Step 3 — only NOW read the DB. A row created during the listing is in the
-	// set, which is the safe direction.
-	ids, err := w.deps.Files.ListIDsByTenant(ctx, tenantID)
-	if err != nil {
-		return stats, err
-	}
-	live := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		live[id] = true
-	}
-
+	// T1/T2 — parse every aged key BEFORE any DB read. Anything that does not
+	// parse-and-round-trip exactly is KEPT: this is the structural
+	// anti-traversal / anti-confusion guard — we only ever delete a key we
+	// REBUILT ourselves.
+	parsed := make([]orphanThumbCandidate, 0, len(aged))
 	for _, cand := range aged {
 		fileID, size, ok := parseThumbnailBlobKey(tenantID, cand.key)
 		if !ok {
-			// T1/T2 — anything that does not parse-and-round-trip exactly is
-			// KEPT. This is the structural anti-traversal / anti-confusion
-			// guard: we only ever delete a key we REBUILT ourselves.
 			orphanGCSkippedTotal.WithLabelValues(orphanGCSkipUnparseableKey).Inc()
 			slog.Warn("Orphan file GC: unparseable thumbnail key, keeping",
 				"event", "orphan_gc.thumbnail", "action", "skipped",
 				"reason", orphanGCSkipUnparseableKey, "blob_key", cand.key, "tenant_id", tenantID)
 			continue
 		}
+		parsed = append(parsed, orphanThumbCandidate{key: cand, fileID: fileID, size: size})
+	}
+	if len(parsed) == 0 {
+		return stats, nil
+	}
+
+	// Step 3 — only NOW read the DB, and ask ONLY about the ids the listed keys
+	// actually named. A tenant-wide id dump would cost, and hold in memory, one
+	// entry per file row in the tenant to answer a question about at most
+	// thumbBudget keys — the dominant cost of the sweep on a large install, for
+	// no added safety.
+	//
+	// A row created DURING the listing lands in this set (the query runs after),
+	// which is the safe direction: the sweep keeps its thumbnails.
+	live, err := w.liveFileIDs(ctx, parsed)
+	if err != nil {
+		return stats, err
+	}
+
+	for _, p := range parsed {
+		cand, fileID, size := p.key, p.fileID, p.size
+
 		// T3 — the double check. The membership set alone can never cause a
 		// delete: a fresh service-mode Get must independently return EXACTLY
 		// registry.ErrNotFound.
@@ -1328,6 +1368,41 @@ func (w *OrphanFileGCWorker) listAgedThumbnails(
 	delete(w.thumbCursor, tenantID)
 
 	return aged, nil
+}
+
+// orphanThumbCandidate is one listed thumbnail key that survived the age filter
+// AND the round-trip parse: the key itself plus the components it decomposed
+// into. Parsing up front is what lets the DB question be asked about exactly the
+// file ids the keys named, and nothing else.
+type orphanThumbCandidate struct {
+	key    orphanThumbKey
+	fileID string
+	size   string
+}
+
+// liveFileIDs asks, in ONE round-trip, which of the file ids named by the parsed
+// keys still have a row. Duplicate ids (a file has a small AND a medium
+// thumbnail) collapse before the query.
+func (w *OrphanFileGCWorker) liveFileIDs(ctx context.Context, parsed []orphanThumbCandidate) (map[string]bool, error) {
+	seen := make(map[string]bool, len(parsed))
+	ids := make([]string, 0, len(parsed))
+	for _, p := range parsed {
+		if seen[p.fileID] {
+			continue
+		}
+		seen[p.fileID] = true
+		ids = append(ids, p.fileID)
+	}
+
+	existing, err := w.deps.Files.ExistingIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	live := make(map[string]bool, len(existing))
+	for _, id := range existing {
+		live[id] = true
+	}
+	return live, nil
 }
 
 // deleteThumbnail removes the REBUILT key — never the raw string the bucket

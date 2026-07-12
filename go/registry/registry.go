@@ -461,12 +461,19 @@ type FileRegistry interface {
 	// window would be re-reported on every tick.
 	ListOrphanCandidates(ctx context.Context, olderThan time.Time, after OrphanCandidateCursor, limit int) ([]*models.FileEntity, error)
 
-	// ListIDsByTenant returns the ids of every file row belonging to the
-	// given tenant, across all its groups (#2237). Service-mode only;
-	// backs the orphan-file GC's thumbnail sweep, which needs a cheap
-	// membership set to test a listed `t/<tenant>/thumbnails/<fileID>_...`
-	// key against. Ids only — the sweep never needs the rows themselves.
-	ListIDsByTenant(ctx context.Context, tenantID string) ([]string, error)
+	// ExistingIDs returns the subset of ids that still have a file row,
+	// in ONE `WHERE id = ANY($1)` round-trip (#2237). Service-mode only.
+	//
+	// It backs the orphan-file GC's thumbnail sweep, which needs to know
+	// which of the file ids embedded in the keys it just listed are still
+	// live. It is deliberately id-driven rather than tenant-driven: a
+	// tenant-wide id dump would cost (and hold in memory) one entry per
+	// file row in the installation's largest tenant to answer a question
+	// about at most a few thousand listed keys.
+	//
+	// Missing / already-deleted ids are simply absent from the result; an
+	// empty input returns (nil, nil) without a query.
+	ExistingIDs(ctx context.Context, ids []string) ([]string, error)
 
 	// CountByOriginalPath returns how many file rows — across EVERY
 	// tenant and group — carry the given files.original_path (#2237).

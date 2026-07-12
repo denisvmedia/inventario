@@ -359,9 +359,9 @@ func (r *countingFileRegistry) ListOrphanCandidates(ctx context.Context, olderTh
 	return r.FileRegistry.ListOrphanCandidates(ctx, olderThan, after, limit)
 }
 
-func (r *countingFileRegistry) ListIDsByTenant(ctx context.Context, tenantID string) ([]string, error) {
+func (r *countingFileRegistry) ExistingIDs(ctx context.Context, ids []string) ([]string, error) {
 	r.calls++
-	return r.FileRegistry.ListIDsByTenant(ctx, tenantID)
+	return r.FileRegistry.ExistingIDs(ctx, ids)
 }
 
 // failingGetFileRegistry makes the thumbnail sweep's row probe fail
@@ -835,6 +835,55 @@ func TestOrphanFileGC_LosingAThumbnailRaceIsNotAFailure(t *testing.T) {
 	c.Assert(f.blobExists(key), qt.IsFalse)
 	c.Assert(logs, qt.Not(qt.Contains), `"action":"failed"`,
 		qt.Commentf("losing the race to another replica was reported as a delete failure"))
+}
+
+// A half-wired DESTRUCTIVE worker must refuse to start, not log a successful
+// startup and then panic inside the sweep goroutine. A nil Exports/Restores
+// registry is not a crash to debug later — it is the concurrency gate silently
+// missing, i.e. the guard that keeps the GC off a tenant mid-restore.
+func TestOrphanFileGC_IncompleteWiringRefusesToStart(t *testing.T) {
+	tests := []struct {
+		name    string
+		unwire  func(*services.OrphanFileGCDeps)
+		missing string
+	}{
+		{name: "no files registry", unwire: func(d *services.OrphanFileGCDeps) { d.Files = nil }, missing: "Files"},
+		{name: "no deleter", unwire: func(d *services.OrphanFileGCDeps) { d.Deleter = nil }, missing: "Deleter"},
+		{name: "no exports registry", unwire: func(d *services.OrphanFileGCDeps) { d.Exports = nil }, missing: "Exports"},
+		{name: "no restores registry", unwire: func(d *services.OrphanFileGCDeps) { d.Restores = nil }, missing: "Restores"},
+		{name: "no tenants registry", unwire: func(d *services.OrphanFileGCDeps) { d.Tenants = nil }, missing: "Tenants"},
+		{name: "no groups registry", unwire: func(d *services.OrphanFileGCDeps) { d.Groups = nil }, missing: "Groups"},
+		{name: "no users registry", unwire: func(d *services.OrphanFileGCDeps) { d.Users = nil }, missing: "Users"},
+		{name: "no upload location", unwire: func(d *services.OrphanFileGCDeps) { d.UploadLocation = "" }, missing: "UploadLocation"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			f := newGCFixture(c)
+
+			// An orphan the worker WOULD collect if it ran.
+			file := f.seedFile(seedFileOpts{linkType: "commodity", linkID: "gone", linkMeta: "images"})
+
+			deps := f.deps()
+			tt.unwire(&deps)
+
+			logs := captureLogs(c, func() {
+				worker := services.NewOrphanFileGCWorker(deps,
+					services.WithOrphanFileGCMode(services.OrphanFileGCModeDelete),
+					services.WithOrphanFileGCInterval(time.Millisecond),
+				)
+				worker.Start(f.ctx)
+				worker.Stop() // returns immediately: nothing was started
+			})
+
+			c.Assert(logs, qt.Contains, "incomplete dependencies")
+			c.Assert(logs, qt.Contains, tt.missing)
+			c.Assert(logs, qt.Not(qt.Contains), "Orphan file GC worker started")
+			c.Assert(f.fileExists(file.ID), qt.IsTrue,
+				qt.Commentf("a half-wired worker swept anyway"))
+		})
+	}
 }
 
 // Soft-pause (#1308) is the operator's emergency stop for the only destructive

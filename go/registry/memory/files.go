@@ -454,23 +454,28 @@ func (r *FileRegistry) CountByOriginalPath(_ context.Context, originalPath strin
 	return count, nil
 }
 
-// ListIDsByTenant mirrors the postgres method — the ids of every file row
-// owned by tenantID, across all its groups (#2237). Service-mode only.
-func (r *FileRegistry) ListIDsByTenant(_ context.Context, tenantID string) ([]string, error) {
-	if tenantID == "" {
-		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+// ExistingIDs mirrors the postgres method — the subset of ids that still have a
+// file row (#2237). Service-mode only.
+func (r *FileRegistry) ExistingIDs(_ context.Context, ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
 	}
-	var ids []string
+	want := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		want[id] = true
+	}
+
+	var existing []string
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		file := pair.Value
-		if file == nil || file.TenantID != tenantID {
+		if file == nil || !want[file.ID] {
 			continue
 		}
-		ids = append(ids, file.ID)
+		existing = append(existing, file.ID)
 	}
-	return ids, nil
+	return existing, nil
 }
 
 // SumSizeBreakdown mirrors the postgres aggregator: per-category byte
