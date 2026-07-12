@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gocloud.dev/blob"
+	"gocloud.dev/gcerrors"
 
 	"github.com/denisvmedia/inventario/appctx"
 	"github.com/denisvmedia/inventario/internal/blobkeys"
@@ -1330,23 +1331,29 @@ func (w *OrphanFileGCWorker) listAgedThumbnails(
 }
 
 // deleteThumbnail removes the REBUILT key — never the raw string the bucket
-// listing handed us. Exists-guarded and not-found-tolerant, so two `run workers`
-// replicas racing the same orphan produce one delete and one no-op.
+// listing handed us.
+//
+// There is deliberately NO Exists() pre-check. A stat-then-delete pair does not
+// make the delete safer (the key is rebuilt, so it can only ever name a
+// thumbnail of a file we just proved gone) — it only opens a window: with two
+// `run workers` replicas, the other one can remove the key between our stat and
+// our delete, and the resulting NotFound would be counted as a FAILURE and
+// logged at error level. That is a lie in exactly the race this worker is
+// expected to run in, and it would make delete-mode runs noisy enough to hide a
+// real failure.
+//
+// So: one round trip, and a NotFound from Delete is a no-op, not a failure —
+// the same tolerance the row path applies to registry.ErrNotFound. Returns
+// whether THIS call is the one that removed the key.
 func (w *OrphanFileGCWorker) deleteThumbnail(ctx context.Context, bucket *blob.Bucket, tenantID, fileID, size string) bool {
 	key := blobkeys.BuildThumbnailBlobKey(tenantID, fileID, size)
 
-	exists, err := bucket.Exists(ctx, key)
-	if err != nil {
-		orphanGCFailuresTotal.Inc()
-		slog.Error("Orphan file GC: failed to stat orphan thumbnail",
-			"event", "orphan_gc.thumbnail", "action", "failed",
-			"blob_key", key, "tenant_id", tenantID, "error", err.Error())
-		return false
-	}
-	if !exists {
-		return false
-	}
 	if err := bucket.Delete(ctx, key); err != nil {
+		if gcerrors.Code(err) == gcerrors.NotFound {
+			// Already gone: another replica won the race, or it was removed
+			// between the listing and here. Nothing to report.
+			return false
+		}
 		orphanGCFailuresTotal.Inc()
 		slog.Error("Orphan file GC: failed to delete orphan thumbnail",
 			"event", "orphan_gc.thumbnail", "action", "failed",

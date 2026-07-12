@@ -784,6 +784,59 @@ func TestOrphanFileGC_ThumbnailLogNeverClaimsAnUnattemptedDelete(t *testing.T) {
 	c.Assert(logs, qt.Contains, `"action":"deleted"`)
 }
 
+// racingThumbnailRegistry deletes a blob from underneath the sweep, right when
+// the sweep probes the owning row — i.e. exactly the window a SECOND `run
+// workers` replica occupies: it listed the same orphan thumbnail and got to the
+// delete first.
+type racingThumbnailRegistry struct {
+	services.OrphanFileGCFileRegistry
+	c              *qt.C
+	ctx            context.Context
+	uploadLocation string
+	key            string
+}
+
+func (r *racingThumbnailRegistry) Get(ctx context.Context, id string) (*models.FileEntity, error) {
+	b, err := blob.OpenBucket(r.ctx, r.uploadLocation)
+	r.c.Assert(err, qt.IsNil)
+	defer b.Close()
+	_ = b.Delete(r.ctx, r.key) // the other replica wins the race
+	return r.OrphanFileGCFileRegistry.Get(ctx, id)
+}
+
+// Two replicas racing the same orphan thumbnail must produce one delete and one
+// NO-OP — not one delete and one reported FAILURE. Counting the loser's
+// already-gone key as a failure would light up orphanGCFailuresTotal and write
+// an error record on every tick of a perfectly healthy two-replica deployment,
+// which is exactly the noise that hides a real failure.
+func TestOrphanFileGC_LosingAThumbnailRaceIsNotAFailure(t *testing.T) {
+	c := qt.New(t)
+	f := newGCFixture(c)
+
+	key := blobkeys.BuildThumbnailBlobKey(f.tenantID, "a-file-id-with-no-row", "small")
+	f.writeBlob(key, []byte("s"))
+	f.backdateBlobs(30 * 24 * time.Hour)
+
+	deps := f.deps()
+	deps.Files = &racingThumbnailRegistry{
+		OrphanFileGCFileRegistry: deps.Files,
+		c:                        c,
+		ctx:                      f.ctx,
+		uploadLocation:           f.uploadLocation,
+		key:                      key,
+	}
+
+	logs := captureLogs(c, func() {
+		services.NewOrphanFileGCWorker(deps,
+			services.WithOrphanFileGCMode(services.OrphanFileGCModeDelete),
+		).RunOnce(f.ctx)
+	})
+
+	c.Assert(f.blobExists(key), qt.IsFalse)
+	c.Assert(logs, qt.Not(qt.Contains), `"action":"failed"`,
+		qt.Commentf("losing the race to another replica was reported as a delete failure"))
+}
+
 // Soft-pause (#1308) is the operator's emergency stop for the only destructive
 // worker in the tree. A paused worker must do NOTHING — not even read.
 //
