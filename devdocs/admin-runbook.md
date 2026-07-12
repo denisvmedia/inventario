@@ -482,7 +482,7 @@ reconstructed.
 | ---- | ------- | ----- |
 | `--orphan-file-gc-mode` | `report` | `off` \| `report` \| `delete`. An unknown value **fails startup**. |
 | `--orphan-file-gc-min-age` | `72h` | Minimum age of a row (both `created_at` *and* `updated_at`) or a blob (bucket `ModTime`). **Hard floor 24h** — a lower value fails startup. |
-| `--orphan-file-gc-interval` | `24h` | Sweep cadence. |
+| `--orphan-file-gc-interval` | `24h` | Sweep cadence. The worker also sweeps **once at startup**, so a fresh deploy does not wait a full interval for its first report. A restart bypasses nothing: the pause, the in-flight gate and the age gate are all re-evaluated on that first sweep. |
 
 ### `inventario_orphan_gc_blocked_tenants` > 0
 
