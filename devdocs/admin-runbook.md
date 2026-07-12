@@ -341,8 +341,8 @@ and the `worker_control.worker_type` column):
 `export`, `import`, `restore`, `thumbnail`, `refresh-token-cleanup`,
 `email-verification-cleanup`, `magic-link-token-cleanup`,
 `operation-slot-cleanup`, `login-event-retention`, `group-purge`,
-`warranty-reminder`, `storage-quota-reminder`, `loan-reminder`,
-`maintenance-reminder`, `currency-migration`.
+`orphan-file-gc`, `warranty-reminder`, `storage-quota-reminder`,
+`loan-reminder`, `maintenance-reminder`, `currency-migration`.
 
 > Email delivery is intentionally **not** in this set — it is a Redis
 > subscriber rather than a polling worker, with a separate pause story.
@@ -405,6 +405,114 @@ The same control is exposed under the back-office-gated admin subtree
   last-known state is **retained** (a DB blip cannot silently un-pause a
   worker an operator deliberately stopped); the failure is logged once
   on the error transition.
+
+---
+
+## 8. Orphan-file GC (#2237)
+
+`orphan-file-gc` is the **only destructive periodic worker** in the
+deployment. It exists as a backstop for residues the delete paths cannot
+close by construction (they are row-first / blob-best-effort and
+multi-transaction, because the file→entity link is polymorphic and cannot
+carry an FK):
+
+1. **Crash window** — a process dies between an entity-row delete and its
+   linked-file sweep, leaving file rows pointing at an entity that no
+   longer exists.
+2. **Concurrent attach** — a file is linked to an entity while that
+   entity's delete is in flight.
+3. **Thumbnail mid-generation race** — a file is deleted while the
+   thumbnail worker sits between its read and its blob writes.
+
+### What it sweeps — and what it will NEVER touch
+
+It sweeps exactly two classes:
+
+- **File ROWS** whose `linked_entity_type` is one of
+  `commodity` / `area` / `location` **and** whose `linked_entity_id`
+  names a row that does not exist anywhere in the database.
+- **THUMBNAIL blobs** under `t/<tenant>/thumbnails/` whose owning file
+  row is gone. Thumbnails are derived and regenerable, and the key
+  embeds the owning row's primary key, so orphan-ness is an exact
+  single-row question.
+
+Everything else is **NEVER-SWEEP** — not filtered out, but never
+enumerated in the first place:
+
+| Class | Why it is never touched |
+| ----- | ----------------------- |
+| Standalone files (`linked_entity_type = ''`) | First-class since #2235; exported in backups. **"No link" is not "orphan."** The candidate predicate is a positive allowlist, so a standalone file cannot enter it. |
+| `export`-linked files | Owned by the backup subsystem's own lifecycle. The exports table is never probed, so a soft-deleted (recoverable) export can never be misread as "gone". |
+| Any unknown / future link type | Fails closed — kept until someone explicitly adds it to the allowlist. |
+| `t/<tenant>/files/` blobs | Upload, restore, and `inventario backfill blobs` are all **blob-first / row-second**, so a rowless blob is a normal transient state. Reclaiming these safely needs a provably-complete global keep-set; the failure mode is irreversible loss of the user's file bytes. Out of scope for an autonomous worker. (Crash-window blobs are still reclaimed — via the row sweep, which deletes the blob and thumbnails with the row.) |
+| `t/<tenant>/exports/` blobs | A failed export leaves its `.inb` referenced by nothing at all. Fix belongs at the source. |
+| `t/<tenant>/restores/` blobs | An uploaded `.inb` awaiting import has **no row of any kind** — and stays rowless forever if the import fails or is never submitted. Deleting one destroys a user's uploaded backup. |
+| Seed blobs, legacy flat (pre-#1793) keys | Not under the swept prefix. |
+
+### Rollout: report → delete
+
+The worker ships in **`report` mode and deletes nothing.** A false
+positive here is irreversible user data loss (`files` has no soft-delete
+column, and the row delete takes the blob and thumbnails with it), so the
+predicate has to be observed against real data before it earns the right
+to delete.
+
+```bash
+# 1. Default. Scan + log + metrics, DELETE NOTHING.
+--orphan-file-gc-mode=report
+
+# 2. Only after watching the candidate stream for a full release cycle.
+--orphan-file-gc-mode=delete
+
+# Or skip the scan entirely (no bucket LIST cost).
+--orphan-file-gc-mode=off
+```
+
+Watch **`inventario_orphan_gc_candidates_total{kind="row"|"thumbnail"}`**
+— it increments in *both* modes. Steady state should be ~0; a small,
+explainable number after a known crash is expected. Every candidate is
+logged (`event=orphan_gc.row` / `event=orphan_gc.thumbnail`) with enough
+detail to hand-verify it against the UI, and — in delete mode — the log
+line is the only artifact from which a destroyed file can be
+reconstructed.
+
+### Knobs
+
+| Flag | Default | Notes |
+| ---- | ------- | ----- |
+| `--orphan-file-gc-mode` | `report` | `off` \| `report` \| `delete`. An unknown value **fails startup**. |
+| `--orphan-file-gc-min-age` | `72h` | Minimum age of a row (both `created_at` *and* `updated_at`) or a blob (bucket `ModTime`). **Hard floor 24h** — a lower value fails startup. |
+| `--orphan-file-gc-interval` | `24h` | Sweep cadence. The worker also sweeps **once at startup**, so a fresh deploy does not wait a full interval for its first report. A restart bypasses nothing: the pause, the in-flight gate and the age gate are all re-evaluated on that first sweep. |
+
+### `inventario_orphan_gc_blocked_tenants` > 0
+
+A tenant is skipped while it has an export or restore in flight — and for
+`min_age` after one finishes (a restore writes the *archive's* timestamps
+onto the rows it creates, so those rows would otherwise clear the age gate
+instantly). The blocking operation is named in an
+`event=orphan_gc.blocked` log line.
+
+The gauge reports the **last completed evaluation**, so read it only while
+`inventario_orphan_gc_runs_total{result="success"}` is advancing: a tick that
+never evaluated the gate (paused worker, `mode=off`, or a gate-build failure)
+resets it to `0` rather than leaving the previous tick's value standing and
+faking a pinned tenant forever.
+
+There is no heartbeat on exports/restores, so a **crashed** operation stays
+`running` / `in_progress` forever and pins its tenant permanently. That is
+the correct direction (under-collecting forever beats one wrong delete),
+but it needs manual attention: investigate and resolve the stuck operation.
+**Do not add a "stale after N hours → ignore it" escape hatch** — that
+re-opens exactly the race the gate closes.
+
+### Stopping it
+
+```bash
+inventario workers pause --type orphan-file-gc --reason "investigating a candidate" \
+  --db-dsn postgres://user:pass@localhost:5432/inventario
+```
+
+The sweep is skipped on the next tick; no restart needed.
 
 ---
 

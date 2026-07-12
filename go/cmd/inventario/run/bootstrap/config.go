@@ -46,8 +46,15 @@ type Config struct {
 	CurrencyMigrationInterval        string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
 	BusinessMetricsInterval          string `yaml:"business_metrics_interval" env:"BUSINESS_METRICS_INTERVAL" env-default:""`
 	WorkerControlRefreshInterval     string `yaml:"worker_control_refresh_interval" env:"WORKER_CONTROL_REFRESH_INTERVAL" env-default:""`
-	JWTSecret                        string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
-	FileSigningKey                   string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
+	// Orphan-file GC (#2237). Mode is off | report | delete and is validated
+	// at startup — an unknown value fails fast rather than silently defaulting
+	// a destructive knob.
+	OrphanFileGCInterval string `yaml:"orphan_file_gc_interval" env:"ORPHAN_FILE_GC_INTERVAL" env-default:""`
+	OrphanFileGCMinAge   string `yaml:"orphan_file_gc_min_age" env:"ORPHAN_FILE_GC_MIN_AGE" env-default:""`
+	OrphanFileGCMode     string `yaml:"orphan_file_gc_mode" env:"ORPHAN_FILE_GC_MODE" env-default:""`
+
+	JWTSecret      string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
+	FileSigningKey string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
 	// BackupSigningKey is the Ed25519 seed used to sign `.inb` backup
 	// archives (issue #534). Unlike the HMAC keys above it must decode to
 	// EXACTLY 32 bytes (the Ed25519 seed size): supply 64 hex characters
@@ -388,6 +395,26 @@ func (c *Config) setWorkerDefaults() {
 	}
 	if c.WorkerControlRefreshInterval == "" {
 		c.WorkerControlRefreshInterval = defaults.GetWorkerControlRefreshInterval()
+	}
+	c.setOrphanFileGCDefaults()
+}
+
+// setOrphanFileGCDefaults applies defaults to the orphan-file GC knobs (#2237).
+// Split out of setWorkerDefaults so the destructive worker's three safety knobs
+// sit together (and so setWorkerDefaults stays inside the cyclomatic budget).
+//
+// The mode default is itself a safety property: the worker ships as `report`,
+// which evaluates the full predicate and deletes nothing. It must never default
+// to `delete`.
+func (c *Config) setOrphanFileGCDefaults() {
+	if c.OrphanFileGCInterval == "" {
+		c.OrphanFileGCInterval = defaults.GetOrphanFileGCInterval()
+	}
+	if c.OrphanFileGCMinAge == "" {
+		c.OrphanFileGCMinAge = defaults.GetOrphanFileGCMinAge()
+	}
+	if c.OrphanFileGCMode == "" {
+		c.OrphanFileGCMode = defaults.GetOrphanFileGCMode()
 	}
 }
 

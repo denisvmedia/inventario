@@ -188,11 +188,25 @@ func (s *FileService) DeleteFileWithPhysical(ctx context.Context, fileID string)
 // that never had a job) matches zero rows and returns nil. Each job's slots are
 // cleared first because the slots.job_id -> jobs(id) FK is NO ACTION and must
 // be gone before the job row can be removed.
+//
+// The teardown runs through SERVICE (RLS-bypassing) registries, and that is
+// load-bearing: a thumbnail job is owned by the user who REQUESTED generation,
+// not by the file's creator (ThumbnailGenerationService.RequestThumbnailGeneration
+// stamps UserID = the requesting user on purpose, so one member cannot spend
+// another's rate limit), and merely VIEWING a not-yet-generated thumbnail
+// enqueues one (servePlaceholderThumbnail). The jobs table's RLS policy is
+// `tenant_id = ... AND user_id = get_current_user_id()`, so a user-scoped
+// teardown cannot SEE — let alone delete — a job another group member created
+// for the same file. The job row then survives and the file delete trips
+// fk_thumbnail_job_file (NO ACTION; PostgreSQL's RI check bypasses row
+// security, so an invisible child still blocks the parent).
+//
+// Caller-side authorization is unaffected: DeleteFileWithPhysical has already
+// resolved the file through a USER registry, so by the time the chain is torn
+// down the caller has been proven to own it. Widening only the job/slot
+// teardown deletes strictly the rows that reference THIS file id.
 func (s *FileService) deleteThumbnailGenerationChain(ctx context.Context, fileID string) error {
-	jobReg, err := s.factorySet.ThumbnailGenerationJobRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to create thumbnail generation job registry", err)
-	}
+	jobReg := s.factorySet.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry()
 
 	// Resolve every job for this file so each job's slots can be cleared before
 	// the job rows are deleted. No job is not an error — the file may never
@@ -203,10 +217,7 @@ func (s *FileService) deleteThumbnailGenerationChain(ctx context.Context, fileID
 	}
 
 	if len(jobs) > 0 {
-		slotReg, slotErr := s.factorySet.UserConcurrencySlotRegistryFactory.CreateUserRegistry(ctx)
-		if slotErr != nil {
-			return errxtrace.Wrap("failed to create user concurrency slot registry", slotErr)
-		}
+		slotReg := s.factorySet.UserConcurrencySlotRegistryFactory.CreateServiceRegistry()
 		for _, job := range jobs {
 			if slotErr := slotReg.DeleteByJobID(ctx, job.ID); slotErr != nil {
 				return errxtrace.Wrap("failed to delete concurrency slots for thumbnail job", slotErr, errx.Attrs("file_id", fileID, "job_id", job.ID))

@@ -412,6 +412,107 @@ type FileRegistry interface {
 	// and group, bypassing RLS. Implementations may return fewer rows
 	// than limit (the queue is exhausted) but must never return more.
 	ListPendingSizeBackfill(ctx context.Context, limit int) ([]*models.FileEntity, error)
+
+	// ListOrphanCandidates streams up to limit file rows that *may* be
+	// orphans — rows whose linked_entity_type/linked_entity_id points at
+	// an entity that no longer exists (#2237). It is the discovery half
+	// of the orphan-file GC; the worker independently re-verifies every
+	// candidate before deleting anything, so this is a filter, never an
+	// authorization to delete.
+	//
+	// The predicate implementations MUST honour, exactly:
+	//
+	//   1. linked_entity_type IN ('commodity', 'area', 'location') — a
+	//      positive ALLOWLIST, never a negation. The empty string is a
+	//      legitimate STANDALONE file (#2235: first-class, exported in
+	//      backups) and 'export' belongs to the backup subsystem's own
+	//      lifecycle; both — and any unknown/future link type — MUST be
+	//      excluded. A predicate shaped `linked_entity_id IS NULL OR NOT
+	//      EXISTS(...)` would silently eat every standalone file in the
+	//      installation.
+	//   2. linked_entity_id <> '' — a set type with an empty id is
+	//      malformed data, not garbage. It is EXCLUDED here, which means
+	//      KEPT and never surfaced to the worker: no probe can prove an
+	//      empty id absent, so such a row must never enter a candidate
+	//      set a destructive worker consumes. (The worker re-asserts the
+	//      same rule as defence-in-depth — the query is a filter, never
+	//      an authorization — so its malformed_link skip reason is
+	//      unreachable while this predicate holds, and stays correct if
+	//      the predicate is ever relaxed.)
+	//   3. BOTH created_at < olderThan AND updated_at < olderThan.
+	//      updated_at is the load-bearing one: PUT /files/{id} stamps it
+	//      with the app wall clock, so a file attached concurrently with
+	//      an entity delete is immune for the whole age window.
+	//   4. No row with id = linked_entity_id exists in the table named by
+	//      linked_entity_type.
+	//
+	// SERVICE-MODE ONLY. The existence check must see every tenant and
+	// group: PUT /files/{id} does not validate the link target's group,
+	// so a file legitimately linked to an entity in ANOTHER group exists
+	// in production. A group-scoped (RLS) implementation would read that
+	// live entity as nonexistent and hand the GC a live file to delete.
+	//
+	// Implementations may return fewer rows than limit but never more,
+	// and must order deterministically by the (created_at, id) KEYSET,
+	// ascending, resuming strictly AFTER the `after` cursor when it is
+	// non-zero.
+	//
+	// The cursor is not an optimization, it is a liveness requirement.
+	// Most rows the GC re-verifies are KEPT, not deleted (a blocked
+	// tenant, a suspended tenant, a pending_deletion group, an
+	// unresolvable owner — several of which never clear), and a kept row
+	// stays in the result set forever. Without a cursor, a bounded
+	// oldest-first window is squatted on by those rows and no other
+	// orphan in the installation is ever enumerated again — and in the
+	// shipping report mode, where NOTHING is ever deleted, the very same
+	// window would be re-reported on every tick.
+	ListOrphanCandidates(ctx context.Context, olderThan time.Time, after OrphanCandidateCursor, limit int) ([]*models.FileEntity, error)
+
+	// ExistingIDs returns the subset of ids that still have a file row,
+	// in ONE `WHERE id = ANY($1)` round-trip (#2237). Service-mode only.
+	//
+	// It backs the orphan-file GC's thumbnail sweep, which needs to know
+	// which of the file ids embedded in the keys it just listed are still
+	// live. It is deliberately id-driven rather than tenant-driven: a
+	// tenant-wide id dump would cost (and hold in memory) one entry per
+	// file row in the installation's largest tenant to answer a question
+	// about at most a few thousand listed keys.
+	//
+	// Missing / already-deleted ids are simply absent from the result; an
+	// empty input returns (nil, nil) without a query.
+	ExistingIDs(ctx context.Context, ids []string) ([]string, error)
+
+	// CountByOriginalPath returns how many file rows — across EVERY
+	// tenant and group — carry the given files.original_path (#2237).
+	// Service-mode only.
+	//
+	// It exists because a blob key is NOT row-unique and there is no
+	// unique index on original_path. An upload's key is
+	// `t/<tenant>/files/<sanitized-name>-<unix SECONDS><ext>`, which has
+	// no group segment, no row segment and no randomness: two uploads of
+	// the same filename inside one tenant in the same second (two members
+	// of different groups; one user multi-selecting two same-named files)
+	// legitimately produce two DISTINCT rows that share one key. Deleting
+	// a file row's blob by key therefore destroys the bytes of every other
+	// row pointing at it, and `files` has no soft-delete. The orphan-file
+	// GC calls this before any destructive step and KEEPS anything whose
+	// key is shared.
+	CountByOriginalPath(ctx context.Context, originalPath string) (int, error)
+}
+
+// OrphanCandidateCursor is the keyset position a paged
+// FileRegistry.ListOrphanCandidates scan resumes from: the last
+// (created_at, id) the caller has already seen. The zero value means
+// "start at the oldest row".
+type OrphanCandidateCursor struct {
+	CreatedAt time.Time
+	ID        string
+}
+
+// IsZero reports whether the cursor names no position, i.e. the scan
+// starts from the oldest candidate.
+func (c OrphanCandidateCursor) IsZero() bool {
+	return c.ID == "" && c.CreatedAt.IsZero()
 }
 
 // StorageBreakdown is the per-bucket byte count returned by

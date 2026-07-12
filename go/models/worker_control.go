@@ -45,6 +45,12 @@ const (
 	WorkerTypeMaintenanceReminder WorkerType = "maintenance-reminder"
 	// WorkerTypeCurrencyMigration pauses the currency migration worker.
 	WorkerTypeCurrencyMigration WorkerType = "currency-migration"
+	// WorkerTypeOrphanFileGC pauses the orphan-file GC sweeper (#2237).
+	// This is the only DESTRUCTIVE periodic worker in the set: pausing it
+	// is the operator's emergency stop, so the constant MUST also appear
+	// in allWorkerTypes and IsValid below — workerpause fails OPEN for
+	// unknown types, which would make the sweeper unpausable.
+	WorkerTypeOrphanFileGC WorkerType = "orphan-file-gc"
 )
 
 // allWorkerTypes is the canonical ordered set of pausable worker types.
@@ -67,6 +73,7 @@ var allWorkerTypes = []WorkerType{
 	WorkerTypeLoanReminder,
 	WorkerTypeMaintenanceReminder,
 	WorkerTypeCurrencyMigration,
+	WorkerTypeOrphanFileGC,
 }
 
 // AllWorkerTypes returns a copy of the canonical ordered worker-type set.
@@ -96,7 +103,8 @@ func (w WorkerType) IsValid() bool {
 		WorkerTypeStorageQuotaReminder,
 		WorkerTypeLoanReminder,
 		WorkerTypeMaintenanceReminder,
-		WorkerTypeCurrencyMigration:
+		WorkerTypeCurrencyMigration,
+		WorkerTypeOrphanFileGC:
 		return true
 	}
 	return false

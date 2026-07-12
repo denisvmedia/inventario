@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -541,6 +542,164 @@ func (r *FileRegistry) ListPendingSizeBackfill(ctx context.Context, limit int) (
 		return nil, errxtrace.Wrap("failed to list pending size-backfill files", err)
 	}
 	return files, nil
+}
+
+// ListOrphanCandidates returns up to limit file rows whose linked entity no
+// longer exists (#2237). Discovery half of the orphan-file GC; see the
+// interface doc in registry.FileRegistry for the full contract.
+//
+// The candidate predicate is a positive ALLOWLIST on linked_entity_type, never
+// a negation:
+//
+//   - ""       → a STANDALONE file. First-class since #2235 (exported in
+//     backups, swept as inventory by a full_replace restore). NOT an orphan,
+//     never a candidate.
+//   - 'export'  → owned by the backup subsystem's own lifecycle
+//     (DeleteExportWithFile / group purge). Never a candidate — and because
+//     the exports table is never probed at all, the `deleted_at IS NULL`
+//     filter on ExportRegistry.Get can never be mistaken for "gone".
+//   - anything else (including a future link type the model validator does
+//     not yet know about — the registries do NOT run ValidateWithContext, so
+//     the DB is a superset of the validator's enumeration) → kept, fails
+//     closed.
+//
+// The three NOT EXISTS anti-joins run under whatever role reg.Do selects. This
+// method is SERVICE-MODE ONLY on purpose: PUT /files/{id} does not validate the
+// link target's group, so a cross-group link is reachable in production and a
+// group-scoped probe would read a LIVE entity as missing.
+//
+// The scan is KEYSET-PAGINATED on (created_at, id): most re-verified candidates
+// are KEPT rather than deleted, and several keep-reasons never clear (a tenant
+// pinned by a crashed restore, a suspended tenant, a purged owner), so a
+// non-resumable oldest-first window would be squatted on by exactly those rows
+// forever and no other orphan in the installation would ever be enumerated.
+//
+// Backed by the existing files_linked_entity_idx / idx_files_tenant_linked_entity
+// — no new index, no migration.
+func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.Time, after registry.OrphanCandidateCursor, limit int) ([]*models.FileEntity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+
+	// $1 = olderThan; the cursor (when set) takes $2/$3, so the LIMIT
+	// placeholder index has to follow the arg list rather than be hardcoded.
+	args := []any{olderThan}
+	keyset := ""
+	if !after.IsZero() {
+		args = append(args, after.CreatedAt, after.ID)
+		keyset = "AND (f.created_at, f.id) > ($2, $3)"
+	}
+	args = append(args, limit)
+	limitPlaceholder := fmt.Sprintf("$%d", len(args))
+
+	var files []*models.FileEntity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT f.* FROM %s f
+			WHERE f.linked_entity_type IN ('commodity', 'area', 'location')
+			  AND f.linked_entity_id <> ''
+			  AND f.created_at < $1
+			  AND f.updated_at < $1
+			  %s
+			  AND NOT EXISTS (
+			      SELECT 1 FROM %s c
+			      WHERE f.linked_entity_type = 'commodity' AND c.id = f.linked_entity_id
+			  )
+			  AND NOT EXISTS (
+			      SELECT 1 FROM %s a
+			      WHERE f.linked_entity_type = 'area' AND a.id = f.linked_entity_id
+			  )
+			  AND NOT EXISTS (
+			      SELECT 1 FROM %s l
+			      WHERE f.linked_entity_type = 'location' AND l.id = f.linked_entity_id
+			  )
+			ORDER BY f.created_at ASC, f.id ASC
+			LIMIT %s`,
+			r.tableNames.Files(),
+			keyset,
+			r.tableNames.Commodities(),
+			r.tableNames.Areas(),
+			r.tableNames.Locations(),
+			limitPlaceholder,
+		)
+		rows, err := tx.QueryxContext(ctx, query, args...)
+		if err != nil {
+			return errxtrace.Wrap("failed to list orphan file candidates", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var file models.FileEntity
+			if scanErr := rows.StructScan(&file); scanErr != nil {
+				return errxtrace.Wrap("failed to scan file", scanErr)
+			}
+			files = append(files, &file)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list orphan file candidates", err)
+	}
+	return files, nil
+}
+
+// ExistingIDs returns the subset of ids that still have a file row, in ONE
+// `id = ANY($1)` round-trip (#2237). Service-mode only; backs the orphan-file
+// GC's thumbnail sweep. Missing ids are simply absent from the result — see the
+// interface doc in registry.FileRegistry for the full contract.
+func (r *FileRegistry) ExistingIDs(ctx context.Context, ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var existing []string
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT id FROM %s WHERE id = ANY($1)`, r.tableNames.Files())
+		rows, qerr := tx.QueryxContext(ctx, query, ids)
+		if qerr != nil {
+			return errxtrace.Wrap("failed to batch-check file ids", qerr)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if scanErr := rows.Scan(&id); scanErr != nil {
+				return errxtrace.Wrap("failed to scan file id", scanErr)
+			}
+			existing = append(existing, id)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to batch-check file ids", err)
+	}
+	return existing, nil
+}
+
+// CountByOriginalPath counts the file rows that reference the given blob key,
+// across EVERY tenant and group (#2237). Service-mode only.
+//
+// The count is deliberately NOT tenant-scoped. Post-#1793 keys carry a
+// `t/<tenant>/` prefix, but legacy flat keys (rows whose blob predates the
+// backfill) do not, so two rows in DIFFERENT tenants can reference one legacy
+// key. The orphan-file GC treats any key referenced by more than one row as
+// shared and keeps the row rather than destroy another row's bytes.
+//
+// An empty path counts as zero rather than matching every row whose blob is
+// unset — a caller must never conclude "nobody else references this" from it.
+func (r *FileRegistry) CountByOriginalPath(ctx context.Context, originalPath string) (int, error) {
+	if originalPath == "" {
+		return 0, nil
+	}
+	var count int
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE original_path = $1`, r.tableNames.Files())
+		return tx.QueryRowxContext(ctx, query, originalPath).Scan(&count)
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to count files by original path", err)
+	}
+	return count, nil
 }
 
 // SumSizeBreakdownByGroup mirrors SumSizeBreakdown but for an explicit

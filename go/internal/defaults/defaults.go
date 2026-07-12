@@ -41,6 +41,9 @@ type Workers struct {
 	CurrencyMigrationInterval        string // Currency migration worker active-poll interval (e.g., "5s")
 	BusinessMetricsInterval          string // Business-metrics collector interval (e.g., "60s")
 	WorkerControlRefreshInterval     string // Worker soft-pause control poll interval (e.g., "10s")
+	OrphanFileGCInterval             string // Orphan-file GC sweep interval (e.g., "24h")
+	OrphanFileGCMinAge               string // Minimum age before an orphan row/blob is eligible (e.g., "72h"; hard floor 24h)
+	OrphanFileGCMode                 string // Orphan-file GC mode: off | report | delete. Ships as "report" — it deletes nothing.
 }
 
 // ThumbnailGeneration contains default values for thumbnail generation configuration
@@ -112,6 +115,15 @@ func New() Config {
 			CurrencyMigrationInterval:        "5s",
 			BusinessMetricsInterval:          "60s",
 			WorkerControlRefreshInterval:     "10s",
+			// Orphan-file GC (#2237). Ships in REPORT mode: it evaluates the
+			// full predicate, logs every candidate and increments
+			// inventario_orphan_gc_candidates_total — and deletes nothing.
+			// A false positive here is irreversible user data loss, so the
+			// predicate has to be observed against real data before an
+			// operator opts into --orphan-file-gc-mode=delete.
+			OrphanFileGCInterval: "24h",
+			OrphanFileGCMinAge:   "72h",
+			OrphanFileGCMode:     "report",
 		},
 		ThumbnailGeneration: ThumbnailGeneration{
 			MaxConcurrentPerUser: 5,     // Maximum 5 simultaneous thumbnail generation jobs per user
@@ -217,6 +229,25 @@ func GetOperationSlotCleanupInterval() string {
 // GetGroupPurgeInterval returns the default interval between group purge sweeps.
 func GetGroupPurgeInterval() string {
 	return defaultConfig.Workers.GroupPurgeInterval
+}
+
+// GetOrphanFileGCInterval returns the default interval between orphan-file GC
+// sweeps (#2237).
+func GetOrphanFileGCInterval() string {
+	return defaultConfig.Workers.OrphanFileGCInterval
+}
+
+// GetOrphanFileGCMinAge returns the default minimum age a file row / thumbnail
+// blob must reach before the orphan-file GC will consider it (#2237).
+func GetOrphanFileGCMinAge() string {
+	return defaultConfig.Workers.OrphanFileGCMinAge
+}
+
+// GetOrphanFileGCMode returns the default orphan-file GC mode (#2237) —
+// "report", i.e. observe-only. Enforcement requires an explicit operator
+// opt-in.
+func GetOrphanFileGCMode() string {
+	return defaultConfig.Workers.OrphanFileGCMode
 }
 
 // GetWarrantyReminderInterval returns the default interval between

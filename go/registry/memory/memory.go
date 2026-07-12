@@ -34,6 +34,14 @@ func NewFactorySet() *registry.FactorySet {
 	userConcurrencySlotFactory := NewUserConcurrencySlotRegistryFactory()
 	operationSlotFactory := NewOperationSlotRegistryFactory()
 
+	// Wire the sibling registries the orphan-file GC's candidate scan probes
+	// for existence (#2237). Postgres does this with a SQL anti-join; the
+	// memory backend has no planner, so the file registry has to hold the
+	// three linked-entity factories. Deliberately a post-construction setter:
+	// commodityFactory depends on areaFactory which depends on
+	// locationFactory, and fileFactory is constructed before all of them.
+	fileFactory.SetLinkedEntityFactories(commodityFactory, areaFactory, locationFactory)
+
 	fs := &registry.FactorySet{}
 	fs.LocationRegistryFactory = locationFactory
 	fs.AreaRegistryFactory = areaFactory

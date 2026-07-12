@@ -2,11 +2,13 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
@@ -18,6 +20,18 @@ import (
 // FileRegistryFactory creates FileRegistry instances with proper context
 type FileRegistryFactory struct {
 	baseFileRegistry *Registry[models.FileEntity, *models.FileEntity]
+
+	// Sibling factories used ONLY by ListOrphanCandidates (#2237) to answer
+	// "does the entity this file is linked to still exist?". Postgres asks
+	// that with a SQL anti-join; the memory backend has no planner, so it
+	// has to hold the other registries. Wired by NewFactorySet via
+	// SetLinkedEntityFactories; nil for a bare NewFileRegistryFactory()
+	// (unit tests that only exercise the file table), in which case
+	// ListOrphanCandidates FAILS CLOSED with an error rather than
+	// reporting "the entity is gone" on no evidence.
+	commodityFactory *CommodityRegistryFactory
+	areaFactory      *AreaRegistryFactory
+	locationFactory  *LocationRegistryFactory
 }
 
 // FileRegistry is a context-aware registry that can only be created through the factory
@@ -25,6 +39,12 @@ type FileRegistry struct {
 	*Registry[models.FileEntity, *models.FileEntity]
 
 	userID string
+
+	// Carried from the factory; see FileRegistryFactory. Only read by
+	// ListOrphanCandidates.
+	commodityFactory *CommodityRegistryFactory
+	areaFactory      *AreaRegistryFactory
+	locationFactory  *LocationRegistryFactory
 }
 
 var _ registry.FileRegistry = (*FileRegistry)(nil)
@@ -34,6 +54,20 @@ func NewFileRegistryFactory() *FileRegistryFactory {
 	return &FileRegistryFactory{
 		baseFileRegistry: NewRegistry[models.FileEntity, *models.FileEntity](),
 	}
+}
+
+// SetLinkedEntityFactories wires the sibling registries the orphan-candidate
+// scan (#2237) probes for existence. Called once from NewFactorySet, after
+// all three factories exist. Leaving them unset is safe: ListOrphanCandidates
+// refuses to run rather than mis-report a live entity as missing.
+func (f *FileRegistryFactory) SetLinkedEntityFactories(
+	commodity *CommodityRegistryFactory,
+	area *AreaRegistryFactory,
+	location *LocationRegistryFactory,
+) {
+	f.commodityFactory = commodity
+	f.areaFactory = area
+	f.locationFactory = location
 }
 
 // Factory methods implementing registry.FileRegistryFactory
@@ -58,8 +92,11 @@ func (f *FileRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.
 	}
 
 	return &FileRegistry{
-		Registry: userRegistry,
-		userID:   user.ID,
+		Registry:         userRegistry,
+		userID:           user.ID,
+		commodityFactory: f.commodityFactory,
+		areaFactory:      f.areaFactory,
+		locationFactory:  f.locationFactory,
 	}, nil
 }
 
@@ -72,8 +109,11 @@ func (f *FileRegistryFactory) CreateServiceRegistry() registry.FileRegistry {
 	}
 
 	return &FileRegistry{
-		Registry: serviceRegistry,
-		userID:   "", // Clear userID to bypass user filtering
+		Registry:         serviceRegistry,
+		userID:           "", // Clear userID to bypass user filtering
+		commodityFactory: f.commodityFactory,
+		areaFactory:      f.areaFactory,
+		locationFactory:  f.locationFactory,
 	}
 }
 
@@ -262,6 +302,180 @@ func (r *FileRegistry) ListPendingSizeBackfill(_ context.Context, limit int) ([]
 		}
 	}
 	return pending, nil
+}
+
+// orphanCandidateLinkTypes is the positive ALLOWLIST of linked_entity_type
+// values the orphan-file GC (#2237) understands. It mirrors the IN (...) list
+// in the postgres ListOrphanCandidates query verbatim, and it is an allowlist
+// on purpose:
+//
+//   - ""       → a STANDALONE file. First-class since #2235 — it has no link,
+//     so it can never have a DANGLING one. Excluded structurally.
+//   - "export" → the backup subsystem's own artifact, with its own lifecycle.
+//     Excluded structurally, so the `deleted_at IS NULL` filter on the exports
+//     registry can never be misread as "the export is gone".
+//   - anything else (a future link type; the registries do NOT enforce
+//     models.FileEntity.ValidateWithContext, so the DB is a superset of the
+//     validator's enumeration) → excluded, fails closed.
+var orphanCandidateLinkTypes = map[string]bool{
+	"commodity": true,
+	"area":      true,
+	"location":  true,
+}
+
+// ListOrphanCandidates mirrors the postgres method — file rows in the
+// linked-entity allowlist whose target no longer exists and whose BOTH
+// timestamps are older than olderThan (#2237). The memory backend has no SQL
+// planner, so the anti-join is three Get probes against the sibling service
+// registries.
+//
+// Runs in service mode (the GC is RLS-blind by necessity: a file may be
+// legitimately linked to an entity in another group, and a group-scoped probe
+// would read that LIVE entity as missing). Fails closed when the sibling
+// factories were never wired.
+func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.Time, after registry.OrphanCandidateCursor, limit int) ([]*models.FileEntity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	if r.commodityFactory == nil || r.areaFactory == nil || r.locationFactory == nil {
+		// No evidence available ⇒ no deletions. Never guess.
+		return nil, errxtrace.Classify(registry.ErrFieldRequired,
+			errx.Attrs("field_name", "linkedEntityFactories"))
+	}
+
+	// Snapshot the shape-eligible rows under the read lock, then probe the
+	// sibling registries with the lock released (they own their own mutexes;
+	// this just keeps the critical section short and honest).
+	var shortlist []*models.FileEntity
+	r.lock.RLock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		file := pair.Value
+		if file == nil {
+			continue
+		}
+		if !orphanCandidateLinkTypes[file.LinkedEntityType] {
+			continue // allowlist: standalone (#2235), export, and unknown types are never candidates
+		}
+		if file.LinkedEntityID == "" {
+			continue // malformed link, not garbage: EXCLUDED here, so it is kept and never surfaced
+		}
+		if !file.CreatedAt.Before(olderThan) || !file.UpdatedAt.Before(olderThan) {
+			continue // BOTH timestamps must clear the age gate
+		}
+		if !afterOrphanCursor(file, after) {
+			continue // already covered by an earlier page of this scan
+		}
+		v := *file
+		shortlist = append(shortlist, &v)
+	}
+	r.lock.RUnlock()
+
+	// (created_at, id) ascending — the same total order the postgres keyset
+	// query produces, so a cursor handed back by one backend means the same
+	// thing in the other.
+	sort.SliceStable(shortlist, func(i, j int) bool {
+		return lessOrphanKeyset(shortlist[i], shortlist[j])
+	})
+
+	comReg := r.commodityFactory.CreateServiceRegistry()
+	areaReg := r.areaFactory.CreateServiceRegistry()
+	locReg := r.locationFactory.CreateServiceRegistry()
+
+	var orphans []*models.FileEntity
+	for _, file := range shortlist {
+		var err error
+		switch file.LinkedEntityType {
+		case "commodity":
+			_, err = comReg.Get(ctx, file.LinkedEntityID)
+		case "area":
+			_, err = areaReg.Get(ctx, file.LinkedEntityID)
+		case "location":
+			_, err = locReg.Get(ctx, file.LinkedEntityID)
+		default:
+			continue // unreachable: the allowlist above already filtered
+		}
+		switch {
+		case err == nil:
+			continue // the entity is alive — not an orphan
+		case errors.Is(err, registry.ErrNotFound):
+			orphans = append(orphans, file)
+		default:
+			// A transient probe failure must never read as "gone".
+			return nil, errxtrace.Wrap("failed to probe linked entity existence", err)
+		}
+		if len(orphans) >= limit {
+			break
+		}
+	}
+	return orphans, nil
+}
+
+// lessOrphanKeyset orders two candidates by the (created_at, id) keyset the
+// paged scan resumes on.
+func lessOrphanKeyset(a, b *models.FileEntity) bool {
+	if a.CreatedAt.Equal(b.CreatedAt) {
+		return a.ID < b.ID
+	}
+	return a.CreatedAt.Before(b.CreatedAt)
+}
+
+// afterOrphanCursor reports whether file sorts strictly after the cursor in the
+// (created_at, id) keyset order. A zero cursor accepts every row.
+func afterOrphanCursor(file *models.FileEntity, after registry.OrphanCandidateCursor) bool {
+	if after.IsZero() {
+		return true
+	}
+	if file.CreatedAt.Equal(after.CreatedAt) {
+		return file.ID > after.ID
+	}
+	return file.CreatedAt.After(after.CreatedAt)
+}
+
+// CountByOriginalPath mirrors the postgres method — how many file rows, across
+// EVERY tenant and group, reference the given blob key (#2237). Service-mode
+// only: it reads the shared item map directly rather than through the
+// visibility filter, because the whole point is to see rows the caller cannot.
+func (r *FileRegistry) CountByOriginalPath(_ context.Context, originalPath string) (int, error) {
+	if originalPath == "" {
+		return 0, nil
+	}
+	count := 0
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		file := pair.Value
+		if file == nil || file.File == nil {
+			continue
+		}
+		if file.OriginalPath == originalPath {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// ExistingIDs mirrors the postgres method — the subset of ids that still have a
+// file row (#2237). Service-mode only.
+func (r *FileRegistry) ExistingIDs(_ context.Context, ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	want := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		want[id] = true
+	}
+
+	var existing []string
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		file := pair.Value
+		if file == nil || !want[file.ID] {
+			continue
+		}
+		existing = append(existing, file.ID)
+	}
+	return existing, nil
 }
 
 // SumSizeBreakdown mirrors the postgres aggregator: per-category byte

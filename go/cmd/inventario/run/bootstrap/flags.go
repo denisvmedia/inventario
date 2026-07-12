@@ -38,6 +38,11 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.MaintenanceReminderInterval, "maintenance-reminder-interval", cfg.MaintenanceReminderInterval, "Interval between maintenance reminder sweeps (14/7/1-day + overdue maintenance emails; e.g., 1h)")
 	flags.StringVar(&cfg.CurrencyMigrationInterval, "currency-migration-interval", cfg.CurrencyMigrationInterval, "Currency migration worker active-poll interval (when pending rows exist; idle cadence is fixed at 1m). Values like 5s, 10s.")
 	flags.StringVar(&cfg.BusinessMetricsInterval, "business-metrics-interval", cfg.BusinessMetricsInterval, "Interval between installation-wide business-metrics collection sweeps (#843; e.g., 60s)")
+	flags.StringVar(&cfg.OrphanFileGCInterval, "orphan-file-gc-interval", cfg.OrphanFileGCInterval, "Interval between orphan-file GC sweeps (#2237; e.g., 24h)")
+
+	flags.StringVar(&cfg.OrphanFileGCMinAge, "orphan-file-gc-min-age", cfg.OrphanFileGCMinAge, "Minimum age a file row / thumbnail blob must reach before the orphan-file GC considers it (#2237; default 72h, hard floor 24h)")
+	//nolint:lll
+	flags.StringVar(&cfg.OrphanFileGCMode, "orphan-file-gc-mode", cfg.OrphanFileGCMode, "Orphan-file GC mode: off (no scan), report (scan + log + metrics, DELETES NOTHING; the default) or delete (enforce). Deletion is irreversible — watch inventario_orphan_gc_candidates_total in report mode for a full release cycle before enabling delete.")
 	flags.IntVar(&cfg.ThumbnailBatchSize, "thumbnail-batch-size", cfg.ThumbnailBatchSize, "Maximum thumbnail jobs processed per batch")
 	flags.StringVar(&cfg.ThumbnailPollInterval, "thumbnail-poll-interval", cfg.ThumbnailPollInterval, "Thumbnail worker poll interval (e.g., 5s, 10s)")
 	flags.StringVar(&cfg.ThumbnailCleanupInterval, "thumbnail-cleanup-interval", cfg.ThumbnailCleanupInterval, "Interval between thumbnail job cleanup runs (e.g., 5m)")

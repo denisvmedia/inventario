@@ -104,6 +104,9 @@ func (c *Command) run() error {
 	stopGroupPurge := bootstrap.StartGroupPurgeWorker(ctx, rs, c.cfg)
 	defer stopGroupPurge()
 
+	stopOrphanFileGC := bootstrap.StartOrphanFileGCWorker(ctx, rs, c.cfg)
+	defer stopOrphanFileGC()
+
 	stopWarrantyReminder := bootstrap.StartWarrantyReminderWorker(ctx, rs, c.cfg)
 	defer stopWarrantyReminder()
 
