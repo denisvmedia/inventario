@@ -106,6 +106,7 @@ const (
 	orphanGCSkipProbeError        = "probe_error"
 	orphanGCSkipMalformedLink     = "malformed_link"
 	orphanGCSkipDisallowedLink    = "disallowed_link_type"
+	orphanGCSkipMissingProbe      = "missing_probe"
 	orphanGCSkipAge               = "age"
 	orphanGCSkipInflight          = "inflight"
 	orphanGCSkipGroupInactive     = "group_inactive"
@@ -929,7 +930,14 @@ func (w *OrphanFileGCWorker) verifyRowCandidate(ctx context.Context, file *model
 	// registry.ErrNotFound; anything else aborts the tick.
 	probe := w.deps.Probes.forLinkType(file.LinkedEntityType)
 	if probe == nil {
-		return orphanRowVerdict{reason: orphanGCSkipDisallowedLink}, nil
+		// NOT disallowed_link_type: screenRowCandidate already rejected every
+		// non-allowlisted type above, so reaching here means the type IS
+		// allowlisted and the worker was handed a nil probe for it — a MISWIRING,
+		// not a policy decision. Both outcomes keep the file (fail closed), which
+		// is exactly why they must not share a label: a miswired worker reports
+		// zero candidates forever, and "disallowed_link_type" makes that look like
+		// the intended handling of an unknown type instead of the bug it is.
+		return orphanRowVerdict{reason: orphanGCSkipMissingProbe}, nil
 	}
 	switch err := probe(ctx, file.LinkedEntityID); {
 	case err == nil:

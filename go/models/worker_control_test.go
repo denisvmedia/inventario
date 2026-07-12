@@ -13,7 +13,7 @@ import (
 // it does not know about (IsPaused returns false for an unknown key), so a
 // constant that is declared but omitted from allWorkerTypes would make the
 // only DESTRUCTIVE periodic worker in the tree impossible for an operator to
-// stop with `inventario workers pause orphan-file-gc`. Assert the whole
+// stop with `inventario workers pause --type orphan-file-gc`. Assert the whole
 // round-trip: the const is canonical, parses, validates, and is enumerated.
 func TestWorkerTypeOrphanFileGC_IsPausable(t *testing.T) {
 	c := qt.New(t)

@@ -844,6 +844,35 @@ func TestOrphanFileGC_LosingAThumbnailRaceIsNotAFailure(t *testing.T) {
 		qt.Commentf("losing the race to another replica was reported as a delete failure"))
 }
 
+// A nil probe for an ALLOWLISTED link type is a MISWIRING, not a policy
+// decision, and the two must not share a skip reason.
+//
+// Both outcomes keep the file, which is exactly why the labels have to differ:
+// a worker wired without its commodity probe reports zero candidates forever,
+// and under `disallowed_link_type` that reads as the intended handling of an
+// unknown link type rather than the bug it is. The operator watching report mode
+// during the rollout would conclude "no orphans in this install" from a worker
+// that is structurally incapable of finding any.
+func TestOrphanFileGC_MissingProbeIsNotDisallowedLink(t *testing.T) {
+	c := qt.New(t)
+	f := newGCFixture(c)
+
+	file := f.seedFile(seedFileOpts{linkType: "commodity", linkID: "gone", linkMeta: "images"})
+
+	deps := f.deps()
+	deps.Probes.Commodity = nil // the miswiring
+
+	worker := services.NewOrphanFileGCWorker(deps,
+		services.WithOrphanFileGCMode(services.OrphanFileGCModeDelete))
+
+	logs := captureLogs(c, func() { worker.RunOnce(f.ctx) })
+
+	c.Assert(f.fileExists(file.ID), qt.IsTrue, qt.Commentf("an unprobeable file must be KEPT"))
+	c.Assert(logs, qt.Contains, `"reason":"missing_probe"`)
+	c.Assert(logs, qt.Not(qt.Contains), `"reason":"disallowed_link_type"`,
+		qt.Commentf("a miswired worker must not masquerade as a policy skip"))
+}
+
 // The worker sweeps ONCE AT STARTUP instead of waiting a full interval. With the
 // 24h default the alternative is a day of silence after every deploy — and in
 // the shipping report mode that silence is the feature not working, since the
