@@ -440,24 +440,32 @@ func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) err
 	// same row-first / blob-best-effort contract as DeleteFileWithPhysical).
 	if sourceBlobToDelete != "" {
 		// SHARED-KEY GUARD for a ROWLESS blob (#2250). This key has no owning file
-		// row, so the row-based guard in FileService cannot see a sharer — and
-		// restore-upload keys minted before #2241 were `<name>-<unix SECONDS>.inb`,
-		// which two uploads of `backup.inb` in one second collide on. Two pending
-		// imported exports can therefore point at ONE blob, and deleting either
-		// export would destroy the other's source archive: the surviving import
-		// then restores nothing, or worse, is left pointing at bytes that are gone.
+		// row at the moment of deletion, so the row-based guard in FileService is
+		// not enough on its own — and restore-upload keys minted before #2241 were
+		// `<name>-<unix SECONDS>.inb`, which two uploads of `backup.inb` collide on
+		// (no group segment, no randomness). Two pending imported exports can point
+		// at ONE blob, and deleting either would destroy the other's source archive.
 		//
-		// The owner set for a rowless restore blob is the EXPORTS table, so that is
-		// what we ask. Our own export row is already deleted, so anything still
-		// carrying this FilePath is somebody else's. ListWithDeleted, not List: a
-		// soft-deleted export still owns its artifacts.
-		shared, cerr := s.restoreBlobSharedByOtherExports(ctx, expReg, sourceBlobToDelete)
+		// Two things this guard MUST do, and the first cut of it did neither:
+		//
+		//   1. Run SERVICE-MODE. `expReg` above is user-scoped (tenant AND group
+		//      RLS), so it cannot see the very sharer this exists to protect: a
+		//      colliding export in another group or tenant is invisible, the guard
+		//      concludes "sole owner", and deletes another user's archive. That is
+		//      the exact fail-open the whole #2250 effort is about.
+		//   2. Union BOTH owner tables — exports AND files. SourceFilePath is
+		//      REQUEST-CONTROLLED (apiserver/exports.go only checks the tenant
+		//      prefix), so a user can point a pending import at a pre-#2241 FILES
+		//      key belonging to another group, then delete the export to weaponise
+		//      this into a blob-delete against that file. Consulting only exports
+		//      leaves the files owner invisible; the delete proceeds.
+		shared, cerr := s.sourceBlobReferencedByOtherRows(ctx, sourceBlobToDelete)
 		switch {
 		case cerr != nil:
 			slog.WarnContext(ctx, "keeping pending imported-export source blob: could not establish sole ownership",
 				"export_id", id, "source_blob_key", sourceBlobToDelete, "error", cerr.Error())
 		case shared:
-			slog.WarnContext(ctx, "keeping pending imported-export source blob: another export still references it",
+			slog.WarnContext(ctx, "keeping pending imported-export source blob: another row references it",
 				"export_id", id, "source_blob_key", sourceBlobToDelete)
 		default:
 			if delErr := s.fileService.DeletePhysicalFile(ctx, sourceBlobToDelete); delErr != nil {
@@ -470,23 +478,38 @@ func (s *EntityService) DeleteExportWithFile(ctx context.Context, id string) err
 	return nil
 }
 
-// restoreBlobSharedByOtherExports reports whether any export row still carries
-// blobKey as its FilePath (#2250).
+// sourceBlobReferencedByOtherRows reports whether ANY row — a file OR an export —
+// still references blobKey (#2250). Our own export row is already deleted before
+// this runs, and a pending import has no file row, so any hit is somebody else's.
 //
-// A pending imported export's source `.inb` blob is ROWLESS — it has no
-// FileEntity, which is why the file-row guard in FileService cannot protect it
-// (#2121). Its owner set is the exports table, so that is what gets asked.
+// Both lookups are SERVICE-MODE (RLS-bypassing) and deliberately not
+// tenant/group-scoped, for the same reason FileService.blobSharedOutsideBatch is:
+// a pre-#2241 key carries no group segment and a pre-#1793 key no tenant prefix,
+// so the sharer whose bytes are at stake can live in another group or tenant
+// entirely, and a scoped lookup would not see it.
 //
-// ListWithDeleted, not List: a soft-deleted export still owns its artifacts, and
-// treating one as gone is how you delete the artifacts out from under it.
+// BOTH tables, because the two owner sets are disjoint and either can hold the
+// key: a rowless restore blob is owned by an export row (FilePath), a normal blob
+// by a file row (original_path), and SourceFilePath is request-controlled so a
+// caller can aim a pending export at either. ListWithDeleted, not List — a
+// soft-deleted export still owns its artifacts.
 //
-// Callers must fail closed on error: without proof that nobody else holds the
-// key, the bytes stay.
-func (s *EntityService) restoreBlobSharedByOtherExports(ctx context.Context, expReg registry.ExportRegistry, blobKey string) (bool, error) {
+// Callers fail closed on error: without proof that nobody else holds the key, the
+// bytes stay.
+func (s *EntityService) sourceBlobReferencedByOtherRows(ctx context.Context, blobKey string) (bool, error) {
 	if blobKey == "" {
 		return false, nil
 	}
-	exports, err := expReg.ListWithDeleted(ctx)
+
+	fileIDs, err := s.factorySet.FileRegistryFactory.CreateServiceRegistry().ListIDsByOriginalPath(ctx, blobKey)
+	if err != nil {
+		return false, err
+	}
+	if len(fileIDs) > 0 {
+		return true, nil
+	}
+
+	exports, err := s.factorySet.ExportRegistryFactory.CreateServiceRegistry().ListWithDeleted(ctx)
 	if err != nil {
 		return false, err
 	}

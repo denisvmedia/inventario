@@ -542,6 +542,105 @@ func TestEntityService_DeleteExport_CleansPendingImportSourceBlob(t *testing.T) 
 		qt.Commentf("pending imported-export source blob %s must not leak", sourceKey))
 }
 
+// A pending imported export's source blob must NOT be deleted while ANOTHER
+// pending export — in a DIFFERENT GROUP — still points at it (#2250).
+//
+// This is the fail-open the review caught: the first cut of the guard asked a
+// USER-scoped export registry, which is RLS-scoped to the caller's tenant AND
+// group, so a colliding export in another group was invisible and the guard
+// happily deleted its archive. Pre-#2241 restore keys had no group segment, so
+// two `backup.inb` uploads in two groups of one tenant collide on one key —
+// permanently, in deployed databases.
+//
+// Mutation check: point sourceBlobReferencedByOtherRows at expReg (user-scoped)
+// again and this reds.
+func TestEntityService_DeleteExport_KeepsSourceBlobSharedByAnotherGroup(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	baseCtx := newTestContext(factorySet)
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	const sharedKey = "t/test-tenant/restores/backup-1783824560.inb"
+	b := must.Must(blob.OpenBucket(baseCtx, uploadLocation))
+	defer b.Close()
+	c.Assert(b.WriteAll(baseCtx, sharedKey, []byte("group-b's only copy"), nil), qt.IsNil)
+
+	// Two pending imported exports, same key, in two DIFFERENT groups.
+	ctxA := appctx.WithGroup(baseCtx, &models.LocationGroup{TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: "group-a"}, TenantID: "test-tenant-id"}})
+	ctxB := appctx.WithGroup(baseCtx, &models.LocationGroup{TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: "group-b"}, TenantID: "test-tenant-id"}})
+
+	mkPending := func(ctx context.Context) string {
+		regSet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+		e := must.Must(regSet.ExportRegistry.Create(ctx, models.Export{
+			Type: models.ExportTypeImported, Status: models.ExportStatusPending,
+			Description: "pending", FilePath: sharedKey, Imported: true,
+		}))
+		return e.ID
+	}
+	exportA := mkPending(ctxA)
+	_ = mkPending(ctxB) // the sharer in group B
+
+	// Group A deletes its export.
+	c.Assert(service.DeleteExportWithFile(ctxA, exportA), qt.IsNil)
+
+	// Group B's source archive must survive — another pending import still needs it.
+	c.Assert(must.Must(b.Exists(baseCtx, sharedKey)), qt.IsTrue,
+		qt.Commentf("deleting group A's export destroyed group B's live import source"))
+}
+
+// A pending imported export's source blob must NOT be deleted while a FILE row
+// owns the same key (#2250) — the weaponisable case.
+//
+// SourceFilePath is request-controlled (only the tenant prefix is validated), so
+// a user can create a pending import pointing at ANOTHER group's pre-#2241 FILES
+// blob, then delete the export to turn this cleanup into a blob-delete against
+// that file. The guard therefore has to union the FILES owner set, not just
+// exports — consulting exports alone leaves the file owner invisible.
+//
+// Mutation check: drop the files branch from sourceBlobReferencedByOtherRows and
+// this reds.
+func TestEntityService_DeleteExport_KeepsSourceBlobOwnedByAFileRow(t *testing.T) {
+	c := qt.New(t)
+
+	tempDir := c.TempDir()
+	uploadLocation := uploadLocationForTempDir(tempDir)
+
+	factorySet := memory.NewFactorySet()
+	ctx := newTestContext(factorySet)
+	service := services.NewEntityService(factorySet, uploadLocation)
+
+	// A live file owns the key — the victim.
+	const key = "t/test-tenant/files/invoice-1783824560.pdf"
+	b := must.Must(blob.OpenBucket(ctx, uploadLocation))
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, key, []byte("the victim file's bytes"), nil), qt.IsNil)
+
+	fileReg := factorySet.FileRegistryFactory.CreateServiceRegistry()
+	_ = must.Must(fileReg.Create(ctx, models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID: "test-tenant-id", GroupID: "victim-group", CreatedByUserID: "victim",
+		},
+		Title: "invoice", Type: models.FileTypeDocument,
+		File: &models.File{Path: "invoice", OriginalPath: key, Ext: ".pdf", MIMEType: "application/pdf"},
+	}))
+
+	// The attacker's pending import points at the victim's file key.
+	regSet := must.Must(factorySet.CreateUserRegistrySet(ctx))
+	attack := must.Must(regSet.ExportRegistry.Create(ctx, models.Export{
+		Type: models.ExportTypeImported, Status: models.ExportStatusPending,
+		Description: "attack", FilePath: key, Imported: true,
+	}))
+
+	c.Assert(service.DeleteExportWithFile(ctx, attack.ID), qt.IsNil)
+
+	c.Assert(must.Must(b.Exists(ctx, key)), qt.IsTrue,
+		qt.Commentf("a pending-import delete destroyed a live file's bytes it merely pointed at"))
+}
+
 // TestDeleteFileWithPhysical_DeletesThumbnailJob asserts the #2117 cleanup
 // order: deleting a file also removes the thumbnail-generation job that
 // references it and the concurrency slot that references that job, so the
