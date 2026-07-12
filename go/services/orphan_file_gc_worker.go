@@ -986,10 +986,15 @@ func (w *OrphanFileGCWorker) verifyRowCandidate(ctx context.Context, file *model
 		if cerr != nil {
 			return orphanRowVerdict{}, cerr // transient: abort the tick, never guess
 		}
-		for _, id := range refs {
-			if id != file.ID {
-				return orphanRowVerdict{reason: orphanGCSkipSharedBlobKey}, nil
-			}
+		// The ONLY shape that proceeds is exactly [this row]. Not "no id that
+		// isn't mine" — that quietly passes an EMPTY result, and an empty result
+		// means the lookup could not even see the row we are holding. Whatever
+		// produced that (a replica that has not caught up, a concurrent delete, a
+		// registry bug), it is a claim about the world we just contradicted, and
+		// "I cannot see my own row" is not evidence that a blob is safe to
+		// destroy. Fail closed, exactly as the old refs != 1 check did.
+		if len(refs) != 1 || refs[0] != file.ID {
+			return orphanRowVerdict{reason: orphanGCSkipSharedBlobKey}, nil
 		}
 	}
 

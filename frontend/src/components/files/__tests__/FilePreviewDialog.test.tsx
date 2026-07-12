@@ -42,4 +42,20 @@ describe("FilePreviewDialog download name", () => {
 
     expect(screen.getByRole("link")).toHaveAttribute("download", "Kitchen receipt.pdf")
   })
+
+  // `path` is nominally the name WITHOUT its extension, but the API accepts one
+  // that already carries it (see go/jsonapi/files_update_validation_test.go,
+  // which round-trips "receipt.pdf"), so appending unconditionally would save
+  // the file as `receipt.pdf.pdf`.
+  it("does not double the extension when path already carries it", () => {
+    render(<FilePreviewDialog file={makeFile({ path: "receipt.pdf" })} onClose={() => {}} />)
+
+    expect(screen.getByRole("link")).toHaveAttribute("download", "receipt.pdf")
+  })
+
+  it("matches the extension case-insensitively", () => {
+    render(<FilePreviewDialog file={makeFile({ path: "Receipt.PDF" })} onClose={() => {}} />)
+
+    expect(screen.getByRole("link")).toHaveAttribute("download", "Receipt.PDF")
+  })
 })

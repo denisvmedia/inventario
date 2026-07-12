@@ -1448,6 +1448,48 @@ func TestOrphanFileGC_SharedBlobKeyIsNeverSwept(t *testing.T) {
 		qt.Commentf("an orphan whose blob key is shared must be KEPT WHOLE, not half-deleted"))
 }
 
+// blindRefsRegistry answers "nobody references that key" for a row we are
+// holding in our hand — the shape a lagging read replica, a concurrent delete,
+// or a registry bug would produce.
+type blindRefsRegistry struct {
+	services.OrphanFileGCFileRegistry
+}
+
+func (blindRefsRegistry) ListIDsByOriginalPath(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+// FAIL CLOSED on an empty answer. The sole-ownership gate proceeds on EXACTLY
+// one shape — [this row] — and on nothing else.
+//
+// An empty result is not "the blob is unreferenced, help yourself": it is the
+// lookup failing to see the very row the worker is holding. Whatever produced
+// it, the worker has just been handed a claim about the world that it can
+// directly contradict, and "I cannot see my own row" is not evidence that a
+// blob is safe to destroy. A `for _, id := range refs { if id != file.ID }`
+// loop reads as if it checks this and silently passes the empty case.
+func TestOrphanFileGC_EmptyRefsFailsClosed(t *testing.T) {
+	c := qt.New(t)
+	f := newGCFixture(c)
+
+	key := blobkeys.BuildFileBlobKey(f.tenantID, "sole-1783824560", ".jpg")
+	orphan := f.seedFile(seedFileOpts{
+		linkType: "commodity", linkID: "gone", linkMeta: "images", blobKey: key,
+	})
+
+	deps := f.deps()
+	deps.Files = blindRefsRegistry{deps.Files}
+
+	worker := services.NewOrphanFileGCWorker(deps,
+		services.WithOrphanFileGCMode(services.OrphanFileGCModeDelete))
+	worker.RunOnce(f.ctx)
+
+	c.Assert(f.fileExists(orphan.ID), qt.IsTrue,
+		qt.Commentf("the GC deleted a row whose blob ownership it could not establish"))
+	c.Assert(f.blobExists(key), qt.IsTrue,
+		qt.Commentf("an empty ownership answer was read as a licence to destroy the bytes"))
+}
+
 // The guard must not turn into a blanket refusal: an orphan that solely owns its
 // key is still collected, blob and all.
 func TestOrphanFileGC_SoleOwnedBlobKeyIsStillSwept(t *testing.T) {
