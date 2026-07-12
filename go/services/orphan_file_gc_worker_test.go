@@ -844,6 +844,52 @@ func TestOrphanFileGC_LosingAThumbnailRaceIsNotAFailure(t *testing.T) {
 		qt.Commentf("losing the race to another replica was reported as a delete failure"))
 }
 
+// The worker sweeps ONCE AT STARTUP instead of waiting a full interval. With the
+// 24h default the alternative is a day of silence after every deploy — and in
+// the shipping report mode that silence is the feature not working, since the
+// candidate counts are the entire point.
+//
+// The second half of the test is the one that matters: a restart must bypass
+// NOTHING. The soft-pause is DB-backed and re-read inside RunOnce, so a paused
+// worker still does nothing on boot.
+func TestOrphanFileGC_SweepsOnceAtStartup(t *testing.T) {
+	t.Run("an unpaused worker sweeps immediately", func(t *testing.T) {
+		c := qt.New(t)
+		f := newGCFixture(c)
+
+		file := f.seedFile(seedFileOpts{linkType: "commodity", linkID: "gone", linkMeta: "images"})
+
+		worker := services.NewOrphanFileGCWorker(f.deps(),
+			services.WithOrphanFileGCMode(services.OrphanFileGCModeDelete),
+			services.WithOrphanFileGCInterval(time.Hour), // the ticker must never fire
+		)
+		worker.Start(f.ctx)
+		worker.Stop() // waits for the startup sweep to finish
+
+		c.Assert(f.fileExists(file.ID), qt.IsFalse,
+			qt.Commentf("the worker waited for the first tick instead of sweeping at startup"))
+	})
+
+	t.Run("a paused worker still does nothing", func(t *testing.T) {
+		c := qt.New(t)
+		f := newGCFixture(c)
+
+		file := f.seedFile(seedFileOpts{linkType: "commodity", linkID: "gone", linkMeta: "images"})
+
+		pause := &stubPause{paused: map[models.WorkerType]bool{models.WorkerTypeOrphanFileGC: true}}
+		worker := services.NewOrphanFileGCWorker(f.deps(),
+			services.WithOrphanFileGCMode(services.OrphanFileGCModeDelete),
+			services.WithOrphanFileGCInterval(time.Hour),
+			services.WithOrphanFileGCPauseController(pause),
+		)
+		worker.Start(f.ctx)
+		worker.Stop()
+
+		c.Assert(f.fileExists(file.ID), qt.IsTrue,
+			qt.Commentf("the startup sweep bypassed the soft-pause emergency stop"))
+	})
+}
+
 // A half-wired DESTRUCTIVE worker must refuse to start, not log a successful
 // startup and then panic inside the sweep goroutine. A nil Exports/Restores
 // registry is not a crash to debug later — it is the concurrency gate silently

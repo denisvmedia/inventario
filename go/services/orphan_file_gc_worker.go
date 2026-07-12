@@ -522,6 +522,20 @@ func (w *OrphanFileGCWorker) Stop() {
 }
 
 func (w *OrphanFileGCWorker) runCleanup(ctx context.Context) {
+	// Sweep once at startup rather than waiting a full interval, matching
+	// LoginEventRetentionWorker and the reminder workers. With the 24h default
+	// the alternative is a day of silence after every deploy — and in the
+	// shipping REPORT mode that silence IS the feature not working: the whole
+	// point of report mode is to give the operator candidate counts to look at
+	// before they ever arm the delete.
+	//
+	// Safe on this worker specifically because a restart bypasses NOTHING: the
+	// soft-pause (#1308) is DB-backed and re-read inside RunOnce, so a paused
+	// worker still does nothing on boot; the in-flight gate is DB-backed too, so
+	// a tenant mid-restore stays blocked across the restart; and the age gate is
+	// wall-clock, so nothing becomes eligible merely because the process is new.
+	w.RunOnce(ctx)
+
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
