@@ -852,6 +852,12 @@ func (w *OrphanFileGCWorker) sweepRowCandidate(
 	if err != nil {
 		// A non-ErrNotFound probe failure must never read as "gone".
 		orphanGCSkippedTotal.WithLabelValues(orphanGCSkipProbeError).Inc()
+		// NAME the row that aborted the tick. The cursor deliberately advances
+		// past it, so a permanently-failing row (a poison row, a flaky replica)
+		// stops a tick every time the scan comes back round to it — and without
+		// this record an operator would watch skipped{reason=probe_error} climb
+		// with nothing to grep for.
+		logOrphanRow(slog.LevelError, w.mode, "failed", orphanGCSkipProbeError, file, "error", err.Error())
 		return err
 	}
 	if !verdict.proceed {
@@ -1054,7 +1060,7 @@ func (w *OrphanFileGCWorker) deleteRow(ctx context.Context, file *models.FileEnt
 //	deleting  — about to be deleted; the pre-image, written while the row still exists
 //	deleted   — the delete RETURNED SUCCESS. Never emitted speculatively.
 //	failed    — the delete raised (deleteRow); the row is still there and is retried
-func logOrphanRow(level slog.Level, mode OrphanFileGCMode, action, reason string, file *models.FileEntity) {
+func logOrphanRow(level slog.Level, mode OrphanFileGCMode, action, reason string, file *models.FileEntity, extra ...any) {
 	attrs := []any{
 		"event", "orphan_gc.row",
 		"mode", string(mode),
@@ -1082,6 +1088,7 @@ func logOrphanRow(level slog.Level, mode OrphanFileGCMode, action, reason string
 			"size_bytes", file.SizeBytes,
 		)
 	}
+	attrs = append(attrs, extra...)
 	slog.Log(context.Background(), level, "Orphan file GC: orphan file row", attrs...)
 }
 
@@ -1255,6 +1262,14 @@ func (w *OrphanFileGCWorker) sweepTenantThumbnails(
 			// The one and only path to a delete.
 		default:
 			orphanGCSkippedTotal.WithLabelValues(orphanGCSkipProbeError).Inc()
+			// NAME the key that aborted the tick, for the same reason the row
+			// path does: the cursor moves past it, so a permanently-failing
+			// probe stops a tick each time the cycle returns to it, and the
+			// metric alone gives an operator nothing to grep for.
+			slog.Error("Orphan file GC: thumbnail row probe failed; aborting tick",
+				"event", "orphan_gc.thumbnail", "action", "failed",
+				"reason", orphanGCSkipProbeError, "blob_key", cand.key,
+				"file_id", fileID, "tenant_id", tenantID, "error", err.Error())
 			// Persist the position BEFORE aborting, for the same reason as the
 			// row cursor: a recurring failure on one key would otherwise make
 			// every tick re-list and re-probe the identical head of this

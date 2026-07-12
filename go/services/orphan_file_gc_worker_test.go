@@ -710,10 +710,17 @@ func TestOrphanFileGC_ProbeErrorAbortsTheTick(t *testing.T) {
 	file := f.seedFile(seedFileOpts{linkType: "commodity", linkID: "gone", linkMeta: "images"})
 	f.probeErr = context.DeadlineExceeded // NOT registry.ErrNotFound
 
-	f.sweep()
+	logs := captureLogs(c, func() { f.sweep() })
 
 	c.Assert(f.fileExists(file.ID), qt.IsTrue,
 		qt.Commentf("a transient probe failure was treated as 'the entity is gone'"))
+
+	// The tick aborts AND the cursor moves past this row, so a permanently
+	// failing row stops a tick every cycle. The log must name it — a rising
+	// skipped{reason=probe_error} with nothing to grep for is not diagnosable.
+	c.Assert(logs, qt.Contains, `"reason":"probe_error"`)
+	c.Assert(logs, qt.Contains, file.ID,
+		qt.Commentf("the row that aborted the tick was not named in the logs"))
 }
 
 // The row scan must keep its place across an ABORTED tick. A probe failure that
@@ -1537,12 +1544,20 @@ func TestOrphanFileGC_ThumbnailProbeErrorNeverReadsAsGone(t *testing.T) {
 		err:          context.DeadlineExceeded, // NOT registry.ErrNotFound
 	}
 
-	services.NewOrphanFileGCWorker(deps,
-		services.WithOrphanFileGCMode(services.OrphanFileGCModeDelete),
-	).RunOnce(f.ctx)
+	logs := captureLogs(c, func() {
+		services.NewOrphanFileGCWorker(deps,
+			services.WithOrphanFileGCMode(services.OrphanFileGCModeDelete),
+		).RunOnce(f.ctx)
+	})
 
 	c.Assert(f.blobExists(key), qt.IsTrue,
 		qt.Commentf("a transient probe failure was treated as 'the file row is gone'"))
+
+	// As on the row path: the tick aborts and the cursor moves past this key, so
+	// the key that keeps failing must be named or it cannot be found.
+	c.Assert(logs, qt.Contains, `"reason":"probe_error"`)
+	c.Assert(logs, qt.Contains, key,
+		qt.Commentf("the thumbnail key that aborted the tick was not named in the logs"))
 }
 
 // ---------------------------------------------------------------------------
