@@ -35,6 +35,11 @@ func TestDefaults(t *testing.T) {
 	c.Assert(cfg.Workers.GroupPurgeInterval, qt.Equals, "5m")
 	c.Assert(cfg.Workers.CurrencyMigrationInterval, qt.Equals, "5s")
 	c.Assert(cfg.Workers.WorkerControlRefreshInterval, qt.Equals, "10s")
+	// Orphan-file GC (#2237). The mode default is a SAFETY property: the
+	// worker ships observe-only and must never default to deleting.
+	c.Assert(cfg.Workers.OrphanFileGCInterval, qt.Equals, "24h")
+	c.Assert(cfg.Workers.OrphanFileGCMinAge, qt.Equals, "72h")
+	c.Assert(cfg.Workers.OrphanFileGCMode, qt.Equals, "report")
 
 	// Test thumbnail generation defaults
 	c.Assert(cfg.ThumbnailGeneration.MaxConcurrentPerUser, qt.Equals, 5)
@@ -65,6 +70,9 @@ func TestDefaultGetters(t *testing.T) {
 	c.Assert(defaults.GetGroupPurgeInterval(), qt.Equals, "5m")
 	c.Assert(defaults.GetCurrencyMigrationInterval(), qt.Equals, "5s")
 	c.Assert(defaults.GetWorkerControlRefreshInterval(), qt.Equals, "10s")
+	c.Assert(defaults.GetOrphanFileGCInterval(), qt.Equals, "24h")
+	c.Assert(defaults.GetOrphanFileGCMinAge(), qt.Equals, "72h")
+	c.Assert(defaults.GetOrphanFileGCMode(), qt.Equals, "report")
 	c.Assert(defaults.GetThumbnailBatchSize(), qt.Equals, 10)
 	c.Assert(defaults.GetThumbnailPollInterval(), qt.Equals, "5s")
 	c.Assert(defaults.GetThumbnailCleanupInterval(), qt.Equals, "5m")

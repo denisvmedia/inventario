@@ -206,6 +206,79 @@ func StartGroupPurgeWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) fun
 	return worker.Stop
 }
 
+// StartOrphanFileGCWorker wires and starts the orphan-file GC sweeper (#2237)
+// and returns its stop function.
+//
+// This is the only DESTRUCTIVE periodic worker in the tree. Two things about
+// the wiring are load-bearing:
+//
+//  1. Every registry it reads is a SERVICE (RLS-bypassing) registry, and every
+//     one of them is read-only. In particular the linked-entity existence
+//     probes MUST be service-mode and match BY ID ONLY: PUT /files/{id} does
+//     not validate the link target's group, so a file legitimately linked to an
+//     entity in ANOTHER group exists in production, and a group-scoped probe
+//     would read that LIVE entity as missing and hand the GC a live file.
+//  2. Deletion goes exclusively through services.FileService.DeleteFileWithPhysical,
+//     which internally creates a USER-scoped registry. The worker impersonates
+//     the file's own creator + group, so the DELETE statement executes under RLS
+//     bound to the file's own (tenant, group): discovery is broad, destruction
+//     is narrow.
+//
+// It ships in report mode (see Config.OrphanFileGCMode) and therefore deletes
+// nothing until an operator explicitly opts in.
+func StartOrphanFileGCWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
+	fs := rs.FactorySet
+	fileService := services.NewFileService(fs, rs.Params.UploadLocation)
+
+	// Service-mode (RLS-bypassing), read-only. Held for the process lifetime,
+	// matching StartOperationSlotCleanupWorker.
+	commodityReg := fs.CommodityRegistryFactory.CreateServiceRegistry()
+	areaReg := fs.AreaRegistryFactory.CreateServiceRegistry()
+	locationReg := fs.LocationRegistryFactory.CreateServiceRegistry()
+
+	deps := services.OrphanFileGCDeps{
+		Files: fs.FileRegistryFactory.CreateServiceRegistry(),
+		Probes: services.OrphanFileGCProbes{
+			Commodity: func(ctx context.Context, id string) error {
+				_, err := commodityReg.Get(ctx, id)
+				return err
+			},
+			Area: func(ctx context.Context, id string) error {
+				_, err := areaReg.Get(ctx, id)
+				return err
+			},
+			Location: func(ctx context.Context, id string) error {
+				_, err := locationReg.Get(ctx, id)
+				return err
+			},
+		},
+		Exports:        fs.ExportRegistryFactory.CreateServiceRegistry(),
+		Restores:       fs.RestoreOperationRegistryFactory.CreateServiceRegistry(),
+		Tenants:        fs.TenantRegistry,
+		Groups:         fs.LocationGroupRegistry,
+		Users:          fs.UserRegistry,
+		Deleter:        fileService,
+		UploadLocation: rs.Params.UploadLocation,
+	}
+
+	// Both values were already validated in ParseWorkerDurations (positive
+	// interval, min-age at or above the hard floor, known mode), so the
+	// options here cannot silently fall back.
+	mode, _ := services.ParseOrphanFileGCMode(cfg.OrphanFileGCMode)
+	opts := []services.OrphanFileGCOption{
+		services.WithOrphanFileGCInterval(rs.WorkerDurations.OrphanFileGCInterval),
+		services.WithOrphanFileGCMinAge(rs.WorkerDurations.OrphanFileGCMinAge),
+		services.WithOrphanFileGCMode(mode),
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithOrphanFileGCPauseController(rs.PauseController))
+	}
+
+	worker := services.NewOrphanFileGCWorker(deps, opts...)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
 // StartWarrantyReminderWorker wires and starts the warranty reminder
 // worker (#1367). Mirrors the group-purge wiring: takes the configured
 // interval from rs.WorkerDurations and pulls the public URL from cfg

@@ -27,6 +27,9 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 		MaintenanceReminderInterval:      "55m",
 		CurrencyMigrationInterval:        "8s",
 		BusinessMetricsInterval:          "90s",
+		OrphanFileGCInterval:             "12h",
+		OrphanFileGCMinAge:               "48h",
+		OrphanFileGCMode:                 "report",
 		ThumbnailPollInterval:            "7s",
 		ThumbnailCleanupInterval:         "6m",
 		ThumbnailJobRetentionPeriod:      "48h",
@@ -53,6 +56,8 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 	c.Assert(got.MaintenanceReminderInterval, qt.Equals, 55*time.Minute)
 	c.Assert(got.CurrencyMigrationInterval, qt.Equals, 8*time.Second)
 	c.Assert(got.BusinessMetricsInterval, qt.Equals, 90*time.Second)
+	c.Assert(got.OrphanFileGCInterval, qt.Equals, 12*time.Hour)
+	c.Assert(got.OrphanFileGCMinAge, qt.Equals, 48*time.Hour)
 	c.Assert(got.ThumbnailPollInterval, qt.Equals, 7*time.Second)
 	c.Assert(got.ThumbnailCleanupInterval, qt.Equals, 6*time.Minute)
 	c.Assert(got.ThumbnailJobRetentionPeriod, qt.Equals, 48*time.Hour)
@@ -140,4 +145,73 @@ func TestParseWorkerDurations_FailsOnInvalidFlag(t *testing.T) {
 			c.Assert(got, qt.Equals, bootstrap.WorkerDurations{})
 		})
 	}
+}
+
+// The orphan-file GC is the only DESTRUCTIVE periodic worker in the tree, so
+// both of its safety knobs are validated at startup and a bad value is a hard
+// failure, not a warning an operator can miss in a log (#2237).
+func TestParseWorkerDurations_OrphanFileGCSafetyKnobs(t *testing.T) {
+	cases := []struct {
+		name        string
+		mutate      func(*bootstrap.Config)
+		wantMessage string
+	}{
+		{
+			name:        "min-age below the 24h hard floor is rejected",
+			mutate:      func(c *bootstrap.Config) { c.OrphanFileGCMinAge = "1h" },
+			wantMessage: "must be at least",
+		},
+		{
+			name:        "min-age exactly one second below the floor is rejected",
+			mutate:      func(c *bootstrap.Config) { c.OrphanFileGCMinAge = "23h59m59s" },
+			wantMessage: "must be at least",
+		},
+		{
+			name:        "non-positive interval is rejected",
+			mutate:      func(c *bootstrap.Config) { c.OrphanFileGCInterval = "0s" },
+			wantMessage: "must be positive",
+		},
+		{
+			name:        "malformed interval is rejected",
+			mutate:      func(c *bootstrap.Config) { c.OrphanFileGCInterval = "nope" },
+			wantMessage: "invalid",
+		},
+		{
+			name:        "unknown mode is rejected",
+			mutate:      func(c *bootstrap.Config) { c.OrphanFileGCMode = "purge" },
+			wantMessage: "must be one of off, report, delete",
+		},
+		{
+			name:        "mode is case-sensitive",
+			mutate:      func(c *bootstrap.Config) { c.OrphanFileGCMode = "DELETE" },
+			wantMessage: "must be one of off, report, delete",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			cfg := &bootstrap.Config{}
+			cfg.SetDefaults()
+			tc.mutate(cfg)
+
+			_, err := bootstrap.ParseWorkerDurations(cfg)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Contains, tc.wantMessage)
+		})
+	}
+}
+
+// The floor itself is accepted — it is a floor, not an exclusive bound.
+func TestParseWorkerDurations_OrphanFileGCMinAgeFloorIsInclusive(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := &bootstrap.Config{}
+	cfg.SetDefaults()
+	cfg.OrphanFileGCMinAge = "24h"
+
+	got, err := bootstrap.ParseWorkerDurations(cfg)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.OrphanFileGCMinAge, qt.Equals, 24*time.Hour)
 }

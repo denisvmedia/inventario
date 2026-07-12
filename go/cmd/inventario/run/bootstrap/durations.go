@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/denisvmedia/inventario/services"
 )
 
 // WorkerDurations holds the parsed time.Duration values for every duration-
@@ -26,6 +28,8 @@ type WorkerDurations struct {
 	CurrencyMigrationInterval        time.Duration
 	BusinessMetricsInterval          time.Duration
 	WorkerControlRefreshInterval     time.Duration
+	OrphanFileGCInterval             time.Duration
+	OrphanFileGCMinAge               time.Duration
 	ThumbnailPollInterval            time.Duration
 	ThumbnailCleanupInterval         time.Duration
 	ThumbnailJobRetentionPeriod      time.Duration
@@ -71,6 +75,8 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		{"maintenance-reminder-interval", cfg.MaintenanceReminderInterval, &out.MaintenanceReminderInterval},
 		{"currency-migration-interval", cfg.CurrencyMigrationInterval, &out.CurrencyMigrationInterval},
 		{"business-metrics-interval", cfg.BusinessMetricsInterval, &out.BusinessMetricsInterval},
+		{"orphan-file-gc-interval", cfg.OrphanFileGCInterval, &out.OrphanFileGCInterval},
+		{"orphan-file-gc-min-age", cfg.OrphanFileGCMinAge, &out.OrphanFileGCMinAge},
 		{"thumbnail-poll-interval", cfg.ThumbnailPollInterval, &out.ThumbnailPollInterval},
 		{"thumbnail-cleanup-interval", cfg.ThumbnailCleanupInterval, &out.ThumbnailCleanupInterval},
 		{"thumbnail-job-retention-period", cfg.ThumbnailJobRetentionPeriod, &out.ThumbnailJobRetentionPeriod},
@@ -84,6 +90,27 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 			return WorkerDurations{}, err
 		}
 		*spec.dst = d
+	}
+
+	// The orphan-file GC min-age (#2237) has a HARD FLOOR on top of the
+	// positive-value check every other duration gets. The GC is the only
+	// destructive periodic worker in the tree and the age gate is one of its
+	// load-bearing safety properties, so a too-short window is a startup
+	// failure, not a warning an operator can miss in a log.
+	if out.OrphanFileGCMinAge < services.MinOrphanFileGCMinAge {
+		err := fmt.Errorf("invalid --orphan-file-gc-min-age %q: must be at least %s",
+			cfg.OrphanFileGCMinAge, services.MinOrphanFileGCMinAge)
+		slog.Error("Refusing to start the orphan-file GC with an unsafe min-age", "error", err)
+		return WorkerDurations{}, err
+	}
+
+	// The orphan-file GC mode (#2237) is validated here too, alongside the
+	// durations, so every knob the destructive worker reads is checked before
+	// a single goroutine starts.
+	if _, ok := services.ParseOrphanFileGCMode(cfg.OrphanFileGCMode); !ok {
+		err := fmt.Errorf("invalid --orphan-file-gc-mode %q: must be one of off, report, delete", cfg.OrphanFileGCMode)
+		slog.Error("Refusing to start with an unknown orphan-file GC mode", "error", err)
+		return WorkerDurations{}, err
 	}
 
 	// The soft-pause refresh interval (#1308) is parsed tolerantly rather

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -68,6 +69,18 @@ func (s *stubFileRegistry) CountByCategory(context.Context, string, *models.File
 }
 
 func (s *stubFileRegistry) ListPendingSizeBackfill(context.Context, int) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) ListOrphanCandidates(context.Context, time.Time, registry.OrphanCandidateCursor, int) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) ListIDsByTenant(context.Context, string) ([]string, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) CountByOriginalPath(context.Context, string) (int, error) {
 	panic("not implemented")
 }
 
