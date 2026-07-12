@@ -44,13 +44,29 @@ export interface FilePreviewDialogProps {
   onDelete?: (fileId: string) => void
 }
 
+// appendExt gives `name` the extension `ext`, unless it already ends with it.
+// Case-insensitive, because a user who typed "Receipt.PDF" gets one extension,
+// not two.
+function appendExt(name: string, ext: string | undefined | null): string {
+  if (!ext) return name
+  return name.toLowerCase().endsWith(ext.toLowerCase()) ? name : `${name}${ext}`
+}
+
 export function FilePreviewDialog({ file, onClose, onDelete }: FilePreviewDialogProps) {
   const { t } = useTranslation()
   if (!file) return null
 
   const mime = file.file.mime_type
   const title = file.file.title?.trim() || file.file.path?.trim() || file.file.id
-  const downloadName = file.file.original_path || file.file.path || title
+  // NOT original_path: that field is the storage blob KEY
+  // (`t/<tenant>/files/<uuid>.jpg`), never a filename the user would recognise
+  // — offering it as the download name saved their receipt as a UUID under a
+  // path-shaped name. Build the name from what the user actually sees.
+  //
+  // `path` is nominally the name WITHOUT its extension, but the API accepts one
+  // that already carries it ("receipt.pdf"), so appending unconditionally would
+  // hand the browser `receipt.pdf.pdf`.
+  const downloadName = appendExt(file.file.path?.trim() || title, file.file.ext)
   const downloadUrl = file.signedUrl?.url
 
   function handleDelete() {

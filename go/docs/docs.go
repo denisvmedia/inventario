@@ -13437,7 +13437,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "original_path": {
-                    "description": "OriginalPath is the original filename as uploaded by the user.\nExample: \"invoice.pdf\"",
+                    "description": "OriginalPath is the storage blob key, NOT a filename despite the name.\nThe human filename lives on Path/Title.\nExample: \"t/\u003ctenant\u003e/files/f47ac10b-58cc-4372-a567-0e02b2c3d479.pdf\"\n\nMinted from a server-side UUID (blobkeys.BuildFileBlobKey). It is the key\nevery reader opens and every delete path removes by, so it must be unique\nper row — see #2241, and the shared-key guard in FileService, for what\nhappens when it is not.",
                     "type": "string"
                 },
                 "path": {

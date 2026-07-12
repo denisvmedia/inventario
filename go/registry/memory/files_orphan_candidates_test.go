@@ -186,39 +186,48 @@ func TestMemoryFileRegistry_ListOrphanCandidates_KeysetCursor(t *testing.T) {
 }
 
 // A blob key is NOT row-unique — there is no unique index on original_path, and
-// an upload key carries only a sanitized filename plus a unix SECOND. Two rows
-// in one tenant can legitimately share one key, and deleting one row's blob by
-// key destroys the other row's bytes. CountByOriginalPath is what lets the GC
-// see that, so it must count rows the caller cannot otherwise see: every tenant,
-// every group.
-func TestMemoryFileRegistry_CountByOriginalPath(t *testing.T) {
+// a pre-#2241 upload key carried only a sanitized filename plus a unix SECOND.
+// Two rows in one tenant can legitimately share one key, and deleting one row's
+// blob by key destroys the other row's bytes. ListIDsByOriginalPath is what lets
+// the delete paths (and the GC) see that: it returns the IDS of every row on the
+// key, across every tenant and group — rows the caller cannot otherwise see.
+func TestMemoryFileRegistry_ListIDsByOriginalPath(t *testing.T) {
 	c := qt.New(t)
 	fs := memory.NewFactorySet()
 
+	// A pre-#2241 key: `<name>-<unix SECONDS><ext>`, which two same-named
+	// uploads in one second collide on. Rows like these are already sitting in
+	// deployed databases and can never be un-collided by a code change, so the
+	// delete paths must keep asking who else points at the blob.
 	const shared = "t/tenant-1/files/receipt-1783824560.jpg"
-	seedOrphanFileWithPath(c, fs, "tenant-1", "group-1", "commodity", "gone", 30*24*time.Hour, shared)
-	seedOrphanFileWithPath(c, fs, "tenant-1", "group-2", "", "", 30*24*time.Hour, shared)
-	seedOrphanFileWithPath(c, fs, "tenant-1", "group-1", "", "", 30*24*time.Hour, "t/tenant-1/files/sole-1783824560.jpg")
+	a := seedOrphanFileWithPath(c, fs, "tenant-1", "group-1", "commodity", "gone", 30*24*time.Hour, shared)
+	b := seedOrphanFileWithPath(c, fs, "tenant-1", "group-2", "", "", 30*24*time.Hour, shared)
+	sole := seedOrphanFileWithPath(c, fs, "tenant-1", "group-1", "", "", 30*24*time.Hour, "t/tenant-1/files/sole-1783824560.jpg")
 
 	reg := fs.FileRegistryFactory.CreateServiceRegistry()
 	ctx := context.Background()
 
-	n, err := reg.CountByOriginalPath(ctx, shared)
+	// Service mode: the row in the OTHER group must be visible, or the delete
+	// that consults this would happily destroy its bytes.
+	ids, err := reg.ListIDsByOriginalPath(ctx, shared)
 	c.Assert(err, qt.IsNil)
-	c.Assert(n, qt.Equals, 2, qt.Commentf("a key shared by two rows must not look sole-owned"))
+	c.Assert(ids, qt.HasLen, 2)
+	c.Assert(ids, qt.Contains, a)
+	c.Assert(ids, qt.Contains, b, qt.Commentf("a sharer in another group was invisible"))
 
-	n, err = reg.CountByOriginalPath(ctx, "t/tenant-1/files/sole-1783824560.jpg")
+	ids, err = reg.ListIDsByOriginalPath(ctx, "t/tenant-1/files/sole-1783824560.jpg")
 	c.Assert(err, qt.IsNil)
-	c.Assert(n, qt.Equals, 1)
+	c.Assert(ids, qt.DeepEquals, []string{sole})
 
-	n, err = reg.CountByOriginalPath(ctx, "t/tenant-1/files/never-uploaded.jpg")
+	ids, err = reg.ListIDsByOriginalPath(ctx, "t/tenant-1/files/never-uploaded.jpg")
 	c.Assert(err, qt.IsNil)
-	c.Assert(n, qt.Equals, 0)
+	c.Assert(ids, qt.HasLen, 0)
 
-	// An empty path must never be read as "nobody references this".
-	n, err = reg.CountByOriginalPath(ctx, "")
+	// "" is the sentinel for a row with no blob, not a key. It must never come
+	// back as "these rows reference it".
+	ids, err = reg.ListIDsByOriginalPath(ctx, "")
 	c.Assert(err, qt.IsNil)
-	c.Assert(n, qt.Equals, 0)
+	c.Assert(ids, qt.HasLen, 0)
 }
 
 func TestMemoryFileRegistry_ExistingIDs(t *testing.T) {

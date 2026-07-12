@@ -240,7 +240,7 @@ func (p OrphanFileGCProbes) forLinkType(linkType string) EntityExistenceProbe {
 type OrphanFileGCFileRegistry interface {
 	ListOrphanCandidates(ctx context.Context, olderThan time.Time, after registry.OrphanCandidateCursor, limit int) ([]*models.FileEntity, error)
 	ExistingIDs(ctx context.Context, ids []string) ([]string, error)
-	CountByOriginalPath(ctx context.Context, originalPath string) (int, error)
+	ListIDsByOriginalPath(ctx context.Context, originalPath string) ([]string, error)
 	Get(ctx context.Context, id string) (*models.FileEntity, error)
 }
 
@@ -957,31 +957,43 @@ func (w *OrphanFileGCWorker) verifyRowCandidate(ctx context.Context, file *model
 	}
 
 	// R8 — SOLE OWNERSHIP OF THE BLOB. The row delete is RLS-narrow, but the
-	// blob delete that follows it inside DeleteFileWithPhysical is KEY-scoped —
-	// and a blob key is NOT row-unique. An upload key is
-	// `t/<tenant>/files/<sanitized-name>-<unix SECONDS><ext>`: no group segment,
-	// no row segment, no randomness (internal/filekit.UploadFileName), and there
-	// is no unique index on files.original_path. Two uploads of the same
-	// filename inside one tenant in the same second — two members of different
-	// groups; one user multi-selecting two same-named files — produce two
-	// DISTINCT rows sharing one key. Deleting the orphan's blob would then
-	// destroy the bytes of a LIVE row (a standalone file, #2235, is not even
-	// reachable by any other gate here), irreversibly: `files` has no
-	// soft-delete and there is no trash.
+	// blob delete that follows it inside DeleteFileWithPhysical is KEY-scoped,
+	// and a blob key is NOT row-unique: there is no unique index on
+	// files.original_path.
+	//
+	// Uploads minted since #2241 carry a server-side UUID and cannot collide.
+	// The rows already sitting in deployed databases can, forever: their key is
+	// `t/<tenant>/files/<sanitized-name>-<unix SECONDS><ext>` — no group segment,
+	// no row segment, no randomness — so two members of different groups who
+	// uploaded the same filename in one second have two DISTINCT rows on ONE
+	// key. Deleting this orphan's blob would then destroy the bytes of a LIVE
+	// row (a standalone file, #2235, is not even reachable by any other gate
+	// here), irreversibly: `files` has no soft-delete and there is no trash.
 	//
 	// So: unless this row is the ONLY one referencing its key, the file is KEPT
-	// whole. Under-collecting a rare same-second filename collision is free;
-	// destroying a live file's bytes is not. There is no TOCTOU here — the key
-	// embeds the SECOND it was minted in, and a candidate must be at least
-	// MinOrphanFileGCMinAge old, so a fresh upload can never mint a colliding
-	// key while the tick runs; a restore, the only other writer that can
-	// re-introduce one, blocks the whole tenant via the concurrency gate.
+	// whole. Under-collecting a rare legacy collision is free; destroying a live
+	// file's bytes is not. DeleteFileWithPhysical re-asserts the same guard
+	// (#2241) — this one is here so the GC never even reports such a row as a
+	// candidate, and so a delete-mode tick cannot spend its budget on rows the
+	// primitive would refuse anyway.
+	//
+	// No TOCTOU: a candidate must be at least MinOrphanFileGCMinAge old, and no
+	// live writer can mint a key colliding with a legacy one (new keys are
+	// UUIDs); a restore, the only writer that can re-introduce an archived key,
+	// blocks the whole tenant via the concurrency gate.
 	if file.File != nil && file.OriginalPath != "" {
-		refs, cerr := w.deps.Files.CountByOriginalPath(ctx, file.OriginalPath)
+		refs, cerr := w.deps.Files.ListIDsByOriginalPath(ctx, file.OriginalPath)
 		if cerr != nil {
 			return orphanRowVerdict{}, cerr // transient: abort the tick, never guess
 		}
-		if refs != 1 {
+		// The ONLY shape that proceeds is exactly [this row]. Not "no id that
+		// isn't mine" — that quietly passes an EMPTY result, and an empty result
+		// means the lookup could not even see the row we are holding. Whatever
+		// produced that (a replica that has not caught up, a concurrent delete, a
+		// registry bug), it is a claim about the world we just contradicted, and
+		// "I cannot see my own row" is not evidence that a blob is safe to
+		// destroy. Fail closed, exactly as the old refs != 1 check did.
+		if len(refs) != 1 || refs[0] != file.ID {
 			return orphanRowVerdict{reason: orphanGCSkipSharedBlobKey}, nil
 		}
 	}

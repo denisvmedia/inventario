@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	"github.com/google/uuid"
 	"gocloud.dev/blob"
 
 	"github.com/denisvmedia/inventario/apiserver/middleware"
@@ -364,12 +365,24 @@ func (api *uploadsAPI) readUploadedFiles(r *http.Request, tenantID string, kind 
 // error (wrapped in uploadHTTPError for the unprocessable-entity-bound
 // MIME mismatch).
 func (api *uploadsAPI) saveOnePart(ctx context.Context, part io.Reader, basename, tenantID string, kind uploadKind, allowedContentTypes []string) (uploadedFile, error) {
+	// The blob key is minted from a fresh server-side UUID, NOT from the
+	// filename (#2241). The key is the delete key and nothing enforces one row
+	// per key, so a key derived from `<name>-<unix SECONDS>` — which two
+	// same-named uploads in one second collide on — is a key whose deletion
+	// destroys another live file's bytes, irreversibly. The human name survives
+	// as the file's Title/Path; it has no business in the key.
+	//
+	// The row does not exist yet (this runs in the streaming multipart
+	// middleware), which is exactly why the key cannot be the row id — and does
+	// not need to be. Uniqueness and unguessability are all it owes.
+	blobID := uuid.New().String()
+
 	var blobKey string
 	switch kind {
 	case uploadKindRestore:
-		blobKey = blobkeys.BuildRestoreUploadKey(tenantID, basename)
+		blobKey = blobkeys.BuildRestoreUploadKey(tenantID, blobID, basename)
 	default:
-		blobKey = blobkeys.BuildFileUploadKey(tenantID, basename)
+		blobKey = blobkeys.BuildFileBlobKey(tenantID, blobID, filekit.Extension(basename))
 	}
 	mimeType, size, err := api.saveFile(ctx, blobKey, part, allowedContentTypes)
 	switch {

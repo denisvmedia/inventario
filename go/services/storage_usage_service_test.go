@@ -80,7 +80,7 @@ func (s *stubFileRegistry) ExistingIDs(context.Context, []string) ([]string, err
 	panic("not implemented")
 }
 
-func (s *stubFileRegistry) CountByOriginalPath(context.Context, string) (int, error) {
+func (s *stubFileRegistry) ListIDsByOriginalPath(context.Context, string) ([]string, error) {
 	panic("not implemented")
 }
 

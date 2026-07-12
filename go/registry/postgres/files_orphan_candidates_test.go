@@ -175,16 +175,17 @@ func TestFileRegistry_Postgres_ListOrphanCandidates(t *testing.T) {
 	})
 }
 
-// TestFileRegistry_Postgres_CountByOriginalPath pins the guard that stops the
-// orphan-file GC from destroying a LIVE file's bytes.
+// TestFileRegistry_Postgres_ListIDsByOriginalPath pins the lookup that stops
+// every delete path — and the orphan-file GC — from destroying a LIVE file's
+// bytes.
 //
-// files.original_path has NO unique index, and an upload key is
+// files.original_path has NO unique index, and a pre-#2241 upload key was
 // `t/<tenant>/files/<sanitized-name>-<unix SECONDS><ext>` — no group segment, no
 // row segment, no randomness. Two rows in one tenant can therefore legitimately
 // share one blob key, while the blob delete inside DeleteFileWithPhysical is
-// key-scoped: deleting the orphan would take the live row's bytes with it,
+// key-scoped: deleting one row would take the other's bytes with it,
 // irreversibly (`files` has no soft-delete).
-func TestFileRegistry_Postgres_CountByOriginalPath(t *testing.T) {
+func TestFileRegistry_Postgres_ListIDsByOriginalPath(t *testing.T) {
 	c := qt.New(t)
 
 	_, cleanup := setupTestRegistrySet(t)
@@ -225,19 +226,19 @@ func TestFileRegistry_Postgres_CountByOriginalPath(t *testing.T) {
 	mk(group2, shared)
 	mk(group1, sole)
 
-	n, err := svc.CountByOriginalPath(ctx, shared)
+	ids, err := svc.ListIDsByOriginalPath(ctx, shared)
 	c.Assert(err, qt.IsNil)
-	c.Assert(n, qt.Equals, 2, qt.Commentf("a key shared by two rows must not look sole-owned to the GC"))
+	c.Assert(ids, qt.HasLen, 2, qt.Commentf("a key shared by two rows must not look sole-owned"))
 
-	n, err = svc.CountByOriginalPath(ctx, sole)
+	ids, err = svc.ListIDsByOriginalPath(ctx, sole)
 	c.Assert(err, qt.IsNil)
-	c.Assert(n, qt.Equals, 1)
+	c.Assert(ids, qt.HasLen, 1)
 
 	t.Run("an empty path never reads as unreferenced", func(t *testing.T) {
 		c := qt.New(t)
-		n, err := svc.CountByOriginalPath(ctx, "")
+		ids, err := svc.ListIDsByOriginalPath(ctx, "")
 		c.Assert(err, qt.IsNil)
-		c.Assert(n, qt.Equals, 0)
+		c.Assert(ids, qt.HasLen, 0)
 	})
 }
 

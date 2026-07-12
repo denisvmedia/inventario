@@ -104,6 +104,211 @@ func TestFileService_DeleteFileWithPhysical(t *testing.T) {
 	c.Assert(exists, qt.IsFalse)
 }
 
+// TestFileService_SharedBlobKey_DeleteKeepsTheOtherRowsBytes is the #2241
+// regression test, and it is about the rows ALREADY IN DEPLOYED DATABASES.
+//
+// New uploads carry a UUID and cannot collide. The rows written before that
+// fix can, forever: their key is `<sanitized-name>-<unix SECONDS><ext>`, so two
+// members of two different groups who uploaded `receipt.jpg` in the same second
+// have two DISTINCT file rows pointing at ONE blob. No code change can
+// un-collide them.
+//
+// Every blob delete goes by key, and `files` has no soft-delete and no trash, so
+// before the guard, deleting either row destroyed the other, still-live file's
+// bytes — irreversibly, with the surviving row left pointing at nothing.
+//
+// The blob may only die with its LAST owner.
+func TestFileService_SharedBlobKey_DeleteKeepsTheOtherRowsBytes(t *testing.T) {
+	c := qt.New(t)
+	ctx := newTestContext()
+
+	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	}
+
+	factorySet := memory.NewFactorySet()
+	registrySet, err := factorySet.CreateUserRegistrySet(ctx)
+	c.Assert(err, qt.IsNil)
+	service := NewFileService(factorySet, uploadLocation)
+
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+
+	// The one blob both rows point at — a legacy, second-granularity key.
+	const shared = "t/test-tenant-id/files/receipt-1783824560.jpg"
+	c.Assert(b.WriteAll(ctx, shared, []byte("the only copy of the user's receipt"), nil), qt.IsNil)
+
+	mk := func(title string) *models.FileEntity {
+		c.Helper()
+		f, err := registrySet.FileRegistry.Create(ctx, models.FileEntity{
+			Title: title,
+			Type:  models.FileTypeImage,
+			File: &models.File{
+				Path: title, OriginalPath: shared, Ext: ".jpg", MIMEType: "image/jpeg",
+			},
+		})
+		c.Assert(err, qt.IsNil)
+		return f
+	}
+	first := mk("receipt-a")
+	second := mk("receipt-b")
+
+	// Deleting the FIRST row must not touch the bytes: the second row is still
+	// live and still points at them.
+	c.Assert(service.DeleteFileWithPhysical(ctx, first.ID), qt.IsNil)
+
+	_, err = registrySet.FileRegistry.Get(ctx, first.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	exists, err := b.Exists(ctx, shared)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsTrue,
+		qt.Commentf("deleting one row destroyed the other live file's only copy — this is #2241"))
+
+	// And the survivor is not merely a row: its bytes are readable.
+	got, err := b.ReadAll(ctx, shared)
+	c.Assert(err, qt.IsNil)
+	c.Assert(string(got), qt.Equals, "the only copy of the user's receipt")
+
+	// The LAST owner takes the blob with it — the guard must not leak the blob
+	// forever, it must only defer.
+	c.Assert(service.DeleteFileWithPhysical(ctx, second.ID), qt.IsNil)
+
+	exists, err = b.Exists(ctx, shared)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsFalse,
+		qt.Commentf("the last owner is gone, so nothing references the blob and it must not be leaked"))
+}
+
+// A group purge sweeps blobs while the rows it is purging are STILL IN THE
+// TABLE (the GroupPurger removes them afterwards). So the shared-key guard has
+// to distinguish "this key is referenced by a row I am deleting" from "this key
+// is referenced by somebody else's row" — and get it right in BOTH directions:
+//
+//   - a purged group's own blobs must actually be cleaned up (a naive
+//     "is anyone pointing at this?" check sees the row itself and leaks
+//     every blob in the installation, forever);
+//   - a blob shared with a row in ANOTHER group must survive the purge.
+func TestFileService_DeletePhysicalFilesForGroup_SharedBlobKey(t *testing.T) {
+	c := qt.New(t)
+	ctx := newTestContext()
+
+	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	}
+
+	factorySet := memory.NewFactorySet()
+	service := NewFileService(factorySet, uploadLocation)
+	fileReg := factorySet.FileRegistryFactory.CreateServiceRegistry()
+
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+
+	const doomed = "t/tenant-1/files/doomed-1783824560.jpg"
+	const shared = "t/tenant-1/files/receipt-1783824560.jpg"
+	c.Assert(b.WriteAll(ctx, doomed, []byte("purge me"), nil), qt.IsNil)
+	c.Assert(b.WriteAll(ctx, shared, []byte("keep me"), nil), qt.IsNil)
+
+	mk := func(groupID, key string) {
+		c.Helper()
+		_, err := fileReg.Create(ctx, models.FileEntity{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				TenantID: "tenant-1", GroupID: groupID, CreatedByUserID: "user-1",
+			},
+			Title: "f", Type: models.FileTypeImage,
+			File: &models.File{Path: "f", OriginalPath: key, Ext: ".jpg", MIMEType: "image/jpeg"},
+		})
+		c.Assert(err, qt.IsNil)
+	}
+	mk("group-1", doomed) // only group-1 points at this
+	mk("group-1", shared) // ...and group-1 shares this one with group-2
+	mk("group-2", shared)
+
+	c.Assert(service.DeletePhysicalFilesForGroup(ctx, "tenant-1", "group-1"), qt.IsNil)
+
+	exists, err := b.Exists(ctx, doomed)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsFalse,
+		qt.Commentf("the purged group's own blob was leaked — the guard mistook the row for somebody else's"))
+
+	exists, err = b.Exists(ctx, shared)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsTrue,
+		qt.Commentf("purging group-1 destroyed group-2's live file bytes"))
+}
+
+// The tenant hard-delete is the one sweep where a CROSS-TENANT collision is
+// reachable, and it is not hypothetical: legacy flat keys predate the #1793
+// tenant prefix (`receipt-1783824560.jpg`, no `t/<tenant>/` at all), so two rows
+// in two DIFFERENT tenants can reference one blob. An unbackfilled installation
+// is full of them.
+//
+// It is also the sweep most likely to get the guard wrong: it lists files
+// INSTALLATION-WIDE and filters by tenant in application code, so a batch built
+// from the raw listing would tell the guard that the other tenant's row is
+// "ours" and hand it that tenant's bytes to delete.
+func TestFileService_DeletePhysicalFilesForTenant_SharedLegacyKeyAcrossTenants(t *testing.T) {
+	c := qt.New(t)
+	ctx := newTestContext()
+
+	tempDir := c.TempDir()
+	uploadLocation := "file://" + tempDir + "?create_dir=1"
+	if runtime.GOOS == "windows" {
+		uploadLocation = "file:///" + tempDir + "?create_dir=1"
+	}
+
+	factorySet := memory.NewFactorySet()
+	service := NewFileService(factorySet, uploadLocation)
+	fileReg := factorySet.FileRegistryFactory.CreateServiceRegistry()
+
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+
+	// A legacy, un-prefixed key — the only shape that can cross a tenant boundary.
+	const shared = "receipt-1783824560.jpg"
+	const doomed = "doomed-1783824560.jpg"
+	c.Assert(b.WriteAll(ctx, shared, []byte("tenant-2's only copy"), nil), qt.IsNil)
+	c.Assert(b.WriteAll(ctx, doomed, []byte("purge me"), nil), qt.IsNil)
+
+	mk := func(tenantID, key string) {
+		c.Helper()
+		_, err := fileReg.Create(ctx, models.FileEntity{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+				TenantID: tenantID, GroupID: "group-1", CreatedByUserID: "user-1",
+			},
+			Title: "f", Type: models.FileTypeImage,
+			File: &models.File{Path: "f", OriginalPath: key, Ext: ".jpg", MIMEType: "image/jpeg"},
+		})
+		c.Assert(err, qt.IsNil)
+	}
+	mk("tenant-1", doomed)
+	mk("tenant-1", shared)
+	mk("tenant-2", shared) // the row whose bytes must survive tenant-1's hard-delete
+
+	c.Assert(service.DeletePhysicalFilesForTenant(ctx, "tenant-1"), qt.IsNil)
+
+	exists, err := b.Exists(ctx, doomed)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsFalse,
+		qt.Commentf("the hard-deleted tenant's own blob was leaked"))
+
+	exists, err = b.Exists(ctx, shared)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsTrue,
+		qt.Commentf("hard-deleting tenant-1 destroyed tenant-2's live file bytes"))
+
+	got, err := b.ReadAll(ctx, shared)
+	c.Assert(err, qt.IsNil)
+	c.Assert(string(got), qt.Equals, "tenant-2's only copy")
+}
+
 func TestFileService_DeleteFileWithPhysical_FileNotFound(t *testing.T) {
 	c := qt.New(t)
 	ctx := newTestContext()

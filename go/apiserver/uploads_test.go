@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
@@ -22,6 +23,7 @@ import (
 	"github.com/denisvmedia/inventario/apiserver"
 	"github.com/denisvmedia/inventario/internal/backupsign"
 	"github.com/denisvmedia/inventario/internal/blobkeys"
+	"github.com/denisvmedia/inventario/internal/filekit"
 	"github.com/denisvmedia/inventario/internal/inb"
 )
 
@@ -149,10 +151,16 @@ func TestUploads_restores(t *testing.T) {
 	c.Assert(response.Type, qt.Equals, "uploads")
 	c.Assert(response.Attributes.Type, qt.Equals, "restores")
 	c.Assert(response.Attributes.FileNames, qt.HasLen, 1)
-	// Restore uploads land under the per-tenant `restores/` namespace
-	// (#1793). The trailing segment is the filekit-sanitized basename of the
-	// uploaded `.inb` archive (#534).
-	c.Assert(response.Attributes.FileNames[0], qt.Matches, `t/[^/]+/restores/backup-\d+\.inb`)
+	// Restore uploads land under the per-tenant `restores/` namespace (#1793),
+	// keyed by a server-minted UUID with the filekit-sanitized basename of the
+	// uploaded `.inb` archive (#534) kept after it for operator legibility.
+	//
+	// The UUID is the load-bearing part (#2241): a restore blob has NO owning
+	// row of any kind (#2121), so a name-keyed upload of `backup.inb` would
+	// silently OVERWRITE an earlier one uploaded in the same second, and the
+	// pending import would then restore bytes its user never uploaded.
+	c.Assert(response.Attributes.FileNames[0], qt.Matches,
+		`t/[^/]+/restores/[0-9a-f-]{36}-backup-\d+\.inb`)
 }
 
 func TestUploads_restores_invalid(t *testing.T) {
@@ -349,6 +357,91 @@ func TestUploads_file_tenantPrefixedKey(t *testing.T) {
 	c.Assert(strings.HasPrefix(resp.Attributes.OriginalPath, "t/"+testUser.TenantID+"/files/"), qt.IsTrue,
 		qt.Commentf("OriginalPath %q must live under the authenticated tenant's namespace", resp.Attributes.OriginalPath))
 	c.Assert(resp.Attributes.Path, qt.Not(qt.Contains), "t/")
+}
+
+// TestUploads_file_sameNameSameSecond_distinctBlobKeys is the #2241 regression
+// test, and it is a DATA-LOSS test, not a naming one.
+//
+// The old key was `t/<tenant>/files/<sanitized-name>-<unix SECONDS><ext>`: no
+// group segment, no row segment, no randomness. Two uploads of `receipt.jpg`
+// inside one second — two members of different groups, or one user
+// multi-selecting two same-named files — produced two DISTINCT file rows
+// pointing at ONE blob key. Every blob delete goes by key and `files` has no
+// soft-delete, so deleting either row destroyed the other, still-live file's
+// bytes, irreversibly.
+//
+// The clock is frozen to make the collision certain rather than a race the test
+// might miss. Both uploads must still land their own bytes, and the human name
+// must survive on Path/Title where it belongs.
+func TestUploads_file_sameNameSameSecond_distinctBlobKeys(t *testing.T) {
+	c := qt.New(t)
+
+	frozen := time.Unix(1783824560, 0)
+	prev := filekit.NowFunc
+	filekit.NowFunc = func() time.Time { return frozen }
+	defer func() { filekit.NowFunc = prev }()
+
+	params, testUser, testGroup := newParams()
+	handler := apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false})
+
+	upload := func() (originalPath, humanPath string) {
+		c.Helper()
+
+		img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+		var imgBuf bytes.Buffer
+		c.Assert(jpeg.Encode(&imgBuf, img, &jpeg.Options{Quality: 80}), qt.IsNil)
+
+		bodyBuf := &bytes.Buffer{}
+		bodyWriter := multipart.NewWriter(bodyBuf)
+		fileWriter, err := bodyWriter.CreatePart(CreateFormFileMIME("file", "receipt.jpg", "image/jpeg"))
+		c.Assert(err, qt.IsNil)
+		_, err = fileWriter.Write(imgBuf.Bytes())
+		c.Assert(err, qt.IsNil)
+		contentType := bodyWriter.FormDataContentType()
+		bodyWriter.Close()
+
+		req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/uploads/file", bodyBuf)
+		c.Assert(err, qt.IsNil)
+		req.Header.Set("Content-Type", contentType)
+		addTestUserAuthHeader(req, testUser.ID)
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+
+		var resp struct {
+			Attributes struct {
+				OriginalPath string `json:"original_path"`
+				Path         string `json:"path"`
+			} `json:"attributes"`
+		}
+		c.Assert(json.Unmarshal(rr.Body.Bytes(), &resp), qt.IsNil)
+		return resp.Attributes.OriginalPath, resp.Attributes.Path
+	}
+
+	firstKey, firstName := upload()
+	secondKey, secondName := upload()
+
+	c.Assert(firstKey, qt.Not(qt.Equals), secondKey,
+		qt.Commentf("two same-named uploads in one second share a blob key: deleting either destroys the other's bytes"))
+
+	// Both blobs are really there — the second upload did not OVERWRITE the
+	// first, which is the same collision seen from the write side.
+	bucket, err := blob.OpenBucket(context.Background(), params.UploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer bucket.Close()
+	for _, key := range []string{firstKey, secondKey} {
+		exists, err := bucket.Exists(context.Background(), key)
+		c.Assert(err, qt.IsNil)
+		c.Assert(exists, qt.IsTrue, qt.Commentf("blob %q is missing — one upload clobbered the other", key))
+	}
+
+	// The human name is unchanged and still human: the entropy belongs in the
+	// key, not in what the user reads.
+	c.Assert(firstName, qt.Equals, secondName)
+	c.Assert(firstName, qt.Contains, "receipt")
+	c.Assert(firstKey, qt.Not(qt.Contains), "receipt",
+		qt.Commentf("a key derived from the filename is exactly what collided"))
 }
 
 // TestUploads_file_tooLarge is the #2101 regression test: a POST

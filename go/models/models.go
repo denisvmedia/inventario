@@ -60,8 +60,14 @@ type File struct {
 	//migrator:schema:field name="path" type="TEXT" not_null="true"
 	Path string `json:"path" db:"path"`
 
-	// OriginalPath is the original filename as uploaded by the user.
-	// Example: "invoice.pdf"
+	// OriginalPath is the storage blob key, NOT a filename despite the name.
+	// The human filename lives on Path/Title.
+	// Example: "t/<tenant>/files/f47ac10b-58cc-4372-a567-0e02b2c3d479.pdf"
+	//
+	// Minted from a server-side UUID (blobkeys.BuildFileBlobKey). It is the key
+	// every reader opens and every delete path removes by, so it must be unique
+	// per row — see #2241, and the shared-key guard in FileService, for what
+	// happens when it is not.
 	//migrator:schema:field name="original_path" type="TEXT" not_null="true"
 	OriginalPath string `json:"original_path" db:"original_path"`
 
@@ -373,6 +379,19 @@ type FileIndexes struct {
 
 	// Trigram similarity index for file path search
 	//migrator:schema:index name="files_path_trgm_idx" fields="path" type="GIN" ops="gin_trgm_ops" table="files"
+	_ int
+
+	// original_path is looked up by EXACT value on the delete hot path: every
+	// blob delete asks "does another row still reference this key?" (#2241)
+	// before it removes any bytes. Without this index that question is a
+	// sequential scan of `files` on every single-file delete, every cascade,
+	// every purge, and every orphan-GC candidate.
+	//
+	// NOT unique, deliberately: rows written before #2241 can legitimately share
+	// a key (that IS the bug), so a unique index would fail to build on exactly
+	// the installations that need it most. Uniqueness is now enforced by
+	// construction at the key-minting site instead.
+	//migrator:schema:index name="files_original_path_idx" fields="original_path" table="files"
 	_ int
 }
 

@@ -170,7 +170,10 @@ func (s *FileService) DeleteFileWithPhysical(ctx context.Context, fileID string)
 	// a failure to remove the physical blob or its thumbnails must never undo
 	// the row delete or surface as an error to the caller.
 	if file.File != nil && file.File.OriginalPath != "" {
-		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, fileID, file.File.OriginalPath, file.File.MIMEType); err != nil {
+		// The row is already gone (#2120 is row-first), so the batch is empty:
+		// any row still referencing this key is somebody else's, and its bytes
+		// must survive.
+		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, fileID, file.File.OriginalPath, file.File.MIMEType, nil); err != nil {
 			slog.WarnContext(ctx, "failed to delete physical blob after file row delete (best-effort)",
 				"file_id", fileID, "tenant_id", file.TenantID, "error", err.Error())
 		}
@@ -259,6 +262,13 @@ func (s *FileService) DeletePhysicalFilesForGroup(ctx context.Context, tenantID,
 		return errxtrace.Wrap("failed to list files by group", err)
 	}
 
+	// The rows are still in the table while this sweep runs (the GroupPurger
+	// removes them afterwards), so the shared-key guard has to be told which
+	// rows are ours — otherwise every blob would look shared with itself and
+	// nothing would ever be cleaned up. A row in ANOTHER group that shares a
+	// pre-#2241 key is NOT in this set, and its bytes survive.
+	batch := blobDeleteBatch(files)
+
 	for _, file := range files {
 		if file == nil {
 			continue
@@ -266,11 +276,23 @@ func (s *FileService) DeletePhysicalFilesForGroup(ctx context.Context, tenantID,
 		if file.File == nil || file.File.OriginalPath == "" {
 			continue
 		}
-		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, file.ID, file.File.OriginalPath, file.File.MIMEType); err != nil {
+		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, file.ID, file.File.OriginalPath, file.File.MIMEType, batch); err != nil {
 			return errxtrace.Wrap(fmt.Sprintf("failed to delete physical blobs for file %s", file.ID), err)
 		}
 	}
 	return nil
+}
+
+// blobDeleteBatch is the set of row IDs a blob sweep is removing, for the
+// #2241 shared-key guard.
+func blobDeleteBatch(files []*models.FileEntity) map[string]bool {
+	batch := make(map[string]bool, len(files))
+	for _, file := range files {
+		if file != nil {
+			batch[file.ID] = true
+		}
+	}
+	return batch
 }
 
 // DeletePhysicalFilesForTenant deletes every physical blob (and its
@@ -299,14 +321,25 @@ func (s *FileService) DeletePhysicalFilesForTenant(ctx context.Context, tenantID
 		return errxtrace.Wrap("failed to list files for tenant", err)
 	}
 
+	// Narrow to the rows this hard-delete actually removes BEFORE building the
+	// guard's batch: the listing is installation-wide, and a batch built from it
+	// would tell the guard that another tenant's row is "ours" and hand it that
+	// tenant's bytes to delete. Cross-tenant sharing is not hypothetical — legacy
+	// flat keys predate the #1793 tenant prefix.
+	owned := make([]*models.FileEntity, 0, len(files))
 	for _, file := range files {
 		if file == nil || file.TenantID != tenantID {
 			continue
 		}
+		owned = append(owned, file)
+	}
+	batch := blobDeleteBatch(owned)
+
+	for _, file := range owned {
 		if file.File == nil || file.File.OriginalPath == "" {
 			continue
 		}
-		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, file.ID, file.File.OriginalPath, file.File.MIMEType); err != nil {
+		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, file.ID, file.File.OriginalPath, file.File.MIMEType, batch); err != nil {
 			return errxtrace.Wrap(fmt.Sprintf("failed to delete physical blobs for file %s", file.ID), err)
 		}
 	}
@@ -321,9 +354,36 @@ func (s *FileService) DeletePhysicalFilesForTenant(ctx context.Context, tenantID
 // row still cleans up cleanly. The thumbnail-key derivation only knows
 // the new layout; an unbackfilled row's legacy thumbnails are deleted
 // best-effort by the backfill itself.
-func (s *FileService) deletePhysicalFileAndThumbnails(ctx context.Context, tenantID, fileID, filePath, mimeType string) error {
-	// Delete the original file
-	if err := s.deletePhysicalFile(ctx, filePath); err != nil {
+//
+// `batch` is the set of file-row IDs this caller is removing. It exists for the
+// SHARED-KEY guard below and nothing else; nil is correct for a caller whose
+// row is already gone from the table.
+func (s *FileService) deletePhysicalFileAndThumbnails(ctx context.Context, tenantID, fileID, filePath, mimeType string, batch map[string]bool) error {
+	// SHARED-KEY GUARD (#2241). A blob key is NOT row-unique: uploads minted
+	// before #2241 are keyed `<sanitized-name>-<unix SECONDS><ext>` with no
+	// group segment, no row segment and no randomness, so two rows — two
+	// members of different groups, one user multi-selecting two same-named
+	// files — can legitimately share one key. Deleting the blob by key would
+	// destroy the bytes of every OTHER row pointing at it, and `files` has no
+	// soft-delete and no trash: that loss is irreversible.
+	//
+	// New uploads carry a UUID and cannot collide, but the rows already sitting
+	// in deployed databases can, forever. So the delete asks the question
+	// directly, every time: does a row OUTSIDE this caller's batch still
+	// reference this blob? If so the bytes stay, and the blob is simply left
+	// behind — an orphan the GC (#2237) will reclaim once the last owner is
+	// gone. Leaking a blob is recoverable; destroying a live file's bytes is
+	// not, so the guard fails in that direction on purpose.
+	shared, err := s.blobSharedOutsideBatch(ctx, filePath, batch)
+	if err != nil {
+		// FAIL CLOSED: if we cannot prove the key unshared, we do not delete
+		// the bytes. The row is already (or about to be) gone either way.
+		return errxtrace.Wrap("failed to check whether the blob is shared by other file rows", err)
+	}
+	if shared {
+		slog.WarnContext(ctx, "keeping a blob shared by another file row (#2241)",
+			"file_id", fileID, "tenant_id", tenantID, "blob_key", filePath)
+	} else if err := s.deletePhysicalFile(ctx, filePath); err != nil {
 		return errxtrace.Wrap("failed to delete original file", err)
 	}
 
@@ -345,6 +405,39 @@ func (s *FileService) deletePhysicalFileAndThumbnails(ctx context.Context, tenan
 	}
 
 	return nil
+}
+
+// blobSharedOutsideBatch reports whether any file row OTHER than the ones in
+// `batch` still references blobKey (#2241).
+//
+// IDs, not a count: the callers are deleting a BATCH (a group purge, a tenant
+// hard-delete) and the rows in that batch are still in the table when the blobs
+// are swept, so "how many rows reference this key" cannot answer the question
+// without arithmetic over the batch — and arithmetic that is subtly wrong here
+// destroys user data. Asking for the ids and subtracting the batch cannot be
+// wrong by an off-by-one.
+//
+// A caller whose row is already deleted passes a nil batch: then ANY id that
+// comes back is somebody else's.
+//
+// The lookup is service-mode (RLS-bypassing) and deliberately NOT tenant-scoped
+// — legacy flat keys predate the #1793 tenant prefix, so the row sharing a key
+// can live in another tenant entirely, and a tenant-scoped check would not see
+// the very row whose bytes are at stake.
+func (s *FileService) blobSharedOutsideBatch(ctx context.Context, blobKey string, batch map[string]bool) (bool, error) {
+	if blobKey == "" {
+		return false, nil
+	}
+	ids, err := s.factorySet.FileRegistryFactory.CreateServiceRegistry().ListIDsByOriginalPath(ctx, blobKey)
+	if err != nil {
+		return false, err
+	}
+	for _, id := range ids {
+		if !batch[id] {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // deletePhysicalFile is the unified implementation for deleting physical files
