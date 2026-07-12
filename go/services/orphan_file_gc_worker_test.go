@@ -716,6 +716,74 @@ func TestOrphanFileGC_ProbeErrorAbortsTheTick(t *testing.T) {
 		qt.Commentf("a transient probe failure was treated as 'the entity is gone'"))
 }
 
+// The row scan must keep its place across an ABORTED tick. A probe failure that
+// recurs on the same row (a poison row, a permanently unhealthy replica) would
+// otherwise replay the identical oldest-first page every tick, forever, and no
+// orphan behind it would ever be enumerated — the worker would look alive while
+// collecting nothing.
+func TestOrphanFileGC_AbortedTickDoesNotReplayTheSamePage(t *testing.T) {
+	c := qt.New(t)
+	f := newGCFixture(c)
+
+	// Two orphans, oldest first. The probe blows up, so tick 1 aborts on the
+	// first one.
+	first := f.seedFile(seedFileOpts{linkType: "commodity", linkID: "gone-1", linkMeta: "images"})
+	second := f.seedFile(seedFileOpts{linkType: "commodity", linkID: "gone-2", linkMeta: "images"})
+
+	// EXACTLY one row per tick. Without that the assertion is vacuous: a tick
+	// that restarts from the top would simply page through both orphans and the
+	// regression would hide.
+	deps := f.deps()
+	worker := services.NewOrphanFileGCWorker(deps,
+		services.WithOrphanFileGCMode(services.OrphanFileGCModeDelete),
+		services.WithOrphanFileGCRowBudget(1, 1),
+	)
+
+	f.probeErr = context.DeadlineExceeded
+	worker.RunOnce(f.ctx) // aborts on the first candidate
+
+	// The failure clears. The next tick must resume AFTER the row it choked on,
+	// not re-serve it — so its one unit of budget reaches the SECOND orphan.
+	f.probeErr = nil
+	worker.RunOnce(f.ctx)
+
+	c.Assert(f.fileExists(second.ID), qt.IsFalse,
+		qt.Commentf("the scan replayed the failed page instead of making progress"))
+	c.Assert(f.fileExists(first.ID), qt.IsTrue,
+		qt.Commentf("the row the probe choked on must be KEPT, not deleted, and revisited when the scan wraps"))
+}
+
+// The forensic log is the ONLY artifact from which a destroyed thumbnail can be
+// reconstructed, so it must never claim a destruction that did not happen. The
+// row path splits "deleting" (pre-image) from "deleted" (post-success); the
+// thumbnail path must do the same, including when the tenant gate fires between
+// the two.
+func TestOrphanFileGC_ThumbnailLogNeverClaimsAnUnattemptedDelete(t *testing.T) {
+	c := qt.New(t)
+	f := newGCFixture(c)
+
+	key := blobkeys.BuildThumbnailBlobKey(f.tenantID, "a-file-id-with-no-row", "small")
+	f.writeBlob(key, []byte("s"))
+	f.backdateBlobs(30 * 24 * time.Hour)
+
+	// report mode: the candidate is found, and NOTHING is deleted.
+	logs := captureLogs(c, func() {
+		f.sweep(services.WithOrphanFileGCMode(services.OrphanFileGCModeReport))
+	})
+
+	c.Assert(f.blobExists(key), qt.IsTrue, qt.Commentf("report mode deleted a blob"))
+	c.Assert(logs, qt.Contains, `"action":"candidate"`)
+	c.Assert(logs, qt.Not(qt.Contains), `"action":"deleted"`,
+		qt.Commentf("the log claimed a thumbnail was deleted while in report mode"))
+
+	// delete mode: "deleting" precedes the attempt, "deleted" follows its success.
+	logs = captureLogs(c, func() { f.sweep() })
+
+	c.Assert(f.blobExists(key), qt.IsFalse)
+	c.Assert(logs, qt.Contains, `"action":"deleting"`)
+	c.Assert(logs, qt.Contains, `"action":"deleted"`)
+}
+
 // Soft-pause (#1308) is the operator's emergency stop for the only destructive
 // worker in the tree. A paused worker must do NOTHING — not even read.
 //

@@ -515,12 +515,21 @@ func (w *OrphanFileGCWorker) runCleanup(ctx context.Context) {
 func (w *OrphanFileGCWorker) RunOnce(ctx context.Context) {
 	// Soft-pause (#1308) FIRST, before any registry or bucket call. The ticker
 	// keeps running so resume takes effect on the next tick without a restart.
+	// The blocked-tenant gauge asserts something about the LAST EVALUATION. A
+	// tick that never evaluates the gate must not leave the previous tick's
+	// value standing: the runbook reads a persistently-positive gauge as "a
+	// tenant is pinned by a stuck operation", and a paused or disabled worker
+	// would otherwise fake exactly that signal forever. Zero is the honest
+	// value for "not measured this tick" — it is only meaningful while
+	// inventario_orphan_gc_runs_total{result="success"} is advancing.
 	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeOrphanFileGC) {
 		orphanGCRunsTotal.WithLabelValues("skipped_paused").Inc()
+		orphanGCBlockedTenants.Set(0)
 		return
 	}
 	if w.mode == OrphanFileGCModeOff {
 		orphanGCRunsTotal.WithLabelValues("skipped_disabled").Inc()
+		orphanGCBlockedTenants.Set(0)
 		return
 	}
 
@@ -534,6 +543,7 @@ func (w *OrphanFileGCWorker) RunOnce(ctx context.Context) {
 	if err != nil {
 		slog.Error("Orphan file GC: failed to build the in-flight concurrency gate; aborting tick", "error", err)
 		orphanGCRunsTotal.WithLabelValues("error").Inc()
+		orphanGCBlockedTenants.Set(0) // the gate was never evaluated — assert nothing
 		return
 	}
 	orphanGCBlockedTenants.Set(float64(len(gate.blocked)))
@@ -754,6 +764,15 @@ func (w *OrphanFileGCWorker) sweepRows(ctx context.Context, gate orphanGCGate, c
 	var stats orphanGCStats
 
 	cursor := w.rowCursor
+	// Persist the scan position even when the tick ABORTS. A probe failure that
+	// keeps recurring on the same row (a poison row, a permanently unhealthy
+	// replica) would otherwise replay the identical page every tick, forever,
+	// and no other orphan in the installation would ever be enumerated. The
+	// cursor was already advanced past that row, so the next tick resumes AFTER
+	// it: the failing row is simply KEPT until the scan wraps and comes back to
+	// it — the safe direction, and the only one that still makes progress.
+	defer func() { w.rowCursor = cursor }()
+
 	for stats.scanned < w.rowBudget {
 		page, err := w.deps.Files.ListOrphanCandidates(ctx, cutoff, cursor, w.rowPageSize)
 		if err != nil {
@@ -788,7 +807,6 @@ func (w *OrphanFileGCWorker) sweepRows(ctx context.Context, gate orphanGCGate, c
 			break
 		}
 	}
-	w.rowCursor = cursor
 
 	return stats, nil
 }
@@ -1196,36 +1214,43 @@ func (w *OrphanFileGCWorker) sweepTenantThumbnails(
 			// The one and only path to a delete.
 		default:
 			orphanGCSkippedTotal.WithLabelValues(orphanGCSkipProbeError).Inc()
+			// Persist the position BEFORE aborting, for the same reason as the
+			// row cursor: a recurring failure on one key would otherwise make
+			// every tick re-list and re-probe the identical head of this
+			// tenant's prefix forever, and no thumbnail past it would ever be
+			// reached. Resuming after the failed key KEEPS it (the safe
+			// direction) and revisits it when the cycle wraps.
+			w.thumbCursor[tenantID] = cand.key
 			return stats, err
 		}
 
 		stats.candidates++
 		orphanGCCandidatesTotal.WithLabelValues("thumbnail").Inc()
-		logOrphanThumbnail(slog.LevelWarn, w.mode, candidateAction(w.mode), tenantID, fileID, size, cand)
 
 		if w.mode != OrphanFileGCModeDelete {
 			orphanGCSkippedTotal.WithLabelValues(orphanGCSkipReportMode).Inc()
+			logOrphanThumbnail(slog.LevelWarn, w.mode, "candidate", tenantID, fileID, size, cand)
 			continue
 		}
 		// T5 — re-assert the in-flight gate immediately before this delete.
 		if gate.isBlocked(tenantID) {
 			orphanGCSkippedTotal.WithLabelValues(orphanGCSkipInflight).Inc()
+			logOrphanThumbnail(slog.LevelWarn, w.mode, "skipped", tenantID, fileID, size, cand)
 			continue
 		}
+		// Two-phase, exactly like the row path: "deleting" is the pre-image,
+		// "deleted" is only ever written after the delete actually succeeded.
+		// A record claiming a destruction that never happened is worse than no
+		// record — the log IS the recovery artifact.
+		logOrphanThumbnail(slog.LevelInfo, w.mode, "deleting", tenantID, fileID, size, cand)
 		if w.deleteThumbnail(ctx, bucket, tenantID, fileID, size) {
 			stats.deleted++
 			orphanGCDeletedTotal.WithLabelValues("thumbnail").Inc()
+			logOrphanThumbnail(slog.LevelInfo, w.mode, "deleted", tenantID, fileID, size, cand)
 		}
 	}
 
 	return stats, nil
-}
-
-func candidateAction(mode OrphanFileGCMode) string {
-	if mode == OrphanFileGCModeDelete {
-		return "deleted"
-	}
-	return "candidate"
 }
 
 // listAgedThumbnails enumerates ONE tenant's thumbnail prefix and keeps only the

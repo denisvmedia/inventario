@@ -492,6 +492,12 @@ onto the rows it creates, so those rows would otherwise clear the age gate
 instantly). The blocking operation is named in an
 `event=orphan_gc.blocked` log line.
 
+The gauge reports the **last completed evaluation**, so read it only while
+`inventario_orphan_gc_runs_total{result="success"}` is advancing: a tick that
+never evaluated the gate (paused worker, `mode=off`, or a gate-build failure)
+resets it to `0` rather than leaving the previous tick's value standing and
+faking a pinned tenant forever.
+
 There is no heartbeat on exports/restores, so a **crashed** operation stays
 `running` / `in_progress` forever and pins its tenant permanently. That is
 the correct direction (under-collecting forever beats one wrong delete),
