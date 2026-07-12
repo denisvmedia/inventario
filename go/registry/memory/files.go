@@ -357,7 +357,7 @@ func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.
 			continue // allowlist: standalone (#2235), export, and unknown types are never candidates
 		}
 		if file.LinkedEntityID == "" {
-			continue // malformed link, not garbage — the worker reports it, never deletes it
+			continue // malformed link, not garbage: EXCLUDED here, so it is kept and never surfaced
 		}
 		if !file.CreatedAt.Before(olderThan) || !file.UpdatedAt.Before(olderThan) {
 			continue // BOTH timestamps must clear the age gate

@@ -1000,7 +1000,12 @@ func screenRowCandidate(file *models.FileEntity, gate orphanGCGate, cutoff time.
 	if !orphanGCLinkAllowlist[file.LinkedEntityType] {
 		return orphanGCSkipDisallowedLink
 	}
-	// A set link type with an empty id is malformed DATA, not garbage.
+	// A set link type with an empty id is malformed DATA, not garbage: no probe
+	// can prove an empty id absent. The registry predicate already excludes such
+	// rows, so this branch is unreachable today and malformed_link never fires —
+	// deliberately. The candidate query is a FILTER, never an authorization, and
+	// this worker must remain correct against any predicate it is handed,
+	// including a future relaxed one.
 	if file.LinkedEntityID == "" {
 		return orphanGCSkipMalformedLink
 	}

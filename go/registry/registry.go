@@ -431,7 +431,14 @@ type FileRegistry interface {
 	//      EXISTS(...)` would silently eat every standalone file in the
 	//      installation.
 	//   2. linked_entity_id <> '' — a set type with an empty id is
-	//      malformed data, not garbage; it is kept and reported.
+	//      malformed data, not garbage. It is EXCLUDED here, which means
+	//      KEPT and never surfaced to the worker: no probe can prove an
+	//      empty id absent, so such a row must never enter a candidate
+	//      set a destructive worker consumes. (The worker re-asserts the
+	//      same rule as defence-in-depth — the query is a filter, never
+	//      an authorization — so its malformed_link skip reason is
+	//      unreachable while this predicate holds, and stays correct if
+	//      the predicate is ever relaxed.)
 	//   3. BOTH created_at < olderThan AND updated_at < olderThan.
 	//      updated_at is the load-bearing one: PUT /files/{id} stamps it
 	//      with the app wall clock, so a file attached concurrently with
