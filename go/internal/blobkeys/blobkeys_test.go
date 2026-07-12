@@ -40,10 +40,20 @@ func TestBuildFileBlobKey(t *testing.T) {
 	}
 }
 
-func TestBuildFileUploadKey(t *testing.T) {
+// There is exactly ONE way to key a file blob, and it takes a server-minted
+// blob id. The upload-time variant that keyed by filename is GONE (#2241): it
+// produced `<name>-<unix SECONDS><ext>`, which two same-named uploads inside one
+// second collide on, and the collision made deleting one file destroy the other
+// file's bytes. Re-adding a filename-keyed builder would re-open that.
+func TestBuildFileBlobKey_IsTheOnlyFileKeyBuilder(t *testing.T) {
 	c := qt.New(t)
-	got := blobkeys.BuildFileUploadKey("tenant-a", "my-photo-1748000000.jpg")
-	c.Assert(got, qt.Equals, "t/tenant-a/files/my-photo-1748000000.jpg")
+
+	a := blobkeys.BuildFileBlobKey("tenant-a", "f47ac10b-58cc-4372-a567-0e02b2c3d479", ".jpg")
+	b := blobkeys.BuildFileBlobKey("tenant-a", "9d3f1c2e-7b4a-4d18-9f6e-2c5a8b1e0d77", ".jpg")
+
+	c.Assert(a, qt.Equals, "t/tenant-a/files/f47ac10b-58cc-4372-a567-0e02b2c3d479.jpg")
+	c.Assert(a, qt.Not(qt.Equals), b,
+		qt.Commentf("distinct blob ids must never share a key — the key is the DELETE key"))
 }
 
 func TestBuildThumbnailBlobKey(t *testing.T) {
@@ -82,10 +92,18 @@ func TestBuildExportBlobKey_LowercasesType(t *testing.T) {
 	c.Assert(got, qt.Equals, "t/tenant-a/exports/export_commodities_20260523_120000.xml")
 }
 
+// A restore blob has NO owning row of any kind (#2121), so nothing would ever
+// notice an overwrite: two uploads of `backup.inb` in the same second must not
+// land on one key, or a pending import restores bytes its user never uploaded.
 func TestBuildRestoreUploadKey(t *testing.T) {
 	c := qt.New(t)
-	got := blobkeys.BuildRestoreUploadKey("tenant-a", "backup-1748000000.xml")
-	c.Assert(got, qt.Equals, "t/tenant-a/restores/backup-1748000000.xml")
+
+	got := blobkeys.BuildRestoreUploadKey("tenant-a", "f47ac10b-58cc-4372-a567-0e02b2c3d479", "backup-1748000000.inb")
+	c.Assert(got, qt.Equals, "t/tenant-a/restores/f47ac10b-58cc-4372-a567-0e02b2c3d479-backup-1748000000.inb")
+
+	other := blobkeys.BuildRestoreUploadKey("tenant-a", "9d3f1c2e-7b4a-4d18-9f6e-2c5a8b1e0d77", "backup-1748000000.inb")
+	c.Assert(got, qt.Not(qt.Equals), other,
+		qt.Commentf("same filename, same second — the blob id is the only thing keeping these apart"))
 }
 
 func TestBuildSeedKey(t *testing.T) {
@@ -201,12 +219,13 @@ func TestKeysAlwaysCarryTenantNamespace(t *testing.T) {
 
 	hostileInputs := []string{
 		blobkeys.BuildFileBlobKey(tenant, "../../escape", ".pdf"),
-		blobkeys.BuildFileUploadKey(tenant, "../../escape.pdf"),
+		blobkeys.BuildFileBlobKey(tenant, "file-1", "../../escape.pdf"),
 		blobkeys.BuildThumbnailBlobKey(tenant, "../../escape", "small"),
 		blobkeys.BuildExportBlobKey(tenant, "any", "ts"),
-		blobkeys.BuildRestoreUploadKey(tenant, "../escape.xml"),
+		blobkeys.BuildRestoreUploadKey(tenant, "blob-id", "../escape.xml"),
+		blobkeys.BuildRestoreUploadKey(tenant, "../../escape", "backup.inb"),
 		blobkeys.BuildSeedKey(tenant, "../etc/passwd"),
-		blobkeys.BuildFileUploadKey(tenant, `..\windows\system32\config\sam`),
+		blobkeys.BuildFileBlobKey(tenant, `..\windows\system32\config\sam`, ""),
 	}
 	for i, got := range hostileInputs {
 		c.Assert(strings.HasPrefix(got, prefix), qt.IsTrue,

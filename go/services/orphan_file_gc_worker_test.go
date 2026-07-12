@@ -1007,7 +1007,7 @@ func TestOrphanFileGC_ReportModeDeletesNothing(t *testing.T) {
 		linkType: "commodity",
 		linkID:   "gone",
 		linkMeta: "images",
-		blobKey:  blobkeys.BuildFileUploadKey(f.tenantID, "orphan.jpg"),
+		blobKey:  blobkeys.BuildFileBlobKey(f.tenantID, "orphan", ".jpg"),
 	})
 	thumbKey := blobkeys.BuildThumbnailBlobKey(f.tenantID, "no-such-file-id", "small")
 	f.writeBlob(thumbKey, []byte("thumb"))
@@ -1061,8 +1061,8 @@ func TestOrphanFileGC_NeverSweepsAnythingButThumbnails(t *testing.T) {
 	f := newGCFixture(c)
 
 	keys := map[string]string{
-		"#2121 pending-import source blob": blobkeys.BuildRestoreUploadKey(f.tenantID, "backup.inb"),
-		"fresh upload (blob-before-row)":   blobkeys.BuildFileUploadKey(f.tenantID, "invoice-123.pdf"),
+		"#2121 pending-import source blob": blobkeys.BuildRestoreUploadKey(f.tenantID, "blob-id", "backup.inb"),
+		"fresh upload (blob-before-row)":   blobkeys.BuildFileBlobKey(f.tenantID, "invoice-123", ".pdf"),
 		"failed-export artifact":           blobkeys.BuildBackupBlobKey(f.tenantID, "full", "20260101"),
 		"seed fixture":                     blobkeys.BuildSeedKey(f.tenantID, "seed-abc.jpg"),
 		"legacy flat key (pre-#1793)":      "thumbnails/legacy-file-id_small.jpg",
@@ -1241,7 +1241,7 @@ func TestOrphanFileGC_SweepsCrashWindowOrphanRows(t *testing.T) {
 			c := qt.New(t)
 			f := newGCFixture(c)
 
-			blobKey := blobkeys.BuildFileUploadKey(f.tenantID, "orphan-"+linkType+".jpg")
+			blobKey := blobkeys.BuildFileBlobKey(f.tenantID, "orphan-"+linkType, ".jpg")
 			file := f.seedFile(seedFileOpts{
 				linkType: linkType,
 				linkID:   "id-of-an-entity-that-no-longer-exists",
@@ -1288,7 +1288,7 @@ func TestOrphanFileGC_IsIdempotent(t *testing.T) {
 	c := qt.New(t)
 	f := newGCFixture(c)
 
-	blobKey := blobkeys.BuildFileUploadKey(f.tenantID, "orphan.jpg")
+	blobKey := blobkeys.BuildFileBlobKey(f.tenantID, "orphan", ".jpg")
 	file := f.seedFile(seedFileOpts{
 		linkType: "commodity", linkID: "gone", linkMeta: "images", blobKey: blobKey,
 	})
@@ -1425,7 +1425,7 @@ func TestOrphanFileGC_SharedBlobKeyIsNeverSwept(t *testing.T) {
 	f := newGCFixture(c)
 
 	// The exact collision production mints: same tenant, same basename, same second.
-	shared := blobkeys.BuildFileUploadKey(f.tenantID, "receipt-1783824560.jpg")
+	shared := blobkeys.BuildFileBlobKey(f.tenantID, "receipt-1783824560", ".jpg")
 
 	otherGroupID := f.newGroup(f.tenantID, "group-b", models.LocationGroupStatusActive)
 	live := f.seedFile(seedFileOpts{
@@ -1454,7 +1454,7 @@ func TestOrphanFileGC_SoleOwnedBlobKeyIsStillSwept(t *testing.T) {
 	c := qt.New(t)
 	f := newGCFixture(c)
 
-	key := blobkeys.BuildFileUploadKey(f.tenantID, "sole-1783824560.jpg")
+	key := blobkeys.BuildFileBlobKey(f.tenantID, "sole-1783824560", ".jpg")
 	orphan := f.seedFile(seedFileOpts{
 		linkType: "commodity", linkID: "gone", linkMeta: "images", blobKey: key,
 	})

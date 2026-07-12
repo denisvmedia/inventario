@@ -225,19 +225,19 @@ func TestFileRegistry_Postgres_CountByOriginalPath(t *testing.T) {
 	mk(group2, shared)
 	mk(group1, sole)
 
-	n, err := svc.CountByOriginalPath(ctx, shared)
+	ids, err := svc.ListIDsByOriginalPath(ctx, shared)
 	c.Assert(err, qt.IsNil)
-	c.Assert(n, qt.Equals, 2, qt.Commentf("a key shared by two rows must not look sole-owned to the GC"))
+	c.Assert(ids, qt.HasLen, 2, qt.Commentf("a key shared by two rows must not look sole-owned"))
 
-	n, err = svc.CountByOriginalPath(ctx, sole)
+	ids, err = svc.ListIDsByOriginalPath(ctx, sole)
 	c.Assert(err, qt.IsNil)
-	c.Assert(n, qt.Equals, 1)
+	c.Assert(ids, qt.HasLen, 1)
 
 	t.Run("an empty path never reads as unreferenced", func(t *testing.T) {
 		c := qt.New(t)
-		n, err := svc.CountByOriginalPath(ctx, "")
+		ids, err := svc.ListIDsByOriginalPath(ctx, "")
 		c.Assert(err, qt.IsNil)
-		c.Assert(n, qt.Equals, 0)
+		c.Assert(ids, qt.HasLen, 0)
 	})
 }
 

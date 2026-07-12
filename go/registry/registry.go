@@ -482,22 +482,27 @@ type FileRegistry interface {
 	// empty input returns (nil, nil) without a query.
 	ExistingIDs(ctx context.Context, ids []string) ([]string, error)
 
-	// CountByOriginalPath returns how many file rows — across EVERY
-	// tenant and group — carry the given files.original_path (#2237).
-	// Service-mode only.
+	// ListIDsByOriginalPath returns the IDs of every file row — across
+	// EVERY tenant and group — that carries the given files.original_path
+	// (#2241). Service-mode only. An empty path returns (nil, nil) without
+	// a query: "" is the sentinel for a row with no blob, not a key.
 	//
-	// It exists because a blob key is NOT row-unique and there is no
-	// unique index on original_path. An upload's key is
-	// `t/<tenant>/files/<sanitized-name>-<unix SECONDS><ext>`, which has
-	// no group segment, no row segment and no randomness: two uploads of
-	// the same filename inside one tenant in the same second (two members
-	// of different groups; one user multi-selecting two same-named files)
-	// legitimately produce two DISTINCT rows that share one key. Deleting
-	// a file row's blob by key therefore destroys the bytes of every other
-	// row pointing at it, and `files` has no soft-delete. The orphan-file
-	// GC calls this before any destructive step and KEEPS anything whose
-	// key is shared.
-	CountByOriginalPath(ctx context.Context, originalPath string) (int, error)
+	// It exists because a blob key is NOT row-unique. Uploads minted before
+	// #2241 are keyed `t/<tenant>/files/<sanitized-name>-<unix SECONDS><ext>`
+	// — no group segment, no row segment, no randomness — so two uploads of
+	// the same filename inside one tenant in the same second (two members of
+	// different groups; one user multi-selecting two same-named files) produce
+	// two DISTINCT rows sharing one key. Every blob delete goes by key, and
+	// `files` has no soft-delete, so deleting one of those rows would destroy
+	// the other's bytes irreversibly. New uploads carry a UUID and cannot
+	// collide, but the rows already in deployed databases can, forever.
+	//
+	// IDs rather than a count on purpose: the callers that need this are
+	// deleting a BATCH (a group purge, a tenant hard-delete) and must ask
+	// "does any row OUTSIDE my batch still reference this blob?". A count
+	// cannot answer that without arithmetic over the batch, and getting that
+	// arithmetic subtly wrong destroys user data.
+	ListIDsByOriginalPath(ctx context.Context, originalPath string) ([]string, error)
 }
 
 // OrphanCandidateCursor is the keyset position a paged

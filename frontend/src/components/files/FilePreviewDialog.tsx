@@ -50,7 +50,11 @@ export function FilePreviewDialog({ file, onClose, onDelete }: FilePreviewDialog
 
   const mime = file.file.mime_type
   const title = file.file.title?.trim() || file.file.path?.trim() || file.file.id
-  const downloadName = file.file.original_path || file.file.path || title
+  // NOT original_path: that field is the storage blob KEY
+  // (`t/<tenant>/files/<uuid>.jpg`), never a filename the user would recognise
+  // — offering it as the download name saved their receipt as a UUID under a
+  // path-shaped name. Build the name from what the user actually sees.
+  const downloadName = `${file.file.path?.trim() || title}${file.file.ext ?? ""}`
   const downloadUrl = file.signedUrl?.url
 
   function handleDelete() {

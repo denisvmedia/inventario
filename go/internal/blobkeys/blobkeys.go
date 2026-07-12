@@ -10,11 +10,18 @@
 //
 // Layout:
 //
-//	t/<tenant>/files/<file-id><ext>             — original uploaded file
+//	t/<tenant>/files/<blob-id><ext>             — original uploaded file
 //	t/<tenant>/thumbnails/<file-id>_<size>.jpg  — derived thumbnail (JPEG)
 //	t/<tenant>/exports/export_<type>_<ts>.xml   — exported XML bundle
-//	t/<tenant>/restores/<filename>              — uploaded XML for restore
+//	t/<tenant>/restores/<blob-id>-<filename>    — uploaded archive for restore
 //	t/<tenant>/seed-<uuid><ext>                 — demo / seed fixtures
+//
+// Every <blob-id> is a server-minted UUID. That is a correctness
+// requirement, not a style choice: the key is the DELETE key, nothing
+// enforces one row per key, and `files` has no soft-delete — so a key
+// that two rows can share is a key whose deletion destroys a live file's
+// bytes. See #2241, where an upload key of `<name>-<unix SECONDS><ext>`
+// did exactly that.
 //
 // The tenant is always supplied by server-side context (the authenticated
 // user's TenantID, or — for cross-tenant background workers — the tenant
@@ -84,35 +91,31 @@ func sanitizeSegment(s string) string {
 }
 
 // BuildFileBlobKey produces the canonical blob key for an original file
-// upload: `t/<tenant>/files/<file-id><ext>`. The extension argument is
+// upload: `t/<tenant>/files/<blob-id><ext>`. The extension argument is
 // expected to start with a dot (".pdf", ".jpg"); an empty string is
 // allowed for files whose MIME type carries no canonical extension.
 //
-// fileID is the FileEntity row ID, not the user-supplied filename, so
-// the key is stable across renames and cannot be guessed from a Path
-// the operator might choose.
-func BuildFileBlobKey(tenantID, fileID, ext string) string {
+// blobID MUST be a server-minted UUID and MUST NOT be derived from the
+// user-supplied filename. Two properties depend on it, and #2241 is what
+// happens when either is lost:
+//
+//   - UNIQUENESS. The key is the delete key. Nothing enforces one row per
+//     key (there is no unique index on files.original_path), so a key two
+//     rows can share is a key whose deletion destroys a live file's bytes.
+//     The old upload key was `<sanitized-name>-<unix SECONDS><ext>`, which
+//     two same-named uploads in one second collide on exactly.
+//   - UNGUESSABILITY. The key must not be derivable from a Path the user
+//     chooses, or from a filename they control.
+//
+// Callers that already have the FileEntity row ID (the restore importer)
+// pass that; the upload handler mints a fresh UUID because the row does
+// not exist yet. Both are unique and unguessable, which is all this key
+// needs — it is not required to equal the row id, and does not.
+func BuildFileBlobKey(tenantID, blobID, ext string) string {
 	return fmt.Sprintf("%s%s/%s/%s%s",
 		Prefix, tenantID, FilesSegment,
-		sanitizeSegment(fileID), sanitizeSegment(ext),
+		sanitizeSegment(blobID), sanitizeSegment(ext),
 	)
-}
-
-// BuildFileUploadKey is the upload-time variant of BuildFileBlobKey for
-// flows that mint the per-blob basename *before* the FileEntity row
-// exists (the multipart upload handler is the canonical example: it
-// writes the bucket from a streaming middleware that doesn't have a
-// row ID yet, only the filekit.UploadFileName-sanitized basename).
-//
-// `basename` already carries its own extension and uniqueness suffix —
-// callers MUST NOT pass a user-supplied filename here; sanitize first
-// via filekit.UploadFileName so the on-disk key is collision-resistant.
-//
-// The key shape is identical to BuildFileBlobKey
-// (`t/<tenant>/files/<basename>`) so readers don't care which writer
-// minted the row.
-func BuildFileUploadKey(tenantID, basename string) string {
-	return fmt.Sprintf("%s%s/%s/%s", Prefix, tenantID, FilesSegment, sanitizeSegment(basename))
 }
 
 // BuildThumbnailBlobKey produces the canonical blob key for a derived
@@ -201,13 +204,24 @@ func SanitizeArchivePath(p string) string {
 	return strings.Join(segments, "/")
 }
 
-// BuildRestoreUploadKey produces the canonical blob key for an XML
-// backup file uploaded as part of a restore operation:
-// `t/<tenant>/restores/<filename>`. `filename` is expected to already
-// be sanitized (the upload pipeline runs every name through
-// filekit.UploadFileName before reaching us).
-func BuildRestoreUploadKey(tenantID, filename string) string {
-	return fmt.Sprintf("%s%s/%s/%s", Prefix, tenantID, RestoresSegment, sanitizeSegment(filename))
+// BuildRestoreUploadKey produces the canonical blob key for a backup
+// archive uploaded as part of a restore operation:
+// `t/<tenant>/restores/<blob-id>-<filename>`. `filename` is expected to
+// already be sanitized (the upload pipeline runs every name through
+// filekit.UploadFileName before reaching us) and is kept only so an
+// operator staring at the bucket can tell what a key is.
+//
+// blobID is a server-minted UUID and carries the uniqueness (#2241). A
+// restore blob has NO owning row of any kind (#2121) — it stays rowless
+// until the user submits the import, and forever if they never do — so a
+// name-only key means two uploads of `backup.inb` in the same second
+// silently OVERWRITE each other, and a pending import then restores bytes
+// its user never uploaded.
+func BuildRestoreUploadKey(tenantID, blobID, filename string) string {
+	return fmt.Sprintf("%s%s/%s/%s-%s",
+		Prefix, tenantID, RestoresSegment,
+		sanitizeSegment(blobID), sanitizeSegment(filename),
+	)
 }
 
 // BuildSeedKey produces the canonical blob key for a demo / seed

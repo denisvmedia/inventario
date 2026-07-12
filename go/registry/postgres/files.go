@@ -675,31 +675,43 @@ func (r *FileRegistry) ExistingIDs(ctx context.Context, ids []string) ([]string,
 	return existing, nil
 }
 
-// CountByOriginalPath counts the file rows that reference the given blob key,
-// across EVERY tenant and group (#2237). Service-mode only.
+// ListIDsByOriginalPath returns the IDs of the file rows that reference the
+// given blob key, across EVERY tenant and group (#2241). Service-mode only.
 //
-// The count is deliberately NOT tenant-scoped. Post-#1793 keys carry a
-// `t/<tenant>/` prefix, but legacy flat keys (rows whose blob predates the
-// backfill) do not, so two rows in DIFFERENT tenants can reference one legacy
-// key. The orphan-file GC treats any key referenced by more than one row as
-// shared and keeps the row rather than destroy another row's bytes.
+// Deliberately NOT tenant-scoped. Post-#1793 keys carry a `t/<tenant>/` prefix,
+// but legacy flat keys (rows whose blob predates the backfill) do not, so two
+// rows in DIFFERENT tenants can reference one legacy key. A blob delete that
+// scoped this lookup to the caller's own tenant would happily destroy the other
+// tenant's bytes.
 //
-// An empty path counts as zero rather than matching every row whose blob is
+// An empty path returns no ids rather than matching every row whose blob is
 // unset — a caller must never conclude "nobody else references this" from it.
-func (r *FileRegistry) CountByOriginalPath(ctx context.Context, originalPath string) (int, error) {
+func (r *FileRegistry) ListIDsByOriginalPath(ctx context.Context, originalPath string) ([]string, error) {
 	if originalPath == "" {
-		return 0, nil
+		return nil, nil
 	}
-	var count int
+	var ids []string
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE original_path = $1`, r.tableNames.Files())
-		return tx.QueryRowxContext(ctx, query, originalPath).Scan(&count)
+		query := fmt.Sprintf(`SELECT id FROM %s WHERE original_path = $1`, r.tableNames.Files())
+		rows, err := tx.QueryxContext(ctx, query, originalPath)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			ids = append(ids, id)
+		}
+		return rows.Err()
 	})
 	if err != nil {
-		return 0, errxtrace.Wrap("failed to count files by original path", err)
+		return nil, errxtrace.Wrap("failed to list file ids by original path", err)
 	}
-	return count, nil
+	return ids, nil
 }
 
 // SumSizeBreakdownByGroup mirrors SumSizeBreakdown but for an explicit

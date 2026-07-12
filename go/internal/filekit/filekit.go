@@ -11,13 +11,22 @@ import (
 
 var NowFunc = time.Now
 
-// UploadFileName generates a sanitized and unique file name with a timestamp for the given file name input.
-// The generated file name is in the format: [sanitized_file_name]-[timestamp].[file_extension]
-// The timestamp is obtained from the NowFunc function, which can be mocked for testing purposes.
-// The file name is sanitized by converting it to lowercase and replacing spaces with dashes.
-// If the file name is empty, it defaults to "h" (hidden).
-// The function properly handles multi-part extensions (like .tar.gz) using getMultiPartExtension.
-// The function returns the generated file name.
+// UploadFileName generates a sanitized, HUMAN-READABLE file name with a
+// timestamp for the given file name input, in the format
+// [sanitized_file_name]-[timestamp].[file_extension].
+//
+// It is NOT unique and MUST NOT be used to derive a blob key. The timestamp has
+// SECOND granularity and there is no randomness, so two uploads of the same
+// filename within one second produce the identical string — which is precisely
+// how #2241 turned a file delete into the destruction of another live file's
+// bytes. Blob keys are minted from a server-side UUID via
+// blobkeys.BuildFileBlobKey; this name exists so the user sees "invoice-…"
+// rather than a UUID as the title of their upload.
+//
+// The timestamp is obtained from the NowFunc function, which can be mocked for
+// testing purposes. The file name is sanitized by converting it to lowercase and
+// replacing spaces with dashes. If the file name is empty, it defaults to "h"
+// (hidden). Multi-part extensions (like .tar.gz) are handled via Extension.
 func UploadFileName(fileName string) string {
 	fileExt := getMultiPartExtension(fileName)
 	originalFileName := strings.TrimSuffix(
@@ -37,6 +46,18 @@ func UploadFileName(fileName string) string {
 	buf.WriteString(fileExt)
 
 	return buf.String()
+}
+
+// Extension returns the file extension of filePath INCLUDING the leading dot,
+// handling multi-part extensions (".tar.gz") the same way UploadFileName does.
+// Returns "" for a name with no extension.
+//
+// Exported so the upload handler can give a UUID-minted blob key the same
+// extension the human-readable name carries — the key's extension is cosmetic
+// (readers open the key verbatim and take the MIME type from the row), but a
+// bucket full of extensionless UUIDs is miserable to operate.
+func Extension(filePath string) string {
+	return getMultiPartExtension(filePath)
 }
 
 func getMultiPartExtension(filePath string) string {

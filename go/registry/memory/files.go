@@ -431,15 +431,16 @@ func afterOrphanCursor(file *models.FileEntity, after registry.OrphanCandidateCu
 	return file.CreatedAt.After(after.CreatedAt)
 }
 
-// CountByOriginalPath mirrors the postgres method — how many file rows, across
-// EVERY tenant and group, reference the given blob key (#2237). Service-mode
-// only: it reads the shared item map directly rather than through the
-// visibility filter, because the whole point is to see rows the caller cannot.
-func (r *FileRegistry) CountByOriginalPath(_ context.Context, originalPath string) (int, error) {
+// ListIDsByOriginalPath mirrors the postgres method — the ids of every file
+// row, across EVERY tenant and group, that references the given blob key
+// (#2241). Service-mode only: it reads the shared item map directly rather than
+// through the visibility filter, because the whole point is to see the rows the
+// caller cannot.
+func (r *FileRegistry) ListIDsByOriginalPath(_ context.Context, originalPath string) ([]string, error) {
 	if originalPath == "" {
-		return 0, nil
+		return nil, nil
 	}
-	count := 0
+	var ids []string
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
@@ -448,10 +449,10 @@ func (r *FileRegistry) CountByOriginalPath(_ context.Context, originalPath strin
 			continue
 		}
 		if file.OriginalPath == originalPath {
-			count++
+			ids = append(ids, file.ID)
 		}
 	}
-	return count, nil
+	return ids, nil
 }
 
 // ExistingIDs mirrors the postgres method — the subset of ids that still have a
