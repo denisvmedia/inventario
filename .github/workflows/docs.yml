@@ -86,7 +86,7 @@ jobs:
         with:
           fetch-depth: 0 # all tags, for the version loop + git worktree
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: 'npm'
