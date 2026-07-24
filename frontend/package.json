@@ -42,7 +42,7 @@
     "qrcode.react": "4.2.0",
     "radix-ui": "1.4.3",
     "react": "19.2.7",
-    "react-dom": "19.2.7",
+    "react-dom": "19.2.8",
     "react-hook-form": "7.81.0",
     "react-i18next": "17.0.10",
     "react-router-dom": "7.17.0",
