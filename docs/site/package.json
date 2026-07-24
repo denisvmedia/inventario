@@ -16,7 +16,7 @@
     "@astrojs/starlight-tailwind": "5.0.0",
     "@tailwindcss/vite": "4.3.1",
     "astro": "6.4.8",
-    "sharp": "^0.34.0",
+    "sharp": "^0.35.0",
     "tailwindcss": "4.3.1"
   },
   "overridesComment": "Pin a single Vite so @tailwindcss/vite shares Astro 6.4.8's Vite (7.x) instance. Without this, npm hoists Vite 8 under @tailwindcss/vite whose rolldown resolver trips 'Missing field tsconfigPaths' against Astro's Vite-7-driven build.",
