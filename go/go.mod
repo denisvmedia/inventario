@@ -51,14 +51,14 @@ require (
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
 	gocloud.dev v0.45.0
 	golang.org/x/crypto v0.54.0
-	golang.org/x/exp v0.0.0-20260709172345-9ea1abe57597
+	golang.org/x/exp v0.0.0-20260727155853-b88d891fe743
 	golang.org/x/image v0.44.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/term v0.45.0
 	golang.org/x/text v0.40.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
-	google.golang.org/grpc v1.82.1
+	google.golang.org/grpc v1.83.0
 )
 
 require (
@@ -164,7 +164,7 @@ require (
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 	github.com/yuin/gopher-lua v1.1.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/contrib/detectors/gcp v1.43.0 // indirect
+	go.opentelemetry.io/contrib/detectors/gcp v1.44.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.69.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
