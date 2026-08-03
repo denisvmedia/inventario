@@ -19,7 +19,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.63.1
 	github.com/bojanz/currency v1.4.4
 	github.com/frankban/quicktest v1.14.6
-	github.com/gabriel-vasile/mimetype v1.4.13
+	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/getsentry/sentry-go v0.47.0
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/go-chi/render v1.0.3
