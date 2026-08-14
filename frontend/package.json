@@ -56,7 +56,7 @@
     "@axe-core/playwright": "4.11.3",
     "@eslint/js": "10.0.1",
     "@lhci/cli": "0.15.1",
-    "@size-limit/preset-app": "12.1.0",
+    "@size-limit/preset-app": "13.0.3",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query-devtools": "5.101.4",
     "@testing-library/dom": "10.4.1",
