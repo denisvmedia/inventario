@@ -57,7 +57,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           <div className="relative z-10" />
         )}
       </div>
-      <div className="flex flex-1 flex-col items-center justify-center bg-background px-6 py-12">
+      <main className="flex flex-1 flex-col items-center justify-center bg-background px-6 py-12">
         <div className="mb-8 flex items-center gap-2 lg:hidden">
           <div className="flex size-7 items-center justify-center rounded-md bg-primary">
             <Package className="size-4 text-primary-foreground" />
@@ -65,7 +65,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           <span className="text-base font-semibold">{t("common:brand")}</span>
         </div>
         <div className="w-full max-w-sm">{children}</div>
-      </div>
+      </main>
     </div>
   )
 }

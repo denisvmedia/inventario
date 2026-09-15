@@ -35,7 +35,11 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
         <button
           type="button"
           onClick={() => setShow((v) => !v)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          // size-8 rather than letting the 16px icon define the hit area:
+          // WCAG 2.2 target-size wants >= 24x24 CSS px. right-1 + size-8 puts
+          // the icon's centre exactly where right-3 + size-4 did, so nothing
+          // moves visually.
+          className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
           aria-label={show ? t("auth:passwordHide") : t("auth:passwordShow")}
         >
           {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
