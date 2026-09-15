@@ -60,7 +60,7 @@ jobs:
         uses: ./.github/actions/vars
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ steps.vars.outputs.node_version }}
           cache: 'npm'
