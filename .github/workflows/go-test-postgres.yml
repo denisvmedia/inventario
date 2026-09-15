@@ -154,7 +154,18 @@ jobs:
       - name: Run PostgreSQL registry tests
         env:
           POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
-        run: go test -v -race ./registry/postgres/...
+        # -timeout above Go's 10m default. setupTestRegistrySet drops every
+        # table, re-runs bootstrap and replays all 66 migrations for each of
+        # the ~400 tests, so the suite's cost is dominated by statements the
+        # migrator issues rather than by the assertions. Ptah's revision
+        # table now records per-migration progress (an INSERT and an UPDATE
+        # around each migration, plus a history SELECT), which took the
+        # statement count for one test from ~3.9k to ~16k and the suite from
+        # ~4m to past the default timeout.
+        #
+        # The timeout is the stopgap. The fix is to stop replaying the whole
+        # migration chain per test -- see #2413.
+        run: go test -v -race -timeout 25m ./registry/postgres/...
         working-directory: go
 
       - name: Run Bootstrap integration tests
