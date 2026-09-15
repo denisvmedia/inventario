@@ -1,0 +1,20 @@
+# Lint policy for the generated migration tree, read by `ptah migrations lint`
+# (it loads <dir>/.ptah-lint.yaml automatically).
+#
+# The CI gate lints a pull request's own changeset via --git-base, not all of
+# history: the 66 migrations behind us are immutable and linting them would
+# report ~875 findings nobody can act on.
+dialect: postgres
+
+rules:
+  # DS107 is "dropping a database object removes existing schema behavior".
+  # Every occurrence in this tree is a DROP FUNCTION (96) or DROP POLICY (75)
+  # immediately followed by the CREATE that replaces it -- the idempotent pair
+  # Ptah's own generator emits for RLS functions and policies. No type,
+  # extension or role is dropped anywhere. As an error it would red every
+  # RLS-touching migration for doing exactly what the generator is supposed to
+  # do, so it is a warning: still reported, no longer a gate.
+  #
+  # Narrow this back to `error` if a migration ever drops an object for real.
+  DS107:
+    severity: warning

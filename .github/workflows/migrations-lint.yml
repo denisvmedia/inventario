@@ -1,0 +1,84 @@
+name: Migrations Lint
+
+# Gates a pull request's own new migrations against Ptah's safety rules
+# (DROP TABLE, lock-heavy DDL, non-CONCURRENTLY index builds, and so on).
+#
+# `--git-base` is what makes this usable: it lints only the migrations the PR
+# adds, not all of history. Linting the whole tree reports ~875 findings from
+# 66 immutable migrations nobody can act on. The rule policy lives in
+# `_sqldata/.ptah-lint.yaml`, which `lint` loads from the directory itself.
+#
+# Lint also verifies `ptah.sum` before it analyzes anything, so this job
+# doubles as the integrity gate: a migration added or edited by hand without
+# re-running `scripts/generate-migration.sh` fails here rather than at deploy
+# time.
+#
+# The CLI version comes from go.mod so the linter is always the same Ptah the
+# code is built against. `go run pkg@version` resolves outside the main
+# module, so nothing is added to go.mod/go.sum.
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'go/schema/migrations/_sqldata/**'
+      - 'go/go.mod'
+      - '.github/workflows/migrations-lint.yml'
+  pull_request:
+    paths:
+      - 'go/schema/migrations/_sqldata/**'
+      - 'go/go.mod'
+      - '.github/workflows/migrations-lint.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint migrations
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          # --git-base diffs against the base branch, so the history has to
+          # be there. A shallow clone leaves it with nothing to compare.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.26.6
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Resolve the Ptah version from go.mod
+        id: ptah
+        working-directory: go
+        run: echo "version=$(go list -m -f '{{.Version}}' ptah.run)" >> "$GITHUB_OUTPUT"
+
+      - name: Lint the migrations this PR adds
+        working-directory: go
+        env:
+          PTAH_VERSION: ${{ steps.ptah.outputs.version }}
+          GIT_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || '' }}
+        run: |
+          set -euo pipefail
+          # On a master push there is no changeset to scope to, so lint the
+          # newest migration only -- enough to catch something that landed
+          # without passing through a pull request.
+          if [ -n "$GIT_BASE" ]; then
+            scope=(--git-base "origin/$GIT_BASE")
+          else
+            scope=(--latest 1)
+          fi
+          go run "ptah.run/cmd/ptah@${PTAH_VERSION}" migrations lint \
+            --dir ./schema/migrations/_sqldata \
+            --format github-actions \
+            "${scope[@]}"
