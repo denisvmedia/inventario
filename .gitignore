@@ -48,3 +48,6 @@ dist/
 
 # Lighthouse CI local run output
 .lighthouseci/
+
+# Lock file ptah writes next to the migrations directory while diffing
+*.ptah-migrate-diff.lock

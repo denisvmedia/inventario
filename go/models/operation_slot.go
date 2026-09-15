@@ -7,6 +7,11 @@ import (
 	"github.com/jellydator/validation"
 )
 
+// Enable RLS for multi-tenant isolation
+//ptah:schema:rls:enable table="operation_slots" comment="Enable RLS for multi-tenant operation slot isolation"
+//ptah:schema:rls:policy name="operation_slot_isolation" table="operation_slots" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures operation slots can only be accessed and modified by their tenant and user with required contexts"
+//ptah:schema:rls:policy name="operation_slot_background_worker_access" table="operation_slots" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to sweep expired operation slots across all tenants"
+
 // OperationSlot represents a resource allocation slot for a specific operation
 //
 //ptah:schema:table name="operation_slots"
