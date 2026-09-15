@@ -134,18 +134,18 @@ func ParseWorkerType(s string) (WorkerType, bool) {
 // posture as system_admin_grants / audit_logs). It is stored directly on
 // FactorySet rather than behind a per-request Factory.
 //
-//migrator:schema:table name="worker_control"
+//ptah:schema:table name="worker_control"
 type WorkerControl struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	EntityID
 
 	// WorkerType is the natural key — one control row per worker type.
 	// Backed by a unique index so Pause can use ON CONFLICT (worker_type).
-	//migrator:schema:field name="worker_type" type="TEXT" not_null="true"
+	//ptah:schema:field name="worker_type" type="TEXT" not_null="true"
 	WorkerType WorkerType `json:"worker_type" db:"worker_type"`
 
 	// Paused is the soft-pause flag the worker run loop checks each tick.
-	//migrator:schema:field name="paused" type="BOOLEAN" not_null="true" default="false"
+	//ptah:schema:field name="paused" type="BOOLEAN" not_null="true" default="false"
 	Paused bool `json:"paused" db:"paused"`
 
 	// PausedBy records who paused the worker: the back-office operator id
@@ -154,23 +154,23 @@ type WorkerControl struct {
 	// recorded. Not an FK — this control plane is intentionally decoupled
 	// from the users table (and a CLI/back-office operator may not be a
 	// tenant user row).
-	//migrator:schema:field name="paused_by" type="TEXT"
+	//ptah:schema:field name="paused_by" type="TEXT"
 	PausedBy *string `json:"paused_by,omitempty" db:"paused_by"`
 
 	// PausedAt is when the worker was first paused. Preserved across
 	// re-pauses (updating by/reason does not reset the original pause
 	// time), and cleared to NULL on resume.
-	//migrator:schema:field name="paused_at" type="TIMESTAMP"
+	//ptah:schema:field name="paused_at" type="TIMESTAMP"
 	PausedAt *time.Time `json:"paused_at,omitempty" db:"paused_at"`
 
 	// Reason is the optional operator-supplied note for the pause. NULL
 	// when none was given; cleared on resume.
-	//migrator:schema:field name="reason" type="TEXT"
+	//ptah:schema:field name="reason" type="TEXT"
 	Reason *string `json:"reason,omitempty" db:"reason"`
 
 	// UpdatedAt is the wall-clock time of the last state change (pause,
 	// re-pause, or resume).
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
@@ -179,12 +179,12 @@ type WorkerControl struct {
 type WorkerControlIndexes struct {
 	// Unique index for the immutable UUID (the dedup key every entity
 	// carries for import/restore — mirrors the convention used elsewhere).
-	//migrator:schema:index name="idx_worker_control_uuid" fields="uuid" unique="true" table="worker_control"
+	//ptah:schema:index name="idx_worker_control_uuid" fields="uuid" unique="true" table="worker_control"
 	_ int
 
 	// Unique index on worker_type: at most one control row per worker.
 	// Backs the Pause INSERT ... ON CONFLICT (worker_type) upsert and the
 	// hot-path lookup the worker run loop runs each tick.
-	//migrator:schema:index name="worker_control_worker_type_idx" fields="worker_type" unique="true" table="worker_control"
+	//ptah:schema:index name="worker_control_worker_type_idx" fields="worker_type" unique="true" table="worker_control"
 	_ int
 }

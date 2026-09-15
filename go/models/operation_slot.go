@@ -9,48 +9,48 @@ import (
 
 // OperationSlot represents a resource allocation slot for a specific operation
 //
-//migrator:schema:table name="operation_slots"
+//ptah:schema:table name="operation_slots"
 type OperationSlot struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantUserAwareEntityID
 
 	// SlotID is the numeric identifier for this slot within the user/operation scope
-	//migrator:schema:field name="slot_id" type="INTEGER" not_null="true"
+	//ptah:schema:field name="slot_id" type="INTEGER" not_null="true"
 	SlotID int `json:"slot_id" db:"slot_id"`
 
 	// OperationName identifies the type of operation this slot is allocated for
-	//migrator:schema:field name="operation_name" type="TEXT" not_null="true" default="upload"
+	//ptah:schema:field name="operation_name" type="TEXT" not_null="true" default="upload"
 	OperationName string `json:"operation_name" db:"operation_name"`
 
 	// CreatedAt is when the slot was allocated
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 
 	// ExpiresAt is when the slot will automatically be released
-	//migrator:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
+	//ptah:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
 }
 
 // PostgreSQL-specific indexes for operation slots
 type OperationSlotIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore)
-	//migrator:schema:index name="idx_operation_slots_uuid" fields="uuid" unique="true" table="operation_slots"
+	//ptah:schema:index name="idx_operation_slots_uuid" fields="uuid" unique="true" table="operation_slots"
 	_ int
 
 	// Primary lookup index for user/operation queries
-	//migrator:schema:index name="idx_operation_slots_user_operation" fields="tenant_id,user_id,operation_name,expires_at" table="operation_slots"
+	//ptah:schema:index name="idx_operation_slots_user_operation" fields="tenant_id,user_id,operation_name,expires_at" table="operation_slots"
 	_ int
 
 	// Cleanup index for expired slot removal
-	//migrator:schema:index name="idx_operation_slots_cleanup" fields="expires_at" table="operation_slots"
+	//ptah:schema:index name="idx_operation_slots_cleanup" fields="expires_at" table="operation_slots"
 	_ int
 
 	// Unique constraint per user/operation/slot
-	//migrator:schema:index name="idx_operation_slots_unique" fields="tenant_id,user_id,operation_name,slot_id" table="operation_slots" unique="true"
+	//ptah:schema:index name="idx_operation_slots_unique" fields="tenant_id,user_id,operation_name,slot_id" table="operation_slots" unique="true"
 	_ int
 
 	// Operation-specific queries
-	//migrator:schema:index name="idx_operation_slots_operation" fields="operation_name,expires_at" table="operation_slots"
+	//ptah:schema:index name="idx_operation_slots_operation" fields="operation_name,expires_at" table="operation_slots"
 	_ int
 }
 

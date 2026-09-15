@@ -33,25 +33,25 @@ var (
 //
 // Enable RLS for multi-tenant isolation.
 //
-//migrator:schema:rls:enable table="maintenance_schedules" comment="Enable RLS for multi-tenant maintenance schedule isolation"
-//migrator:schema:rls:policy name="maintenance_schedule_isolation" table="maintenance_schedules" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures maintenance schedules can only be accessed and modified by their tenant and group with required contexts"
-//migrator:schema:rls:policy name="maintenance_schedule_background_worker_access" table="maintenance_schedules" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all maintenance schedules for processing"
-//migrator:schema:table name="maintenance_schedules"
+//ptah:schema:rls:enable table="maintenance_schedules" comment="Enable RLS for multi-tenant maintenance schedule isolation"
+//ptah:schema:rls:policy name="maintenance_schedule_isolation" table="maintenance_schedules" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures maintenance schedules can only be accessed and modified by their tenant and group with required contexts"
+//ptah:schema:rls:policy name="maintenance_schedule_background_worker_access" table="maintenance_schedules" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all maintenance schedules for processing"
+//ptah:schema:table name="maintenance_schedules"
 type MaintenanceSchedule struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantGroupAwareEntityID
 
 	// CommodityID is the schedule's owning commodity. ON DELETE CASCADE
 	// is added manually to the generated migration: hard-deleting a
 	// commodity drops its maintenance history (no orphan rows). Mirrors
 	// commodity_loans / commodity_services.
-	//migrator:schema:field name="commodity_id" type="TEXT" not_null="true" foreign="commodities(id)" foreign_key_name="fk_maintenance_schedule_commodity" on_delete="CASCADE"
+	//ptah:schema:field name="commodity_id" type="TEXT" not_null="true" foreign="commodities(id)" foreign_key_name="fk_maintenance_schedule_commodity" on_delete="CASCADE"
 	CommodityID string `json:"commodity_id" db:"commodity_id"`
 
 	// Title is required and free-form ("Replace water filter",
 	// "Descale espresso machine"). Capped at 200 chars to match the
 	// soft cap used by other text fields and leave room for indexes.
-	//migrator:schema:field name="title" type="TEXT" not_null="true"
+	//ptah:schema:field name="title" type="TEXT" not_null="true"
 	Title string `json:"title" db:"title"`
 
 	// IntervalDays is the fixed cadence in days. v1 keeps this as a
@@ -59,14 +59,14 @@ type MaintenanceSchedule struct {
 	// scope (#1368 options §1). Validated to be strictly positive: a
 	// non-positive interval would either spam reminders (0) or make
 	// next_due_at recede (negative).
-	//migrator:schema:field name="interval_days" type="INTEGER" not_null="true"
+	//ptah:schema:field name="interval_days" type="INTEGER" not_null="true"
 	IntervalDays int `json:"interval_days" db:"interval_days"`
 
 	// NextDueAt is the date the next instance is due. Stored as TEXT
 	// in YYYY-MM-DD format to match the codebase's other date fields
 	// (lent_at, sent_at, warranty_expires_at). Recomputed on every
 	// MarkDone call as `done_date + interval_days`.
-	//migrator:schema:field name="next_due_at" type="TEXT" not_null="true"
+	//ptah:schema:field name="next_due_at" type="TEXT" not_null="true"
 	NextDueAt Date `json:"next_due_at" db:"next_due_at"`
 
 	// LastDoneAt is the most recent date the user marked the schedule
@@ -75,13 +75,13 @@ type MaintenanceSchedule struct {
 	// be in the past (the user logging a maintenance they performed
 	// earlier and forgot to tick off) and may differ from the previous
 	// next_due_at by an arbitrary delta (life happens).
-	//migrator:schema:field name="last_done_at" type="TEXT"
+	//ptah:schema:field name="last_done_at" type="TEXT"
 	LastDoneAt PDate `json:"last_done_at" db:"last_done_at"`
 
 	// Notes is a free-form aide-mémoire ("use NSF-53 filter, comes in
 	// 2-packs"). Capped at 1000 chars — same convention as the loan /
 	// service note fields.
-	//migrator:schema:field name="notes" type="TEXT"
+	//ptah:schema:field name="notes" type="TEXT"
 	Notes string `json:"notes" db:"notes"`
 
 	// Enabled gates the reminder worker. Disabled rows are still
@@ -89,45 +89,45 @@ type MaintenanceSchedule struct {
 	// schedule without losing the configuration, but the worker skips
 	// them at scan time — no reminder rows are written and no email
 	// fires.
-	//migrator:schema:field name="enabled" type="BOOLEAN" not_null="true" default="true"
+	//ptah:schema:field name="enabled" type="BOOLEAN" not_null="true" default="true"
 	Enabled bool `json:"enabled" db:"enabled"`
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
 }
 
 // MaintenanceScheduleIndexes defines the postgres indexes for maintenance_schedules.
 type MaintenanceScheduleIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore).
-	//migrator:schema:index name="idx_maintenance_schedules_uuid" fields="uuid" unique="true" table="maintenance_schedules"
+	//ptah:schema:index name="idx_maintenance_schedules_uuid" fields="uuid" unique="true" table="maintenance_schedules"
 	_ int
 
 	// Index for tenant-based queries.
-	//migrator:schema:index name="idx_maintenance_schedules_tenant_id" fields="tenant_id" table="maintenance_schedules"
+	//ptah:schema:index name="idx_maintenance_schedules_tenant_id" fields="tenant_id" table="maintenance_schedules"
 	_ int
 
 	// Composite index for tenant+group RLS-filtered queries.
-	//migrator:schema:index name="idx_maintenance_schedules_tenant_group" fields="tenant_id,group_id" table="maintenance_schedules"
+	//ptah:schema:index name="idx_maintenance_schedules_tenant_group" fields="tenant_id,group_id" table="maintenance_schedules"
 	_ int
 
 	// Composite index for per-commodity reads (the per-item Maintenance
 	// section orders by next_due_at).
-	//migrator:schema:index name="idx_maintenance_schedules_commodity" fields="commodity_id,next_due_at" table="maintenance_schedules"
+	//ptah:schema:index name="idx_maintenance_schedules_commodity" fields="commodity_id,next_due_at" table="maintenance_schedules"
 	_ int
 
 	// Composite index for the group-wide upcoming list — the FE sorts
 	// by next_due_at ASC across the whole group.
-	//migrator:schema:index name="idx_maintenance_schedules_group_due" fields="group_id,next_due_at" table="maintenance_schedules"
+	//ptah:schema:index name="idx_maintenance_schedules_group_due" fields="group_id,next_due_at" table="maintenance_schedules"
 	_ int
 
 	// Partial index for the reminder worker's scan — only enabled rows
 	// are eligible to fire a reminder. The unenabled rows still match
 	// the index above but the worker filters them out; this index
 	// keeps the scan cheap.
-	//migrator:schema:index name="idx_maintenance_schedules_enabled_due" fields="next_due_at" condition="enabled = true" table="maintenance_schedules"
+	//ptah:schema:index name="idx_maintenance_schedules_enabled_due" fields="next_due_at" condition="enabled = true" table="maintenance_schedules"
 	_ int
 }
 

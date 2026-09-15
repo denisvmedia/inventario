@@ -8,11 +8,11 @@ package models
 // Database roles for multi-tenant access control
 type DatabaseRoles struct {
 	// Application role for RLS policies
-	//xmigrator:schema:role name="inventario_app" login="false" comment="Application role for Row-Level Security policies"
+	//xptah:schema:role name="inventario_app" login="false" comment="Application role for Row-Level Security policies"
 	_ int
 }
 
-// Multi-tenant context functions for Row-Level Security.
+// RLSFunctions carries the multi-tenant context functions for Row-Level Security.
 //
 // The setter scopes the GUC to the current transaction
 // (`set_config(..., true)` == `SET LOCAL`) so a pgbouncer-pooled
@@ -20,12 +20,13 @@ type DatabaseRoles struct {
 // request's transaction. SECURITY DEFINER is deliberately NOT set —
 // set_config requires no elevated privilege. Matches
 // set_group_context / set_user_context.
+//
+// The annotations sit on the type's doc comment, not on struct fields: Ptah
+// collects `ptah:schema:function` from the declaration a comment is attached
+// to, and a field of a struct that declares no table is never reached.
+//
+//ptah:schema:function name="set_tenant_context" params="tenant_id_param TEXT" returns="VOID" language="plpgsql" body="BEGIN PERFORM set_config('app.current_tenant_id', tenant_id_param, true); END;" comment="Sets the current tenant context for RLS policies (transaction-local)"
+//ptah:schema:function name="get_current_tenant_id" returns="TEXT" language="plpgsql" volatility="STABLE" body="BEGIN RETURN current_setting('app.current_tenant_id', true); END;" comment="Gets the current tenant ID from session for RLS policies"
 type RLSFunctions struct {
-	// Function to set the current tenant context in the session
-	//migrator:schema:function name="set_tenant_context" params="tenant_id_param TEXT" returns="VOID" language="plpgsql" body="BEGIN PERFORM set_config('app.current_tenant_id', tenant_id_param, true); END;" comment="Sets the current tenant context for RLS policies (transaction-local)"
-	_ int
-
-	// Function to get the current tenant ID from the session
-	//migrator:schema:function name="get_current_tenant_id" returns="TEXT" language="plpgsql" volatility="STABLE" body="BEGIN RETURN current_setting('app.current_tenant_id', true); END;" comment="Gets the current tenant ID from session for RLS policies"
 	_ int
 }

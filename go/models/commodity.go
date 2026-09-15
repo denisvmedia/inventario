@@ -92,9 +92,9 @@ var (
 )
 
 // Enable RLS for multi-tenant isolation
-//migrator:schema:rls:enable table="commodities" comment="Enable RLS for multi-tenant commodity isolation"
-//migrator:schema:rls:policy name="commodity_isolation" table="commodities" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures commodities can only be accessed and modified by their tenant and group with required contexts"
-//migrator:schema:rls:policy name="commodity_background_worker_access" table="commodities" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all commodities for processing"
+//ptah:schema:rls:enable table="commodities" comment="Enable RLS for multi-tenant commodity isolation"
+//ptah:schema:rls:policy name="commodity_isolation" table="commodities" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures commodities can only be accessed and modified by their tenant and group with required contexts"
+//ptah:schema:rls:policy name="commodity_background_worker_access" table="commodities" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all commodities for processing"
 
 // Both-or-neither invariant on the acquisition pair (#1550 / #202) is
 // enforced at the application layer: migrationops.SetAcquisition is
@@ -103,18 +103,18 @@ var (
 // preserves them. A schema-level CHECK constraint would be nice as
 // defence in depth, but ptah's walker.go does NOT bubble per-file
 // `Database.Constraints` from ParseFS results, so any
-// `migrator:schema:constraint` annotation drifts vs the live DB on
+// `ptah:schema:constraint` annotation drifts vs the live DB on
 // every run. Re-add when the upstream walker is fixed.
 //
-//migrator:schema:table name="commodities"
+//ptah:schema:table name="commodities"
 type Commodity struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantGroupAwareEntityID
-	//migrator:schema:field name="name" type="TEXT" not_null="true"
+	//ptah:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
-	//migrator:schema:field name="short_name" type="TEXT"
+	//ptah:schema:field name="short_name" type="TEXT"
 	ShortName string `json:"short_name" db:"short_name"`
-	//migrator:schema:field name="type" type="TEXT" not_null="true"
+	//ptah:schema:field name="type" type="TEXT" not_null="true"
 	Type CommodityType `json:"type" db:"type"`
 	// AreaID is the area the commodity is filed under. Nullable (issue
 	// #1986): a commodity may be created with no area and later
@@ -122,54 +122,54 @@ type Commodity struct {
 	// on_delete clause — area deletion is handled at the service layer
 	// (EntityService.DeleteAreaRecursive cascades to the area's
 	// commodities), unchanged by this issue.
-	//migrator:schema:field name="area_id" type="TEXT" foreign="areas(id)" foreign_key_name="fk_commodity_area"
+	//ptah:schema:field name="area_id" type="TEXT" foreign="areas(id)" foreign_key_name="fk_commodity_area"
 	AreaID *string `json:"area_id,omitempty" db:"area_id"`
-	//migrator:schema:field name="count" type="INTEGER" not_null="true" default="1"
+	//ptah:schema:field name="count" type="INTEGER" not_null="true" default="1"
 	Count int `json:"count" db:"count"`
-	//migrator:schema:field name="original_price" type="DECIMAL(15,2)"
+	//ptah:schema:field name="original_price" type="DECIMAL(15,2)"
 	OriginalPrice decimal.Decimal `json:"original_price" db:"original_price"`
-	//migrator:schema:field name="original_price_currency" type="TEXT"
+	//ptah:schema:field name="original_price_currency" type="TEXT"
 	OriginalPriceCurrency Currency `json:"original_price_currency" db:"original_price_currency"`
-	//migrator:schema:field name="converted_original_price" type="DECIMAL(15,2)"
+	//ptah:schema:field name="converted_original_price" type="DECIMAL(15,2)"
 	ConvertedOriginalPrice decimal.Decimal `json:"converted_original_price" db:"converted_original_price"`
-	//migrator:schema:field name="current_price" type="DECIMAL(15,2)"
+	//ptah:schema:field name="current_price" type="DECIMAL(15,2)"
 	CurrentPrice decimal.Decimal `json:"current_price" db:"current_price"`
-	//migrator:schema:field name="serial_number" type="TEXT"
+	//ptah:schema:field name="serial_number" type="TEXT"
 	SerialNumber string `json:"serial_number" db:"serial_number"`
-	//migrator:schema:field name="extra_serial_numbers" type="JSONB"
+	//ptah:schema:field name="extra_serial_numbers" type="JSONB"
 	ExtraSerialNumbers ValuerSlice[string] `json:"extra_serial_numbers" db:"extra_serial_numbers"`
-	//migrator:schema:field name="part_numbers" type="JSONB"
+	//ptah:schema:field name="part_numbers" type="JSONB"
 	PartNumbers ValuerSlice[string] `json:"part_numbers" db:"part_numbers"`
-	//migrator:schema:field name="tags" type="JSONB"
+	//ptah:schema:field name="tags" type="JSONB"
 	Tags ValuerSlice[string] `json:"tags" db:"tags"`
-	//migrator:schema:field name="status" type="TEXT" not_null="true"
+	//ptah:schema:field name="status" type="TEXT" not_null="true"
 	Status CommodityStatus `json:"status" db:"status"`
-	//migrator:schema:field name="purchase_date" type="TEXT"
+	//ptah:schema:field name="purchase_date" type="TEXT"
 	PurchaseDate PDate `json:"purchase_date" db:"purchase_date"`
-	//migrator:schema:field name="registered_date" type="TEXT"
+	//ptah:schema:field name="registered_date" type="TEXT"
 	RegisteredDate PDate `json:"registered_date" db:"registered_date"`
-	//migrator:schema:field name="last_modified_date" type="TEXT"
+	//ptah:schema:field name="last_modified_date" type="TEXT"
 	LastModifiedDate PDate `json:"last_modified_date" db:"last_modified_date"`
-	//migrator:schema:field name="urls" type="JSONB"
+	//ptah:schema:field name="urls" type="JSONB"
 	URLs ValuerSlice[*URL] `json:"urls" swaggertype:"string" db:"urls"`
-	//migrator:schema:field name="comments" type="TEXT"
+	//ptah:schema:field name="comments" type="TEXT"
 	Comments string `json:"comments" db:"comments"`
-	//migrator:schema:field name="draft" type="BOOLEAN" not_null="true" default="false"
+	//ptah:schema:field name="draft" type="BOOLEAN" not_null="true" default="false"
 	Draft bool `json:"draft" db:"draft"`
 	// CoverFileID is the user-picked cover photo for the commodity (issue
 	// #1451 option B). Nullable: when unset, the cover-resolver falls back
 	// to the earliest `category=images` file (option A — first photo).
 	// ON DELETE SET NULL so deleting the photo silently drops the
 	// override; the resolver's first-photo path takes over.
-	//migrator:schema:field name="cover_file_id" type="TEXT" foreign="files(id)" foreign_key_name="fk_commodity_cover_file" on_delete="SET NULL"
+	//ptah:schema:field name="cover_file_id" type="TEXT" foreign="files(id)" foreign_key_name="fk_commodity_cover_file" on_delete="SET NULL"
 	CoverFileID *string `json:"cover_file_id,omitempty" db:"cover_file_id"`
 	// WarrantyExpiresAt is the date the manufacturer/seller warranty for this
 	// commodity ends. Nil means "no warranty tracked" (status=none). Status —
 	// active / expiring / expired — is computed from this date and the server
 	// clock, never stored, so a row "expires" without any write happening.
-	//migrator:schema:field name="warranty_expires_at" type="TEXT"
+	//ptah:schema:field name="warranty_expires_at" type="TEXT"
 	WarrantyExpiresAt PDate `json:"warranty_expires_at" db:"warranty_expires_at"`
-	//migrator:schema:field name="warranty_notes" type="TEXT"
+	//ptah:schema:field name="warranty_notes" type="TEXT"
 	WarrantyNotes string `json:"warranty_notes" db:"warranty_notes"`
 
 	// AcquisitionPrice is the per-row "as purchased" amount, frozen the
@@ -179,11 +179,11 @@ type Commodity struct {
 	// already is the purchase value. Server-managed and write-once: the
 	// API silently drops any payload values, and the migration worker
 	// only writes when both columns are still NULL.
-	//migrator:schema:field name="acquisition_price" type="DECIMAL(15,2)"
+	//ptah:schema:field name="acquisition_price" type="DECIMAL(15,2)"
 	AcquisitionPrice *decimal.Decimal `json:"acquisition_price,omitempty" db:"acquisition_price" userinput:"false" readonly:"true"`
 	// AcquisitionCurrency is the original currency of AcquisitionPrice.
 	// Always either both NULL or both set (DB CHECK constraint enforces).
-	//migrator:schema:field name="acquisition_currency" type="TEXT"
+	//ptah:schema:field name="acquisition_currency" type="TEXT"
 	AcquisitionCurrency *Currency `json:"acquisition_currency,omitempty" db:"acquisition_currency" userinput:"false" readonly:"true"`
 
 	// StatusDate is the day the user reported the commodity's transition
@@ -192,18 +192,18 @@ type Commodity struct {
 	// day-precision string — the mock uses `<input type="date">` so we
 	// don't need sub-day granularity. NULL while `status = in_use` or
 	// for terminal rows that pre-date this column.
-	//migrator:schema:field name="status_date" type="TEXT"
+	//ptah:schema:field name="status_date" type="TEXT"
 	StatusDate PDate `json:"status_date" db:"status_date"`
 	// StatusNote is the free-form note recorded alongside a status
 	// transition (e.g. "Sold to Bob" / "Last seen at the airport"). NULL
 	// for `in_use` rows and pre-existing terminal rows. Bounded by the
 	// same 1024-char ceiling we use for Comments to keep the BE/UI sane.
-	//migrator:schema:field name="status_note" type="TEXT"
+	//ptah:schema:field name="status_note" type="TEXT"
 	StatusNote string `json:"status_note" db:"status_note"`
 	// SalePrice is the realised proceeds for a `sold` transition. NULL
 	// for any other status. Stored in the commodity's original purchase
 	// currency — sale-side currency reporting is out of scope for #1611.
-	//migrator:schema:field name="sale_price" type="DECIMAL(15,2)"
+	//ptah:schema:field name="sale_price" type="DECIMAL(15,2)"
 	SalePrice *decimal.Decimal `json:"sale_price,omitempty" db:"sale_price"`
 }
 
@@ -276,61 +276,61 @@ func ComputeWarrantyStatus(expires PDate, now time.Time) WarrantyStatus {
 // PostgreSQL-specific indexes for commodities
 type CommodityIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore)
-	//migrator:schema:index name="idx_commodities_uuid" fields="uuid" unique="true" table="commodities"
+	//ptah:schema:index name="idx_commodities_uuid" fields="uuid" unique="true" table="commodities"
 	_ int
 
 	// Index for tenant-based queries
-	//migrator:schema:index name="idx_commodities_tenant_id" fields="tenant_id" table="commodities"
+	//ptah:schema:index name="idx_commodities_tenant_id" fields="tenant_id" table="commodities"
 	_ int
 
 	// Composite index for tenant + area queries
-	//migrator:schema:index name="idx_commodities_tenant_area" fields="tenant_id,area_id" table="commodities"
+	//ptah:schema:index name="idx_commodities_tenant_area" fields="tenant_id,area_id" table="commodities"
 	_ int
 
 	// Composite index for tenant + status queries
-	//migrator:schema:index name="idx_commodities_tenant_status" fields="tenant_id,status" table="commodities"
+	//ptah:schema:index name="idx_commodities_tenant_status" fields="tenant_id,status" table="commodities"
 	_ int
 
 	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
-	//migrator:schema:index name="idx_commodities_tenant_group" fields="tenant_id,group_id" table="commodities"
+	//ptah:schema:index name="idx_commodities_tenant_group" fields="tenant_id,group_id" table="commodities"
 	_ int
 
 	// GIN index for JSONB tags field
-	//migrator:schema:index name="commodities_tags_gin_idx" fields="tags" type="GIN" table="commodities"
+	//ptah:schema:index name="commodities_tags_gin_idx" fields="tags" type="GIN" table="commodities"
 	_ int
 
 	// GIN index for JSONB extra_serial_numbers field
-	//migrator:schema:index name="commodities_extra_serial_numbers_gin_idx" fields="extra_serial_numbers" type="GIN" table="commodities"
+	//ptah:schema:index name="commodities_extra_serial_numbers_gin_idx" fields="extra_serial_numbers" type="GIN" table="commodities"
 	_ int
 
 	// GIN index for JSONB part_numbers field
-	//migrator:schema:index name="commodities_part_numbers_gin_idx" fields="part_numbers" type="GIN" table="commodities"
+	//ptah:schema:index name="commodities_part_numbers_gin_idx" fields="part_numbers" type="GIN" table="commodities"
 	_ int
 
 	// GIN index for JSONB urls field
-	//migrator:schema:index name="commodities_urls_gin_idx" fields="urls" type="GIN" table="commodities"
+	//ptah:schema:index name="commodities_urls_gin_idx" fields="urls" type="GIN" table="commodities"
 	_ int
 
 	// Partial index for active commodities (non-draft)
-	//migrator:schema:index name="commodities_active_idx" fields="status,area_id" condition="draft = false" table="commodities"
+	//ptah:schema:index name="commodities_active_idx" fields="status,area_id" condition="draft = false" table="commodities"
 	_ int
 
 	// Partial index for draft commodities
-	//migrator:schema:index name="commodities_draft_idx" fields="last_modified_date" condition="draft = true" table="commodities"
+	//ptah:schema:index name="commodities_draft_idx" fields="last_modified_date" condition="draft = true" table="commodities"
 	_ int
 
 	// Trigram similarity index for commodity name search
-	//migrator:schema:index name="commodities_name_trgm_idx" fields="name" type="GIN" ops="gin_trgm_ops" table="commodities"
+	//ptah:schema:index name="commodities_name_trgm_idx" fields="name" type="GIN" ops="gin_trgm_ops" table="commodities"
 	_ int
 
 	// Trigram similarity index for short name search
-	//migrator:schema:index name="commodities_short_name_trgm_idx" fields="short_name" type="GIN" ops="gin_trgm_ops" table="commodities"
+	//ptah:schema:index name="commodities_short_name_trgm_idx" fields="short_name" type="GIN" ops="gin_trgm_ops" table="commodities"
 	_ int
 
 	// Partial index for warranty filtering — only commodities that have a
 	// warranty date set are interesting for the worker scan and the
 	// "expiring soon" filter. Skips the bulk of rows (no warranty).
-	//migrator:schema:index name="commodities_warranty_expires_at_idx" fields="warranty_expires_at" condition="warranty_expires_at IS NOT NULL" table="commodities"
+	//ptah:schema:index name="commodities_warranty_expires_at_idx" fields="warranty_expires_at" condition="warranty_expires_at IS NOT NULL" table="commodities"
 	_ int
 }
 

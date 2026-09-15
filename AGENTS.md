@@ -63,12 +63,12 @@ The system implements enterprise-grade multi-tenancy with:
 - `make run-dev` - Run both servers concurrently
 
 ### Database Operations
-- **MIGRATIONS — DEFAULT IS GENERATED, HAND-WRITTEN REQUIRES EXPLICIT USER APPROVAL.** Schema migrations live in `go/schema/migrations/_sqldata/` as `<version>_<name>.up.sql` / `.down.sql` pairs. Those files are **generated** from the Go model annotations (Ptah `//migrator:schema:...` tags) by the schema-drift generator; the CI schema-drift check regenerates from models and exits non-zero on any mismatch, so a freehand file will fail before merge regardless of how clean it looks. To add or change a migration:
-  1. Edit the Go model in `go/models/` — add fields with `//migrator:schema:field`, indexes with `//migrator:schema:index`, RLS policies with `//migrator:schema:rls:policy`, etc.
+- **MIGRATIONS — DEFAULT IS GENERATED, HAND-WRITTEN REQUIRES EXPLICIT USER APPROVAL.** Schema migrations live in `go/schema/migrations/_sqldata/` as `<version>_<name>.up.sql` / `.down.sql` pairs. Those files are **generated** from the Go model annotations (Ptah `//ptah:schema:...` tags) by the schema-drift generator; the CI schema-drift check regenerates from models and exits non-zero on any mismatch, so a freehand file will fail before merge regardless of how clean it looks. To add or change a migration:
+  1. Edit the Go model in `go/models/` — add fields with `//ptah:schema:field`, indexes with `//ptah:schema:index`, RLS policies with `//ptah:schema:rls:policy`, etc.
   2. Run `./scripts/generate-migration.sh <descriptive_name>`. It spins up an ephemeral Postgres container, applies every existing migration, diffs the live schema against your model annotations, and writes the resulting UP/DOWN pair to `_sqldata/`.
   3. The generator picks its own timestamp (a real UTC Unix timestamp ≤ wall-clock now). A `TestEmbeddedMigrations_VersionNotInFuture` CI guard fails the build if any prefix exceeds the wall-clock; never invent a "fake-future" prefix to dodge collisions, just rebase + regenerate so the next real-time second is picked.
-  4. Review the generated SQL, run `go test ./schema/migrations/...` locally, then commit both files.
-  If the generator output looks wrong, fix the **model annotations** and regenerate — don't edit the SQL by hand.
+  4. Review the generated SQL, run `go test ./schema/migrations/...` locally, then commit both files **and the refreshed `_sqldata/ptah.sum`** — the script re-hashes the directory after generating, and every Ptah verb that reads the directory rejects a pair the sum does not cover.
+  If the generator output looks wrong, fix the **model annotations** and regenerate — don't edit the SQL by hand. Editing a committed `.sql` file in place also invalidates `ptah.sum`, which is exactly what that file is there to catch.
   **Hand-written migrations exception.** Some changes can't be expressed via model annotations (data backfills, view refactors, multi-step `ALTER`s, one-off custom DDL). In those rare cases — **STOP and ask the user for explicit permission before writing SQL by hand**. Do not improvise. The user will tell you whether to handcraft the migration or land it as a follow-up using a different approach (e.g. a runtime backfill worker). The CI check still has to pass afterward, so the user's approval includes the trade-off of suppressing drift detection for that specific file.
 - `curl -X POST http://localhost:3333/api/v1/seed` - Seed the database with test data (POST only; the route is gated off by default since #2039; run the server with `--enable-seed-endpoint` / `INVENTARIO_RUN_ENABLE_SEED_ENDPOINT=true` first)
 - `./inventario tenants create` - Create tenants for initial setup
@@ -315,7 +315,7 @@ Support for multiple database backends via DSN:
 - Use Ptah struct annotations for schema definition
 - All entities extend TenantAwareEntityID for multi-tenancy
 - Foreign key constraints ensure data integrity
-- **Never hand-write migration SQL.** New tables/columns/indexes are declared as `//migrator:schema:*` annotations on the model struct; the migration files in `go/schema/migrations/_sqldata/` are *generated* from those annotations by `inventool db migrations generate` against an ephemeral postgres. Use the wrapper script:
+- **Never hand-write migration SQL.** New tables/columns/indexes are declared as `//ptah:schema:*` annotations on the model struct; the migration files in `go/schema/migrations/_sqldata/` are *generated* from those annotations by `inventool db migrations generate` against an ephemeral postgres. Use the wrapper script:
   ```
   ./scripts/generate-migration.sh <migration_name>
   ```
@@ -350,7 +350,7 @@ Support for multiple database backends via DSN:
 6. Write tests for all layers
 
 ### Database Schema Changes
-1. Update `//migrator:schema:*` annotations on the model struct (table, fields, indexes, RLS policies).
+1. Update `//ptah:schema:*` annotations on the model struct (table, fields, indexes, RLS policies).
 2. Generate the migration with `./scripts/generate-migration.sh <name>` — never hand-write the SQL.
 3. Apply locally: `./inventario db migrate up --db-dsn=<dsn>` (use `--dry-run` first if unsure).
 4. Update tests to reflect schema changes.

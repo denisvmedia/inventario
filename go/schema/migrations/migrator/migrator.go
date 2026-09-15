@@ -14,8 +14,8 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	_ "github.com/lib/pq" // PostgreSQL driver for database/sql
-	"github.com/stokaro/ptah/dbschema"
-	"github.com/stokaro/ptah/migration/migrator"
+	"ptah.run/dbschema"
+	"ptah.run/migration/migrator"
 
 	"github.com/denisvmedia/inventario/schema/dsnutil"
 	"github.com/denisvmedia/inventario/schema/migrations"
@@ -383,7 +383,7 @@ func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) 
 // PrintMigrationStatus prints detailed migration status information
 func (m *Migrator) PrintMigrationStatus(ctx context.Context, verbose bool) error { //revive:disable:flag-parameter
 	fmt.Println("=== MIGRATION STATUS ===")
-	fmt.Printf("Database: %s\n", dbschema.FormatDatabaseURL(m.dbURL))
+	fmt.Printf("Database: %s\n", dsnutil.Redact(m.dbURL))
 	fmt.Println("Schema source: File system")
 	fmt.Println()
 

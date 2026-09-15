@@ -138,56 +138,56 @@ func (e ExportSelectedItem) ValidateWithContext(ctx context.Context) error {
 }
 
 // Enable RLS for multi-tenant isolation
-//migrator:schema:rls:enable table="exports" comment="Enable RLS for multi-tenant export isolation"
-//migrator:schema:rls:policy name="export_isolation" table="exports" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures exports can only be accessed and modified by their tenant and group with required contexts"
-//migrator:schema:rls:policy name="export_background_worker_access" table="exports" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all exports for processing"
+//ptah:schema:rls:enable table="exports" comment="Enable RLS for multi-tenant export isolation"
+//ptah:schema:rls:policy name="export_isolation" table="exports" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures exports can only be accessed and modified by their tenant and group with required contexts"
+//ptah:schema:rls:policy name="export_background_worker_access" table="exports" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all exports for processing"
 
-//migrator:schema:table name="exports"
+//ptah:schema:table name="exports"
 type Export struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantGroupAwareEntityID
-	//migrator:schema:field name="type" type="TEXT" not_null="true"
+	//ptah:schema:field name="type" type="TEXT" not_null="true"
 	Type ExportType `json:"type" db:"type"`
-	//migrator:schema:field name="status" type="TEXT" not_null="true"
+	//ptah:schema:field name="status" type="TEXT" not_null="true"
 	Status ExportStatus `json:"status" db:"status" userinput:"false"`
-	//migrator:schema:field name="include_file_data" type="BOOLEAN" not_null="true" default="false"
+	//ptah:schema:field name="include_file_data" type="BOOLEAN" not_null="true" default="false"
 	IncludeFileData bool `json:"include_file_data" db:"include_file_data"`
-	//migrator:schema:field name="selected_items" type="JSONB"
+	//ptah:schema:field name="selected_items" type="JSONB"
 	SelectedItems ValuerSlice[ExportSelectedItem] `json:"selected_items" db:"selected_items"`
-	//migrator:schema:field name="file_id" type="TEXT" foreign="files(id)" foreign_key_name="fk_export_file" on_delete="SET NULL"
+	//ptah:schema:field name="file_id" type="TEXT" foreign="files(id)" foreign_key_name="fk_export_file" on_delete="SET NULL"
 	FileID *string `json:"file_id" db:"file_id" userinput:"false"`
-	//migrator:schema:field name="file_path" type="TEXT"
+	//ptah:schema:field name="file_path" type="TEXT"
 	FilePath string `json:"file_path" db:"file_path" userinput:"false"` // Deprecated: will be removed after migration
-	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedDate PTimestamp `json:"created_date" db:"created_date" userinput:"false"`
-	//migrator:schema:field name="completed_date" type="TIMESTAMP"
+	//ptah:schema:field name="completed_date" type="TIMESTAMP"
 	CompletedDate PTimestamp `json:"completed_date" db:"completed_date" userinput:"false"`
-	//migrator:schema:field name="deleted_at" type="TIMESTAMP"
+	//ptah:schema:field name="deleted_at" type="TIMESTAMP"
 	DeletedAt PTimestamp `json:"deleted_at" db:"deleted_at" userinput:"false"`
-	//migrator:schema:field name="error_message" type="TEXT"
+	//ptah:schema:field name="error_message" type="TEXT"
 	ErrorMessage string `json:"error_message" db:"error_message" userinput:"false"`
-	//migrator:schema:field name="description" type="TEXT"
+	//ptah:schema:field name="description" type="TEXT"
 	Description string `json:"description" db:"description"`
-	//migrator:schema:field name="imported" type="BOOLEAN" not_null="true" default="false"
+	//ptah:schema:field name="imported" type="BOOLEAN" not_null="true" default="false"
 	Imported bool `json:"imported" db:"imported" userinput:"false"`
 	// Export statistics
-	//migrator:schema:field name="file_size" type="BIGINT" default="0"
+	//ptah:schema:field name="file_size" type="BIGINT" default="0"
 	FileSize int64 `json:"file_size" db:"file_size" userinput:"false"`
-	//migrator:schema:field name="location_count" type="INTEGER" default="0"
+	//ptah:schema:field name="location_count" type="INTEGER" default="0"
 	LocationCount int `json:"location_count" db:"location_count" userinput:"false"`
-	//migrator:schema:field name="area_count" type="INTEGER" default="0"
+	//ptah:schema:field name="area_count" type="INTEGER" default="0"
 	AreaCount int `json:"area_count" db:"area_count" userinput:"false"`
-	//migrator:schema:field name="commodity_count" type="INTEGER" default="0"
+	//ptah:schema:field name="commodity_count" type="INTEGER" default="0"
 	CommodityCount int `json:"commodity_count" db:"commodity_count" userinput:"false"`
-	//migrator:schema:field name="image_count" type="INTEGER" default="0"
+	//ptah:schema:field name="image_count" type="INTEGER" default="0"
 	ImageCount int `json:"image_count" db:"image_count" userinput:"false"`
-	//migrator:schema:field name="invoice_count" type="INTEGER" default="0"
+	//ptah:schema:field name="invoice_count" type="INTEGER" default="0"
 	InvoiceCount int `json:"invoice_count" db:"invoice_count" userinput:"false"`
-	//migrator:schema:field name="manual_count" type="INTEGER" default="0"
+	//ptah:schema:field name="manual_count" type="INTEGER" default="0"
 	ManualCount int `json:"manual_count" db:"manual_count" userinput:"false"`
-	//migrator:schema:field name="file_count" type="INTEGER" default="0"
+	//ptah:schema:field name="file_count" type="INTEGER" default="0"
 	FileCount int `json:"file_count" db:"file_count" userinput:"false"`
-	//migrator:schema:field name="binary_data_size" type="BIGINT" default="0"
+	//ptah:schema:field name="binary_data_size" type="BIGINT" default="0"
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
 }
 
@@ -219,23 +219,23 @@ func NewExportFromUserInput(export *Export) Export {
 // ExportIndexes defines performance indexes for the exports table
 type ExportIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore)
-	//migrator:schema:index name="idx_exports_uuid" fields="uuid" unique="true" table="exports"
+	//ptah:schema:index name="idx_exports_uuid" fields="uuid" unique="true" table="exports"
 	_ int
 
 	// Index for tenant-based queries
-	//migrator:schema:index name="idx_exports_tenant_id" fields="tenant_id" table="exports"
+	//ptah:schema:index name="idx_exports_tenant_id" fields="tenant_id" table="exports"
 	_ int
 
 	// Composite index for tenant + status queries
-	//migrator:schema:index name="idx_exports_tenant_status" fields="tenant_id,status" table="exports"
+	//ptah:schema:index name="idx_exports_tenant_status" fields="tenant_id,status" table="exports"
 	_ int
 
 	// Composite index for tenant + type queries
-	//migrator:schema:index name="idx_exports_tenant_type" fields="tenant_id,type" table="exports"
+	//ptah:schema:index name="idx_exports_tenant_type" fields="tenant_id,type" table="exports"
 	_ int
 
 	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
-	//migrator:schema:index name="idx_exports_tenant_group" fields="tenant_id,group_id" table="exports"
+	//ptah:schema:index name="idx_exports_tenant_group" fields="tenant_id,group_id" table="exports"
 	_ int
 }
 

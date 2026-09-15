@@ -83,9 +83,9 @@ var (
 // background-worker bypass policy so the periodic scan can read
 // across all groups.
 //
-//migrator:schema:rls:enable table="maintenance_reminders" comment="Enable RLS for multi-tenant maintenance reminder isolation"
-//migrator:schema:rls:policy name="maintenance_reminder_isolation" table="maintenance_reminders" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures maintenance reminders are accessible only by their tenant and group"
-//migrator:schema:rls:policy name="maintenance_reminder_background_worker_access" table="maintenance_reminders" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to record reminder emissions across all groups"
+//ptah:schema:rls:enable table="maintenance_reminders" comment="Enable RLS for multi-tenant maintenance reminder isolation"
+//ptah:schema:rls:policy name="maintenance_reminder_isolation" table="maintenance_reminders" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures maintenance reminders are accessible only by their tenant and group"
+//ptah:schema:rls:policy name="maintenance_reminder_background_worker_access" table="maintenance_reminders" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to record reminder emissions across all groups"
 
 // MaintenanceReminder is the idempotency row written by the
 // maintenance reminder worker right after it successfully enqueues an
@@ -98,29 +98,29 @@ var (
 // On commodity hard-delete the rows cascade away with the schedule
 // (and the schedule cascades with the commodity).
 //
-//migrator:schema:table name="maintenance_reminders"
+//ptah:schema:table name="maintenance_reminders"
 type MaintenanceReminder struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantGroupAwareEntityID
 
 	// ScheduleID is the owning maintenance_schedules row. Cascade-
 	// deletes with the schedule so old reminders never block re-
 	// creating a similar schedule for the same commodity.
-	//migrator:schema:field name="schedule_id" type="TEXT" not_null="true" foreign="maintenance_schedules(id)" foreign_key_name="fk_maintenance_reminder_schedule" on_delete="CASCADE"
+	//ptah:schema:field name="schedule_id" type="TEXT" not_null="true" foreign="maintenance_schedules(id)" foreign_key_name="fk_maintenance_reminder_schedule" on_delete="CASCADE"
 	ScheduleID string `json:"schedule_id" db:"schedule_id"`
 
 	// ThresholdDays is the MaintenanceReminderThreshold this row
 	// accounts for (14 / 7 / 1 / 0). Stored as INTEGER rather than
 	// text so a future cadence change can compare numerically. The
 	// overdue sentinel is stored as 0.
-	//migrator:schema:field name="threshold_days" type="INTEGER" not_null="true"
+	//ptah:schema:field name="threshold_days" type="INTEGER" not_null="true"
 	ThresholdDays int `json:"threshold_days" db:"threshold_days"`
 
 	// SentAt is the wall-clock time the email was enqueued (not
 	// necessarily delivered — the email queue is async). Surfacing
 	// this directly is enough for support/audit purposes; the email
 	// queue's own job log records final delivery.
-	//migrator:schema:field name="sent_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="sent_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	SentAt time.Time `json:"sent_at" db:"sent_at"`
 }
 
@@ -131,16 +131,16 @@ type MaintenanceReminderIndexes struct {
 	// Unique idempotency key — at most one reminder row per
 	// (schedule, threshold). The worker checks this before enqueueing
 	// the email.
-	//migrator:schema:index name="idx_maintenance_reminders_schedule_threshold" fields="schedule_id,threshold_days" unique="true" table="maintenance_reminders"
+	//ptah:schema:index name="idx_maintenance_reminders_schedule_threshold" fields="schedule_id,threshold_days" unique="true" table="maintenance_reminders"
 	_ int
 
 	// Tenant-scoped index for housekeeping queries.
-	//migrator:schema:index name="idx_maintenance_reminders_tenant_id" fields="tenant_id" table="maintenance_reminders"
+	//ptah:schema:index name="idx_maintenance_reminders_tenant_id" fields="tenant_id" table="maintenance_reminders"
 	_ int
 
 	// Group-scoped index — used when the group purge worker fans
 	// reminders out for hard-delete in FK order.
-	//migrator:schema:index name="idx_maintenance_reminders_group_id" fields="group_id" table="maintenance_reminders"
+	//ptah:schema:index name="idx_maintenance_reminders_group_id" fields="group_id" table="maintenance_reminders"
 	_ int
 }
 

@@ -44,12 +44,12 @@ const (
 //
 // Enable RLS for multi-tenant + per-user isolation:
 //
-//migrator:schema:rls:enable table="commodity_scan_audits" comment="Enable RLS for multi-tenant commodity scan audit isolation"
-//migrator:schema:rls:policy name="commodity_scan_audit_isolation" table="commodity_scan_audits" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures commodity scan audit rows can only be accessed and modified by the owning user within their tenant"
-//migrator:schema:rls:policy name="commodity_scan_audit_background_worker_access" table="commodity_scan_audits" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all commodity scan audit rows for retention/analytics"
-//migrator:schema:table name="commodity_scan_audits"
+//ptah:schema:rls:enable table="commodity_scan_audits" comment="Enable RLS for multi-tenant commodity scan audit isolation"
+//ptah:schema:rls:policy name="commodity_scan_audit_isolation" table="commodity_scan_audits" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures commodity scan audit rows can only be accessed and modified by the owning user within their tenant"
+//ptah:schema:rls:policy name="commodity_scan_audit_background_worker_access" table="commodity_scan_audits" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all commodity scan audit rows for retention/analytics"
+//ptah:schema:table name="commodity_scan_audits"
 type CommodityScanAudit struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantUserAwareEntityID
 
 	// Provider is the aivision provider name that handled the scan
@@ -57,51 +57,51 @@ type CommodityScanAudit struct {
 	// rows this is the configured provider name even though no call
 	// went out, so the audit table tells the same operational story
 	// regardless of where the request short-circuited.
-	//migrator:schema:field name="provider" type="VARCHAR(32)" not_null="true"
+	//ptah:schema:field name="provider" type="VARCHAR(32)" not_null="true"
 	Provider string `json:"provider" db:"provider"`
 
 	// Model is the specific model id the provider was configured with
 	// (e.g. "claude-sonnet-4-6", "gpt-4o"). Empty when the call was
 	// short-circuited before a model was resolved.
-	//migrator:schema:field name="model" type="VARCHAR(64)" not_null="true"
+	//ptah:schema:field name="model" type="VARCHAR(64)" not_null="true"
 	Model string `json:"model" db:"model"`
 
 	// PhotoCount is the number of photos in the request, after the
 	// handler's per-call limit was applied. 0 for short-circuited rows.
-	//migrator:schema:field name="photo_count" type="SMALLINT" not_null="true"
+	//ptah:schema:field name="photo_count" type="SMALLINT" not_null="true"
 	PhotoCount int16 `json:"photo_count" db:"photo_count"`
 
 	// TotalPhotoBytes is the sum of per-photo sizes (uncompressed
 	// reach the provider; we don't re-encode). Used by abuse dashboards.
-	//migrator:schema:field name="total_photo_bytes" type="INTEGER" not_null="true"
+	//ptah:schema:field name="total_photo_bytes" type="INTEGER" not_null="true"
 	TotalPhotoBytes int32 `json:"total_photo_bytes" db:"total_photo_bytes"`
 
 	// Status is one of the CommodityScanStatus* constants. Always set.
-	//migrator:schema:field name="status" type="VARCHAR(16)" not_null="true"
+	//ptah:schema:field name="status" type="VARCHAR(16)" not_null="true"
 	Status string `json:"status" db:"status"`
 
 	// ErrorCode is the structured error code surfaced to the client
 	// (e.g. "commodity_scan.rate_limited"). Empty on success.
-	//migrator:schema:field name="error_code" type="VARCHAR(64)"
+	//ptah:schema:field name="error_code" type="VARCHAR(64)"
 	ErrorCode string `json:"error_code,omitempty" db:"error_code"`
 
 	// LatencyMS is the wall-clock service-side duration in ms.
-	//migrator:schema:field name="latency_ms" type="INTEGER" not_null="true"
+	//ptah:schema:field name="latency_ms" type="INTEGER" not_null="true"
 	LatencyMS int32 `json:"latency_ms" db:"latency_ms"`
 
 	// TokensUsed is the provider-reported token usage when available;
 	// zero otherwise.
-	//migrator:schema:field name="tokens_used" type="INTEGER" not_null="true" default="0"
+	//ptah:schema:field name="tokens_used" type="INTEGER" not_null="true" default="0"
 	TokensUsed int32 `json:"tokens_used" db:"tokens_used"`
 
 	// ResultJSON is the marshalled ScanResult on success. Empty on
 	// every non-OK status. Kept JSONB so cost-analytics queries can
 	// project specific fields without a downstream join.
-	//migrator:schema:field name="result_json" type="JSONB"
+	//ptah:schema:field name="result_json" type="JSONB"
 	ResultJSON []byte `json:"result_json,omitempty" db:"result_json"`
 
 	// CreatedAt is the row creation time, set by the registry.
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
@@ -110,14 +110,14 @@ type CommodityScanAudit struct {
 // index backs the rate-limit count query.
 type CommodityScanAuditIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore)
-	//migrator:schema:index name="idx_commodity_scan_audits_uuid" fields="uuid" unique="true" table="commodity_scan_audits"
+	//ptah:schema:index name="idx_commodity_scan_audits_uuid" fields="uuid" unique="true" table="commodity_scan_audits"
 	_ int
 
 	// Composite index for the per-user rate-limit window query.
-	//migrator:schema:index name="idx_commodity_scan_audits_user_created" fields="user_id,created_at" table="commodity_scan_audits"
+	//ptah:schema:index name="idx_commodity_scan_audits_user_created" fields="user_id,created_at" table="commodity_scan_audits"
 	_ int
 
 	// Index for tenant-level dashboards (cost per tenant).
-	//migrator:schema:index name="idx_commodity_scan_audits_tenant_created" fields="tenant_id,created_at" table="commodity_scan_audits"
+	//ptah:schema:index name="idx_commodity_scan_audits_tenant_created" fields="tenant_id,created_at" table="commodity_scan_audits"
 	_ int
 }

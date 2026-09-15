@@ -43,25 +43,25 @@ import (
 // hash format is identical and the CLI bootstrap can reuse the standard
 // bcrypt code paths.
 
-//migrator:schema:table name="backoffice_users"
+//ptah:schema:table name="backoffice_users"
 type BackofficeUser struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	EntityID
-	//migrator:schema:field name="email" type="TEXT" not_null="true"
+	//ptah:schema:field name="email" type="TEXT" not_null="true"
 	Email string `json:"email" db:"email"`
-	//migrator:schema:field name="name" type="TEXT" not_null="true"
+	//ptah:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
 	// PasswordHash is bcrypt(DefaultCost). Marshal-blocked via `json:"-"`
 	// so the hash can never accidentally leak to a JSON response — back-
 	// office identities are higher-value than regular users, so the
 	// guardrail matters even more.
-	//migrator:schema:field name="password_hash" type="TEXT" not_null="true"
+	//ptah:schema:field name="password_hash" type="TEXT" not_null="true"
 	PasswordHash string `json:"-" db:"password_hash" userinput:"false"`
 	// Role is a typed enum: support_agent | platform_admin. Validated in
 	// ValidateWithContext via BackofficeRole.Validate.
-	//migrator:schema:field name="role" type="TEXT" not_null="true"
+	//ptah:schema:field name="role" type="TEXT" not_null="true"
 	Role BackofficeRole `json:"role" db:"role"`
-	//migrator:schema:field name="is_active" type="BOOLEAN" not_null="true" default="true"
+	//ptah:schema:field name="is_active" type="BOOLEAN" not_null="true" default="true"
 	IsActive bool `json:"is_active" db:"is_active"`
 	// MFAEnforced flips back to default-true now that Phase 4 wires the
 	// real step-1 challenge + step-2 endpoint (issue #1785). A row with
@@ -72,13 +72,13 @@ type BackofficeUser struct {
 	// before they can sign in. The schema default flipped from false to
 	// true at the same commit that wired the challenge so the security
 	// promise lines up with the data state.
-	//migrator:schema:field name="mfa_enforced" type="BOOLEAN" not_null="true" default="true"
+	//ptah:schema:field name="mfa_enforced" type="BOOLEAN" not_null="true" default="true"
 	MFAEnforced bool `json:"mfa_enforced" db:"mfa_enforced"`
-	//migrator:schema:field name="last_login_at" type="TIMESTAMP"
+	//ptah:schema:field name="last_login_at" type="TIMESTAMP"
 	LastLoginAt *time.Time `json:"last_login_at" db:"last_login_at" userinput:"false"`
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
 }
 
@@ -86,19 +86,19 @@ type BackofficeUser struct {
 type BackofficeUserIndexes struct {
 	// Immutable UUID index (deduplication key for import/restore, mirroring
 	// every other table that embeds EntityID).
-	//migrator:schema:index name="idx_backoffice_users_uuid" fields="uuid" unique="true" table="backoffice_users"
+	//ptah:schema:index name="idx_backoffice_users_uuid" fields="uuid" unique="true" table="backoffice_users"
 	_ int
 
 	// Unique index on email enforces platform-wide uniqueness. The
 	// registry layer lowercases email on write + read so case variants
 	// collapse to the same row; without that normalisation the unique
 	// index alone would let "Admin@x.com" and "admin@x.com" coexist.
-	//migrator:schema:index name="idx_backoffice_users_email" fields="email" unique="true" table="backoffice_users"
+	//ptah:schema:index name="idx_backoffice_users_email" fields="email" unique="true" table="backoffice_users"
 	_ int
 
 	// Index for active-user lookups (Phase 2's login flow will filter on
 	// is_active before checking the password hash).
-	//migrator:schema:index name="idx_backoffice_users_active" fields="is_active" table="backoffice_users"
+	//ptah:schema:index name="idx_backoffice_users_active" fields="is_active" table="backoffice_users"
 	_ int
 }
 
