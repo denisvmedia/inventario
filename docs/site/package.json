@@ -19,8 +19,8 @@
     "sharp": "^0.35.0",
     "tailwindcss": "4.3.3"
   },
-  "overridesComment": "Pin a single Vite so @tailwindcss/vite shares Astro 6.4.8's Vite (7.x) instance. Without this, npm hoists Vite 8 under @tailwindcss/vite whose rolldown resolver trips 'Missing field tsconfigPaths' against Astro's Vite-7-driven build.",
+  "overridesComment": "Pin a single Vite so @tailwindcss/vite shares Astro's instance. Astro 7 depends on Vite 8; leaving this at a 7.x pin holds Astro on a Vite it cannot drive, and `astro build` dies with \"rollupOptions.input should not be an html file when building for SSR\".",
   "overrides": {
-    "vite": "7.3.6"
+    "vite": "8.0.16"
   }
 }
