@@ -175,8 +175,7 @@ func TestBootstrapCommand_Apply_Integration_HappyPath(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer db.Close()
 
-	// Check if extensions were created. btree_gin was removed in #2423 -- the schema
-	// has no GIN index that needs it.
+	// Check if extensions were created.
 	var extensionExists bool
 	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')").Scan(&extensionExists)
 	c.Assert(err, qt.IsNil)

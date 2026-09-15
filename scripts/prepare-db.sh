@@ -13,17 +13,17 @@
 # fails with `role "inventario_background_worker" does not exist`, and a little
 # later with `operator class "gin_trgm_ops" does not exist`.
 #
-# Four separate things hit that, and each looked like a different bug: the Ptah
-# checkpoint shadow database (#2424), stokaro/ptah-action (#2422),
-# TestMigrationFilesSyncWithAnnotations, and anyone creating a scratch database
-# by hand. This is the one path they should all use, so the prerequisite has a
-# name instead of being folklore. See #2423.
+# This is the one path that makes a database replay-ready, for a Ptah shadow
+# database, a CI job, or a scratch database made by hand.
 #
-# It is a thin wrapper over `inventario db bootstrap apply` that adds a check:
-# bootstrap succeeding does not by itself prove the extensions are there, and
-# that gap is what made the failure show up three steps later.
+# A shadow database for `ptah migrations checkpoint` needs one thing more: its
+# extensions outside `public`. Checkpoint cleans the managed schema and refuses
+# while an extension is owned by it.
 #
-# Prerequisites: go. (Deliberately no psql — see #2423.)
+# It wraps `inventario db bootstrap apply` and then verifies: bootstrap
+# succeeding for the roles does not prove the extensions are there.
+#
+# Prerequisites: go.
 
 set -euo pipefail
 
@@ -56,7 +56,3 @@ echo ""
 
 echo "🎉  Database is ready. Apply the chain with:"
 echo "    cd ${GO_DIR} && go run ./cmd/inventario db migrate up --db-dsn=\"${DSN}\""
-echo ""
-echo "Note for Ptah checkpoints (#2424): a shadow database additionally needs its"
-echo "extensions outside \`public\`, because checkpoint cleans the managed schema and"
-echo "refuses while an extension is owned by it. That relocation is tracked there."

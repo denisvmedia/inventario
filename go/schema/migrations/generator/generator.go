@@ -62,15 +62,14 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 		MigrationName: migrationName,
 		OutputDir:     migrationsDir,
 		// Extensions are provisioned by `inventario db bootstrap`, not declared to Ptah,
-		// so they must be ignored here or the diff plans a DROP EXTENSION for each --
+		// so they must be ignored here or the diff plans a DROP EXTENSION for each:
 		// Ptah treats an undeclared extension present in the database as a removal.
-		// Ignoring excludes them from BOTH directions of the diff, which is what we
-		// want: Ptah neither creates nor drops them.
+		// Ignoring excludes them from both directions, which is what we want.
 		//
-		// This list only grows. btree_gin is no longer installed on new databases
-		// (#2423) and pgcrypto goes once #2424 lands, but both stay named here forever:
-		// databases created before those changes still carry them, and dropping the name
-		// from this list is what would hand them a DROP EXTENSION. See models/extensions.go.
+		// This list only grows. A name stays here even once the extension is no longer
+		// installed on new databases, because older databases still carry it and
+		// removing the name is exactly what would hand them a DROP EXTENSION.
+		// See models/extensions.go.
 		CompareOptions: config.WithAdditionalIgnoredExtensions("btree_gin", "pg_trgm", "pgcrypto"),
 	}
 

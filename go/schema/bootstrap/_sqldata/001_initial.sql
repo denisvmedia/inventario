@@ -46,19 +46,15 @@ BEGIN
 END $$;
 
 -- pg_trgm backs the trigram indexes on commodities.name/short_name, files.title/path
--- and tags.label (gin_trgm_ops). It is the only extension the schema needs.
+-- and tags.label (gin_trgm_ops). No migration creates it, and the migrator role could
+-- not: it holds CREATE on the schema, not on the database. This is the only step that
+-- installs it.
 --
--- pgcrypto is here for gen_random_uuid(), which is core since PostgreSQL 13 and so is
--- no longer needed on any supported version. It cannot be removed yet: migration
--- 1772465439 still issues CREATE EXTENSION IF NOT EXISTS pgcrypto, and a fresh database
--- replaying history would reach that with the extension absent, needing CREATE on the
--- database that the migrator role does not have. It goes once a checkpoint stops fresh
--- databases replaying that far -- see #2424.
---
--- btree_gin was dropped from here (#2423): every GIN index in the schema is single-column
--- over JSONB or an array and uses the built-in jsonb_ops/array_ops. It stays in the
--- generator's ignored-extension list so existing databases that have it are never handed
--- a DROP EXTENSION.
+-- pgcrypto is only needed for gen_random_uuid() on PostgreSQL < 13, below the supported
+-- floor. It stays because migration 1772465439 issues CREATE EXTENSION IF NOT EXISTS
+-- pgcrypto on a full replay: with it absent here, that statement would need a privilege
+-- the migrator does not have. Removing it requires that fresh databases stop replaying
+-- that far.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 

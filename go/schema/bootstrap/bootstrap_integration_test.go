@@ -115,8 +115,7 @@ func TestMigrator_Apply_TemplateSubstitution_Integration_HappyPath(t *testing.T)
 	c.Assert(err, qt.IsNil)
 	c.Assert(roleExists, qt.IsTrue, qt.Commentf("inventario_migrator role should exist"))
 
-	// Check if extensions were created. btree_gin was removed in #2423 -- the schema
-	// has no GIN index that needs it.
+	// Check if extensions were created.
 	var extensionExists bool
 	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')").Scan(&extensionExists)
 	c.Assert(err, qt.IsNil)
