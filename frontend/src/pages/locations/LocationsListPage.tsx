@@ -99,9 +99,7 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
   // Dialog state. We track both kinds in one state slot so the page
   // never tries to mount two modals at once.
   type DialogState =
-    | { kind: "none" }
-    | { kind: "create-location" }
-    | { kind: "create-area"; locationId?: string }
+    { kind: "none" } | { kind: "create-location" } | { kind: "create-area"; locationId?: string }
   const [dialog, setDialog] = useState<DialogState>(() =>
     initialMode === "create" ? { kind: "create-location" } : { kind: "none" }
   )
