@@ -45,3 +45,6 @@ dist/
 
 # Local agent tooling
 .codex
+
+# Lighthouse CI local run output
+.lighthouseci/
