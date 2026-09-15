@@ -18,8 +18,17 @@ import (
 var _ registry.AuditLogRegistry = (*AuditLogRegistry)(nil)
 
 // AuditLogRegistry provides PostgreSQL-backed storage for audit log entries.
-// It uses a NonRLSRepository because audit logs are system-wide records not
-// subject to per-user or per-tenant Row-Level Security.
+//
+// It uses a NonRLSRepository because the writer runs outside any tenant context:
+// auth events are recorded before a session exists and CLI actions have no tenant
+// at all, which is why TenantID is nullable. Most rows do carry a tenant, so this
+// is not a tenant-less table. What makes the missing policy safe is that nothing
+// reads it — every use of this registry is Create.
+//
+// A tenant-visible read needs an RLS policy and an RLSRepository, together. The
+// policy alone is not enough: a reader left on this repository never switches
+// roles, so it keeps the login's inherited inventario_background_worker
+// membership along with that role's USING (true) policy, and sees every tenant.
 type AuditLogRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
