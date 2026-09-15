@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -25,12 +26,58 @@ var (
 	// Shared connection pool for tests
 	sharedPools = make(map[string]*pgxpool.Pool)
 	poolMutex   sync.Mutex
+
+	// schemaBuild guards building the schema once per DSN. Every test needs an
+	// empty database, which is not the same as a newly created one -- see
+	// migrateUp.
+	schemaBuild      = make(map[string]*sync.Once)
+	schemaBuildErr   = make(map[string]error)
+	schemaBuildMutex sync.Mutex
 )
 
-// migrateUp removes all test data by dropping and recreating the schema
+// migrateUp gives the caller an empty database.
+//
+// It builds the schema once per DSN and truncates between tests, rather than
+// dropping and recreating the schema every time. Every test in this package
+// needs empty tables; none needs a newly created schema, and rebuilding it per
+// test made the suite's cost the migrator's rather than the assertions' (#2413).
 func migrateUp(t *testing.T, ctx context.Context, migr *migrator.Migrator, dsn string) error {
 	t.Helper()
 
+	if err := buildSchemaOnce(ctx, migr, dsn); err != nil {
+		return err
+	}
+
+	return truncateAllTables(ctx, dsn)
+}
+
+// buildSchemaOnce drops and rebuilds the schema the first time it is called for
+// a DSN, and does nothing afterwards. The drop is what makes the first call
+// authoritative: the database may carry a schema from an earlier run of the
+// suite, possibly from a different commit.
+func buildSchemaOnce(ctx context.Context, migr *migrator.Migrator, dsn string) error {
+	schemaBuildMutex.Lock()
+	once, ok := schemaBuild[dsn]
+	if !ok {
+		once = &sync.Once{}
+		schemaBuild[dsn] = once
+	}
+	schemaBuildMutex.Unlock()
+
+	once.Do(func() {
+		err := buildSchema(ctx, migr, dsn)
+		schemaBuildMutex.Lock()
+		schemaBuildErr[dsn] = err
+		schemaBuildMutex.Unlock()
+	})
+
+	schemaBuildMutex.Lock()
+	defer schemaBuildMutex.Unlock()
+
+	return schemaBuildErr[dsn]
+}
+
+func buildSchema(ctx context.Context, migr *migrator.Migrator, dsn string) error {
 	// Drop all tables (this cleans all data)
 	err := migr.DropTables(ctx, false, true) // dryRun=false, confirm=true
 	if err != nil {
@@ -67,6 +114,50 @@ func migrateUp(t *testing.T, ctx context.Context, migr *migrator.Migrator, dsn s
 	}
 
 	return nil
+}
+
+// truncateAllTables empties every table the schema owns, leaving the schema and
+// the migration history in place.
+//
+// One TRUNCATE naming every table at once, because the schema has foreign-key
+// cycles that a table-at-a-time loop cannot order. CASCADE covers anything not
+// named, RESTART IDENTITY resets the sequences so a test never sees an id from
+// its predecessor.
+func truncateAllTables(ctx context.Context, dsn string) error {
+	pool, err := getOrCreatePool(dsn)
+	if err != nil {
+		return err
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT quote_ident(tablename)
+		FROM pg_tables
+		WHERE schemaname = 'public'
+		  AND tablename <> 'schema_migrations'`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		tables = append(tables, name)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(tables) == 0 {
+		return nil
+	}
+
+	_, err = pool.Exec(ctx,
+		"TRUNCATE TABLE "+strings.Join(tables, ", ")+" RESTART IDENTITY CASCADE")
+
+	return err
 }
 
 // getOrCreatePool gets or creates a shared connection pool for the given DSN
