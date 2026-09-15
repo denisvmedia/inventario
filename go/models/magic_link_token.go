@@ -13,57 +13,57 @@ import (
 // token (never serialised to JSON), short expiry, and an atomic single-use
 // claim via the claimed_at sentinel.
 //
-//migrator:schema:table name="magic_link_tokens"
+//ptah:schema:table name="magic_link_tokens"
 type MagicLinkToken struct {
 	// ID is the unique identifier for the token record.
-	//migrator:schema:field name="id" type="TEXT" primary="true"
+	//ptah:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id"`
 	// UUID is the immutable public identifier, stable across restores.
-	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_expr="(gen_random_uuid())::text"
+	//ptah:schema:field name="uuid" type="TEXT" not_null="true" default_expr="(gen_random_uuid())::text"
 	UUID string `json:"uuid" db:"uuid" userinput:"false"`
 
 	// UserID is the ID of the user the sign-in link belongs to.
-	//migrator:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_magic_link_token_user"
+	//ptah:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_magic_link_token_user"
 	UserID string `json:"user_id" db:"user_id"`
 
 	// TenantID is the tenant this sign-in request belongs to.
-	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_magic_link_token_tenant"
+	//ptah:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_magic_link_token_tenant"
 	TenantID string `json:"tenant_id" db:"tenant_id"`
 
 	// Email is the address associated with the sign-in request.
-	//migrator:schema:field name="email" type="TEXT" not_null="true"
+	//ptah:schema:field name="email" type="TEXT" not_null="true"
 	Email string `json:"email" db:"email"`
 
 	// Token is the secure random sign-in token (never serialised to JSON).
-	//migrator:schema:field name="token" type="TEXT" not_null="true"
+	//ptah:schema:field name="token" type="TEXT" not_null="true"
 	Token string `json:"-" db:"token"`
 
 	// ExpiresAt is the time after which the token is no longer valid (15 minutes).
-	//migrator:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
+	//ptah:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
 
 	// ClaimedAt is set when the token has been successfully consumed. It is the
 	// single-use sentinel — analogous to PasswordReset's UsedAt, but flipped
 	// atomically by MarkClaimed so a replay or concurrent request can never
 	// burn the same link twice.
-	//migrator:schema:field name="claimed_at" type="TIMESTAMP"
+	//ptah:schema:field name="claimed_at" type="TIMESTAMP"
 	ClaimedAt *time.Time `json:"claimed_at,omitempty" db:"claimed_at"`
 
 	// CreatedAt is when the record was created.
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
 // MagicLinkTokenIndexes defines PostgreSQL indexes for the magic_link_tokens table.
 type MagicLinkTokenIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore)
-	//migrator:schema:index name="idx_magic_link_tokens_uuid" fields="uuid" unique="true" table="magic_link_tokens"
+	//ptah:schema:index name="idx_magic_link_tokens_uuid" fields="uuid" unique="true" table="magic_link_tokens"
 	_ int
-	//migrator:schema:index name="magic_link_tokens_user_id_idx" fields="user_id" table="magic_link_tokens"
+	//ptah:schema:index name="magic_link_tokens_user_id_idx" fields="user_id" table="magic_link_tokens"
 	_ int
-	//migrator:schema:index name="magic_link_tokens_token_idx" fields="token" unique="true" table="magic_link_tokens"
+	//ptah:schema:index name="magic_link_tokens_token_idx" fields="token" unique="true" table="magic_link_tokens"
 	_ int
-	//migrator:schema:index name="magic_link_tokens_email_idx" fields="email" table="magic_link_tokens"
+	//ptah:schema:index name="magic_link_tokens_email_idx" fields="email" table="magic_link_tokens"
 	_ int
 }
 

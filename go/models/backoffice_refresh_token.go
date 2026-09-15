@@ -31,28 +31,28 @@ import (
 // the raw token; lookups always hash first. This means a DB dump of
 // backoffice_refresh_tokens cannot be replayed against the API.
 
-//migrator:schema:table name="backoffice_refresh_tokens"
+//ptah:schema:table name="backoffice_refresh_tokens"
 type BackofficeRefreshToken struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	EntityID
 	// BackofficeUserID is the FK to backoffice_users.id. Distinct from
 	// User.user_id so a stolen tenant refresh token can never resolve to
 	// a back-office identity even if the hash collided.
-	//migrator:schema:field name="backoffice_user_id" type="TEXT" not_null="true" foreign="backoffice_users(id)" foreign_key_name="fk_backoffice_refresh_token_user"
+	//ptah:schema:field name="backoffice_user_id" type="TEXT" not_null="true" foreign="backoffice_users(id)" foreign_key_name="fk_backoffice_refresh_token_user"
 	BackofficeUserID string `json:"-" db:"backoffice_user_id" userinput:"false"`
-	//migrator:schema:field name="token_hash" type="VARCHAR(128)" not_null="true"
+	//ptah:schema:field name="token_hash" type="VARCHAR(128)" not_null="true"
 	TokenHash string `json:"-" db:"token_hash"`
-	//migrator:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
+	//ptah:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	//migrator:schema:field name="last_used_at" type="TIMESTAMP"
+	//ptah:schema:field name="last_used_at" type="TIMESTAMP"
 	LastUsedAt *time.Time `json:"last_used_at,omitempty" db:"last_used_at"`
-	//migrator:schema:field name="ip_address" type="VARCHAR(45)"
+	//ptah:schema:field name="ip_address" type="VARCHAR(45)"
 	IPAddress string `json:"ip_address,omitempty" db:"ip_address"`
-	//migrator:schema:field name="user_agent" type="TEXT"
+	//ptah:schema:field name="user_agent" type="TEXT"
 	UserAgent string `json:"user_agent,omitempty" db:"user_agent"`
-	//migrator:schema:field name="revoked_at" type="TIMESTAMP"
+	//ptah:schema:field name="revoked_at" type="TIMESTAMP"
 	RevokedAt *time.Time `json:"revoked_at,omitempty" db:"revoked_at"`
 }
 
@@ -60,23 +60,23 @@ type BackofficeRefreshToken struct {
 type BackofficeRefreshTokenIndexes struct {
 	// Immutable UUID index (deduplication key, mirroring every other
 	// table that embeds EntityID).
-	//migrator:schema:index name="idx_backoffice_refresh_tokens_uuid" fields="uuid" unique="true" table="backoffice_refresh_tokens"
+	//ptah:schema:index name="idx_backoffice_refresh_tokens_uuid" fields="uuid" unique="true" table="backoffice_refresh_tokens"
 	_ int
 
 	// Index for per-user lookups (list active sessions for a back-office
 	// user, revoke-all on password change, etc.).
-	//migrator:schema:index name="idx_backoffice_refresh_tokens_user_id" fields="backoffice_user_id" table="backoffice_refresh_tokens"
+	//ptah:schema:index name="idx_backoffice_refresh_tokens_user_id" fields="backoffice_user_id" table="backoffice_refresh_tokens"
 	_ int
 
 	// Unique index on token_hash powers the cookie -> row lookup in the
 	// refresh flow. Same constraint shape as the tenant-side refresh
 	// token table.
-	//migrator:schema:index name="idx_backoffice_refresh_tokens_token_hash" fields="token_hash" unique="true" table="backoffice_refresh_tokens"
+	//ptah:schema:index name="idx_backoffice_refresh_tokens_token_hash" fields="token_hash" unique="true" table="backoffice_refresh_tokens"
 	_ int
 
 	// Index for expiry-based cleanup; the retention sweep (future worker)
 	// will scan by expires_at.
-	//migrator:schema:index name="idx_backoffice_refresh_tokens_expires_at" fields="expires_at" table="backoffice_refresh_tokens"
+	//ptah:schema:index name="idx_backoffice_refresh_tokens_expires_at" fields="expires_at" table="backoffice_refresh_tokens"
 	_ int
 }
 

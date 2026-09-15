@@ -93,13 +93,13 @@ no build tag to enable them.
 
 **Never hand-write migration SQL.** Schema migrations under
 `go/schema/migrations/_sqldata/` are **generated** from the Go model annotations
-(Ptah `//migrator:schema:*` tags). The CI schema-drift check regenerates from
+(Ptah `//ptah:schema:*` tags). The CI schema-drift check regenerates from
 the models and fails on any mismatch, so a freehand file will not pass review.
 
 To add or change a migration:
 
 1. Edit the Go model in `go/models/` — add fields, indexes, and RLS policies via
-   `//migrator:schema:*` annotations.
+   `//ptah:schema:*` annotations.
 2. Run `./scripts/generate-migration.sh <descriptive_name>`. It spins up an
    ephemeral Postgres container, applies every existing migration, diffs the
    live schema against your model annotations, and writes the resulting

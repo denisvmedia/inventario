@@ -6,10 +6,10 @@ import (
 	"os"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
-	"github.com/stokaro/ptah/config"
-	"github.com/stokaro/ptah/core/goschema"
-	"github.com/stokaro/ptah/dbschema"
-	"github.com/stokaro/ptah/migration/generator"
+	"ptah.run/config"
+	"ptah.run/core/goschema"
+	"ptah.run/dbschema"
+	"ptah.run/migration/generator"
 )
 
 type Generator struct {
@@ -69,13 +69,16 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 		return nil, errxtrace.Wrap("failed to generate migration files", err)
 	}
 
-	// Check if no migration was needed (files will be nil when no changes detected)
-	if files == nil {
+	// Check if no migration was needed. Ptah returns a nil result, or one
+	// carrying no pairs, when the diff came out empty.
+	if files == nil || len(files.Files) == 0 {
 		m.logger.Info("No schema changes detected - no migration files generated")
 		return nil, nil
 	}
 
-	m.logger.Info("Migration files generated", "up_file", files.UpFile, "down_file", files.DownFile, "version", files.Version)
+	for _, pair := range files.Files {
+		m.logger.Info("Migration files generated", "up_file", pair.UpFile, "down_file", pair.DownFile, "version", pair.Version)
+	}
 
 	return files, nil
 }

@@ -4480,7 +4480,7 @@ definitions:
           and route visibility (the backend re-checks via `RequireSystemAdmin`
           on every /admin/* request).
 
-          Persistence safety: there is no `//migrator:schema:field` annotation
+          Persistence safety: there is no `//ptah:schema:field` annotation
           so the migration generator never re-adds the column, and the `db:"-"`
           tag tells sqlx to skip the field in both SELECT and INSERT/UPDATE,
           so this stays purely in-memory. A caller that smuggles `true` here

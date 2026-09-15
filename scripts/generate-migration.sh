@@ -17,7 +17,8 @@
 #   3. Runs bootstrap to create required roles and extensions
 #   4. Applies all existing migrations (so the generator can diff)
 #   5. Runs "inventool db migrations generate" to create the UP/DOWN files
-#   6. Removes the container on exit (even on error)
+#   6. Refreshes ptah.sum so the new pair is covered by the integrity file
+#   7. Removes the container on exit (even on error)
 
 set -euo pipefail
 
@@ -138,6 +139,20 @@ echo "✨  Generating migration: ${MIGRATION_NAME}"
     --db-dsn="${DSN}" \
     --go-entities-dir="${MODELS_DIR}" \
     --migrations-dir="${MIGRATIONS_DIR}"
+
+# ---------------------------------------------------------------------------
+# 7. Refresh the migration directory's integrity file
+# ---------------------------------------------------------------------------
+# inventool writes the .up.sql/.down.sql pair but does not touch ptah.sum, so
+# the new files would be reported as "added (not in ptah.sum)" by every Ptah
+# verb that verifies the directory. The CLI version is read from go.mod so the
+# hash always comes from the same Ptah the library code is built against, and
+# `go run pkg@version` resolves outside the main module, so this adds nothing
+# to go.mod/go.sum.
+echo ""
+echo "🔏  Refreshing ptah.sum..."
+PTAH_VERSION="$(cd "${GO_DIR}" && go list -m -f '{{.Version}}' ptah.run)"
+(cd "${GO_DIR}" && go run "ptah.run/cmd/ptah@${PTAH_VERSION}" migrations hash --dir "${MIGRATIONS_DIR}")
 
 echo ""
 echo "🎉  Done! Check ${MIGRATIONS_DIR} for the new files."

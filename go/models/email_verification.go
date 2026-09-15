@@ -9,54 +9,54 @@ import (
 
 // EmailVerification stores a pending email address verification for a user account.
 //
-//migrator:schema:table name="email_verifications"
+//ptah:schema:table name="email_verifications"
 type EmailVerification struct {
 	// ID is the unique identifier for the verification record.
-	//migrator:schema:field name="id" type="TEXT" primary="true"
+	//ptah:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id"`
 	// UUID is the immutable public identifier, stable across restores.
-	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_expr="(gen_random_uuid())::text"
+	//ptah:schema:field name="uuid" type="TEXT" not_null="true" default_expr="(gen_random_uuid())::text"
 	UUID string `json:"uuid" db:"uuid" userinput:"false"`
 
 	// UserID is the ID of the user being verified.
-	//migrator:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_email_verification_user"
+	//ptah:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_email_verification_user"
 	UserID string `json:"user_id" db:"user_id"`
 
 	// TenantID is the tenant this verification belongs to.
-	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_email_verification_tenant"
+	//ptah:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_email_verification_tenant"
 	TenantID string `json:"tenant_id" db:"tenant_id"`
 
 	// Email is the address being verified.
-	//migrator:schema:field name="email" type="TEXT" not_null="true"
+	//ptah:schema:field name="email" type="TEXT" not_null="true"
 	Email string `json:"email" db:"email"`
 
 	// Token is the secure random verification token (never serialised to JSON).
-	//migrator:schema:field name="token" type="TEXT" not_null="true"
+	//ptah:schema:field name="token" type="TEXT" not_null="true"
 	Token string `json:"-" db:"token"`
 
 	// ExpiresAt is the time after which the token is no longer valid.
-	//migrator:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
+	//ptah:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
 
 	// VerifiedAt is set when the user successfully verifies their email.
-	//migrator:schema:field name="verified_at" type="TIMESTAMP"
+	//ptah:schema:field name="verified_at" type="TIMESTAMP"
 	VerifiedAt *time.Time `json:"verified_at,omitempty" db:"verified_at"`
 
 	// CreatedAt is when the record was created.
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
 // EmailVerificationIndexes defines PostgreSQL indexes for the email_verifications table.
 type EmailVerificationIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore)
-	//migrator:schema:index name="idx_email_verifications_uuid" fields="uuid" unique="true" table="email_verifications"
+	//ptah:schema:index name="idx_email_verifications_uuid" fields="uuid" unique="true" table="email_verifications"
 	_ int
-	//migrator:schema:index name="email_verifications_user_id_idx" fields="user_id" table="email_verifications"
+	//ptah:schema:index name="email_verifications_user_id_idx" fields="user_id" table="email_verifications"
 	_ int
-	//migrator:schema:index name="email_verifications_token_idx" fields="token" unique="true" table="email_verifications"
+	//ptah:schema:index name="email_verifications_token_idx" fields="token" unique="true" table="email_verifications"
 	_ int
-	//migrator:schema:index name="email_verifications_email_idx" fields="email" table="email_verifications"
+	//ptah:schema:index name="email_verifications_email_idx" fields="email" table="email_verifications"
 	_ int
 }
 

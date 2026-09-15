@@ -57,7 +57,7 @@ var (
 type File struct {
 	// Path is the filename without extension. This is the only field that can be modified by the user.
 	// Example: "invoice-2023"
-	//migrator:schema:field name="path" type="TEXT" not_null="true"
+	//ptah:schema:field name="path" type="TEXT" not_null="true"
 	Path string `json:"path" db:"path"`
 
 	// OriginalPath is the storage blob key, NOT a filename despite the name.
@@ -68,24 +68,24 @@ type File struct {
 	// every reader opens and every delete path removes by, so it must be unique
 	// per row — see #2241, and the shared-key guard in FileService, for what
 	// happens when it is not.
-	//migrator:schema:field name="original_path" type="TEXT" not_null="true"
+	//ptah:schema:field name="original_path" type="TEXT" not_null="true"
 	OriginalPath string `json:"original_path" db:"original_path"`
 
 	// Ext is the file extension including the dot.
 	// Example: ".pdf"
-	//migrator:schema:field name="ext" type="TEXT" not_null="true"
+	//ptah:schema:field name="ext" type="TEXT" not_null="true"
 	Ext string `json:"ext" db:"ext"`
 
 	// MIMEType is the MIME type of the file.
 	// Example: "application/pdf"
-	//migrator:schema:field name="mime_type" type="TEXT" not_null="true"
+	//ptah:schema:field name="mime_type" type="TEXT" not_null="true"
 	MIMEType string `json:"mime_type" db:"mime_type"`
 
 	// SizeBytes is the byte size of the stored blob, captured at upload time
 	// and used by the per-group storage-usage aggregation (#1388). Defaults
 	// to 0 for rows that pre-date the column; a backfill walks the bucket
 	// and updates them best-effort on first boot.
-	//migrator:schema:field name="size_bytes" type="BIGINT" not_null="true" default="0"
+	//ptah:schema:field name="size_bytes" type="BIGINT" not_null="true" default="0"
 	SizeBytes int64 `json:"size_bytes" db:"size_bytes"`
 }
 
@@ -272,113 +272,113 @@ func (s StringSlice) Value() (driver.Value, error) {
 //
 // Enable RLS for multi-tenant isolation
 //
-//migrator:schema:rls:enable table="files" comment="Enable RLS for multi-tenant file isolation"
-//migrator:schema:rls:policy name="file_isolation" table="files" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures files can only be accessed and modified by their tenant and group with required contexts"
-//migrator:schema:rls:policy name="file_background_worker_access" table="files" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all files for processing"
-//migrator:schema:table name="files"
+//ptah:schema:rls:enable table="files" comment="Enable RLS for multi-tenant file isolation"
+//ptah:schema:rls:policy name="file_isolation" table="files" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures files can only be accessed and modified by their tenant and group with required contexts"
+//ptah:schema:rls:policy name="file_background_worker_access" table="files" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all files for processing"
+//ptah:schema:table name="files"
 type FileEntity struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantGroupAwareEntityID
 
 	// Title is the user-defined title for the file
-	//migrator:schema:field name="title" type="TEXT"
+	//ptah:schema:field name="title" type="TEXT"
 	Title string `json:"title" db:"title"`
 
 	// Description is an optional description of the file
-	//migrator:schema:field name="description" type="TEXT"
+	//ptah:schema:field name="description" type="TEXT"
 	Description string `json:"description" db:"description"`
 
 	// Type represents the category of the file (image, document, etc.)
-	//migrator:schema:field name="type" type="TEXT" not_null="true"
+	//ptah:schema:field name="type" type="TEXT" not_null="true"
 	Type FileType `json:"type" db:"type"`
 
 	// Category is the user-meaningful classification surfaced in the UI
 	// (Images/Documents/Other; the legacy `invoices` bucket folded into
 	// `documents` per #1622, with the `invoice` tag preserving the
 	// semantic).
-	//migrator:schema:field name="category" type="TEXT" not_null="true" default="other"
+	//ptah:schema:field name="category" type="TEXT" not_null="true" default="other"
 	Category FileCategory `json:"category" db:"category"`
 
 	// Tags are optional tags for categorization and search
-	//migrator:schema:field name="tags" type="JSONB"
+	//ptah:schema:field name="tags" type="JSONB"
 	Tags StringSlice `json:"tags" db:"tags"`
 
 	// LinkedEntityType indicates what type of entity this file is linked to (commodity, export, or empty for standalone files)
-	//migrator:schema:field name="linked_entity_type" type="TEXT"
+	//ptah:schema:field name="linked_entity_type" type="TEXT"
 	LinkedEntityType string `json:"linked_entity_type" db:"linked_entity_type"`
 
 	// LinkedEntityID is the ID of the linked entity (commodity or export)
-	//migrator:schema:field name="linked_entity_id" type="TEXT"
+	//ptah:schema:field name="linked_entity_id" type="TEXT"
 	LinkedEntityID string `json:"linked_entity_id" db:"linked_entity_id"`
 
 	// LinkedEntityMeta contains metadata about the link type
 	// For commodities: "images", "invoices", "manuals"
 	// For exports: "xml-1.0" (version of the export file format)
-	//migrator:schema:field name="linked_entity_meta" type="TEXT"
+	//ptah:schema:field name="linked_entity_meta" type="TEXT"
 	LinkedEntityMeta string `json:"linked_entity_meta" db:"linked_entity_meta"`
 
 	// CreatedAt is when the file was created
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 
 	// UpdatedAt is when the file was last updated
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 
 	// File contains the actual file metadata
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	*File
 }
 
 // PostgreSQL-specific indexes for files
 type FileIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore)
-	//migrator:schema:index name="idx_files_uuid" fields="uuid" unique="true" table="files"
+	//ptah:schema:index name="idx_files_uuid" fields="uuid" unique="true" table="files"
 	_ int
 
 	// Index for tenant-based queries
-	//migrator:schema:index name="idx_files_tenant_id" fields="tenant_id" table="files"
+	//ptah:schema:index name="idx_files_tenant_id" fields="tenant_id" table="files"
 	_ int
 
 	// Composite index for tenant + type queries
-	//migrator:schema:index name="idx_files_tenant_type" fields="tenant_id,type" table="files"
+	//ptah:schema:index name="idx_files_tenant_type" fields="tenant_id,type" table="files"
 	_ int
 
 	// Composite index for tenant + linked entity queries
-	//migrator:schema:index name="idx_files_tenant_linked_entity" fields="tenant_id,linked_entity_type,linked_entity_id" table="files"
+	//ptah:schema:index name="idx_files_tenant_linked_entity" fields="tenant_id,linked_entity_type,linked_entity_id" table="files"
 	_ int
 
 	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
-	//migrator:schema:index name="idx_files_tenant_group" fields="tenant_id,group_id" table="files"
+	//ptah:schema:index name="idx_files_tenant_group" fields="tenant_id,group_id" table="files"
 	_ int
 
 	// GIN index for JSONB tags field
-	//migrator:schema:index name="files_tags_gin_idx" fields="tags" type="GIN" table="files"
+	//ptah:schema:index name="files_tags_gin_idx" fields="tags" type="GIN" table="files"
 	_ int
 
 	// Composite index for type and created_at
-	//migrator:schema:index name="files_type_created_idx" fields="type,created_at" table="files"
+	//ptah:schema:index name="files_type_created_idx" fields="type,created_at" table="files"
 	_ int
 
 	// Composite index for tenant+group+category — backs the per-category list
 	// on GET /files?category= and the GET /files/category-counts aggregator.
-	//migrator:schema:index name="idx_files_tenant_group_category" fields="tenant_id,group_id,category" table="files"
+	//ptah:schema:index name="idx_files_tenant_group_category" fields="tenant_id,group_id,category" table="files"
 	_ int
 
 	// Index for linked entity queries
-	//migrator:schema:index name="files_linked_entity_idx" fields="linked_entity_type,linked_entity_id" table="files"
+	//ptah:schema:index name="files_linked_entity_idx" fields="linked_entity_type,linked_entity_id" table="files"
 	_ int
 
 	// Index for linked entity with metadata
-	//migrator:schema:index name="files_linked_entity_meta_idx" fields="linked_entity_type,linked_entity_id,linked_entity_meta" table="files"
+	//ptah:schema:index name="files_linked_entity_meta_idx" fields="linked_entity_type,linked_entity_id,linked_entity_meta" table="files"
 	_ int
 
 	// Trigram similarity index for file title search
-	//migrator:schema:index name="files_title_trgm_idx" fields="title" type="GIN" ops="gin_trgm_ops" table="files"
+	//ptah:schema:index name="files_title_trgm_idx" fields="title" type="GIN" ops="gin_trgm_ops" table="files"
 	_ int
 
 	// Trigram similarity index for file path search
-	//migrator:schema:index name="files_path_trgm_idx" fields="path" type="GIN" ops="gin_trgm_ops" table="files"
+	//ptah:schema:index name="files_path_trgm_idx" fields="path" type="GIN" ops="gin_trgm_ops" table="files"
 	_ int
 
 	// original_path is looked up by EXACT value on the delete hot path: every
@@ -391,7 +391,7 @@ type FileIndexes struct {
 	// a key (that IS the bug), so a unique index would fail to build on exactly
 	// the installations that need it most. Uniqueness is now enforced by
 	// construction at the key-minting site instead.
-	//migrator:schema:index name="files_original_path_idx" fields="original_path" table="files"
+	//ptah:schema:index name="files_original_path_idx" fields="original_path" table="files"
 	_ int
 }
 
@@ -481,9 +481,9 @@ var (
 //   - UUID: the immutable public identifier that is stable across
 //     exports, imports, and restores.
 type EntityID struct {
-	//migrator:schema:field name="id" type="TEXT" primary="true"
+	//ptah:schema:field name="id" type="TEXT" primary="true"
 	ID string `json:"id" db:"id" userinput:"false"`
-	//migrator:schema:field name="uuid" type="TEXT" not_null="true" default_expr="(gen_random_uuid())::text"
+	//ptah:schema:field name="uuid" type="TEXT" not_null="true" default_expr="(gen_random_uuid())::text"
 	UUID string `json:"uuid" db:"uuid" userinput:"false"`
 }
 
@@ -519,9 +519,9 @@ func WithID[T IDable](id string, i T) T {
 // TenantUserAwareEntityID instead; group-isolated data tables embed
 // TenantGroupAwareEntityID.
 type TenantAwareEntityID struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	EntityID
-	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
+	//ptah:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
 	TenantID string `json:"-" db:"tenant_id" userinput:"false"`
 }
 
@@ -544,11 +544,11 @@ func WithTenantID[T TenantAware](tenantID string, i T) T {
 // RLS policies. Keep distinct from TenantAwareEntityID so that schemas
 // that don't need a user_id column don't accidentally grow one.
 type TenantUserAwareEntityID struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	EntityID
-	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
+	//ptah:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
 	TenantID string `json:"-" db:"tenant_id" userinput:"false"`
-	//migrator:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_entity_user"
+	//ptah:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_entity_user"
 	UserID string `json:"-" db:"user_id" userinput:"false"`
 }
 

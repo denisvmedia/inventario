@@ -68,23 +68,23 @@ func (ts *TenantSettings) Scan(value any) error {
 	}
 }
 
-//migrator:schema:table name="tenants"
+//ptah:schema:table name="tenants"
 type Tenant struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	EntityID
-	//migrator:schema:field name="name" type="TEXT" not_null="true"
+	//ptah:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
-	//migrator:schema:field name="slug" type="TEXT" not_null="true" unique="true"
+	//ptah:schema:field name="slug" type="TEXT" not_null="true" unique="true"
 	Slug string `json:"slug" db:"slug"`
-	//migrator:schema:field name="domain" type="TEXT"
+	//ptah:schema:field name="domain" type="TEXT"
 	Domain *string `json:"domain" db:"domain"`
-	//migrator:schema:field name="status" type="TEXT" not_null="true" default="active"
+	//ptah:schema:field name="status" type="TEXT" not_null="true" default="active"
 	Status TenantStatus `json:"status" db:"status"`
-	//migrator:schema:field name="is_default" type="BOOLEAN" not_null="true" default="false"
+	//ptah:schema:field name="is_default" type="BOOLEAN" not_null="true" default="false"
 	IsDefault bool `json:"is_default" db:"is_default"`
-	//migrator:schema:field name="registration_mode" type="TEXT" not_null="true" default="closed"
+	//ptah:schema:field name="registration_mode" type="TEXT" not_null="true" default="closed"
 	RegistrationMode RegistrationMode `json:"registration_mode" db:"registration_mode"`
-	//migrator:schema:field name="settings" type="JSONB"
+	//ptah:schema:field name="settings" type="JSONB"
 	Settings TenantSettings `json:"settings" db:"settings"`
 	// PlanID is the subscription tier this tenant pays for. The actual
 	// limits + capability gates live on the corresponding `models.Plan`
@@ -99,39 +99,39 @@ type Tenant struct {
 	// writer is the DB default + operator hand-edits. Unknown values
 	// degrade to PlanUnlimited at read time via `models.PlanByID`
 	// rather than rejecting the request.
-	//migrator:schema:field name="plan_id" type="TEXT" not_null="true" default="unlimited"
+	//ptah:schema:field name="plan_id" type="TEXT" not_null="true" default="unlimited"
 	PlanID string `json:"plan_id" db:"plan_id"`
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
 }
 
 // PostgreSQL-specific indexes for tenants
 type TenantIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore)
-	//migrator:schema:index name="idx_tenants_uuid" fields="uuid" unique="true" table="tenants"
+	//ptah:schema:index name="idx_tenants_uuid" fields="uuid" unique="true" table="tenants"
 	_ int
 
 	// Index for slug lookups
-	//migrator:schema:index name="tenants_slug_idx" fields="slug" unique="true" table="tenants"
+	//ptah:schema:index name="tenants_slug_idx" fields="slug" unique="true" table="tenants"
 	_ int
 
 	// Index for domain lookups
-	//migrator:schema:index name="tenants_domain_idx" fields="domain" table="tenants"
+	//ptah:schema:index name="tenants_domain_idx" fields="domain" table="tenants"
 	_ int
 
 	// Index for status filtering
-	//migrator:schema:index name="tenants_status_idx" fields="status" table="tenants"
+	//ptah:schema:index name="tenants_status_idx" fields="status" table="tenants"
 	_ int
 
 	// Partial unique index ensuring at most one tenant can be the system default
-	//migrator:schema:index name="tenants_single_default_idx" fields="is_default" unique="true" condition="is_default = true" table="tenants"
+	//ptah:schema:index name="tenants_single_default_idx" fields="is_default" unique="true" condition="is_default = true" table="tenants"
 	_ int
 
 	// Index for plan_id lookups (the Plan & quota card joins tenants→plans
 	// on every group settings open; #1389).
-	//migrator:schema:index name="idx_tenants_plan_id" fields="plan_id" table="tenants"
+	//ptah:schema:index name="idx_tenants_plan_id" fields="plan_id" table="tenants"
 	_ int
 }
 

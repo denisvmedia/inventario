@@ -59,3 +59,47 @@ func TestStripPGXPoolParams(t *testing.T) {
 		})
 	}
 }
+
+func TestRedact(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "masks the password",
+			input:    "postgres://user:s3cr3t@localhost:5432/inventario?sslmode=disable",
+			expected: "postgres://user:xxxxxx@localhost:5432/inventario?sslmode=disable",
+		},
+		{
+			name:     "keeps username, host, database and params",
+			input:    "postgresql://admin:hunter2@db.internal:6543/app?pool_max_conns=10",
+			expected: "postgresql://admin:xxxxxx@db.internal:6543/app?pool_max_conns=10",
+		},
+		{
+			name:     "userinfo without a password is returned unchanged",
+			input:    "postgres://user@localhost/inventario",
+			expected: "postgres://user@localhost/inventario",
+		},
+		{
+			name:     "no userinfo is returned unchanged",
+			input:    "memory://",
+			expected: "memory://",
+		},
+		{
+			// A control character makes url.Parse fail; the raw value (which
+			// could embed credentials) must not be echoed back.
+			name:     "an unparseable DSN never echoes the raw value",
+			input:    "postgres://user:s3cr3t@localhost/db\x7f",
+			expected: "<redacted>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			c.Assert(dsnutil.Redact(tt.input), qt.Equals, tt.expected)
+		})
+	}
+}

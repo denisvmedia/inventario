@@ -159,12 +159,12 @@ var (
 //
 // Enable RLS for multi-tenant isolation
 //
-//migrator:schema:rls:enable table="commodity_events" comment="Enable RLS for multi-tenant commodity event isolation"
-//migrator:schema:rls:policy name="commodity_event_isolation" table="commodity_events" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures commodity events can only be accessed and modified by their tenant and group with required contexts"
-//migrator:schema:rls:policy name="commodity_event_background_worker_access" table="commodity_events" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all commodity events for processing"
-//migrator:schema:table name="commodity_events"
+//ptah:schema:rls:enable table="commodity_events" comment="Enable RLS for multi-tenant commodity event isolation"
+//ptah:schema:rls:policy name="commodity_event_isolation" table="commodity_events" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures commodity events can only be accessed and modified by their tenant and group with required contexts"
+//ptah:schema:rls:policy name="commodity_event_background_worker_access" table="commodity_events" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all commodity events for processing"
+//ptah:schema:table name="commodity_events"
 type CommodityEvent struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantGroupAwareEntityID
 
 	// CommodityID is the parent commodity. ON DELETE CASCADE: when the
@@ -172,62 +172,62 @@ type CommodityEvent struct {
 	// detail page won't exist anymore either). The "deleted" kind is
 	// persisted in the same transaction so the row is observable for the
 	// rest of the request before the cascade fires.
-	//migrator:schema:field name="commodity_id" type="TEXT" not_null="true" foreign="commodities(id)" foreign_key_name="fk_commodity_event_commodity" on_delete="CASCADE"
+	//ptah:schema:field name="commodity_id" type="TEXT" not_null="true" foreign="commodities(id)" foreign_key_name="fk_commodity_event_commodity" on_delete="CASCADE"
 	CommodityID string `json:"commodity_id" db:"commodity_id"`
 
 	// Kind is one of CommodityEventKind*. Validated at app level — the FE
 	// renders kind-aware copy and unknown kinds fall through to a generic
 	// "updated" line.
-	//migrator:schema:field name="kind" type="TEXT" not_null="true"
+	//ptah:schema:field name="kind" type="TEXT" not_null="true"
 	Kind CommodityEventKind `json:"kind" db:"kind"`
 
 	// OccurredAt is when the event was recorded; defaults to now() on
 	// insert. Distinct from EntityID's created_at (we don't have one here)
 	// because the issue uses occurred_at as the canonical timestamp.
-	//migrator:schema:field name="occurred_at" type="TIMESTAMPTZ" not_null="true" default_expr="now()"
+	//ptah:schema:field name="occurred_at" type="TIMESTAMPTZ" not_null="true" default_expr="now()"
 	OccurredAt time.Time `json:"occurred_at" db:"occurred_at"`
 
 	// Before is the sparse JSONB snapshot of changed fields BEFORE the
 	// event. Null on `created`. Stored as map[string]any so different
 	// kinds can use different field sets without a schema bump.
-	//migrator:schema:field name="before" type="JSONB"
+	//ptah:schema:field name="before" type="JSONB"
 	Before CommodityEventPayload `json:"before,omitempty" db:"before"`
 
 	// After is the sparse JSONB snapshot of changed fields AFTER the
 	// event. Null on `deleted`.
-	//migrator:schema:field name="after" type="JSONB"
+	//ptah:schema:field name="after" type="JSONB"
 	After CommodityEventPayload `json:"after,omitempty" db:"after"`
 
 	// Note is a free-form, optional operator-supplied reason. Reserved for
 	// a future "leave a comment" UX; today every event lands with an
 	// empty note.
-	//migrator:schema:field name="note" type="TEXT"
+	//ptah:schema:field name="note" type="TEXT"
 	Note string `json:"note,omitempty" db:"note"`
 }
 
 // CommodityEventIndexes defines indexes for commodity_events.
 type CommodityEventIndexes struct {
 	// Unique index on uuid for restore/import dedup parity with siblings.
-	//migrator:schema:index name="idx_commodity_events_uuid" fields="uuid" unique="true" table="commodity_events"
+	//ptah:schema:index name="idx_commodity_events_uuid" fields="uuid" unique="true" table="commodity_events"
 	_ int
 
 	// Per-commodity timeline lookup, descending by occurrence — backs the
 	// detail page's `GET /commodities/{id}/events?per_page=N` (and the
 	// composite group_id+commodity_id+occurred_at order avoids a sort step).
-	//migrator:schema:index name="commodity_events_lookup" fields="group_id,commodity_id,occurred_at" table="commodity_events"
+	//ptah:schema:index name="commodity_events_lookup" fields="group_id,commodity_id,occurred_at" table="commodity_events"
 	_ int
 
 	// Tenant-scope index for cross-group analytics — same shape as siblings.
-	//migrator:schema:index name="idx_commodity_events_tenant_id" fields="tenant_id" table="commodity_events"
+	//ptah:schema:index name="idx_commodity_events_tenant_id" fields="tenant_id" table="commodity_events"
 	_ int
 
 	// Composite tenant + group index for RLS-filtered queries.
-	//migrator:schema:index name="idx_commodity_events_tenant_group" fields="tenant_id,group_id" table="commodity_events"
+	//ptah:schema:index name="idx_commodity_events_tenant_group" fields="tenant_id,group_id" table="commodity_events"
 	_ int
 
 	// Kind filter — narrow per-commodity queries by event kind without a
 	// table scan when the timeline grows large.
-	//migrator:schema:index name="commodity_events_kind_idx" fields="commodity_id,kind" table="commodity_events"
+	//ptah:schema:index name="commodity_events_kind_idx" fields="commodity_id,kind" table="commodity_events"
 	_ int
 }
 

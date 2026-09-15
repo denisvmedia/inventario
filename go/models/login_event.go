@@ -88,52 +88,52 @@ const (
 // IP storage policy mirrors refresh_tokens: truncated /24 (IPv4) or /56
 // (IPv6) — never the raw client address.
 //
-//migrator:schema:table name="login_events"
-//migrator:schema:rls:enable table="login_events" comment="Enable RLS for multi-tenant login event isolation"
-//migrator:schema:rls:policy name="login_event_tenant_isolation" table="login_events" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''" comment="Login events are tenant-isolated; per-user filtering happens in application logic so a user only sees their own attempts"
-//migrator:schema:rls:policy name="login_event_background_worker_access" table="login_events" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows the retention worker and login flow to insert/sweep events outside any user context"
+//ptah:schema:table name="login_events"
+//ptah:schema:rls:enable table="login_events" comment="Enable RLS for multi-tenant login event isolation"
+//ptah:schema:rls:policy name="login_event_tenant_isolation" table="login_events" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''" comment="Login events are tenant-isolated; per-user filtering happens in application logic so a user only sees their own attempts"
+//ptah:schema:rls:policy name="login_event_background_worker_access" table="login_events" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows the retention worker and login flow to insert/sweep events outside any user context"
 type LoginEvent struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantAwareEntityID
 
 	// UserID references the user the attempt resolved to. NULL when the
 	// email did not match any user (unknown-email bad_password case) so
 	// the row still survives the retention sweep keyed on user_id.
-	//migrator:schema:field name="user_id" type="TEXT" foreign="users(id)" foreign_key_name="fk_login_event_user"
+	//ptah:schema:field name="user_id" type="TEXT" foreign="users(id)" foreign_key_name="fk_login_event_user"
 	UserID *string `json:"user_id,omitempty" db:"user_id"`
 
 	// Email is the address the client typed. Always recorded — even when
 	// UserID is set — so a user changing their email later still sees
 	// "someone tried <my-old-email>" in their history. Empty allowed for
 	// future code paths that authenticate without an email (none today).
-	//migrator:schema:field name="email" type="TEXT" not_null="true"
+	//ptah:schema:field name="email" type="TEXT" not_null="true"
 	Email string `json:"email" db:"email"`
 
 	// Outcome is the resolved LoginOutcome at the moment the row was
 	// written. Stored TEXT (no DB CHECK).
-	//migrator:schema:field name="outcome" type="TEXT" not_null="true"
+	//ptah:schema:field name="outcome" type="TEXT" not_null="true"
 	Outcome LoginOutcome `json:"outcome" db:"outcome"`
 
 	// Method is the credential family. "password" for v1; OAuth lands
 	// with #1394 / #1395.
-	//migrator:schema:field name="method" type="TEXT" not_null="true" default="password"
+	//ptah:schema:field name="method" type="TEXT" not_null="true" default="password"
 	Method LoginMethod `json:"method" db:"method"`
 
 	// IPAddress holds the truncated client IP (/24 IPv4, /56 IPv6) per
 	// the privacy policy in #1378. Empty when the request had no
 	// resolvable address.
-	//migrator:schema:field name="ip_address" type="VARCHAR(64)"
+	//ptah:schema:field name="ip_address" type="VARCHAR(64)"
 	IPAddress string `json:"ip_address,omitempty" db:"ip_address"`
 
 	// UserAgent is the raw Sec-CH-UA / User-Agent header. Parsing happens
 	// client-side per #1378 option 2 (server-side parsing would age
 	// poorly as UA strings drift).
-	//migrator:schema:field name="user_agent" type="TEXT"
+	//ptah:schema:field name="user_agent" type="TEXT"
 	UserAgent string `json:"user_agent,omitempty" db:"user_agent"`
 
 	// CreatedAt is the wall-clock instant the row was written. The
 	// list endpoint orders newest-first by this column.
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 }
 
@@ -141,21 +141,21 @@ type LoginEvent struct {
 type LoginEventIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for
 	// import/restore).
-	//migrator:schema:index name="idx_login_events_uuid" fields="uuid" unique="true" table="login_events"
+	//ptah:schema:index name="idx_login_events_uuid" fields="uuid" unique="true" table="login_events"
 	_ int
 
 	// Read pattern: "the last N events for me", newest first.
-	//migrator:schema:index name="idx_login_events_user_created_at" fields="user_id,created_at" table="login_events"
+	//ptah:schema:index name="idx_login_events_user_created_at" fields="user_id,created_at" table="login_events"
 	_ int
 
 	// Tenant isolation index — same shape every other tenant-scoped
 	// table uses; lets the RLS qual short-circuit on a single column.
-	//migrator:schema:index name="idx_login_events_tenant_id" fields="tenant_id" table="login_events"
+	//ptah:schema:index name="idx_login_events_tenant_id" fields="tenant_id" table="login_events"
 	_ int
 
 	// Retention sweep predicate ("delete WHERE created_at < cutoff").
 	// A plain (created_at) index is enough — the table is append-only,
 	// the sweep runs daily, and we don't need composite ordering here.
-	//migrator:schema:index name="idx_login_events_created_at" fields="created_at" table="login_events"
+	//ptah:schema:index name="idx_login_events_created_at" fields="created_at" table="login_events"
 	_ int
 }

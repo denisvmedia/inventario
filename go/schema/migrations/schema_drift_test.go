@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/stokaro/ptah/core/goschema"
-	"github.com/stokaro/ptah/dbschema"
-	"github.com/stokaro/ptah/migration/schemadiff"
+	"ptah.run/core/goschema"
+	"ptah.run/dbschema"
+	"ptah.run/migration/schemadiff"
 
 	"github.com/denisvmedia/inventario/schema/migrations/migrator"
 )

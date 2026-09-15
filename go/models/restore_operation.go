@@ -80,49 +80,49 @@ func (r RestoreOptions) ValidateWithContext(ctx context.Context) error {
 // RestoreOperation represents a restore operation performed on an export
 //
 // Enable RLS for multi-tenant isolation
-//migrator:schema:rls:enable table="restore_operations" comment="Enable RLS for multi-tenant restore operation isolation"
-//migrator:schema:rls:policy name="restore_operation_isolation" table="restore_operations" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures restore operations can only be accessed and modified by their tenant and group with required contexts"
-//migrator:schema:rls:policy name="restore_operation_background_worker_access" table="restore_operations" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all restore operations for processing"
+//ptah:schema:rls:enable table="restore_operations" comment="Enable RLS for multi-tenant restore operation isolation"
+//ptah:schema:rls:policy name="restore_operation_isolation" table="restore_operations" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures restore operations can only be accessed and modified by their tenant and group with required contexts"
+//ptah:schema:rls:policy name="restore_operation_background_worker_access" table="restore_operations" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all restore operations for processing"
 
-//migrator:schema:table name="restore_operations"
+//ptah:schema:table name="restore_operations"
 type RestoreOperation struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantGroupAwareEntityID
-	//migrator:schema:field name="export_id" type="TEXT" not_null="true" foreign="exports(id)" foreign_key_name="fk_restore_operation_export"
+	//ptah:schema:field name="export_id" type="TEXT" not_null="true" foreign="exports(id)" foreign_key_name="fk_restore_operation_export"
 	ExportID string `json:"export_id" db:"export_id"`
-	//migrator:schema:field name="description" type="TEXT" not_null="true"
+	//ptah:schema:field name="description" type="TEXT" not_null="true"
 	Description string `json:"description" db:"description"`
-	//migrator:schema:field name="status" type="TEXT" not_null="true"
+	//ptah:schema:field name="status" type="TEXT" not_null="true"
 	Status RestoreStatus `json:"status" db:"status" userinput:"false"`
-	//migrator:schema:field name="options" type="JSONB" not_null="true"
+	//ptah:schema:field name="options" type="JSONB" not_null="true"
 	Options RestoreOptions `json:"options" db:"options"`
-	//migrator:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_date" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedDate PTimestamp `json:"created_date" db:"created_date" userinput:"false"`
-	//migrator:schema:field name="started_date" type="TIMESTAMP"
+	//ptah:schema:field name="started_date" type="TIMESTAMP"
 	StartedDate PTimestamp `json:"started_date" db:"started_date" userinput:"false"`
-	//migrator:schema:field name="completed_date" type="TIMESTAMP"
+	//ptah:schema:field name="completed_date" type="TIMESTAMP"
 	CompletedDate PTimestamp `json:"completed_date" db:"completed_date" userinput:"false"`
-	//migrator:schema:field name="error_message" type="TEXT"
+	//ptah:schema:field name="error_message" type="TEXT"
 	ErrorMessage string `json:"error_message" db:"error_message" userinput:"false"`
 
 	// Statistics
-	//migrator:schema:field name="location_count" type="INTEGER" default="0"
+	//ptah:schema:field name="location_count" type="INTEGER" default="0"
 	LocationCount int `json:"location_count" db:"location_count" userinput:"false"`
-	//migrator:schema:field name="area_count" type="INTEGER" default="0"
+	//ptah:schema:field name="area_count" type="INTEGER" default="0"
 	AreaCount int `json:"area_count" db:"area_count" userinput:"false"`
-	//migrator:schema:field name="commodity_count" type="INTEGER" default="0"
+	//ptah:schema:field name="commodity_count" type="INTEGER" default="0"
 	CommodityCount int `json:"commodity_count" db:"commodity_count" userinput:"false"`
-	//migrator:schema:field name="image_count" type="INTEGER" default="0"
+	//ptah:schema:field name="image_count" type="INTEGER" default="0"
 	ImageCount int `json:"image_count" db:"image_count" userinput:"false"`
-	//migrator:schema:field name="invoice_count" type="INTEGER" default="0"
+	//ptah:schema:field name="invoice_count" type="INTEGER" default="0"
 	InvoiceCount int `json:"invoice_count" db:"invoice_count" userinput:"false"`
-	//migrator:schema:field name="manual_count" type="INTEGER" default="0"
+	//ptah:schema:field name="manual_count" type="INTEGER" default="0"
 	ManualCount int `json:"manual_count" db:"manual_count" userinput:"false"`
-	//migrator:schema:field name="file_count" type="INTEGER" default="0"
+	//ptah:schema:field name="file_count" type="INTEGER" default="0"
 	FileCount int `json:"file_count" db:"file_count" userinput:"false"`
-	//migrator:schema:field name="binary_data_size" type="BIGINT" default="0"
+	//ptah:schema:field name="binary_data_size" type="BIGINT" default="0"
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
-	//migrator:schema:field name="error_count" type="INTEGER" default="0"
+	//ptah:schema:field name="error_count" type="INTEGER" default="0"
 	ErrorCount int `json:"error_count" db:"error_count" userinput:"false"`
 
 	// Related steps (not stored in DB, loaded separately)
@@ -132,23 +132,23 @@ type RestoreOperation struct {
 // RestoreOperationIndexes defines performance indexes for the restore_operations table
 type RestoreOperationIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore)
-	//migrator:schema:index name="idx_restore_operations_uuid" fields="uuid" unique="true" table="restore_operations"
+	//ptah:schema:index name="idx_restore_operations_uuid" fields="uuid" unique="true" table="restore_operations"
 	_ int
 
 	// Index for tenant-based queries
-	//migrator:schema:index name="idx_restore_operations_tenant_id" fields="tenant_id" table="restore_operations"
+	//ptah:schema:index name="idx_restore_operations_tenant_id" fields="tenant_id" table="restore_operations"
 	_ int
 
 	// Composite index for tenant + status queries
-	//migrator:schema:index name="idx_restore_operations_tenant_status" fields="tenant_id,status" table="restore_operations"
+	//ptah:schema:index name="idx_restore_operations_tenant_status" fields="tenant_id,status" table="restore_operations"
 	_ int
 
 	// Composite index for tenant + export queries
-	//migrator:schema:index name="idx_restore_operations_tenant_export" fields="tenant_id,export_id" table="restore_operations"
+	//ptah:schema:index name="idx_restore_operations_tenant_export" fields="tenant_id,export_id" table="restore_operations"
 	_ int
 
 	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
-	//migrator:schema:index name="idx_restore_operations_tenant_group" fields="tenant_id,group_id" table="restore_operations"
+	//ptah:schema:index name="idx_restore_operations_tenant_group" fields="tenant_id,group_id" table="restore_operations"
 	_ int
 }
 

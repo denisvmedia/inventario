@@ -80,33 +80,33 @@ var (
 )
 
 // Enable RLS for multi-tenant isolation
-//migrator:schema:rls:enable table="users" comment="Enable RLS for multi-tenant user isolation"
-//migrator:schema:rls:policy name="user_isolation" table="users" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures users can only access and modify their own data within their tenant with required contexts"
-//migrator:schema:rls:policy name="user_background_worker_access" table="users" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all users for processing"
+//ptah:schema:rls:enable table="users" comment="Enable RLS for multi-tenant user isolation"
+//ptah:schema:rls:policy name="user_isolation" table="users" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures users can only access and modify their own data within their tenant with required contexts"
+//ptah:schema:rls:policy name="user_background_worker_access" table="users" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all users for processing"
 
-//migrator:schema:table name="users"
+//ptah:schema:table name="users"
 type User struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantAwareEntityID
-	//migrator:schema:field name="email" type="TEXT" not_null="true"
+	//ptah:schema:field name="email" type="TEXT" not_null="true"
 	Email string `json:"email" db:"email"`
-	//migrator:schema:field name="password_hash" type="TEXT" not_null="true"
+	//ptah:schema:field name="password_hash" type="TEXT" not_null="true"
 	PasswordHash string `json:"-" db:"password_hash" userinput:"false"`
-	//migrator:schema:field name="name" type="TEXT" not_null="true"
+	//ptah:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
-	//migrator:schema:field name="is_active" type="BOOLEAN" not_null="true" default="true"
+	//ptah:schema:field name="is_active" type="BOOLEAN" not_null="true" default="true"
 	IsActive bool `json:"is_active" db:"is_active"`
-	//migrator:schema:field name="last_login_at" type="TIMESTAMP"
+	//ptah:schema:field name="last_login_at" type="TIMESTAMP"
 	LastLoginAt *time.Time `json:"last_login_at" db:"last_login_at" userinput:"false"`
 	// DefaultGroupID is the user's preferred landing group after login.
 	// Nullable: when unset, the login flow falls back to "first group the user
 	// created, else first group they were invited to" (#1263). ON DELETE SET NULL
 	// so removing a group silently clears the preference instead of blocking the delete.
-	//migrator:schema:field name="default_group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_user_default_group" on_delete="SET NULL"
+	//ptah:schema:field name="default_group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_user_default_group" on_delete="SET NULL"
 	DefaultGroupID *string `json:"default_group_id" db:"default_group_id"`
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
 
 	// IsSystemAdmin is a transient wire-only field reflecting the user's
@@ -118,7 +118,7 @@ type User struct {
 	// and route visibility (the backend re-checks via `RequireSystemAdmin`
 	// on every /admin/* request).
 	//
-	// Persistence safety: there is no `//migrator:schema:field` annotation
+	// Persistence safety: there is no `//ptah:schema:field` annotation
 	// so the migration generator never re-adds the column, and the `db:"-"`
 	// tag tells sqlx to skip the field in both SELECT and INSERT/UPDATE,
 	// so this stays purely in-memory. A caller that smuggles `true` here
@@ -146,19 +146,19 @@ func (u *User) HasPasswordSet() bool {
 // PostgreSQL-specific indexes for users
 type UserIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore)
-	//migrator:schema:index name="idx_users_uuid" fields="uuid" unique="true" table="users"
+	//ptah:schema:index name="idx_users_uuid" fields="uuid" unique="true" table="users"
 	_ int
 
 	// Unique index for email within tenant
-	//migrator:schema:index name="users_tenant_email_idx" fields="tenant_id,email" unique="true" table="users"
+	//ptah:schema:index name="users_tenant_email_idx" fields="tenant_id,email" unique="true" table="users"
 	_ int
 
 	// Index for tenant lookups
-	//migrator:schema:index name="users_tenant_idx" fields="tenant_id" table="users"
+	//ptah:schema:index name="users_tenant_idx" fields="tenant_id" table="users"
 	_ int
 
 	// Index for active users
-	//migrator:schema:index name="users_active_idx" fields="is_active" table="users"
+	//ptah:schema:index name="users_active_idx" fields="is_active" table="users"
 	_ int
 }
 

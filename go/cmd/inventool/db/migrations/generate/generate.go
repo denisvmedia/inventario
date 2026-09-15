@@ -123,7 +123,7 @@ func (c *Command) migrateGenerate(cfg *Config, dbConfig *shared.DatabaseConfig, 
 	}
 
 	// Check if no migration was needed (files will be nil when no changes detected)
-	if files == nil {
+	if files == nil || len(files.Files) == 0 {
 		fmt.Println("✅ No schema changes detected - no migration files generated")
 		fmt.Printf("The database schema is already in sync with your Go entity annotations.\n")
 		fmt.Printf("No migration is needed at this time.\n")
@@ -134,7 +134,7 @@ func (c *Command) migrateGenerate(cfg *Config, dbConfig *shared.DatabaseConfig, 
 	fmt.Printf("Next steps:\n")
 	fmt.Printf("  1. Review the generated migration files\n")
 	fmt.Printf("  2. Run 'inventario migrate up' to apply the migration\n")
-	fmt.Printf("  3. Test rollback with 'inventario migrate down %d' if needed\n", files.Version)
+	fmt.Printf("  3. Test rollback with 'inventario migrate down %d' if needed\n", files.Files[len(files.Files)-1].Version)
 
 	return nil
 }

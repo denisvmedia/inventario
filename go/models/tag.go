@@ -184,64 +184,64 @@ var (
 //
 // Enable RLS for multi-tenant isolation
 //
-//migrator:schema:rls:enable table="tags" comment="Enable RLS for multi-tenant tag isolation"
-//migrator:schema:rls:policy name="tag_isolation" table="tags" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures tags can only be accessed and modified by their tenant and group with required contexts"
-//migrator:schema:rls:policy name="tag_background_worker_access" table="tags" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all tags for processing"
-//migrator:schema:table name="tags"
+//ptah:schema:rls:enable table="tags" comment="Enable RLS for multi-tenant tag isolation"
+//ptah:schema:rls:policy name="tag_isolation" table="tags" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures tags can only be accessed and modified by their tenant and group with required contexts"
+//ptah:schema:rls:policy name="tag_background_worker_access" table="tags" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all tags for processing"
+//ptah:schema:table name="tags"
 type Tag struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantGroupAwareEntityID
 
 	// Kind separates item-tags (commodity) from file-tags (file). Two tags
 	// with the same slug but different kind are distinct entities. Existing
 	// rows default to "commodity" on migration; new rows always carry an
 	// explicit kind from the write path.
-	//migrator:schema:field name="kind" type="TEXT" not_null="true" default="commodity"
+	//ptah:schema:field name="kind" type="TEXT" not_null="true" default="commodity"
 	Kind TagKind `json:"kind" db:"kind"`
 
 	// Slug is the kebab-cased identifier referenced from
 	// commodities.tags / files.tags JSONB arrays. Unique per (group, kind).
-	//migrator:schema:field name="slug" type="TEXT" not_null="true"
+	//ptah:schema:field name="slug" type="TEXT" not_null="true"
 	Slug string `json:"slug" db:"slug"`
 
 	// Label is the human-readable display name.
-	//migrator:schema:field name="label" type="TEXT" not_null="true"
+	//ptah:schema:field name="label" type="TEXT" not_null="true"
 	Label string `json:"label" db:"label"`
 
 	// Color is one of the curated TagColor values.
-	//migrator:schema:field name="color" type="TEXT" not_null="true" default="muted"
+	//ptah:schema:field name="color" type="TEXT" not_null="true" default="muted"
 	Color TagColor `json:"color" db:"color"`
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 
-	//migrator:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // TagIndexes defines the postgres indexes / uniqueness constraints for tags.
 type TagIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore).
-	//migrator:schema:index name="idx_tags_uuid" fields="uuid" unique="true" table="tags"
+	//ptah:schema:index name="idx_tags_uuid" fields="uuid" unique="true" table="tags"
 	_ int
 
 	// Index for tenant-based queries (audit, cross-group analytics).
-	//migrator:schema:index name="idx_tags_tenant_id" fields="tenant_id" table="tags"
+	//ptah:schema:index name="idx_tags_tenant_id" fields="tenant_id" table="tags"
 	_ int
 
 	// Composite index for tenant+group RLS-filtered queries.
-	//migrator:schema:index name="idx_tags_tenant_group" fields="tenant_id,group_id" table="tags"
+	//ptah:schema:index name="idx_tags_tenant_group" fields="tenant_id,group_id" table="tags"
 	_ int
 
 	// Per-group, per-kind slug uniqueness — backs the autocomplete lookup
 	// and prevents duplicate "kitchen" / "Kitchen" tags within the same
 	// group AND kind, while allowing the same slug to exist once as a
 	// commodity tag and once as a file tag.
-	//migrator:schema:index name="idx_tags_group_kind_slug" fields="group_id,kind,slug" unique="true" table="tags"
+	//ptah:schema:index name="idx_tags_group_kind_slug" fields="group_id,kind,slug" unique="true" table="tags"
 	_ int
 
 	// Trigram similarity for label search (autocomplete / ?q=).
-	//migrator:schema:index name="tags_label_trgm_idx" fields="label" type="GIN" ops="gin_trgm_ops" table="tags"
+	//ptah:schema:index name="tags_label_trgm_idx" fields="label" type="GIN" ops="gin_trgm_ops" table="tags"
 	_ int
 }
 
