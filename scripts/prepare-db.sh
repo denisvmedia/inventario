@@ -54,5 +54,7 @@ echo "🔍  Verifying the migration chain's prerequisites..."
 echo "✅  Prerequisites satisfied"
 echo ""
 
+# The DSN is privileged and usually carries a password, so it is never echoed —
+# terminal scrollback and CI logs outlive the command.
 echo "🎉  Database is ready. Apply the chain with:"
-echo "    cd ${GO_DIR} && go run ./cmd/inventario db migrate up --db-dsn=\"${DSN}\""
+echo "    cd ${GO_DIR} && go run ./cmd/inventario db migrate up --db-dsn='<dsn>'"

@@ -42,9 +42,18 @@ var ErrMissingExtension = errx.NewSentinel("required PostgreSQL extension is not
 // requiredExtensions are the extensions the migration chain cannot run without.
 //
 // pg_trgm supplies gin_trgm_ops for the trigram indexes on commodities, files and
-// tags. pgcrypto is absent deliberately: bootstrap still installs it, but nothing
-// in the schema needs it at the supported PostgreSQL floor.
-var requiredExtensions = []string{"pg_trgm"}
+// tags.
+//
+// pgcrypto is required by the chain rather than by the schema: nothing needs it at
+// the supported PostgreSQL floor, where gen_random_uuid() is core, but migration
+// 1772465439 issues CREATE EXTENSION IF NOT EXISTS pgcrypto. On a database that
+// does not have it that is not a no-op, and the migrator role cannot satisfy it —
+// it holds CREATE on the schema, not on the database:
+//
+//	ERROR: permission denied to create extension "pgcrypto" (SQLSTATE 42501)
+//
+// The requirement can go once fresh databases stop replaying that far.
+var requiredExtensions = []string{"pg_trgm", "pgcrypto"}
 
 type Args struct {
 	DryRun bool
