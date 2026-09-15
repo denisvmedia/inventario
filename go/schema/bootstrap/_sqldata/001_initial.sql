@@ -49,13 +49,6 @@ END $$;
 -- and tags.label (gin_trgm_ops). No migration creates it, and the migrator role could
 -- not: it holds CREATE on the schema, not on the database. This is the only step that
 -- installs it.
---
--- pgcrypto is only needed for gen_random_uuid() on PostgreSQL < 13, below the supported
--- floor. It stays because migration 1772465439 issues CREATE EXTENSION IF NOT EXISTS
--- pgcrypto on a full replay: with it absent here, that statement would need a privilege
--- the migrator does not have. Removing it requires that fresh databases stop replaying
--- that far.
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- Create application role for RLS policies

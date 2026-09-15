@@ -197,14 +197,11 @@ persistence/HA) — never use it in production.
 - [ ] Create the database and an **app** user, plus a **migrator** user — or provide a
   superuser DSN and let the chart's bootstrap step create the migrator role for you
   (`setupJob.bootstrap.superuserDsn`). Use `sslmode=require`.
-- [ ] Ensure the **`pg_trgm`** and **`pgcrypto`** extensions are installed in that
-  database. Bootstrap creates them when it runs, and the migrator role cannot: it holds
-  `CREATE` on the schema, not on the database. `pg_trgm` backs the trigram indexes;
-  `pgcrypto` is needed because a full replay reaches a migration that issues
-  `CREATE EXTENSION IF NOT EXISTS pgcrypto`, which is only a no-op where it already
-  exists. `inventario db migrate up` checks both up front and names what is missing, so
-  the failure is legible — but it is still a failure. Managed providers usually expose
-  both; some require enabling them per database.
+- [ ] Ensure the **`pg_trgm`** extension is installed in that database. It backs the
+  trigram indexes. Bootstrap creates it when it runs, and the migrator role cannot: it
+  holds `CREATE` on the schema, not on the database. `inventario db migrate up` checks
+  for it up front and names it, so the failure is legible — but it is still a failure.
+  Managed providers usually expose `pg_trgm`; some require enabling it per database.
 - [ ] Record two DSNs for the Secret:
   - `INVENTARIO_DB_DSN` — app user: `postgres://inventario:…@<host>:5432/inventario?sslmode=require`
   - `MIGRATOR_DB_DSN` — migrator user (falls back to the app DSN if omitted).
@@ -661,8 +658,7 @@ kubectl -n inventario create secret generic inventario-runtime \
 
 If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (or set
 `setupJob.bootstrap.enabled=false`). Turning bootstrap off also skips the
-`CREATE EXTENSION` statements it would have run, so `pg_trgm` and `pgcrypto` become your
-responsibility too — see the provisioning checklist above. For production, prefer a secrets manager
+`CREATE EXTENSION` it would have run, so `pg_trgm` becomes your responsibility too — see the provisioning checklist above. For production, prefer a secrets manager
 (sops / sealed-secrets / external-secrets) over a raw `kubectl create secret`.
 
 ## Appendix C — Upgrades

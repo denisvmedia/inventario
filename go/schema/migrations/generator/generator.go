@@ -61,16 +61,11 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 		DBConn:        conn,
 		MigrationName: migrationName,
 		OutputDir:     migrationsDir,
-		// Extensions are provisioned by `inventario db bootstrap`, not declared to Ptah,
-		// so they must be ignored here or the diff plans a DROP EXTENSION for each:
-		// Ptah treats an undeclared extension present in the database as a removal.
-		// Ignoring excludes them from both directions, which is what we want.
-		//
-		// This list only grows. A name stays here even once the extension is no longer
-		// installed on new databases, because older databases still carry it and
-		// removing the name is exactly what would hand them a DROP EXTENSION.
-		// See models/extensions.go.
-		CompareOptions: config.WithAdditionalIgnoredExtensions("btree_gin", "pg_trgm", "pgcrypto"),
+		// pg_trgm is provisioned by `inventario db bootstrap`, not declared to Ptah, so
+		// it must be ignored here or the diff plans a DROP EXTENSION for it: Ptah treats
+		// an undeclared extension present in the database as a removal. Ignoring excludes
+		// it from both directions, which is what we want. See models/extensions.go.
+		CompareOptions: config.WithAdditionalIgnoredExtensions("pg_trgm"),
 	}
 
 	files, err := generator.GenerateMigration(ctx, opts)
