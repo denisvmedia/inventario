@@ -1092,7 +1092,11 @@ demo:
     #   - A separate init Job creates the bucket for the app
     enabled: false
 
-    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    # Pulled from quay.io, not Docker Hub: MinIO withdrew the docker.io/minio/minio
+    # repository, so the same RELEASE tag there now fails with
+    # "pull access denied, repository does not exist". quay.io serves the
+    # identical digest and is already where mcImage below comes from.
+    image: quay.io/minio/minio:RELEASE.2025-01-20T14-49-07Z
 
     # Image for the `mc` client run by the one-shot bucket-create Job.
     # Pinned to an immutable RELEASE tag (NOT :latest): in argocdMode that Job

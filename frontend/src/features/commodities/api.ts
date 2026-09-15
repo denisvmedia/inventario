@@ -85,12 +85,7 @@ interface ValueResponse {
 }
 
 export type CommoditySortField =
-  | "name"
-  | "registered_date"
-  | "purchase_date"
-  | "current_price"
-  | "original_price"
-  | "count"
+  "name" | "registered_date" | "purchase_date" | "current_price" | "original_price" | "count"
 
 // What the list endpoint accepts. The handler treats each field as
 // optional + zero-value-means-no-filter, mirroring the BE

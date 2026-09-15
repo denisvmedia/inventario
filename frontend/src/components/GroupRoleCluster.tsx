@@ -45,11 +45,7 @@ export function GroupRoleCluster() {
   const role: "viewer" | "user" | "admin" | "owner" | null =
     user?.id && membersQuery.data
       ? ((membersQuery.data.find((m) => m.member_user_id === user.id)?.role ?? null) as
-          | "viewer"
-          | "user"
-          | "admin"
-          | "owner"
-          | null)
+          "viewer" | "user" | "admin" | "owner" | null)
       : null
 
   // Debounced PUT /auth/me — see #1262 / #1300. We hold the latest target
