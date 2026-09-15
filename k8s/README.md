@@ -62,8 +62,37 @@ Both baselines preserve the same startup flow used by `docker-compose.yaml`:
 - Set `migrator-db-dsn` to the migration user DSN.
 - Set `app-db-dsn` to the application user DSN.
 - Set `redis-url` to the external Redis instance used for token blacklist and other Redis-backed runtime features.
-- Set `bootstrap-username` and `bootstrap-username-for-migrations` to the operational and migration usernames that `inventario db bootstrap apply` should provision/grant.
+- Set `bootstrap-username` and `bootstrap-username-for-migrations` to the operational and migration usernames that `inventario db bootstrap apply` should provision/grant. `bootstrap-username` must not be one of the service role names (`inventario_app`, `inventario_migrator`, `inventario_background_worker`, `inventario_admin`), in any case — see below.
 - Replace `admin-password`, `smtp-username`, and `smtp-password` placeholders.
+
+#### The operational login must not be named after a service role
+
+Bootstrap creates the login users first and the service roles second, so a login
+named `inventario_app` leaves one role doing both jobs. That breaks tenant
+isolation: the application narrows its privileges per transaction with
+`SET LOCAL ROLE inventario_app`, and `SET ROLE` only narrows when the target is a
+different role than the one holding the grants. A login that already is
+`inventario_app` keeps `inventario_background_worker`, whose RLS policies are
+`USING (true)`, and those OR with the tenant-isolation policy.
+
+`inventario db bootstrap apply` refuses any of the four service role names for
+`bootstrap-username`, and refuses them case-insensitively: the SQL interpolates
+the name unquoted, so PostgreSQL folds `INVENTARIO_APP` to `inventario_app` and
+the collision lands anyway.
+
+`inventario_migrator` stays valid for `bootstrap-username-for-migrations`, and
+only there: that connection never switches roles and never serves user traffic.
+
+A cluster bootstrapped before this check needs the grants removed as well as the
+name changed, because renaming the secret leaves the old role behind:
+
+```sql
+REVOKE inventario_background_worker, inventario_admin FROM inventario_app;
+ALTER ROLE inventario_app NOLOGIN;
+```
+
+Then re-run the setup job with the corrected `bootstrap-username`, and point
+`app-db-dsn` at the new login.
 
 `k8s/prod/configmap.yaml` contains the non-secret runtime defaults for the `inventario run` section, including `INVENTARIO_RUN_ADDR`, `INVENTARIO_RUN_PUBLIC_URL`, `INVENTARIO_RUN_UPLOAD_LOCATION`, and seed toggles.
 
