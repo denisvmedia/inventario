@@ -805,11 +805,11 @@ setupJob:
     superuserDsn: ""
 
     # Application DB username (already exists; bootstrap grants roles to it).
-    # Must not be inventario_app, inventario_background_worker or
-    # inventario_admin: the app narrows to inventario_app per transaction with
-    # SET LOCAL ROLE, and a login that already is that role keeps every role
-    # granted to it, which defeats the tenant-isolation policies. Bootstrap
-    # rejects such a name.
+    # Must not be a service role name (inventario_app, inventario_migrator,
+    # inventario_background_worker, inventario_admin), in any case: the app
+    # narrows to inventario_app per transaction with SET LOCAL ROLE, and a login
+    # that already is that role keeps every role granted to it, which defeats
+    # the tenant-isolation policies. Bootstrap rejects such a name.
     # Env: INVENTARIO_BOOTSTRAP_USERNAME
     username: "inventario"
 

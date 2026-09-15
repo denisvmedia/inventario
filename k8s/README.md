@@ -62,7 +62,7 @@ Both baselines preserve the same startup flow used by `docker-compose.yaml`:
 - Set `migrator-db-dsn` to the migration user DSN.
 - Set `app-db-dsn` to the application user DSN.
 - Set `redis-url` to the external Redis instance used for token blacklist and other Redis-backed runtime features.
-- Set `bootstrap-username` and `bootstrap-username-for-migrations` to the operational and migration usernames that `inventario db bootstrap apply` should provision/grant. `bootstrap-username` must not be `inventario_app`, `inventario_background_worker` or `inventario_admin` — see below.
+- Set `bootstrap-username` and `bootstrap-username-for-migrations` to the operational and migration usernames that `inventario db bootstrap apply` should provision/grant. `bootstrap-username` must not be one of the service role names (`inventario_app`, `inventario_migrator`, `inventario_background_worker`, `inventario_admin`), in any case — see below.
 - Replace `admin-password`, `smtp-username`, and `smtp-password` placeholders.
 
 #### The operational login must not be named after a service role
@@ -75,9 +75,13 @@ different role than the one holding the grants. A login that already is
 `inventario_app` keeps `inventario_background_worker`, whose RLS policies are
 `USING (true)`, and those OR with the tenant-isolation policy.
 
-`inventario db bootstrap apply` refuses such a name. `inventario_migrator` stays
-valid for `bootstrap-username-for-migrations`: that connection never switches
-roles and never serves user traffic.
+`inventario db bootstrap apply` refuses any of the four service role names for
+`bootstrap-username`, and refuses them case-insensitively: the SQL interpolates
+the name unquoted, so PostgreSQL folds `INVENTARIO_APP` to `inventario_app` and
+the collision lands anyway.
+
+`inventario_migrator` stays valid for `bootstrap-username-for-migrations`, and
+only there: that connection never switches roles and never serves user traffic.
 
 A cluster bootstrapped before this check needs the grants removed as well as the
 name changed, because renaming the secret leaves the old role behind:

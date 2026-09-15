@@ -455,6 +455,28 @@ func TestTemplateData_Validate_UnhappyPath(t *testing.T) {
 				UsernameForBackgroundWorker: "inventario_app",
 			},
 		},
+		{
+			// The template interpolates the name unquoted, so PostgreSQL folds
+			// this to inventario_app and the collision lands regardless. Its own
+			// guards compare SQL string literals, which do not fold, so bootstrap
+			// happily grants the worker role to the policy role.
+			name:     "operational login in another case",
+			template: bootstrap.TemplateData{Username: "INVENTARIO_APP"},
+		},
+		{
+			name: "worker login in another case",
+			template: bootstrap.TemplateData{
+				Username:                    "inventario",
+				UsernameForBackgroundWorker: "Inventario_App",
+			},
+		},
+		{
+			name: "migration login in another case",
+			template: bootstrap.TemplateData{
+				Username:              "inventario",
+				UsernameForMigrations: "INVENTARIO_ADMIN",
+			},
+		},
 	}
 
 	for _, tt := range tests {

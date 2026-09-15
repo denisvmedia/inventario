@@ -71,7 +71,11 @@ func (t TemplateData) Validate() error {
 		{"username-for-background-worker", t.UsernameForBackgroundWorker},
 	} {
 		for _, reserved := range reservedNames[f.flag] {
-			if f.value != reserved {
+			// Case-insensitively: the template interpolates the name unquoted, so
+			// PostgreSQL folds INVENTARIO_APP to inventario_app and the collision
+			// happens anyway. The template's own guards compare SQL string
+			// literals, which do not fold, so they wave the spelling through.
+			if !strings.EqualFold(f.value, reserved) {
 				continue
 			}
 			return errxtrace.Wrap(
