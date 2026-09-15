@@ -29,6 +29,20 @@ import (
 // container's binary later expected.
 var ErrSchemaLagsBinary = errx.NewSentinel("database schema lags the binary's embedded migrations")
 
+// ErrMissingExtension is returned by MigrateUp when a PostgreSQL extension the
+// migrations depend on is not installed.
+//
+// Without it the failure surfaces from partway through the chain as
+// `operator class "gin_trgm_ops" does not exist for access method "gin"`, naming
+// neither the extension nor the step meant to install it. Extensions come from
+// `inventario db bootstrap`, so a skipped bootstrap is the usual cause — notably
+// `setupJob.bootstrap.enabled=false`.
+var ErrMissingExtension = errx.NewSentinel("required PostgreSQL extension is not installed")
+
+// requiredExtensions are the extensions the migration chain cannot run without.
+// pg_trgm supplies gin_trgm_ops for the trigram indexes on commodities, files and tags.
+var requiredExtensions = []string{"pg_trgm"}
+
 type Args struct {
 	DryRun bool
 }
@@ -85,6 +99,12 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 	}
 	defer conn.Close()
 
+	// A missing extension is a setup problem. Reporting it here names the extension
+	// rather than failing later on whatever operator class it supplied.
+	if err := m.verifyExtensions(ctx); err != nil {
+		return err
+	}
+
 	// Create migrator
 	ptahMigrator, err := migrator.NewFSMigrator(conn, m.migFS)
 	if err != nil {
@@ -117,6 +137,45 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 
 	m.logger.Info("Migrations completed successfully")
 	return nil
+}
+
+// verifyExtensions reports the extensions in requiredExtensions that the target
+// database does not have, as ErrMissingExtension. It reads pg_extension rather
+// than probing an operator class so the error names the thing to install.
+func (m *Migrator) verifyExtensions(ctx context.Context) error {
+	db, err := sql.Open("postgres", m.dbURL)
+	if err != nil {
+		return errxtrace.Wrap("failed to connect to database", err)
+	}
+	defer db.Close()
+
+	var missing []string
+	for _, name := range requiredExtensions {
+		var installed bool
+		err := db.QueryRowContext(ctx,
+			"SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = $1)", name,
+		).Scan(&installed)
+		if err != nil {
+			return errxtrace.Wrap("failed to read installed extensions", err)
+		}
+		if !installed {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+
+	m.logger.Error("required PostgreSQL extension is missing — bootstrap has not run against this database",
+		"missing", strings.Join(missing, ", "),
+	)
+
+	return errxtrace.Wrap(
+		fmt.Sprintf("%s: run `inventario db bootstrap apply` with a privileged DSN, "+
+			"or install it out of band if your platform manages extensions",
+			strings.Join(missing, ", ")),
+		ErrMissingExtension,
+	)
 }
 
 // VerifySchemaUpToDate opens its own connection to compare the binary's

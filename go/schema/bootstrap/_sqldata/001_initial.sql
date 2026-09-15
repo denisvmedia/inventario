@@ -45,8 +45,10 @@ BEGIN
     END IF;
 END $$;
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS btree_gin;
+-- pg_trgm backs the trigram indexes on commodities.name/short_name, files.title/path
+-- and tags.label (gin_trgm_ops). No migration creates it, and the migrator role could
+-- not: it holds CREATE on the schema, not on the database. This is the only step that
+-- installs it.
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- Create application role for RLS policies

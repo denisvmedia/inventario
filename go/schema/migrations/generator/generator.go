@@ -56,12 +56,16 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 
 	// Use Ptah's native migration generator with database connection
 	opts := generator.GenerateMigrationOptions{
-		GoEntitiesDir:  m.goEntitiesDir,
-		DatabaseURL:    m.dbURL,
-		DBConn:         conn,
-		MigrationName:  migrationName,
-		OutputDir:      migrationsDir,
-		CompareOptions: config.WithAdditionalIgnoredExtensions("btree_gin", "pg_trgm", "pgcrypto"),
+		GoEntitiesDir: m.goEntitiesDir,
+		DatabaseURL:   m.dbURL,
+		DBConn:        conn,
+		MigrationName: migrationName,
+		OutputDir:     migrationsDir,
+		// pg_trgm is provisioned by `inventario db bootstrap`, not declared to Ptah, so
+		// it must be ignored here or the diff plans a DROP EXTENSION for it: Ptah treats
+		// an undeclared extension present in the database as a removal. Ignoring excludes
+		// it from both directions, which is what we want. See models/extensions.go.
+		CompareOptions: config.WithAdditionalIgnoredExtensions("pg_trgm"),
 	}
 
 	files, err := generator.GenerateMigration(ctx, opts)
