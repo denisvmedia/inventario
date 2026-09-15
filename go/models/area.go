@@ -14,42 +14,42 @@ var (
 )
 
 // Enable RLS for multi-tenant isolation
-//migrator:schema:rls:enable table="areas" comment="Enable RLS for multi-tenant area isolation"
-//migrator:schema:rls:policy name="area_isolation" table="areas" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures areas can only be accessed and modified by their tenant and group with required contexts"
-//migrator:schema:rls:policy name="area_background_worker_access" table="areas" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all areas for processing"
+//ptah:schema:rls:enable table="areas" comment="Enable RLS for multi-tenant area isolation"
+//ptah:schema:rls:policy name="area_isolation" table="areas" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures areas can only be accessed and modified by their tenant and group with required contexts"
+//ptah:schema:rls:policy name="area_background_worker_access" table="areas" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all areas for processing"
 
-//migrator:schema:table name="areas"
+//ptah:schema:table name="areas"
 type Area struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantGroupAwareEntityID
-	//migrator:schema:field name="name" type="TEXT" not_null="true"
+	//ptah:schema:field name="name" type="TEXT" not_null="true"
 	Name string `json:"name" db:"name"`
-	//migrator:schema:field name="location_id" type="TEXT" not_null="true" foreign="locations(id)" foreign_key_name="fk_area_location"
+	//ptah:schema:field name="location_id" type="TEXT" not_null="true" foreign="locations(id)" foreign_key_name="fk_area_location"
 	LocationID string `json:"location_id" db:"location_id"`
 	// Icon is a short visual token (typically a single emoji) shown as
 	// the area's avatar tile in the area grid on the location detail
 	// view. Empty string means "no icon picked" — the UI falls back to
 	// the generic Package glyph.
-	//migrator:schema:field name="icon" type="TEXT" not_null="true" default=""
+	//ptah:schema:field name="icon" type="TEXT" not_null="true" default=""
 	Icon string `json:"icon" db:"icon"`
 }
 
 // AreaIndexes defines performance indexes for the areas table
 type AreaIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for import/restore)
-	//migrator:schema:index name="idx_areas_uuid" fields="uuid" unique="true" table="areas"
+	//ptah:schema:index name="idx_areas_uuid" fields="uuid" unique="true" table="areas"
 	_ int
 
 	// Index for tenant-based queries
-	//migrator:schema:index name="idx_areas_tenant_id" fields="tenant_id" table="areas"
+	//ptah:schema:index name="idx_areas_tenant_id" fields="tenant_id" table="areas"
 	_ int
 
 	// Composite index for tenant + location queries
-	//migrator:schema:index name="idx_areas_tenant_location" fields="tenant_id,location_id" table="areas"
+	//ptah:schema:index name="idx_areas_tenant_location" fields="tenant_id,location_id" table="areas"
 	_ int
 
 	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
-	//migrator:schema:index name="idx_areas_tenant_group" fields="tenant_id,group_id" table="areas"
+	//ptah:schema:index name="idx_areas_tenant_group" fields="tenant_id,group_id" table="areas"
 	_ int
 }
 

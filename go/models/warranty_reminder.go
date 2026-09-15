@@ -59,9 +59,9 @@ var (
 // shape as commodities — group-scoped + a separate background-worker
 // bypass policy so the periodic scan can read across all groups.
 //
-//migrator:schema:rls:enable table="warranty_reminders" comment="Enable RLS for multi-tenant warranty reminder isolation"
-//migrator:schema:rls:policy name="warranty_reminder_isolation" table="warranty_reminders" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures warranty reminders are accessible only by their tenant and group"
-//migrator:schema:rls:policy name="warranty_reminder_background_worker_access" table="warranty_reminders" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to record reminder emissions across all groups"
+//ptah:schema:rls:enable table="warranty_reminders" comment="Enable RLS for multi-tenant warranty reminder isolation"
+//ptah:schema:rls:policy name="warranty_reminder_isolation" table="warranty_reminders" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures warranty reminders are accessible only by their tenant and group"
+//ptah:schema:rls:policy name="warranty_reminder_background_worker_access" table="warranty_reminders" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to record reminder emissions across all groups"
 
 // WarrantyReminder is the idempotency row written by the warranty
 // reminder worker right after it successfully enqueues an email. The
@@ -74,28 +74,28 @@ var (
 // commodity's group is purged (handled by GroupPurger like every other
 // group-scoped table).
 //
-//migrator:schema:table name="warranty_reminders"
+//ptah:schema:table name="warranty_reminders"
 type WarrantyReminder struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantGroupAwareEntityID
 
 	// CommodityID is the warranty's owning commodity. Cascade-deletes
 	// with the commodity row so old reminders never block re-creating an
 	// item with the same name.
-	//migrator:schema:field name="commodity_id" type="TEXT" not_null="true" foreign="commodities(id)" foreign_key_name="fk_warranty_reminder_commodity" on_delete="CASCADE"
+	//ptah:schema:field name="commodity_id" type="TEXT" not_null="true" foreign="commodities(id)" foreign_key_name="fk_warranty_reminder_commodity" on_delete="CASCADE"
 	CommodityID string `json:"commodity_id" db:"commodity_id"`
 
 	// ThresholdDays is the WarrantyReminderThreshold this row accounts
 	// for (60, 30, 7). Stored as INTEGER rather than text so a future
 	// "X days" cadence change can compare numerically.
-	//migrator:schema:field name="threshold_days" type="INTEGER" not_null="true"
+	//ptah:schema:field name="threshold_days" type="INTEGER" not_null="true"
 	ThresholdDays int `json:"threshold_days" db:"threshold_days"`
 
 	// SentAt is the wall-clock time the email was enqueued (not
 	// necessarily delivered — the email queue is async). Surfacing this
 	// directly is enough for support/audit purposes; the email queue's
 	// own job log records final delivery.
-	//migrator:schema:field name="sent_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="sent_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	SentAt time.Time `json:"sent_at" db:"sent_at"`
 }
 
@@ -105,16 +105,16 @@ type WarrantyReminder struct {
 type WarrantyReminderIndexes struct {
 	// Unique idempotency key — at most one reminder row per (commodity,
 	// threshold). The worker checks this before enqueueing email.
-	//migrator:schema:index name="idx_warranty_reminders_commodity_threshold" fields="commodity_id,threshold_days" unique="true" table="warranty_reminders"
+	//ptah:schema:index name="idx_warranty_reminders_commodity_threshold" fields="commodity_id,threshold_days" unique="true" table="warranty_reminders"
 	_ int
 
 	// Tenant-scoped index for housekeeping queries.
-	//migrator:schema:index name="idx_warranty_reminders_tenant_id" fields="tenant_id" table="warranty_reminders"
+	//ptah:schema:index name="idx_warranty_reminders_tenant_id" fields="tenant_id" table="warranty_reminders"
 	_ int
 
 	// Group-scoped index — used when the group purge worker fans
 	// reminders out for hard-delete in FK order.
-	//migrator:schema:index name="idx_warranty_reminders_group_id" fields="group_id" table="warranty_reminders"
+	//ptah:schema:index name="idx_warranty_reminders_group_id" fields="group_id" table="warranty_reminders"
 	_ int
 }
 

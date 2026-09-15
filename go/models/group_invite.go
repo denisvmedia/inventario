@@ -22,81 +22,81 @@ const DefaultInviteExpiry = 24 * time.Hour
 
 // Enable RLS for multi-tenant isolation (tenant-only)
 //
-//migrator:schema:rls:enable table="group_invites" comment="Enable RLS for multi-tenant group invite isolation"
-//migrator:schema:rls:policy name="group_invite_tenant_isolation" table="group_invites" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''" comment="Ensures group invites are isolated by tenant"
-//migrator:schema:rls:policy name="group_invite_background_worker_access" table="group_invites" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all group invites for cleanup"
+//ptah:schema:rls:enable table="group_invites" comment="Enable RLS for multi-tenant group invite isolation"
+//ptah:schema:rls:policy name="group_invite_tenant_isolation" table="group_invites" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''" comment="Ensures group invites are isolated by tenant"
+//ptah:schema:rls:policy name="group_invite_background_worker_access" table="group_invites" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all group invites for cleanup"
 
-//migrator:schema:table name="group_invites"
+//ptah:schema:table name="group_invites"
 type GroupInvite struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantAwareEntityID
 
 	// GroupID references the group this invite is for.
-	//migrator:schema:field name="group_id" type="TEXT" not_null="true" foreign="location_groups(id)" foreign_key_name="fk_invite_group"
+	//ptah:schema:field name="group_id" type="TEXT" not_null="true" foreign="location_groups(id)" foreign_key_name="fk_invite_group"
 	GroupID string `json:"group_id" db:"group_id"`
 
 	// Token is a cryptographically random, URL-safe string used in the invite link.
-	//migrator:schema:field name="token" type="TEXT" not_null="true"
+	//ptah:schema:field name="token" type="TEXT" not_null="true"
 	Token string `json:"token" db:"token" userinput:"false"`
 
 	// CreatedBy is the user ID of the admin who generated the invite.
-	//migrator:schema:field name="created_by" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_invite_created_by"
+	//ptah:schema:field name="created_by" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_invite_created_by"
 	CreatedBy string `json:"created_by" db:"created_by" userinput:"false"`
 
 	// ExpiresAt is when the invite link becomes invalid.
-	//migrator:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
+	//ptah:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
 
 	// UsedBy is the user ID of the person who accepted the invite (null if unused).
-	//migrator:schema:field name="used_by" type="TEXT" foreign="users(id)" foreign_key_name="fk_invite_used_by"
+	//ptah:schema:field name="used_by" type="TEXT" foreign="users(id)" foreign_key_name="fk_invite_used_by"
 	UsedBy *string `json:"used_by" db:"used_by"`
 
 	// UsedAt is when the invite was accepted (null if unused).
-	//migrator:schema:field name="used_at" type="TIMESTAMP"
+	//ptah:schema:field name="used_at" type="TIMESTAMP"
 	UsedAt *time.Time `json:"used_at" db:"used_at"`
 
-	//migrator:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 
 	// InviteeEmail is the email address the invite was addressed to when
 	// created via the email-send flow (#1533). Nil for legacy token-only
 	// invites the admin generates as a copy-paste URL — that path stays
 	// supported for users who don't have email yet.
-	//migrator:schema:field name="invitee_email" type="TEXT"
+	//ptah:schema:field name="invitee_email" type="TEXT"
 	InviteeEmail *string `json:"invitee_email" db:"invitee_email"`
 
 	// Role is the role the invitee will be granted on acceptance. Defaults
 	// to "user" — the old enum's only non-admin tier — so legacy invites
 	// continue to behave as before.
-	//migrator:schema:field name="role" type="TEXT" not_null="true" default="user"
+	//ptah:schema:field name="role" type="TEXT" not_null="true" default="user"
 	Role GroupRole `json:"role" db:"role"`
 }
 
 // GroupInviteIndexes defines PostgreSQL indexes for the group_invites table.
 type GroupInviteIndexes struct {
 	// Unique index for the immutable UUID
-	//migrator:schema:index name="idx_group_invites_uuid" fields="uuid" unique="true" table="group_invites"
+	//ptah:schema:index name="idx_group_invites_uuid" fields="uuid" unique="true" table="group_invites"
 	_ int
 
 	// Unique index for token lookups
-	//migrator:schema:index name="idx_group_invites_token" fields="token" unique="true" table="group_invites"
+	//ptah:schema:index name="idx_group_invites_token" fields="token" unique="true" table="group_invites"
 	_ int
 
 	// Index for listing invites by group
-	//migrator:schema:index name="idx_group_invites_group_id" fields="group_id" table="group_invites"
+	//ptah:schema:index name="idx_group_invites_group_id" fields="group_id" table="group_invites"
 	_ int
 
 	// Index for tenant-based queries
-	//migrator:schema:index name="idx_group_invites_tenant_id" fields="tenant_id" table="group_invites"
+	//ptah:schema:index name="idx_group_invites_tenant_id" fields="tenant_id" table="group_invites"
 	_ int
 
 	// Index for expiry-based cleanup
-	//migrator:schema:index name="idx_group_invites_expires_at" fields="expires_at" table="group_invites"
+	//ptah:schema:index name="idx_group_invites_expires_at" fields="expires_at" table="group_invites"
 	_ int
 
 	// Index for lookups by invitee email (resend / dedupe).
 	// Partial index — most legacy rows have invitee_email NULL.
-	//migrator:schema:index name="idx_group_invites_invitee_email" fields="invitee_email" table="group_invites" condition="invitee_email IS NOT NULL"
+	//ptah:schema:index name="idx_group_invites_invitee_email" fields="invitee_email" table="group_invites" condition="invitee_email IS NOT NULL"
 	_ int
 }
 

@@ -44,43 +44,43 @@ func (p OAuthProvider) IsValid() bool {
 // the background-worker role because it must look up a row by
 // (provider, provider_user_id) BEFORE any user session exists.
 //
-//migrator:schema:table name="user_oauth_identities"
-//migrator:schema:rls:enable table="user_oauth_identities" comment="Enable RLS for multi-tenant OAuth identity isolation"
-//migrator:schema:rls:policy name="oauth_identity_user_isolation" table="user_oauth_identities" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Users can read and modify only their own OAuth identities"
-//migrator:schema:rls:policy name="oauth_identity_background_worker_access" table="user_oauth_identities" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="OAuth callback is the only background-worker writer; runs before any user session exists and looks up identities by (provider, provider_user_id) — no scheduled job touches this table"
+//ptah:schema:table name="user_oauth_identities"
+//ptah:schema:rls:enable table="user_oauth_identities" comment="Enable RLS for multi-tenant OAuth identity isolation"
+//ptah:schema:rls:policy name="oauth_identity_user_isolation" table="user_oauth_identities" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Users can read and modify only their own OAuth identities"
+//ptah:schema:rls:policy name="oauth_identity_background_worker_access" table="user_oauth_identities" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="OAuth callback is the only background-worker writer; runs before any user session exists and looks up identities by (provider, provider_user_id) — no scheduled job touches this table"
 type OAuthIdentity struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	TenantAwareEntityID
 
 	// UserID is the Inventario user this identity belongs to. ON DELETE
 	// CASCADE: deleting the user removes the identity rows so the
 	// (provider, provider_user_id) pair becomes available again for a
 	// fresh sign-up.
-	//migrator:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_oauth_identity_user" on_delete="CASCADE"
+	//ptah:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_oauth_identity_user" on_delete="CASCADE"
 	UserID string `json:"user_id" db:"user_id"`
 
 	// Provider is the OAuthProvider enum value ("google" | "github").
 	// Stored TEXT so the enum can grow without a CHECK migration each
 	// time we add a provider.
-	//migrator:schema:field name="provider" type="TEXT" not_null="true"
+	//ptah:schema:field name="provider" type="TEXT" not_null="true"
 	Provider OAuthProvider `json:"provider" db:"provider"`
 
 	// ProviderUserID is the stable identifier the provider issues for the
 	// account ("sub" claim on Google, numeric "id" on GitHub). NEVER use
 	// email or username as the lookup key — both can be reassigned at
 	// the provider, while the provider_user_id is documented stable.
-	//migrator:schema:field name="provider_user_id" type="TEXT" not_null="true"
+	//ptah:schema:field name="provider_user_id" type="TEXT" not_null="true"
 	ProviderUserID string `json:"provider_user_id" db:"provider_user_id"`
 
 	// Email is the address the provider returned at link time. Recorded
 	// for display in the "Connected accounts" UI; not used as an
 	// authentication key. May go stale if the user changes their email at
 	// the provider — we don't poll for it.
-	//migrator:schema:field name="email" type="TEXT" not_null="true"
+	//ptah:schema:field name="email" type="TEXT" not_null="true"
 	Email string `json:"email" db:"email"`
 
 	// LinkedAt is when the link was created. Read-only in the API.
-	//migrator:schema:field name="linked_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	//ptah:schema:field name="linked_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	LinkedAt time.Time `json:"linked_at" db:"linked_at" userinput:"false"`
 }
 
@@ -88,7 +88,7 @@ type OAuthIdentity struct {
 type OAuthIdentityIndexes struct {
 	// Unique index for the immutable UUID (deduplication key for
 	// import/restore — same shape every other tenant-scoped table uses).
-	//migrator:schema:index name="idx_oauth_identities_uuid" fields="uuid" unique="true" table="user_oauth_identities"
+	//ptah:schema:index name="idx_oauth_identities_uuid" fields="uuid" unique="true" table="user_oauth_identities"
 	_ int
 
 	// Global uniqueness on (provider, provider_user_id) — a single
@@ -97,7 +97,7 @@ type OAuthIdentityIndexes struct {
 	// authenticating across tenants is a feature we explicitly do not
 	// support, since the "log in via Google" handler has no tenant
 	// context to scope the lookup.
-	//migrator:schema:index name="idx_oauth_identities_provider_subject" fields="provider,provider_user_id" unique="true" table="user_oauth_identities"
+	//ptah:schema:index name="idx_oauth_identities_provider_subject" fields="provider,provider_user_id" unique="true" table="user_oauth_identities"
 	_ int
 
 	// Tenant + user composite — read pattern is "list every identity
@@ -106,7 +106,7 @@ type OAuthIdentityIndexes struct {
 	// query that scans by user_id also pins tenant_id (the RLS qual does
 	// it for the user-mode read path, and the registry's defense-in-depth
 	// adds it for the service-mode background-worker path).
-	//migrator:schema:index name="idx_oauth_identities_tenant_user" fields="tenant_id,user_id" table="user_oauth_identities"
+	//ptah:schema:index name="idx_oauth_identities_tenant_user" fields="tenant_id,user_id" table="user_oauth_identities"
 	_ int
 
 	// Per-user provider uniqueness — a user can have at most one row per
@@ -116,12 +116,12 @@ type OAuthIdentityIndexes struct {
 	// to display. The global (provider, provider_user_id) uniqueness
 	// already prevents two different users from claiming the same
 	// provider account; this index closes the symmetric direction.
-	//migrator:schema:index name="idx_oauth_identities_tenant_user_provider" fields="tenant_id,user_id,provider" unique="true" table="user_oauth_identities"
+	//ptah:schema:index name="idx_oauth_identities_tenant_user_provider" fields="tenant_id,user_id,provider" unique="true" table="user_oauth_identities"
 	_ int
 
 	// Tenant isolation index — same shape every other tenant-scoped
 	// table uses; lets the RLS qual short-circuit on a single column.
-	//migrator:schema:index name="idx_oauth_identities_tenant_id" fields="tenant_id" table="user_oauth_identities"
+	//ptah:schema:index name="idx_oauth_identities_tenant_id" fields="tenant_id" table="user_oauth_identities"
 	_ int
 }
 

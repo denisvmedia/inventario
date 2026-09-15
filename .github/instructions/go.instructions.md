@@ -134,7 +134,7 @@ guides you may have been trained on.
 - **Standard layout differs:** the module lives in `go/`, not at repo root.
   Sub-packages: `apiserver/` (HTTP handlers), `registry/` (data layer
   interface + memory/postgres implementations), `services/` (business
-  logic), `models/` (domain models with `//migrator:schema:*` annotations),
+  logic), `models/` (domain models with `//ptah:schema:*` annotations),
   `internal/` (shared infra). There's no `pkg/` directory and no `cmd/` at
   the *root* — CLI commands live under `go/cmd/`. Don't suggest the
   standard `pkg/`/`cmd/`/`internal/` layout reorg.
@@ -160,7 +160,7 @@ Don't propose switching one for the other without naming the security impact.
 ## Migrations are generated, not hand-written
 
 Schema migrations under `go/schema/migrations/_sqldata/` are **generated** from
-Go model annotations (`//migrator:schema:...`) by `./scripts/generate-migration.sh`.
+Go model annotations (`//ptah:schema:...`) by `./scripts/generate-migration.sh`.
 CI's schema-drift check regenerates and fails on any mismatch. **Do not
 suggest editing `.up.sql` / `.down.sql` files directly** — the correct fix is
 to change the model annotations and regenerate. Hand-written SQL is allowed

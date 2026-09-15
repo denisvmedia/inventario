@@ -48,13 +48,13 @@ var (
 // created_by_user_id tracks who created the record (audit only, not access control).
 // Access control is enforced via group_id in RLS policies.
 type TenantGroupAwareEntityID struct {
-	//migrator:embedded mode="inline"
+	//ptah:embedded mode="inline"
 	EntityID
-	//migrator:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
+	//ptah:schema:field name="tenant_id" type="TEXT" not_null="true" foreign="tenants(id)" foreign_key_name="fk_entity_tenant"
 	TenantID string `json:"-" db:"tenant_id" userinput:"false"`
-	//migrator:schema:field name="group_id" type="TEXT" not_null="true" foreign="location_groups(id)" foreign_key_name="fk_entity_group"
+	//ptah:schema:field name="group_id" type="TEXT" not_null="true" foreign="location_groups(id)" foreign_key_name="fk_entity_group"
 	GroupID string `json:"-" db:"group_id" userinput:"false"`
-	//migrator:schema:field name="created_by_user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_entity_created_by"
+	//ptah:schema:field name="created_by_user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_entity_created_by"
 	CreatedByUserID string `json:"-" db:"created_by_user_id" userinput:"false"`
 }
 
