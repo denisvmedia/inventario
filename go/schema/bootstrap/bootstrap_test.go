@@ -380,3 +380,106 @@ func TestMigrator_Print_EmptyTemplate_HappyPath(t *testing.T) {
 	err := migrator.Print(templateData)
 	c.Assert(err, qt.IsNil, qt.Commentf("print should work with empty template fields"))
 }
+
+func TestTemplateData_Validate_HappyPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		template bootstrap.TemplateData
+	}{
+		{
+			name: "plain login names",
+			template: bootstrap.TemplateData{
+				Username:                    "inventario",
+				UsernameForMigrations:       "inventario_migrator",
+				UsernameForBackgroundWorker: "inventario",
+			},
+		},
+		{
+			name: "migration login may carry the migrator role name",
+			template: bootstrap.TemplateData{
+				Username:              "app",
+				UsernameForMigrations: "inventario_migrator",
+			},
+		},
+		{
+			name:     "empty fields are left to the caller's defaulting",
+			template: bootstrap.TemplateData{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			err := tt.template.Validate()
+
+			c.Assert(err, qt.IsNil)
+		})
+	}
+}
+
+func TestTemplateData_Validate_UnhappyPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		template bootstrap.TemplateData
+	}{
+		{
+			// The k8s/prod regression: the login collapses into the role the
+			// application narrows to, so SET LOCAL ROLE stops narrowing.
+			name:     "operational login named after the app role",
+			template: bootstrap.TemplateData{Username: "inventario_app"},
+		},
+		{
+			name:     "operational login named after the worker role",
+			template: bootstrap.TemplateData{Username: "inventario_background_worker"},
+		},
+		{
+			name:     "operational login named after the admin role",
+			template: bootstrap.TemplateData{Username: "inventario_admin"},
+		},
+		{
+			name:     "operational login named after the migrator role",
+			template: bootstrap.TemplateData{Username: "inventario_migrator"},
+		},
+		{
+			name: "migration login named after the app role",
+			template: bootstrap.TemplateData{
+				Username:              "inventario",
+				UsernameForMigrations: "inventario_app",
+			},
+		},
+		{
+			name: "worker login named after the app role",
+			template: bootstrap.TemplateData{
+				Username:                    "inventario",
+				UsernameForBackgroundWorker: "inventario_app",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			err := tt.template.Validate()
+
+			c.Assert(err, qt.ErrorIs, bootstrap.ErrReservedLoginName)
+		})
+	}
+}
+
+func TestMigrator_Apply_ReservedLoginName_UnhappyPath(t *testing.T) {
+	c := qt.New(t)
+
+	migrator := bootstrap.New()
+
+	// Dry run has to report the collision too: the setup job previews before it
+	// applies, and a preview that passes would hide the defect until rollout.
+	err := migrator.Apply(context.Background(), bootstrap.ApplyArgs{
+		DSN:      "postgres://admin:pass@localhost/inventario",
+		DryRun:   true,
+		Template: bootstrap.TemplateData{Username: "inventario_app"},
+	})
+
+	c.Assert(err, qt.ErrorIs, bootstrap.ErrReservedLoginName)
+}

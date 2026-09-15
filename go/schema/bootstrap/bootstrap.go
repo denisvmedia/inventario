@@ -26,6 +26,65 @@ type TemplateData struct {
 	UsernameForBackgroundWorker string
 }
 
+// Service roles that 001_initial.sql creates and that the RLS policies are
+// attached to. The application logs in as an ordinary user and reaches these
+// with SET LOCAL ROLE, per operation.
+const (
+	roleApp        = "inventario_app"
+	roleMigrator   = "inventario_migrator"
+	roleBackground = "inventario_background_worker"
+	roleAdmin      = "inventario_admin"
+)
+
+// A login named after a service role collapses into that role: CREATE USER runs
+// first, so the later CREATE ROLE finds the name taken and skips, leaving one
+// role that is both the login and the policy target.
+//
+// For the operational login that is an isolation failure. The app calls
+// SET LOCAL ROLE inventario_app to drop to the tenant-scoped policies, but
+// SET ROLE only narrows privileges when the target is a *different* role than
+// the one holding the grants. A login already named inventario_app keeps every
+// role granted to it — including inventario_background_worker, whose policies
+// are USING (true) — and the tenant-isolation policy ORs with them. The switch
+// becomes a no-op and every tenant's rows are visible.
+//
+// inventario_migrator is exempt for the migration login: that connection never
+// switches roles and never serves user traffic, and every deployment manifest
+// in this repo already names it that way.
+var reservedNames = map[string][]string{
+	"username":                       {roleApp, roleMigrator, roleBackground, roleAdmin},
+	"username-for-migrations":        {roleApp, roleBackground, roleAdmin},
+	"username-for-background-worker": {roleApp, roleMigrator, roleAdmin},
+}
+
+// ErrReservedLoginName is returned by Apply when a login name collides with one
+// of the service roles bootstrap manages.
+var ErrReservedLoginName = errx.NewSentinel("login name collides with a managed service role")
+
+// Validate rejects login names that collide with a managed service role.
+func (t TemplateData) Validate() error {
+	for _, f := range []struct {
+		flag, value string
+	}{
+		{"username", t.Username},
+		{"username-for-migrations", t.UsernameForMigrations},
+		{"username-for-background-worker", t.UsernameForBackgroundWorker},
+	} {
+		for _, reserved := range reservedNames[f.flag] {
+			if f.value != reserved {
+				continue
+			}
+			return errxtrace.Wrap(
+				fmt.Sprintf("--%s=%s: pick a plain login name such as `inventario`; "+
+					"bootstrap grants it the service roles it needs",
+					f.flag, f.value),
+				ErrReservedLoginName,
+			)
+		}
+	}
+	return nil
+}
+
 // ApplyArgs contains arguments for applying bootstrap migrations
 type ApplyArgs struct {
 	DSN      string
@@ -61,6 +120,11 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 	// Validate that this is a PostgreSQL DSN
 	if !strings.HasPrefix(args.DSN, "postgres://") && !strings.HasPrefix(args.DSN, "postgresql://") {
 		return fmt.Errorf("migrator: bootstrap migrations only support PostgreSQL databases")
+	}
+
+	// Before the dry-run branch: --dry-run has to report the collision too.
+	if err := args.Template.Validate(); err != nil {
+		return err
 	}
 
 	// Get all SQL files from embedded filesystem
@@ -218,6 +282,12 @@ func (m *Migrator) readAndProcessFile(filename string, templateData TemplateData
 
 // Print outputs all bootstrap migrations with template variables resolved
 func (m *Migrator) Print(templateData TemplateData) error {
+	// The printed SQL is meant to be handed to a DBA, so a collision has to
+	// surface here rather than in the statements they end up running.
+	if err := templateData.Validate(); err != nil {
+		return err
+	}
+
 	// Get all SQL files from embedded filesystem
 	files, err := m.getSQLFiles()
 	if err != nil {
