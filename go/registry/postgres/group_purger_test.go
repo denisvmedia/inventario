@@ -32,7 +32,7 @@ func setupCleanPostgresFactorySet(t *testing.T) *registry.FactorySet {
 	pool, err := getOrCreatePool(dsn)
 	c.Assert(err, qt.IsNil)
 
-	// Drop and recreate the schema so fixtures from prior tests don't bleed in.
+	// Empty the database so fixtures from prior tests don't bleed in.
 	migr := migrator.NewWithFallback(dsn, "../../models")
 	ctx := context.Background()
 	c.Assert(migrateUp(t, ctx, migr, dsn), qt.IsNil)
