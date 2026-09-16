@@ -102,18 +102,18 @@ ROL03 on the login itself is expected and not a problem — one login holding al
 three roles is how the role switching is meant to work. It is the object of the
 finding that matters: a service role must never appear there.
 
-A cluster bootstrapped before this check needs the grants removed as well as the
-name changed, because renaming the secret leaves the old role behind. Revoke from
-the role ROL03 reported, not from `inventario_app`: the shipped manifest used that
-name, but any of the three collapses the same way, taking the other two with it.
+Fixing it takes both the grants and the name: changing the secret alone leaves
+the role able to log in with everything granted to it. Revoke from whichever role
+ROL03 reports — any of the three collapses the same way, taking the other two
+with it.
 
-| login was named | revoke from it |
+| role ROL03 reports | revoke from it |
 | --- | --- |
 | `inventario_app` | `inventario_admin`, `inventario_background_worker` |
 | `inventario_background_worker` | `inventario_admin`, `inventario_app` |
 | `inventario_admin` | `inventario_app`, `inventario_background_worker` |
 
-For the name the shipped manifest used:
+For a login named `inventario_app`:
 
 ```sql
 REVOKE inventario_background_worker, inventario_admin FROM inventario_app;
