@@ -21,9 +21,11 @@ import (
 // operation_slots decide what it sees. The scope comes from the mode the registry
 // was built in: a user registry switches to inventario_app and is bound to its
 // tenant and user, a service registry switches to inventario_background_worker
-// and spans every tenant. Reaching for the pool directly would skip that role
-// switch and inherit the worker policy from the login, which is how the sweeps
-// and the per-user lookups came to mean the same thing.
+// and spans every tenant.
+//
+// Queries must not reach for the pool directly. That skips the role switch, so
+// they run as the login, which inherits inventario_background_worker and its
+// USING (true) policy — every tenant, whatever the policies say.
 type OperationSlotRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
