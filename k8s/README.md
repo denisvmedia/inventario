@@ -83,57 +83,6 @@ the collision lands anyway.
 `inventario_migrator` stays valid for `bootstrap-username-for-migrations`, and
 only there: that connection never switches roles and never serves user traffic.
 
-To find out whether an existing cluster is in this state, read its role
-memberships, or let Ptah do it:
-
-```sh
-ptah schema security --db-url "$BOOTSTRAP_DSN" --fail-on none
-```
-
-A healthy deployment reports ROL03 against the plain login, naming the service
-roles it holds. A collapsed one reports ROL03 against a service role:
-
-```
-ROL03  info  role inventario_app  roles inventario_admin and inventario_background_worker
-                                  are both held by inventario_app
-```
-
-ROL03 on the login itself is expected and not a problem — one login holding all
-three roles is how the role switching is meant to work. It is the object of the
-finding that matters: a service role must never appear there.
-
-Fixing it takes both the grants and the name: changing the secret alone leaves
-the role able to log in with everything granted to it. Revoke from whichever role
-ROL03 reports — any of the three collapses the same way, taking the other two
-with it.
-
-| role ROL03 reports | revoke from it |
-| --- | --- |
-| `inventario_app` | `inventario_admin`, `inventario_background_worker` |
-| `inventario_background_worker` | `inventario_admin`, `inventario_app` |
-| `inventario_admin` | `inventario_app`, `inventario_background_worker` |
-
-For a login named `inventario_app`:
-
-```sql
-REVOKE inventario_background_worker, inventario_admin FROM inventario_app;
-ALTER ROLE inventario_app NOLOGIN;
-```
-
-`inventario_admin` is the urgent one. Bootstrap's admin block runs
-`ALTER ROLE inventario_admin WITH BYPASSRLS` when the role already exists, so a
-login by that name carries the attribute itself and skips RLS outright on every
-query that does not switch roles — a wider hole than the other two, which only
-inherit the worker's `USING (true)` policies.
-
-Do not strip that attribute while fixing it. `BYPASSRLS` belongs on
-`inventario_admin` as a service role and the cross-tenant admin surfaces need it;
-`NOLOGIN` is what closes the hole, by leaving `SET ROLE` as the only way to reach
-it. Re-running bootstrap restores the attribute in any case.
-
-Then re-run the setup job with the corrected `bootstrap-username`, and point
-`app-db-dsn` at the new login.
-
 `k8s/prod/configmap.yaml` contains the non-secret runtime defaults for the `inventario run` section, including `INVENTARIO_RUN_ADDR`, `INVENTARIO_RUN_PUBLIC_URL`, `INVENTARIO_RUN_UPLOAD_LOCATION`, and seed toggles.
 
 ### Development
