@@ -83,6 +83,25 @@ the collision lands anyway.
 `inventario_migrator` stays valid for `bootstrap-username-for-migrations`, and
 only there: that connection never switches roles and never serves user traffic.
 
+To find out whether an existing cluster is in this state, read its role
+memberships, or let Ptah do it:
+
+```sh
+ptah schema security --db-url "$BOOTSTRAP_DSN" --fail-on none
+```
+
+A healthy deployment reports ROL03 against the plain login, naming the service
+roles it holds. A collapsed one reports ROL03 against a service role:
+
+```
+ROL03  info  role inventario_app  roles inventario_admin and inventario_background_worker
+                                  are both held by inventario_app
+```
+
+ROL03 on the login itself is expected and not a problem — one login holding all
+three roles is how the role switching is meant to work. It is the object of the
+finding that matters: a service role must never appear there.
+
 A cluster bootstrapped before this check needs the grants removed as well as the
 name changed, because renaming the secret leaves the old role behind:
 
