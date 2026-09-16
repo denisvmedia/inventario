@@ -83,17 +83,6 @@ the collision lands anyway.
 `inventario_migrator` stays valid for `bootstrap-username-for-migrations`, and
 only there: that connection never switches roles and never serves user traffic.
 
-A cluster bootstrapped before this check needs the grants removed as well as the
-name changed, because renaming the secret leaves the old role behind:
-
-```sql
-REVOKE inventario_background_worker, inventario_admin FROM inventario_app;
-ALTER ROLE inventario_app NOLOGIN;
-```
-
-Then re-run the setup job with the corrected `bootstrap-username`, and point
-`app-db-dsn` at the new login.
-
 `k8s/prod/configmap.yaml` contains the non-secret runtime defaults for the `inventario run` section, including `INVENTARIO_RUN_ADDR`, `INVENTARIO_RUN_PUBLIC_URL`, `INVENTARIO_RUN_UPLOAD_LOCATION`, and seed toggles.
 
 ### Development
