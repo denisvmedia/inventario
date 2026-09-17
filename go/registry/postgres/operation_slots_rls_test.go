@@ -12,16 +12,14 @@ import (
 	"github.com/denisvmedia/inventario/registry"
 )
 
-// TestOperationSlotRegistry_TenantIsolation covers the two halves of the
-// operation_slots fix: the table now carries RLS policies, and every query in
-// the registry runs inside the repository transaction so the policies apply.
+// TestOperationSlotRegistry_TenantIsolation asserts that a user registry sees
+// only its own tenant's slots and a service registry sees every tenant's.
 //
-// Before the fix the registry mixed two access styles. The repository methods
-// expected the database to filter, and it did not — the table had RLS disabled
-// and no policies. The remaining methods went straight to the pool, which skips
-// the role switch: the login inherits inventario_background_worker, whose policy
-// is USING (true), so those queries saw every tenant no matter what policies
-// existed.
+// Both halves of the mechanism have to hold for that. The table needs its RLS
+// policies, and every query needs to run inside the repository transaction: a
+// query issued on the pool skips the role switch and runs as the login, which
+// inherits inventario_background_worker and its USING (true) policy, so it sees
+// every tenant whatever the policies say. Either half alone fails this test.
 //
 // It connects as a non-superuser login that is merely a member of the service
 // roles, like a real deployment. The default harness connects as a superuser,
@@ -103,8 +101,9 @@ func TestOperationSlotRegistry_TenantIsolation(t *testing.T) {
 		}
 	})
 
-	// The methods below issue their own SQL. They used to run on the pool with
-	// no role switch and no tenant predicate, so they answered for every tenant.
+	// The methods below issue their own SQL and carry no tenant predicate, so the
+	// policy is the only thing confining them — and it only reaches them because
+	// they run inside the repository transaction.
 	c.Run("hand-written queries are confined too", func(c *qt.C) {
 		foreign, err := userRegistry.GetUserSlotStats(ctxA, userB.ID)
 		c.Assert(err, qt.IsNil)
