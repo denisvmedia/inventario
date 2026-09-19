@@ -62,6 +62,24 @@ jobs:
         run: go mod download
         working-directory: go
 
+      - name: Look for hand-written release notes
+        id: notes
+        # A tag may ship curated notes instead of the generated changelog by
+        # committing .github/release-notes/<tag>.md. Absent the file the
+        # changelog is generated as usual, so this is opt-in per tag.
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          file=".github/release-notes/${TAG}.md"
+          if [ -f "$file" ]; then
+            echo "Using $file"
+            echo "args=--release-notes=${file}" >> "$GITHUB_OUTPUT"
+          else
+            echo "No $file; goreleaser will generate the changelog"
+          fi
+
       - name: Run GoReleaser
         # PR runs the snapshot dry-run (no GitHub Release upload, no signing,
         # no SBOM); tag push runs the real release.
@@ -70,6 +88,6 @@ jobs:
           # Pin goreleaser CLI to v2.x (avoids the action's `latest`
           # default-warning and shields PRs from a surprise major bump).
           version: '~> v2'
-          args: ${{ github.event_name == 'pull_request' && 'release --snapshot --clean --skip=publish,sbom,sign' || 'release --clean' }}
+          args: ${{ github.event_name == 'pull_request' && 'release --snapshot --clean --skip=publish,sbom,sign' || format('release --clean {0}', steps.notes.outputs.args) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
