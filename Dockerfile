@@ -73,14 +73,22 @@ ARG BUILD_DATE=unknown
 # /root/.cache/go-build stays a cache mount: it benefits local dev where
 # the BuildKit daemon persists; in CI it's a no-op but harmless.
 WORKDIR /app/go/cmd/inventario
+# The module path comes from go.mod rather than being written out here. The
+# linker drops -X for a symbol it cannot find without saying so, so a stale
+# path produces a binary that reports "dev" and a release nobody can identify
+# — which is how v0.1.0 shipped. Deriving it removes the way to be wrong.
+# `version` prints through cobra, which writes to stderr, hence the redirect.
 RUN --mount=type=cache,target=/root/.cache/go-build \
+    MODULE="$(go list -m)" && \
     CGO_ENABLED=0 GOOS=linux go build \
     -tags with_frontend \
-    -ldflags "-X github.com/denisvmedia/inventario/internal/version.Version=${VERSION} \
-              -X github.com/denisvmedia/inventario/internal/version.Commit=${COMMIT} \
-              -X github.com/denisvmedia/inventario/internal/version.Date=${BUILD_DATE}" \
+    -ldflags "-X ${MODULE}/internal/version.Version=${VERSION} \
+              -X ${MODULE}/internal/version.Commit=${COMMIT} \
+              -X ${MODULE}/internal/version.Date=${BUILD_DATE}" \
     -a -installsuffix cgo \
-    -o inventario .
+    -o inventario . && \
+    ./inventario version 2>&1 | grep -q "^${VERSION} " || \
+      { echo "ldflags did not apply: version reports '$(./inventario version 2>&1)', expected '${VERSION}'" >&2; exit 1; }
 
 # Stage 4: Test environment
 FROM go-base AS test-runner
