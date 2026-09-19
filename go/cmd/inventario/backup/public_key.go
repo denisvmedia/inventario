@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/backupsign"
 )
 
 // newPublicKeyCmd prints the backup signing public key (PEM) and its fingerprint

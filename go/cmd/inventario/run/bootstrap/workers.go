@@ -5,15 +5,15 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/denisvmedia/inventario/backup/export"
-	importpkg "github.com/denisvmedia/inventario/backup/import"
-	"github.com/denisvmedia/inventario/backup/restore"
-	"github.com/denisvmedia/inventario/internal/metrics"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres"
-	"github.com/denisvmedia/inventario/services"
-	"github.com/denisvmedia/inventario/services/notifications"
+	"go.5x5.cz/inventario/backup/export"
+	importpkg "go.5x5.cz/inventario/backup/import"
+	"go.5x5.cz/inventario/backup/restore"
+	"go.5x5.cz/inventario/internal/metrics"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres"
+	"go.5x5.cz/inventario/services"
+	"go.5x5.cz/inventario/services/notifications"
 )
 
 // currencyMigrationOp is a local alias for *models.CurrencyMigration so

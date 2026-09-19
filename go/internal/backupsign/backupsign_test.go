@@ -10,7 +10,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/backupsign"
 )
 
 func seed(b byte) []byte {

@@ -12,8 +12,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/aivision"
-	"github.com/denisvmedia/inventario/internal/aivision/openai"
+	"go.5x5.cz/inventario/internal/aivision"
+	"go.5x5.cz/inventario/internal/aivision/openai"
 )
 
 type fakeRoundTripper struct {

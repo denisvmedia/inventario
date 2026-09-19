@@ -26,7 +26,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/denisvmedia/inventario/internal/fileblob/retry"
+	"go.5x5.cz/inventario/internal/fileblob/retry"
 )
 
 // An ErrorCode describes the error's category.

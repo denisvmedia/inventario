@@ -10,7 +10,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 // CommodityLoanResponse is the JSON:API envelope for a single loan.

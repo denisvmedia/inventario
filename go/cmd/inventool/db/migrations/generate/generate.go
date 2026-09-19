@@ -8,9 +8,9 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/internal/command"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/schema/migrations/generator"
+	"go.5x5.cz/inventario/cmd/internal/command"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/schema/migrations/generator"
 )
 
 type Command struct {

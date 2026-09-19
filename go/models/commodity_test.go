@@ -9,8 +9,8 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/internal/validationctx"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/internal/validationctx"
+	"go.5x5.cz/inventario/models"
 )
 
 func TestCommodityStatus_IsValid_HappyPaths(t *testing.T) {

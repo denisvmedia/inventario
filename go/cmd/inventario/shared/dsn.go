@@ -1,6 +1,6 @@
 package shared
 
-import "github.com/denisvmedia/inventario/schema/dsnutil"
+import "go.5x5.cz/inventario/schema/dsnutil"
 
 // RedactDSN masks the password embedded in a database DSN so credentials never
 // leak into terminal history, CI logs, or screen-shared sessions.

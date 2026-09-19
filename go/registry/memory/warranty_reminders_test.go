@@ -8,8 +8,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/memory"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/memory"
 )
 
 // TestWarrantyReminderRegistry_CreateOnce_Race regression-guards the

@@ -13,7 +13,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/denisvmedia/inventario/schema/dsnutil"
+	"go.5x5.cz/inventario/schema/dsnutil"
 )
 
 //go:embed _sqldata/*.sql

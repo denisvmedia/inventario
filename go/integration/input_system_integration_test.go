@@ -11,12 +11,12 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	tenantcreate "github.com/denisvmedia/inventario/cmd/inventario/tenants/create"
-	usercreate "github.com/denisvmedia/inventario/cmd/inventario/users/create"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	tenantcreate "go.5x5.cz/inventario/cmd/inventario/tenants/create"
+	usercreate "go.5x5.cz/inventario/cmd/inventario/users/create"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/registry/postgres"
 )
 
 // TestInputSystemIntegration tests the new interactive input system with both

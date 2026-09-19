@@ -1,8 +1,8 @@
 package bootstrap
 
 import (
-	"github.com/denisvmedia/inventario/internal/metrics"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/internal/metrics"
+	"go.5x5.cz/inventario/registry"
 )
 
 // SystemStatsToBusinessStats exposes the unexported adapter copy to the

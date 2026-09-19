@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/services"
 )
 
 // EmailServiceLifecycle bundles the initialized email service together with its

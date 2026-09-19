@@ -18,17 +18,17 @@ import (
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/memblob"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/backup/export"
-	"github.com/denisvmedia/inventario/backup/restore"
-	"github.com/denisvmedia/inventario/backup/restore/types"
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	_ "github.com/denisvmedia/inventario/internal/fileblob"
-	"github.com/denisvmedia/inventario/internal/inb"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/export"
+	"go.5x5.cz/inventario/backup/restore"
+	"go.5x5.cz/inventario/backup/restore/types"
+	"go.5x5.cz/inventario/internal/backupsign"
+	_ "go.5x5.cz/inventario/internal/fileblob"
+	"go.5x5.cz/inventario/internal/inb"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services"
 )
 
 // inbUploadLocation uses the in-memory fileblob backend (memfs), which — unlike

@@ -8,8 +8,8 @@ import (
 	"github.com/go-chi/render"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/internal/valuation"
-	"github.com/denisvmedia/inventario/jsonapi"
+	"go.5x5.cz/inventario/internal/valuation"
+	"go.5x5.cz/inventario/jsonapi"
 )
 
 type valuesAPI struct {

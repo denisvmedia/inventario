@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-chi/render"
 
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/services"
 )
 
 // quantityBumpBlockerError adapts services.QuantityBumpBlocker to the

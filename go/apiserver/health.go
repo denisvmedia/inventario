@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/registry"
 )
 
 const defaultHealthCheckTimeout = 5 * time.Second

@@ -11,8 +11,8 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/models"
 )
 
 // TestGroupSlugResolver_ValidMember asserts that a member of an active group

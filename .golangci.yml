@@ -312,7 +312,7 @@ formatters:
       sections:
         - standard
         - default
-        - prefix(github.com/denisvmedia/inventario)
+        - prefix(go.5x5.cz/inventario)
   exclusions:
     generated: lax
     paths:

@@ -15,11 +15,11 @@ import (
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres"
-	"github.com/denisvmedia/inventario/schema/bootstrap"
-	"github.com/denisvmedia/inventario/schema/migrations/migrator"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres"
+	"go.5x5.cz/inventario/schema/bootstrap"
+	"go.5x5.cz/inventario/schema/migrations/migrator"
 )
 
 var (

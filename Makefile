@@ -15,9 +15,9 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown")
 
 # Go ldflags for version injection
-LDFLAGS=-X github.com/denisvmedia/inventario/internal/version.Version=$(VERSION) \
-        -X github.com/denisvmedia/inventario/internal/version.Commit=$(COMMIT) \
-        -X github.com/denisvmedia/inventario/internal/version.Date=$(BUILD_DATE)
+LDFLAGS=-X go.5x5.cz/inventario/internal/version.Version=$(VERSION) \
+        -X go.5x5.cz/inventario/internal/version.Commit=$(COMMIT) \
+        -X go.5x5.cz/inventario/internal/version.Date=$(BUILD_DATE)
 
 BINARY_PATH=$(BIN_DIR)/$(BINARY_NAME)
 INVENTOOL_PATH=$(BIN_DIR)/inventool

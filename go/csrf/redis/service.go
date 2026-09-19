@@ -8,7 +8,7 @@ import (
 
 	redisv9 "github.com/redis/go-redis/v9"
 
-	"github.com/denisvmedia/inventario/csrf"
+	"go.5x5.cz/inventario/csrf"
 )
 
 // Service implements csrf.Service using Redis sorted sets.

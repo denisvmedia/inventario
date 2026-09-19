@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/services/oauth"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/services/oauth"
 )
 
 // oauthSetup is the realized OAuth configuration produced by buildOAuth.

@@ -13,10 +13,10 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/backup/restore/processor"
-	"github.com/denisvmedia/inventario/backup/restore/types"
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/backup/restore/processor"
+	"go.5x5.cz/inventario/backup/restore/types"
+	"go.5x5.cz/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/models"
 )
 
 // blobBody builds a deterministic body of exactly size bytes, matching the shape

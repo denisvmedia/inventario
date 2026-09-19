@@ -8,9 +8,9 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-chi/chi/v5"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	"github.com/denisvmedia/inventario/internal/checkers"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/checkers"
 )
 
 func TestBackupPublicKey(t *testing.T) {

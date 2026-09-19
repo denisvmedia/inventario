@@ -15,12 +15,12 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/models"
-	memreg "github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services"
-	oauthsvc "github.com/denisvmedia/inventario/services/oauth"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/models"
+	memreg "go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services"
+	oauthsvc "go.5x5.cz/inventario/services/oauth"
 )
 
 // stubProvider is a deterministic oauthsvc.Provider used by every OAuth

@@ -7,7 +7,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/apiserver"
+	"go.5x5.cz/inventario/apiserver"
 )
 
 // The GET /swagger/* API documentation UI is gated behind EnableAPIDocs

@@ -9,7 +9,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/mimekit"
+	"go.5x5.cz/inventario/internal/mimekit"
 )
 
 func TestMIMEReader_Read(t *testing.T) {

@@ -25,7 +25,7 @@ import (
 	"github.com/spf13/afero"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/internal/fileblob"
+	"go.5x5.cz/inventario/internal/fileblob"
 )
 
 func ExampleOpenBucket() {

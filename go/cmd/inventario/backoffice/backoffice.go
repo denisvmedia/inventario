@@ -19,9 +19,9 @@ package backoffice
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/backoffice/bootstrap"
-	"github.com/denisvmedia/inventario/cmd/inventario/backoffice/mfa"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/backoffice/bootstrap"
+	"go.5x5.cz/inventario/cmd/inventario/backoffice/mfa"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
 )
 
 // New creates the parent `backoffice` command and registers its

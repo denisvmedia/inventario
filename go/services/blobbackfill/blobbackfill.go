@@ -26,10 +26,10 @@ import (
 	"gocloud.dev/blob"
 	"gocloud.dev/gcerrors"
 
-	"github.com/denisvmedia/inventario/internal/blobkeys"
-	"github.com/denisvmedia/inventario/internal/mimekit"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/mimekit"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // Stats records the per-run outcome for the operator. Zero values are

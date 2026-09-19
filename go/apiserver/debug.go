@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/denisvmedia/inventario/debug"
+	"go.5x5.cz/inventario/debug"
 )
 
 type debugAPI struct {

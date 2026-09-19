@@ -3,7 +3,7 @@ package version
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/internal/version"
+	"go.5x5.cz/inventario/internal/version"
 )
 
 func New() *cobra.Command {

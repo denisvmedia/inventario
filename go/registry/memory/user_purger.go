@@ -5,7 +5,7 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/registry"
 )
 
 var _ registry.UserPurger = (*UserPurger)(nil)

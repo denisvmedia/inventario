@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/denisvmedia/inventario/email/sender"
+	"go.5x5.cz/inventario/email/sender"
 )
 
 // Sender is a fake transport used when delivery should not leave the process.

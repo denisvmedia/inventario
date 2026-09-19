@@ -7,9 +7,9 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/internal/command"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/schema/migrations"
+	"go.5x5.cz/inventario/cmd/internal/command"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/schema/migrations"
 )
 
 type Command struct {

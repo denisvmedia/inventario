@@ -3,12 +3,12 @@ package migrate
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/data"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/down"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/list"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/up"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/verify"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/db/migrate/data"
+	"go.5x5.cz/inventario/cmd/inventario/db/migrate/down"
+	"go.5x5.cz/inventario/cmd/inventario/db/migrate/list"
+	"go.5x5.cz/inventario/cmd/inventario/db/migrate/up"
+	"go.5x5.cz/inventario/cmd/inventario/db/migrate/verify"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
 )
 
 // New creates the migrate command group

@@ -10,7 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/denisvmedia/inventario/internal/metrics"
+	"go.5x5.cz/inventario/internal/metrics"
 )
 
 func TestQueryTracer_RecordsSuccess(t *testing.T) {

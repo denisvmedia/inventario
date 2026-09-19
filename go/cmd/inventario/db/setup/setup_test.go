@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/lib/pq" // PostgreSQL driver
 
-	"github.com/denisvmedia/inventario/cmd/inventario/db/setup"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/cmd/inventario/db/setup"
+	"go.5x5.cz/inventario/models"
 )
 
 func TestDataSetupManager_SetupInitialDataset_DryRun(t *testing.T) {

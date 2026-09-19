@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 
-	"github.com/denisvmedia/inventario/csrf"
+	"go.5x5.cz/inventario/csrf"
 )
 
 // Service implements csrf.Service using per-user expirable LRU caches.

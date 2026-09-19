@@ -3,9 +3,9 @@ package db
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/db/bootstrap"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/cmd/inventool/db/migrations"
+	"go.5x5.cz/inventario/cmd/inventario/db/bootstrap"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventool/db/migrations"
 )
 
 // New creates the main db command.

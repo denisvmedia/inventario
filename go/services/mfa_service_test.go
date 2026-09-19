@@ -9,8 +9,8 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/services"
 )
 
 var testRootKey = []byte("test-root-key-32-bytes-minimum-len-OK!!")

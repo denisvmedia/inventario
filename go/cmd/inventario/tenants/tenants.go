@@ -3,12 +3,12 @@ package tenants
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/cmd/inventario/tenants/create"
-	"github.com/denisvmedia/inventario/cmd/inventario/tenants/deletecmd"
-	"github.com/denisvmedia/inventario/cmd/inventario/tenants/get"
-	"github.com/denisvmedia/inventario/cmd/inventario/tenants/list"
-	"github.com/denisvmedia/inventario/cmd/inventario/tenants/update"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/tenants/create"
+	"go.5x5.cz/inventario/cmd/inventario/tenants/deletecmd"
+	"go.5x5.cz/inventario/cmd/inventario/tenants/get"
+	"go.5x5.cz/inventario/cmd/inventario/tenants/list"
+	"go.5x5.cz/inventario/cmd/inventario/tenants/update"
 )
 
 // New creates the main tenants command group

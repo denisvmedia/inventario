@@ -15,10 +15,10 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-chi/chi/v5"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres"
 )
 
 func setupTestDatabase(t *testing.T) (registry.RegistrySet, func()) {

@@ -5,7 +5,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/schema/dsnutil"
+	"go.5x5.cz/inventario/schema/dsnutil"
 )
 
 func TestStripPGXPoolParams(t *testing.T) {

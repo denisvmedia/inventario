@@ -9,7 +9,7 @@ import (
 	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 // CommodityServiceResponse is the JSON:API envelope for a single service

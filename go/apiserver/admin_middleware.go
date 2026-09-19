@@ -4,8 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/registry"
 )
 
 // adminForbiddenCode is the JSON:API error code emitted by RequireSystemAdmin

@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/schema/migrations"
+	"go.5x5.cz/inventario/schema/migrations"
 )
 
 func TestMaxVersion_TakesHighestUpFile(t *testing.T) {

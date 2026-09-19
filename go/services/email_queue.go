@@ -4,9 +4,9 @@ import (
 	"log/slog"
 	"time"
 
-	emailqueue "github.com/denisvmedia/inventario/email/queue"
-	emailqueueinmemory "github.com/denisvmedia/inventario/email/queue/inmemory"
-	emailqueueredis "github.com/denisvmedia/inventario/email/queue/redis"
+	emailqueue "go.5x5.cz/inventario/email/queue"
+	emailqueueinmemory "go.5x5.cz/inventario/email/queue/inmemory"
+	emailqueueredis "go.5x5.cz/inventario/email/queue/redis"
 )
 
 type emailJob struct {

@@ -9,9 +9,9 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services/workerpause"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services/workerpause"
 )
 
 func TestControllerRefreshOnce_NoRows_AllRunning(t *testing.T) {

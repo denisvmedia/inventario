@@ -9,11 +9,11 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
-	"github.com/denisvmedia/inventario/backup/restore/processor"
-	"github.com/denisvmedia/inventario/backup/restore/types"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/backup/restore/processor"
+	"go.5x5.cz/inventario/backup/restore/types"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services"
 )
 
 func TestRestoreService_StreamingXMLParsing(t *testing.T) {

@@ -11,8 +11,8 @@ import (
 	"gocloud.dev/blob"
 	"gocloud.dev/gcerrors"
 
-	"github.com/denisvmedia/inventario/internal/mimekit"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/internal/mimekit"
+	"go.5x5.cz/inventario/registry"
 )
 
 // GetFileAttributes retrieves file attributes including size for setting Content-Length header.

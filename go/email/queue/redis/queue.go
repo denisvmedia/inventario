@@ -8,7 +8,7 @@ import (
 
 	redisv9 "github.com/redis/go-redis/v9"
 
-	"github.com/denisvmedia/inventario/email/queue"
+	"go.5x5.cz/inventario/email/queue"
 )
 
 const (

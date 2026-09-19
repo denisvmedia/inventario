@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	sesv2types "github.com/aws/aws-sdk-go-v2/service/sesv2/types"
 
-	"github.com/denisvmedia/inventario/email/sender"
+	"go.5x5.cz/inventario/email/sender"
 )
 
 // Config defines AWS SES sender settings.

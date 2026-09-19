@@ -3,13 +3,13 @@ package users
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/cmd/inventario/users/create"
-	"github.com/denisvmedia/inventario/cmd/inventario/users/deletecmd"
-	"github.com/denisvmedia/inventario/cmd/inventario/users/get"
-	"github.com/denisvmedia/inventario/cmd/inventario/users/list"
-	"github.com/denisvmedia/inventario/cmd/inventario/users/mfareset"
-	"github.com/denisvmedia/inventario/cmd/inventario/users/update"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/users/create"
+	"go.5x5.cz/inventario/cmd/inventario/users/deletecmd"
+	"go.5x5.cz/inventario/cmd/inventario/users/get"
+	"go.5x5.cz/inventario/cmd/inventario/users/list"
+	"go.5x5.cz/inventario/cmd/inventario/users/mfareset"
+	"go.5x5.cz/inventario/cmd/inventario/users/update"
 )
 
 // New creates the main users command group

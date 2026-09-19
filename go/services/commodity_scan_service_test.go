@@ -8,11 +8,11 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/aivision"
-	"github.com/denisvmedia/inventario/internal/aivision/mock"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/internal/aivision"
+	"go.5x5.cz/inventario/internal/aivision/mock"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services"
 )
 
 func newScanInput(photos ...services.ScanPhotoInput) services.ScanInput {

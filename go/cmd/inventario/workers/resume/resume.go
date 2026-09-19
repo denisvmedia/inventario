@@ -9,10 +9,10 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/internal/command"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/services/admin"
+	"go.5x5.cz/inventario/cmd/internal/command"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/services/admin"
 )
 
 // Config carries the resume command's flags.

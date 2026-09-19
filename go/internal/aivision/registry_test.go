@@ -5,10 +5,10 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/aivision"
-	_ "github.com/denisvmedia/inventario/internal/aivision/anthropic" // register provider
-	_ "github.com/denisvmedia/inventario/internal/aivision/mock"      // register provider
-	_ "github.com/denisvmedia/inventario/internal/aivision/openai"    // register provider
+	"go.5x5.cz/inventario/internal/aivision"
+	_ "go.5x5.cz/inventario/internal/aivision/anthropic" // register provider
+	_ "go.5x5.cz/inventario/internal/aivision/mock"      // register provider
+	_ "go.5x5.cz/inventario/internal/aivision/openai"    // register provider
 )
 
 func TestNewProvider_DisabledByEmptyName(t *testing.T) {

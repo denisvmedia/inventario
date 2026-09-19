@@ -1,4 +1,4 @@
-module github.com/denisvmedia/inventario
+module go.5x5.cz/inventario
 
 go 1.26.5
 
@@ -8,9 +8,9 @@ tool (
 	github.com/swaggo/swag/cmd/swag
 )
 
-require github.com/denisvmedia/inventario/frontend v0.0.0
+require go.5x5.cz/inventario/frontend v0.0.0
 
-replace github.com/denisvmedia/inventario/frontend => ../frontend
+replace go.5x5.cz/inventario/frontend => ../frontend
 
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0

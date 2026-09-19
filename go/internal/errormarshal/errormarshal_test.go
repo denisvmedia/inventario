@@ -11,8 +11,8 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jellydator/validation"
 
-	"github.com/denisvmedia/inventario/internal/checkers"
-	"github.com/denisvmedia/inventario/internal/errormarshal"
+	"go.5x5.cz/inventario/internal/checkers"
+	"go.5x5.cz/inventario/internal/errormarshal"
 )
 
 type customError struct {

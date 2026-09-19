@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/internal/httpserver"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/httpserver"
 )
 
 // ProbesHandler builds the chi router served on the workers' probe listener. It

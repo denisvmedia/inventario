@@ -7,7 +7,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/secrets"
+	"go.5x5.cz/inventario/secrets"
 )
 
 func TestDeriveSubkey_Deterministic(t *testing.T) {

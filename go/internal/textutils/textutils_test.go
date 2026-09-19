@@ -5,7 +5,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/textutils"
+	"go.5x5.cz/inventario/internal/textutils"
 )
 
 func TestCleanFilename(t *testing.T) {

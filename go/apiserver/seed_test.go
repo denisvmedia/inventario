@@ -11,8 +11,8 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-chi/chi/v5"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/registry/memory"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/registry/memory"
 )
 
 // seedURL is the public, gated seed endpoint path (#2039).

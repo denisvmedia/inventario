@@ -7,7 +7,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/services/oauth"
+	"go.5x5.cz/inventario/services/oauth"
 )
 
 func newKey(t *testing.T) []byte {

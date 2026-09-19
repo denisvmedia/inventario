@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-extras/errx"
 
-	"github.com/denisvmedia/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/backupsign"
 )
 
 // ErrPlaceholderSecret is returned when a JWT secret, file signing key, or

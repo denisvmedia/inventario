@@ -8,7 +8,7 @@ import (
 	"github.com/go-extras/errx"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 // jsonapi types for currency migrations (issue #202 / #1551).

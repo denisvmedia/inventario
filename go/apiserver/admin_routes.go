@@ -8,10 +8,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/denisvmedia/inventario/csrf"
-	"github.com/denisvmedia/inventario/debug"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/csrf"
+	"go.5x5.cz/inventario/debug"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 // defaultAdminImpersonationStore lets Admin() fall back to an in-memory

@@ -5,7 +5,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/aivision"
+	"go.5x5.cz/inventario/internal/aivision"
 )
 
 // TestResponseSchema_TypeEnumWarrantyShortNameMultiItem locks the parts of

@@ -10,9 +10,9 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/backup/restore/types"
-	"github.com/denisvmedia/inventario/internal/blobkeys"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/backup/restore/types"
+	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/models"
 )
 
 // attachCommodityFileAtKey is the divergent-key variant of attachCommodityFile:

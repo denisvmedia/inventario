@@ -14,10 +14,10 @@ import (
 	"gocloud.dev/blob"
 	"gocloud.dev/gcerrors"
 
-	"github.com/denisvmedia/inventario/backup/export/types"
-	"github.com/denisvmedia/inventario/internal/blobkeys"
-	"github.com/denisvmedia/inventario/internal/textutils"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/backup/export/types"
+	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/textutils"
+	"go.5x5.cz/inventario/models"
 )
 
 // inbBuilder accumulates the per-location JSON documents + their commodity file

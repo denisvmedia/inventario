@@ -9,7 +9,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 // This file mirrors the JSON document schemas the `.inb` exporter writes (see

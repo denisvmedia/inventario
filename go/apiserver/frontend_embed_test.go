@@ -10,7 +10,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/frontend"
+	"go.5x5.cz/inventario/frontend"
 )
 
 // TestFrontendEmbed_UnderscorePrefixedFilesArePresent verifies that files

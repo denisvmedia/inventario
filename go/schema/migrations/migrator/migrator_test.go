@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/schema/migrations/migrator"
+	"go.5x5.cz/inventario/schema/migrations/migrator"
 )
 
 func TestMigrator_parsePostgreSQLDSN(t *testing.T) {

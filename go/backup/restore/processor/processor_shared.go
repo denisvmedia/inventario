@@ -12,15 +12,15 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/backup/restore/security"
-	"github.com/denisvmedia/inventario/backup/restore/types"
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	"github.com/denisvmedia/inventario/internal/blobkeys"
-	"github.com/denisvmedia/inventario/internal/validationctx"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/restore/security"
+	"go.5x5.cz/inventario/backup/restore/types"
+	"go.5x5.cz/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/validationctx"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 // RestoreOperationProcessor wraps the restore service to provide detailed logging.

@@ -13,12 +13,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register file:// driver
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	memreg "github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/apiserver"
+	_ "go.5x5.cz/inventario/internal/fileblob" // register file:// driver
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	memreg "go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services"
 )
 
 // accountDeletionTestRig bundles the wiring an account-deletion handler test

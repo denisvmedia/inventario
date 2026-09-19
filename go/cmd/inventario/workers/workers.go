@@ -23,10 +23,10 @@ package workers
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/cmd/inventario/workers/pause"
-	"github.com/denisvmedia/inventario/cmd/inventario/workers/resume"
-	"github.com/denisvmedia/inventario/cmd/inventario/workers/status"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/workers/pause"
+	"go.5x5.cz/inventario/cmd/inventario/workers/resume"
+	"go.5x5.cz/inventario/cmd/inventario/workers/status"
 )
 
 // New creates the parent `workers` command and registers its

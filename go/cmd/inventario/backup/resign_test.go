@@ -13,9 +13,9 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/backup"
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	"github.com/denisvmedia/inventario/internal/inb"
+	"go.5x5.cz/inventario/cmd/inventario/backup"
+	"go.5x5.cz/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/inb"
 )
 
 func seed(b byte) []byte {

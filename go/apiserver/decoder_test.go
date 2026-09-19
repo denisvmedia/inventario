@@ -9,7 +9,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-chi/render"
 
-	"github.com/denisvmedia/inventario/apiserver"
+	"go.5x5.cz/inventario/apiserver"
 )
 
 func TestGetRequestContentType(t *testing.T) {

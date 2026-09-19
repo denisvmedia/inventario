@@ -12,7 +12,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	_ "github.com/lib/pq"
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 // setupTestDatabase creates a test database and returns the connection string

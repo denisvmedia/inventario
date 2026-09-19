@@ -7,7 +7,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/jsonapi"
+	"go.5x5.cz/inventario/jsonapi"
 )
 
 func TestImportExportRequest_Validation(t *testing.T) {

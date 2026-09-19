@@ -18,16 +18,16 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/apiserver/internal/downloadutils"
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/assets"
-	"github.com/denisvmedia/inventario/internal/filekit"
-	"github.com/denisvmedia/inventario/internal/mimekit"
-	"github.com/denisvmedia/inventario/internal/textutils"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/apiserver/internal/downloadutils"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/assets"
+	"go.5x5.cz/inventario/internal/filekit"
+	"go.5x5.cz/inventario/internal/mimekit"
+	"go.5x5.cz/inventario/internal/textutils"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 type filesAPI struct {

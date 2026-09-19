@@ -33,7 +33,7 @@ import (
 	"gocloud.dev/blob/driver"
 	"gocloud.dev/gcerrors"
 
-	"github.com/denisvmedia/inventario/internal/fileblob/drivertest"
+	"go.5x5.cz/inventario/internal/fileblob/drivertest"
 )
 
 type harness struct {

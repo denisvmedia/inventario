@@ -15,10 +15,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/csrf"
-	csrfinmemory "github.com/denisvmedia/inventario/csrf/inmemory"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/csrf"
+	csrfinmemory "go.5x5.cz/inventario/csrf/inmemory"
+	"go.5x5.cz/inventario/models"
 )
 
 // Cross-plane impersonation tests (#1785 Phase 5). The

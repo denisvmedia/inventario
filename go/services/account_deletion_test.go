@@ -7,12 +7,12 @@ import (
 	qt "github.com/frankban/quicktest"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/appctx"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register file:// driver
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/appctx"
+	_ "go.5x5.cz/inventario/internal/fileblob" // register file:// driver
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services"
 )
 
 // newAccountDeletionService builds an AccountDeletionService over a fresh

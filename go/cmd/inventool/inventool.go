@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/common/version"
-	"github.com/denisvmedia/inventario/cmd/inventool/db"
+	"go.5x5.cz/inventario/cmd/common/version"
+	"go.5x5.cz/inventario/cmd/inventool/db"
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.

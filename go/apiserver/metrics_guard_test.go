@@ -7,7 +7,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/apiserver"
+	"go.5x5.cz/inventario/apiserver"
 )
 
 // The /metrics endpoint exposes installation-wide business gauges (#2102).

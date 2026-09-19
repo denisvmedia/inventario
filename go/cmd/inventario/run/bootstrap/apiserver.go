@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/internal/httpserver"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/httpserver"
 )
 
 // StartAPIServer starts the HTTP listener on cfg.Addr and returns the server

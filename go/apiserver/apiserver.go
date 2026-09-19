@@ -25,19 +25,19 @@ import (
 	_ "gocloud.dev/blob/memblob" // register memblob driver
 	_ "gocloud.dev/blob/s3blob"  // register s3blob driver
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/csrf"
-	"github.com/denisvmedia/inventario/debug"
-	_ "github.com/denisvmedia/inventario/docs" // register swagger docs
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register the in-memory + file blob drivers
-	"github.com/denisvmedia/inventario/internal/metrics"
-	"github.com/denisvmedia/inventario/internal/observability/sentry"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services"
-	"github.com/denisvmedia/inventario/services/oauth"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/csrf"
+	"go.5x5.cz/inventario/debug"
+	_ "go.5x5.cz/inventario/docs" // register swagger docs
+	"go.5x5.cz/inventario/internal/backupsign"
+	_ "go.5x5.cz/inventario/internal/fileblob" // register the in-memory + file blob drivers
+	"go.5x5.cz/inventario/internal/metrics"
+	"go.5x5.cz/inventario/internal/observability/sentry"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
+	"go.5x5.cz/inventario/services/oauth"
 )
 
 // RestoreStatusQuerier reports the aggregate status of restore operations

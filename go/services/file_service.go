@@ -14,11 +14,11 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/internal/blobkeys"
-	"github.com/denisvmedia/inventario/internal/mimekit"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services/imageprocessor"
+	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/mimekit"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services/imageprocessor"
 )
 
 // FileService provides business logic for file operations

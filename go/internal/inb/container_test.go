@@ -8,7 +8,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/inb"
+	"go.5x5.cz/inventario/internal/inb"
 )
 
 func TestWriteReadContainer_RoundTrip(t *testing.T) {

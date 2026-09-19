@@ -12,8 +12,8 @@ import (
 	qt "github.com/frankban/quicktest"
 	"golang.org/x/oauth2"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/services/oauth"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/services/oauth"
 )
 
 // newGoogleStub returns an httptest.Server that pretends to be both the

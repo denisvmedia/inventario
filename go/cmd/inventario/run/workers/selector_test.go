@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/run/workers"
+	"go.5x5.cz/inventario/cmd/inventario/run/workers"
 )
 
 func TestParseSelector_DefaultsToAll(t *testing.T) {

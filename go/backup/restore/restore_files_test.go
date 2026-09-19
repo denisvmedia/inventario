@@ -13,17 +13,17 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/backup/export"
-	exporttypes "github.com/denisvmedia/inventario/backup/export/types"
-	"github.com/denisvmedia/inventario/backup/restore/processor"
-	"github.com/denisvmedia/inventario/backup/restore/types"
-	"github.com/denisvmedia/inventario/internal/blobkeys"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/export"
+	exporttypes "go.5x5.cz/inventario/backup/export/types"
+	"go.5x5.cz/inventario/backup/restore/processor"
+	"go.5x5.cz/inventario/backup/restore/types"
+	"go.5x5.cz/inventario/internal/blobkeys"
+	_ "go.5x5.cz/inventario/internal/fileblob" // register fileblob driver
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services"
 )
 
 // fileFixture is a per-test helper that builds a complete backup environment:

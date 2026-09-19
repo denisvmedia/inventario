@@ -48,7 +48,7 @@ func TestFormatting(t *testing.T) {
 			"%+v",
 			[]string{
 				`^message \(code=NotFound\):$`,
-				`\s+github.com/denisvmedia/inventario/internal/fileblob/gcerr.TestFormatting$`,
+				`\s+go.5x5.cz/inventario/internal/fileblob/gcerr.TestFormatting$`,
 				`\s+.*/fileblob/gcerr/gcerr_test.go:\d+$`,
 			},
 		},
@@ -62,7 +62,7 @@ func TestFormatting(t *testing.T) {
 			"%+v",
 			[]string{
 				`^message \(code=AlreadyExists\):`,
-				`^\s+github.com/denisvmedia/inventario/internal/fileblob/gcerr.TestFormatting$`,
+				`^\s+go.5x5.cz/inventario/internal/fileblob/gcerr.TestFormatting$`,
 				`^\s+.*/fileblob/gcerr/gcerr_test.go:\d+$`,
 				`^\s+- wrapped$`,
 			},
@@ -77,7 +77,7 @@ func TestFormatting(t *testing.T) {
 			"%+v",
 			[]string{
 				`^code=AlreadyExists:`,
-				`^\s+github.com/denisvmedia/inventario/internal/fileblob/gcerr.TestFormatting$`,
+				`^\s+go.5x5.cz/inventario/internal/fileblob/gcerr.TestFormatting$`,
 				`^\s+.*/fileblob/gcerr/gcerr_test.go:\d+$`,
 				`^\s+- wrapped$`,
 			},

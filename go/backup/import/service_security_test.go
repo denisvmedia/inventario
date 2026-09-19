@@ -8,8 +8,8 @@ import (
 	"github.com/go-extras/go-kit/must"
 	_ "gocloud.dev/blob/memblob" // register the memory:// blob driver
 
-	importpkg "github.com/denisvmedia/inventario/backup/import"
-	"github.com/denisvmedia/inventario/models"
+	importpkg "go.5x5.cz/inventario/backup/import"
+	"go.5x5.cz/inventario/models"
 )
 
 // TestImportService_ProcessImport_ForeignTenantSourcePath_FailsFast is the

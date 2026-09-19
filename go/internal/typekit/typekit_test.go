@@ -5,7 +5,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/typekit"
+	"go.5x5.cz/inventario/internal/typekit"
 )
 
 func TestZeroOfType(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/assets"
+	"go.5x5.cz/inventario/assets"
 )
 
 // TestServePlaceholderImageImplementation tests the exact implementation used in the files API

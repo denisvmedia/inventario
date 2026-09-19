@@ -5,19 +5,19 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/common/version"
-	"github.com/denisvmedia/inventario/cmd/inventario/admin"
-	"github.com/denisvmedia/inventario/cmd/inventario/backfill"
-	"github.com/denisvmedia/inventario/cmd/inventario/backoffice"
-	"github.com/denisvmedia/inventario/cmd/inventario/backup"
-	"github.com/denisvmedia/inventario/cmd/inventario/db"
-	"github.com/denisvmedia/inventario/cmd/inventario/features"
-	"github.com/denisvmedia/inventario/cmd/inventario/initconfig"
-	"github.com/denisvmedia/inventario/cmd/inventario/run"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/cmd/inventario/tenants"
-	"github.com/denisvmedia/inventario/cmd/inventario/users"
-	"github.com/denisvmedia/inventario/cmd/inventario/workers"
+	"go.5x5.cz/inventario/cmd/common/version"
+	"go.5x5.cz/inventario/cmd/inventario/admin"
+	"go.5x5.cz/inventario/cmd/inventario/backfill"
+	"go.5x5.cz/inventario/cmd/inventario/backoffice"
+	"go.5x5.cz/inventario/cmd/inventario/backup"
+	"go.5x5.cz/inventario/cmd/inventario/db"
+	"go.5x5.cz/inventario/cmd/inventario/features"
+	"go.5x5.cz/inventario/cmd/inventario/initconfig"
+	"go.5x5.cz/inventario/cmd/inventario/run"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/tenants"
+	"go.5x5.cz/inventario/cmd/inventario/users"
+	"go.5x5.cz/inventario/cmd/inventario/workers"
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.

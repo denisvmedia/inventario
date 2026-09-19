@@ -4,8 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/csrf"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/csrf"
 )
 
 const (

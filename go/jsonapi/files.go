@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 // FileResponse is an object that holds file information.
