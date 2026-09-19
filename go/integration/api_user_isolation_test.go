@@ -16,13 +16,13 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/debug"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/debug"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres"
+	"go.5x5.cz/inventario/services"
 )
 
 // apiIsolationFixture bundles one user with their own group (incl. an

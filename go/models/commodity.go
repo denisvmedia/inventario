@@ -9,8 +9,8 @@ import (
 	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/internal/validationctx"
-	"github.com/denisvmedia/inventario/models/rules"
+	"go.5x5.cz/inventario/internal/validationctx"
+	"go.5x5.cz/inventario/models/rules"
 )
 
 var (

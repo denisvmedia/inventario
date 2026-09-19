@@ -3,12 +3,12 @@ package db
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/db/bootstrap"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/drop"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/reset"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/status"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/db/bootstrap"
+	"go.5x5.cz/inventario/cmd/inventario/db/drop"
+	"go.5x5.cz/inventario/cmd/inventario/db/migrate"
+	"go.5x5.cz/inventario/cmd/inventario/db/reset"
+	"go.5x5.cz/inventario/cmd/inventario/db/status"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
 )
 
 // New creates the main db command.

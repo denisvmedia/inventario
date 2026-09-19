@@ -6,8 +6,8 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/internal/currency"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/internal/currency"
+	"go.5x5.cz/inventario/models"
 )
 
 // commodity is a minimal builder. We only set the fields ApplyConversion

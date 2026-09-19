@@ -11,10 +11,10 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 
-	"github.com/denisvmedia/inventario/debug/seeddata"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"go.5x5.cz/inventario/debug/seeddata"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres"
 )
 
 // postgresTestDSN resolves the integration-test database DSN. CI always

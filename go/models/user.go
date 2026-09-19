@@ -10,7 +10,7 @@ import (
 	"github.com/jellydator/validation"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/denisvmedia/inventario/models/rules"
+	"go.5x5.cz/inventario/models/rules"
 )
 
 // bcryptCost is the cost factor used by SetPassword. In production it is

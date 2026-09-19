@@ -9,7 +9,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-chi/render"
 
-	"github.com/denisvmedia/inventario/jsonapi"
+	"go.5x5.cz/inventario/jsonapi"
 )
 
 func TestFilesAPI_GenerateSignedURL_JSONAPIFormat(t *testing.T) {

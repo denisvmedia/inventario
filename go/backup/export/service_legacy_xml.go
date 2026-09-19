@@ -22,10 +22,10 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/backup/export/types"
-	"github.com/denisvmedia/inventario/internal/blobkeys"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/export/types"
+	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/models"
 )
 
 // exportFileMeta returns the FileEntity stamping for a legacy XML export

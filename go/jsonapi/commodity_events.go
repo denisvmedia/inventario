@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-chi/render"
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 // CommodityEventActor is the human-readable identity of the user who

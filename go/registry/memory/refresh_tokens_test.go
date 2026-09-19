@@ -7,8 +7,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/memory"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/memory"
 )
 
 // TestRefreshTokenRegistryMemory_GetByTokenHash_ReturnsRevokedRow pins, for the

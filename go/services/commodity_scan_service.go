@@ -11,9 +11,9 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
-	"github.com/denisvmedia/inventario/internal/aivision"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/internal/aivision"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // clampInt16 saturates v into the int16 range. Used when packing

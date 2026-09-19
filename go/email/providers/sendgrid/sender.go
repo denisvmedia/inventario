@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/denisvmedia/inventario/email/sender"
+	"go.5x5.cz/inventario/email/sender"
 )
 
 // Config defines SendGrid API transport settings.

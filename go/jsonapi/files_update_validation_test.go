@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/jsonapi"
+	"go.5x5.cz/inventario/jsonapi"
 )
 
 // newFileUpdateRequest builds a well-formed JSON:API update envelope with the

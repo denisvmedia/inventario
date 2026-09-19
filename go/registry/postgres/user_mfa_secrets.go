@@ -12,9 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres/store"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres/store"
 )
 
 var _ registry.UserMFASecretRegistry = (*UserMFASecretRegistry)(nil)

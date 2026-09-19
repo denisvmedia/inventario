@@ -7,7 +7,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/assert"
+	"go.5x5.cz/inventario/internal/assert"
 )
 
 func TestNoError_WithNoError(t *testing.T) {

@@ -3,13 +3,13 @@ package services
 import (
 	"fmt"
 
-	"github.com/denisvmedia/inventario/email/providers/mandrill"
-	"github.com/denisvmedia/inventario/email/providers/sendgrid"
-	"github.com/denisvmedia/inventario/email/providers/ses"
-	"github.com/denisvmedia/inventario/email/providers/smtp"
-	"github.com/denisvmedia/inventario/email/providers/smtp2go"
-	"github.com/denisvmedia/inventario/email/providers/stub"
-	"github.com/denisvmedia/inventario/email/sender"
+	"go.5x5.cz/inventario/email/providers/mandrill"
+	"go.5x5.cz/inventario/email/providers/sendgrid"
+	"go.5x5.cz/inventario/email/providers/ses"
+	"go.5x5.cz/inventario/email/providers/smtp"
+	"go.5x5.cz/inventario/email/providers/smtp2go"
+	"go.5x5.cz/inventario/email/providers/stub"
+	"go.5x5.cz/inventario/email/sender"
 )
 
 type emailSender = sender.Sender

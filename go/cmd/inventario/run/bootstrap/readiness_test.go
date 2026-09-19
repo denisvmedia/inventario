@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/run/bootstrap"
+	"go.5x5.cz/inventario/cmd/inventario/run/bootstrap"
 )
 
 func TestNewReadinessRedisPinger_NoRedisConfigured(t *testing.T) {

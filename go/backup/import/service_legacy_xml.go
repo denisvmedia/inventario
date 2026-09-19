@@ -14,8 +14,8 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
-	"github.com/denisvmedia/inventario/backup/export/parser"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/backup/export/parser"
+	"go.5x5.cz/inventario/models"
 )
 
 // importFileMeta returns the FileEntity stamping for a legacy imported XML

@@ -6,8 +6,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/email/providers/stub"
-	"github.com/denisvmedia/inventario/email/sender"
+	"go.5x5.cz/inventario/email/providers/stub"
+	"go.5x5.cz/inventario/email/sender"
 )
 
 func TestNew(t *testing.T) {

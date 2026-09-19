@@ -13,10 +13,10 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // countingCommodityRegistry decorates a registry.CommodityRegistry with

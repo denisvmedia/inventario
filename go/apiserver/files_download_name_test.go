@@ -12,11 +12,11 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/blobkeys"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/models"
 )
 
 // TestDownload_ContentDispositionFilename asserts the filename the user actually

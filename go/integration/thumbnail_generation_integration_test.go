@@ -11,11 +11,11 @@ import (
 	qt "github.com/frankban/quicktest"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/appctx"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // Register file driver
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/appctx"
+	_ "go.5x5.cz/inventario/internal/fileblob" // Register file driver
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services"
 )
 
 // TestThumbnailGenerationIntegration tests the complete thumbnail generation workflow

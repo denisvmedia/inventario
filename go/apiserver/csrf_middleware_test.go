@@ -11,11 +11,11 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/csrf"
-	csrfinmemory "github.com/denisvmedia/inventario/csrf/inmemory"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/csrf"
+	csrfinmemory "go.5x5.cz/inventario/csrf/inmemory"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // errCSRFService is a CSRFService that always returns an error (to test the

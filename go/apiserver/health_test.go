@@ -10,7 +10,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/apiserver"
+	"go.5x5.cz/inventario/apiserver"
 )
 
 type healthResponse struct {

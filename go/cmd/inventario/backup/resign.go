@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	"github.com/denisvmedia/inventario/internal/inb"
+	"go.5x5.cz/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/inb"
 )
 
 // resignOptions holds the parsed flags for `inventario backup resign`.

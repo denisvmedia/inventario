@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/denisvmedia/inventario/email/queue"
+	"go.5x5.cz/inventario/email/queue"
 )
 
 type scheduledPayload struct {

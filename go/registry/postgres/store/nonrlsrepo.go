@@ -9,7 +9,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 // NonRLSRepository provides basic SQL operations without user context requirements

@@ -8,8 +8,8 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
-	"github.com/denisvmedia/inventario/backup/export/types"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/backup/export/types"
+	"go.5x5.cz/inventario/models"
 )
 
 // ParseXMLMetadata parses XML file to extract statistics and determine export type

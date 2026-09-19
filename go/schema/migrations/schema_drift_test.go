@@ -11,7 +11,7 @@ import (
 	"ptah.run/dbschema"
 	"ptah.run/migration/schemadiff"
 
-	"github.com/denisvmedia/inventario/schema/migrations/migrator"
+	"go.5x5.cz/inventario/schema/migrations/migrator"
 )
 
 // TestSchemaDriftDetection validates that the current migration files are in sync

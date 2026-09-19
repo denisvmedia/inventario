@@ -10,11 +10,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/internal/command"
-	"github.com/denisvmedia/inventario/cmd/internal/input"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/services/admin"
+	"go.5x5.cz/inventario/cmd/internal/command"
+	"go.5x5.cz/inventario/cmd/internal/input"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/services/admin"
 )
 
 // Command represents the tenant creation command

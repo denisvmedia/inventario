@@ -3,7 +3,7 @@ package registry
 import (
 	"context"
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 // AreaRegistryFactory creates AreaRegistry instances with proper context

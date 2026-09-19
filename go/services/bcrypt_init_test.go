@@ -6,8 +6,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/services"
 )
 
 // TestMain lowers the bcrypt cost factor used inside this package for

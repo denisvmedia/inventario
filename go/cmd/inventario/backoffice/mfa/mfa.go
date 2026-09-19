@@ -25,10 +25,10 @@ package mfa
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/backoffice/mfa/disable"
-	"github.com/denisvmedia/inventario/cmd/inventario/backoffice/mfa/regeneratecodes"
-	"github.com/denisvmedia/inventario/cmd/inventario/backoffice/mfa/setup"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/backoffice/mfa/disable"
+	"go.5x5.cz/inventario/cmd/inventario/backoffice/mfa/regeneratecodes"
+	"go.5x5.cz/inventario/cmd/inventario/backoffice/mfa/setup"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
 )
 
 // New constructs the parent `backoffice mfa` command and registers its

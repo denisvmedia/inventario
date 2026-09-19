@@ -11,13 +11,13 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/appctx"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register file:// driver
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres"
-	"github.com/denisvmedia/inventario/schema/migrations/migrator"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/appctx"
+	_ "go.5x5.cz/inventario/internal/fileblob" // register file:// driver
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres"
+	"go.5x5.cz/inventario/schema/migrations/migrator"
+	"go.5x5.cz/inventario/services"
 )
 
 // setupCleanPostgresFactorySet migrates the schema and returns a raw factory

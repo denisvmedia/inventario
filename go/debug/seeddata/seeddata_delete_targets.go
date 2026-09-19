@@ -7,8 +7,8 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // Disposable fixture emails consumed exclusively by delete-account.spec.ts

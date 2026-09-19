@@ -6,10 +6,10 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services/backoffice"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services/backoffice"
 )
 
 // setupMemoryAsPostgres registers the in-memory registry under the `postgres`

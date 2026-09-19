@@ -11,7 +11,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/observability/sentry"
+	"go.5x5.cz/inventario/internal/observability/sentry"
 )
 
 func TestLoadConfig_ReadsBareEnv(t *testing.T) {

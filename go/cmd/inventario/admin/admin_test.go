@@ -7,12 +7,12 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/admin"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
-	adminservice "github.com/denisvmedia/inventario/services/admin"
+	"go.5x5.cz/inventario/cmd/inventario/admin"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/memory"
+	adminservice "go.5x5.cz/inventario/services/admin"
 )
 
 // adminTestFixture seeds two users into a memory registry registered as

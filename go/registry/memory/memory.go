@@ -3,7 +3,7 @@ package memory
 import (
 	"context"
 
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/registry"
 )
 
 const Name = "memory"

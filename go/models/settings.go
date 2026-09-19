@@ -4,7 +4,7 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/jellydator/validation"
 
-	"github.com/denisvmedia/inventario/internal/typekit"
+	"go.5x5.cz/inventario/internal/typekit"
 )
 
 // Enable RLS for multi-tenant isolation

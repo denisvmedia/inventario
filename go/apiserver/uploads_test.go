@@ -20,11 +20,11 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	"github.com/denisvmedia/inventario/internal/blobkeys"
-	"github.com/denisvmedia/inventario/internal/filekit"
-	"github.com/denisvmedia/inventario/internal/inb"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/filekit"
+	"go.5x5.cz/inventario/internal/inb"
 )
 
 // countBucketKeys returns the total number of blob keys in the bucket at

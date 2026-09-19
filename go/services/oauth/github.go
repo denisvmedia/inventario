@@ -12,7 +12,7 @@ import (
 	"golang.org/x/oauth2"
 	githuboauth "golang.org/x/oauth2/github"
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 // githubUserURL returns the authenticated user's profile (id, login, name).

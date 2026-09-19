@@ -41,7 +41,7 @@ import (
 	"gocloud.dev/blob/driver"
 	"gocloud.dev/gcerrors"
 
-	"github.com/denisvmedia/inventario/internal/fileblob/escape"
+	"go.5x5.cz/inventario/internal/fileblob/escape"
 )
 
 // Harness descibes the functionality test harnesses must provide to run

@@ -3,9 +3,9 @@ package services
 import (
 	"log/slog"
 
-	"github.com/denisvmedia/inventario/csrf"
-	csrfinmemory "github.com/denisvmedia/inventario/csrf/inmemory"
-	csrfredis "github.com/denisvmedia/inventario/csrf/redis"
+	"go.5x5.cz/inventario/csrf"
+	csrfinmemory "go.5x5.cz/inventario/csrf/inmemory"
+	csrfredis "go.5x5.cz/inventario/csrf/redis"
 )
 
 // NewCSRFService selects the appropriate csrf.Service implementation based on

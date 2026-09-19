@@ -9,7 +9,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/httpserver"
+	"go.5x5.cz/inventario/internal/httpserver"
 )
 
 func TestAPIServer_Run(t *testing.T) {

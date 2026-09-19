@@ -223,9 +223,9 @@ jobs:
             -tags=with_frontend \
             -trimpath \
             -ldflags="-s -w \
-              -X github.com/denisvmedia/inventario/internal/version.Version=${VERSION} \
-              -X github.com/denisvmedia/inventario/internal/version.Commit=${COMMIT} \
-              -X github.com/denisvmedia/inventario/internal/version.Date=${BUILD_DATE}" \
+              -X go.5x5.cz/inventario/internal/version.Version=${VERSION} \
+              -X go.5x5.cz/inventario/internal/version.Commit=${COMMIT} \
+              -X go.5x5.cz/inventario/internal/version.Date=${BUILD_DATE}" \
             -o ../../../dist-e2e/inventario .
           chmod +x ../../../dist-e2e/inventario
 

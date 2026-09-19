@@ -17,9 +17,9 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // Service wraps BackofficeUserRegistry with the business-rule logic

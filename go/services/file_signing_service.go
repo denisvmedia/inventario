@@ -15,9 +15,9 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/mimekit"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/mimekit"
+	"go.5x5.cz/inventario/models"
 )
 
 // FileSigningService provides secure file URL signing functionality

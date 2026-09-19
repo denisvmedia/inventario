@@ -3,10 +3,10 @@ package migrations
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/list"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/up"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/cmd/inventool/db/migrations/generate"
+	"go.5x5.cz/inventario/cmd/inventario/db/migrate/list"
+	"go.5x5.cz/inventario/cmd/inventario/db/migrate/up"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventool/db/migrations/generate"
 )
 
 // New creates the migrations command group

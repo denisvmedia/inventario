@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/services"
 )
 
 // StorageUsage mounts GET /g/{groupSlug}/storage-usage. The route is

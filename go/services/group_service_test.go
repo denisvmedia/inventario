@@ -9,9 +9,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services"
 )
 
 func newTestGroupService() *services.GroupService {

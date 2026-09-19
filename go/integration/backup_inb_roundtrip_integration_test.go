@@ -12,13 +12,13 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
-	exportpkg "github.com/denisvmedia/inventario/backup/export"
-	importpkg "github.com/denisvmedia/inventario/backup/import"
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register the file:// blob driver
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	exportpkg "go.5x5.cz/inventario/backup/export"
+	importpkg "go.5x5.cz/inventario/backup/import"
+	"go.5x5.cz/inventario/internal/backupsign"
+	_ "go.5x5.cz/inventario/internal/fileblob" // register the file:// blob driver
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres"
 )
 
 // TestINBBackupRoundTripPostgres is a regression test for the postgres-only

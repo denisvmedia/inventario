@@ -10,8 +10,8 @@ import (
 	qt "github.com/frankban/quicktest"
 	redisv9 "github.com/redis/go-redis/v9"
 
-	"github.com/denisvmedia/inventario/csrf"
-	csrfredis "github.com/denisvmedia/inventario/csrf/redis"
+	"go.5x5.cz/inventario/csrf"
+	csrfredis "go.5x5.cz/inventario/csrf/redis"
 )
 
 // Compile-time interface check.

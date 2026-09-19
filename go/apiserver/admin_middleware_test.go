@@ -7,7 +7,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/apiserver"
+	"go.5x5.cz/inventario/apiserver"
 )
 
 // Cross-plane regression tests for the #1785 Phase 3 migration. The

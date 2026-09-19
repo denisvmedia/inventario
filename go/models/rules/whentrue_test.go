@@ -6,7 +6,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/jellydator/validation"
 
-	"github.com/denisvmedia/inventario/models/rules"
+	"go.5x5.cz/inventario/models/rules"
 )
 
 // mockRule is a mock implementation of validation.Rule for testing

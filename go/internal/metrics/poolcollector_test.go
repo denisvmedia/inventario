@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/denisvmedia/inventario/internal/metrics"
+	"go.5x5.cz/inventario/internal/metrics"
 )
 
 // stubProvider satisfies PoolStatProvider.

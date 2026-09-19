@@ -13,9 +13,9 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	"github.com/denisvmedia/inventario/internal/inb"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/inb"
+	"go.5x5.cz/inventario/models"
 )
 
 // importFileMeta returns the FileEntity stamping for an imported `.inb` backup

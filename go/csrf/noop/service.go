@@ -3,7 +3,7 @@ package noop
 import (
 	"context"
 
-	"github.com/denisvmedia/inventario/csrf"
+	"go.5x5.cz/inventario/csrf"
 )
 
 const noopToken = "noop-csrf-token" //#nosec G101 -- false-positive: fixed test-only placeholder, not a credential.

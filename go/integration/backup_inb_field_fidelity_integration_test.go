@@ -14,16 +14,16 @@ import (
 	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/appctx"
-	exportpkg "github.com/denisvmedia/inventario/backup/export"
-	"github.com/denisvmedia/inventario/backup/restore"
-	restoretypes "github.com/denisvmedia/inventario/backup/restore/types"
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register the file:// blob driver
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/appctx"
+	exportpkg "go.5x5.cz/inventario/backup/export"
+	"go.5x5.cz/inventario/backup/restore"
+	restoretypes "go.5x5.cz/inventario/backup/restore/types"
+	"go.5x5.cz/inventario/internal/backupsign"
+	_ "go.5x5.cz/inventario/internal/fileblob" // register the file:// blob driver
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres"
+	"go.5x5.cz/inventario/services"
 )
 
 // TestINBFieldFidelityRoundTripPostgres is the lossless-commodity-round-trip

@@ -10,14 +10,14 @@ import (
 
 	"github.com/jellydator/validation"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/debug"
-	"github.com/denisvmedia/inventario/internal/aivision"
-	_ "github.com/denisvmedia/inventario/internal/aivision/anthropic" // register the anthropic provider via init()
-	_ "github.com/denisvmedia/inventario/internal/aivision/mock"      // register the mock provider via init()
-	_ "github.com/denisvmedia/inventario/internal/aivision/openai"    // register the openai provider via init()
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/debug"
+	"go.5x5.cz/inventario/internal/aivision"
+	_ "go.5x5.cz/inventario/internal/aivision/anthropic" // register the anthropic provider via init()
+	_ "go.5x5.cz/inventario/internal/aivision/mock"      // register the mock provider via init()
+	_ "go.5x5.cz/inventario/internal/aivision/openai"    // register the openai provider via init()
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 // serverSetup aggregates everything produced by buildServerParams: the

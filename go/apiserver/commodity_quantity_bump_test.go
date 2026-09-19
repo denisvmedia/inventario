@@ -12,10 +12,10 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/internal/checkers"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/checkers"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/models"
 )
 
 // Issue #1554: locks the four illegal write paths surfaced as 422.

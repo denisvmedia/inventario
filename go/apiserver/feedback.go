@@ -14,10 +14,10 @@ import (
 	"github.com/go-chi/render"
 	"github.com/go-extras/errx"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/errormarshal"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/errormarshal"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/services"
 )
 
 // feedbackMaxMessageBytes caps the free-form message payload. Five

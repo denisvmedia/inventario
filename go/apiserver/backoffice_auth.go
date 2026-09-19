@@ -20,10 +20,10 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 // Back-office auth plane (issue #1785, Phase 2).

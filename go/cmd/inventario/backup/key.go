@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-extras/errx"
 
-	"github.com/denisvmedia/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/backupsign"
 )
 
 // backupSigningKeyEnv is the environment variable the server reads the backup

@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/defaults"
+	"go.5x5.cz/inventario/internal/defaults"
 )
 
 func TestDefaults(t *testing.T) {

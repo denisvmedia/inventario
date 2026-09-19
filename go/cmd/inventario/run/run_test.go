@@ -5,7 +5,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/run"
+	"go.5x5.cz/inventario/cmd/inventario/run"
 )
 
 func TestNew_WorkerSelectorFlagsOnlyOnWorkersSubcommand(t *testing.T) {

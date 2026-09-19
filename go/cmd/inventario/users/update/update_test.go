@@ -9,11 +9,11 @@ import (
 	qt "github.com/frankban/quicktest"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/cmd/inventario/users/update"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/users/update"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/memory"
 )
 
 const testDSN = "postgres://test:test@localhost/test"

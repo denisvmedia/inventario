@@ -8,10 +8,10 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/internal/checkers"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/checkers"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/services"
 )
 
 // Admin group-membership handler tests (#1749). Every AC in the issue

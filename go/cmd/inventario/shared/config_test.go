@@ -7,7 +7,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
 )
 
 // captureSlog swaps the default slog logger for one writing to a buffer for the

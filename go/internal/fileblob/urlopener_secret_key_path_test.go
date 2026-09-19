@@ -12,7 +12,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"gocloud.dev/blob"
 
-	_ "github.com/denisvmedia/inventario/internal/fileblob"
+	_ "go.5x5.cz/inventario/internal/fileblob"
 )
 
 func TestOpenBucketURL_AllowsSecretKeyPathWithinBucketRoot(t *testing.T) {

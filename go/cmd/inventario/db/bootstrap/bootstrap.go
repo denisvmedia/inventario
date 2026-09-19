@@ -3,9 +3,9 @@ package bootstrap
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/db/bootstrap/apply"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/bootstrap/printcmd"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/db/bootstrap/apply"
+	"go.5x5.cz/inventario/cmd/inventario/db/bootstrap/printcmd"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
 )
 
 // New creates the bootstrap command group

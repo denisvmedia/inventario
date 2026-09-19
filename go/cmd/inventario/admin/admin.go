@@ -12,10 +12,10 @@ package admin
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/admin/grant"
-	"github.com/denisvmedia/inventario/cmd/inventario/admin/listcmd"
-	"github.com/denisvmedia/inventario/cmd/inventario/admin/revoke"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/admin/grant"
+	"go.5x5.cz/inventario/cmd/inventario/admin/listcmd"
+	"go.5x5.cz/inventario/cmd/inventario/admin/revoke"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
 )
 
 // New creates the parent `admin` command and registers its subcommands.

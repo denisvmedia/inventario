@@ -7,8 +7,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	qt "github.com/frankban/quicktest"
 
-	emailqueueinmemory "github.com/denisvmedia/inventario/email/queue/inmemory"
-	emailqueueredis "github.com/denisvmedia/inventario/email/queue/redis"
+	emailqueueinmemory "go.5x5.cz/inventario/email/queue/inmemory"
+	emailqueueredis "go.5x5.cz/inventario/email/queue/redis"
 )
 
 func TestNewEmailQueue_WithoutRedisURL_UsesInMemory(t *testing.T) {

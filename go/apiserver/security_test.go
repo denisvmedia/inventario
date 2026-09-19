@@ -14,11 +14,11 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/memory"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/memory"
 )
 
 // TestSecurityIDRejection tests that user-provided IDs are rejected in create requests

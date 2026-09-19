@@ -11,8 +11,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	emailqueueinmemory "github.com/denisvmedia/inventario/email/queue/inmemory"
-	mailsender "github.com/denisvmedia/inventario/email/sender"
+	emailqueueinmemory "go.5x5.cz/inventario/email/queue/inmemory"
+	mailsender "go.5x5.cz/inventario/email/sender"
 )
 
 type flakyEmailSender struct {

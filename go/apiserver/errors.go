@@ -8,11 +8,11 @@ import (
 	"github.com/go-chi/render"
 	"github.com/go-extras/errx"
 
-	"github.com/denisvmedia/inventario/internal/errormarshal"
-	"github.com/denisvmedia/inventario/internal/observability/sentry"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/internal/errormarshal"
+	"go.5x5.cz/inventario/internal/observability/sentry"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 var (

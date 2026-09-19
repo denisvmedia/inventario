@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/backupsign"
 )
 
 // validHexSeed returns a 64-hex-char string that decodes to a 32-byte seed.

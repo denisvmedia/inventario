@@ -17,8 +17,8 @@ import (
 	"ptah.run/dbschema"
 	"ptah.run/migration/migrator"
 
-	"github.com/denisvmedia/inventario/schema/dsnutil"
-	"github.com/denisvmedia/inventario/schema/migrations"
+	"go.5x5.cz/inventario/schema/dsnutil"
+	"go.5x5.cz/inventario/schema/migrations"
 )
 
 // ErrSchemaLagsBinary is returned by VerifySchemaUpToDate when the binary

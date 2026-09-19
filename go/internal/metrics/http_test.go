@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/denisvmedia/inventario/internal/metrics"
+	"go.5x5.cz/inventario/internal/metrics"
 )
 
 func TestHTTPMiddleware_RecordsRoutePatternNotConcretePath(t *testing.T) {

@@ -1,8 +1,8 @@
 // Package services_test covers factory-level CSRF tests only.
 // Implementation-level tests live in the respective sub-packages:
-//   - github.com/denisvmedia/inventario/csrf/inmemory
-//   - github.com/denisvmedia/inventario/csrf/noop
-//   - github.com/denisvmedia/inventario/csrf/redis
+//   - go.5x5.cz/inventario/csrf/inmemory
+//   - go.5x5.cz/inventario/csrf/noop
+//   - go.5x5.cz/inventario/csrf/redis
 package services_test
 
 import (
@@ -11,8 +11,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	csrfinmemory "github.com/denisvmedia/inventario/csrf/inmemory"
-	"github.com/denisvmedia/inventario/services"
+	csrfinmemory "go.5x5.cz/inventario/csrf/inmemory"
+	"go.5x5.cz/inventario/services"
 )
 
 func TestNewCSRFService_FallbackToInMemory(t *testing.T) {

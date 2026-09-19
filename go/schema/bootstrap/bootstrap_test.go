@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/schema/bootstrap"
+	"go.5x5.cz/inventario/schema/bootstrap"
 )
 
 func TestNew(t *testing.T) {

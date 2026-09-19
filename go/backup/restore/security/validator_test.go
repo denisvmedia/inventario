@@ -11,7 +11,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
-	"github.com/denisvmedia/inventario/backup/restore/security"
+	"go.5x5.cz/inventario/backup/restore/security"
 )
 
 // newValidator builds a RestoreSecurityValidator around a JSON slog handler

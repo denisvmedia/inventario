@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jellydator/validation"
 
-	"github.com/denisvmedia/inventario/models/rules"
+	"go.5x5.cz/inventario/models/rules"
 )
 
 var _ render.Binder = (*UpdateProfileRequest)(nil)

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/services"
 )
 
 // WorkerDurations holds the parsed time.Duration values for every duration-

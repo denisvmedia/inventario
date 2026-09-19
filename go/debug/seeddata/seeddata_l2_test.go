@@ -6,9 +6,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/debug/seeddata"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/memory"
+	"go.5x5.cz/inventario/debug/seeddata"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/memory"
 )
 
 // The public, unauthenticated /api/v1/seed endpoint must not be coaxed into

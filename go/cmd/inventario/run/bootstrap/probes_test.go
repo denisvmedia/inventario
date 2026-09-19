@@ -13,9 +13,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/cmd/inventario/run/bootstrap"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/cmd/inventario/run/bootstrap"
+	"go.5x5.cz/inventario/registry"
 )
 
 type stubRedisPinger struct {

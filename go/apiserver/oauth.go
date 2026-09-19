@@ -12,10 +12,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	oauthsvc "github.com/denisvmedia/inventario/services/oauth"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	oauthsvc "go.5x5.cz/inventario/services/oauth"
 )
 
 // oauthStateCookieName is the cookie that pins a particular signed state

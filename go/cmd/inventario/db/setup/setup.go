@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/lib/pq" // PostgreSQL driver
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 // DataSetupManager handles initial dataset setup operations for tenant and user isolation

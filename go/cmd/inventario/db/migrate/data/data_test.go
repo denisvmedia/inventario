@@ -5,8 +5,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/data"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/db/migrate/data"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
 )
 
 func TestNew(t *testing.T) {

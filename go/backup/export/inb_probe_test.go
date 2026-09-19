@@ -10,8 +10,8 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"gocloud.dev/blob"
 
-	_ "github.com/denisvmedia/inventario/internal/fileblob"
-	"github.com/denisvmedia/inventario/models"
+	_ "go.5x5.cz/inventario/internal/fileblob"
+	"go.5x5.cz/inventario/models"
 )
 
 // closedBucket returns a bucket whose every operation fails with a

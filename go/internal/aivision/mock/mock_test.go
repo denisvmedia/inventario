@@ -7,8 +7,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/aivision"
-	"github.com/denisvmedia/inventario/internal/aivision/mock"
+	"go.5x5.cz/inventario/internal/aivision"
+	"go.5x5.cz/inventario/internal/aivision/mock"
 )
 
 func TestMockProvider_DefaultResultCoversAllFields(t *testing.T) {

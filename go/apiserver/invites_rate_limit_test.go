@@ -8,8 +8,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/services"
 )
 
 // GET /api/v1/invites/{token} is public (the invitee is usually

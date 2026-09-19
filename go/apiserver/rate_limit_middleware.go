@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/metrics"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/metrics"
+	"go.5x5.cz/inventario/services"
 )
 
 // ParseTrustedProxyCIDRs parses a comma-separated list of trusted proxy CIDRs or IPs.

@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"github.com/denisvmedia/inventario/frontend"
+	"go.5x5.cz/inventario/frontend"
 )
 
 // FrontendHandler returns the SPA handler that serves the embedded React

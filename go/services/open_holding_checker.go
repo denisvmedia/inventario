@@ -6,7 +6,7 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/registry"
 )
 
 // HoldingKind names a kind of "holding" — a state where a commodity is

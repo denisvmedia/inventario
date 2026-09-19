@@ -5,7 +5,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/checkers"
+	"go.5x5.cz/inventario/internal/checkers"
 )
 
 var nopNoteFn = func(string, any) {}

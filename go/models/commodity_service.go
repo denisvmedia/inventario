@@ -8,7 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 	"golang.org/x/text/currency"
 
-	"github.com/denisvmedia/inventario/models/rules"
+	"go.5x5.cz/inventario/models/rules"
 )
 
 var (

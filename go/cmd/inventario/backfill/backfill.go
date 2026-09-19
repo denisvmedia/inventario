@@ -7,8 +7,8 @@ package backfill
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/backfill/blobs"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/backfill/blobs"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
 )
 
 // New constructs the parent `backfill` command and registers its

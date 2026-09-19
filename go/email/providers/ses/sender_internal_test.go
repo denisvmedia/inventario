@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/email/sender"
+	"go.5x5.cz/inventario/email/sender"
 )
 
 type mockSESClient struct {

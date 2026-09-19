@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/assets"
+	"go.5x5.cz/inventario/assets"
 )
 
 func TestGetPlaceholderFile_Success(t *testing.T) {

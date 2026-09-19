@@ -12,11 +12,11 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/yalp/jsonpath"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/internal/checkers"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/checkers"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // mockRestoreWorker is a mock implementation of RestoreStatusQuerier for testing

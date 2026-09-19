@@ -9,12 +9,12 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/denisvmedia/inventario/appctx"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register file:// driver
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres"
-	"github.com/denisvmedia/inventario/registry/postgres/store"
+	"go.5x5.cz/inventario/appctx"
+	_ "go.5x5.cz/inventario/internal/fileblob" // register file:// driver
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres"
+	"go.5x5.cz/inventario/registry/postgres/store"
 )
 
 // seededTenant bundles the ids a purge test needs to assert against one tenant.

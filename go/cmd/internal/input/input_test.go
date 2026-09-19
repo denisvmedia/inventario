@@ -9,7 +9,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/cmd/internal/input"
+	"go.5x5.cz/inventario/cmd/internal/input"
 )
 
 func TestBoolField_Prompt(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/postgres"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/postgres"
 )
 
 // TestFileRegistry_Postgres_ListByLinkedEntity_AreaAndLocation exercises the

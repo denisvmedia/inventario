@@ -11,9 +11,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/denisvmedia/inventario/debug"
-	"github.com/denisvmedia/inventario/internal/version"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/debug"
+	"go.5x5.cz/inventario/internal/version"
+	"go.5x5.cz/inventario/models"
 )
 
 type systemAPI struct {

@@ -13,12 +13,12 @@ import (
 	"github.com/go-extras/errx"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/internal/currency"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/postgres"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/internal/currency"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres"
+	"go.5x5.cz/inventario/services"
 )
 
 // Currency-migration apiserver surface — issue #202 / #1551 PR 2/4.

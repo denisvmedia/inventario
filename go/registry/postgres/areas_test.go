@@ -5,8 +5,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/models"
 )
 
 func TestAreaRegistry_Create_HappyPath(t *testing.T) {

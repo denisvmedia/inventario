@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/wk8/go-ordered-map/v2"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 type Registry[T any, P registry.PIDable[T]] struct {

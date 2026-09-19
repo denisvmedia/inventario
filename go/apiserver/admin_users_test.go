@@ -14,10 +14,10 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/internal/checkers"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/checkers"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/services"
 )
 
 // Block + unblock handler tests (#1747). Every AC in the issue spec

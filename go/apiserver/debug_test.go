@@ -10,9 +10,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/debug"
-	"github.com/denisvmedia/inventario/registry/memory"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/debug"
+	"go.5x5.cz/inventario/registry/memory"
 )
 
 // GET /debug moved to /admin/debug behind the back-office auth plane

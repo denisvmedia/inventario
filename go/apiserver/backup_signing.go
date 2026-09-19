@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-extras/errx"
 
-	"github.com/denisvmedia/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/backupsign"
 )
 
 // errBackupSignerUnavailable is returned if the public-key handler is reached

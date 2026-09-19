@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/denisvmedia/inventario/internal/textutils"
+	"go.5x5.cz/inventario/internal/textutils"
 )
 
 var NowFunc = time.Now

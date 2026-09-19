@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/lib/pq" // PostgreSQL driver
 
-	"github.com/denisvmedia/inventario/schema/bootstrap"
+	"go.5x5.cz/inventario/schema/bootstrap"
 )
 
 func getPostgresDSNorSkip(t *testing.T) string {

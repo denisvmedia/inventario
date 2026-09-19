@@ -17,14 +17,14 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/csrf"
-	"github.com/denisvmedia/inventario/internal/metrics"
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services"
-	"github.com/denisvmedia/inventario/services/oauth"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/csrf"
+	"go.5x5.cz/inventario/internal/metrics"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
+	"go.5x5.cz/inventario/services/oauth"
 )
 
 const (

@@ -10,10 +10,10 @@ import (
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/memblob"
 
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register fileblob driver
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
+	_ "go.5x5.cz/inventario/internal/fileblob" // register fileblob driver
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/memory"
 )
 
 func newTestFactorySet() *registry.FactorySet {

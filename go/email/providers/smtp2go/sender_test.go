@@ -10,8 +10,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/email/providers/smtp2go"
-	"github.com/denisvmedia/inventario/email/sender"
+	"go.5x5.cz/inventario/email/providers/smtp2go"
+	"go.5x5.cz/inventario/email/sender"
 )
 
 type smtp2goRecordedRequest struct {

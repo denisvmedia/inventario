@@ -3,8 +3,8 @@ package apiserver
 import (
 	"net/http"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/models"
 )
 
 // GetUserFromRequest extracts user from request context

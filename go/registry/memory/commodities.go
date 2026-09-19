@@ -11,9 +11,9 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // CommodityRegistryFactory creates CommodityRegistry instances with proper context

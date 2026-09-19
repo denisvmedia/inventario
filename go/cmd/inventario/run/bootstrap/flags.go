@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
 )
 
 // RegisterFlags populates cfg from the "run" config section (YAML/env) and

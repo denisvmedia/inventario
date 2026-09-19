@@ -6,10 +6,10 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services/notifications"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services/notifications"
 )
 
 // userCtx returns a context carrying `user` so the user-aware

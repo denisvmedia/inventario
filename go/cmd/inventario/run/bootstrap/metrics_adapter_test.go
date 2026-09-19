@@ -5,8 +5,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/run/bootstrap"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/cmd/inventario/run/bootstrap"
+	"go.5x5.cz/inventario/registry"
 )
 
 // TestSystemStatsToBusinessStats asserts the registry.SystemStats →

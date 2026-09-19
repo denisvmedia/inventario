@@ -9,7 +9,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/denisvmedia/inventario/internal/typekit"
+	"go.5x5.cz/inventario/internal/typekit"
 )
 
 type TxExecutor[T any] struct {

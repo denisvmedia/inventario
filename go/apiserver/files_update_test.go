@@ -10,9 +10,9 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/internal/checkers"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/checkers"
+	"go.5x5.cz/inventario/models"
 )
 
 // seedCommodityFile creates a file row attached to the first fixture commodity

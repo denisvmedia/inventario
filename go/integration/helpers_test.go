@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/denisvmedia/inventario/cmd/inventario/db/bootstrap/apply"
-	"github.com/denisvmedia/inventario/cmd/inventario/db/migrate/up"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/cmd/inventario/db/bootstrap/apply"
+	"go.5x5.cz/inventario/cmd/inventario/db/migrate/up"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
 )
 
 // setupFreshDatabase runs bootstrap and migration commands to set up a fresh database

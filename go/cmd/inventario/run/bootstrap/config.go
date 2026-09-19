@@ -6,7 +6,7 @@
 package bootstrap
 
 import (
-	"github.com/denisvmedia/inventario/internal/defaults"
+	"go.5x5.cz/inventario/internal/defaults"
 )
 
 // Config holds every flag read by `inventario run` and its subcommands. The

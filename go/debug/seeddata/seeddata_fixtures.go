@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/blobkeys"
 )
 
 // fixturesFS bundles a handful of small JPG photos and PDF documents.

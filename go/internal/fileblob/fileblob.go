@@ -77,9 +77,9 @@ import (
 	"gocloud.dev/blob/driver"
 	"gocloud.dev/gcerrors"
 
-	"github.com/denisvmedia/inventario/internal/fileblob/escape"
-	"github.com/denisvmedia/inventario/internal/fileblob/fileio"
-	"github.com/denisvmedia/inventario/internal/fileblob/gcerr"
+	"go.5x5.cz/inventario/internal/fileblob/escape"
+	"go.5x5.cz/inventario/internal/fileblob/fileio"
+	"go.5x5.cz/inventario/internal/fileblob/gcerr"
 )
 
 var memFS = afero.NewMemMapFs()

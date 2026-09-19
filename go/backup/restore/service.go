@@ -3,10 +3,10 @@ package restore
 import (
 	"context"
 
-	"github.com/denisvmedia/inventario/backup/restore/processor"
-	"github.com/denisvmedia/inventario/internal/backupsign"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/backup/restore/processor"
+	"go.5x5.cz/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 // RestoreService handles backup restore operations with different strategies.

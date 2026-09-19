@@ -8,8 +8,8 @@ import (
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // TagMeta carries the per-tag usage breakdown returned alongside detail

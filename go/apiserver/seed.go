@@ -8,8 +8,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
-	"github.com/denisvmedia/inventario/debug/seeddata"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/debug/seeddata"
+	"go.5x5.cz/inventario/registry"
 )
 
 // envSeedSystemAdminFixture is the opt-in env var that lets the seed

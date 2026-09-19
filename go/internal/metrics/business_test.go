@@ -9,7 +9,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/denisvmedia/inventario/internal/metrics"
+	"go.5x5.cz/inventario/internal/metrics"
 )
 
 func TestBusinessCollector_CollectOnceSetsGauges(t *testing.T) {

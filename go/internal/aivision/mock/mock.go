@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/denisvmedia/inventario/internal/aivision"
+	"go.5x5.cz/inventario/internal/aivision"
 )
 
 // Name is the stable identifier this provider reports for the audit

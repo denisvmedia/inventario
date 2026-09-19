@@ -10,8 +10,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/email/providers/sendgrid"
-	"github.com/denisvmedia/inventario/email/sender"
+	"go.5x5.cz/inventario/email/providers/sendgrid"
+	"go.5x5.cz/inventario/email/sender"
 )
 
 type sendgridRecordedRequest struct {

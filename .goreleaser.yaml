@@ -17,9 +17,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/denisvmedia/inventario/internal/version.Version={{.Version}}
-      - -X github.com/denisvmedia/inventario/internal/version.Commit={{.Commit}}
-      - -X github.com/denisvmedia/inventario/internal/version.Date={{.Date}}
+      - -X go.5x5.cz/inventario/internal/version.Version={{.Version}}
+      - -X go.5x5.cz/inventario/internal/version.Commit={{.Commit}}
+      - -X go.5x5.cz/inventario/internal/version.Date={{.Date}}
     env:
       - CGO_ENABLED=0
     goos:

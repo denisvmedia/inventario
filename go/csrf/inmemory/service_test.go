@@ -8,8 +8,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/csrf"
-	"github.com/denisvmedia/inventario/csrf/inmemory"
+	"go.5x5.cz/inventario/csrf"
+	"go.5x5.cz/inventario/csrf/inmemory"
 )
 
 // Compile-time interface check.

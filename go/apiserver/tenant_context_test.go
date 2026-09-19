@@ -7,9 +7,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/models"
 )
 
 func TestJWTTenantResolver_ResolveTenant(t *testing.T) {

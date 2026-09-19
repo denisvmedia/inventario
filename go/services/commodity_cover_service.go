@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // CoverSource enumerates the resolved cover photo's provenance.

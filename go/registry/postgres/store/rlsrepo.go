@@ -9,7 +9,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/denisvmedia/inventario/models"
+	"go.5x5.cz/inventario/models"
 )
 
 type RLSRepository[T any, P ptrTenantAware[T]] struct {

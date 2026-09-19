@@ -13,11 +13,11 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/internal/aivision"
-	"github.com/denisvmedia/inventario/internal/aivision/mock"
-	"github.com/denisvmedia/inventario/internal/checkers"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/aivision"
+	"go.5x5.cz/inventario/internal/aivision/mock"
+	"go.5x5.cz/inventario/internal/checkers"
+	"go.5x5.cz/inventario/services"
 )
 
 // buildScanMultipart returns the body + content-type for a scan request

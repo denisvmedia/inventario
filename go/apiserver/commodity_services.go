@@ -11,10 +11,10 @@ import (
 	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
 
-	"github.com/denisvmedia/inventario/jsonapi"
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/jsonapi"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 const commodityServiceCtxKey ctxValueKey = "commodity_service"

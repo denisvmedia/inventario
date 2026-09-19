@@ -14,13 +14,13 @@ import (
 	qt "github.com/frankban/quicktest"
 	"gocloud.dev/blob"
 
-	"github.com/denisvmedia/inventario/appctx"
-	"github.com/denisvmedia/inventario/internal/blobkeys"
-	_ "github.com/denisvmedia/inventario/internal/fileblob" // register the file:// driver
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/registry"
-	"github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/blobkeys"
+	_ "go.5x5.cz/inventario/internal/fileblob" // register the file:// driver
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services"
 )
 
 // The orphan-file GC (#2237) DELETES USER DATA. The bar is not "does it delete

@@ -23,8 +23,8 @@ import (
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/denisvmedia/inventario/models"
-	"github.com/denisvmedia/inventario/secrets"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/secrets"
 )
 
 // backupCodeBcryptCost is the cost factor used by GenerateBackupCodes.

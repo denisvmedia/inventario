@@ -9,7 +9,7 @@ import (
 
 	"github.com/jellydator/validation"
 
-	"github.com/denisvmedia/inventario/models/rules"
+	"go.5x5.cz/inventario/models/rules"
 )
 
 var (

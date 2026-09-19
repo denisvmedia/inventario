@@ -18,11 +18,11 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/spf13/cobra"
 
-	"github.com/denisvmedia/inventario/cmd/internal/command"
-	"github.com/denisvmedia/inventario/cmd/inventario/backoffice/mfa/internal"
-	"github.com/denisvmedia/inventario/cmd/inventario/shared"
-	"github.com/denisvmedia/inventario/services"
-	"github.com/denisvmedia/inventario/services/backoffice"
+	"go.5x5.cz/inventario/cmd/internal/command"
+	"go.5x5.cz/inventario/cmd/inventario/backoffice/mfa/internal"
+	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/services"
+	"go.5x5.cz/inventario/services/backoffice"
 )
 
 // Config carries the regenerate-backup-codes command's flags.

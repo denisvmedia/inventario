@@ -17,10 +17,10 @@ import (
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
-	"github.com/denisvmedia/inventario/apiserver"
-	"github.com/denisvmedia/inventario/models"
-	memreg "github.com/denisvmedia/inventario/registry/memory"
-	"github.com/denisvmedia/inventario/services"
+	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/models"
+	memreg "go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services"
 )
 
 // recordingMagicLinkEmailService records every SendMagicLinkEmail call so the

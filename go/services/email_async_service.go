@@ -12,10 +12,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/denisvmedia/inventario/appctx"
-	emailqueue "github.com/denisvmedia/inventario/email/queue"
-	mailsender "github.com/denisvmedia/inventario/email/sender"
-	"github.com/denisvmedia/inventario/internal/metrics"
+	"go.5x5.cz/inventario/appctx"
+	emailqueue "go.5x5.cz/inventario/email/queue"
+	mailsender "go.5x5.cz/inventario/email/sender"
+	"go.5x5.cz/inventario/internal/metrics"
 )
 
 // AsyncEmailService is the orchestration layer between business flows and provider

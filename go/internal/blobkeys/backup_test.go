@@ -6,7 +6,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/denisvmedia/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/blobkeys"
 )
 
 func TestBuildBackupBlobKey(t *testing.T) {
