@@ -56,10 +56,11 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
-      - '^ci:'
-      - '^build:'
+      # Conventional-commit scopes are optional, and most of this repo's
+      # commits carry one (`build(deps):`, `docs(k8s):`), so an anchored
+      # `^build:` matches almost nothing. The alternation covers the bare
+      # form, a scope, and the breaking-change `!`.
+      - '^(build|chore|ci|docs|test|style|refactor)(\([^)]*\))?!?:'
       - Merge pull request
       - Merge branch
       - go mod tidy
@@ -77,15 +78,21 @@ release:
     
     ## Installation
     
-    ### Using pre-built binaries
+    ### Pre-built binaries
     
-    Download the appropriate binary for your platform from the assets below.
+    Download the archive for your platform from the assets below and verify it
+    against `inventario-{{ .Version }}-checksums.txt`.
     
-    ### Using Go
+    ### Container image
     
     ```bash
-    go install github.com/denisvmedia/inventario@v{{ .Version }}
+    docker pull ghcr.io/denisvmedia/inventario:v{{ .Version }}
     ```
+    
+    ### Kubernetes
+    
+    See [PRODUCTION.md](https://github.com/denisvmedia/inventario/blob/v{{ .Version }}/PRODUCTION.md)
+    for the Helm chart and a worked `values-prod.yaml`.
 
 source:
   enabled: true
