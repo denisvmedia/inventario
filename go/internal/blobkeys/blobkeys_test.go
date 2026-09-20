@@ -82,14 +82,14 @@ func TestBuildThumbnailBlobKey(t *testing.T) {
 
 func TestBuildExportBlobKey(t *testing.T) {
 	c := qt.New(t)
-	got := blobkeys.BuildExportBlobKey("tenant-a", "full_database", "20260523_120000")
-	c.Assert(got, qt.Equals, "t/tenant-a/exports/export_full_database_20260523_120000.xml")
+	got := blobkeys.BuildExportBlobKey("tenant-a", "full_database", "export-1")
+	c.Assert(got, qt.Equals, "t/tenant-a/exports/export_full_database_export-1.xml")
 }
 
 func TestBuildExportBlobKey_LowercasesType(t *testing.T) {
 	c := qt.New(t)
-	got := blobkeys.BuildExportBlobKey("tenant-a", "COMMODITIES", "20260523_120000")
-	c.Assert(got, qt.Equals, "t/tenant-a/exports/export_commodities_20260523_120000.xml")
+	got := blobkeys.BuildExportBlobKey("tenant-a", "COMMODITIES", "export-1")
+	c.Assert(got, qt.Equals, "t/tenant-a/exports/export_commodities_export-1.xml")
 }
 
 // A restore blob has NO owning row of any kind (#2121), so nothing would ever

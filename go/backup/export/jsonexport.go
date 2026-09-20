@@ -92,8 +92,7 @@ func (s *ExportService) generateExport(ctx context.Context, export models.Export
 		return "", nil, errxtrace.Wrap("failed to stat temp payload", err)
 	}
 
-	timestamp := time.Now().Format("20060102_150405")
-	blobKey := blobkeys.BuildBackupBlobKey(tenantID, string(export.Type), timestamp)
+	blobKey := blobkeys.BuildBackupBlobKey(tenantID, string(export.Type), exportArchiveID(export))
 
 	if err := s.writeContainerToBlob(ctx, bucket, blobKey, sig, tmp, info.Size()); err != nil {
 		return "", nil, err

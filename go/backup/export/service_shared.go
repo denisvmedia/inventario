@@ -11,6 +11,8 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
+	"github.com/google/uuid"
+
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/models"
@@ -56,6 +58,21 @@ type ExportService struct {
 	factorySet     *registry.FactorySet
 	uploadLocation string
 	signer         *backupsign.Signer
+}
+
+// exportArchiveID returns the value that makes an archive's blob key unique.
+//
+// The export row's id is the natural choice: one row, one archive, and a
+// retry of that row reuses the key rather than orphaning the partial object
+// the failed attempt left behind. A row reaching here without an id means a
+// caller drove generateExport directly (tests do), and a random id is still
+// better than the colliding timestamp this replaced (#2252) — it just gives
+// up the retry-overwrite property, which those callers do not exercise.
+func exportArchiveID(export models.Export) string {
+	if export.ID != "" {
+		return export.ID
+	}
+	return uuid.New().String()
 }
 
 // NewExportService creates a new export service. The signer is consumed by the

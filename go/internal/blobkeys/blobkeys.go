@@ -130,30 +130,47 @@ func BuildThumbnailBlobKey(tenantID, fileID, size string) string {
 }
 
 // BuildExportBlobKey produces the canonical blob key for a generated
-// export bundle: `t/<tenant>/exports/export_<type>_<timestamp>.xml`.
+// export bundle: `t/<tenant>/exports/export_<type>_<exportID>.xml`.
 // `exportType` is lowercased so the resulting key is stable across the
 // casing used by callers.
-func BuildExportBlobKey(tenantID, exportType, timestamp string) string {
+//
+// See BuildBackupBlobKey for why the key is keyed on the export row's id
+// rather than on a timestamp.
+func BuildExportBlobKey(tenantID, exportType, exportID string) string {
 	return fmt.Sprintf("%s%s/%s/export_%s_%s.xml",
 		Prefix, tenantID, ExportsSegment,
 		sanitizeSegment(strings.ToLower(exportType)),
-		sanitizeSegment(timestamp),
+		sanitizeSegment(exportID),
 	)
 }
 
 // BuildBackupBlobKey produces the canonical blob key for a generated
 // signed `.inb` backup archive:
-// `t/<tenant>/exports/backup_<type>_<timestamp>.inb` (issue #534).
+// `t/<tenant>/exports/backup_<type>_<exportID>.inb` (issue #534).
+//
+// `exportID` MUST identify one export row. The key used to end in a
+// second-granularity timestamp, which is not a unique value: two exports
+// of the same type in one tenant that finished within the same second —
+// a user double-clicking, or two users both running a full export, with
+// MaxConcurrentExports defaulting to 3 — computed the SAME key, and the
+// writer has no existence check, so one archive silently overwrote the
+// other's bytes. Both rows then pointed at one blob and one of them
+// described bytes that no longer existed (#2252).
+//
+// Dropping the timestamp also makes a retry self-healing: the retry of a
+// failed export recomputes the same key and overwrites whatever partial
+// object the failed attempt left, instead of orphaning it under a key
+// nothing references. The human-readable timestamp lives on the row.
 //
 // It mirrors BuildExportBlobKey's layout (same `exports/` subfolder,
-// same lowercase-type + timestamp shape) but uses the `backup_` prefix
-// and `.inb` extension so the new signed archives sit alongside — and
-// are distinguishable from — the legacy XML bundles.
-func BuildBackupBlobKey(tenantID, exportType, timestamp string) string {
+// same lowercase-type shape) but uses the `backup_` prefix and `.inb`
+// extension so the signed archives sit alongside — and are
+// distinguishable from — the legacy XML bundles.
+func BuildBackupBlobKey(tenantID, exportType, exportID string) string {
 	return fmt.Sprintf("%s%s/%s/backup_%s_%s.inb",
 		Prefix, tenantID, ExportsSegment,
 		sanitizeSegment(strings.ToLower(exportType)),
-		sanitizeSegment(timestamp),
+		sanitizeSegment(exportID),
 	)
 }
 
