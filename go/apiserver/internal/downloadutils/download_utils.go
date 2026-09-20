@@ -69,13 +69,15 @@ func CopyFileInChunks(w http.ResponseWriter, r io.Reader) error {
 
 // SetStreamingHeaders sets HTTP headers optimized for streaming downloads and preventing browser preloading.
 // It sets the following headers:
-// - Content-Type: specified content type
-// - Content-Length: file size for proper download progress indication
-// - Cache-Control: prevents browser caching of large files
-// - Pragma: legacy cache control for older browsers
-// - Expires: ensures immediate expiration
-// - Accept-Ranges: indicates support for range requests
-// - Content-Disposition: sets attachment filename when provided
+//   - Content-Type: specified content type
+//   - Content-Length: file size for proper download progress indication
+//   - Cache-Control: prevents browser caching of large files
+//   - Pragma: legacy cache control for older browsers
+//   - Expires: ensures immediate expiration
+//   - Accept-Ranges: indicates support for range requests
+//   - X-Content-Type-Options: nosniff, so no file-serving response depends on
+//     its disposition to stop the browser re-interpreting the declared type
+//   - Content-Disposition: sets attachment filename when provided
 func SetStreamingHeaders(w http.ResponseWriter, contentType string, fileSize int64, filename string) {
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
@@ -83,6 +85,7 @@ func SetStreamingHeaders(w http.ResponseWriter, contentType string, fileSize int
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
 	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 
 	if filename != "" {
 		attachmentHeader := mimekit.FormatContentDisposition(filename)

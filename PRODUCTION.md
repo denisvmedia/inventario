@@ -247,6 +247,11 @@ than one replica (set `persistence.enabled=false`).
   - API key → Secret key `INVENTARIO_RUN_SMTP2GO_API_KEY` (Helm `secrets.smtp2goApiKey`).
 - [ ] (Optional) `email.replyTo`. Leave `email.logUrls=false` in production (tokens in
   logs).
+- [ ] `email.supportEmail=<inbox you read>`. This is the destination for the in-app
+  "Contact support" form, and it is the only help channel the app offers. Left empty,
+  `POST /api/v1/feedback` answers with a typed `feedback.not_configured` 503 and the
+  dialog tells the user feedback is not set up — so a confused first user has nowhere
+  to go.
 - [ ] **Alternative — SMTP relay:** if you prefer SMTP over the HTTP API, set
   `email.provider=smtp`, `email.smtp.host=mail.smtp2go.com`, `email.smtp.port=587`
   (or `2525`), `email.smtp.useTls=true` (our provider uses STARTTLS — do NOT use the

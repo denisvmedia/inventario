@@ -233,6 +233,10 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 
 	user, err := api.userRegistry.GetByEmail(r.Context(), tenantID, req.Email)
 	if err != nil {
+		// Unknown email and wrong password answer identically, but only the
+		// second one would have run bcrypt. Spend the same work here so the
+		// pair stays indistinguishable in time as well as in body (#2246).
+		models.EqualizePasswordTiming(req.Password)
 		slog.Warn("Failed login attempt: user not found", "email", req.Email, "error", err)
 		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		errMsg := "user not found"

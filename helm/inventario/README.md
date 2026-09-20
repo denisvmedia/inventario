@@ -260,6 +260,7 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `persistence.size` | `10Gi` | Resize the uploads PVC for local file storage. |
 | `email.provider` | `stub` | Switch to `smtp`, `sendgrid`, `ses`, `mandrill`, or `mailchimp` for real email. |
 | `email.from` | `""` | Required for real email delivery. |
+| `email.supportEmail` | `""` | Destination for the in-app "Contact support" form — the only help channel the app offers. Empty leaves `POST /api/v1/feedback` answering with a typed `feedback.not_configured` 503 and the dialog saying feedback is not set up. |
 | `aivision.provider` | `none` | AI photo-scan provider: `none` (off, 503), `mock` (canned), `anthropic`, or `openai`. A real provider **requires** the matching `secrets.aiVision*ApiKey`, or the apiserver fails to boot. |
 | `aivision.anthropicModel` / `aivision.openaiModel` | `claude-sonnet-4-6` / `gpt-4o` | Model id used for the selected provider. |
 | `secrets.aiVisionAnthropicApiKey` / `secrets.aiVisionOpenaiApiKey` | `""` | Provider API key; required for the matching `aivision.provider` unless supplied via `secrets.existingSecret`. |
@@ -275,6 +276,7 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `metrics.podMonitor.enabled` | `false` | Scrape each worker pod via a `PodMonitor`. Needed in split mode — the worker Service is headless, so a ServiceMonitor cannot reach its endpoints and the business/email gauges are never collected. Renders nothing in combined mode. |
 | `metrics.prometheusRule.enabled` | `false` | Ship the recording rules and the three alerts (`InventarioTargetDown`, `InventarioHighErrorRate`, `InventarioHighLatencyP95`) as a `PrometheusRule`. Thresholds under `metrics.prometheusRule.*`. |
 | `metrics.grafanaDashboard.enabled` | `false` | Publish the "Inventario / Overview" dashboard as a ConfigMap for Grafana's dashboard sidecar. Adjust `.label` / `.labelValue` if your sidecar selects a different label. |
+| `dbRetry.attempts` / `dbRetry.intervalSeconds` | `60` / `5` | Shared retry envelope for everything that waits on the database before the app can serve: the `migrate` init container and the init-data Job. Raise on a platform whose database takes longer to accept connections (a managed instance electing a primary, a Service whose endpoints are slow to propagate). The Jobs' own `activeDeadlineSeconds` still caps the wall clock. |
 | `setupJob.argocdMode` | `false` | Enable for ArgoCD-managed installs to use the sync-wave layout that supports in-place upgrades with new migrations. See [ArgoCD-managed migrations](#argocd-managed-migrations). |
 | `setupJob.bootstrap.enabled` | `true` | Disable if DB bootstrap/role management is handled outside Helm. |
 | `setupJob.bootstrap.superuserDsn` | `""` | Provide when bootstrap needs elevated DB privileges. |

@@ -339,6 +339,46 @@ jobs:
             exit 1
           fi
 
+      - name: Verify every database waiter shares one retry budget
+        run: |
+          set -euo pipefail
+
+          # The `migrate` init container and the init-data Job wait on the
+          # same database. When their budgets diverged, a stall the init
+          # container rode out failed the Job alone and took the whole
+          # `helm install --wait-for-jobs` with it (#2243). Pin that they
+          # render from dbRetry.* so they cannot drift apart again, and that
+          # the migrate loop still stops on a dirty revision rather than
+          # spending the budget on a decided outcome (#2416).
+          # Both topologies render two waiters, from different templates:
+          # argocdMode splits them across the Deployment's migrate init
+          # container and the init-data Job; the default mode keeps both
+          # inside the setup Job.
+          for mode in true false; do
+            helm template inventario helm/inventario \
+              --set demo.postgresql.enabled=true \
+              --set setupJob.argocdMode=$mode \
+              --set setupJob.initData.adminPassword=demo-secret \
+              --set dbRetry.attempts=42 \
+              --set dbRetry.intervalSeconds=7 \
+              > /tmp/inventario-dbretry-render.yaml
+
+            waiters=$(grep -c 'attempts=42' /tmp/inventario-dbretry-render.yaml)
+            if [ "$waiters" -ne 2 ]; then
+              echo "argocdMode=$mode: expected 2 database waiters on the shared budget, found $waiters." >&2
+              grep -n 'attempts=' /tmp/inventario-dbretry-render.yaml >&2
+              exit 1
+            fi
+            grep -q 'interval=7' /tmp/inventario-dbretry-render.yaml
+            grep -q 'recorded as dirty' /tmp/inventario-dbretry-render.yaml
+            # No loop may keep the old hardcoded budget.
+            if grep -q -- '-le 15' /tmp/inventario-dbretry-render.yaml; then
+              echo "argocdMode=$mode: a retry loop still hardcodes 15 attempts." >&2
+              grep -n -- '-le 15' /tmp/inventario-dbretry-render.yaml >&2
+              exit 1
+            fi
+          done
+
       - name: Render chart with setupJob.argocdMode (combined + demo)
         run: |
           set -euo pipefail

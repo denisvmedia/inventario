@@ -547,3 +547,25 @@ func refreshCookieSet(resp *httptest.ResponseRecorder) bool {
 	}
 	return false
 }
+
+// TestMagicLinkVerify_DisabledAccountDoesNotBurnTheLink is the regression test
+// for #2131. The handler claimed the one-time token before checking whether the
+// account was active, so a refusal the user had no part in consumed their link
+// and the next click reported it invalid.
+func TestMagicLinkVerify_DisabledAccountDoesNotBurnTheLink(t *testing.T) {
+	c := qt.New(t)
+	user := makeMagicLinkUser(true)
+	f := newMagicLinkFixture(user)
+	token := seedMagicLinkToken(t, f, user, time.Now().Add(15*time.Minute))
+
+	// Disabled after the link was issued.
+	user.IsActive = false
+
+	resp := magicLinkRequest(t, f.router, "/auth/magic-link/verify", map[string]string{"token": token})
+	c.Assert(resp.Code, qt.Equals, http.StatusForbidden)
+
+	mlt, err := f.magicLinkReg.GetByToken(t.Context(), token)
+	c.Assert(err, qt.IsNil)
+	c.Assert(mlt.IsClaimed(), qt.IsFalse,
+		qt.Commentf("a 403 must leave the token usable once the account is re-enabled"))
+}

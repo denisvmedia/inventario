@@ -2,7 +2,9 @@ package smtp
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"mime"
 	"net"
@@ -133,8 +135,28 @@ func (s *Sender) Send(ctx context.Context, message sender.Message) error {
 	return nil
 }
 
+// mimeBoundary returns a fresh multipart boundary.
+//
+// The bodies are written into the MIME structure unescaped, so a body that
+// contained the boundary string on its own line would close the multipart
+// early or forge a part. Both bodies carry user-influenced text — a feedback
+// message, a commodity name in a reminder — so the boundary must not be
+// guessable. 128 bits from crypto/rand removes the guessing surface; the
+// timestamp this replaced only required predicting a nanosecond (#2143).
+//
+// crypto/rand.Read does not fail on any supported platform; a panic here
+// would take down a worker mid-send, so the impossible branch falls back to
+// a timestamp rather than aborting delivery.
+func mimeBoundary() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return fmt.Sprintf("inventario-%d", time.Now().UnixNano())
+	}
+	return "inventario-" + hex.EncodeToString(raw[:])
+}
+
 func buildMIMEMessage(message sender.Message) []byte {
-	boundary := fmt.Sprintf("inventario-%d", time.Now().UnixNano())
+	boundary := mimeBoundary()
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "From: %s\r\n", sanitizeHeader(message.From))

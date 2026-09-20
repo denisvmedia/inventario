@@ -194,21 +194,24 @@ func (w *ThumbnailGenerationWorker) Start(ctx context.Context) {
 
 // Stop stops the thumbnail generation worker
 func (w *ThumbnailGenerationWorker) Stop() {
+	// Signal under the lock, wait outside it: holding mu across wg.Wait would
+	// block IsRunning and a concurrent Stop for the duration of the drain.
 	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	if !w.isRunning || w.stopped {
+		w.mu.Unlock()
 		return
 	}
-
 	w.stopped = true
 	close(w.stopCh)
 	w.isRunning = false
+	w.mu.Unlock()
 
-	go func() {
-		w.wg.Wait()
-		slog.Info("Thumbnail generation worker stopped")
-	}()
+	// Blocks, like every other worker in this package. Detaching the wait
+	// returned before the in-flight jobs finished, and those run under
+	// context.WithoutCancel — so the shutdown hook completed, the DB pool
+	// closed, and the jobs went on querying a closed pool (#2131).
+	w.wg.Wait()
+	slog.Info("Thumbnail generation worker stopped")
 }
 
 // IsRunning returns whether the worker is currently running

@@ -5,9 +5,14 @@ if [ ! -f /app/state/data-initialized ]; then
   echo "=== RUNNING INITIAL DATA SETUP ==="
   echo "Database DSN: [configured]"
 
-  # Wait for database to be ready with retry mechanism
-  echo "Waiting for database to be ready for initial data setup..."
-  for i in $(seq 1 15); do
+  # Wait for database to be ready with retry mechanism. The budget comes from
+  # the chart (dbRetry.*) so this Job rides out the same stall the `migrate`
+  # init container does; when they diverged, a transient network stall every
+  # other component survived failed this Job alone (#2243).
+  ATTEMPTS="${INVENTARIO_DB_RETRY_ATTEMPTS:-60}"
+  INTERVAL="${INVENTARIO_DB_RETRY_INTERVAL_SECONDS:-5}"
+  echo "Waiting for database to be ready for initial data setup (up to $ATTEMPTS attempts, ${INTERVAL}s apart)..."
+  for i in $(seq 1 "$ATTEMPTS"); do
     if inventario db migrate data \
       --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
       --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
@@ -71,12 +76,12 @@ if [ ! -f /app/state/data-initialized ]; then
       echo "Initial data setup completed successfully"
       exit 0
     else
-      echo "Attempt $i failed, retrying in 2 seconds..."
-      sleep 2
+      echo "Attempt $i/$ATTEMPTS failed, retrying in ${INTERVAL}s..."
+      sleep "$INTERVAL"
     fi
   done
 
-  echo "Failed to setup initial data after 15 attempts"
+  echo "Failed to setup initial data after $ATTEMPTS attempts"
   exit 1
 else
   echo "Initial data already setup, skipping..."

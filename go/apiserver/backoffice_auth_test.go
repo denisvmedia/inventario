@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -711,22 +712,135 @@ func TestBackofficeAuth_Refresh_RotatesRefreshToken(t *testing.T) {
 	c.Assert(rotatedCookie, qt.IsNotNil)
 	c.Assert(rotatedCookie.Value, qt.Not(qt.Equals), originalCookie.Value)
 
-	// Second refresh with the ORIGINAL cookie: must fail with 401
-	// because the original row is now revoked. This is the
-	// replay-after-rotation defence: a stolen cookie stays valid only
-	// until the legitimate operator next refreshes.
-	replayReq := httptest.NewRequest("POST", "/refresh", nil)
-	replayReq.AddCookie(originalCookie)
-	replayRec := httptest.NewRecorder()
-	router.ServeHTTP(replayRec, replayReq)
-	c.Assert(replayRec.Code, qt.Equals, http.StatusUnauthorized)
-
-	// The rotated cookie still works (third call uses the new value).
+	// The rotated cookie works (second call uses the new value). Checked
+	// BEFORE any replay: since #2168 a replay of the original revokes the
+	// whole session family, so ordering these the other way round would
+	// assert the cascade failed rather than that rotation succeeded. The
+	// replay itself is covered by
+	// TestBackofficeAuth_Refresh_ReuseDetectionRevokesAllSessions.
 	thirdReq := httptest.NewRequest("POST", "/refresh", nil)
 	thirdReq.AddCookie(rotatedCookie)
 	thirdRec := httptest.NewRecorder()
 	router.ServeHTTP(thirdRec, thirdReq)
 	c.Assert(thirdRec.Code, qt.Equals, http.StatusOK)
+}
+
+// TestBackofficeAuth_Refresh_ReuseDetectionRevokesAllSessions pins the #2168
+// theft cascade on the operator plane. Replaying a cookie the session has
+// already rotated away from can only mean a copy of it exists, so every
+// session the operator holds is revoked — including the cookie the
+// legitimate browser is currently using. The 401 body is byte-identical to
+// the plain-expired branch so it tells the replayer nothing, and exactly one
+// audit row records the event.
+func TestBackofficeAuth_Refresh_ReuseDetectionRevokesAllSessions(t *testing.T) {
+	c := qt.New(t)
+	router, bo, rt, audit := newBackofficeAuthRouter(t)
+	user := seedBackofficeUser(t, bo, "ops@example.com", "S3cretPass!")
+
+	originalCookie := backofficeLoginCookie(t, router)
+
+	// Rotate once.
+	refreshReq := httptest.NewRequest("POST", "/refresh", nil)
+	refreshReq.AddCookie(originalCookie)
+	refreshRec := httptest.NewRecorder()
+	router.ServeHTTP(refreshRec, refreshReq)
+	c.Assert(refreshRec.Code, qt.Equals, http.StatusOK)
+	rotatedCookie := backofficeRefreshCookie(refreshRec)
+	c.Assert(rotatedCookie, qt.IsNotNil)
+
+	// Replay the consumed original: theft.
+	replayReq := httptest.NewRequest("POST", "/refresh", nil)
+	replayReq.AddCookie(originalCookie)
+	replayRec := httptest.NewRecorder()
+	router.ServeHTTP(replayRec, replayReq)
+	c.Assert(replayRec.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(strings.TrimSpace(replayRec.Body.String()), qt.Equals, "Refresh token expired or revoked")
+
+	// Cascade: the legitimate rotated row is revoked too. Asserted through
+	// the registry rather than by replaying the cookie — a replay would
+	// itself be a second reuse event and inflate the audit count.
+	rotatedRow, err := rt.GetByHash(context.Background(), hashCookie(rotatedCookie.Value))
+	c.Assert(err, qt.IsNil)
+	c.Assert(rotatedRow.RevokedAt, qt.IsNotNil)
+	c.Assert(rotatedRow.BackofficeUserID, qt.Equals, user.ID)
+
+	logs, err := audit.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	reuseRows := 0
+	for _, l := range logs {
+		if l.Action == "backoffice.refresh_token_reuse_detected" {
+			reuseRows++
+			c.Assert(l.Success, qt.IsFalse)
+		}
+	}
+	c.Assert(reuseRows, qt.Equals, 1)
+}
+
+// TestBackofficeAuth_Refresh_ExpiredNoCascade pins the other side of #2168: a
+// row that merely ran out of time is not evidence of anything, so the
+// operator's other sessions must survive and no reuse audit row is written.
+func TestBackofficeAuth_Refresh_ExpiredNoCascade(t *testing.T) {
+	c := qt.New(t)
+	router, bo, rt, audit := newBackofficeAuthRouter(t)
+	user := seedBackofficeUser(t, bo, "ops@example.com", "S3cretPass!")
+
+	// A healthy session the cascade must not touch.
+	healthyCookie := backofficeLoginCookie(t, router)
+
+	// An expired-but-never-revoked row for the same operator.
+	_, err := rt.Create(context.Background(), models.BackofficeRefreshToken{
+		BackofficeUserID: user.ID,
+		TokenHash:        hashCookie("expired-raw-token"),
+		ExpiresAt:        time.Now().Add(-time.Hour),
+	})
+	c.Assert(err, qt.IsNil)
+
+	req := httptest.NewRequest("POST", "/refresh", nil)
+	// #nosec G124 -- test cookie attached to an httptest.Request; not transmitted over the wire.
+	req.AddCookie(&http.Cookie{Name: "backoffice_refresh_token", Value: "expired-raw-token"})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	c.Assert(rec.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(strings.TrimSpace(rec.Body.String()), qt.Equals, "Refresh token expired or revoked")
+
+	healthyRow, err := rt.GetByHash(context.Background(), hashCookie(healthyCookie.Value))
+	c.Assert(err, qt.IsNil)
+	c.Assert(healthyRow.RevokedAt, qt.IsNil)
+
+	logs, err := audit.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	for _, l := range logs {
+		c.Assert(l.Action, qt.Not(qt.Equals), "backoffice.refresh_token_reuse_detected")
+	}
+}
+
+// backofficeLoginCookie signs the seeded operator in and returns the
+// refresh cookie the login handed out.
+func backofficeLoginCookie(t *testing.T, router http.Handler) *http.Cookie {
+	t.Helper()
+	c := qt.New(t)
+
+	body, _ := json.Marshal(apiserver.BackofficeLoginRequest{Email: "ops@example.com", Password: "S3cretPass!"})
+	req := httptest.NewRequest("POST", "/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	c.Assert(rec.Code, qt.Equals, http.StatusOK)
+
+	cookie := backofficeRefreshCookie(rec)
+	c.Assert(cookie, qt.IsNotNil)
+	return cookie
+}
+
+// backofficeRefreshCookie picks the back-office refresh cookie out of a
+// response, or nil when it carries none.
+func backofficeRefreshCookie(rec *httptest.ResponseRecorder) *http.Cookie {
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "backoffice_refresh_token" {
+			return cookie
+		}
+	}
+	return nil
 }
 
 // TestBackofficeAuth_Refresh_RejectsTenantRefreshCookie pins the

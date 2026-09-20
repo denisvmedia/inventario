@@ -34,6 +34,19 @@ interface LocationReportProps {
   generatedDate: string
 }
 
+// The BE marshals non-pointer decimals, so an unpriced item arrives as "0"
+// rather than undefined — the `!== undefined` guard was never false and every
+// such item rendered as a formatted zero (#2132).
+function priceOrNoValue(
+  raw: unknown,
+  currency: string,
+  noValue: string,
+  format: (n: number, c: string) => string
+): string {
+  const n = Number(raw)
+  return Number.isFinite(n) && n !== 0 ? format(n, currency) : noValue
+}
+
 export function LocationReport({
   locationName,
   locationIcon,
@@ -109,14 +122,13 @@ export function LocationReport({
           imageSize,
           item.name ?? ""
         )
-        const purchase =
-          item.converted_original_price !== undefined
-            ? formatCurrency(Number(item.converted_original_price), groupCurrency)
-            : noValue
-        const value =
-          item.current_price !== undefined
-            ? formatCurrency(Number(item.current_price), groupCurrency)
-            : noValue
+        const purchase = priceOrNoValue(
+          item.converted_original_price,
+          groupCurrency,
+          noValue,
+          formatCurrency
+        )
+        const value = priceOrNoValue(item.current_price, groupCurrency, noValue, formatCurrency)
         return (
           <div
             key={item.id}

@@ -6,11 +6,11 @@ import { ArrowRight, CheckCircle2, Clock, XCircle } from "lucide-react"
 import { AuthLayout } from "@/components/auth/AuthLayout"
 import { Button } from "@/components/ui/button"
 import { useVerifyEmail } from "@/features/auth/hooks"
-import { HttpError } from "@/lib/http"
+import { HttpError, NetworkError } from "@/lib/http"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { cn } from "@/lib/utils"
 
-type VerifyState = "verifying" | "success" | "expired" | "invalid" | "missing"
+type VerifyState = "verifying" | "success" | "expired" | "invalid" | "transient" | "missing"
 
 // Heuristic: distinguish "expired" from "generic invalid" so the page can
 // offer "request new link" instead of just "back to sign in". The backend
@@ -19,11 +19,16 @@ type VerifyState = "verifying" | "success" | "expired" | "invalid" | "missing"
 // This only works because the unknown-token message no longer says "expired"
 // too — it did, which classified every bad token as expired (#2096). Keep the
 // two backend messages disjoint on that word.
-function classifyError(err: unknown): "expired" | "invalid" {
+function classifyError(err: unknown): "expired" | "invalid" | "transient" {
+  // A request that never got an answer is not a verdict on the link. It used
+  // to land in "invalid", telling the user their link was bad when the
+  // network was (#2132).
+  if (err instanceof NetworkError) return "transient"
   if (err instanceof HttpError) {
     const data = err.data
     const text = typeof data === "string" ? data : ""
     if (/expir/i.test(text)) return "expired"
+    if (err.status >= 500) return "transient"
   }
   return "invalid"
 }
@@ -174,6 +179,15 @@ function pickConfig(
         iconColor: "text-destructive",
         title: t("auth:verify.invalidTitle"),
         body: t("auth:verify.invalidBody"),
+        action: null,
+      }
+    case "transient":
+      return {
+        icon: XCircle,
+        iconBg: "bg-amber-500/10",
+        iconColor: "text-amber-500",
+        title: t("auth:verify.transientTitle"),
+        body: t("auth:verify.transientBody"),
         action: null,
       }
     case "missing":

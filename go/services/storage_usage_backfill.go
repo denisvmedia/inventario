@@ -75,18 +75,19 @@ func BackfillFileSizes(ctx context.Context, factorySet *registry.FactorySet, upl
 		// (missing blobs leave size_bytes at 0). When every row in a
 		// batch failed, the next ListPending call would return the
 		// same set — bail out instead.
-		batchUpdated, batchFailed, cancelled := backfillBatch(ctx, fileReg, bucket, batch)
-		updated += batchUpdated
-		failed += batchFailed
-		if cancelled {
+		result := backfillBatch(ctx, fileReg, bucket, batch)
+		updated += result.updated
+		failed += result.failed
+		if result.cancelled {
 			slog.Info("storage backfill cancelled",
 				"updated", updated, "failed", failed)
 			return
 		}
 
-		// All rows in the batch failed — every subsequent batch would
-		// surface the same un-stat'able rows. Stop instead of spinning.
-		if batchUpdated == 0 {
+		// Nothing left the pending set: either every row failed, or every
+		// row was a genuinely empty blob rewritten to the same 0. Both mean
+		// the next batch is this batch, so stop rather than spin.
+		if result.advanced == 0 {
 			break
 		}
 	}
@@ -100,10 +101,23 @@ func BackfillFileSizes(ctx context.Context, factorySet *registry.FactorySet, upl
 // outer loop so the per-batch error handling doesn't pile cyclomatic
 // complexity on BackfillFileSizes itself. Returns (updated, failed,
 // cancelled) where `cancelled` signals the outer loop to bail out.
-func backfillBatch(ctx context.Context, fileReg backfillFileRegistry, bucket *blob.Bucket, batch []*models.FileEntity) (updated, failed int, cancelled bool) {
+// backfillResult separates "wrote a row" from "the row left the pending set".
+// ListPendingSizeBackfill selects size_bytes = 0, so a genuinely empty blob is
+// rewritten to the same 0 and stays selected: counting that as progress spun
+// the caller's loop for the life of the process (#2129).
+type backfillResult struct {
+	updated   int
+	advanced  int
+	failed    int
+	cancelled bool
+}
+
+func backfillBatch(ctx context.Context, fileReg backfillFileRegistry, bucket *blob.Bucket, batch []*models.FileEntity) backfillResult {
+	var res backfillResult
 	for _, file := range batch {
 		if ctx.Err() != nil {
-			return updated, failed, true
+			res.cancelled = true
+			return res
 		}
 		if file == nil || file.File == nil {
 			continue
@@ -118,7 +132,7 @@ func backfillBatch(ctx context.Context, fileReg backfillFileRegistry, bucket *bl
 				slog.Debug("storage backfill: missing blob",
 					"file_id", file.ID, "path", file.OriginalPath, "error", attrErr.Error())
 			}
-			failed++
+			res.failed++
 			continue
 		}
 
@@ -126,12 +140,15 @@ func backfillBatch(ctx context.Context, fileReg backfillFileRegistry, bucket *bl
 		if _, updErr := fileReg.Update(ctx, *file); updErr != nil {
 			slog.Debug("storage backfill: update failed",
 				"file_id", file.ID, "error", updErr.Error())
-			failed++
+			res.failed++
 			continue
 		}
-		updated++
+		res.updated++
+		if attrs.Size > 0 {
+			res.advanced++
+		}
 	}
-	return updated, failed, false
+	return res
 }
 
 // backfillFileRegistry narrows the registry surface backfillBatch

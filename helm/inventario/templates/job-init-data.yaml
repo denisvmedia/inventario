@@ -69,8 +69,14 @@ spec:
             - |
               set -eu
               export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
+              # Shared with the `migrate` init container (dbRetry.*). These two
+              # wait on the same database, and when their budgets diverged a
+              # stall the init container rode out failed this Job alone, and
+              # with it `helm install --wait-for-jobs` (#2243).
+              attempts={{ int .Values.dbRetry.attempts }}
+              interval={{ int .Values.dbRetry.intervalSeconds }}
               i=1
-              while [ "$i" -le 15 ]; do
+              while [ "$i" -le "$attempts" ]; do
                 if inventario db migrate data \
                   --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
                   --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
@@ -79,12 +85,12 @@ spec:
                   --admin-name="$INVENTARIO_MIGRATE_DATA_ADMIN_NAME"; then
                   break
                 fi
-                echo "Initial data attempt $i failed, retrying in 2 seconds..."
+                echo "Initial data attempt $i/$attempts failed, retrying in ${interval}s..."
                 i=$((i + 1))
-                sleep 2
+                sleep "$interval"
               done
-              if [ "$i" -gt 15 ]; then
-                echo "Initial data setup failed after 15 attempts"
+              if [ "$i" -gt "$attempts" ]; then
+                echo "Initial data setup failed after $attempts attempts"
                 exit 1
               fi
 
@@ -110,7 +116,7 @@ spec:
                 # backofficeUser.email when the Secret key is absent (PR previews). (#1967)
                 bo_email="${BACKOFFICE_USER_EMAIL:-$INVENTARIO_BACKOFFICE_BOOTSTRAP_EMAIL}"
                 k=1
-                while [ "$k" -le 15 ]; do
+                while [ "$k" -le "$attempts" ]; do
                   if inventario backoffice bootstrap \
                     --email="$bo_email" \
                     --name="$INVENTARIO_BACKOFFICE_BOOTSTRAP_NAME" \
@@ -120,12 +126,12 @@ spec:
                     --ensure; then
                     break
                   fi
-                  echo "Back-office bootstrap attempt $k failed, retrying in 2 seconds..."
+                  echo "Back-office bootstrap attempt $k/$attempts failed, retrying in ${interval}s..."
                   k=$((k + 1))
-                  sleep 2
+                  sleep "$interval"
                 done
-                if [ "$k" -gt 15 ]; then
-                  echo "Back-office bootstrap failed after 15 attempts"
+                if [ "$k" -gt "$attempts" ]; then
+                  echo "Back-office bootstrap failed after $attempts attempts"
                   exit 1
                 fi
               fi

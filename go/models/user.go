@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -202,6 +203,41 @@ func (u *User) SetPassword(password string) error {
 func (u *User) CheckPassword(password string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
 	return err == nil
+}
+
+// dummyHashes caches one bcrypt hash per cost factor. bcrypt is deliberately
+// slow, so EqualizePasswordTiming must not generate a hash per call — that
+// would cost roughly twice what it is equalizing against. Keyed by cost
+// because SetBcryptCostForTesting can change it while the process runs.
+var dummyHashes sync.Map
+
+// EqualizePasswordTiming spends what CheckPassword would have spent, for a
+// caller that has no user to check.
+//
+// Login answers "no such email" and "wrong password" with the same body and
+// the same status, but only the second one ran bcrypt — and at DefaultCost
+// that is ~80ms of difference anyone can measure. The gap turns an
+// indistinguishable response into an email-enumeration oracle (#2246). Call
+// this on the path that skipped the real comparison.
+//
+// The result is intentionally discarded: there is nothing to learn from
+// comparing a password against a hash of something else. Only the time
+// matters.
+func EqualizePasswordTiming(password string) {
+	cost := bcryptCost.Load()
+	hash, ok := dummyHashes.Load(cost)
+	if !ok {
+		// The plaintext is irrelevant — bcrypt's work depends only on the
+		// cost factor. A generation failure means the cost is out of
+		// range, which cannot happen for a value SetPassword accepts; drop
+		// the equalization rather than panicking inside a login handler.
+		generated, err := bcrypt.GenerateFromPassword([]byte("inventario-timing-equalizer"), int(cost))
+		if err != nil {
+			return
+		}
+		hash, _ = dummyHashes.LoadOrStore(cost, generated)
+	}
+	_ = bcrypt.CompareHashAndPassword(hash.([]byte), []byte(password))
 }
 
 // ValidatePassword validates a password without setting it

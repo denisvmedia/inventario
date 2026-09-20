@@ -4,7 +4,6 @@ import { http } from "@/lib/http"
 
 export interface StorageBreakdown {
   images: number
-  invoices: number
   documents: number
   other: number
   exports: number

@@ -73,6 +73,14 @@ func (api *AuthAPI) requestMagicLink(w http.ResponseWriter, r *http.Request) {
 	successMsg := "If that email address is registered you will receive a sign-in link shortly."
 
 	tenantID := TenantIDFromContext(r.Context())
+	// Mirrors login() and verify: without a tenant the lookup below is
+	// unscoped, which is not something to paper over with a neutral 200
+	// (#2131).
+	if tenantID == "" {
+		slog.Error("Magic-link request without tenant context")
+		http.Error(w, "Tenant context not established", http.StatusInternalServerError)
+		return
+	}
 
 	user, err := api.userRegistry.GetByEmail(r.Context(), tenantID, req.Email)
 	switch {
@@ -141,25 +149,16 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	// Claim first (race-safe): MarkClaimed atomically flips claimed_at only
 	// for a still-unclaimed, non-expired row. A false result covers unknown /
 	// replayed / expired / lost-race in one branch.
-	claimed, err := api.magicLinkRegistry.MarkClaimed(r.Context(), req.Token)
-	if err != nil {
-		slog.Error("Failed to claim magic-link token", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-	if !claimed {
-		http.Error(w, "Invalid or expired sign-in link", http.StatusBadRequest)
-		return
-	}
-
+	// Read first, claim last. Claiming up front burned the link on a refusal
+	// the user could do nothing about — a disabled account (403) or a
+	// lockout (429) consumed the one-time token and the next click reported
+	// it invalid (#2131).
 	mlt, err := api.magicLinkRegistry.GetByToken(r.Context(), req.Token)
 	if err != nil {
-		slog.Error("Failed to load claimed magic-link token", "error", err)
+		slog.Error("Failed to load magic-link token", "error", err)
 		http.Error(w, "Invalid or expired sign-in link", http.StatusBadRequest)
 		return
 	}
-	// Belt-and-braces: MarkClaimed already folds in the expiry check, but
-	// re-assert it after the read in case the row's clock skewed.
 	if mlt.IsExpired() {
 		http.Error(w, "Invalid or expired sign-in link", http.StatusBadRequest)
 		return
@@ -189,6 +188,19 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	// Account-lockout enforced at verify (requesting a link while locked is
 	// still allowed — refusing would leak lockout state).
 	if !api.checkMFALoginLockout(w, r, user.Email) {
+		return
+	}
+
+	// Every gate passed, so consume the link. Still the atomic one-shot: two
+	// concurrent clicks both reach here and exactly one wins the claim.
+	claimed, err := api.magicLinkRegistry.MarkClaimed(r.Context(), req.Token)
+	if err != nil {
+		slog.Error("Failed to claim magic-link token", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !claimed {
+		http.Error(w, "Invalid or expired sign-in link", http.StatusBadRequest)
 		return
 	}
 
