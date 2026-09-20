@@ -586,11 +586,20 @@ func (s *ValuerSlice[T]) Scan(src any) error {
 		*s = nil
 		return nil
 	}
-	bytes, ok := src.([]byte)
-	if !ok {
-		return fmt.Errorf("cannot scan type %T into StringSlice", src)
+	// Drivers disagree about how they hand back a JSON/JSONB column: lib/pq
+	// gives []byte, others give string. Accepting only []byte made the
+	// choice of driver a correctness question, and the error named a type
+	// this method has nothing to do with (#2131).
+	var raw []byte
+	switch v := src.(type) {
+	case []byte:
+		raw = v
+	case string:
+		raw = []byte(v)
+	default:
+		return fmt.Errorf("cannot scan type %T into ValuerSlice", src)
 	}
-	return json.Unmarshal(bytes, s)
+	return json.Unmarshal(raw, s)
 }
 
 func (s ValuerSlice[T]) Value() (driver.Value, error) {

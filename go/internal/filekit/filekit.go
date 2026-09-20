@@ -81,9 +81,20 @@ func DownloadName(path, ext string) string {
 	return path + ext
 }
 
+// compoundExtensionStems are the first halves of the two-part extensions worth
+// keeping together. Anything else that looks like one — `report.v2.pdf`,
+// `invoice.2024.pdf` — is a dot in the NAME, and swallowing it moved half the
+// filename into the extension and out of the title the user sees (#2131).
+var compoundExtensionStems = map[string]bool{
+	".tar": true,
+}
+
 func getMultiPartExtension(filePath string) string {
 	ext := filepath.Ext(filePath)                 // Get the last element of the path
 	filename := strings.TrimSuffix(filePath, ext) // Remove the extension from the filename
-	multiPartExt := filepath.Ext(filename) + ext  // Combine the extension with the remaining filename
-	return multiPartExt
+	stem := filepath.Ext(filename)
+	if compoundExtensionStems[strings.ToLower(stem)] {
+		return stem + ext
+	}
+	return ext
 }

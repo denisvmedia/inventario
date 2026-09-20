@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -189,4 +190,79 @@ func TestNoOpAuthRateLimiter_PublicScan_AlwaysAllows(t *testing.T) {
 	globalRes, err := lim.CheckPublicScanGlobalCap(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(globalRes.Allowed, qt.IsTrue)
+}
+
+// TestInMemoryAuthRateLimiter_SweepsAbandonedKeys pins #2131: both maps evict
+// per key, but only for the key the caller asks about — and the keys that grow
+// the map are precisely the ones nobody asks about twice. Without a periodic
+// sweep, one distinct email or source IP leaves one permanent entry for the
+// process lifetime, which is a memory leak an attacker chooses the size of.
+func TestInMemoryAuthRateLimiter_SweepsAbandonedKeys(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := start
+	lim := NewInMemoryAuthRateLimiter()
+	lim.now = func() time.Time { return now }
+
+	// One hit each from a thousand addresses and a thousand emails, none of
+	// which is ever seen again.
+	for i := range 1000 {
+		_, err := lim.CheckLoginAttempt(ctx, fmt.Sprintf("10.0.%d.%d", i/256, i%256))
+		c.Assert(err, qt.IsNil)
+		_, _, err = lim.RecordFailedLogin(ctx, fmt.Sprintf("user%d@example.com", i))
+		c.Assert(err, qt.IsNil)
+	}
+
+	lim.mu.Lock()
+	windows, failed := len(lim.windows), len(lim.failed)
+	lim.mu.Unlock()
+	c.Assert(windows, qt.Equals, 1000)
+	c.Assert(failed, qt.Equals, 1000)
+
+	// Well past every window and lockout. One more call of each kind is
+	// enough: the sweep is amortized onto the next write, not scheduled.
+	now = start.Add(48 * time.Hour)
+	_, err := lim.CheckLoginAttempt(ctx, "203.0.113.1")
+	c.Assert(err, qt.IsNil)
+	_, _, err = lim.RecordFailedLogin(ctx, "someone@example.com")
+	c.Assert(err, qt.IsNil)
+
+	lim.mu.Lock()
+	windows, failed = len(lim.windows), len(lim.failed)
+	lim.mu.Unlock()
+	c.Assert(windows, qt.Equals, 1, qt.Commentf("only the live key should remain"))
+	c.Assert(failed, qt.Equals, 1, qt.Commentf("only the live key should remain"))
+}
+
+// A sweep must never drop a key that is still doing its job: an active
+// lockout, or a sliding window with a timestamp still inside it.
+func TestInMemoryAuthRateLimiter_SweepKeepsLiveEntries(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := start
+	lim := NewInMemoryAuthRateLimiter()
+	lim.now = func() time.Time { return now }
+
+	// Lock an account out.
+	for range failedLoginLockoutThreshold {
+		_, _, err := lim.RecordFailedLogin(ctx, "victim@example.com")
+		c.Assert(err, qt.IsNil)
+	}
+	locked, _, err := lim.IsAccountLocked(ctx, "victim@example.com")
+	c.Assert(err, qt.IsNil)
+	c.Assert(locked, qt.IsTrue)
+
+	// Move far enough to trigger a sweep, but not past the lockout.
+	now = start.Add(inMemoryRateLimitSweepInterval + time.Minute)
+	_, _, err = lim.RecordFailedLogin(ctx, "other@example.com")
+	c.Assert(err, qt.IsNil)
+
+	locked, until, err := lim.IsAccountLocked(ctx, "victim@example.com")
+	c.Assert(err, qt.IsNil)
+	c.Assert(locked, qt.IsTrue, qt.Commentf("a sweep must not release an active lockout"))
+	c.Assert(until, qt.Equals, start.Add(accountLockoutDuration))
 }

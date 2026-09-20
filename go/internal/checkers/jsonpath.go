@@ -65,7 +65,18 @@ func (c *jsonPathMatchesChecker) Check(got any, args []any, note func(key string
 		note("json path", c.jsonPath)
 	}
 
-	jsonPathVal, err := jsonpath.Read(got, c.jsonPath)
+	// Compile before evaluating so the two failure modes stay apart (#2131):
+	// a malformed expression is a bug in the TEST and must fail even when the
+	// expectation is nil, while a well-formed path that does not resolve in
+	// this document is a legitimate way to assert absence. Reading first and
+	// then letting `isNil && isNil` swallow the error made a typo'd path pass.
+	filter, err := jsonpath.Prepare(c.jsonPath)
+	if err != nil {
+		notes()
+		return fmt.Errorf("invalid JSON path expression %q: %w", c.jsonPath, err)
+	}
+
+	jsonPathVal, err := filter(got)
 
 	if isNil(jsonPathVal) && isNil(args[0]) {
 		return nil

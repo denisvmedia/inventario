@@ -20,8 +20,7 @@ jobs:
     name: Auto-merge Dependabot PRs
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
-    # Long enough to outlast the slowest lane (e2e, 45m) plus queue time.
-    timeout-minutes: 75
+    timeout-minutes: 10
     steps:
       # Pinned to the BASE commit, not the PR merge ref: the wait script below
       # runs from the checkout, and a script taken from the pull request would
@@ -38,33 +37,43 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Wait for this PR's checks to pass
-        # `gh pr merge --auto` defers to REQUIRED status checks. master has no
-        # branch protection, so "required" is the empty set and --auto merges
-        # the moment it is enabled — before a single workflow has reported
-        # (#1819). A patch bump that breaks the build would land on master
-        # unreviewed and untested.
-        #
-        # Waiting here makes the gate independent of repo settings: the merge
-        # step below is only reached once every check that ran has passed.
-        # Configuring required checks in branch protection is still the better
-        # answer and would make this redundant, but it is a repo setting, not
-        # something a workflow can assert.
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
-        run: ./.github/scripts/wait-for-pr-checks.sh "$PR_URL"
+      - name: Can auto-merge be trusted here?
+        id: gate
+        # `gh pr merge --auto` defers to REQUIRED status checks. With no
+        # protection rule that set is empty and --auto merges the moment it is
+        # enabled — before a single workflow has reported (#1819). So the
+        # answer to "is auto-merge safe?" is "does this branch have required
+        # checks?", and nothing else.
+        run: |
+          set -euo pipefail
+          ok=$(./.github/scripts/required-checks-configured.sh \
+            "${{ github.repository_owner }}" "${{ github.event.repository.name }}" \
+            "${{ github.event.pull_request.base.ref }}")
+          echo "required=$ok" >> "$GITHUB_OUTPUT"
         env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable auto-merge for patch updates only
         # PATCH-ONLY (#2097). Minor and major updates are held for manual
         # review — a minor bump can still pull in behavioural changes that
         # lint/typecheck/unit tests miss.
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' &&
+          steps.gate.outputs.required == 'true'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Explain why auto-merge is held
+        # A notice, not a failure. "I could not confirm CI would gate the
+        # merge, so I did not enable it" is the intended outcome, and a red
+        # check would say something is broken when nothing is.
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' &&
+          steps.gate.outputs.required != 'true'
+        run: |
+          echo "::notice::Auto-merge not enabled: ${{ github.event.pull_request.base.ref }} has no required status checks, so --auto would merge before CI reports. Configure required checks in branch protection to turn this back on."
 
       - name: Comment on minor and major updates
         if: |
@@ -81,7 +90,7 @@ jobs:
     name: Auto-merge Renovate PRs
     runs-on: ubuntu-latest
     if: github.actor == 'renovate[bot]'
-    timeout-minutes: 75
+    timeout-minutes: 10
     steps:
       # Base commit, not the PR merge ref — see the note in the Dependabot job.
       - name: Check out repository
@@ -121,21 +130,33 @@ jobs:
           fi
           echo "is_patch=$is_patch" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for this PR's checks to pass
-        # Same reason as the Dependabot job above (#1819): with no required
-        # checks configured, --auto merges before CI reports.
-        if: steps.classify.outputs.is_patch == 'true'
-        run: ./.github/scripts/wait-for-pr-checks.sh "$PR_URL"
+      - name: Can auto-merge be trusted here?
+        id: gate
+        # Same question as the Dependabot job above (#1819).
+        run: |
+          set -euo pipefail
+          ok=$(./.github/scripts/required-checks-configured.sh \
+            "${{ github.repository_owner }}" "${{ github.event.repository.name }}" \
+            "${{ github.event.pull_request.base.ref }}")
+          echo "required=$ok" >> "$GITHUB_OUTPUT"
         env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable auto-merge for patch updates only
-        if: steps.classify.outputs.is_patch == 'true'
+        if: >-
+          steps.classify.outputs.is_patch == 'true' &&
+          steps.gate.outputs.required == 'true'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Explain why auto-merge is held
+        if: >-
+          steps.classify.outputs.is_patch == 'true' &&
+          steps.gate.outputs.required != 'true'
+        run: |
+          echo "::notice::Auto-merge not enabled: ${{ github.event.pull_request.base.ref }} has no required status checks, so --auto would merge before CI reports. Configure required checks in branch protection to turn this back on."
 
       - name: Comment on non-patch updates
         if: steps.classify.outputs.is_patch != 'true'

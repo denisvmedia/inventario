@@ -156,6 +156,21 @@ Go dependencies are covered by `govulncheck`, which is reachability-aware:
 it reports a vulnerability only when your code can actually reach the affected
 symbol, so a finding there is never noise.
 
+## Bot auto-merge is held until required checks exist
+
+Dependabot and Renovate **patch** updates are eligible for auto-merge, and the
+workflow only enables it when the base branch has at least one required status
+check.
+
+The reason is narrow: `gh pr merge --auto` waits for *required* checks. On a
+branch with no protection rule that set is empty, so `--auto` merges the moment
+it is enabled — before a single workflow reports. A patch bump that breaks the
+build would land unreviewed and untested (#1819).
+
+So today the workflow posts a notice and leaves bot pull requests for a human.
+To turn auto-merge back on, configure required checks on `master`; the workflow
+picks that up on its own, with no change here.
+
 ## GitHub Actions are pinned to commit SHAs
 
 Every third-party action is referenced by commit SHA with the version in a

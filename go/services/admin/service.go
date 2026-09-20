@@ -189,11 +189,15 @@ func (s *Service) ListTenants(ctx context.Context, req TenantListRequest) (*Tena
 		}
 	}
 
-	// Apply pagination
+	// Apply pagination. A non-positive Limit means "no limit", not "an empty
+	// page": callers that only want the count would otherwise get a
+	// TotalCount alongside zero rows (#2131).
 	totalCount := len(filteredTenants)
 	start := min(req.Offset, len(filteredTenants))
-
-	end := min(start+req.Limit, len(filteredTenants))
+	end := len(filteredTenants)
+	if req.Limit > 0 {
+		end = min(start+req.Limit, len(filteredTenants))
+	}
 
 	paginatedTenants := filteredTenants[start:end]
 
@@ -418,11 +422,13 @@ func (s *Service) ListUsers(ctx context.Context, req UserListRequest) (*UserList
 		}
 	}
 
-	// Apply pagination
+	// Apply pagination. Non-positive Limit means unlimited — see ListTenants.
 	totalCount := len(filteredUsers)
 	start := min(req.Offset, len(filteredUsers))
-
-	end := min(start+req.Limit, len(filteredUsers))
+	end := len(filteredUsers)
+	if req.Limit > 0 {
+		end = min(start+req.Limit, len(filteredUsers))
+	}
 
 	paginatedUsers := filteredUsers[start:end]
 
