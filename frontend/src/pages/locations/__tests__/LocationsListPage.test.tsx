@@ -3,13 +3,20 @@ import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
+import { http, HttpResponse } from "msw"
 
 import { LocationsListPage } from "@/pages/locations/LocationsListPage"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { areaHandlers, commodityHandlers, groupHandlers, locationHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  areaHandlers,
+  commodityHandlers,
+  groupHandlers,
+  locationHandlers,
+} from "@/test/handlers"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -298,6 +305,32 @@ describe("<LocationsListPage />", () => {
     expect(wrapper).not.toBeNull()
     expect(wrapper!.className).toMatch(/(?:^|\s)relative(?:\s|$)/)
     expect(wrapper!.className).toMatch(/(?:^|\s)z-10(?:\s|$)/)
+  })
+
+  it("states the server's item count in the delete dialog, not the capped page sample (#2140)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      ...areaHandlers.list(SLUG, [areaResource("a1", { name: "Kitchen", location_id: "loc1" })]),
+      // The page-level sample is one capped page of active rows and sees
+      // nothing; the accurate per-area lookup (area_id + include_inactive)
+      // reports 7. The dialog must quote 7 — telling someone they are about
+      // to delete 0 items when it is 7 is the bug.
+      http.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        const url = new URL(request.url)
+        if (url.searchParams.get("area_id") === "a1") {
+          return HttpResponse.json({ data: [], meta: { commodities: 7 } })
+        }
+        return HttpResponse.json({ data: [] })
+      })
+    )
+    renderList()
+    const card = await screen.findByTestId("location-card")
+    await user.click(within(card).getByTestId("location-card-menu"))
+    await user.click(await screen.findByTestId("location-card-delete"))
+    const dialog = await screen.findByTestId("delete-with-items-dialog")
+    expect(within(dialog).getByText(/still holds 7 items\b/i)).toBeInTheDocument()
   })
 
   it("has no axe violations once data has loaded", async () => {
