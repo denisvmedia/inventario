@@ -73,3 +73,30 @@ describe("<VerifyEmailPage />", () => {
     await waitFor(() => expect(screen.getByTestId("verify-invalid")).toBeInTheDocument())
   })
 })
+
+// #2096: the backend's unknown-token message used to contain the word
+// "expired", so every bad token rendered "Link expired". The two cases must
+// not collide.
+describe("VerifyEmailPage — error classification", () => {
+  it("renders 'invalid' for an unknown token", async () => {
+    server.use(
+      msw.get(api("/verify-email"), () =>
+        HttpResponse.json("Invalid verification token", { status: 400 })
+      )
+    )
+    renderVerify("/verify-email?token=nope")
+
+    await waitFor(() => expect(screen.getByTestId("verify-invalid")).toBeInTheDocument())
+  })
+
+  it("renders 'expired' for the backend's expiry message", async () => {
+    server.use(
+      msw.get(api("/verify-email"), () =>
+        HttpResponse.json("Verification token expired. Please request a new one.", { status: 400 })
+      )
+    )
+    renderVerify("/verify-email?token=old")
+
+    await waitFor(() => expect(screen.getByTestId("verify-expired")).toBeInTheDocument())
+  })
+})

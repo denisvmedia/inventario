@@ -274,7 +274,10 @@ func TestHandleVerifyEmail_UnknownTokenReturns400(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, newVerifyRequest("no-such-token"))
 	c.Assert(w.Code, qt.Equals, http.StatusBadRequest)
-	c.Assert(w.Body.String(), qt.Contains, "Invalid or expired")
+	c.Assert(w.Body.String(), qt.Contains, "Invalid verification token")
+	// The word "expired" belongs to the expiry response alone. Sharing it made
+	// the client classify every unknown token as expired (#2096).
+	c.Assert(w.Body.String(), qt.Not(qt.Contains), "expired")
 }
 
 func TestHandleVerifyEmail_AlreadyVerifiedTokenReturns200(t *testing.T) {

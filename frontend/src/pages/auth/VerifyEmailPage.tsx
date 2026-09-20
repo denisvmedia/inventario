@@ -15,6 +15,10 @@ type VerifyState = "verifying" | "success" | "expired" | "invalid" | "missing"
 // Heuristic: distinguish "expired" from "generic invalid" so the page can
 // offer "request new link" instead of just "back to sign in". The backend
 // surfaces both as 4xx with a string body, so we look at the message text.
+//
+// This only works because the unknown-token message no longer says "expired"
+// too — it did, which classified every bad token as expired (#2096). Keep the
+// two backend messages disjoint on that word.
 function classifyError(err: unknown): "expired" | "invalid" {
   if (err instanceof HttpError) {
     const data = err.data
