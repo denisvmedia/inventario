@@ -293,3 +293,25 @@ func TestMarshal_ValidationErrorsEmitsCodeTree(t *testing.T) {
 	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.raw.code"), "")
 	c.Assert(raw, checkers.JSONPathEquals("$.errorCodes.data.attributes.raw.message"), "ID field not allowed in create requests")
 }
+
+// TestMarshal_OmitsStackTraces is the regression test for #2178. errx records
+// absolute source paths, so a rendered error published the server's filesystem
+// layout on every API response that carried one.
+func TestMarshal_OmitsStackTraces(t *testing.T) {
+	c := qt.New(t)
+
+	// Nested, because errx keeps a trace at each level of the cause chain and
+	// stripping only the outermost would still leak the ones below it.
+	inner := errxtrace.Wrap("inner", errx.NewSentinel("boom"))
+	wrapped := errxtrace.Wrap("outer", inner, errx.Attrs("id", "abc"))
+
+	body := string(errormarshal.Marshal(wrapped))
+
+	c.Assert(body, qt.Not(qt.Contains), "stack_trace")
+	c.Assert(body, qt.Not(qt.Contains), "errormarshal_test.go",
+		qt.Commentf("no source path should survive into a client body"))
+
+	// The parts a client needs are untouched.
+	c.Assert(body, qt.Contains, "outer: inner: boom")
+	c.Assert(body, qt.Contains, `"key":"id"`)
+}
