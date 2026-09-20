@@ -65,23 +65,25 @@ const (
 )
 
 // serve runs the middleware chain the way the router composes it and reports
-// whether the handler behind it was reached.
-func serve(svc *fakeUploadService, withUser bool, withOperation bool) (*httptest.ResponseRecorder, bool) {
+// whether the handler behind it was reached. An empty userID leaves the
+// request unauthenticated; an empty operation leaves SetUploadOperation out of
+// the chain, which is what a route that is not an upload endpoint looks like.
+func serve(svc *fakeUploadService, userID, operation string) (*httptest.ResponseRecorder, bool) {
 	reached := false
 	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		reached = true
 		w.WriteHeader(http.StatusOK)
 	})
 	handler = middleware.UploadLimiter(svc)(handler)
-	if withOperation {
-		handler = middleware.SetUploadOperation(testOperation)(handler)
+	if operation != "" {
+		handler = middleware.SetUploadOperation(operation)(handler)
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/uploads/file", nil)
-	if withUser {
+	if userID != "" {
 		user := &models.User{
 			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: testUserID},
+				EntityID: models.EntityID{ID: userID},
 				TenantID: "tenant-1",
 			},
 		}
@@ -97,7 +99,7 @@ func TestUploadLimiter_AllowsAndReleasesTheSlot(t *testing.T) {
 	c := qt.New(t)
 	svc := &fakeUploadService{canStart: true}
 
-	rr, reached := serve(svc, true, true)
+	rr, reached := serve(svc, testUserID, testOperation)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(reached, qt.IsTrue)
@@ -113,7 +115,7 @@ func TestUploadLimiter_RefusesWhenOverTheCap(t *testing.T) {
 	c := qt.New(t)
 	svc := &fakeUploadService{canStart: false}
 
-	rr, reached := serve(svc, true, true)
+	rr, reached := serve(svc, testUserID, testOperation)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusTooManyRequests)
 	c.Assert(reached, qt.IsFalse)
@@ -134,7 +136,7 @@ func TestUploadLimiter_RefusesWhenStartLosesTheRace(t *testing.T) {
 		startErr: errxtrace.Wrap("maximum concurrent uploads reached", registry.ErrTooManyRequests),
 	}
 
-	rr, reached := serve(svc, true, true)
+	rr, reached := serve(svc, testUserID, testOperation)
 
 	c.Assert(rr.Code, qt.Equals, http.StatusTooManyRequests)
 	c.Assert(reached, qt.IsFalse)
@@ -147,7 +149,7 @@ func TestUploadLimiter_PassesThroughWithoutAUser(t *testing.T) {
 	c := qt.New(t)
 	svc := &fakeUploadService{canStart: true}
 
-	rr, reached := serve(svc, false, true)
+	rr, reached := serve(svc, "", testOperation)
 
 	// Auth is the handler's business, not the limiter's.
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
@@ -160,7 +162,7 @@ func TestUploadLimiter_PassesThroughOnANonUploadRoute(t *testing.T) {
 	svc := &fakeUploadService{canStart: true}
 
 	// No SetUploadOperation in the chain: this is not an upload endpoint.
-	rr, reached := serve(svc, true, false)
+	rr, reached := serve(svc, testUserID, "")
 
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(reached, qt.IsTrue)
@@ -173,7 +175,7 @@ func TestUploadLimiter_PassesThroughWhenTheServiceIsBroken(t *testing.T) {
 	// A service that cannot answer must not become a 429: that would turn a
 	// backend fault into "you upload too much" for every user at once.
 	checkFailed := &fakeUploadService{canStartErr: errors.New("redis is down")}
-	rr, reached := serve(checkFailed, true, true)
+	rr, reached := serve(checkFailed, testUserID, testOperation)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(reached, qt.IsTrue)
 
@@ -181,7 +183,7 @@ func TestUploadLimiter_PassesThroughWhenTheServiceIsBroken(t *testing.T) {
 		canStart: true,
 		startErr: errors.New("redis is down"),
 	}
-	rr, reached = serve(startFailed, true, true)
+	rr, reached = serve(startFailed, testUserID, testOperation)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(reached, qt.IsTrue)
 	// No slot was taken, so none is released.
