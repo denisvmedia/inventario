@@ -147,6 +147,33 @@ export class HttpError extends Error {
   }
 }
 
+// A request that never reached the server: offline, DNS failure, a dropped
+// connection. fetch rejects with a bare TypeError, which carries no status and
+// slipped past every `instanceof HttpError` guard — including the global error
+// toast, so a network drop rendered as an empty list (#2098).
+//
+// Status 0 is what browsers already use for "no response", so existing status
+// checks read it as "not a success" rather than tripping over undefined.
+export class NetworkError extends HttpError {
+  constructor(url: string, cause: unknown) {
+    super("Network request failed", 0, url, undefined)
+    this.name = "NetworkError"
+    this.cause = cause
+  }
+}
+
+// An AbortError is the caller cancelling, not a failure to reach the server,
+// so it passes through untouched — turning it into a NetworkError would toast
+// on every navigation that cancels an in-flight query.
+async function fetchOrNetworkError(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init)
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err
+    throw new NetworkError(url, err)
+  }
+}
+
 interface RefreshResponse {
   access_token?: string
   csrf_token?: string
@@ -613,7 +640,7 @@ async function performRequest<T = unknown>(
       : typeof init.body === "string" || init.body instanceof FormData
         ? init.body
         : JSON.stringify(init.body)
-  const response = await fetch(url, {
+  const response = await fetchOrNetworkError(url, {
     method,
     headers,
     body,

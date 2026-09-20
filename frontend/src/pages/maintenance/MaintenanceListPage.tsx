@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
+import { ListLoadError } from "@/components/common/ListLoadError"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -41,6 +42,8 @@ export function MaintenanceListPage() {
               <Skeleton className="h-10" />
               <Skeleton className="h-10" />
             </div>
+          ) : list.isError ? (
+            <ListLoadError testId="maintenance-error" onRetry={() => void list.refetch()} />
           ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground" data-testid="maintenance-empty">
               {t("maintenance:list.empty")}
