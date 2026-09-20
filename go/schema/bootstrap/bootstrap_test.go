@@ -1,7 +1,10 @@
 package bootstrap_test
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -266,6 +269,55 @@ func TestMigrator_Apply_TemplateVariableSubstitution_HappyPath(t *testing.T) {
 			c.Assert(err, qt.IsNil, qt.Commentf("template substitution should work"))
 		})
 	}
+}
+
+// Default privileges key on the role that CREATES an object, and role
+// membership does not carry them. A migration login named anything other than
+// inventario_migrator therefore needs its own ALTER DEFAULT PRIVILEGES, or the
+// tables it creates grant nothing to the app role (#2520).
+func TestMigrator_Print_GrantsDefaultsToTheMigrationLogin(t *testing.T) {
+	c := qt.New(t)
+
+	sql := captureStdout(t, func() {
+		err := bootstrap.New().Print(bootstrap.TemplateData{
+			Username:                    "inventario",
+			UsernameForMigrations:       "custom_migration_login",
+			UsernameForBackgroundWorker: "inventario_bgw",
+		})
+		c.Assert(err, qt.IsNil)
+	})
+
+	c.Assert(sql, qt.Contains, "'custom_migration_login' != 'inventario_migrator'")
+	c.Assert(sql, qt.Contains, "ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public ")
+	c.Assert(sql, qt.Contains, "TO inventario_app, inventario_background_worker, inventario_admin")
+}
+
+// captureStdout collects what fn writes to os.Stdout. Print emits the rendered
+// SQL there rather than through the Migrator's writer, which defaults to
+// io.Discard and carries logging only.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	done := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		done <- buf.String()
+	}()
+
+	fn()
+
+	os.Stdout = orig
+	_ = w.Close()
+	out := <-done
+	_ = r.Close()
+	return out
 }
 
 func TestMigrator_Apply_FileOrdering_HappyPath(t *testing.T) {

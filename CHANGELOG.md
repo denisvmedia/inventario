@@ -17,6 +17,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
+- Bootstrap now grants the app, worker and admin roles access to tables created
+  by a migration login named anything other than `inventario_migrator`. With a
+  custom name, every migrated table came out unreadable to the application
+  ([#2520](https://github.com/denisvmedia/inventario/issues/2520)).
 - `/metrics` no longer listens on the public port, where the default ingress
   rule exposed installation-wide gauges to the Internet
   ([#2244](https://github.com/denisvmedia/inventario/issues/2244)).

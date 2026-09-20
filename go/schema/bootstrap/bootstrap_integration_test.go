@@ -122,6 +122,65 @@ func TestMigrator_Apply_TemplateSubstitution_Integration_HappyPath(t *testing.T)
 	c.Assert(extensionExists, qt.IsTrue, qt.Commentf("pg_trgm extension should exist"))
 }
 
+// The tables a migration creates must be readable by the app role, and default
+// privileges only reach them when they name the login that creates them, not
+// the group role it is a member of (#2520). Asserted against pg_default_acl
+// because the login has no password here and cannot create a table to check.
+func TestMigrator_Apply_DefaultPrivilegesFollowTheMigrationLogin(t *testing.T) {
+	dsn := getPostgresDSNorSkip(t)
+	c := qt.New(t)
+
+	const login = "inventario_mig_acl_test"
+
+	db, err := sql.Open("postgres", dsn)
+	c.Assert(err, qt.IsNil)
+	// Cleanups run last-registered-first, so the close must be registered
+	// before the drops that need the connection. A `defer db.Close()` here
+	// would run before both and leave the role behind — which would make a
+	// second run of this test pass on the first run's leftovers.
+	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() {
+		// The role owns nothing but its default-ACL entries, which hold the
+		// DROP until they are gone.
+		if _, err := db.Exec("DROP OWNED BY " + login); err != nil {
+			t.Errorf("drop owned by %s: %v", login, err)
+		}
+		if _, err := db.Exec("DROP ROLE IF EXISTS " + login); err != nil {
+			t.Errorf("drop role %s: %v", login, err)
+		}
+	})
+
+	err = bootstrap.New().Apply(context.Background(), bootstrap.ApplyArgs{
+		DSN: dsn,
+		Template: bootstrap.TemplateData{
+			Username:                    "inventario",
+			UsernameForMigrations:       login,
+			UsernameForBackgroundWorker: "inventario",
+		},
+	})
+	c.Assert(err, qt.IsNil)
+
+	for _, grantee := range []string{
+		"inventario_app",
+		"inventario_background_worker",
+		"inventario_admin",
+	} {
+		var granted bool
+		err = db.QueryRow(`
+			SELECT EXISTS (
+				SELECT 1
+				FROM pg_default_acl d
+				JOIN pg_roles r ON r.oid = d.defaclrole
+				WHERE r.rolname = $1
+				  AND d.defaclobjtype = 'r'
+				  AND array_to_string(d.defaclacl, ',') LIKE '%' || $2 || '=%'
+			)`, login, grantee).Scan(&granted)
+		c.Assert(err, qt.IsNil)
+		c.Assert(granted, qt.IsTrue,
+			qt.Commentf("tables created by %s must grant to %s", login, grantee))
+	}
+}
+
 func TestMigrator_Apply_InvalidDSN_UnhappyPath(t *testing.T) {
 	//dsn := os.Getenv("POSTGRES_TEST_DSN")
 	//if dsn == "" {
