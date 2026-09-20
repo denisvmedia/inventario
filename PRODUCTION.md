@@ -47,7 +47,7 @@ Runtime dependencies:
 | **Redis** | Recommended | Token blacklist, auth/global rate limit, CSRF, email queue. In-memory fallback warns and is single-instance only. |
 | **SMTP / email provider** | For real email | `stub` (default) only logs. Registration, password reset, invites, magic-link need a real provider. |
 | **AI vision provider** | Optional | `none` (default), `mock`, `anthropic`, `openai`. Fails-loud if a real provider is selected without its API key. |
-| **Prometheus + Grafana** | **Go-live gate** | See Part B §B10 and blocker [#2034](https://github.com/denisvmedia/inventario/issues/2034). |
+| **Prometheus + Grafana** | **Go-live gate** | The chart ships the monitors, rules and dashboard; you pick the stack and wire Alertmanager. See Part B §B10. |
 
 The chart's source of truth for every value and secret key is
 [`helm/inventario/values.yaml`](helm/inventario/values.yaml) and
@@ -383,11 +383,10 @@ than one replica (set `persistence.enabled=false`).
 
 ### B10. Monitoring & alerting — required go-live gate
 
-⚠️ **Do not call the deployment "done" until alerts fire to a real channel.** The app
-ships `/metrics` and the building blocks exist (`deploy/monitoring/`), but production
-monitoring is **not yet turnkey** — tracked as blocker
-[#2034](https://github.com/denisvmedia/inventario/issues/2034). Until that lands, wire it
-manually:
+⚠️ **Do not call the deployment "done" until alerts fire to a real channel.** The chart
+ships the scrape hooks, the alert rules and the dashboard, but they are all OFF by
+default — a chart cannot know which monitoring stack you run — and Alertmanager routing
+is yours to configure.
 
 - [ ] **Deploy a monitoring stack** (Prometheus + Grafana + Alertmanager). The simplest
   universal path is `kube-prometheus-stack`:
@@ -400,25 +399,57 @@ manually:
 
   (GKE: Google Cloud Managed Service for Prometheus is an alternative. DOKS: the same
   Helm chart, or DO's monitoring add-on for node metrics.)
-- [ ] **Enable scraping in the Inventario release** (add to `values-prod.yaml`,
-  then `helm upgrade`):
+- [ ] **Turn the monitoring resources on in the Inventario release** (add to
+  `values-prod.yaml`, then `helm upgrade`). Every block below renders only when the
+  Prometheus Operator CRDs are present, so enabling them on a cluster without the
+  operator is a no-op rather than a failed install. The `release:` label is how the
+  operator decides which monitors and rules belong to it — set it to your
+  kube-prometheus-stack release name:
 
   ```yaml
   metrics:
-    serviceMonitor:
+    serviceMonitor:              # scrapes the API
       enabled: true
       labels:
-        release: kps          # so the Operator selects it
-    podAnnotations:
-      enabled: true           # needed to scrape worker pods in split mode
+        release: kps
+    podMonitor:                  # scrapes each worker pod (split mode)
+      enabled: true
+      labels:
+        release: kps
+    prometheusRule:              # recording rules + the three alerts
+      enabled: true
+      labels:
+        release: kps
+    grafanaDashboard:            # "Inventario / Overview" via the Grafana sidecar
+      enabled: true
   ```
 
-- [ ] **Import the dashboard**: `deploy/monitoring/grafana/dashboards/inventario-overview.json`
-  ("Inventario / Overview") into Grafana.
-- [ ] **Load the alert rules** as a `PrometheusRule` (port the recording rules + alerts
-  from `deploy/monitoring/prometheus/rules/inventario.rules.yml` — `InventarioTargetDown`,
-  `InventarioHighErrorRate` (5xx > 5%), `InventarioHighLatencyP95` (p95 > 1s)) and point
-  Alertmanager at a real receiver (email/Slack/PagerDuty).
+  In **combined mode** (`run all`) the ServiceMonitor covers everything and the
+  PodMonitor renders nothing. In **split mode** you need both: the worker Service is
+  headless, so a ServiceMonitor cannot reach its per-pod endpoints, and without the
+  PodMonitor the installation-wide business gauges and the email-queue depth are never
+  collected — the API target reports them as 0.
+
+  The dashboard ConfigMap is picked up by Grafana's dashboard sidecar, which watches for
+  the `grafana_dashboard: "1"` label. If your Grafana is configured with a different
+  label, or restricts the sidecar to certain namespaces, adjust
+  `metrics.grafanaDashboard.label` / `.labelValue` or set
+  `grafana.sidecar.dashboards.searchNamespace` accordingly. No sidecar at all: import
+  `helm/inventario/files/grafana-dashboards/inventario-overview.json` by hand.
+
+- [ ] **Point Alertmanager at a real receiver** (email/Slack/PagerDuty) and confirm a
+  test alert arrives. The chart ships the rules that fire — `InventarioTargetDown`
+  (critical, 2m), `InventarioHighErrorRate` (5xx > 5% for 10m) and
+  `InventarioHighLatencyP95` (p95 > 1s for 10m) — but routing them is deployment-specific
+  and is the step that actually makes monitoring useful. Thresholds are tunable under
+  `metrics.prometheusRule.*`.
+- [ ] **Verify end to end**, not just that the resources exist:
+
+  ```bash
+  kubectl -n monitoring get prometheusrule,servicemonitor,podmonitor -l release=kps
+  # Prometheus UI -> Status -> Targets: every inventario target must be UP
+  # Prometheus UI -> Alerts: the three Inventario alerts must be listed (inactive)
+  ```
 - [ ] ⚠️ **Protect `/metrics` with the bearer token and keep it off the public internet.**
   It exposes installation-wide aggregate gauges (tenant/user/commodity counts, storage
   bytes). Configure the token per **§B10a** below, scrape it only from the in-cluster

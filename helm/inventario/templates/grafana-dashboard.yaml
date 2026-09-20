@@ -1,0 +1,37 @@
+{{- /*
+Grafana "Inventario / Overview" dashboard as a sidecar-discovered ConfigMap
+(#2034).
+
+Before this, the dashboard existed only as a file the dev compose stack bind-
+mounted, so a Kubernetes install had nothing to look at. The JSON now lives in
+the chart (files/grafana-dashboards/) and compose mounts it from there, so the
+two can never drift.
+
+Discovery is by label, not by any chart-to-Grafana coupling: kube-prometheus-
+stack runs a sidecar that watches ConfigMaps carrying `grafana_dashboard: "1"`
+in whatever namespaces it is configured for, and loads their data as
+dashboards. That is why this renders without needing Grafana's CRDs or even
+Grafana itself — an unwatched ConfigMap is inert.
+
+OFF by default: on a cluster with no sidecar it would sit there unread.
+*/ -}}
+{{- if .Values.metrics.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inventario.fullname" . }}-grafana-dashboards
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    {{- /* The label the sidecar selects on. Configurable because operators
+           rename it (grafana.sidecar.dashboards.label). */}}
+    {{ .Values.metrics.grafanaDashboard.label }}: {{ .Values.metrics.grafanaDashboard.labelValue | quote }}
+  {{- with .Values.metrics.grafanaDashboard.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  {{- range $path, $_ := .Files.Glob "files/grafana-dashboards/*.json" }}
+  {{ base $path }}: |-
+    {{- $.Files.Get $path | nindent 4 }}
+  {{- end }}
+{{- end }}

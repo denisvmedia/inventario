@@ -280,6 +280,65 @@ jobs:
           --set-string run.all.autoscaling.metrics[0].external.target.averageValue=5
           > /tmp/inventario-hpa-external-render.yaml
 
+      - name: Verify the monitoring resources render and the alert set matches
+        run: |
+          set -euo pipefail
+
+          # The chart's PrometheusRule and the dev compose stack's rules file
+          # hold the same alerts with different `up` selectors — the compose
+          # stack has a static job name, a cluster does not (#2034). The
+          # expressions may differ; the alert SET may not, or the dev stack
+          # and production quietly stop testing the same thing.
+          helm template inventario helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.initData.adminPassword=test \
+            --set run.all.enabled=false \
+            --set run.apiserver.enabled=true \
+            --set run.workers.media.enabled=true \
+            --set metrics.serviceMonitor.enabled=true \
+            --set metrics.podMonitor.enabled=true \
+            --set metrics.prometheusRule.enabled=true \
+            --set metrics.grafanaDashboard.enabled=true \
+            --api-versions monitoring.coreos.com/v1 \
+            > /tmp/inventario-monitoring-render.yaml
+
+          for kind in ServiceMonitor PodMonitor PrometheusRule; do
+            grep -q "^kind: $kind$" /tmp/inventario-monitoring-render.yaml || {
+              echo "$kind did not render with its toggle on." >&2
+              exit 1
+            }
+          done
+          grep -q 'grafana_dashboard: "1"' /tmp/inventario-monitoring-render.yaml
+          grep -q 'inventario-overview.json' /tmp/inventario-monitoring-render.yaml
+
+          chart_alerts=$(grep -oE '\- alert: [A-Za-z0-9]+' /tmp/inventario-monitoring-render.yaml \
+            | awk '{print $3}' | sort -u)
+          compose_alerts=$(grep -oE '\- alert: [A-Za-z0-9]+' \
+            deploy/monitoring/prometheus/rules/inventario.rules.yml | awk '{print $3}' | sort -u)
+          if [ "$chart_alerts" != "$compose_alerts" ]; then
+            echo "Chart and compose alert sets diverged." >&2
+            diff <(echo "$chart_alerts") <(echo "$compose_alerts") >&2 || true
+            exit 1
+          fi
+          echo "Alerts in both: $(echo "$chart_alerts" | tr '\n' ' ')"
+
+          # Without the CRDs the toggles must be inert, not a render error.
+          helm template inventario helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.initData.adminPassword=test \
+            --set metrics.serviceMonitor.enabled=true \
+            --set metrics.podMonitor.enabled=true \
+            --set metrics.prometheusRule.enabled=true \
+            > /tmp/inventario-monitoring-nocrd.yaml
+          if grep -qE '^kind: (ServiceMonitor|PodMonitor|PrometheusRule)$' /tmp/inventario-monitoring-nocrd.yaml; then
+            echo "An operator CR rendered on a cluster without the CRDs." >&2
+            exit 1
+          fi
+
       - name: Verify every database waiter shares one retry budget
         run: |
           set -euo pipefail

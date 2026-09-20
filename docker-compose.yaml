@@ -318,7 +318,10 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
     volumes:
       - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      # The dashboard JSON lives in the chart so the compose stack and a
+      # Kubernetes install cannot drift apart (#2034): the chart publishes the
+      # same file as a Grafana-sidecar ConfigMap.
+      - ./helm/inventario/files/grafana-dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
