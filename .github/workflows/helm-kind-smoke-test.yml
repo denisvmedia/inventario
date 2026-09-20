@@ -68,8 +68,19 @@ jobs:
       matrix:
         include:
           - mode: argocd
+            install_values: --set setupJob.argocdMode=true
             values: --set setupJob.argocdMode=true
+          # The first install runs in the chart's default arrangement, then
+          # upgrades into the one under test. That is not a shortcut: a fresh
+          # install with the migration in the pod AND the chart's own demo
+          # Postgres cannot work, because bootstrap has to be a post-install
+          # hook (the database is a main resource) and the app pod cannot
+          # become ready until bootstrap has run. The chart refuses that
+          # combination outright. Upgrading into it is the supported path with
+          # demo Postgres, and it is also where this arrangement earns its
+          # keep — the old-image/new-schema window is an upgrade problem.
           - mode: helm-in-pod
+            install_values: ""
             values: --set setupJob.migrateInInitContainer=true
 
     env:
@@ -141,12 +152,28 @@ jobs:
           echo $! > /tmp/capture-pod-logs.pid
           echo "Log capture running as PID $(cat /tmp/capture-pod-logs.pid)"
 
-      - name: Install chart (${{ matrix.mode }} + demo)
+      - name: Install chart (demo)
         run: |
           set -euo pipefail
           helm upgrade --install "$RELEASE_NAME" helm/inventario \
             --namespace "$K8S_NAMESPACE" \
             --create-namespace \
+            --set-string image.tag="${{ steps.image-tag.outputs.tag }}" \
+            --set demo.postgresql.enabled=true \
+            --set demo.redis.enabled=true \
+            --set demo.minio.enabled=true \
+            ${{ matrix.install_values }} \
+            --set setupJob.initData.seedDatabase=true \
+            --set-string setupJob.initData.adminPassword="$ADMIN_PASSWORD" \
+            --wait --wait-for-jobs --timeout 8m
+
+      - name: Upgrade into ${{ matrix.mode }}
+        # A no-op re-sync for the argocd lane; the transition under test for
+        # the other. Either way everything below this point sees the mode.
+        run: |
+          set -euo pipefail
+          helm upgrade "$RELEASE_NAME" helm/inventario \
+            --namespace "$K8S_NAMESPACE" \
             --set-string image.tag="${{ steps.image-tag.outputs.tag }}" \
             --set demo.postgresql.enabled=true \
             --set demo.redis.enabled=true \

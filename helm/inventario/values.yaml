@@ -874,11 +874,21 @@ setupJob:
   # get the safe ordering under plain Helm or Helmfile — which is what #2086
   # was about, the ordering having been reachable only through argocdMode.
   #
-  # One caveat under plain Helm: the init-data Job is a post-install/
-  # post-upgrade hook, and without `helm upgrade --wait` Helm runs those as
-  # soon as the manifests are applied — before the new pods have finished
-  # migrating. The Job's own retry loop (dbRetry.*) covers that window; using
-  # --wait removes it.
+  # Two caveats under plain Helm.
+  #
+  # The init-data Job becomes a post-install/post-upgrade hook, and without
+  # `helm upgrade --wait` Helm runs those as soon as the manifests are applied
+  # — before the new pods have finished migrating. The Job's own retry loop
+  # (dbRetry.*) covers that window; --wait removes it.
+  #
+  # And a FRESH INSTALL cannot combine this with demo.postgresql.enabled: the
+  # demo database is a main resource, so bootstrap has to be a post-install
+  # hook, and Helm runs post-install hooks only after the main resources are
+  # ready — which the app pod cannot become until bootstrap has created the
+  # migrator user. The chart refuses that combination rather than hanging
+  # until the retry budget runs out. Install with this off and upgrade into
+  # it, use an external database (where bootstrap is a pre-install hook and
+  # the ordering works), or use argocdMode, where sync waves order the two.
   migrateInInitContainer: null
 
   # Hard wall-clock cap on the bootstrap/setup Job (templates/job-setup.yaml).

@@ -195,7 +195,11 @@ The default is the simpler story when Helm is the deployment engine: one Job, on
 
 The middle column is what #2086 added. The in-pod ordering — the one with no window where an old-image pod talks to a newer schema — used to be reachable only through `argocdMode`, which meant plain-Helm and Helmfile installs silently got the weaker guarantee. Setting `setupJob.migrateInInitContainer=true` gets the same ordering without ArgoCD.
 
-One caveat in that middle column, and it is the reason it is not the default: the init-data Job becomes a `post-upgrade` hook, and **without `helm upgrade --wait` Helm runs post-phase hooks as soon as the manifests are applied** — before the new pods have finished migrating. The Job's retry loop (`dbRetry.attempts` × `dbRetry.intervalSeconds`, 5 minutes by default) is what covers that window. `--wait` removes it, and Helmfile passes `--wait` when `wait: true` is set on the release.
+Two caveats in that middle column, and together they are the reason it is not the default.
+
+The init-data Job becomes a `post-upgrade` hook, and **without `helm upgrade --wait` Helm runs post-phase hooks as soon as the manifests are applied** — before the new pods have finished migrating. The Job's retry loop (`dbRetry.attempts` × `dbRetry.intervalSeconds`, 5 minutes by default) is what covers that window. `--wait` removes it, and Helmfile passes `--wait` when `wait: true` is set on the release.
+
+And a **fresh install cannot combine it with `demo.postgresql.enabled`**. The demo database is a main resource, so bootstrap has to be a `post-install` hook; Helm runs post-install hooks only after the main resources are ready; and the app pod cannot become ready until bootstrap has created the migrator user. Nothing breaks that circle, so the chart refuses the combination outright rather than hanging until the retry budget runs out. Install with `migrateInInitContainer=false` and upgrade into it, use an external database — where bootstrap is a `pre-install` hook and the ordering works, which is the case this mode exists for — or use ArgoCD, where sync waves order the two explicitly.
 
 The ArgoCD column exists because Helm hooks do not map onto ArgoCD's sync phases — see [ArgoCD-managed migrations](#argocd-managed-migrations) below.
 

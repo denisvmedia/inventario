@@ -1,4 +1,28 @@
 {{- if .Values.setupJob.enabled }}
+{{- /*
+  Refuse a fresh install that cannot work, instead of hanging for the length
+  of the retry budget and failing with a timeout (#2086).
+
+  With the chart's own demo Postgres, the setup Job has to be a post-install
+  hook: the database is a main resource, so a pre-install hook would find
+  nothing to connect to. Helm runs post-install hooks only after the main
+  resources are ready. If the schema migration lives in the app pod, that pod
+  cannot become ready until bootstrap has created the migrator user — and
+  bootstrap is the hook Helm is waiting to run. Nothing breaks the circle.
+
+  It only affects a fresh install. On upgrade the hook is pre-upgrade, which
+  runs first, so bootstrap completes before the rollout starts. And with an
+  external database — the case #2086 was filed about — the hook is
+  pre-install, which has the same ordering. ArgoCD is unaffected: sync waves
+  order the two explicitly.
+*/ -}}
+{{- if and
+      (eq (include "inventario.migrateInPod" .) "true")
+      (not .Values.setupJob.argocdMode)
+      .Values.demo.postgresql.enabled
+      .Release.IsInstall }}
+{{- fail "setupJob.migrateInInitContainer=true cannot be used for a fresh install with demo.postgresql.enabled=true under plain Helm: bootstrap must run as a post-install hook (the demo database is a main resource), but the app pod cannot become ready until bootstrap has run. Install with migrateInInitContainer=false and upgrade into it, use an external database, or use setupJob.argocdMode=true. See helm/inventario/README.md, \"What runs when\"." }}
+{{- end }}
 {{- $fullName := include "inventario.fullname" . -}}
 {{- $secretName := include "inventario.secretName" . -}}
 {{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
