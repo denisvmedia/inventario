@@ -233,11 +233,20 @@ function MigrateCurrencyDialogBody({
       setConfirmError(t("groups:validation.confirmWordMismatch"))
       return
     }
+    // `?? 0` turned a missing or unparseable preview rate into a value the BE
+    // is guaranteed to reject, so the dialog sent a request it knew was bad
+    // and surfaced the 422 as a server error (#2132).
+    const effectiveRate = rateValue ?? Number(preview.exchange_rate)
+    if (!Number.isFinite(effectiveRate) || effectiveRate <= 0) {
+      setStep(2)
+      return
+    }
+
     try {
       await startMutation.mutateAsync({
         from_currency: fromCurrency,
         to_currency: toCurrency,
-        exchange_rate: rateValue ?? Number(preview.exchange_rate ?? 0),
+        exchange_rate: effectiveRate,
         preview_token: preview.preview_token,
       })
       close()
