@@ -48,6 +48,28 @@ jobs:
     name: Resolve build artifacts
     uses: ./.github/workflows/_wait-for-docker-image.yml
 
+
+  # A cancelled or failed image build used to take every lane below it with
+  # it: the waiter cancels, its dependents report SKIPPED, and the pull
+  # request shows no failing check at all (#2536). This job exists only in
+  # that case, so the gap is loud instead of silent. A legitimate path-filter
+  # skip leaves `result` as `skipped` and this stays out of the way.
+  image-guard:
+    name: Image build did not complete
+    runs-on: ubuntu-latest
+    needs: resolve-build
+    if: >-
+      always() &&
+      (needs.resolve-build.result == 'cancelled' ||
+       needs.resolve-build.result == 'failure')
+    steps:
+      - name: Report the lanes that never ran
+        run: |
+          echo "::error::The image build this workflow waits on ended as '${{ needs.resolve-build.result }}'."
+          echo "Every job that needs it was skipped, so nothing below actually ran."
+          echo "Re-run the workflow once the image for this commit has been published."
+          exit 1
+
   helm-kind-smoke-test:
     name: Helm chart kind smoke (argocdMode)
     runs-on: ubuntu-latest
