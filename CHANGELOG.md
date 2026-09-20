@@ -17,6 +17,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
+- Every response now carries `X-Content-Type-Options`, `X-Frame-Options` and
+  `Referrer-Policy`, and `Strict-Transport-Security` over TLS. A stock install
+  serves the SPA from the binary itself, with no proxy to add them
+  ([#2523](https://github.com/denisvmedia/inventario/issues/2523)).
 - Bootstrap now grants the app, worker and admin roles access to tables created
   by a migration login named anything other than `inventario_migrator`. With a
   custom name, every migrated table came out unreadable to the application
