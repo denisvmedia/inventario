@@ -66,7 +66,6 @@ import {
   COMMODITY_TYPES,
   COMMODITY_TYPE_ICONS,
   COMMODITY_WARRANTY_STATUSES,
-  warrantyStatus,
   type CommoditySortOption,
   type CommodityStatusValue,
   type CommodityTypeValue,
@@ -212,6 +211,11 @@ export function CommoditiesListPage() {
       unassigned: unassignedOnly ? true : undefined,
       sort: validSort,
       sortDesc,
+      // Server-side, not a post-filter over the page: filtering 24 fetched
+      // rows while total and totalPages stayed unfiltered meant a page whose
+      // 24 rows held no match showed "no matches" next to a pager offering
+      // more pages, and matches further in never surfaced (#2128).
+      warrantyStatuses: warrantyFilter.length > 0 ? warrantyFilter : undefined,
     },
     { enabled }
   )
@@ -432,16 +436,9 @@ export function CommoditiesListPage() {
   // ---- Derived -----------------------------------------------------------
   const allRows = list.data?.commodities ?? []
   // Warranty status reads the BE-computed `warranty_expires_at`
-  // (#1367). Filter still runs client-side so we pick up the same
-  // page even on a partial dataset. Server-side `warranty_status=` is
-  // wired on the BE — we'll switch to it once the FE list page
-  // consolidates filter state, then drop this block.
-  const rows =
-    warrantyFilter.length === 0
-      ? allRows
-      : allRows.filter((r) =>
-          warrantyFilter.includes(warrantyStatus({ warranty_expires_at: r.warranty_expires_at }))
-        )
+  // (#1367). The warranty filter is applied by the BE, so the page, the
+  // total and the pager all describe the same filtered set (#2128).
+  const rows = allRows
   // Open-loan counts for the visible page only (#1452). The hook
   // skips the request when commodityIDsForCounts is empty (e.g. while
   // the list is still loading), so the badge column simply doesn't
