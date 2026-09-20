@@ -9,9 +9,8 @@ import (
 	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
-	"gocloud.dev/blob"
-
 	"github.com/google/uuid"
+	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/internal/backupsign"
