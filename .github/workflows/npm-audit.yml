@@ -1,0 +1,66 @@
+name: npm Audit
+
+# Fails when an npm workspace resolves a HIGH or CRITICAL advisory (#848).
+#
+# This is NOT what dependency-review.yml does. That one reads the dependency
+# DIFF of a pull request, so it catches a vulnerability arriving with this
+# change and says nothing about one already installed — an advisory published
+# against a dependency that has been in the lockfile for months is invisible
+# to it. This job audits the whole resolved tree, on every push to master as
+# well as on PRs, so an advisory published today turns the build red tomorrow
+# rather than waiting for someone to touch that package.
+#
+# Dependabot still does the updating; this only decides when the repo stops
+# pretending the problem is not there.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  # Weekly, because the tree does not change but the advisory database does.
+  # The whole point is catching a vulnerability in a dependency nobody has
+  # touched.
+  schedule:
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: npm audit (${{ matrix.workspace }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Report every workspace, not just the first to fail.
+      fail-fast: false
+      matrix:
+        workspace: [frontend, e2e, docs/site]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - id: vars
+        uses: ./.github/actions/vars
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ steps.vars.outputs.node_version }}
+
+      - name: Audit
+        working-directory: ${{ matrix.workspace }}
+        # HIGH and above fails; moderate and low are printed and tolerated.
+        # The threshold matches dependency-review.yml on purpose — two gates
+        # disagreeing about what counts as serious is how both end up ignored.
+        run: |
+          set -euo pipefail
+          npm audit --audit-level=high || {
+            echo "::error::${{ matrix.workspace }} has a high or critical advisory."
+            echo "Run 'npm audit fix --package-lock-only' in ${{ matrix.workspace }},"
+            echo "or document why it cannot be fixed."
+            exit 1
+          }
