@@ -1,0 +1,22 @@
+{{- if and .Values.backup.enabled .Values.backup.persistence.enabled (not .Values.backup.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "inventario.fullname" . }}-backups
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+  annotations:
+    # Keep the dumps when the release goes away. A `helm uninstall` that
+    # takes the backups with it is the worst possible time to lose them.
+    "helm.sh/resource-policy": keep
+spec:
+  accessModes:
+    - {{ .Values.backup.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.backup.persistence.size }}
+  {{- with .Values.backup.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}

@@ -2138,6 +2138,15 @@ export type paths = {
                         "application/json": string;
                     };
                 };
+                /** @description Invalid credentials or code */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
             };
         };
         delete?: never;
@@ -2184,6 +2193,15 @@ export type paths = {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Invalid code */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2340,8 +2358,17 @@ export type paths = {
                         "application/json": string;
                     };
                 };
-                /** @description Unauthorized — invalid code */
+                /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Invalid code */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };
