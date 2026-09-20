@@ -14,20 +14,20 @@ func TestBuildBackupBlobKey(t *testing.T) {
 		name       string
 		tenant     string
 		exportType string
-		timestamp  string
+		exportID   string
 		expected   string
 	}{
-		{"full database", "tenant-a", "full_database", "20060102_150405",
-			"t/tenant-a/exports/backup_full_database_20060102_150405.inb"},
-		{"lowercases type", "tenant-a", "FullDatabase", "20060102_150405",
-			"t/tenant-a/exports/backup_fulldatabase_20060102_150405.inb"},
-		{"locations", "tenant-b", "locations", "20240101_000000",
-			"t/tenant-b/exports/backup_locations_20240101_000000.inb"},
+		{"full database", "tenant-a", "full_database", "exp-1",
+			"t/tenant-a/exports/backup_full_database_exp-1.inb"},
+		{"lowercases type", "tenant-a", "FullDatabase", "exp-1",
+			"t/tenant-a/exports/backup_fulldatabase_exp-1.inb"},
+		{"locations", "tenant-b", "locations", "exp-2",
+			"t/tenant-b/exports/backup_locations_exp-2.inb"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			got := blobkeys.BuildBackupBlobKey(tc.tenant, tc.exportType, tc.timestamp)
+			got := blobkeys.BuildBackupBlobKey(tc.tenant, tc.exportType, tc.exportID)
 			c.Assert(got, qt.Equals, tc.expected)
 			c.Assert(strings.HasPrefix(got, "t/"+tc.tenant+"/"), qt.IsTrue,
 				qt.Commentf("backup key must carry tenant prefix"))
@@ -35,6 +35,33 @@ func TestBuildBackupBlobKey(t *testing.T) {
 				qt.Commentf("backup key must have .inb extension"))
 		})
 	}
+}
+
+// The whole point of #2252: two exports of the same type in the same tenant
+// must not land on the same key. They used to, whenever both finished within
+// the same wall-clock second, and the second writer overwrote the first
+// archive's bytes with no error anywhere.
+func TestBuildBackupBlobKey_DistinctPerExport(t *testing.T) {
+	c := qt.New(t)
+	first := blobkeys.BuildBackupBlobKey("tenant-a", "full_database", "export-1")
+	second := blobkeys.BuildBackupBlobKey("tenant-a", "full_database", "export-2")
+	c.Assert(first, qt.Not(qt.Equals), second)
+
+	// And the same export retried must land on the SAME key, so the retry
+	// overwrites whatever partial object the failed attempt left rather than
+	// orphaning it under a key nothing references.
+	retry := blobkeys.BuildBackupBlobKey("tenant-a", "full_database", "export-1")
+	c.Assert(retry, qt.Equals, first)
+}
+
+// Same property on the legacy XML path, which minted its key the same way.
+func TestBuildExportBlobKey_DistinctPerExport(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(
+		blobkeys.BuildExportBlobKey("tenant-a", "full_database", "export-1"),
+		qt.Not(qt.Equals),
+		blobkeys.BuildExportBlobKey("tenant-a", "full_database", "export-2"),
+	)
 }
 
 func TestSanitizeArchivePath_Safe(t *testing.T) {

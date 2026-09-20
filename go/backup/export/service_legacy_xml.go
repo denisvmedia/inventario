@@ -127,9 +127,9 @@ func (s *ExportService) generateExport(ctx context.Context, export models.Export
 		return "", nil, errors.New("tenant context is required to generate an export")
 	}
 
-	// Generate blob key (filename) — tenant-prefixed under #1793.
-	timestamp := time.Now().Format("20060102_150405")
-	blobKey := blobkeys.BuildExportBlobKey(tenantID, string(export.Type), timestamp)
+	// Generate blob key (filename) — tenant-prefixed under #1793, keyed on the
+	// export row so two exports of the same type cannot collide (#2252).
+	blobKey := blobkeys.BuildExportBlobKey(tenantID, string(export.Type), exportArchiveID(export))
 
 	// Create blob writer
 	writer, err := b.NewWriter(ctx, blobKey, nil)
