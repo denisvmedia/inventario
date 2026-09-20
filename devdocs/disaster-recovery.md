@@ -61,7 +61,12 @@ into production; a rehearsal that can hurt you is one you will not run.
 # Managed Postgres: list the snapshots the provider kept.
 # CloudNativePG:
 kubectl -n <ns> get backups.postgresql.cnpg.io
-# pg_dump CronJob: list what is in the bucket.
+# pg_dump CronJob: list what is in the bucket, or on the chart's PVC:
+kubectl -n <ns> run backup-ls --rm -it --restart=Never \
+  --image=busybox --overrides='{"spec":{"containers":[{"name":"backup-ls",
+  "image":"busybox","command":["ls","-l","/backups"],
+  "volumeMounts":[{"name":"b","mountPath":"/backups"}]}],
+  "volumes":[{"name":"b","persistentVolumeClaim":{"claimName":"<release>-backups"}}]}}'
 ```
 
 Note the timestamp of the most recent one. If it is older than your RPO, stop
@@ -179,11 +184,15 @@ backup**, not on job failures. A failure alert misses the job that stopped
 being scheduled at all.
 
 - **CloudNativePG** exposes `cnpg_collector_last_available_backup_timestamp`.
-- **A `pg_dump` CronJob** — alert on `kube_job_status_succeeded` for it, and
-  on the absence of a recent object in the destination bucket.
+- **A `pg_dump` CronJob** — alert on the age of the newest successful Job, and
+  on the absence of a recent object in the destination bucket. The chart's own
+  CronJob (`backup.enabled`) ships both rules with its PrometheusRule:
+  `InventarioBackupStale` for the age, `InventarioBackupNeverRan` for the case
+  where there is nothing to measure yet. Both need kube-state-metrics.
 - **Managed providers** publish snapshot status in their own console; most
   can forward it to an alerting channel.
 
 Inventario's chart ships alerts for the application
-(`metrics.prometheusRule.enabled`), not for your backup tier — it cannot know
-what runs it. Wire one anyway; it is the alert most likely to earn its keep.
+(`metrics.prometheusRule.enabled`), and for its own backup CronJob when you use
+it. It cannot know what runs your backups otherwise. Wire an alert anyway; it is
+the one most likely to earn its keep.

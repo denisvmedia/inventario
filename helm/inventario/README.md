@@ -492,6 +492,36 @@ Horizontal Pod Autoscaling on one of these custom metrics (e.g. `inventario_emai
 
 A ready-to-run developer monitoring stack (Prometheus + Grafana via docker-compose) lives at [`deploy/monitoring/`](../../deploy/monitoring/README.md).
 
+## Database backups (opt-in)
+
+`backup.enabled=true` adds a CronJob that runs `pg_dump` on a schedule, verifies the dump it just wrote, and prunes copies older than `backup.retentionDays`. It is **off by default**, and that is the right default for most installs: a managed Postgres already takes snapshots, and CloudNativePG has scheduled backups of its own. Turn it on when the database tier has no backup story you can name — a Postgres you run yourself, or the chart's own `demo.postgresql`.
+
+Read [devdocs/disaster-recovery.md](../../devdocs/disaster-recovery.md) before relying on it, and run the drill there. A dump on a PVC in the cluster it came from survives a bad migration or a deleted row; it does not survive losing the cluster.
+
+| Value | Default | Effect |
+| ----- | ------- | ------ |
+| `backup.enabled` | `false` | Renders the CronJob, its PVC, and (with `metrics.prometheusRule.enabled`) two alerts about backup age. |
+| `backup.schedule` | `"0 2 * * *"` | Cron expression. `backup.timeZone` takes an IANA name on Kubernetes 1.27+. |
+| `backup.retentionDays` | `30` | Dumps older than this are deleted **after** a successful run, so a failing job never removes the copy it could not replace. |
+| `backup.image.tag` | `17-alpine` | `pg_dump`'s major version must be at least the server's. Bump it when you upgrade Postgres. |
+| `backup.role` | `inventario_admin` | The role `pg_dump` assumes with `SET ROLE`. See below. |
+| `backup.dsnSecretKey` | `INVENTARIO_DB_DSN` | Which Secret key holds the connection string. |
+| `backup.persistence.existingClaim` | `""` | Point the dumps at a volume that already exists — the way to put them somewhere replicated. |
+| `backup.alert.maxAgeHours` | `36` | Age of the newest successful dump that counts as stale. Tolerates one missed nightly run. |
+
+**Why `backup.role` matters.** `pg_dump` reads every table with `row_security = off`, which PostgreSQL allows only for a role that owns the table or holds `BYPASSRLS`. `inventario_admin` is the one role with that attribute, and the app login is a member of it. Without the role, `pg_dump` stops at the first RLS table with `query would be affected by row-level security policy` — loud, but a failed backup. Leave `backup.role` empty only when the DSN is a superuser or the table owner.
+
+**The alerts need kube-state-metrics.** Both rules read `kube_job_status_completion_time` and `kube_job_owner`. Without kube-state-metrics installed they evaluate against nothing and never fire, which is worse than no alert at all. Confirm those series exist before trusting them. `InventarioBackupStale` covers "the last dump is too old"; `InventarioBackupNeverRan` covers the case the first cannot — a CronJob that has never completed produces no data to compare against, and no failures either.
+
+```bash
+helm template inventario helm/inventario/ \
+  --set-string secrets.dbDsn='postgres://u:p@h:5432/inv?sslmode=require' \
+  --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+  --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+  --set setupJob.initData.adminPassword=test \
+  --set backup.enabled=true
+```
+
 ## Validation
 
 The chart is covered by the `helm-lint.yml` CI workflow across combined, split, demo, and misconfiguration scenarios. The commands below reproduce those scenarios locally:
