@@ -129,6 +129,33 @@ maintainer for explicit approval before writing SQL by hand.**
 - Write tests for new behavior; add or update unit, integration, and e2e tests
   as appropriate for the layer you touched.
 
+## GitHub Actions are pinned to commit SHAs
+
+Every third-party action is referenced by commit SHA with the version in a
+trailing comment:
+
+```yaml
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+```
+
+A tag is a movable pointer. Whoever controls the action's repository can
+repoint `v7` at any commit they like, and that commit runs with whatever
+permissions the job has — in the release workflow, a token that can publish.
+The SHA is the only reference that means one specific tree.
+
+When adding an action, resolve the SHA rather than writing the tag:
+
+```bash
+gh api repos/<owner>/<repo>/git/ref/tags/<tag> -q '.object.sha + " " + .object.type'
+# type "tag" means an annotated tag — dereference it to the commit:
+gh api repos/<owner>/<repo>/git/tags/<sha> -q '.object.sha'
+```
+
+Keep the `# vX` comment: it is what makes a diff readable, and Dependabot
+maintains it when it bumps the pin. Dependabot's `github-actions` ecosystem is
+enabled precisely so a pin stays a reviewable dependency instead of a
+permanent freeze.
+
 ## Changelog
 
 [`CHANGELOG.md`](CHANGELOG.md) is the source of truth for release notes: the
