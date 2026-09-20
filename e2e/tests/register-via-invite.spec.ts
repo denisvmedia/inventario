@@ -156,9 +156,11 @@ test.describe('Register via invite (#1285)', () => {
       await inviteePage.fill('input[data-testid="email"]', uniqueEmail);
       await inviteePage.fill('input[data-testid="password"]', uniquePassword);
       // The React form's zod resolver requires the Terms checkbox before
-      // submit; click the visible label rather than the hidden checkbox
-      // primitive shadcn ships.
-      await inviteePage.click('label[for="register-terms"]');
+      // submit. Click the checkbox itself, not the label: the label
+      // carries the Terms and Privacy links (#2148), so a label click
+      // lands on an anchor as often as not and opens a tab instead of
+      // ticking.
+      await inviteePage.click('[data-testid="terms"]');
 
       // The register POST must carry invite_token so the backend skips the
       // closed-mode gate and email verification. Hook the request before
