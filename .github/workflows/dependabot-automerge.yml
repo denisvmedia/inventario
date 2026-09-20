@@ -8,25 +8,58 @@ permissions:
   contents: write
   pull-requests: write
 
+# A push to an open bot PR supersedes the watcher already running for it.
+# Without this, a PR that is pushed to twice keeps two watchers alive and the
+# older one can enable auto-merge for a commit that no longer exists.
+concurrency:
+  group: automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   dependabot:
     name: Auto-merge Dependabot PRs
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
+    # Long enough to outlast the slowest lane (e2e, 45m) plus queue time.
+    timeout-minutes: 75
     steps:
+      # Pinned to the BASE commit, not the PR merge ref: the wait script below
+      # runs from the checkout, and a script taken from the pull request would
+      # be code the PR supplied gating the PR's own merge.
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
       - name: Fetch Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Wait for this PR's checks to pass
+        # `gh pr merge --auto` defers to REQUIRED status checks. master has no
+        # branch protection, so "required" is the empty set and --auto merges
+        # the moment it is enabled — before a single workflow has reported
+        # (#1819). A patch bump that breaks the build would land on master
+        # unreviewed and untested.
+        #
+        # Waiting here makes the gate independent of repo settings: the merge
+        # step below is only reached once every check that ran has passed.
+        # Configuring required checks in branch protection is still the better
+        # answer and would make this redundant, but it is a repo setting, not
+        # something a workflow can assert.
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: ./.github/scripts/wait-for-pr-checks.sh "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Enable auto-merge for patch updates only
-        # PATCH-ONLY (#2097). `gh pr merge --auto` only completes once every
-        # required status check passes, so branch protection on master is what
-        # actually gates this on the new security checks (go-govulncheck,
-        # dependency-review, the docker.yml image scan). Minor and major
-        # updates are held for manual review — a minor bump can still pull in
-        # behavioural changes that lint/typecheck/unit tests miss.
+        # PATCH-ONLY (#2097). Minor and major updates are held for manual
+        # review — a minor bump can still pull in behavioural changes that
+        # lint/typecheck/unit tests miss.
         if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
@@ -48,15 +81,20 @@ jobs:
     name: Auto-merge Renovate PRs
     runs-on: ubuntu-latest
     if: github.actor == 'renovate[bot]'
+    timeout-minutes: 75
     steps:
+      # Base commit, not the PR merge ref — see the note in the Dependabot job.
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
 
       - name: Get PR labels
         id: pr-labels
         run: |
           labels=$(gh pr view "$PR_URL" --json labels --jq '.labels[].name' | tr '\n' ',')
-          echo "labels=$labels" >> $GITHUB_OUTPUT
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -83,9 +121,16 @@ jobs:
           fi
           echo "is_patch=$is_patch" >> "$GITHUB_OUTPUT"
 
+      - name: Wait for this PR's checks to pass
+        # Same reason as the Dependabot job above (#1819): with no required
+        # checks configured, --auto merges before CI reports.
+        if: steps.classify.outputs.is_patch == 'true'
+        run: ./.github/scripts/wait-for-pr-checks.sh "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Enable auto-merge for patch updates only
-        # `gh pr merge --auto` waits for required status checks, so branch
-        # protection on master gates this on the new security checks.
         if: steps.classify.outputs.is_patch == 'true'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
