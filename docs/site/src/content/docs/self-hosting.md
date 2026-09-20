@@ -43,6 +43,16 @@ Once you've outgrown the quick start, pick the runbook that matches how you want
 - **Docker Compose, in depth** — environment variables, data persistence, external PostgreSQL, cloud storage, and monitoring: [DOCKER.md](https://github.com/denisvmedia/inventario/blob/master/DOCKER.md).
 - **Bare-metal / systemd** — running the binary directly with your own PostgreSQL, secrets, email, and Redis: [DEPLOYMENT.md](https://github.com/denisvmedia/inventario/blob/master/DEPLOYMENT.md).
 - **Kubernetes / Helm release runbook** — cutting a release and deploying to a cluster, with upgrade and rollback steps: [PRODUCTION.md](https://github.com/denisvmedia/inventario/blob/master/PRODUCTION.md).
+- **Email deliverability** — SPF, DKIM, DMARC and how to check that verification and invite mail actually reaches inboxes: [devdocs/email-deliverability.md](https://github.com/denisvmedia/inventario/blob/master/devdocs/email-deliverability.md).
+
+:::caution[Mail that goes to spam is an invisible failure]
+Inventario sends verification, password-reset and invitation mail, and a user
+who never sees it usually gives up rather than telling you. Two things are
+worth doing before you invite anyone: replace the default email provider (it is
+a stub that silently drops every message), and publish SPF, DKIM and DMARC for
+the sending domain. The deliverability runbook linked above walks through both,
+including how to read the headers of a test message.
+:::
 
 :::tip[Back up your data]
 Whichever route you choose, set up regular backups of your database and uploaded files early. Inventario also has its own portable export format — see [Backup & restore](../backup-and-restore/) for the in-app side of this.
