@@ -13,13 +13,31 @@ import (
 // means a stock `docker compose up` — which serves the SPA straight from the
 // binary with nothing in front of it — is not left without them.
 //
-// Content-Security-Policy is deliberately NOT here. A policy that is wrong
-// breaks the application in the browser, in ways no test in this repository
-// would catch, and two facts have to be settled first: uploads can be served
-// from a separate origin (S3/R2 signed URLs), so `img-src 'self'` is wrong for
-// some deployments; and several UI libraries inject `<style>` elements at
-// runtime. It needs its own change, with the policy driven by the configured
-// upload location.
+// The Content-Security-Policy below is a constant and not a knob, because
+// nothing in the product loads from another origin. Signed file URLs are
+// same-origin (`/api/v1/files/download/…` — the server streams the bytes
+// rather than redirecting to the object store), there is no presigned
+// direct-to-bucket upload, and the frontend makes no cross-origin fetches.
+// A deployment that needs to relax it can have a flag when it exists; a knob
+// added ahead of that is one more way to ship a policy nobody checked.
+const contentSecurityPolicy = "default-src 'self'; " +
+	"script-src 'self'; " +
+	// Radix, sonner and friends append <style> elements at runtime. React's
+	// `style` prop goes through CSSOM and is unaffected either way; it is the
+	// injected elements that need this. script-src stays strict, which is
+	// where XSS actually lives.
+	"style-src 'self' 'unsafe-inline'; " +
+	// data: and blob: are the locally-previewed upload, before it is sent.
+	"img-src 'self' data: blob:; " +
+	"font-src 'self' data:; " +
+	"connect-src 'self'; " +
+	"object-src 'none'; " +
+	"base-uri 'self'; " +
+	"form-action 'self'; " +
+	// Supersedes X-Frame-Options for browsers that honor it; the older header
+	// stays for the proxies and scanners that read only that one.
+	"frame-ancestors 'none'"
+
 func SecurityHeaders() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,6 +51,7 @@ func SecurityHeaders() func(http.Handler) http.Handler {
 			// The default leaks the full URL — including group slugs and entity
 			// ids — to every cross-origin request the page makes.
 			h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			h.Set("Content-Security-Policy", contentSecurityPolicy)
 
 			// HSTS only over TLS. Browsers ignore it on a plain-HTTP origin,
 			// but sending it there would also pin `localhost` for developers

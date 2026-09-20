@@ -32,7 +32,37 @@ func TestSecurityHeaders_AreSetOnEveryResponse(t *testing.T) {
 			qt.Commentf("path %s", path))
 		c.Assert(rr.Header().Get("Referrer-Policy"), qt.Equals, "strict-origin-when-cross-origin",
 			qt.Commentf("path %s", path))
+		c.Assert(rr.Header().Get("Content-Security-Policy"), qt.Not(qt.Equals), "",
+			qt.Commentf("path %s", path))
 	}
+}
+
+// The directives worth naming individually are the ones whose absence is not
+// obvious from a glance at the header: no inline script, nothing framed, no
+// plugin content, and a <base> that cannot be rewritten to point elsewhere.
+func TestSecurityHeaders_PolicyPinsTheDirectivesThatMatter(t *testing.T) {
+	c := qt.New(t)
+	rr := httptest.NewRecorder()
+	apiserver.SecurityHeaders()(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) },
+	)).ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	policy := rr.Header().Get("Content-Security-Policy")
+	for _, directive := range []string{
+		"default-src 'self'",
+		// No 'unsafe-inline' here: script-src is where XSS lives, and the
+		// build emits no inline script.
+		"script-src 'self'",
+		"object-src 'none'",
+		"base-uri 'self'",
+		"form-action 'self'",
+		"frame-ancestors 'none'",
+		// The upload preview holds a blob: URL before the file is sent.
+		"img-src 'self' data: blob:",
+	} {
+		c.Assert(policy, qt.Contains, directive)
+	}
+	c.Assert(policy, qt.Not(qt.Contains), "script-src 'self' 'unsafe-inline'")
 }
 
 func TestSecurityHeaders_HSTSOnlyOverTLS(t *testing.T) {
