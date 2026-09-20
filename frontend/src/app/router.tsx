@@ -28,6 +28,8 @@ const LocationDetailPage = lazy(() =>
 const AreaDetailPage = lazy(() =>
   import("@/pages/areas/AreaDetailPage").then((m) => ({ default: m.AreaDetailPage }))
 )
+const PrivacyPage = lazy(() => import("@/pages/legal/PrivacyPage"))
+const TermsPage = lazy(() => import("@/pages/legal/TermsPage"))
 const NotFoundPage = lazy(() =>
   import("@/pages/NotFound").then((m) => ({ default: m.NotFoundPage }))
 )
@@ -259,6 +261,11 @@ export function AppRoutes() {
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/magic-link" element={<MagicLinkPage />} />
         <Route path="/invite/:token" element={<InviteAcceptPage />} />
+
+        {/* Public and outside the auth flow: register makes accepting these a
+            condition of signing up, so they have to be readable first. */}
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
 
         {/* Maintenance is a public route — when the API returns 503 the
             http client bounces here before the auth probe even fires.
