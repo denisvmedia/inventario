@@ -63,8 +63,8 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if $root.Values.setupJob.argocdMode }}
-      # Migrate init container — argocdMode only (#1884). Workers go through
+      {{- if eq (include "inventario.migrateInPod" $root) "true" }}
+      # Migrate init container (#1884, #2086). Workers go through
       # the same verifySchemaMatchesBinary preflight as the apiserver, so they
       # need the same image-coupled migrate-up. Concurrent runs across
       # worker-group Deployments are safe via ptah's advisory lock.

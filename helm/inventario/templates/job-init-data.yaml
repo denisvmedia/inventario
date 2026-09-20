@@ -1,17 +1,22 @@
 {{- /*
-Separate init-data Job for argocdMode (#1884). Runs at sync-wave +5, i.e.
-AFTER the app Deployment is Healthy and the schema has been migrated by
-the Deployment's `migrate` init container. Creates the default tenant /
-admin user (idempotent) and optionally seeds demo data via a temporary
-`inventario run` server.
+Separate init-data Job, rendered whenever schema migrations run in the app
+pod (#1884, #2086). It creates the default tenant / admin user (idempotent)
+and optionally seeds demo data via a temporary `inventario run` server.
 
-This intentionally lives in a separate template from job-setup.yaml so the
-two argocdMode Jobs (bootstrap-only at wave -5, init-data at wave +5)
-stay readable. The non-argocdMode path keeps everything in the existing
-setup Job (templates/job-setup.yaml) — see that file for the Helm-hook
-ordering it relies on.
+It has to be separate because it must run AFTER the schema is migrated, and
+in this mode the migration happens in the Deployment's `migrate` init
+container rather than before the Deployment exists. Under ArgoCD that is
+sync-wave +5, which waits for the Deployment to be Healthy. Under plain Helm
+it is a post-install/post-upgrade hook, which is weaker: without
+`helm upgrade --wait` Helm runs those hooks as soon as the manifests are
+applied, so this Job can start while the new pods are still migrating. The
+dbRetry loop below is what covers that window — `inventario db migrate data`
+fails and is retried until the schema is there.
+
+When migrations stay in the setup Job (the chart default), everything runs
+there instead and this template renders nothing.
 */}}
-{{- if and .Values.setupJob.enabled .Values.setupJob.argocdMode }}
+{{- if and .Values.setupJob.enabled (eq (include "inventario.migrateInPod" .) "true") }}
 {{- $fullName := include "inventario.fullname" . -}}
 {{- $secretName := include "inventario.secretName" . -}}
 {{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
@@ -26,6 +31,7 @@ metadata:
     {{- include "inventario.labels" . | nindent 4 }}
     app.kubernetes.io/component: init-data
   annotations:
+    {{- if .Values.setupJob.argocdMode }}
     # ArgoCD post-Deployment Job (#1884). Runs after the app Deployment is
     # Healthy (which only happens once its `migrate` init container brings
     # the schema up to date). This Job then calls `inventario db migrate
@@ -36,6 +42,15 @@ metadata:
     # Replace=true delete-then-creates the immutable Job on each sync.
     "argocd.argoproj.io/sync-wave": "5"
     "argocd.argoproj.io/sync-options": "Force=true,Replace=true"
+    {{- else }}
+    # Plain Helm: a post-phase hook, so it runs after the Deployment
+    # manifests are applied rather than before them. Jobs are immutable, so
+    # before-hook-creation deletes the previous one; hook-failed keeps a
+    # failed Job around for its logs.
+    "helm.sh/hook": "post-install,post-upgrade"
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-failed
+    {{- end }}
 spec:
   backoffLimit: 3
   {{- with .Values.setupJob.initData.activeDeadlineSeconds }}
@@ -278,17 +293,20 @@ spec:
             {{- end }}
             - name: SEED_DATABASE
               value: {{ ternary "true" "false" .Values.setupJob.initData.seedDatabase | quote }}
-            # SETUP_SKIP_SEED_ON_UPGRADE: in non-argocdMode this was driven by
-            # .Release.IsUpgrade. ArgoCD doesn't expose Helm's upgrade flag in
-            # the same way — and the Job is delete-then-created on every sync
-            # under Replace=true regardless. The seed step here is gated by
-            # `seedDatabase` alone; operators who don't want re-seeding on
-            # subsequent syncs should leave seedDatabase=false in production
-            # overlays (the seed itself is also a one-shot via /api/v1/seed
-            # which the server only allows for the first install — see
-            # /api/v1/seed handler).
+            # SETUP_SKIP_SEED_ON_UPGRADE. Under plain Helm this follows
+            # .Release.IsUpgrade, the same as the setup Job: an upgrade must
+            # not re-seed demo data over what the user has since entered.
+            # ArgoCD does not expose Helm's upgrade flag, and the Job is
+            # delete-then-created on every sync under Replace=true regardless,
+            # so there it is gated by `seedDatabase` alone — leave that false
+            # in production overlays. (The seed is also one-shot server-side:
+            # /api/v1/seed only accepts the first install.)
             - name: SETUP_SKIP_SEED_ON_UPGRADE
+              {{- if .Values.setupJob.argocdMode }}
               value: "false"
+              {{- else }}
+              value: {{ ternary "true" "false" .Release.IsUpgrade | quote }}
+              {{- end }}
             # Opt the seed into writing the bundled fixture bytes (cover
             # photos / invoices / manuals) for whatever tenant we seed —
             # not just the well-known `test-org`. Set only here on the

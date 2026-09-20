@@ -182,26 +182,35 @@ Both need the DB roles that `inventario db bootstrap` creates, and the `pg_trgm`
 
 ### What runs when
 
-| | Plain Helm / Helmfile (default) | `setupJob.argocdMode=true` |
-| --- | --- | --- |
-| Bootstrap | setup Job, `pre-install,pre-upgrade` hook | setup Job, sync-wave `-5` |
-| Schema migration | same setup Job, after bootstrap | `migrate` init container on every app Deployment |
-| Data migration + seed | same setup Job, after migration | separate init-data Job, sync-wave `+5` |
-| Ordering guarantee | the whole sequence completes before the Deployment is touched | migration is pinned to the pod image that will run it |
+Three arrangements, chosen by two values. `setupJob.argocdMode` picks the deployment engine; `setupJob.migrateInInitContainer` picks where the schema migration runs and defaults to whatever `argocdMode` says.
 
-The default path is the simpler story when Helm is the deployment engine: one Job, one pod, three steps in order, and `helm upgrade --wait --wait-for-jobs` does not return until it finished. The ArgoCD path exists because Helm hooks do not map onto ArgoCD's sync phases — see [ArgoCD-managed migrations](#argocd-managed-migrations) below.
+| | Helm, migration in the Job (default) | Helm, `migrateInInitContainer=true` | `argocdMode=true` |
+| --- | --- | --- | --- |
+| Bootstrap | setup Job, `pre-install,pre-upgrade` hook | setup Job, same hook, bootstrap only | setup Job, sync-wave `-5` |
+| Schema migration | same setup Job, after bootstrap | `migrate` init container on every app Deployment | `migrate` init container on every app Deployment |
+| Data migration + seed | same setup Job, after migration | separate init-data Job, `post-install,post-upgrade` hook | separate init-data Job, sync-wave `+5` |
+| Ordering guarantee | the whole sequence completes before the Deployment is touched | migration is pinned to the pod image that will run it | migration is pinned to the pod image that will run it |
 
-### Migrations must be backward-compatible in both modes
+The default is the simpler story when Helm is the deployment engine: one Job, one pod, three steps in order, and `helm upgrade --wait --wait-for-jobs` does not return until it finished.
+
+The middle column is what #2086 added. The in-pod ordering — the one with no window where an old-image pod talks to a newer schema — used to be reachable only through `argocdMode`, which meant plain-Helm and Helmfile installs silently got the weaker guarantee. Setting `setupJob.migrateInInitContainer=true` gets the same ordering without ArgoCD.
+
+One caveat in that middle column, and it is the reason it is not the default: the init-data Job becomes a `post-upgrade` hook, and **without `helm upgrade --wait` Helm runs post-phase hooks as soon as the manifests are applied** — before the new pods have finished migrating. The Job's retry loop (`dbRetry.attempts` × `dbRetry.intervalSeconds`, 5 minutes by default) is what covers that window. `--wait` removes it, and Helmfile passes `--wait` when `wait: true` is set on the release.
+
+The ArgoCD column exists because Helm hooks do not map onto ArgoCD's sync phases — see [ArgoCD-managed migrations](#argocd-managed-migrations) below.
+
+
+### Migrations must be backward-compatible in every mode
 
 This is the part worth being blunt about, because it is easy to read the ArgoCD section and conclude otherwise.
 
-In the default path, the `pre-upgrade` hook migrates to completion **before** the rolling update starts, so old-revision pods serve traffic against the new schema for the whole rollout. In ArgoCD mode the migration happens as the first new pod starts, which shortens that window to the rollout itself — but old pods are still up, and still talking to the migrated schema, until the last one is replaced.
+When the migration runs in the setup Job, the `pre-upgrade` hook migrates to completion **before** the rolling update starts, so old-revision pods serve traffic against the new schema for the whole rollout. When it runs in the pod — `migrateInInitContainer=true` or ArgoCD mode — the migration happens as the first new pod starts, which shortens that window to the rollout itself. Old pods are still up, and still talking to the migrated schema, until the last one is replaced.
 
 Neither mode removes the requirement. Expand and contract over releases: add a column, deploy code that writes both, backfill, deploy code that reads the new one, drop the old one in a later release. The chart cannot enforce this and does not try.
 
 ### Concurrency is safe
 
-In ArgoCD mode every app pod — apiserver and each worker — runs `migrate up` on start, so several can run at once during a rollout. That is fine: the migrator takes a PostgreSQL advisory lock (`ptah_migrate`) for the duration, so concurrent runners serialize rather than racing. A pod that finds the schema already current returns after a single round trip.
+Whenever the migration runs in the pod, every app pod — apiserver and each worker — runs `migrate up` on start, so several can run at once during a rollout. That is fine: the migrator takes a PostgreSQL advisory lock (`ptah_migrate`) for the duration, so concurrent runners serialize rather than racing. A pod that finds the schema already current returns after a single round trip.
 
 ### Preview before you sync
 
@@ -230,9 +239,9 @@ kubectl -n <ns> run migrate-preview --rm -it --restart=Never \
 
 ### When a migration fails
 
-**Default path.** The setup Job fails, `helm upgrade --wait --wait-for-jobs` fails with it, and the Deployment is never touched — the old release keeps serving. Read the Job's logs, fix forward, re-run the upgrade.
+**Migration in the setup Job (default).** The Job fails, `helm upgrade --wait --wait-for-jobs` fails with it, and the Deployment is never touched — the old release keeps serving. Read the Job's logs, fix forward, re-run the upgrade.
 
-**ArgoCD mode.** The new pod's init container fails, the surge replica never becomes Ready, the rollout stalls at `progressDeadlineSeconds`, and the old pods keep serving. ArgoCD reports `Degraded`. Roll the image tag back; no schema intervention is needed, because a migration that failed did not commit.
+**Migration in the pod** (`migrateInInitContainer=true`, or ArgoCD mode). The new pod's init container fails, the surge replica never becomes Ready, the rollout stalls at `progressDeadlineSeconds`, and the old pods keep serving. Under Helm the upgrade fails at `--wait`; under ArgoCD the Application reports `Degraded`. Roll the image tag back; no schema intervention is needed, because a migration that failed did not commit.
 
 **A migration that half-applied.** A body that is not transactional — `CREATE INDEX CONCURRENTLY` is the usual case — can leave the schema between two states. The migrator records that and refuses to retry, because re-running an unknown-state migration is how you turn one problem into two. Reconcile by hand against the migration file, then let the retry through.
 

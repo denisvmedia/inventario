@@ -14,6 +14,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 - Privacy Policy and Terms of Service pages, linked from the registration
   consent checkbox ([#2148](https://github.com/denisvmedia/inventario/issues/2148)).
+- `setupJob.migrateInInitContainer` makes the in-pod migration ordering
+  available without ArgoCD, so a plain Helm or Helmfile install no longer has
+  to migrate before the rollout starts
+  ([#2086](https://github.com/denisvmedia/inventario/issues/2086)).
 - Opt-in nightly `pg_dump` CronJob in the Helm chart (`backup.enabled`), with
   retention, a read-back check on each dump, and alerts on backup age
   ([#845](https://github.com/denisvmedia/inventario/issues/845)).

@@ -456,6 +456,71 @@ jobs:
           echo "$init_data_block" | grep -Eq -- '- name: init-data' \
             || { echo "init-data Job missing init-data init container" >&2; exit 1; }
 
+      - name: Render chart with setupJob.migrateInInitContainer (plain Helm)
+        run: |
+          set -euo pipefail
+
+          # The in-pod migration ordering without ArgoCD (#2086). Same three
+          # resources as argocdMode, held together by Helm hooks instead of
+          # sync waves: a bootstrap-only setup Job on pre-install/pre-upgrade,
+          # the `migrate` init container on the Deployment, and the init-data
+          # Job on post-install/post-upgrade. Each assertion below is one of
+          # the moves that makes the ordering work.
+          helm template inventario helm/inventario \
+            --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+            --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+            --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+            --set setupJob.initData.adminPassword=test \
+            --set setupJob.migrateInInitContainer=true \
+            > /tmp/inventario-migrate-in-pod-render.yaml
+
+          setup_job_block="$(awk '
+            /^# Source: inventario\/templates\/job-setup.yaml/ { in_block=1 }
+            in_block { print }
+            in_block && /^# Source: / && !/job-setup\.yaml/ { exit }
+          ' /tmp/inventario-migrate-in-pod-render.yaml)"
+
+          # Still a Helm hook — this is not ArgoCD — but bootstrap only.
+          echo "$setup_job_block" | grep -Eq '"helm.sh/hook": "pre-install,pre-upgrade"' \
+            || { echo "setup Job lost its Helm hook" >&2; echo "$setup_job_block" >&2; exit 1; }
+          echo "$setup_job_block" | grep -Eq -- '- name: bootstrap' \
+            || { echo "setup Job missing bootstrap init container" >&2; exit 1; }
+          for step in migrate init-data; do
+            if echo "$setup_job_block" | grep -Eq -- "- name: $step"; then
+              echo "setup Job must not run $step when migrations moved to the pod" >&2
+              exit 1
+            fi
+          done
+
+          deployment_block="$(awk '
+            /^# Source: inventario\/templates\/deployment.yaml/ { in_block=1 }
+            in_block { print }
+            in_block && /^# Source: / && !/templates\/deployment\.yaml/ { exit }
+          ' /tmp/inventario-migrate-in-pod-render.yaml)"
+
+          echo "$deployment_block" | grep -Eq -- '- name: migrate' \
+            || { echo "Deployment missing migrate init container" >&2; exit 1; }
+          echo "$deployment_block" | grep -Eq 'inventario db migrate up' \
+            || { echo "migrate init container missing migrate-up command" >&2; exit 1; }
+
+          init_data_block="$(awk '
+            /^# Source: inventario\/templates\/job-init-data.yaml/ { in_block=1 }
+            in_block { print }
+            in_block && /^# Source: / && !/job-init-data\.yaml/ { exit }
+          ' /tmp/inventario-migrate-in-pod-render.yaml)"
+
+          test -n "$init_data_block" \
+            || { echo "render is missing the init-data Job" >&2; exit 1; }
+          # A POST-phase hook: it has to run after the Deployment exists, not
+          # before it. A pre- hook here would migrate data against the old
+          # schema, which is the whole failure this arrangement avoids.
+          echo "$init_data_block" | grep -Eq '"helm.sh/hook": "post-install,post-upgrade"' \
+            || { echo "init-data Job is not a post-phase Helm hook" >&2; echo "$init_data_block" >&2; exit 1; }
+          if echo "$init_data_block" | grep -Eq 'argocd.argoproj.io'; then
+            echo "init-data Job carries ArgoCD annotations outside argocdMode" >&2
+            exit 1
+          fi
+
       - name: Render chart with setupJob.argocdMode (split + external services)
         run: |
           set -euo pipefail

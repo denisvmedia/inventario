@@ -49,10 +49,10 @@ spec:
     values.yaml setupJob.activeDeadlineSeconds for the full rationale.
 
     Budget depends on what this Job actually does:
-      - argocdMode  → bootstrap-only (migrate + init-data/seed run in the
-        Deployment's migrate init container and the separate wave +5
-        init-data Job), so the setup budget is just setupJob.activeDeadlineSeconds.
-      - non-argocd  → this ONE Job runs bootstrap + migrate + init-data +
+      - migrations in the pod → bootstrap-only (migrate runs in the
+        Deployment's init container and init-data/seed in the separate
+        init-data Job), so the budget is just setupJob.activeDeadlineSeconds.
+      - migrations in this Job → it runs bootstrap + migrate + init-data +
         (optional) seed sequentially, so its budget must cover BOTH phases.
         Hence the SUM (not the max): the phases run back-to-back, so the seed
         budget (setupJob.initData.activeDeadlineSeconds) is added on top of
@@ -60,7 +60,7 @@ spec:
     0 on both knobs leaves the cap unset (unbounded, old behavior).
   */}}
   {{- $deadline := int .Values.setupJob.activeDeadlineSeconds }}
-  {{- if not .Values.setupJob.argocdMode }}
+  {{- if ne (include "inventario.migrateInPod" .) "true" }}
   {{- $deadline = add $deadline (int .Values.setupJob.initData.activeDeadlineSeconds) }}
   {{- end }}
   {{- if gt $deadline 0 }}
@@ -96,10 +96,10 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- /* Don't emit `initContainers:` with no entries — happens when
-             argocdMode=true AND bootstrap.enabled=false. An empty key is
-             rejected by the k8s API. */}}
-      {{- if or .Values.setupJob.bootstrap.enabled (not .Values.setupJob.argocdMode) }}
+      {{- /* Don't emit `initContainers:` with no entries — happens when the
+             migrate/init-data steps moved to the pod AND bootstrap.enabled is
+             false. An empty key is rejected by the k8s API. */}}
+      {{- if or .Values.setupJob.bootstrap.enabled (ne (include "inventario.migrateInPod" .) "true") }}
       initContainers:
         {{- if .Values.setupJob.bootstrap.enabled }}
         - name: bootstrap
@@ -160,7 +160,7 @@ spec:
             - name: tmp
               mountPath: /tmp
         {{- end }}
-        {{- if not .Values.setupJob.argocdMode }}
+        {{- if ne (include "inventario.migrateInPod" .) "true" }}
         {{- include "inventario.migrateInitContainer" . | nindent 8 }}
         - name: init-data
           image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}

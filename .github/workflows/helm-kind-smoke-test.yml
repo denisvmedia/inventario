@@ -1,16 +1,24 @@
 name: Helm Kind Smoke Test
 
-# Chart-level smoke for the argocdMode upgrade path (#1884). Helm-direct
-# install (no ArgoCD): the chart's sync-wave annotations are ignored, but
-# the retry logic in the bootstrap Job / migrate init container / init-data
-# Job tolerates the unordered apply. The smoke validates:
-#   - the bootstrap Job (wave -5 in argocdMode) successfully creates the
-#     migrator DB user against demo postgres,
-#   - the app Deployment's `migrate` init container (#1884) runs
+# Chart-level smoke for both arrangements that migrate inside the app pod
+# (#1884, #2086), run against a kind cluster:
+#
+#   - `argocd`      — setupJob.argocdMode=true. Helm-direct install, so the
+#                     sync-wave annotations are inert; what is exercised is
+#                     the resource shape and the retry logic that tolerates
+#                     an unordered apply.
+#   - `helm-in-pod` — setupJob.migrateInInitContainer=true. The same three
+#                     resources held together by Helm hooks, which a
+#                     Helm-direct install DOES honor, so this lane also
+#                     exercises the real ordering.
+#
+# Both validate:
+#   - the bootstrap Job creates the migrator DB user against demo postgres,
+#   - the app Deployment's `migrate` init container runs
 #     `inventario db migrate up` against the demo schema and the main
 #     container then comes Ready,
-#   - the init-data Job (wave +5 in argocdMode) creates the default tenant
-#     + admin and (with seedDatabase=true) seeds demo data,
+#   - the init-data Job creates the default tenant + admin and (with
+#     seedDatabase=true) seeds demo data,
 #   - a second `helm upgrade --install` (no-op re-sync) re-runs the Jobs
 #     idempotently and the Deployment stays Ready.
 #
@@ -49,10 +57,20 @@ jobs:
     uses: ./.github/workflows/_wait-for-docker-image.yml
 
   helm-kind-smoke-test:
-    name: Helm chart kind smoke (argocdMode)
+    name: Helm chart kind smoke (${{ matrix.mode }})
     runs-on: ubuntu-latest
     needs: resolve-build
     timeout-minutes: 30
+
+    strategy:
+      # Report both arrangements, not just the first to break.
+      fail-fast: false
+      matrix:
+        include:
+          - mode: argocd
+            values: --set setupJob.argocdMode=true
+          - mode: helm-in-pod
+            values: --set setupJob.migrateInInitContainer=true
 
     env:
       KIND_CLUSTER_NAME: inventario-helm-ci
@@ -123,7 +141,7 @@ jobs:
           echo $! > /tmp/capture-pod-logs.pid
           echo "Log capture running as PID $(cat /tmp/capture-pod-logs.pid)"
 
-      - name: Install chart (argocdMode + demo)
+      - name: Install chart (${{ matrix.mode }} + demo)
         run: |
           set -euo pipefail
           helm upgrade --install "$RELEASE_NAME" helm/inventario \
@@ -133,12 +151,12 @@ jobs:
             --set demo.postgresql.enabled=true \
             --set demo.redis.enabled=true \
             --set demo.minio.enabled=true \
-            --set setupJob.argocdMode=true \
+            ${{ matrix.values }} \
             --set setupJob.initData.seedDatabase=true \
             --set-string setupJob.initData.adminPassword="$ADMIN_PASSWORD" \
             --wait --wait-for-jobs --timeout 8m
 
-      - name: Verify resource shape (argocdMode)
+      - name: Verify resource shape
         run: |
           set -euo pipefail
 
@@ -149,11 +167,11 @@ jobs:
           echo "setup Job init containers:"
           echo "$setup_init"
           [ "$setup_init" = "bootstrap" ] || {
-            echo "Setup Job init containers must be exactly [bootstrap] in argocdMode" >&2
+            echo "Setup Job init containers must be exactly [bootstrap] when migrations run in the pod" >&2
             exit 1
           }
 
-          # Init-data Job is a separate resource in argocdMode.
+          # Init-data Job is a separate resource whenever migrations run in the pod.
           init_data_init="$(kubectl get job "${RELEASE_NAME}-inventario-init-data" \
             -n "$K8S_NAMESPACE" \
             -o jsonpath='{range .spec.template.spec.initContainers[*]}{.name}{"\n"}{end}')"
@@ -171,7 +189,7 @@ jobs:
           echo "app Deployment init containers:"
           echo "$app_init"
           [ "$app_init" = "migrate" ] || {
-            echo "App Deployment must have exactly the [migrate] init container in argocdMode" >&2
+            echo "App Deployment must have exactly the [migrate] init container" >&2
             exit 1
           }
 
@@ -253,7 +271,7 @@ jobs:
             --set demo.postgresql.enabled=true \
             --set demo.redis.enabled=true \
             --set demo.minio.enabled=true \
-            --set setupJob.argocdMode=true \
+            ${{ matrix.values }} \
             --set setupJob.initData.seedDatabase=true \
             --set-string setupJob.initData.adminPassword="$ADMIN_PASSWORD" \
             --wait --wait-for-jobs --timeout 8m
@@ -290,7 +308,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: helm-kind-smoke-diagnostics
+          name: helm-kind-smoke-diagnostics-${{ matrix.mode }}
           path: artifacts/
           retention-days: 14
 
