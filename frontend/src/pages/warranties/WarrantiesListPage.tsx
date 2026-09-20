@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
+import { ListLoadError } from "@/components/common/ListLoadError"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Separator } from "@/components/ui/separator"
@@ -207,6 +208,10 @@ export function WarrantiesListPage() {
           <Skeleton className="h-14" />
           <Skeleton className="h-14" />
         </div>
+      ) : list.isError ? (
+        // Only the commodities query. areas just supplies a name lookup that
+        // falls back to "", so failing it costs a label, not the rows.
+        <ListLoadError testId="warranties-error" onRetry={() => void list.refetch()} />
       ) : rows.length === 0 ? (
         <EmptyState tab={tab} />
       ) : (

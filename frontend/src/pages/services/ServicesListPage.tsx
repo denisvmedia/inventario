@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
+import { ListLoadError } from "@/components/common/ListLoadError"
 import { Card, CardContent } from "@/components/ui/card"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -80,6 +81,8 @@ export function ServicesListPage() {
               <Skeleton className="h-10" />
               <Skeleton className="h-10" />
             </div>
+          ) : list.isError ? (
+            <ListLoadError testId="services-error" onRetry={() => void list.refetch()} />
           ) : list.data && list.data.services.length === 0 ? (
             <p className="text-sm text-muted-foreground" data-testid="in-service-empty">
               {t("services:list.empty")}

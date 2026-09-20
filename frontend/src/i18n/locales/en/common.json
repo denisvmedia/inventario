@@ -16,6 +16,10 @@
   "errors": {
     "generic": "Something went wrong"
   },
+  "listError": {
+    "description": "The request failed, so nothing is shown here. This does not mean the list is empty.",
+    "title": "Couldn't load this list"
+  },
   "loading": "Loading…",
   "nav": {
     "backup": "Backup",

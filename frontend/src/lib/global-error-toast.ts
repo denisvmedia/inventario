@@ -16,7 +16,7 @@ import { toast } from "sonner"
 
 import { i18next } from "@/i18n"
 
-import { HttpError } from "./http"
+import { HttpError, NetworkError } from "./http"
 import { getServerErrorCode, parseServerError } from "./server-error"
 
 export interface GlobalErrorToastMeta {
@@ -37,6 +37,18 @@ export function notifyGlobalServerError(error: unknown, meta: unknown): void {
     toast.error(
       i18next.t("errors:lockedDuringMigration", {
         defaultValue: "Commodity changes are paused while a currency migration runs.",
+      })
+    )
+    return
+  }
+
+  // Status 0 is a request that never reached the server. It has to come before
+  // the < 500 return, which would otherwise swallow it and leave the user with
+  // a list that looks empty (#2098).
+  if (error instanceof NetworkError) {
+    toast.error(
+      i18next.t("common:serverError.network.title", {
+        defaultValue: "Can't reach the server",
       })
     )
     return
