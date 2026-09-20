@@ -6,6 +6,7 @@ import { Clock } from "lucide-react"
 import { AuthLayout } from "@/components/auth/AuthLayout"
 import { MFAChallenge } from "@/components/auth/MFAChallenge"
 import { Button } from "@/components/ui/button"
+import type { LoginOutcome } from "@/features/auth/api"
 import { useMagicLinkVerify } from "@/features/auth/hooks"
 import { sanitizeRedirectPath } from "@/lib/safe-redirect"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -27,6 +28,14 @@ import { RouteTitle } from "@/components/routing/RouteTitle"
 // success path logs the user in (verifyMagicLink already stored the tokens)
 // and the MFA branch reuses the shared <MFAChallenge> component.
 type VerifyState = "verifying" | "mfa" | "error"
+
+// One request per token, shared across mounts. The effect's cleanup only set
+// a `cancelled` flag; it never aborted the request, so a remount — StrictMode
+// in development, or any remount before the URL is replaced — fired a second
+// verify against a one-time token. The first call had already logged the user
+// in; the second got a 400 and painted "link expired" over a live session
+// (#2132). Keyed by token so a different link still verifies.
+const inFlightByToken = new Map<string, Promise<LoginOutcome>>()
 
 export function MagicLinkPage() {
   const { t } = useTranslation()
@@ -53,8 +62,15 @@ export function MagicLinkPage() {
     setMfaToken(null)
     /* eslint-enable react-hooks/set-state-in-effect */
     let cancelled = false
-    verifyMutation
-      .mutateAsync(token)
+    let pending = inFlightByToken.get(token)
+    if (!pending) {
+      pending = verifyMutation.mutateAsync(token)
+      inFlightByToken.set(token, pending)
+      // Dropped once settled: the entry exists to deduplicate concurrent
+      // mounts, not to cache an outcome for later navigations.
+      void pending.finally(() => inFlightByToken.delete(token))
+    }
+    pending
       .then((outcome) => {
         if (cancelled) return
         if (outcome.kind === "mfa_required") {

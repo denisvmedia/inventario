@@ -34,13 +34,11 @@ export function counts(
   slug: string,
   data: {
     images?: number
-    invoices?: number
     documents?: number
     other?: number
     all?: number
     bytes?: {
       images?: number
-      invoices?: number
       documents?: number
       other?: number
       all?: number
@@ -52,11 +50,10 @@ export function counts(
       HttpResponse.json({
         data: {
           images: 0,
-          invoices: 0,
           documents: 0,
           other: 0,
           all: 0,
-          bytes: { images: 0, invoices: 0, documents: 0, other: 0, all: 0 },
+          bytes: { images: 0, documents: 0, other: 0, all: 0 },
           ...data,
         },
       })

@@ -88,7 +88,7 @@ describe("features/files/api", () => {
     server.use(
       http.get(apiUrl("/g/g1/files/category-counts"), () =>
         HttpResponse.json({
-          data: { images: 3, invoices: 0, documents: 1, other: 0, all: 4 },
+          data: { images: 3, documents: 1, other: 0, all: 4 },
         })
       )
     )

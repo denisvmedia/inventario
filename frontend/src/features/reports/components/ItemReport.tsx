@@ -32,6 +32,19 @@ interface ItemReportProps {
   generatedDate: string
 }
 
+// The BE marshals non-pointer decimals, so an unpriced item arrives as "0"
+// rather than undefined — the `!== undefined` guard was never false and every
+// such item rendered as a formatted zero (#2132).
+function priceOrNoValue(
+  raw: unknown,
+  currency: string,
+  noValue: string,
+  format: (n: number, c: string) => string
+): string {
+  const n = Number(raw)
+  return Number.isFinite(n) && n !== 0 ? format(n, currency) : noValue
+}
+
 export function ItemReport({
   commodity,
   imageFiles,
@@ -49,14 +62,18 @@ export function ItemReport({
   const WarrantyIcon = wConfig.icon
   const photos = filesToPhotos(imageFiles, imageSize)
 
-  const purchasePrice =
-    commodity.original_price !== undefined
-      ? formatCurrency(Number(commodity.original_price), purchaseCurrency)
-      : noValue
-  const estimatedValue =
-    commodity.current_price !== undefined
-      ? formatCurrency(Number(commodity.current_price), groupCurrency)
-      : noValue
+  const purchasePrice = priceOrNoValue(
+    commodity.original_price,
+    purchaseCurrency,
+    noValue,
+    formatCurrency
+  )
+  const estimatedValue = priceOrNoValue(
+    commodity.current_price,
+    groupCurrency,
+    noValue,
+    formatCurrency
+  )
 
   const details: { icon: LucideIcon; label: string; value: string }[] = [
     {

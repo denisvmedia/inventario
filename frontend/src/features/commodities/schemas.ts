@@ -173,7 +173,13 @@ const baseCommoditySchema = z
     // Future-date guard. Surface the error on `purchase_date` directly
     // so RHF puts it next to the input.
     if (vals.purchase_date) {
-      const today = new Date().toISOString().slice(0, 10)
+      // Local components, not toISOString: the input is a local calendar date,
+      // and comparing it against UTC's today rejected a same-day purchase for
+      // anyone east of UTC+10 for the first hours of their day (#2132).
+      const now = new Date()
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+        now.getDate()
+      ).padStart(2, "0")}`
       if (vals.purchase_date > today) {
         ctx.addIssue({
           path: ["purchase_date"],
