@@ -2,6 +2,7 @@ package up
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -10,6 +11,11 @@ import (
 	"go.5x5.cz/inventario/cmd/inventario/shared"
 	"go.5x5.cz/inventario/schema/migrations/migrator"
 )
+
+// ExitCodeDirtyMigration is returned when a previous attempt left a migration
+// half-applied. It is distinct from the generic failure status so a retry
+// wrapper can stop instead of exhausting its budget on a decided outcome.
+const ExitCodeDirtyMigration = 3
 
 type Command struct {
 	command.Base
@@ -62,5 +68,14 @@ func (c *Command) migrateUp(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 	migratorArgs := migrator.Args{
 		DryRun: dryRun,
 	}
-	return migr.MigrateUp(context.Background(), migratorArgs)
+	err := migr.MigrateUp(context.Background(), migratorArgs)
+	if errors.Is(err, migrator.ErrDirtyMigration) {
+		// Hand the caller a status it can branch on. Deploy wrappers retry
+		// `migrate up` because most failures are transient — an unreachable
+		// database, a lock held by a concurrent rollout — but a dirty
+		// revision is decided, and retrying it only delays the point at
+		// which someone looks at the logs (#2416).
+		return command.WithExitCode(err, ExitCodeDirtyMigration)
+	}
+	return err
 }

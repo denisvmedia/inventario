@@ -161,53 +161,7 @@ spec:
               mountPath: /tmp
         {{- end }}
         {{- if not .Values.setupJob.argocdMode }}
-        - name: migrate
-          image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["sh", "-c"]
-          args:
-            - |
-              set -eu
-              export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
-              i=1
-              while [ "$i" -le 15 ]; do
-                if inventario db migrate up; then
-                  echo "Schema migrations completed successfully"
-                  exit 0
-                fi
-                echo "Migration attempt $i failed, retrying in 2 seconds..."
-                i=$((i + 1))
-                sleep 2
-              done
-              echo "Schema migrations failed after 15 attempts"
-              exit 1
-          env:
-            - name: APP_DB_DSN
-              {{- if .Values.demo.postgresql.enabled }}
-              value: {{ include "inventario.dbDsn" . | quote }}
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $secretName }}
-                  key: INVENTARIO_DB_DSN
-              {{- end }}
-            - name: MIGRATOR_DB_DSN
-              {{- if .Values.demo.postgresql.enabled }}
-              value: {{ include "inventario.migratorDsn" . | quote }}
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $secretName }}
-                  key: MIGRATOR_DB_DSN
-                  optional: true
-              {{- end }}
-          {{- with .Values.containerSecurityContext }}
-          securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
+        {{- include "inventario.migrateInitContainer" . | nindent 8 }}
         - name: init-data
           image: {{ printf "%s:%s" .Values.image.repository $imageTag | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -216,8 +170,13 @@ spec:
             - |
               set -eu
               export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
+              # Shared with the `migrate` init container (dbRetry.*) — see the
+              # note on that value. Diverging budgets are what made a stall
+              # every other component survived fail this Job alone (#2243).
+              attempts={{ int .Values.dbRetry.attempts }}
+              interval={{ int .Values.dbRetry.intervalSeconds }}
               i=1
-              while [ "$i" -le 15 ]; do
+              while [ "$i" -le "$attempts" ]; do
                 if inventario db migrate data \
                   --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
                   --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
@@ -226,12 +185,12 @@ spec:
                   --admin-name="$INVENTARIO_MIGRATE_DATA_ADMIN_NAME"; then
                   break
                 fi
-                echo "Initial data attempt $i failed, retrying in 2 seconds..."
+                echo "Initial data attempt $i/$attempts failed, retrying in ${interval}s..."
                 i=$((i + 1))
-                sleep 2
+                sleep "$interval"
               done
-              if [ "$i" -gt 15 ]; then
-                echo "Initial data setup failed after 15 attempts"
+              if [ "$i" -gt "$attempts" ]; then
+                echo "Initial data setup failed after $attempts attempts"
                 exit 1
               fi
 
@@ -257,7 +216,7 @@ spec:
                 # backofficeUser.email when the Secret key is absent (PR previews). (#1967)
                 bo_email="${BACKOFFICE_USER_EMAIL:-$INVENTARIO_BACKOFFICE_BOOTSTRAP_EMAIL}"
                 k=1
-                while [ "$k" -le 15 ]; do
+                while [ "$k" -le "$attempts" ]; do
                   if inventario backoffice bootstrap \
                     --email="$bo_email" \
                     --name="$INVENTARIO_BACKOFFICE_BOOTSTRAP_NAME" \
@@ -267,12 +226,12 @@ spec:
                     --ensure; then
                     break
                   fi
-                  echo "Back-office bootstrap attempt $k failed, retrying in 2 seconds..."
+                  echo "Back-office bootstrap attempt $k/$attempts failed, retrying in ${interval}s..."
                   k=$((k + 1))
-                  sleep 2
+                  sleep "$interval"
                 done
-                if [ "$k" -gt 15 ]; then
-                  echo "Back-office bootstrap failed after 15 attempts"
+                if [ "$k" -gt "$attempts" ]; then
+                  echo "Back-office bootstrap failed after $attempts attempts"
                   exit 1
                 fi
               fi

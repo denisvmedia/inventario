@@ -3,6 +3,7 @@ package migrator
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -38,6 +39,14 @@ var ErrSchemaLagsBinary = errx.NewSentinel("database schema lags the binary's em
 // `inventario db bootstrap`, so a skipped bootstrap is the usual cause — notably
 // `setupJob.bootstrap.enabled=false`.
 var ErrMissingExtension = errx.NewSentinel("required PostgreSQL extension is not installed")
+
+// ErrDirtyMigration is returned by MigrateUp when a previous attempt left a
+// migration recorded as dirty and Ptah will not retry it automatically
+// (#2416). It is a terminal condition: the caller's retry loop must stop and
+// an operator has to reconcile the schema by hand. A failure whose
+// transaction demonstrably rolled back never reaches here — MigrateUp asks
+// Ptah to discard that revision so the next attempt re-runs the migration.
+var ErrDirtyMigration = errx.NewSentinel("migration is recorded as dirty and cannot be retried automatically")
 
 // requiredExtensions are the extensions the migration chain cannot run without.
 // pg_trgm supplies gin_trgm_ops for the trigram indexes on commodities, files and tags.
@@ -119,9 +128,34 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 		return nil
 	}
 
-	// Apply migrations
-	err = ptahMigrator.MigrateUp(ctx)
+	// Apply migrations.
+	//
+	// DiscardRolledBackFailure (#2416) is what makes a retry loop mean
+	// something. Ptah records a revision row before it runs a migration's
+	// body and marks it dirty when the body fails; a later attempt then
+	// refuses to run at all ("migration N is dirty"). For a fault that
+	// aborted the transaction — a deadlock against a concurrent
+	// `ALTER TABLE` is the one we hit — the schema is untouched and that
+	// row is simply wrong, so every subsequent attempt failed on the
+	// bookkeeping rather than re-trying the work. The option drops the row
+	// only when Ptah observed the rollback succeed AND the row shows zero
+	// applied statements, so it cannot paper over a half-applied
+	// migration; those still stop the deploy for a human.
+	err = ptahMigrator.MigrateUpWithOptions(ctx, migrator.MigrateUpOptions{
+		DiscardRolledBackFailure: true,
+	})
 	if err != nil {
+		if migrator.IsDirtyMigration(err) {
+			// Retrying is pointless from here: the previous attempt left the
+			// schema in a state Ptah cannot reason about (a non-transactional
+			// body, or a rollback it could not confirm). Say so, so the
+			// caller stops burning its retry budget on a decided outcome.
+			return errxtrace.Wrap(
+				"a previous attempt left this migration half-applied; "+
+					"reconcile the schema and the revision row by hand — retrying will not clear it",
+				errors.Join(ErrDirtyMigration, err),
+			)
+		}
 		return errxtrace.Wrap("failed to run migrations", err)
 	}
 

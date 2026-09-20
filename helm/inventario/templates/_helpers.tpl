@@ -436,17 +436,32 @@ The caller is expected to render this list item under `initContainers:`.
     - |
       set -eu
       export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
+      attempts={{ int .Values.dbRetry.attempts }}
+      interval={{ int .Values.dbRetry.intervalSeconds }}
       i=1
-      while [ "$i" -le 15 ]; do
-        if inventario db migrate up; then
+      while [ "$i" -le "$attempts" ]; do
+        set +e
+        inventario db migrate up
+        status=$?
+        set -e
+        if [ "$status" -eq 0 ]; then
           echo "Schema migrations completed successfully"
           exit 0
         fi
-        echo "Migration attempt $i failed, retrying in 2 seconds..."
+        # Exit 3 means a previous attempt left a migration half-applied.
+        # Ptah refuses to re-run it and no retry will change that, so stop
+        # here rather than spending the rest of the budget reaching the same
+        # answer with the real error scrolled out of view (#2416).
+        if [ "$status" -eq 3 ]; then
+          echo "Schema migrations stopped: a migration is recorded as dirty."
+          echo "Reconcile the schema and the revision row before retrying."
+          exit "$status"
+        fi
+        echo "Migration attempt $i/$attempts failed (exit $status), retrying in ${interval}s..."
         i=$((i + 1))
-        sleep 2
+        sleep "$interval"
       done
-      echo "Schema migrations failed after 15 attempts"
+      echo "Schema migrations failed after $attempts attempts"
       exit 1
   env:
     - name: APP_DB_DSN

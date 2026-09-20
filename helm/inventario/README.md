@@ -271,6 +271,7 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `secrets.migratorDbDsn` | `""` | Set when schema migrations need a different DB user than the app runtime. |
 | `secrets.jwtSecret` | `""` | Required unless supplied through `secrets.existingSecret`. |
 | `secrets.fileSigningKey` | `""` | Required unless supplied through `secrets.existingSecret`. |
+| `dbRetry.attempts` / `dbRetry.intervalSeconds` | `60` / `5` | Shared retry envelope for everything that waits on the database before the app can serve: the `migrate` init container and the init-data Job. Raise on a platform whose database takes longer to accept connections (a managed instance electing a primary, a Service whose endpoints are slow to propagate). The Jobs' own `activeDeadlineSeconds` still caps the wall clock. |
 | `setupJob.argocdMode` | `false` | Enable for ArgoCD-managed installs to use the sync-wave layout that supports in-place upgrades with new migrations. See [ArgoCD-managed migrations](#argocd-managed-migrations). |
 | `setupJob.bootstrap.enabled` | `true` | Disable if DB bootstrap/role management is handled outside Helm. |
 | `setupJob.bootstrap.superuserDsn` | `""` | Provide when bootstrap needs elevated DB privileges. |
