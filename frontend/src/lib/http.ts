@@ -306,7 +306,17 @@ async function parseBody(response: Response): Promise<unknown> {
   const ctype = response.headers.get("content-type") ?? ""
   if (ctype.includes("json")) {
     const text = await response.text()
-    return text ? JSON.parse(text) : null
+    if (!text) return null
+    try {
+      return JSON.parse(text)
+    } catch {
+      // A json content-type over a truncated or non-JSON body — a proxy error
+      // page, a cut connection. Throwing a SyntaxError here escapes as
+      // something that is not an HttpError, which skips the 503 maintenance
+      // bounce and the HttpError throw below it (#2127). The raw text is a
+      // worse body but a recoverable one.
+      return text
+    }
   }
   return await response.text()
 }
@@ -664,7 +674,11 @@ async function performRequest<T = unknown>(
   // mutation to fail CSRF verification).
   const newCsrf = response.headers.get("X-CSRF-Token") ?? response.headers.get("x-csrf-token")
   if (newCsrf) {
-    if (isBackofficePath(path)) {
+    // Recomputed with the same condition buildHeaders used. A bare
+    // isBackofficePath here sent the rotated token to back-office storage for
+    // impersonation self-service calls, which go out on the tenant pair, so
+    // the rotation landed in the plane that did not make the request (#2127).
+    if (isBackofficePath(path) && !usesImpersonationCredential(path)) {
       setBackofficeCsrfToken(newCsrf)
     } else {
       setCsrfToken(newCsrf)
