@@ -226,7 +226,7 @@ func DoAsBackgroundWorker(ctx context.Context, dbx *sqlx.DB, fn func(context.Con
 // the cross-tenant reads/writes succeed without weakening the
 // per-tenant isolation that normal inventario_app traffic relies on.
 //
-// New callers should be rare and gated behind RequireSystemAdmin.
+// New callers should be rare and gated behind the back-office plane.
 func DoAsAdmin(ctx context.Context, dbx *sqlx.DB, fn func(context.Context, *sqlx.Tx) error) (err error) {
 	tx, err := beginAdminTx(ctx, dbx)
 	if err != nil {

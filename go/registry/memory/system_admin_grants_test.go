@@ -39,9 +39,9 @@ func TestSystemAdminGrantRegistry_Grant_Idempotent(t *testing.T) {
 
 // TestSystemAdminGrantRegistry_Exists_AfterGrantAndRevoke walks the
 // happy path: a freshly-granted user reads as Exists=true; once
-// revoked, reads as Exists=false. This is the RequireSystemAdmin
-// middleware's hot path so any divergence between Grant/Revoke and
-// the Exists view would 403 a legitimate admin or admit a revoked one.
+// revoked, reads as Exists=false. The impersonation target guard reads it on
+// every start, so a divergence between Grant/Revoke and the Exists view would
+// either refuse a borrowable identity or offer up an admin's.
 func TestSystemAdminGrantRegistry_Exists_AfterGrantAndRevoke(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()

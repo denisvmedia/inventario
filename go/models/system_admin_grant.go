@@ -47,7 +47,7 @@ type SystemAdminGrantIndexes struct {
 	_ int
 
 	// Unique index on user_id: each user has at most one grant. Backs
-	// the hot-path Exists() lookup that RequireSystemAdmin runs on every
+	// the hot-path Exists() lookup that the impersonation target guard runs on every
 	// /api/v1/admin/* request, and prevents duplicate grants under a
 	// race between two concurrent CLI grant calls (the unique violation
 	// is what Grant() reads as "row already exists, return idempotent").

@@ -29,7 +29,7 @@ function currentNavLabelKey(pathname: string): string {
 // AdminLayout is the chrome shared by every /admin/* page: a breadcrumb
 // (Admin → <section>) and a secondary nav strip, with the active page
 // rendered through <Outlet />. Mounted as a layout route in router.tsx
-// under the RequireSystemAdmin guard.
+// under the RequireBackofficeAuth guard.
 //
 // The design mock ships no admin layout shell — each admin view in
 // design-mocks/src/views/admin/ is self-contained. This layout reuses

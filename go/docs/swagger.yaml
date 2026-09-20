@@ -4477,8 +4477,11 @@ definitions:
           emit a /auth/me-style payload (the authenticated user reading their
           own identity) populate it from `SystemAdminGrantRegistry.Exists`
           before encoding; the FE uses it as an advisory hint to gate sidebar
-          and route visibility (the backend re-checks via `RequireSystemAdmin`
-          on every /admin/* request).
+          and route visibility. NOTE: since #1785 the /admin/* surface lives
+          behind the back-office plane, which this flag has nothing to do with —
+          no frontend consumer remains (#2475). The flag stays on the wire
+          because the grant it reflects is still real: impersonationTargetGuard
+          refuses to borrow the identity of a user who holds one.
 
           Persistence safety: there is no `//ptah:schema:field` annotation
           so the migration generator never re-adds the column, and the `db:"-"`

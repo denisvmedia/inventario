@@ -161,10 +161,10 @@ func Admin(params AdminParams) func(r chi.Router) {
 	if params.AuditService == nil {
 		panic("apiserver.Admin requires non-nil AdminParams.AuditService")
 	}
-	// The #1784 grant store backs RequireSystemAdmin; we dereference
-	// params.FactorySet a few lines below to resolve it. A nil FactorySet
-	// would NPE before any middleware ran, so trip the startup-guard
-	// invariant here for a clear failure message.
+	// The #1784 grant store backs the impersonation target guard; we
+	// dereference params.FactorySet a few lines below to resolve it. A nil
+	// FactorySet would NPE before any middleware ran, so trip the
+	// startup-guard invariant here for a clear failure message.
 	if params.FactorySet == nil {
 		panic("apiserver.Admin requires non-nil AdminParams.FactorySet")
 	}

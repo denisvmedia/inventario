@@ -1,9 +1,4 @@
 {
-  "forbidden": {
-    "back": "Zpět na přehled",
-    "description": "Nemáte oprávnění zobrazit oblast správy. Tato oblast je vyhrazena pro systémové administrátory.",
-    "title": "Přístup odepřen"
-  },
   "groupDetail": {
     "back": "Zpět na skupiny",
     "danger": {
