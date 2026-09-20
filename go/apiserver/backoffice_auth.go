@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-extras/errx"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -95,7 +96,12 @@ const (
 	backofficeActionLoginFailed = "backoffice.login_failed"
 	backofficeActionLogout      = "backoffice.logout"
 	backofficeActionRefresh     = "backoffice.refresh"
-	backofficeActionMFARequired = "backoffice.login_mfa_required"
+	// backofficeActionRefreshReuse marks a replayed refresh cookie: the
+	// presented value hashes to a row this plane already revoked, which
+	// only a rotated-away copy can do. Distinct from a plain failed
+	// refresh so an operator can alert on it (#2168).
+	backofficeActionRefreshReuse = "backoffice.refresh_token_reuse_detected"
+	backofficeActionMFARequired  = "backoffice.login_mfa_required"
 	// backofficeActionLoginMFACompleted is the audit action stamped on a
 	// successful step-2 MFA login. Lets ops correlate the step-1 challenge
 	// (`backoffice.login_mfa_required`) with the step-2 outcome on the
@@ -647,8 +653,38 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Reuse detection (#2168, porting #967 H4). GetByHash returns revoked
+	// rows unfiltered, so a cookie that hashes to an already-revoked row
+	// means the presenter is replaying a token the legitimate session has
+	// since rotated away from. Treat it as theft and revoke every session
+	// the operator has: a stolen cookie then buys at most one more rotation
+	// before the whole family dies. This plane guards platform operators,
+	// so it must not detect theft later than the tenant plane does.
+	//
+	// Runs BEFORE the user-active and blacklist checks so theft is caught
+	// even for an operator who has since been disabled, and the 401 is
+	// byte-identical to the plain-expired branch so the response tells an
+	// attacker nothing about which of the two fired.
+	if refreshToken.RevokedAt != nil {
+		if err := api.refreshTokenRegistry.RevokeByBackofficeUserID(r.Context(), refreshToken.BackofficeUserID); err != nil {
+			slog.Error("Failed to revoke all backoffice sessions on refresh-token reuse",
+				"user_id", refreshToken.BackofficeUserID, "error", err)
+		}
+		slog.Warn("Backoffice refresh token reuse detected",
+			"user_id", refreshToken.BackofficeUserID,
+			"token_id", refreshToken.ID,
+			"ip", clientIPTruncated(r),
+			"request_id", middleware.GetReqID(r.Context()))
+		api.logAuth(r.Context(), backofficeActionRefreshReuse, refreshToken.BackofficeUserID, false, r, nil)
+		clearBackofficeRefreshCookie(w, r)
+		http.Error(w, "Refresh token expired or revoked", http.StatusUnauthorized)
+		return
+	}
+
 	if !refreshToken.IsValid() {
-		slog.Warn("Backoffice refresh: token expired or revoked", "token_id", refreshToken.ID)
+		// Genuinely expired (RevokedAt == nil, past ExpiresAt): no theft
+		// signal, no cascade — just clear the cookie.
+		slog.Warn("Backoffice refresh: token expired", "token_id", refreshToken.ID)
 		clearBackofficeRefreshCookie(w, r)
 		http.Error(w, "Refresh token expired or revoked", http.StatusUnauthorized)
 		return
