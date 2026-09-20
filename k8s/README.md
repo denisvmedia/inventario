@@ -18,15 +18,10 @@ Both baselines preserve the same startup flow used by `docker-compose.yaml`:
 
 ## Image and tag assumptions
 
-- **Production prerequisite (do this first):** the `k8s/prod` manifests ship with
-  `ghcr.io/denisvmedia/inventario:latest`. Before applying them to production,
-  replace every `image:` reference in `k8s/prod/deployment.yaml` and
-  `k8s/prod/job-setup.yaml` with a specific, immutable published image tag (a
-  released `v<major>.<minor>.<patch>` once one exists, or a `sha-<commit>` tag in
-  the meantime). `:latest` is a floating tag and is **not** safe for production.
-  - Note: there are **no released version tags yet** (tracked in #2088), so no
-    `vX.Y.Z` image exists to pin to today. Until the first release is published,
-    pin to an immutable `sha-<commit>` tag of a `master` build instead.
+- The `k8s/prod` manifests pin a released tag (`v0.1.0` today). Bump every
+  `image:` reference in `k8s/prod/deployment.yaml` and `k8s/prod/job-setup.yaml`
+  when you move to a newer release. Do not put `:latest` back — it floats, so
+  two applies of the same manifest can land different code.
 - **For production, the Helm chart at `helm/inventario/` is the preferred deploy
   path.** `k8s/prod` is a **hand-maintained reference baseline**: it is **not**
   exercised by CI (only `k8s/dev` is — see the kind smoke workflow below), so it

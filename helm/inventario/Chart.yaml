@@ -3,7 +3,14 @@ name: inventario
 description: Personal inventory management system
 type: application
 version: 0.4.0
-appVersion: "latest" # overridden by CI with the actual image tag
+# Pinned to a published release, not "latest": it is the default for
+# image.tag, so a floating value makes a stock install unreproducible and,
+# before any release existed, unpullable (#2035). Bump it with the release —
+# .github/workflows/release.yml fails a tag whose chart disagrees.
+# The "v" is part of it: docker.yml tags images vX.Y.Z, and appVersion is the
+# default for image.tag, so a bare 0.1.0 resolves to a tag that was never
+# published.
+appVersion: "v0.1.0"
 keywords:
   - inventory
   - personal

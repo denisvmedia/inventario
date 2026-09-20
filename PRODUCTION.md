@@ -76,7 +76,7 @@ Fill these in before you start; they parameterize the rest of the runbook.
 Pushing a `vX.Y.Z` tag is what publishes the production image. Until you do this,
 `ghcr.io/denisvmedia/inventario:<VERSION>` and `:latest` **do not exist** (only
 `edge` / `master` / `sha-<commit>` from master pushes), and a default `helm install`
-would `ImagePullBackOff` (see [#2035](https://github.com/denisvmedia/inventario/issues/2035)).
+would have nothing to pull.
 
 - [ ] **Confirm `master` CI is green.** ⚠️ Tagging does **not** wait for CI — verify
   first. The gates: `go-test`, `go-test-postgres`, `go-lint`, `go-swagger-docs`,
@@ -109,7 +109,7 @@ would `ImagePullBackOff` (see [#2035](https://github.com/denisvmedia/inventario/
 - [ ] **Verify the GitHub Release** is published with binaries + `checksums.txt`.
 - [ ] **Record the immutable tag** you will deploy: `ghcr.io/denisvmedia/inventario:v0.1.0`.
   ⚠️ Always deploy a concrete `:vX.Y.Z`, never `:latest` (the chart `appVersion` is
-  `latest`, so you must pass `--set image.tag=v0.1.0` — [#2035](https://github.com/denisvmedia/inventario/issues/2035)).
+  the released version, so a stock install resolves it without `--set`).
 
 ---
 
@@ -555,7 +555,7 @@ file holds only non-secret configuration.
 ```yaml
 image:
   repository: ghcr.io/denisvmedia/inventario
-  # tag is passed on the CLI: --set image.tag=v0.1.0  (do NOT rely on appVersion=latest)
+  # tag defaults to the chart's appVersion; override only to deploy something else
 
 run:
   all:
@@ -684,7 +684,7 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| Pods `ImagePullBackOff` on `:latest` | `image.tag` not set; `appVersion=latest` resolves to a non-existent image | `--set image.tag=vX.Y.Z` ([#2035](https://github.com/denisvmedia/inventario/issues/2035)) |
+| Pods `ImagePullBackOff` | the chart's `appVersion` names a release that was never published | check `helm/inventario/Chart.yaml` against the GitHub releases, or pass `--set image.tag=vX.Y.Z` |
 | File upload fails with HTTP 501 / checksum error | R2 rejecting `aws-sdk-go-v2` default request checksums | Add the two `AWS_*_CHECKSUM_*=when_required` keys (§B4) |
 | Logged out immediately / cookies not `Secure` | ingress not forwarding `X-Forwarded-Proto: https` | enable the header on the controller (§B8) |
 | Log warns "in-memory … not suitable for multi-instance" | no Redis configured | enable `demo.redis` or set the five `secrets.*RedisUrl` (§B6) |
