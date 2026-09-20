@@ -67,8 +67,12 @@ export function MagicLinkPage() {
       pending = verifyMutation.mutateAsync(token)
       inFlightByToken.set(token, pending)
       // Dropped once settled: the entry exists to deduplicate concurrent
-      // mounts, not to cache an outcome for later navigations.
-      void pending.finally(() => inFlightByToken.delete(token))
+      // mounts, not to cache an outcome for later navigations. The rejection
+      // is swallowed *on this chain only* — the caller below still sees it,
+      // and without the catch this bookkeeping chain is an unhandled
+      // rejection whenever the verify fails.
+      const forget = () => inFlightByToken.delete(token)
+      pending.then(forget, forget)
     }
     pending
       .then((outcome) => {
