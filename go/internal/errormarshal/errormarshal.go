@@ -131,7 +131,7 @@ func MarshalError(aerr error) ([]byte, error) {
 		// Try errxjson for errx errors (which don't implement json.Marshaler)
 		if data, err := errxjson.Marshal(aerr); err == nil {
 			jsonErr := jsonError{
-				Error: data,
+				Error: stripInternalFields(data),
 				Type:  fmt.Sprintf("%T", aerr),
 			}
 			return json.Marshal(&jsonErr)
@@ -143,6 +143,46 @@ func MarshalError(aerr error) ([]byte, error) {
 			Type: fmt.Sprintf("%T", v),
 		}
 		return json.Marshal(&jsonErr)
+	}
+}
+
+// stripInternalFields removes stack traces from an errx-rendered error before
+// it reaches a client (#2178). errx records absolute source paths, so the body
+// would otherwise publish the server's filesystem layout on every API error.
+// Applied to the client-facing path only — every caller of this package is in
+// apiserver, and logs get the error itself rather than this rendering.
+//
+// Returns the input unchanged when it does not parse, since a body that lost
+// its message is worse than one carrying a trace.
+func stripInternalFields(data json.RawMessage) json.RawMessage {
+	var tree any
+	if err := json.Unmarshal(data, &tree); err != nil {
+		return data
+	}
+	pruned, err := json.Marshal(pruneStackTraces(tree))
+	if err != nil {
+		return data
+	}
+	return pruned
+}
+
+// pruneStackTraces walks the decoded tree because errx nests a wrapped cause
+// under the wrapper, each level carrying its own trace.
+func pruneStackTraces(node any) any {
+	switch v := node.(type) {
+	case map[string]any:
+		delete(v, "stack_trace")
+		for key, child := range v {
+			v[key] = pruneStackTraces(child)
+		}
+		return v
+	case []any:
+		for i, child := range v {
+			v[i] = pruneStackTraces(child)
+		}
+		return v
+	default:
+		return node
 	}
 }
 
