@@ -369,7 +369,7 @@ Both the apiserver and every worker Deployment `envFrom` the shared ConfigMap **
 
 ## Metrics & scraping
 
-Inventario always serves Prometheus metrics at `/metrics` — on the API HTTP port (`:3333`, served by `run.all` and `run.apiserver`) and on each worker's probe port (`:3334`, alongside `/healthz` and `/readyz`). The endpoint is unconditional; the `metrics.*` discovery values only control how an external Prometheus *discovers* the pods. Everything below is **OFF by default** and does not change rendered output unless explicitly enabled.
+Inventario serves Prometheus metrics at `/metrics` on the probe port (`:3334`, alongside `/healthz` and `/readyz`) for every `run` mode. It is deliberately not on the API HTTP port: the default ingress rule is `path: /`, which would publish installation-wide gauges to the Internet (#2244). The endpoint is unconditional; the `metrics.*` discovery values only control how an external Prometheus *discovers* the pods. Everything below is **OFF by default** and does not change rendered output unless explicitly enabled.
 
 ⚠️ **`/metrics` leaks installation-wide gauges** (tenant/user/commodity counts, storage bytes). Gate it with `metrics.token` (#2102) and do not route it through the public ingress — see [PRODUCTION.md §B10a](../../PRODUCTION.md). When the token is unset the endpoint is **open** and the app logs a one-time startup warning.
 

@@ -263,16 +263,16 @@ run:
 metrics:
   # Optional shared-secret bearer token for GET /metrics (#2102). When set, the
   # app requires the header `Authorization: Bearer <token>` on every /metrics
-  # request (API :3333 and worker :3334) and rejects mismatches with HTTP 401.
+  # request on the probe port (:3334) and rejects mismatches with HTTP 401.
   # The chart injects it as the INVENTARIO_RUN_METRICS_TOKEN env var (via the runtime
   # Secret) on every workload and, when serviceMonitor.enabled, wires the
   # Prometheus Operator to send it automatically.
   #
-  # Leave empty to keep the legacy OPEN behaviour (the app logs a one-time
-  # startup warning). STRONGLY recommended for production: when empty, anyone with
-  # network access to the HTTP port can read installation-wide gauges
-  # (inventario_tenants / _users / _commodities / _file_storage_bytes).
-  # Generate a strong value (>= 32 bytes): openssl rand -hex 32
+  # Defence in depth rather than the only control: since #2244 /metrics is on
+  # the probe port, which the ingress does not route, so an empty token exposes
+  # the gauges (inventario_tenants / _users / _commodities / _file_storage_bytes)
+  # only to whatever already has in-cluster network access. Set it if that set is
+  # wider than your Prometheus: openssl rand -hex 32
   #
   # When secrets.existingSecret is set, leave this empty and instead provide the
   # key INVENTARIO_RUN_METRICS_TOKEN in that Secret.

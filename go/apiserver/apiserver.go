@@ -16,7 +16,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swagger "github.com/swaggo/http-swagger/v2"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/azureblob" // register azureblob driver
@@ -462,13 +461,10 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// behaviour) and the one-time warning below fires so operators notice the
 	// installation-wide gauges are exposed; when set, /metrics requires
 	// "Authorization: Bearer <token>".
-	if params.MetricsToken == "" {
-		slog.Warn("GET /metrics is unauthenticated (no metrics token configured). " +
-			"This is acceptable for local development but exposes installation-wide business gauges " +
-			"(inventario_tenants/users/commodities/file_storage_bytes). " +
-			"Set INVENTARIO_RUN_METRICS_TOKEN (or --metrics-token) to a strong random value to require bearer-token auth.")
-	}
-	r.With(MetricsTokenMiddleware(params.MetricsToken)).Method(http.MethodGet, "/metrics", promhttp.Handler())
+	// /metrics is not mounted here (#2244): the default ingress rule is path
+	// `/`, so this router is Internet-reachable and the gauges are
+	// installation-wide. It lives on the probe listener — see
+	// bootstrap.ProbesHandler.
 
 	// Resolve blacklister: default to in-memory if not provided.
 	blacklist := params.TokenBlacklister

@@ -131,5 +131,6 @@ func (c *Command) run() error {
 	go services.BackfillFileSizes(ctx, rs.FactorySet, rs.Params.UploadLocation)
 
 	srv, errCh := bootstrap.StartAPIServer(c.cfg, rs, restoreWorker)
-	return bootstrap.WaitForShutdown(srv, errCh)
+	probeSrv, probeErrCh := bootstrap.StartProbes(c.cfg, rs)
+	return bootstrap.WaitForShutdownWithProbes(srv, errCh, probeSrv, probeErrCh)
 }

@@ -82,6 +82,39 @@ func TestProbesHandler_MetricsEndpointServesPrometheus(t *testing.T) {
 	c.Assert(rec.Body.String(), qt.Contains, "go_goroutines")
 }
 
+func TestProbesHandler_MetricsHonoursTheToken(t *testing.T) {
+	const token = "s3cr3t-metrics-token-at-least-32-bytes!"
+
+	tests := []struct {
+		name   string
+		header string
+		want   int
+	}{
+		{name: "no header", header: "", want: http.StatusUnauthorized},
+		{name: "wrong token", header: "Bearer nope", want: http.StatusUnauthorized},
+		{name: "correct token", header: "Bearer " + token, want: http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			rs := newProbeRuntimeSetup(nil)
+			rs.Params.MetricsToken = token
+			handler := bootstrap.ProbesHandler(rs)
+
+			req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			if tt.header != "" {
+				req.Header.Set("Authorization", tt.header)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			c.Assert(rec.Code, qt.Equals, tt.want)
+		})
+	}
+}
+
 func TestStartProbes_ServesAllThreeEndpointsOverNetwork(t *testing.T) {
 	c := qt.New(t)
 

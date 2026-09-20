@@ -70,5 +70,6 @@ func (c *Command) run() error {
 
 	restoreStatus := restore.NewRegistryStatusQuerier(rs.FactorySet.CreateServiceRegistrySet())
 	srv, errCh := bootstrap.StartAPIServer(c.cfg, rs, restoreStatus)
-	return bootstrap.WaitForShutdown(srv, errCh)
+	probeSrv, probeErrCh := bootstrap.StartProbes(c.cfg, rs)
+	return bootstrap.WaitForShutdownWithProbes(srv, errCh, probeSrv, probeErrCh)
 }
