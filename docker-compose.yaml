@@ -218,6 +218,11 @@ services:
       INVENTARIO_RUN_SMTP_HOST: ${SMTP_HOST:-mailpit}
       INVENTARIO_RUN_SMTP_PORT: ${SMTP_PORT:-1025}
       INVENTARIO_RUN_SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
+      # Where the in-app "Contact support" form delivers (#2103). Optional,
+      # but leaving it empty is a visible gap: the endpoint answers with a
+      # typed `feedback.not_configured` 503 and the UI tells the user
+      # feedback is not set up. Set it to a real inbox you read.
+      INVENTARIO_RUN_SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
 
       # AI-vision photo-scan (#1720). Defaults OFF. Set AI_VISION_PROVIDER=mock
       # in .env for a no-key deterministic result, or =anthropic|openai with the

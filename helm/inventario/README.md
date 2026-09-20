@@ -260,6 +260,7 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `persistence.size` | `10Gi` | Resize the uploads PVC for local file storage. |
 | `email.provider` | `stub` | Switch to `smtp`, `sendgrid`, `ses`, `mandrill`, or `mailchimp` for real email. |
 | `email.from` | `""` | Required for real email delivery. |
+| `email.supportEmail` | `""` | Destination for the in-app "Contact support" form — the only help channel the app offers. Empty leaves `POST /api/v1/feedback` answering with a typed `feedback.not_configured` 503 and the dialog saying feedback is not set up. |
 | `aivision.provider` | `none` | AI photo-scan provider: `none` (off, 503), `mock` (canned), `anthropic`, or `openai`. A real provider **requires** the matching `secrets.aiVision*ApiKey`, or the apiserver fails to boot. |
 | `aivision.anthropicModel` / `aivision.openaiModel` | `claude-sonnet-4-6` / `gpt-4o` | Model id used for the selected provider. |
 | `secrets.aiVisionAnthropicApiKey` / `secrets.aiVisionOpenaiApiKey` | `""` | Provider API key; required for the matching `aivision.provider` unless supplied via `secrets.existingSecret`. |
