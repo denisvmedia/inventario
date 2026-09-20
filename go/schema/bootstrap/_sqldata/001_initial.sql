@@ -188,6 +188,42 @@ ALTER DEFAULT PRIVILEGES FOR ROLE inventario_migrator IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE inventario_migrator IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO inventario_admin;
 
+-- The same defaults, keyed on the migration LOGIN rather than the group role.
+--
+-- Default privileges key on the role that CREATES the object, and role
+-- membership does not enter into it: a login named something other than
+-- inventario_migrator creates tables that carry none of the grants above, and
+-- the app role cannot read its own data. When the two names coincide these
+-- statements are the ones already issued, so the common path is unchanged.
+DO $$
+BEGIN
+    IF '{{.UsernameForMigrations}}' != 'inventario_migrator' THEN
+        EXECUTE format(
+            'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public '
+            'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES '
+            'TO inventario_app, inventario_background_worker, inventario_admin',
+            '{{.UsernameForMigrations}}');
+        EXECUTE format(
+            'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public '
+            'GRANT USAGE, SELECT ON SEQUENCES '
+            'TO inventario_app, inventario_background_worker, inventario_admin',
+            '{{.UsernameForMigrations}}');
+        EXECUTE format(
+            'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public '
+            'GRANT EXECUTE ON FUNCTIONS TO inventario_app, inventario_admin',
+            '{{.UsernameForMigrations}}');
+        EXECUTE format(
+            'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public '
+            'GRANT ALL PRIVILEGES ON TABLES TO inventario_migrator',
+            '{{.UsernameForMigrations}}');
+        EXECUTE format(
+            'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public '
+            'GRANT ALL PRIVILEGES ON SEQUENCES TO inventario_migrator',
+            '{{.UsernameForMigrations}}');
+        RAISE NOTICE 'Set default privileges for migration login {{.UsernameForMigrations}}';
+    END IF;
+END $$;
+
 -- Default privileges for objects created by the current user (whoever runs this bootstrap)
 -- This ensures that tables created during migrations get the correct permissions
 -- regardless of the actual database username
