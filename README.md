@@ -454,6 +454,7 @@ This test validates:
 ## Documentation
 
 - [Changelog](CHANGELOG.md) - What changed in each release, newest first
+- [API reference](https://denisvmedia.github.io/inventario/edge/api/) - The HTTP API, generated from the shipped OpenAPI spec
 - [User Guide](https://denisvmedia.github.io/inventario/) - End-user documentation: items, locations, files & photos, warranties, reports, backups, and sharing
 - [Production Release & Deployment Runbook](PRODUCTION.md) - Cut a release and deploy to Kubernetes (k3s/GKE/DOKS), distribution-agnostic
 - [Production Deployment (bare-metal / systemd)](DEPLOYMENT.md) - Single-host install without Kubernetes

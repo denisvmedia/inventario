@@ -114,6 +114,10 @@ export default defineConfig({
           label: 'Help',
           items: [{ slug: 'troubleshooting' }],
         },
+        {
+          label: 'Reference',
+          items: [{ slug: 'api' }],
+        },
       ],
     }),
   ],
