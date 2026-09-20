@@ -114,6 +114,15 @@ jobs:
           tag="${INVENTARIO_IMAGE##*:}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+      - name: Start pod log capture
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARTIFACTS_DIR/pod-logs"
+          nohup .github/scripts/capture-pod-logs.sh "$K8S_NAMESPACE" "$ARTIFACTS_DIR/pod-logs" \
+            > "$ARTIFACTS_DIR/pod-logs/_capture.log" 2>&1 &
+          echo $! > /tmp/capture-pod-logs.pid
+          echo "Log capture running as PID $(cat /tmp/capture-pod-logs.pid)"
+
       - name: Install chart (argocdMode + demo)
         run: |
           set -euo pipefail
@@ -248,6 +257,18 @@ jobs:
             --set setupJob.initData.seedDatabase=true \
             --set-string setupJob.initData.adminPassword="$ADMIN_PASSWORD" \
             --wait --wait-for-jobs --timeout 8m
+
+      - name: Stop pod log capture
+        if: always()
+        run: |
+          pkill -f capture-pod-logs.sh 2>/dev/null || true
+          # The per-pod tails are grandchildren, so the script's own PID
+          # does not reach them.
+          pkill -f 'kubectl logs -f' 2>/dev/null || true
+          # Let the tails flush before the artifact is packed.
+          sleep 2
+          find "$ARTIFACTS_DIR/pod-logs" -size 0 -delete 2>/dev/null || true
+          ls -la "$ARTIFACTS_DIR/pod-logs" || true
 
       - name: Collect diagnostics on failure
         if: failure()

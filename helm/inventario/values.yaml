@@ -737,6 +737,25 @@ secrets:
 #   2. migrate    — applies schema migrations (idempotent)
 #   3. init-data  — creates default tenant + admin user (idempotent)
 # ============================================================
+# Retry envelope for the two components that wait on the database before the
+# app can serve: the `migrate` init container on every pod, and the init-data
+# Job. Both sit behind the same dependency, so they share one budget — the
+# split budgets they had before meant a network stall that the init container
+# rode out failed the Job and, with it, `helm install --wait-for-jobs` (#2243).
+#
+# The default is deliberately generous. A managed Postgres that is still
+# electing a primary, or a freshly-created Service whose endpoints have not
+# propagated, routinely takes minutes; the cost of waiting is a slower first
+# rollout, and the cost of not waiting is a failed install an operator has to
+# re-run by hand. The Job's own activeDeadlineSeconds still caps the wall
+# clock, so this cannot hang forever.
+dbRetry:
+  # Number of attempts before giving up.
+  attempts: 60
+  # Seconds to sleep between attempts. attempts x intervalSeconds is the
+  # floor on the budget; each failed attempt also costs its own timeout.
+  intervalSeconds: 5
+
 setupJob:
   enabled: true
 

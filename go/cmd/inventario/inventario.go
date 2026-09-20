@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.5x5.cz/inventario/cmd/common/version"
+	"go.5x5.cz/inventario/cmd/internal/command"
 	"go.5x5.cz/inventario/cmd/inventario/admin"
 	"go.5x5.cz/inventario/cmd/inventario/backfill"
 	"go.5x5.cz/inventario/cmd/inventario/backoffice"
@@ -74,6 +75,10 @@ Use "inventario [command] --help" for detailed information about each command.`,
 	rootCmd.AddCommand(version.New())
 	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(1) //revive:disable-line:deep-exit
+		// Most failures exit 1. A command that wants a wrapper script to be
+		// able to tell its failure apart — `db migrate up` on a dirty
+		// revision, which no amount of retrying will clear (#2416) — returns
+		// an error carrying its own status. See command.ExitCoder.
+		os.Exit(command.ExitCodeFor(err)) //revive:disable-line:deep-exit
 	}
 }
