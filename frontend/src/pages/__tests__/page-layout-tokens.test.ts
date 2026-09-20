@@ -64,6 +64,11 @@ const SPECIAL_PURPOSE_PAGES = new Set<string>([
   "LandingPage.tsx",
   "FirstItemResolver.tsx",
   "admin/AdminForbiddenPage.tsx",
+  // Legal pages — a plain prose column, reachable before an account exists,
+  // so no app chrome to hang a PageHeader on (#2148).
+  "legal/LegalPage.tsx",
+  "legal/PrivacyPage.tsx",
+  "legal/TermsPage.tsx",
   // Auth pages — own card-centered layout.
   "auth/ForgotPasswordPage.tsx",
   "auth/InviteAcceptPage.tsx",
