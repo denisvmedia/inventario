@@ -1625,6 +1625,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "422": {
+                        "description": "Invalid credentials or code",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -1662,6 +1668,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid code",
                         "schema": {
                             "type": "string"
                         }
@@ -1759,7 +1771,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized — invalid code",
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid code",
                         "schema": {
                             "type": "string"
                         }
