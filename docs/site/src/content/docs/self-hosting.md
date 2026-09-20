@@ -55,5 +55,6 @@ With your instance running, the rest of this guide applies just the same as a ho
 - [Getting started](../getting-started/) — your first sign-in and a tour of the app
 - [Items](../items/) — add and organize what you own
 - [Settings & account](../settings-and-account/) — currency, profile, and preferences
+- [Troubleshooting](../troubleshooting/) — symptoms and fixes for the things that actually go wrong
 
 Found a bug or have a question? Open an issue on the [GitHub repository](https://github.com/denisvmedia/inventario/issues).

@@ -63,6 +63,8 @@ Once your first item is in, here's how to make the most of Inventario:
 - **[Backup & restore](../backup-and-restore/)** — export your data to keep your own copy or move it to another instance.
 - **[Groups & sharing](../groups-and-sharing/)** — invite other people into your group and give each of them a role.
 
-:::tip[Need more help?]
+:::tip[Something not working?]
+[Troubleshooting](../troubleshooting/) covers the things that go wrong first — mail that never arrives, a file that will not upload, a restore that did more than you meant.
+
 Press `?` anywhere in the app for keyboard shortcuts, or open **Settings → Help & support → Contact support / share feedback** to ask a question, report a bug, or suggest a feature. See [Settings & account](../settings-and-account/) for more.
 :::
