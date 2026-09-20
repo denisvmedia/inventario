@@ -18,6 +18,9 @@
   //   - .research/**        abandoned design notes (banner-marked deprecated)
   //   - **/node_modules/**  third-party npm packages
   //   - e2e/test-results/** Playwright run artifacts
+  //   - .github/release-notes/** release bodies, not documents: GitHub titles
+  //                          the release and goreleaser appends the footer, so
+  //                          the file is a fragment with no heading of its own
   //   - e2e/playwright-report/** Playwright HTML report artifacts
   //   - frontend/coverage/** Vitest coverage HTML
   //   - frontend/dist/**    built bundle
@@ -36,6 +39,7 @@
     ".research/**",
     "**/node_modules/**",
     "e2e/test-results/**",
+    ".github/release-notes/**",
     "e2e/playwright-report/**",
     "frontend/coverage/**",
     "frontend/dist/**",

@@ -70,10 +70,14 @@ release:
   github:
     owner: denisvmedia
     name: inventario
-  header: |
-    ## Inventario v{{ .Version }}
-    
-    This release includes the following changes:
+  # No header. GitHub already titles the release with the tag, and
+  # "the following changes" introduces a changelog that hand-written notes
+  # replace. The footer stays: install instructions are useful on every
+  # release, generated changelog or not.
+  #
+  # Both are applied by the release pipe regardless of --release-notes --
+  # only the identically-named CLI flags go through the changelog pipe --
+  # so a notes file must not repeat what the footer already says.
   footer: |
     
     ## Installation
