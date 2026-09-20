@@ -13,6 +13,9 @@ go/inventario
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# `go test | tee` transcript the CI coverage summary parses.
+test-output*.txt
+
 # JetBrains IDE configuration
 .idea
 
