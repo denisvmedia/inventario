@@ -7,20 +7,19 @@ export default function TermsPage() {
   return (
     <LegalPage title="Terms of Service" updated="2026-09-20">
       <p>
-        Inventario is open-source software, licensed under the MIT License. These terms cover
-        your use of this particular instance. The organization running it may add terms of its
-        own.
+        Inventario is open-source software, licensed under the MIT License. These terms cover your
+        use of this particular instance. The organization running it may add terms of its own.
       </p>
 
       <LegalSection heading="Your account">
         <p>
-          You are responsible for what happens under your account, including keeping your
-          password and any two-factor codes to yourself. Tell the operator if you believe your
-          account has been accessed by someone else.
+          You are responsible for what happens under your account, including keeping your password
+          and any two-factor codes to yourself. Tell the operator if you believe your account has
+          been accessed by someone else.
         </p>
         <p>
-          Accounts are for people, not for sharing. If several people need access, invite them
-          to your group rather than sharing one login.
+          Accounts are for people, not for sharing. If several people need access, invite them to
+          your group rather than sharing one login.
         </p>
       </LegalSection>
 
@@ -31,20 +30,20 @@ export default function TermsPage() {
           backups.
         </p>
         <p>
-          Do not upload content you have no right to store, or content that is unlawful where
-          this instance is operated.
+          Do not upload content you have no right to store, or content that is unlawful where this
+          instance is operated.
         </p>
       </LegalSection>
 
       <LegalSection heading="Availability">
         <p>
           This instance is provided as-is. There is no uptime guarantee unless the operator has
-          given you one separately, and the software itself comes with no warranty — see the
-          MIT License for the full disclaimer.
+          given you one separately, and the software itself comes with no warranty — see the MIT
+          License for the full disclaimer.
         </p>
         <p>
-          Keep your own copy of anything you cannot afford to lose. The application can export
-          your data at any time.
+          Keep your own copy of anything you cannot afford to lose. The application can export your
+          data at any time.
         </p>
       </LegalSection>
 
@@ -57,8 +56,8 @@ export default function TermsPage() {
 
       <LegalSection heading="Changes">
         <p>
-          These terms may change as the software does. The date at the top says when this
-          version was written; material changes should be announced by the operator.
+          These terms may change as the software does. The date at the top says when this version
+          was written; material changes should be announced by the operator.
         </p>
       </LegalSection>
     </LegalPage>
