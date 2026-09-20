@@ -450,6 +450,7 @@ This test validates:
 - [User Guide](https://denisvmedia.github.io/inventario/) - End-user documentation: items, locations, files & photos, warranties, reports, backups, and sharing
 - [Production Release & Deployment Runbook](PRODUCTION.md) - Cut a release and deploy to Kubernetes (k3s/GKE/DOKS), distribution-agnostic
 - [Production Deployment (bare-metal / systemd)](DEPLOYMENT.md) - Single-host install without Kubernetes
+- [Email Deliverability Runbook](devdocs/email-deliverability.md) - SPF/DKIM/DMARC for the sending domain, and how to check that verification and invite mail lands
 - [System Admin Operations Runbook](devdocs/admin-runbook.md) - Bootstrapping system admins, audit-log inspection, lockout recovery
 - [Admin Section Threat Model](devdocs/security/admin-threat-model.md) - Security model for the cross-tenant admin surface
 

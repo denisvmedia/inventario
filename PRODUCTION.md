@@ -247,6 +247,12 @@ than one replica (set `persistence.enabled=false`).
   - API key → Secret key `INVENTARIO_RUN_SMTP2GO_API_KEY` (Helm `secrets.smtp2goApiKey`).
 - [ ] (Optional) `email.replyTo`. Leave `email.logUrls=false` in production (tokens in
   logs).
+- [ ] **Make the mail land.** Publish SPF, DKIM and DMARC for the `email.from`
+  domain and send yourself a verification mail before inviting anyone — a
+  verification or reset mail in a spam folder is a user who quietly gives up,
+  and nothing in the app reports it. Step by step, including how to read the
+  headers and what each failure mode looks like:
+  [devdocs/email-deliverability.md](devdocs/email-deliverability.md).
 - [ ] `email.supportEmail=<inbox you read>`. This is the destination for the in-app
   "Contact support" form, and it is the only help channel the app offers. Left empty,
   `POST /api/v1/feedback` answers with a typed `feedback.not_configured` 503 and the
@@ -693,6 +699,8 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
 | File upload fails with HTTP 501 / checksum error | R2 rejecting `aws-sdk-go-v2` default request checksums | Add the two `AWS_*_CHECKSUM_*=when_required` keys (§B4) |
 | Logged out immediately / cookies not `Secure` | ingress not forwarding `X-Forwarded-Proto: https` | enable the header on the controller (§B8) |
 | Log warns "in-memory … not suitable for multi-instance" | no Redis configured | enable `demo.redis` or set the five `secrets.*RedisUrl` (§B6) |
+| Verification / reset / invite mail never arrives | `email.provider` is still the `stub` that drops mail | set a real provider (§B5) |
+| Mail arrives but lands in spam | SPF / DKIM / DMARC missing or misaligned for the `email.from` domain | [devdocs/email-deliverability.md](devdocs/email-deliverability.md) |
 | apiserver crashes on boot | `aivision.provider` real but API key empty | set the key, or `aivision.provider=none` (§B7) |
 | Setup Job hangs / sync wedged | image tag missing from registry | fix the tag; `setupJob.activeDeadlineSeconds` caps the hang |
 | Emails never arrive | `email.provider=stub` (default) | set a real provider + `email.from` (§B5) |
