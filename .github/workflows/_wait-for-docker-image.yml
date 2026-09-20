@@ -109,7 +109,7 @@ jobs:
               echo "::error::docker.yml for $COMMIT_SHA is still ${STATUS} after 20 minutes. The runner fleet is backed up; this is not a build failure. Re-run this job once the docker.yml run finishes."
               ;;
             in_progress)
-              echo "::error::docker.yml for $COMMIT_SHA is still running after 20 minutes, against a typical 5-8. Re-run this job once it finishes."
+              echo "::error::docker.yml for $COMMIT_SHA is still running after 20 minutes, against a typical 5-8 minute runtime. Re-run this job once it finishes."
               ;;
             none | "")
               echo "::error::no docker.yml run found for $COMMIT_SHA within 20 minutes. Check that docker.yml was triggered for this event at all."
