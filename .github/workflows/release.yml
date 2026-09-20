@@ -62,6 +62,23 @@ jobs:
         run: go mod download
         working-directory: go
 
+      - name: Check the chart pins this release
+        # Chart.appVersion is the default for image.tag, so a tag whose chart
+        # still names the previous release ships an install that silently
+        # deploys the wrong image (#2035).
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          chart="$(grep -E '^appVersion:' helm/inventario/Chart.yaml | head -1 | tr -d '"' | awk '{print $2}')"
+          want="${TAG}"
+          if [ "$chart" != "$want" ]; then
+            echo "::error::helm/inventario/Chart.yaml appVersion is '${chart}', expected '${want}' for tag ${TAG}. Bump it before tagging."
+            exit 1
+          fi
+          echo "chart appVersion ${chart} matches ${TAG}"
+
       - name: Look for hand-written release notes
         id: notes
         # A tag may ship curated notes instead of the generated changelog by
