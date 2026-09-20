@@ -280,7 +280,7 @@ func TestBuildMIMEMessage_BoundaryIsUnpredictable(t *testing.T) {
 		random := strings.TrimPrefix(boundary, "inventario-")
 		// 16 bytes, hex-encoded. A timestamp-derived boundary is decimal
 		// and shorter, so the length alone catches a regression.
-		c.Assert(len(random), qt.Equals, 32, qt.Commentf("boundary %q", boundary))
+		c.Assert(random, qt.HasLen, 32, qt.Commentf("boundary %q", boundary))
 		_, err := hex.DecodeString(random)
 		c.Assert(err, qt.IsNil, qt.Commentf("boundary %q", boundary))
 		_, repeated := seen[boundary]
