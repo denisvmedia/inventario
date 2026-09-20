@@ -595,26 +595,41 @@ describe("<CommoditiesListPage />", () => {
     })
   })
 
-  it("filters rows by warranty status (derived from warranty_expires_at)", async () => {
+  // #2128: the filter is applied by the server, not over the fetched page.
+  // Filtering client-side left total and totalPages describing the unfiltered
+  // set, so a page whose rows held no match read as "no matches" beside a
+  // pager offering more, and matches further in never surfaced.
+  it("sends the warranty filter to the server and renders what comes back", async () => {
     const user = userEvent.setup()
+    const seen: string[][] = []
     server.use(
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
-      ...commodityHandlers.list(SLUG, [
-        commodityRes("c1", { name: "Chair", warranty_expires_at: "2099-12-31" }),
-        commodityRes("c2", { name: "Couch" }),
-      ])
+      msw.get(`${window.location.origin}/api/v1/g/${SLUG}/commodities`, ({ request }) => {
+        const statuses = new URL(request.url).searchParams.getAll("warranty_status")
+        seen.push(statuses)
+        const rows =
+          statuses.length > 0
+            ? [commodityRes("c1", { name: "Chair", warranty_expires_at: "2099-12-31" })]
+            : [
+                commodityRes("c1", { name: "Chair", warranty_expires_at: "2099-12-31" }),
+                commodityRes("c2", { name: "Couch" }),
+              ]
+        return HttpResponse.json({ data: rows })
+      })
     )
     renderList()
     await waitFor(() => expect(screen.getAllByTestId("commodity-card").length).toBe(2))
+
     await user.click(screen.getByTestId("commodities-filter-warranty"))
     await user.click(await screen.findByRole("menuitemcheckbox", { name: /Active/i }))
-    // Only the row with a tracked warranty remains.
+
     await waitFor(() => {
       const rows = screen.queryAllByTestId("commodity-card")
       expect(rows).toHaveLength(1)
       expect(rows[0]).toHaveTextContent(/Chair/)
     })
+    expect(seen.at(-1)).toContain("active")
   })
 
   it("renders WarrantyBadge with status derived from warranty_expires_at on grid cards (#1657)", async () => {

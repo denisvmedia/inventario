@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 
-import { useCommodities, useCommoditiesValue } from "@/features/commodities/hooks"
+import { useAllCommodities, useCommoditiesValue } from "@/features/commodities/hooks"
 import type { Commodity } from "@/features/commodities/api"
 import {
   effectiveWarrantyExpiry,
@@ -116,12 +116,13 @@ export function warrantyBuckets(
 export function useDashboardData(): DashboardData {
   const { currentGroup } = useCurrentGroup()
   const enabled = !!currentGroup
-  // perPage=100 is the BE max — gives the "Recently added" slice the
-  // best chance of seeing new items in groups beyond the default 50.
-  // For larger groups, the BE's name/id ordering still means a recent
-  // addition can fall off page 1; that's a known limitation and lives
-  // in the useCommodities() docstring.
-  const commodities = useCommodities({ perPage: 100 }, { enabled })
+  // The whole set, not the first page. Warranty health is presented as a
+  // group-wide distribution, and computing it from 100 rows made the
+  // percentages quietly wrong past that — and an expiring warranty on item
+  // 101 invisible — next to a group-wide item count on the same screen
+  // (#2128). useAllCommodities stops after one request when the group fits
+  // in a page, so the extra cost only appears where the truncation did.
+  const commodities = useAllCommodities({}, { enabled })
   const values = useCommoditiesValue({ enabled })
 
   return useMemo<DashboardData>(() => {
