@@ -7,6 +7,7 @@ package smtp
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"mime"
 	"net"
 	"net/mail"
@@ -256,4 +257,44 @@ func mimeHeaderValue(c *qt.C, raw, key string) string {
 		}
 	}
 	return ""
+}
+
+// #2143: the bodies go into the MIME structure unescaped, so a guessable
+// boundary lets user-influenced text close the multipart early or forge a
+// part. The boundary must come from crypto/rand, not from the clock.
+func TestBuildMIMEMessage_BoundaryIsUnpredictable(t *testing.T) {
+	c := qt.New(t)
+	msg := sender.Message{
+		From:    "noreply@example.com",
+		To:      "user@example.com",
+		Subject: "subject",
+		Text:    "text",
+		HTML:    "<p>html</p>",
+	}
+
+	seen := make(map[string]struct{}, 32)
+	for range 32 {
+		boundary := mimeBoundaryOf(c, string(buildMIMEMessage(msg)))
+		c.Assert(strings.HasPrefix(boundary, "inventario-"), qt.IsTrue,
+			qt.Commentf("boundary %q", boundary))
+		random := strings.TrimPrefix(boundary, "inventario-")
+		// 16 bytes, hex-encoded. A timestamp-derived boundary is decimal
+		// and shorter, so the length alone catches a regression.
+		c.Assert(random, qt.HasLen, 32, qt.Commentf("boundary %q", boundary))
+		_, err := hex.DecodeString(random)
+		c.Assert(err, qt.IsNil, qt.Commentf("boundary %q", boundary))
+		_, repeated := seen[boundary]
+		c.Assert(repeated, qt.IsFalse, qt.Commentf("boundary %q repeated", boundary))
+		seen[boundary] = struct{}{}
+	}
+}
+
+// mimeBoundaryOf pulls the boundary out of the Content-Type header so the
+// test reads the value the message actually used rather than recomputing it.
+func mimeBoundaryOf(c *qt.C, raw string) string {
+	_, params, err := mime.ParseMediaType(mimeHeaderValue(c, raw, "Content-Type"))
+	c.Assert(err, qt.IsNil)
+	boundary := params["boundary"]
+	c.Assert(boundary, qt.Not(qt.Equals), "")
+	return boundary
 }

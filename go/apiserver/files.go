@@ -888,6 +888,7 @@ func (api *filesAPI) servePlaceholderImage(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 
 	// Get placeholder from embedded assets
 	filename, ok := placeholderFilename(size)
