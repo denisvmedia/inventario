@@ -39,10 +39,10 @@ jobs:
       ci: ${{ steps.filter.outputs.ci }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Filter changed paths
         id: filter
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
           filters: .github/filters.yml
 
@@ -89,13 +89,13 @@ jobs:
       CACHE_SCOPE_PREFIX: ${{ github.event.pull_request.number && 'inventario-pr' || 'inventario-edge' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4.6.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -106,7 +106,7 @@ jobs:
         # merge job stitches the per-arch digests into one multi-arch manifest
         # list. No QEMU on either runner — each shard builds natively.
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: ./Dockerfile
@@ -143,7 +143,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: digests-${{ matrix.arch }}
           path: /tmp/digests/*
@@ -178,20 +178,20 @@ jobs:
       BUILD_DATE: ${{ github.event.pull_request.updated_at || github.event.head_commit.timestamp }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - id: vars
         uses: ./.github/actions/vars
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: 1.26.6
           cache: true
           cache-dependency-path: go/go.sum
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: ${{ steps.vars.outputs.node_version }}
           cache: npm
@@ -230,7 +230,7 @@ jobs:
           chmod +x ../../../dist-e2e/inventario
 
       - name: Upload darwin/arm64 binary
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: inventario-darwin-arm64
           path: dist-e2e/inventario
@@ -245,17 +245,17 @@ jobs:
       IMAGE: ghcr.io/${{ github.repository }}
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4.6.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download digests
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: /tmp/digests
           pattern: digests-*
@@ -377,7 +377,7 @@ jobs:
       - name: Checkout code
         # Brings .trivyignore (repo-root allowlist) into the workspace so the
         # scanner honours documented, time-boxed CVE exceptions.
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Compute image ref
         id: ref
@@ -386,7 +386,7 @@ jobs:
           echo "image=${IMAGE}:sha-${COMMIT_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4.6.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -396,7 +396,7 @@ jobs:
         # exit-code 0: this pass only produces the SARIF for the Security tab;
         # the gating happens in the next step. Pinned Trivy DB is fetched at
         # run time. `.trivyignore` in the workspace is auto-discovered.
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.ref.outputs.image }}
           format: sarif
@@ -409,7 +409,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4.38.0
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         # Surface findings even when the gating step below fails the job.
         if: always()
         with:
@@ -420,7 +420,7 @@ jobs:
         # Second pass with exit-code 1 turns unignored HIGH/CRITICAL findings
         # into a job failure. DB is cached from the SARIF pass (--skip-db-update
         # via the action's `skip-setup-trivy`/cache is implicit on the runner).
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.ref.outputs.image }}
           format: table
@@ -446,7 +446,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Force-push the master image pin to argocd/master-pin
         env:

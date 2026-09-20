@@ -57,6 +57,10 @@ updates:
         patterns:
           - "vitest"
           - "@vitest/*"
+  # Every action is pinned to a commit SHA (#1824), which Dependabot updates
+  # in place and keeps annotated with the version comment. Without this
+  # ecosystem enabled a SHA pin is a permanent freeze rather than a
+  # reviewable dependency, so the two go together.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
