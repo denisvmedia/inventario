@@ -99,3 +99,29 @@ func TestDownloadName(t *testing.T) {
 		})
 	}
 }
+
+// #2131: a dot in the NAME is not an extension. `report.v2.pdf` used to yield
+// extension ".v2.pdf", which moved half the filename out of the title the
+// user sees and produced a nonsense extension. Only the compound extensions
+// that really are two parts stay joined.
+func TestUploadFileName_DotsInTheName(t *testing.T) {
+	c := qt.New(t)
+	filekit.NowFunc = func() time.Time { return time.Unix(1700000000, 0) }
+	t.Cleanup(func() { filekit.NowFunc = time.Now })
+
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"report.v2.pdf", "report_v2-1700000000.pdf"},
+		{"invoice.2024.pdf", "invoice_2024-1700000000.pdf"},
+		{"archive.tar.gz", "archive-1700000000.tar.gz"},
+		{"ARCHIVE.TAR.GZ", "archive-1700000000.TAR.GZ"},
+		{"plain.pdf", "plain-1700000000.pdf"},
+	}
+	for _, tc := range tests {
+		c.Run(tc.in, func(c *qt.C) {
+			c.Assert(filekit.UploadFileName(tc.in), qt.Equals, tc.want)
+		})
+	}
+}
