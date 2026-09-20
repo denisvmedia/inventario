@@ -298,6 +298,64 @@ metrics:
     # so the operator selects it).
     labels: {}
 
+  # PodMonitor for the worker Deployments (#2034). Workers need their own
+  # monitor because their Service is headless in split mode and a
+  # ServiceMonitor cannot reliably target a headless Service's per-pod
+  # endpoints. Without it the installation-wide business gauges and the
+  # email-queue depth are never collected — they live on the worker
+  # processes, and the apiserver target reports them as 0.
+  #
+  # Renders nothing in combined mode (`run all` has no worker pods) and,
+  # like the ServiceMonitor, is additionally guarded by the CRD check so
+  # enabling it without the operator is a no-op.
+  podMonitor:
+    enabled: false
+    interval: 15s
+    scrapeTimeout: 10s
+    # Extra labels (e.g. release: kube-prometheus-stack so the operator
+    # selects it).
+    labels: {}
+
+  # Alert + recording rules as a PrometheusRule (#2034). Ports the rules the
+  # dev compose stack evaluates, with `up` selectors written for a cluster
+  # instead of the compose stack's static job name. CRD-guarded like the
+  # monitors above.
+  prometheusRule:
+    enabled: false
+    # Evaluation interval for the recording group.
+    interval: 15s
+    # Extra labels (e.g. release: kube-prometheus-stack so the operator
+    # selects it).
+    labels: {}
+    # How long a target must be unreachable before InventarioTargetDown
+    # fires. Longer than one scrape interval so a rollout does not page.
+    targetDownFor: 2m
+    # Fraction of requests answering 5xx that counts as an incident, and how
+    # long it must hold. 5% over 10m is deliberately dull: it ignores a
+    # single bad deploy minute and catches a sustained regression.
+    errorRatioThreshold: 0.05
+    errorRateFor: 10m
+    # p95 request latency ceiling, in seconds, and how long it must hold.
+    latencyP95Seconds: 1
+    latencyFor: 10m
+
+  # Publish the "Inventario / Overview" dashboard as a ConfigMap for
+  # Grafana's dashboard sidecar to pick up (#2034). The JSON is the same file
+  # the dev compose stack mounts, so the two cannot drift.
+  #
+  # This needs no Grafana CRD and no coupling to a Grafana release: the
+  # sidecar watches for the label below. Leave it off if your cluster has no
+  # sidecar — the ConfigMap would just sit there unread.
+  grafanaDashboard:
+    enabled: false
+    # The label the sidecar selects on. kube-prometheus-stack defaults to
+    # `grafana_dashboard: "1"`; change if yours is configured differently.
+    label: grafana_dashboard
+    labelValue: "1"
+    # Annotations, e.g. `grafana_folder: Inventario` to place the dashboard
+    # in a folder rather than the sidecar's default one.
+    annotations: {}
+
 # ============================================================
 # Sentry — error tracking / performance (#844, PR #2183)
 # ============================================================

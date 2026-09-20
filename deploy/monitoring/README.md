@@ -42,12 +42,25 @@ deploy/monitoring/
 │   ├── prometheus.yml            # scrape config (job: inventario → inventario:3333)
 │   └── rules/inventario.rules.yml# recording rules + alerts (5xx ratio, p95, target down)
 └── grafana/
-    ├── provisioning/
-    │   ├── datasources/prometheus.yml   # Prometheus datasource (uid inventario-prometheus)
-    │   └── dashboards/inventario.yml    # provider: read-only file provisioning
-    └── dashboards/
-        └── inventario-overview.json     # the dashboard
+    └── provisioning/
+        ├── datasources/prometheus.yml   # Prometheus datasource (uid inventario-prometheus)
+        └── dashboards/inventario.yml    # provider: read-only file provisioning
+
+helm/inventario/files/grafana-dashboards/
+└── inventario-overview.json             # the dashboard (compose mounts it from here)
 ```
+
+The dashboard JSON lives in the Helm chart, not here. The chart publishes it as a
+Grafana-sidecar ConfigMap for Kubernetes installs (#2034), and this compose stack
+bind-mounts the same file, so the two cannot drift. The dashboard is
+environment-agnostic — it selects its datasource through a `${datasource}` variable
+rather than hardcoding one.
+
+The rules file is the reverse: it stays here because it is compose-specific. A
+Prometheus scraping via `kubernetes_sd` has no static `job="inventario"` label, so the
+chart's `PrometheusRule` carries the same alerts with cluster-shaped `up` selectors. A
+`helm-lint` step compares the two alert name sets on every PR, so the expressions may
+differ but the alert set cannot.
 
 ## Metric families → dashboard panels
 

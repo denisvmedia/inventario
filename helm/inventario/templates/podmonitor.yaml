@@ -1,0 +1,66 @@
+{{- /*
+Prometheus Operator PodMonitor for the worker Deployments (#2034).
+
+Workers need their own monitor: in split mode each worker Service is headless
+(clusterIP: None), and a ServiceMonitor cannot reliably target a headless
+Service's per-pod endpoints. Without this the installation-wide business
+gauges and the email-queue depth are never collected — they live on the
+worker processes, and the apiserver target reports them as 0.
+
+Double-gated like the ServiceMonitor: the toggle AND the CRD, so enabling it
+without the operator is a no-op rather than a render error. It also renders
+nothing in combined mode — `run all` serves /metrics from the apiserver target
+the ServiceMonitor already scrapes, so there are no worker pods to select and
+an empty `values:` list would select every pod in the namespace.
+*/ -}}
+{{- if and .Values.metrics.podMonitor.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+{{- if eq (include "inventario.anyWorkerEnabled" .) "true" }}
+{{- $components := list -}}
+{{- range $role := splitList " " (include "inventario.workerRoles" .) -}}
+{{- $cfg := index $.Values.run.workers $role -}}
+{{- if and $cfg $cfg.enabled -}}
+{{- $components = append $components (printf "worker-%s" (include "inventario.workerCliId" $role)) -}}
+{{- end -}}
+{{- end -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "inventario.fullname" . }}-workers
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "inventario.selectorLabels" . | nindent 6 }}
+    # Worker pods carry `app.kubernetes.io/component: worker-<group>`, so
+    # there is no single value to match on and label selectors have no
+    # prefix operator. The list is built from the enabled groups, which
+    # means adding a group to values.yaml brings it into the monitor
+    # without touching this file.
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          {{- range $components }}
+          - {{ . }}
+          {{- end }}
+  podMetricsEndpoints:
+    - port: probe
+      path: /metrics
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+      {{- if (include "inventario.metricsTokenEnabled" .) }}
+      # Bearer token wiring (#2102), same contract as the ServiceMonitor: the
+      # operator reads the token from the runtime Secret, which must live in
+      # this namespace.
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ include "inventario.secretName" . }}
+          key: INVENTARIO_RUN_METRICS_TOKEN
+      {{- end }}
+{{- end }}
+{{- end }}

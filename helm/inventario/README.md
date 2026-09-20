@@ -271,6 +271,10 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `secrets.migratorDbDsn` | `""` | Set when schema migrations need a different DB user than the app runtime. |
 | `secrets.jwtSecret` | `""` | Required unless supplied through `secrets.existingSecret`. |
 | `secrets.fileSigningKey` | `""` | Required unless supplied through `secrets.existingSecret`. |
+| `metrics.serviceMonitor.enabled` | `false` | Scrape the API via a Prometheus Operator `ServiceMonitor`. CRD-guarded, so enabling it without the operator is a no-op. |
+| `metrics.podMonitor.enabled` | `false` | Scrape each worker pod via a `PodMonitor`. Needed in split mode — the worker Service is headless, so a ServiceMonitor cannot reach its endpoints and the business/email gauges are never collected. Renders nothing in combined mode. |
+| `metrics.prometheusRule.enabled` | `false` | Ship the recording rules and the three alerts (`InventarioTargetDown`, `InventarioHighErrorRate`, `InventarioHighLatencyP95`) as a `PrometheusRule`. Thresholds under `metrics.prometheusRule.*`. |
+| `metrics.grafanaDashboard.enabled` | `false` | Publish the "Inventario / Overview" dashboard as a ConfigMap for Grafana's dashboard sidecar. Adjust `.label` / `.labelValue` if your sidecar selects a different label. |
 | `setupJob.argocdMode` | `false` | Enable for ArgoCD-managed installs to use the sync-wave layout that supports in-place upgrades with new migrations. See [ArgoCD-managed migrations](#argocd-managed-migrations). |
 | `setupJob.bootstrap.enabled` | `true` | Disable if DB bootstrap/role management is handled outside Helm. |
 | `setupJob.bootstrap.superuserDsn` | `""` | Provide when bootstrap needs elevated DB privileges. |
