@@ -75,7 +75,7 @@ func BackfillFileSizes(ctx context.Context, factorySet *registry.FactorySet, upl
 		// (missing blobs leave size_bytes at 0). When every row in a
 		// batch failed, the next ListPending call would return the
 		// same set — bail out instead.
-		batchUpdated, batchFailed, cancelled := backfillBatch(ctx, fileReg, bucket, batch)
+		batchUpdated, batchAdvanced, batchFailed, cancelled := backfillBatch(ctx, fileReg, bucket, batch)
 		updated += batchUpdated
 		failed += batchFailed
 		if cancelled {
@@ -84,9 +84,10 @@ func BackfillFileSizes(ctx context.Context, factorySet *registry.FactorySet, upl
 			return
 		}
 
-		// All rows in the batch failed — every subsequent batch would
-		// surface the same un-stat'able rows. Stop instead of spinning.
-		if batchUpdated == 0 {
+		// Nothing left the pending set: either every row failed, or every
+		// row was a genuinely empty blob rewritten to the same 0. Both mean
+		// the next batch is this batch, so stop rather than spin.
+		if batchAdvanced == 0 {
 			break
 		}
 	}
@@ -100,10 +101,15 @@ func BackfillFileSizes(ctx context.Context, factorySet *registry.FactorySet, upl
 // outer loop so the per-batch error handling doesn't pile cyclomatic
 // complexity on BackfillFileSizes itself. Returns (updated, failed,
 // cancelled) where `cancelled` signals the outer loop to bail out.
-func backfillBatch(ctx context.Context, fileReg backfillFileRegistry, bucket *blob.Bucket, batch []*models.FileEntity) (updated, failed int, cancelled bool) {
+// advanced counts rows that left the pending set — size_bytes actually
+// non-zero afterwards. updated counts successful writes, which includes
+// writing 0 over 0 for a genuinely empty blob: those rows stay selected by
+// ListPendingSizeBackfill forever, so counting them as progress spun the
+// caller's loop for the life of the process (#2129).
+func backfillBatch(ctx context.Context, fileReg backfillFileRegistry, bucket *blob.Bucket, batch []*models.FileEntity) (updated, advanced, failed int, cancelled bool) {
 	for _, file := range batch {
 		if ctx.Err() != nil {
-			return updated, failed, true
+			return updated, advanced, failed, true
 		}
 		if file == nil || file.File == nil {
 			continue
@@ -130,8 +136,11 @@ func backfillBatch(ctx context.Context, fileReg backfillFileRegistry, bucket *bl
 			continue
 		}
 		updated++
+		if attrs.Size > 0 {
+			advanced++
+		}
 	}
-	return updated, failed, false
+	return updated, advanced, failed, false
 }
 
 // backfillFileRegistry narrows the registry surface backfillBatch

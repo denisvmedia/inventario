@@ -471,6 +471,17 @@ func toJSONAPIError(err error) jsonapi.Error {
 			StatusText:     "Unprocessable Entity",
 			Code:           "group.last_owner",
 		}
+	case errors.Is(err, services.ErrGroupNotActive):
+		// A group in pending_deletion. /groups/{id} uses groupCtx, which does
+		// not check IsActive, so an owner editing a group mid-deletion reached
+		// the default 500 — a false alert for a user error (#2129).
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusUnprocessableEntity,
+			StatusText:     "Unprocessable Entity",
+			Code:           "group.not_active",
+		}
 	case errors.Is(err, services.ErrLastMember):
 		// #1652 defense-in-depth: removing the last member of any role
 		// is rejected even when the owner check would pass vacuously.
