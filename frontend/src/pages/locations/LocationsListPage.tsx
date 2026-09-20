@@ -30,7 +30,7 @@ import { AreaFormDialog } from "@/components/locations/AreaFormDialog"
 import { DeleteWithItemsDialog } from "@/components/locations/DeleteWithItemsDialog"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas, useCreateArea } from "@/features/areas/hooks"
-import { useCommodities } from "@/features/commodities/hooks"
+import { useAreaItemCounter, useCommodities } from "@/features/commodities/hooks"
 import { useCreateLocation, useDeleteLocation, useLocations } from "@/features/locations/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -81,6 +81,7 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
   )
   const createLocation = useCreateLocation()
   const deleteLocation = useDeleteLocation()
+  const countAreaItems = useAreaItemCounter()
   const createArea = useCreateArea()
 
   const toast = useAppToast()
@@ -193,13 +194,27 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
     if (!loc.id) return
     const locAreas = (areas.data ?? []).filter((a) => a.location_id === loc.id)
     const areaCount = locAreas.length
-    const itemCount = locAreas.reduce(
-      (sum, a) => sum + (a.id ? (areaItemCounts.get(a.id) ?? 0) : 0),
-      0
-    )
+    // The dialog states how many items the delete would take with it, so the
+    // number has to be the server's, not this page's. The stat chips read a
+    // single capped commodities page, which undercounts a location whose
+    // items live past the cap or are inactive — and telling someone they are
+    // about to delete 100 items when it is 400 is worse than telling them
+    // nothing (#2140). Fall back to the sample if a lookup fails: the gate
+    // below keys on areaCount anyway, so a transient error costs accuracy in
+    // the copy, never the choice itself.
+    let itemCount: number
+    try {
+      const counts = await Promise.all(
+        locAreas.map((a) => (a.id ? countAreaItems(a.id) : Promise.resolve(0)))
+      )
+      itemCount = counts.reduce((sum, n) => sum + n, 0)
+    } catch {
+      itemCount = locAreas.reduce((sum, a) => sum + (a.id ? (areaItemCounts.get(a.id) ?? 0) : 0), 0)
+    }
     // Non-empty (has areas or items) → offer the cascade/unlink choice so
     // the user can't blow away a populated location by accident. Empty →
-    // the plain confirm.
+    // the plain confirm. A commodity cannot exist without an area, so
+    // areaCount alone settles empty-vs-non-empty; itemCount only ever adds.
     if (areaCount > 0 || itemCount > 0) {
       setDeleteTarget({ id: loc.id, name: loc.name ?? "", itemCount, areaCount })
       return
