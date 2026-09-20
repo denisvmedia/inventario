@@ -49,11 +49,26 @@ function currentLocale(): string {
   return i18next.resolvedLanguage || i18next.language || "en"
 }
 
+// Intl throws RangeError on a structurally invalid BCP-47 tag ("en_US", "c").
+// One can reach here from a stored appearance preference, which is only
+// checked for non-emptiness, and every price and date on the page goes
+// through these — so the throw reached the error boundary and whited out the
+// screen (#2127). Fall back to English instead.
+const INTL_FALLBACK_LOCALE = "en"
+
+function safeLocale(locale: string): string {
+  try {
+    return Intl.getCanonicalLocales(locale).length > 0 ? locale : INTL_FALLBACK_LOCALE
+  } catch {
+    return INTL_FALLBACK_LOCALE
+  }
+}
+
 function getNumberFormatter(locale: string, opts: Intl.NumberFormatOptions): Intl.NumberFormat {
   const key = `${locale}::${JSON.stringify(opts)}`
   let f = numberFormatters.get(key)
   if (!f) {
-    f = new Intl.NumberFormat(locale, opts)
+    f = new Intl.NumberFormat(safeLocale(locale), opts)
     numberFormatters.set(key, f)
   }
   return f
@@ -63,7 +78,7 @@ function getDateFormatter(locale: string, opts: Intl.DateTimeFormatOptions): Int
   const key = `${locale}::${JSON.stringify(opts)}`
   let f = dateFormatters.get(key)
   if (!f) {
-    f = new Intl.DateTimeFormat(locale, opts)
+    f = new Intl.DateTimeFormat(safeLocale(locale), opts)
     dateFormatters.set(key, f)
   }
   return f
