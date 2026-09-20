@@ -37,6 +37,15 @@ type ExportWorker struct {
 	mu            sync.RWMutex
 	stopped       bool
 	semaphore     *semaphore.Weighted
+	// inFlight guards against processing the same row twice. The status flip
+	// to in_progress happens inside the spawned goroutine, so a tick that
+	// fires while a slow export is still starting lists it as pending again
+	// and produces a second artifact (#2131).
+	//
+	// Per process: it covers replicaCount=1, which is what the chart
+	// documents for this worker family. A claim that survives replicas needs
+	// a conditional UPDATE in the registry — see the follow-up issue.
+	inFlight sync.Map
 }
 
 // WorkerOption customizes an ExportWorker constructed via NewExportWorker.
@@ -178,14 +187,20 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 			continue
 		}
 
+		if _, running := w.inFlight.LoadOrStore(export.ID, struct{}{}); running {
+			continue
+		}
+
 		// Block until we can acquire a semaphore slot to limit concurrent goroutines
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
+			w.inFlight.Delete(export.ID)
 			slog.Error("Failed to acquire semaphore", "error", err)
 			return
 		}
 
 		go func(exportID string) {
 			defer w.semaphore.Release(1)
+			defer w.inFlight.Delete(exportID)
 			w.processExport(ctx, exportID)
 		}(export.ID)
 	}

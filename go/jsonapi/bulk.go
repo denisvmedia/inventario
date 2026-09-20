@@ -2,6 +2,7 @@ package jsonapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/render"
@@ -28,6 +29,12 @@ type BulkIDsAttributes struct {
 	IDs []string `json:"ids"`
 }
 
+// MaxBulkIDs caps a single bulk action. Each id costs at least one
+// round-trip, and the handlers loop without a deadline, so an unbounded list
+// turned one request into an arbitrarily long blocking one (#2131). 100 is
+// the page size the UI works in, so nothing a user can select is refused.
+const MaxBulkIDs = 100
+
 // Bind validates a BulkIDsRequest body. The implementation matches the
 // other Bind() implementations in this package: do the cheap shape
 // checks here so the handler can rely on a populated payload.
@@ -37,6 +44,9 @@ func (r *BulkIDsRequest) Bind(_ *http.Request) error {
 	}
 	if len(r.Data.Attributes.IDs) == 0 {
 		return errors.New("ids must not be empty")
+	}
+	if len(r.Data.Attributes.IDs) > MaxBulkIDs {
+		return fmt.Errorf("ids must not exceed %d entries", MaxBulkIDs)
 	}
 	return nil
 }
@@ -66,6 +76,9 @@ func (r *BulkMoveRequest) Bind(_ *http.Request) error {
 	}
 	if len(r.Data.Attributes.IDs) == 0 {
 		return errors.New("ids must not be empty")
+	}
+	if len(r.Data.Attributes.IDs) > MaxBulkIDs {
+		return fmt.Errorf("ids must not exceed %d entries", MaxBulkIDs)
 	}
 	if r.Data.Attributes.AreaID == "" {
 		return errors.New("area_id is required")

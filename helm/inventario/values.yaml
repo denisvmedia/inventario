@@ -222,11 +222,12 @@ run:
     archive:
       # Bundles exports, imports, and restores. They share the archive
       # code path and a single queue-depth scaling signal.
-      # NOTE: Each replica enforces its own app.maxConcurrentRestores
-      # (and export/import) limit. Cluster-wide concurrency =
-      # replicaCount * maxConcurrent per family. DB-level job locking
-      # prevents duplicate work, but keep replicaCount=1 unless your DB
-      # sizing supports the multiplied concurrency.
+      # Keep replicaCount at 1. Each replica enforces its own
+      # app.maxConcurrentRestores (and export/import) limit, so cluster-wide
+      # concurrency is replicaCount * maxConcurrent per family — and a
+      # pending job is claimed per process, not in the database, so two
+      # replicas can pick up the same row and run it twice. A second replica
+      # needs the DB-level claim first.
       enabled: false
     emails:
       enabled: false

@@ -36,6 +36,9 @@ type ImportWorker struct {
 	mu            sync.RWMutex
 	stopped       bool
 	semaphore     *semaphore.Weighted
+	// See ExportWorker.inFlight: the status flip happens inside the spawned
+	// goroutine, so a tick during a slow start re-lists a pending row.
+	inFlight sync.Map
 }
 
 // WorkerOption customizes an ImportWorker constructed via NewImportWorker.
@@ -174,14 +177,20 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 			continue
 		}
 
+		if _, running := w.inFlight.LoadOrStore(export.ID, struct{}{}); running {
+			continue
+		}
+
 		// Block until we can acquire a semaphore slot to limit concurrent goroutines
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
+			w.inFlight.Delete(export.ID)
 			slog.Error("Failed to acquire semaphore", "error", err)
 			return
 		}
 
 		go func(exportID, sourceFilePath string) {
 			defer w.semaphore.Release(1)
+			defer w.inFlight.Delete(exportID)
 			w.processImport(ctx, exportID, sourceFilePath)
 		}(export.ID, export.FilePath)
 	}
