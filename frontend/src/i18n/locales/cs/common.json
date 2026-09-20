@@ -150,5 +150,9 @@
     "then": "poté",
     "title": "Klávesové zkratky"
   },
-  "trackedBy": "Sledováno pomocí {{ref}}."
+  "trackedBy": "Sledováno pomocí {{ref}}.",
+  "listError": {
+    "title": "Seznam se nepodařilo načíst",
+    "description": "Požadavek selhal, proto se nic nezobrazuje. Neznamená to, že je seznam prázdný."
+  }
 }
