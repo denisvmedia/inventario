@@ -342,7 +342,10 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 	ev, err := api.verificationRegistry.GetByToken(r.Context(), token)
 	if err != nil {
 		if errors.Is(err, registry.ErrNotFound) || errors.Is(err, registry.ErrFieldRequired) {
-			http.Error(w, "Invalid or expired verification token", http.StatusBadRequest)
+			// Not "invalid or expired": a token that expired is handled below
+			// with its own message, and saying both here made the client
+			// classify every unknown token as expired (#2096).
+			http.Error(w, "Invalid verification token", http.StatusBadRequest)
 			return
 		}
 		slog.Error("Failed to look up verification token", "error", err)
