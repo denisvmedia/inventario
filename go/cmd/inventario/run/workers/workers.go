@@ -83,8 +83,6 @@ func (c *Command) registerFlags() {
 	flags.StringVar(&c.cfg.WorkersExclude, "workers-exclude", c.cfg.WorkersExclude,
 		"Comma-separated list of worker-group identifiers to skip (e.g., emails). "+
 			"Mutually exclusive with --workers-only.")
-	flags.StringVar(&c.cfg.ProbeAddr, "probe-addr", c.cfg.ProbeAddr,
-		"Bind address for the workers' probe listener that serves /healthz, /readyz and /metrics.")
 }
 
 // starter is the shared shape every bootstrap.Start* helper reduces to after

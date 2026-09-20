@@ -17,6 +17,8 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 
 	flags := cmd.PersistentFlags()
 	flags.StringVar(&cfg.Addr, "addr", cfg.Addr, "Bind address for the server")
+	flags.StringVar(&cfg.ProbeAddr, "probe-addr", cfg.ProbeAddr,
+		"Bind address for the probe listener serving /healthz, /readyz and /metrics. Keep it off the ingress (#2244).")
 	flags.StringVar(&cfg.UploadLocation, "upload-location", cfg.UploadLocation, "Location for the uploaded files")
 	flags.Int64Var(&cfg.MaxUploadBytes, "max-upload-bytes", cfg.MaxUploadBytes, "Maximum size of a single uploaded file in bytes (default 1 GiB); a negative value disables the limit")
 	shared.RegisterDatabaseFlags(cmd, dbConfig)

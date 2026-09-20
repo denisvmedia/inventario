@@ -23,7 +23,10 @@ import (
 func ProbesHandler(rs *RuntimeSetup) http.Handler {
 	r := chi.NewRouter()
 	r.Group(apiserver.Health(rs.FactorySet, rs.Params.RedisPinger))
-	r.Method(http.MethodGet, "/metrics", promhttp.Handler())
+	// Defence in depth: this listener is in-cluster only, so an empty token
+	// exposes nothing the operator did not publish themselves.
+	r.With(apiserver.MetricsTokenMiddleware(rs.Params.MetricsToken)).
+		Method(http.MethodGet, "/metrics", promhttp.Handler())
 	return r
 }
 

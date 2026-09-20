@@ -10,67 +10,27 @@ import (
 	"go.5x5.cz/inventario/apiserver"
 )
 
-// The /metrics endpoint exposes installation-wide business gauges (#2102).
-// When params.MetricsToken is set it must require a bearer token; when unset
-// it stays open (legacy behaviour that keeps local dev frictionless).
+// /metrics is not served by the public router (#2244) — it lives on the probe
+// listener, which the chart keeps off the ingress. The guard itself is still
+// used there, so its unit tests stay here next to the middleware.
 
-func TestMetricsGuard_OpenWhenTokenUnset(t *testing.T) {
+func TestPublicRouter_DoesNotServeMetrics(t *testing.T) {
 	c := qt.New(t)
 
-	params, _, _ := newParams()
-	// MetricsToken left empty → open.
-	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	// Both with and without a token: the endpoint is absent either way, so a
+	// deployment cannot expose it by leaving the token unset.
+	for _, token := range []string{"", "s3cr3t-metrics-token-at-least-32-bytes!"} {
+		params, _, _ := newParams()
+		params.MetricsToken = token
+		handler := apiserver.APIServer(params, &mockRestoreWorker{})
 
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
 
-	c.Assert(rr.Code, qt.Equals, http.StatusOK)
-}
-
-func TestMetricsGuard_RejectsMissingTokenWhenConfigured(t *testing.T) {
-	c := qt.New(t)
-
-	params, _, _ := newParams()
-	params.MetricsToken = "s3cr3t-metrics-token-at-least-32-bytes!"
-	handler := apiserver.APIServer(params, &mockRestoreWorker{})
-
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
-}
-
-func TestMetricsGuard_RejectsWrongTokenWhenConfigured(t *testing.T) {
-	c := qt.New(t)
-
-	params, _, _ := newParams()
-	params.MetricsToken = "s3cr3t-metrics-token-at-least-32-bytes!"
-	handler := apiserver.APIServer(params, &mockRestoreWorker{})
-
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	req.Header.Set("Authorization", "Bearer wrong-token")
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
-}
-
-func TestMetricsGuard_AcceptsCorrectTokenWhenConfigured(t *testing.T) {
-	c := qt.New(t)
-
-	params, _, _ := newParams()
-	const token = "s3cr3t-metrics-token-at-least-32-bytes!"
-	params.MetricsToken = token
-	handler := apiserver.APIServer(params, &mockRestoreWorker{})
-
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+		c.Assert(rr.Code, qt.Equals, http.StatusNotFound,
+			qt.Commentf("the default ingress forwards every path on this router"))
+	}
 }
 
 func TestMetricsTokenMiddleware_NoOpWhenEmpty(t *testing.T) {

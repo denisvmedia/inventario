@@ -32,7 +32,7 @@ spec:
         {{- with $cfg.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- $metricsAnnotations := include "inventario.metricsPodAnnotations" (dict "root" $ "port" "3333") }}
+      {{- $metricsAnnotations := include "inventario.metricsPodAnnotations" (dict "root" $ "port" "3334") }}
       {{- if or $cfg.podAnnotations (trim $metricsAnnotations) }}
       annotations:
         {{- with $cfg.podAnnotations }}
@@ -76,6 +76,11 @@ spec:
           ports:
             - name: http
               containerPort: 3333
+              protocol: TCP
+            # Metrics live here, not on :3333 — the ingress forwards every
+            # path on the http port (#2244).
+            - name: probe
+              containerPort: 3334
               protocol: TCP
           envFrom:
             - configMapRef:

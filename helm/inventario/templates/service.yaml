@@ -15,4 +15,10 @@ spec:
       port: {{ .Values.service.port }}
       targetPort: 3333
       protocol: TCP
+    # In-cluster only: /metrics is served here so the ingress, whose default
+    # rule is path `/` on the http port, cannot reach it (#2244).
+    - name: probe
+      port: 3334
+      targetPort: probe
+      protocol: TCP
 {{- end }}
