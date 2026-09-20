@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { Link, useNavigate } from "react-router-dom"
 import { ArrowRight, CheckCircle2, Mail, User } from "lucide-react"
 
@@ -278,7 +278,30 @@ export function RegisterPage() {
               htmlFor="register-terms"
               className="text-sm font-normal text-muted-foreground leading-relaxed"
             >
-              {t("auth:register.termsAccept")}
+              <Trans
+                i18nKey="auth:register.termsAccept"
+                components={{
+                  // Numbered to match the placeholders in the translations:
+                  // <1> is the terms link, <3> the privacy one. New tab so a
+                  // half-filled registration form is not lost to a read.
+                  1: (
+                    <Link
+                      to="/terms"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-2 hover:text-foreground"
+                    />
+                  ),
+                  3: (
+                    <Link
+                      to="/privacy"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-2 hover:text-foreground"
+                    />
+                  ),
+                }}
+              />
             </Label>
           </div>
           {form.formState.errors.acceptTerms ? (
