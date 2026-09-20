@@ -73,7 +73,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # 20-minute ceiling (80 * 15s). Longer than the typical 6-8 min
+          # 20-minute ceiling (80 * 15s). Longer than the typical 5-8 min
           # build to absorb queue wait on a busy runner fleet.
           for i in $(seq 1 80); do
             RUN_JSON="$(
