@@ -5,9 +5,10 @@
   "private": true,
   "description": "Inventario user-facing documentation site (Astro + Starlight).",
   "scripts": {
-    "dev": "astro dev",
-    "start": "astro dev",
-    "build": "astro build",
+    "dev": "npm run build:api && astro dev",
+    "start": "npm run build:api && astro dev",
+    "build": "npm run build:api && astro build",
+    "build:api": "node scripts/build-api-reference.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },
@@ -23,5 +24,8 @@
   "overrides": {
     "vite": "8.0.16",
     "nanoid": "^3.3.18"
+  },
+  "devDependencies": {
+    "redoc": "^2.5.0"
   }
 }

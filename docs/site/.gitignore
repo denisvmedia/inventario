@@ -19,3 +19,8 @@ pnpm-debug.log*
 
 # macOS
 .DS_Store
+
+# Assembled by scripts/build-api-reference.mjs (the spec comes from
+# go/docs/swagger.yaml, the bundle from node_modules) — not committed.
+public/api/swagger.yaml
+public/api/redoc.standalone.js
