@@ -369,6 +369,11 @@ serviceAccount:
   # Override the generated name (leave empty to auto-generate)
   name: ""
   annotations: {}
+  # Mount a Kubernetes API token into pods bound to this ServiceAccount.
+  # Off: no workload in this chart calls the Kubernetes API, and a valid
+  # token in an Internet-facing pod is a privilege-pivot primitive (#2245).
+  # Turn it on only if you add a sidecar or hook that needs API access.
+  automountToken: false
 
 # ============================================================
 # Application — non-sensitive settings (go into ConfigMap)
