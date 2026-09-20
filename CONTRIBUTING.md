@@ -129,6 +129,41 @@ maintainer for explicit approval before writing SQL by hand.**
 - Write tests for new behavior; add or update unit, integration, and e2e tests
   as appropriate for the layer you touched.
 
+## Changelog
+
+[`CHANGELOG.md`](CHANGELOG.md) is the source of truth for release notes: the
+release workflow reads the section matching the tag and publishes it as the
+GitHub Release body. Entries are written as the change lands, not assembled at
+tag time by someone reconstructing two months of history from commit subjects.
+
+Add an entry to the `## [Unreleased]` section, under `Added`, `Changed`,
+`Deprecated`, `Removed`, `Fixed` or `Security`, when your change is one a user
+or an operator would notice:
+
+- a feature, or a change to how an existing one behaves;
+- a bug they could have hit;
+- anything that changes how the thing is deployed, configured or upgraded;
+- a security fix.
+
+Skip it for refactors, test-only changes, CI plumbing and dependency bumps —
+they are in the git history, and a changelog nobody can skim is a changelog
+nobody reads. Write for the person who hits the problem, not for the reviewer:
+say what was wrong, not which function changed. Link the issue.
+
+### Cutting a release
+
+1. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and open a fresh
+   empty `## [Unreleased]` above it.
+2. Update the link definitions at the foot of the file.
+3. Bump `appVersion` in `helm/inventario/Chart.yaml` to `vX.Y.Z` — the release
+   workflow refuses a tag whose chart disagrees with it.
+4. Tag `vX.Y.Z` and push. The workflow publishes the section as the release
+   body.
+
+A release that wants an announcement rather than a change list — the first
+one did — can commit `.github/release-notes/vX.Y.Z.md` instead, which takes
+precedence. Keep the changelog section too, pointing at it.
+
 ## User documentation
 
 The end-user docs site is an [Astro Starlight](https://starlight.astro.build)
