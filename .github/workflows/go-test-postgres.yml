@@ -154,8 +154,30 @@ jobs:
       - name: Run PostgreSQL registry tests
         env:
           POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
-        run: go test -v -race ./registry/postgres/...
+        # This lane is the only place registry/postgres is exercised at all —
+        # without a DSN its tests self-skip, which is where the "0%" that #2114
+        # quoted came from. Measuring it here is what makes that number real.
+        run: |
+          set -euo pipefail
+          go test -v -race -covermode=atomic -coverprofile=coverage-postgres.out \
+            ./registry/postgres/... 2>&1 | tee test-output-postgres.txt
         working-directory: go
+
+      - name: Coverage summary
+        if: always()
+        run: >-
+          ../.github/scripts/coverage-summary.sh
+          test-output-postgres.txt coverage-postgres.out "PostgreSQL registry"
+        working-directory: go
+
+      - name: Upload the coverage profile
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: go-coverage-postgres
+          path: go/coverage-postgres.out
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Run Bootstrap integration tests
         env:
