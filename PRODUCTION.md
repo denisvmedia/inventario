@@ -553,7 +553,12 @@ read by the app via `cleanenv.ReadEnv` with **no prefix**, so they are the **bar
 Use independent layers — at least the first two are required:
 
 - [ ] **PostgreSQL (logical)**: enable automated backups (managed snapshots, CloudNativePG
-  scheduled backups, or a `pg_dump` CronJob). This is your primary data backup.
+  scheduled backups, or a `pg_dump` CronJob). This is your primary data backup. If your
+  database tier has no backup story you can name, the chart ships one: `backup.enabled=true`
+  runs a nightly `pg_dump`, verifies it, and prunes past `backup.retentionDays`
+  (see [helm/inventario/README.md](helm/inventario/README.md#database-backups-opt-in)).
+  Leave it off next to a managed provider's snapshots — a second copy of the same data is
+  a second thing to watch.
 - [ ] **Run the restore drill before go-live.** A backup you have never restored is a
   hypothesis. The procedure — restore into a scratch namespace, bring the schema forward,
   and check the four things that can each pass while the next fails — is in

@@ -86,4 +86,54 @@ spec:
           annotations:
             summary: "Inventario p95 latency above threshold"
             description: "Global p95 request latency is {{ `{{ $value }}` }}s over the last 5m."
+{{- if and .Values.backup.enabled .Values.backup.alert.enabled }}
+
+{{- /*
+  Backup alerts, only when the chart runs the backups (backup.enabled).
+  There is no compose counterpart, and the helm-lint alert-set check
+  renders with backups off, so this group stays out of that comparison
+  by construction.
+
+  Both rules need kube-state-metrics in the cluster. Without it they
+  never fire and never say so, which is the one way an alert can be
+  worse than no alert — see the note in values.yaml.
+*/ -}}
+{{- $jobs := printf `namespace="%s"` .Release.Namespace -}}
+{{- $owner := printf `namespace="%s", owner_kind="CronJob", owner_name="%s-backup"` .Release.Namespace $fullname }}
+    - name: inventario-backup-alerts
+      rules:
+        # Age of the newest SUCCESSFUL dump, not "did the last job fail".
+        # A CronJob that stopped being scheduled produces no failures at
+        # all, and that is the usual way this breaks.
+        - alert: InventarioBackupStale
+          expr: |
+            time() - max(
+              kube_job_status_completion_time{ {{- $jobs -}} }
+              * on (namespace, job_name) group_left()
+              kube_job_owner{ {{- $owner -}} }
+            ) > {{ mul (int .Values.backup.alert.maxAgeHours) 3600 }}
+          for: {{ .Values.backup.alert.for }}
+          labels:
+            severity: critical
+          annotations:
+            summary: "Inventario database backup is stale"
+            description: "The newest successful dump is {{ `{{ $value | humanizeDuration }}` }} old in namespace {{ .Release.Namespace }}."
+
+        # The stale rule above compares against an empty vector when no job
+        # has ever completed, which produces no alert. That is exactly the
+        # state a fresh, silently-broken backup config is in.
+        - alert: InventarioBackupNeverRan
+          expr: |
+            absent(
+              kube_job_status_completion_time{ {{- $jobs -}} }
+              * on (namespace, job_name) group_left()
+              kube_job_owner{ {{- $owner -}} }
+            )
+          for: {{ .Values.backup.alert.neverRanFor }}
+          labels:
+            severity: critical
+          annotations:
+            summary: "Inventario database backup has never completed"
+            description: "No successful dump has ever been recorded for {{ $fullname }}-backup in namespace {{ .Release.Namespace }}."
+{{- end }}
 {{- end }}
