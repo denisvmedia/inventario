@@ -47,6 +47,16 @@ updates:
         patterns:
           - "vitest"
           - "@vitest/*"
+      # React refuses to run when `react` and `react-dom` disagree on the
+      # exact version ("Incompatible React versions"), so a PR that bumps one
+      # of them alone fails every suite and can never be merged. They have to
+      # move together.
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
 
   - package-ecosystem: "npm" # See documentation for possible values
     directory: "/e2e" # Location of package manifests
