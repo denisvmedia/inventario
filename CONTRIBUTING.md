@@ -129,6 +129,33 @@ maintainer for explicit approval before writing SQL by hand.**
 - Write tests for new behavior; add or update unit, integration, and e2e tests
   as appropriate for the layer you touched.
 
+## Dependency advisories
+
+Two gates, and they answer different questions:
+
+- **`dependency-review`** reads the dependency *diff* of a pull request and
+  fails when the change introduces a HIGH or CRITICAL advisory.
+- **`npm Audit`** audits the whole resolved tree of each npm workspace, on
+  every push and weekly on a schedule. An advisory published today against a
+  dependency nobody has touched in months is invisible to the first gate and
+  caught by the second.
+
+When one goes red:
+
+```bash
+cd <workspace>            # frontend | e2e | docs/site
+npm audit                 # what and why
+npm audit fix --package-lock-only
+```
+
+If it cannot be fixed — no patched version exists, or the fix is a breaking
+major — say so in the PR rather than raising the threshold. A gate that was
+loosened to go green stops meaning anything.
+
+Go dependencies are covered by `govulncheck`, which is reachability-aware:
+it reports a vulnerability only when your code can actually reach the affected
+symbol, so a finding there is never noise.
+
 ## Bot auto-merge is held until required checks exist
 
 Dependabot and Renovate **patch** updates are eligible for auto-merge, and the
