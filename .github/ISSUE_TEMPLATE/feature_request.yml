@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest something Inventario should do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The most useful feature requests describe the problem rather than the
+        solution — what you were trying to do, and what stopped you. That
+        leaves room for an answer nobody had thought of yet.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The situation, and what currently gets in the way.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: Optional. If you already have a shape in mind, describe it.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead
+      description: A workaround, another tool, or nothing. It says a lot about how much this matters.

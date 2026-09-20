@@ -1,5 +1,11 @@
 # Inventario - Your Personal Inventory
 
+[![Go Test](https://github.com/denisvmedia/inventario/actions/workflows/go-test.yml/badge.svg?branch=master)](https://github.com/denisvmedia/inventario/actions/workflows/go-test.yml)
+[![Go Lint](https://github.com/denisvmedia/inventario/actions/workflows/go-lint.yml/badge.svg?branch=master)](https://github.com/denisvmedia/inventario/actions/workflows/go-lint.yml)
+[![Frontend Test](https://github.com/denisvmedia/inventario/actions/workflows/frontend-test.yml/badge.svg?branch=master)](https://github.com/denisvmedia/inventario/actions/workflows/frontend-test.yml)
+[![Release](https://img.shields.io/github/v/release/denisvmedia/inventario?sort=semver)](https://github.com/denisvmedia/inventario/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Welcome to Inventario - the ultimate app for managing and organizing your personal inventory.
 
 Note, the project is still under development.
@@ -456,6 +462,13 @@ This test validates:
 ## Security
 
 See [SECURITY.md](SECURITY.md) for the security policy and how to report a vulnerability.
+
+## Getting help
+
+See [SUPPORT.md](SUPPORT.md) for where to ask and what to include so the answer
+is useful. Contributions are welcome — [CONTRIBUTING.md](CONTRIBUTING.md) covers
+the workflow, and everyone taking part is expected to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Contributing
 
