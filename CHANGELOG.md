@@ -14,6 +14,8 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 - Privacy Policy and Terms of Service pages, linked from the registration
   consent checkbox ([#2148](https://github.com/denisvmedia/inventario/issues/2148)).
+- k6 load profile (`load/k6/api-load.js`) and a weekly OWASP ZAP baseline scan
+  of the public surface ([#848](https://github.com/denisvmedia/inventario/issues/848)).
 
 ### Fixed
 
