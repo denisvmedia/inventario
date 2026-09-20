@@ -96,9 +96,9 @@ type AuthAPI struct {
 	mfaRegistry             registry.UserMFASecretRegistry
 	// systemAdminGrantRegistry resolves the is_system_admin advisory
 	// claim baked into access tokens (#1784). The claim is FE-only —
-	// authorization happens server-side in RequireSystemAdmin /
-	// RequireBackofficeAuth / RequirePlatformAdmin, which all query the
-	// grant store or backoffice_users directly on every admin request.
+	// authorization happens server-side in RequireBackofficeAuth /
+	// RequirePlatformAdmin, which query backoffice_users directly on every
+	// admin request.
 	// May be nil in tests; issueAccessToken treats nil as "not an admin".
 	systemAdminGrantRegistry registry.SystemAdminGrantRegistry
 	blacklistService         services.TokenBlacklister
@@ -853,10 +853,9 @@ func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request)
 	// after a page reload where the in-memory token was lost).
 	api.writeCSRFHeader(w, r.Context(), user.ID)
 
-	// Stamp the wire-only is_system_admin advisory flag (#1784) so the
-	// FE's `useIsSystemAdmin()` hook receives the current truth on the
-	// canonical boot probe. Authorization is still enforced server-side
-	// via RequireSystemAdmin on every /admin/* request.
+	// Stamp the wire-only is_system_admin advisory flag (#1784). Nothing on
+	// the frontend reads it since #2475; it stays on the wire because the
+	// grant it reflects still decides whether a user may be impersonated.
 	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, user)
 	// Stamp the wire-only has_password flag (#1394) so the FE knows
 	// whether to render the "Set a password" form for OAuth-only users
@@ -1551,12 +1550,11 @@ func (api *AuthAPI) recordLoginEventWithMethod(ctx context.Context, tenantID, em
 // claim from the validated JWT. Pass "" when no refresh-token row exists
 // yet — the claim is then omitted.
 //
-// The is_system_admin claim is an advisory FE hint only (#1784): the
-// authoritative source of system-admin privilege is the
-// `system_admin_grants` table, queried by RequireSystemAdmin on every
-// /api/v1/admin/* request. The claim is included so the FE can render
-// the admin chrome (sidebar, banner) without an extra round-trip; the
-// backend must never trust it for authorization. A fresh registry
+// The is_system_admin claim is advisory only (#1784): the authoritative
+// source of the privilege is the `system_admin_grants` table, which
+// impersonationTargetGuard queries before letting an operator borrow an
+// identity. The backend must never trust the claim for authorization. A fresh
+// registry
 // lookup is performed at token-issue time so a revocation invalidates
 // the claim within accessTokenExpiration (15 min). A nil registry or a
 // transient lookup error reads as `false` — fail closed for the FE

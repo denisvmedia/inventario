@@ -44,10 +44,12 @@ var (
 	// exfiltration. The handler answers 422 directly via
 	// unprocessableEntityError, so it does not need a toJSONAPIError mapping.
 	errImportSourceForeignTenant = errx.NewSentinel("import source path must be within your tenant namespace")
-	// ErrNotSystemAdmin is returned by RequireSystemAdmin when the caller's
-	// user is not flagged as a system administrator. Surfaces as a 403 with
-	// JSON:API code "admin.forbidden" so the FE can render specific copy
-	// instead of the generic "permission denied" toast (#1745).
+	// ErrNotSystemAdmin is returned by a handler that itself refuses a caller
+	// holding no `system_admin_grants` row. No middleware gates a route on it
+	// any more (#2475) — the admin routes live behind the back-office plane —
+	// so this is the handler-side case only. Surfaces as a 403 with JSON:API
+	// code "admin.forbidden" so the FE can render specific copy instead of the
+	// generic "permission denied" toast (#1745).
 	ErrNotSystemAdmin = errx.NewSentinel("system administrator privileges required")
 	// ErrPlatformAdminRequired is returned by RequirePlatformAdmin when a
 	// back-office user authenticates successfully but their role is not
@@ -371,10 +373,19 @@ func adminImpersonationGuardError(err error) jsonapi.Error {
 	}
 }
 
-// adminSentinelJSONAPIError maps the admin-only guard sentinels
-// (RequireSystemAdmin, the #1747 block guards, the #1750 impersonation
-// guards) to their JSON:API wire shape. Extracted as a single
-// early-return helper called before the toJSONAPIError switch so the
+// adminForbiddenCode is the JSON:API error code for "you are authenticated
+// but you are not a platform admin". No middleware emits it any more: #1785
+// Phase 5 moved every admin route behind RequireBackofficeAuth /
+// RequirePlatformAdmin, and #2475 removed the unmounted tenant-side gates
+// that were left behind. It survives as the wire code for ErrNotSystemAdmin,
+// so a handler that returns that sentinel directly still produces the shape
+// the frontend already branches on.
+const adminForbiddenCode = "admin.forbidden"
+
+// adminSentinelJSONAPIError maps the admin-only guard sentinels (the #1747
+// block guards, the #1750 impersonation guards, and ErrNotSystemAdmin when a
+// handler returns it directly) to their JSON:API wire shape. Extracted as a
+// single early-return helper called before the toJSONAPIError switch so the
 // switch stays under the gocyclo budget; ok=false when err is not an
 // admin sentinel, leaving the switch to handle it.
 func adminSentinelJSONAPIError(err error) (jsonapi.Error, bool) {

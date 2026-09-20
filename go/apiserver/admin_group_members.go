@@ -126,7 +126,7 @@ type adminGroupMembersAPI struct {
 // editor. Cross-tenant by design: the read routes through
 // GroupService.AdminListMembersWithUsers, whose registry path bypasses
 // Postgres RLS, so a system admin can list members of a group in ANY
-// tenant. The RequireSystemAdmin gate is authorization enough.
+// tenant. The back-office gate on the route is authorization enough.
 //
 // An empty group is a 200 with `{"data": []}`, not a 404 — the group
 // exists, it just has no members yet.

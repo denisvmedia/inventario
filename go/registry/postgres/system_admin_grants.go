@@ -57,7 +57,7 @@ func (r *SystemAdminGrantRegistry) newSQLRegistry() *store.NonRLSRepository[mode
 }
 
 // Exists returns true when the user has a grant row. Hot path —
-// RequireSystemAdmin runs this on every /api/v1/admin/* request.
+// Read by the /auth/me advisory flag and by impersonationTargetGuard.
 // Backed by the unique index on user_id so the lookup is constant-time
 // regardless of the total grant count.
 func (r *SystemAdminGrantRegistry) Exists(ctx context.Context, userID string) (bool, error) {

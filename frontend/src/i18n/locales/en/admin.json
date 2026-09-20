@@ -1,9 +1,4 @@
 {
-  "forbidden": {
-    "back": "Back to dashboard",
-    "description": "You do not have permission to view the admin area. This area is restricted to system administrators.",
-    "title": "Access denied"
-  },
   "groupDetail": {
     "back": "Back to groups",
     "danger": {

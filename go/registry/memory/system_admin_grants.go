@@ -45,7 +45,7 @@ func NewSystemAdminGrantRegistry() *SystemAdminGrantRegistry {
 }
 
 // Exists returns true when the user has a grant row. Hot path —
-// called from RequireSystemAdmin on every /api/v1/admin/* request.
+// read by the /auth/me advisory flag and by impersonationTargetGuard.
 func (r *SystemAdminGrantRegistry) Exists(_ context.Context, userID string) (bool, error) {
 	if userID == "" {
 		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "UserID"))

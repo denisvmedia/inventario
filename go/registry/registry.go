@@ -1926,7 +1926,7 @@ type UserRegistry interface {
 // orthogonal to tenants. Same posture as AuditLogRegistry.
 type SystemAdminGrantRegistry interface {
 	// Exists returns true when the user has a grant row. Hot path —
-	// RequireSystemAdmin runs this on every /api/v1/admin/* request.
+	// Read by the /auth/me advisory flag and by impersonationTargetGuard.
 	// Postgres backs the lookup with a unique index on user_id; memory
 	// keeps a simple map keyed by user id.
 	Exists(ctx context.Context, userID string) (bool, error)
