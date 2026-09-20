@@ -79,11 +79,15 @@ jobs:
           fi
           echo "chart appVersion ${chart} matches ${TAG}"
 
-      - name: Look for hand-written release notes
+      - name: Resolve the release notes
         id: notes
-        # A tag may ship curated notes instead of the generated changelog by
-        # committing .github/release-notes/<tag>.md. Absent the file the
-        # changelog is generated as usual, so this is opt-in per tag.
+        # Three sources, in order (#2155):
+        #   1. .github/release-notes/<tag>.md — a hand-written announcement,
+        #      for a release that wants prose rather than a change list. Rare.
+        #   2. The CHANGELOG.md section for the tag. This is the normal path:
+        #      the entries were written as the changes landed, so nobody
+        #      assembles a list at tag time.
+        #   3. Neither — goreleaser generates a changelog from the commits.
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           TAG: ${{ github.ref_name }}
@@ -93,9 +97,16 @@ jobs:
           if [ -f "$file" ]; then
             echo "Using $file"
             echo "args=--release-notes=${file}" >> "$GITHUB_OUTPUT"
-          else
-            echo "No $file; goreleaser will generate the changelog"
+            exit 0
           fi
+          generated="${RUNNER_TEMP}/release-notes-${TAG}.md"
+          if ./.github/scripts/changelog-section.sh "$TAG" > "$generated"; then
+            echo "Using the CHANGELOG.md section for ${TAG}"
+            cat "$generated"
+            echo "args=--release-notes=${generated}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::warning::no notes for ${TAG} in .github/release-notes/ or CHANGELOG.md; goreleaser will generate the changelog from commits"
 
       - name: Run GoReleaser
         # PR runs the snapshot dry-run (no GitHub Release upload, no signing,
