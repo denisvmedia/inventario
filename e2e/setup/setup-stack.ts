@@ -160,6 +160,14 @@ export async function startBackend(): Promise<void> {
       // deployment.
       INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE:
         process.env.INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE ?? 'true',
+      // Opt the seed into the back-office operator fixtures
+      // (operator@backoffice.test / support@backoffice.test) so the
+      // admin-section e2e suite (#2100) can sign in to the back-office
+      // plane. OFF by default in the binary — these are password-only
+      // platform operators with MFA disabled, and /api/v1/seed is
+      // unauthenticated, so this must never be set in a real deployment.
+      INVENTARIO_SEED_BACKOFFICE_FIXTURE:
+        process.env.INVENTARIO_SEED_BACKOFFICE_FIXTURE ?? 'true',
       // Mount the public POST /api/v1/seed route (#2039) so seedDatabase()
       // below can reach it. The endpoint is OFF by default in the binary —
       // it runs a privileged, RLS-bypassing operation — and must never be

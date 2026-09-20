@@ -1,21 +1,23 @@
 /**
- * E2E coverage for the system-wide admin section (umbrella #1744,
- * QA gate #1758).
+ * E2E coverage for the back-office (platform-operator) surface
+ * (umbrella #1744, QA gate #1758, rewritten for the back-office plane
+ * in #2100).
  *
- * The system admin is bootstrapped by the test harness: debug/seeddata
- * provisions `sysadmin@test-org.com` with `is_system_admin = true`
- * (mirroring the production `inventario admin grant-system-admin` CLI
- * step) so every harness lane gets the fixture without a bespoke CLI
- * call — see SYSADMIN_TEST_CREDENTIALS in includes/auth.ts.
+ * The operators are bootstrapped by the test harness: debug/seeddata
+ * provisions `operator@backoffice.test` (platform_admin) and
+ * `support@backoffice.test` (support_agent) with MFA disabled, mirroring
+ * the production `inventario backoffice bootstrap` CLI step. See
+ * SEED fixtures in includes/backoffice.ts.
  *
- * Spec layout follows the issue #1758 E2E checklist:
+ * Spec layout:
  *   1. browse tenants → tenant detail → users + groups tabs
- *   2. non-admins are denied the admin surface (UI 403 + API 403)
+ *   2. a tenant session is denied the admin surface (UI bounce + API 401)
  *   3. block invalidates the target's live access token; unblock restores it
  *   4. admin group membership add / role-change / remove + soft-delete
- *   5. impersonation: start → banner → navigate → end → admin restored
+ *   5. impersonation: start → banner → navigate → end → operator restored
  *   6. impersonation safety: no nested impersonation, no token refresh
  *   7. impersonation safety: a system admin cannot be impersonated
+ *   8. impersonation safety: support_agent may read but may not impersonate
  *
  * Cross-tenant rejection (`admin.member.tenant_mismatch`) is not
  * reachable here — the e2e database holds a single tenant — and is
@@ -34,6 +36,13 @@ import {
   ORPHAN_TEST_CREDENTIALS,
   TEST_CREDENTIALS,
 } from '../includes/auth.js';
+import {
+  BACKOFFICE_SUPPORT_CREDENTIALS,
+  bearer,
+  loginAsOperator,
+  operatorApiLogin,
+  operatorPageToken,
+} from '../includes/backoffice.js';
 import { BASE_URL } from '../../setup/urls.js';
 
 const TEAMMATE_CREDENTIALS = {
@@ -46,8 +55,10 @@ const JSON_API = 'application/vnd.api+json';
 type ApiSession = { token: string; csrf: string; userId: string };
 
 /**
- * Log in directly against the JSON API (no browser). Returns the
+ * Log in directly against the TENANT JSON API (no browser). Returns the
  * access token, CSRF token and user id from the LoginResponse body.
+ * Impersonation targets and the group fixture live on the tenant plane;
+ * the operator side goes through operatorApiLogin instead.
  */
 async function apiLogin(
   request: APIRequestContext,
@@ -61,48 +72,19 @@ async function apiLogin(
   const body = await resp.json();
   expect(body.access_token, `access_token for ${credentials.email}`).toBeTruthy();
   expect(body.user?.id, `user id for ${credentials.email}`).toBeTruthy();
-  // CSRF is required for every mutating admin endpoint this spec hits.
-  // Fail fast here with a clear message rather than letting a missing
-  // token surface as a confusing 403 far downstream.
+  // CSRF is required for every mutating TENANT endpoint this spec hits
+  // (the back-office plane is bearer-only). Fail fast here with a clear
+  // message rather than letting a missing token surface as a confusing
+  // 403 far downstream.
   expect(body.csrf_token, `csrf_token for ${credentials.email}`).toBeTruthy();
   return { token: body.access_token, csrf: body.csrf_token, userId: body.user.id };
 }
 
-/** Log in as the seeded system admin through the real login form. */
-async function loginAsSysadmin(page: Page): Promise<void> {
-  await page.goto('/login');
-  await login(page, undefined, SYSADMIN_TEST_CREDENTIALS);
+function tenantHeaders(session: ApiSession): Record<string, string> {
+  return { ...bearer(session.token), 'X-CSRF-Token': session.csrf };
 }
 
-/** Read the access + CSRF tokens the frontend stashed after login. */
-async function pageTokens(page: Page): Promise<{ token: string; csrf: string }> {
-  return page.evaluate(() => ({
-    token: localStorage.getItem('inventario_token') || '',
-    csrf: sessionStorage.getItem('inventario_csrf_token') || '',
-  }));
-}
-
-function authHeaders(token: string, csrf?: string): Record<string, string> {
-  const h: Record<string, string> = { Authorization: `Bearer ${token}` };
-  if (csrf) h['X-CSRF-Token'] = csrf;
-  return h;
-}
-
-// PRE-EXISTING MASTER REGRESSION — #1785 (back-office auth plane) moved the
-// admin surface off the tenant plane and onto a dedicated back-office login
-// (`/backoffice/login`, `aud=backoffice` tokens, `RequireBackofficeAuth` on
-// `/api/v1/admin/*`, FE `RequireBackofficeAuth` wrapper on `/admin/*`). This
-// spec was written for the pre-#1785 model and `loginAsSysadmin(page)` now
-// round-trips to `/backoffice/login?reason=auth_required`, so every assertion
-// fails. The failures were masked on master by the fast-fail gate in the e2e
-// workflow — once #1849 fixed that gate the full suite surfaced this debt.
-//
-// Skipping here is deliberate scope-control for #1849 (a focused bcrypt-cost
-// + impersonation-banner-401 fix). The proper rewrite (seed a backoffice
-// operator fixture, drive `/backoffice/login`, mint tokens via
-// `POST /api/v1/backoffice/auth/login`, rework the impersonation lifecycle
-// for `restoreBackofficeSession`) is tracked as a follow-up to #1785.
-test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for back-office plane after #1785]', () => {
+test.describe('Back-office admin section (#1744 / #1758 / #2100)', () => {
   test.beforeAll(async () => {
     // global-setup waits for the stack, but sibling specs may have
     // bounced services in between — re-probe so the first navigation
@@ -117,10 +99,7 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
   });
 
   test('browses tenants, tenant detail, users and groups tabs', async ({ page }) => {
-    await loginAsSysadmin(page);
-
-    // The admin sidebar entry is only rendered for system admins.
-    await expect(page.getByTestId('sidebar-admin-group')).toBeVisible();
+    await loginAsOperator(page);
 
     await page.goto('/admin/tenants');
     await expect(page.getByTestId('admin-tenants-page')).toBeVisible();
@@ -144,26 +123,29 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
     await expect(page.getByTestId('admin-tenant-group-row').first()).toBeVisible();
   });
 
-  test('denies the admin surface to non-admin users (UI + API 403)', async ({ page, request }) => {
-    // A regular tenant user — not a system admin.
+  test('denies the admin surface to a tenant session (UI bounce + API 401)', async ({
+    page,
+    request,
+  }) => {
+    // A regular tenant user. Since #1785 the admin surface is a separate
+    // auth plane, so even a tenant system admin would be refused here —
+    // holding a tenant token is the disqualifier, not the role.
     await page.goto('/login');
     await login(page, undefined, TEST_CREDENTIALS);
 
-    // No admin sidebar entry.
-    await expect(page.getByTestId('sidebar-admin-group')).toHaveCount(0);
-
-    // Deep-linking into /admin renders the in-place 403, not the data.
+    // Deep-linking into /admin bounces to the back-office login, not to
+    // the admin data.
     await page.goto('/admin/tenants');
-    await expect(page.getByTestId('admin-forbidden')).toBeVisible();
+    await expect(page.getByTestId('backoffice-login-page')).toBeVisible();
+    await expect(page).toHaveURL(/\/backoffice\/login\?.*reason=auth_required/);
     await expect(page.getByTestId('admin-tenants-page')).toHaveCount(0);
 
-    // The API rejects the non-admin token outright.
-    const { token } = await pageTokens(page);
+    // The API rejects the tenant token outright: RequireBackofficeAuth
+    // refuses anything whose `aud` is not `backoffice`.
+    const token = await page.evaluate(() => localStorage.getItem('inventario_token') || '');
     expect(token).toBeTruthy();
-    const resp = await request.get('/api/v1/admin/tenants', {
-      headers: authHeaders(token),
-    });
-    expect(resp.status()).toBe(403);
+    const resp = await request.get('/api/v1/admin/tenants', { headers: bearer(token) });
+    expect(resp.status()).toBe(401);
   });
 
   test('blocking a user invalidates their live token; unblock restores access', async ({
@@ -174,12 +156,10 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
     const target = await apiLogin(request, BLOCK_TARGET_TEST_CREDENTIALS);
 
     // Sanity: the captured token is live right now.
-    const before = await request.get('/api/v1/auth/me', {
-      headers: authHeaders(target.token),
-    });
+    const before = await request.get('/api/v1/auth/me', { headers: bearer(target.token) });
     expect(before.status()).toBe(200);
 
-    await loginAsSysadmin(page);
+    await loginAsOperator(page);
     await page.goto(`/admin/users/${target.userId}`);
     await expect(page.getByTestId('admin-user-detail-page')).toBeVisible();
 
@@ -187,7 +167,7 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
       // Block via the user-detail UI.
       await page.getByTestId('admin-user-block').click();
       await expect(page.getByTestId('admin-user-action-dialog')).toBeVisible();
-      await page.getByTestId('admin-user-action-reason').fill('e2e block/unblock coverage (#1758)');
+      await page.getByTestId('admin-user-action-reason').fill('e2e block/unblock coverage (#2100)');
       const blockResp = page.waitForResponse(
         (r) => r.url().includes(`/users/${target.userId}/block`) && r.request().method() === 'POST',
       );
@@ -199,16 +179,14 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
 
       // The token issued before the block is now rejected — block bumps
       // the JWT-blacklist iat-staleness threshold for the user.
-      const after = await request.get('/api/v1/auth/me', {
-        headers: authHeaders(target.token),
-      });
+      const after = await request.get('/api/v1/auth/me', { headers: bearer(target.token) });
       expect(after.status()).toBe(401);
     } finally {
       // Unblock restores the account — always runs even if assertions fail.
-      const { token, csrf } = await pageTokens(page);
+      const operatorToken = await operatorPageToken(page);
       const unblockResp = await request.post(`/api/v1/admin/users/${target.userId}/unblock`, {
-        headers: { 'Content-Type': 'application/json', ...authHeaders(token, csrf) },
-        data: { reason: 'e2e cleanup (#1758)' },
+        headers: { 'Content-Type': 'application/json', ...bearer(operatorToken) },
+        data: { reason: 'e2e cleanup (#2100)' },
       });
       expect(unblockResp.status()).toBe(200);
     }
@@ -222,16 +200,17 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
   });
 
   test('admin edits group membership and soft-deletes the group', async ({ page, request }) => {
-    await loginAsSysadmin(page);
-    const { token, csrf } = await pageTokens(page);
-    expect(token).toBeTruthy();
+    const operator = await operatorApiLogin(request);
 
-    // A throwaway group owned by the system admin. Soft-deleting it at
-    // the end of the test is its own cleanup — the purge worker
-    // finishes the job — so it never leaks into later runs.
+    // A throwaway group. Groups belong to the tenant plane, so the
+    // operator (who has no tenant identity at all since #1785) cannot
+    // create one — the seeded tenant admin does. Soft-deleting it at the
+    // end of the test is its own cleanup: the purge worker finishes the
+    // job, so it never leaks into later runs.
+    const owner = await apiLogin(request, TEST_CREDENTIALS);
     const groupName = `Admin QA Group ${Date.now()}`;
     const createResp = await request.post('/api/v1/groups', {
-      headers: { 'Content-Type': JSON_API, Accept: JSON_API, ...authHeaders(token, csrf) },
+      headers: { 'Content-Type': JSON_API, Accept: JSON_API, ...tenantHeaders(owner) },
       data: { data: { type: 'groups', attributes: { name: groupName, icon: '🧪' } } },
     });
     expect(createResp.status()).toBe(201);
@@ -242,12 +221,13 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
 
     // Add the member (viewer) via the admin membership endpoint.
     const addResp = await request.post(`/api/v1/admin/groups/${groupId}/members`, {
-      headers: { 'Content-Type': 'application/json', ...authHeaders(token, csrf) },
+      headers: { 'Content-Type': 'application/json', ...bearer(operator.token) },
       data: { userID: member.userId, role: 'viewer' },
     });
     expect(addResp.status()).toBe(201);
 
     // The membership editor renders the new member.
+    await loginAsOperator(page);
     await page.goto(`/admin/groups/${groupId}`);
     await expect(page.getByTestId('admin-group-detail-page')).toBeVisible();
     await expect(page.getByTestId('admin-group-member-row')).toHaveCount(2);
@@ -256,7 +236,7 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
     const roleResp = await request.patch(
       `/api/v1/admin/groups/${groupId}/members/${member.userId}`,
       {
-        headers: { 'Content-Type': 'application/json', ...authHeaders(token, csrf) },
+        headers: { 'Content-Type': 'application/json', ...bearer(operator.token) },
         data: { role: 'user' },
       },
     );
@@ -265,7 +245,7 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
     // Remove the member.
     const removeResp = await request.delete(
       `/api/v1/admin/groups/${groupId}/members/${member.userId}`,
-      { headers: authHeaders(token, csrf) },
+      { headers: bearer(operator.token) },
     );
     expect(removeResp.status()).toBe(204);
 
@@ -274,7 +254,7 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
 
     // Soft-delete the group: status → pending_deletion.
     const deleteResp = await request.delete(`/api/v1/admin/groups/${groupId}`, {
-      headers: authHeaders(token, csrf),
+      headers: bearer(operator.token),
     });
     expect([200, 202, 204]).toContain(deleteResp.status());
 
@@ -283,34 +263,40 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
     await expect(page.getByTestId('admin-group-pending-banner')).toBeVisible();
   });
 
-  test('impersonation: start, banner, navigate, end, admin restored', async ({ page, request }) => {
+  test('impersonation: start, banner, navigate, end, operator restored', async ({
+    page,
+    request,
+  }) => {
     // The orphan fixture is a safe impersonation target — it is a
     // non-admin, active user and impersonating it does not mutate any
     // state a sibling spec depends on.
     const orphan = await apiLogin(request, ORPHAN_TEST_CREDENTIALS);
 
-    await loginAsSysadmin(page);
+    await loginAsOperator(page);
     await page.goto(`/admin/users/${orphan.userId}`);
     await expect(page.getByTestId('admin-user-detail-page')).toBeVisible();
 
     // Start impersonation. The frontend hard-reloads the app on
     // success, so anchor on the POST response before the reload.
     const startResp = page.waitForResponse(
-      (r) => r.url().includes(`/users/${orphan.userId}/impersonate`) && r.request().method() === 'POST',
+      (r) =>
+        r.url().includes(`/users/${orphan.userId}/impersonate`) && r.request().method() === 'POST',
     );
     await page.getByTestId('admin-user-impersonate').click();
     await expect(page.getByTestId('admin-user-action-dialog')).toBeVisible();
     await page.getByTestId('admin-user-action-confirm').click();
     expect((await startResp).ok()).toBeTruthy();
 
-    // The persistent impersonation banner appears.
+    // The persistent impersonation banner appears. The browser is now on
+    // the TENANT plane under the borrowed identity.
     await expect(page.getByTestId('impersonation-banner')).toBeVisible({ timeout: 20000 });
 
     // The banner survives an in-app navigation.
     await page.goto('/profile');
     await expect(page.getByTestId('impersonation-banner')).toBeVisible();
 
-    // End impersonation → the admin session is restored.
+    // End impersonation → the operator's back-office session is restored
+    // and the FE returns to the impersonated user's admin detail page.
     const endResp = page.waitForResponse(
       (r) => r.url().includes('/impersonation/end') && r.request().method() === 'POST',
     );
@@ -318,65 +304,84 @@ test.describe.skip('System admin section (#1744 / #1758) [BLOCKED: rewrite for b
     expect((await endResp).ok()).toBeTruthy();
 
     await expect(page.getByTestId('impersonation-banner')).toBeHidden({ timeout: 20000 });
-    // Admin privileges are back: the admin sidebar entry is visible again.
-    await expect(page.getByTestId('sidebar-admin-group')).toBeVisible({ timeout: 20000 });
+    // Back on the back-office plane: the operator chrome renders, which
+    // only RequireBackofficeAuth-gated routes do.
+    await expect(page.getByTestId('admin-shell-operator')).toBeVisible({ timeout: 20000 });
+    await expect(page.getByTestId('admin-user-detail-page')).toBeVisible({ timeout: 20000 });
   });
 
   test('impersonation safety: no nested impersonation, no token refresh', async ({ request }) => {
     const orphan = await apiLogin(request, ORPHAN_TEST_CREDENTIALS);
-    const sysadmin = await apiLogin(request, SYSADMIN_TEST_CREDENTIALS);
+    const operator = await operatorApiLogin(request);
 
     // Start an impersonation session for the orphan user.
     const startResp = await request.post(`/api/v1/admin/users/${orphan.userId}/impersonate`, {
-      headers: { 'Content-Type': 'application/json', ...authHeaders(sysadmin.token, sysadmin.csrf) },
-      data: { reason: 'e2e impersonation safety check (#1758)' },
+      headers: { 'Content-Type': 'application/json', ...bearer(operator.token) },
+      data: { reason: 'e2e impersonation safety check (#2100)' },
     });
     expect(startResp.ok()).toBeTruthy();
-    const startBody = await startResp.json();
-    const impToken = startBody.access_token as string;
-    const impCsrf = (startBody.csrf_token as string) ?? '';
+    const impToken = (await startResp.json()).access_token as string;
     expect(impToken).toBeTruthy();
 
-    // No chain: an impersonation session cannot start a nested one.
-    // Rejected either by RequireSystemAdmin (403 — the impersonation
-    // token carries is_system_admin=false) or the no-chain handler
-    // guard (422 admin.impersonate.nested).
+    // No chain: an impersonation session cannot start a nested one. The
+    // impersonation token is a TENANT JWT, so RequireBackofficeAuth
+    // rejects it at the gate (401) well before the handler's own
+    // defence-in-depth nested guard (422) can fire.
     const nested = await request.post(`/api/v1/admin/users/${orphan.userId}/impersonate`, {
-      headers: { 'Content-Type': 'application/json', ...authHeaders(impToken, impCsrf) },
+      headers: { 'Content-Type': 'application/json', ...bearer(impToken) },
       data: { reason: 'nested attempt' },
     });
     expect(nested.ok(), 'nested impersonation must be rejected').toBeFalsy();
-    expect([403, 422]).toContain(nested.status());
+    expect([401, 403, 422]).toContain(nested.status());
 
     // No refresh: the impersonation token cannot mint a fresh access
-    // token via the refresh endpoint.
+    // token via the tenant refresh endpoint.
     const refreshed = await request.post('/api/v1/auth/refresh', {
-      headers: authHeaders(impToken, impCsrf),
+      headers: bearer(impToken),
     });
     expect(refreshed.ok(), 'impersonation token must not refresh').toBeFalsy();
     expect([401, 403]).toContain(refreshed.status());
 
-    // Clean up: end the impersonation session.
+    // Clean up: end the impersonation session. `end` self-validates the
+    // imp token off the Authorization header, so no cookie is needed.
     const end = await request.post('/api/v1/admin/impersonation/end', {
-      headers: authHeaders(impToken, impCsrf),
+      headers: bearer(impToken),
     });
     expect(end.ok()).toBeTruthy();
   });
 
   test('impersonation safety: a system admin cannot be impersonated', async ({ request }) => {
+    const operator = await operatorApiLogin(request);
+    // The tenant-side system-admin grant (#1784) still guards the target
+    // side: a user holding one may not be borrowed, whatever the
+    // operator's back-office role.
     const sysadmin = await apiLogin(request, SYSADMIN_TEST_CREDENTIALS);
 
-    // No admin targets: impersonating a system admin is rejected. The
-    // seeded fixtures hold a single system admin (sysadmin@test-org.com),
-    // so it doubles as the target — impersonationTargetGuard rejects on
-    // `target.IsSystemAdmin` regardless of whether the target is the
-    // caller or a different admin, which is exactly the guard under test.
     const resp = await request.post(`/api/v1/admin/users/${sysadmin.userId}/impersonate`, {
-      headers: { 'Content-Type': 'application/json', ...authHeaders(sysadmin.token, sysadmin.csrf) },
-      data: { reason: 'e2e admin-target rejection check (#1758)' },
+      headers: { 'Content-Type': 'application/json', ...bearer(operator.token) },
+      data: { reason: 'e2e admin-target rejection check (#2100)' },
     });
     expect(resp.status(), 'impersonating a system admin must be rejected').toBe(422);
     // The JSON:API error envelope pins the specific guard that fired.
     expect(await resp.text()).toContain('admin.impersonate.target_is_admin');
+  });
+
+  test('impersonation safety: a support agent may read but may not impersonate', async ({
+    request,
+  }) => {
+    const support = await operatorApiLogin(request, BACKOFFICE_SUPPORT_CREDENTIALS);
+    const orphan = await apiLogin(request, ORPHAN_TEST_CREDENTIALS);
+
+    // support_agent keeps read access to the admin surface.
+    const tenants = await request.get('/api/v1/admin/tenants', { headers: bearer(support.token) });
+    expect(tenants.status()).toBe(200);
+
+    // But RequirePlatformAdmin refuses it at impersonation start.
+    const resp = await request.post(`/api/v1/admin/users/${orphan.userId}/impersonate`, {
+      headers: { 'Content-Type': 'application/json', ...bearer(support.token) },
+      data: { reason: 'e2e role-boundary check (#2100)' },
+    });
+    expect(resp.status(), 'support_agent must not start impersonation').toBe(403);
+    expect(await resp.text()).toContain('admin.role_required');
   });
 });

@@ -10,6 +10,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	_ "gocloud.dev/blob/fileblob" // register the file:// blob driver for the upload-location tests
+	"golang.org/x/crypto/bcrypt"
 
 	"go.5x5.cz/inventario/debug/seeddata"
 	"go.5x5.cz/inventario/models"
@@ -756,4 +757,52 @@ func countRegularFiles(c *qt.C, dir string) int {
 	})
 	c.Assert(err, qt.IsNil)
 	return n
+}
+
+// TestSeedBackofficeOperators covers the #2100 fixture: the two
+// back-office operators the admin e2e suite signs in as. The rows must
+// exist with MFA disabled (the suite cannot enrol TOTP from a browser)
+// and be self-healing across re-seeds.
+func TestSeedBackofficeOperators(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	factorySet := memory.NewFactorySet()
+
+	// Gated off by default — the seed endpoint is unauthenticated.
+	_, err := seeddata.SeedData(factorySet, seeddata.SeedOptions{})
+	c.Assert(err, qt.IsNil)
+	_, err = factorySet.BackofficeUserRegistry.GetByEmail(ctx, "operator@backoffice.test")
+	c.Assert(err, qt.ErrorIs, registry.ErrBackofficeUserNotFound)
+
+	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{SeedBackofficeOperators: true})
+	c.Assert(err, qt.IsNil)
+
+	admin, err := factorySet.BackofficeUserRegistry.GetByEmail(ctx, "operator@backoffice.test")
+	c.Assert(err, qt.IsNil)
+	c.Assert(admin.Role, qt.Equals, models.BackofficeRolePlatformAdmin)
+	c.Assert(admin.IsActive, qt.IsTrue)
+	c.Assert(admin.MFAEnforced, qt.IsFalse,
+		qt.Commentf("MFAEnforced=true fails login closed with 501 until TOTP is enrolled"))
+	c.Assert(bcrypt.CompareHashAndPassword([]byte(admin.PasswordHash), []byte("TestPassword123")), qt.IsNil)
+
+	support, err := factorySet.BackofficeUserRegistry.GetByEmail(ctx, "support@backoffice.test")
+	c.Assert(err, qt.IsNil)
+	c.Assert(support.Role, qt.Equals, models.BackofficeRoleSupportAgent)
+
+	// Drift: a previous run left the operator disabled and MFA-gated.
+	c.Assert(factorySet.BackofficeUserRegistry.SetActive(ctx, admin.ID, false), qt.IsNil)
+	drifted, err := factorySet.BackofficeUserRegistry.Get(ctx, admin.ID)
+	c.Assert(err, qt.IsNil)
+	drifted.MFAEnforced = true
+	_, err = factorySet.BackofficeUserRegistry.Update(ctx, *drifted)
+	c.Assert(err, qt.IsNil)
+
+	// Re-seeding reconciles it rather than skipping the existing row.
+	_, err = seeddata.SeedData(factorySet, seeddata.SeedOptions{SeedBackofficeOperators: true})
+	c.Assert(err, qt.IsNil)
+	healed, err := factorySet.BackofficeUserRegistry.GetByEmail(ctx, "operator@backoffice.test")
+	c.Assert(err, qt.IsNil)
+	c.Assert(healed.ID, qt.Equals, admin.ID, qt.Commentf("reconciled, not duplicated"))
+	c.Assert(healed.IsActive, qt.IsTrue)
+	c.Assert(healed.MFAEnforced, qt.IsFalse)
 }
