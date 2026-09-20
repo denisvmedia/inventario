@@ -38,6 +38,9 @@ type RestoreWorker struct {
 	mu             sync.RWMutex
 	stopped        bool
 	semaphore      *semaphore.Weighted
+	// See ExportWorker.inFlight. A restore processed twice replays an archive
+	// over live data, which is the worst of the three (#2131).
+	inFlight sync.Map
 }
 
 // WorkerOption customizes a RestoreWorker constructed via NewRestoreWorker.
@@ -186,14 +189,20 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 			continue
 		}
 
+		if _, running := w.inFlight.LoadOrStore(restoreOp.ID, struct{}{}); running {
+			continue
+		}
+
 		// Attempt to acquire a semaphore slot to limit concurrent goroutines
 		if !w.semaphore.TryAcquire(1) {
+			w.inFlight.Delete(restoreOp.ID)
 			slog.Warn("Failed to acquire semaphore for restore, another restore is in progress, skipping...")
 			return
 		}
 
 		go func(restoreOperationID string) {
 			defer w.semaphore.Release(1)
+			defer w.inFlight.Delete(restoreOperationID)
 			w.processRestore(ctx, restoreOperationID)
 		}(restoreOp.ID)
 	}
