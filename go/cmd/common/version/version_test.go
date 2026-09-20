@@ -23,7 +23,10 @@ func TestVersionCommand_WritesToStdout(t *testing.T) {
 
 	stdout, stderr := captureStdio(c, func() {
 		cmd := cmdversion.New()
-		cmd.SetArgs(nil)
+		// Empty, not nil: cobra falls back to os.Args[1:] when args are nil
+		// and the binary is not named cobra.test, so a nil here would hand the
+		// command whatever flags `go test` was invoked with.
+		cmd.SetArgs([]string{})
 		c.Assert(cmd.Execute(), qt.IsNil)
 	})
 
