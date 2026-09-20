@@ -553,8 +553,13 @@ read by the app via `cleanenv.ReadEnv` with **no prefix**, so they are the **bar
 Use independent layers — at least the first two are required:
 
 - [ ] **PostgreSQL (logical)**: enable automated backups (managed snapshots, CloudNativePG
-  scheduled backups, or a `pg_dump` CronJob). This is your primary data backup. Verify a
-  restore actually works.
+  scheduled backups, or a `pg_dump` CronJob). This is your primary data backup.
+- [ ] **Run the restore drill before go-live.** A backup you have never restored is a
+  hypothesis. The procedure — restore into a scratch namespace, bring the schema forward,
+  and check the four things that can each pass while the next fails — is in
+  [devdocs/disaster-recovery.md](devdocs/disaster-recovery.md), along with the RPO/RTO
+  defaults, what to do on the day, and why the alert to wire is on backup *age* rather
+  than job failure.
 - [ ] **Object storage (R2)**: enable bucket versioning / lifecycle rules so uploaded files
   survive accidental deletion/overwrite.
 - [ ] **Cluster-level (Velero)**: for whole-namespace disaster recovery — Kubernetes
