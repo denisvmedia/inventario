@@ -22,6 +22,13 @@ function generateTOTP(secret: string): string {
   return generateSync({ secret, digits: 6, period: 30 });
 }
 
+// Sleep into the next 30s TOTP step, so the code generated after this call
+// belongs to a step the replay guard (#2124) has not seen.
+async function waitForNextTotpStep(): Promise<void> {
+  const msIntoStep = Date.now() % 30_000;
+  await new Promise((resolve) => setTimeout(resolve, 30_000 - msIntoStep + 500));
+}
+
 // ---------------------------------------------------------------------------
 // Helpers — kept inline because nothing else in the suite enrolls MFA.
 // ---------------------------------------------------------------------------
@@ -164,12 +171,20 @@ async function disableMFA(page: Page, args: { totp?: string; backup?: string }) 
 // ---------------------------------------------------------------------------
 
 test.describe.serial('MFA / TOTP enrollment + login', () => {
+  // Held for the teardown below. admin@test-org.com is shared with every other
+  // spec, so MFA left enabled here does not fail this test — it stalls each
+  // later login on the challenge until the 120s global timeout, one test at a
+  // time, until the lane runs out of budget and is cancelled mid-suite (#2249).
+  // Cleared on the clean path, where the test disables MFA itself.
+  let enrolledSecret: string | null = null;
+
   // Single end-to-end run: each step depends on the previous one's state.
   test('enroll → login with TOTP → login with backup code → reject reuse → disable', async ({ page }) => {
     await page.goto('/');
     await ensureAuthenticated(page);
 
     const { secret, backupCodes } = await enrollMFA(page);
+    enrolledSecret = secret;
 
     // Logout and re-login with a fresh TOTP code. This consumes the current
     // 30s time-step: the #2124 replay guard records last_used_step, so any
@@ -209,6 +224,45 @@ test.describe.serial('MFA / TOTP enrollment + login', () => {
     // another fresh backup code (a same-window TOTP would again be rejected
     // by the replay guard).
     await disableMFA(page, { backup: backupCodes[2] });
+    enrolledSecret = null;
+  });
+
+  // Runs whatever the test did. A failure anywhere after enrollMFA used to
+  // leave the shared user enrolled, and the damage lands on the specs that
+  // follow rather than here — see the note on enrolledSecret.
+  //
+  // TOTP rather than a backup code: the codes consumed above depend on how far
+  // the test got, and guessing wrong leaves MFA on. The #2124 replay guard
+  // rejects a code from an already-used 30s step, so this waits out the
+  // current step before each submission rather than tracking which steps were
+  // used.
+  test.afterAll(async ({ browser }) => {
+    if (enrolledSecret === null) {
+      return;
+    }
+
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await waitForNextTotpStep();
+      await loginWithMFA(page, { totp: generateTOTP(enrolledSecret) }, true);
+      await waitForNextTotpStep();
+      await disableMFA(page, { totp: generateTOTP(enrolledSecret) });
+      enrolledSecret = null;
+    } catch (err) {
+      // Rethrown deliberately. A silent miss here is the failure this teardown
+      // exists to prevent, and it surfaces later as unrelated specs timing out
+      // on a login prompt nobody expected.
+      console.error(
+        '[mfa.spec] teardown could not disable MFA on the shared user; ' +
+          'later specs that log in as ' + TEST_CREDENTIALS.email + ' will stall ' +
+          'on the MFA challenge until they time out',
+        err,
+      );
+      throw err;
+    } finally {
+      await context.close();
+    }
   });
 });
 
