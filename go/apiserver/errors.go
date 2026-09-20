@@ -429,8 +429,29 @@ func adminSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 // helpers (admin guards, account-deletion) before the toJSONAPIError switch.
 // Collapsing them into a single early-return call keeps toJSONAPIError under
 // the gocyclo budget. ok=false when err matches none of them.
+// groupStateSentinelJSONAPIError handles sentinels about the group's own
+// lifecycle. ErrGroupNotActive fell to the default 500 with a false
+// slog.Error, because /groups/{id} uses groupCtx, which does not check
+// IsActive — so an owner editing a group mid-deletion tripped an alert for
+// what is a user error (#2129).
+func groupStateSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
+	if !errors.Is(err, services.ErrGroupNotActive) {
+		return jsonapi.Error{}, false
+	}
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusUnprocessableEntity,
+		StatusText:     "Unprocessable Entity",
+		Code:           "group.not_active",
+	}, true
+}
+
 func preSwitchSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	if jsErr, ok := adminSentinelJSONAPIError(err); ok {
+		return jsErr, true
+	}
+	if jsErr, ok := groupStateSentinelJSONAPIError(err); ok {
 		return jsErr, true
 	}
 	if jsErr, ok := accountDeletionSentinelJSONAPIError(err); ok {

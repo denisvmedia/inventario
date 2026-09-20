@@ -151,7 +151,13 @@ func (l *CommodityLoan) IsOverdue(now time.Time) bool {
 	if due.IsZero() {
 		return false
 	}
-	return now.After(due)
+	n := now.UTC()
+	today := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
+	// Due today is not overdue. now.After(due) made it so from one second
+	// past the due midnight, which disagreed with the postgres filter
+	// (due_back_at < today) — the same item read differently depending on
+	// the backend (#2129). Mirrors MaintenanceSchedule.IsOverdue.
+	return due.Before(today)
 }
 
 func (*CommodityLoan) Validate() error {

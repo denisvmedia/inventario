@@ -121,12 +121,15 @@ func (api *searchAPI) searchWithBasicFallback(w http.ResponseWriter, r *http.Req
 			}
 		}
 
-		// Apply pagination
-		start := min(offset, len(filtered))
-		end := min(start+limit, len(filtered))
+		// Count before slicing: the total is the match count, not the page
+		// size. Reporting the page made every result set look like one page,
+		// so nothing past the first was reachable (#2129).
+		total := len(filtered)
+		start := min(offset, total)
+		end := min(start+limit, total)
 		filtered = filtered[start:end]
 
-		response := jsonapi.NewSearchResponse("commodities", filtered, len(filtered))
+		response := jsonapi.NewSearchResponse("commodities", filtered, total)
 		if err := render.Render(w, r, response); err != nil {
 			internalServerError(w, r, err)
 		}
@@ -138,12 +141,13 @@ func (api *searchAPI) searchWithBasicFallback(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		// Apply pagination
-		start := min(offset, len(files))
-		end := min(start+limit, len(files))
+		// Count before slicing — see the commodities branch above (#2129).
+		total := len(files)
+		start := min(offset, total)
+		end := min(start+limit, total)
 		files = files[start:end]
 
-		response := jsonapi.NewSearchResponse("files", files, len(files))
+		response := jsonapi.NewSearchResponse("files", files, total)
 		if err := render.Render(w, r, response); err != nil {
 			internalServerError(w, r, err)
 		}
