@@ -31,6 +31,11 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"img-src 'self' data: blob:; " +
 	"font-src 'self' data:; " +
 	"connect-src 'self'; " +
+	// pdf.js runs its parser in a worker. The bundler emits it as a
+	// same-origin asset, which default-src already covers; blob: is there
+	// because pdf.js falls back to a blob worker in some paths and the
+	// failure would be a PDF that silently never renders.
+	"worker-src 'self' blob:; " +
 	"object-src 'none'; " +
 	"base-uri 'self'; " +
 	"form-action 'self'; " +
