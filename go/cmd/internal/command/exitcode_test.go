@@ -25,7 +25,7 @@ func TestExitCodeFor(t *testing.T) {
 	c.Run("an exit-coded error keeps its status through wrapping", func(c *qt.C) {
 		err := fmt.Errorf("outer: %w", command.WithExitCode(sentinel, 3))
 		c.Assert(command.ExitCodeFor(err), qt.Equals, 3)
-		c.Assert(errors.Is(err, sentinel), qt.IsTrue,
+		c.Assert(err, qt.ErrorIs, sentinel,
 			qt.Commentf("the wrapper must not hide the cause"))
 	})
 
