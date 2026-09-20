@@ -135,7 +135,7 @@ func (api *adminWorkersAPI) listWorkers(w http.ResponseWriter, r *http.Request) 
 		resources = append(resources, workerControlResource(wt, byType[wt]))
 	}
 
-	api.writeEnvelope(w, r, http.StatusOK, WorkerControlListEnvelope{Data: resources})
+	_ = api.writeEnvelope(w, r, http.StatusOK, WorkerControlListEnvelope{Data: resources})
 }
 
 // pauseWorker soft-pauses the worker named in the {workerType} path
@@ -189,9 +189,11 @@ func (api *adminWorkersAPI) pauseWorker(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	api.writeEnvelope(w, r, http.StatusOK, WorkerControlEnvelope{Data: workerControlResource(wt, control)})
-	// Audit AFTER render so a writer failure lands as Success=false.
-	api.logWorkerOutcome(r, AuditActionAdminWorkerPause, actor.ID, string(wt), req.Reason, true, "")
+	// Audit AFTER render so a writer failure lands as Success=false: the
+	// worker IS paused either way, but the operator did not see it confirmed.
+	writeErr := api.writeEnvelope(w, r, http.StatusOK, WorkerControlEnvelope{Data: workerControlResource(wt, control)})
+	api.logWorkerOutcome(r, AuditActionAdminWorkerPause, actor.ID, string(wt), req.Reason,
+		writeErr == nil, errMessage(writeErr))
 }
 
 // resumeWorker clears the soft-pause on the worker named in the
@@ -228,8 +230,9 @@ func (api *adminWorkersAPI) resumeWorker(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	api.writeEnvelope(w, r, http.StatusOK, WorkerControlEnvelope{Data: workerControlResource(wt, control)})
-	api.logWorkerOutcome(r, AuditActionAdminWorkerResume, actor.ID, string(wt), "", true, "")
+	writeErr := api.writeEnvelope(w, r, http.StatusOK, WorkerControlEnvelope{Data: workerControlResource(wt, control)})
+	api.logWorkerOutcome(r, AuditActionAdminWorkerResume, actor.ID, string(wt), "",
+		writeErr == nil, errMessage(writeErr))
 }
 
 // resolveWorkerType reads + validates the {workerType} path segment.
@@ -280,14 +283,28 @@ func (api *adminWorkersAPI) decodePauseRequest(w http.ResponseWriter, r *http.Re
 // writeEnvelope encodes v as a JSON:API response on w. Centralised so the
 // content-type + encode-error handling is identical across list / single
 // responses.
-func (api *adminWorkersAPI) writeEnvelope(w http.ResponseWriter, _ *http.Request, status int, v any) {
+// writeEnvelope renders the response and reports whether the client actually
+// received it. The status is already flushed by the time an encode can fail,
+// so there is no recovering — but the caller audits the outcome, and an audit
+// row claiming success for a response the operator never saw is worse than no
+// row at all (#2131).
+func (api *adminWorkersAPI) writeEnvelope(w http.ResponseWriter, _ *http.Request, status int, v any) error {
 	w.Header().Set("Content-Type", "application/vnd.api+json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		// Headers (and status) already flushed — cannot recover, but log
-		// so the operator-side trail is honest.
 		slog.Error("admin workers: failed to encode response", "error", err)
+		return err
 	}
+	return nil
+}
+
+// errMessage renders an error for the audit row's message column, empty for
+// nil so a successful row carries no text.
+func errMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // logWorkerOutcome writes the admin.worker_pause / admin.worker_resume

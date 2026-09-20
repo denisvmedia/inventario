@@ -282,6 +282,12 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 		if g, ok := groupsByID[m.GroupID]; ok {
 			row.GroupSlug = g.Slug
 			row.GroupName = g.Name
+		} else {
+			// The membership points at a group this lookup did not return —
+			// deleted, or in another tenant. Rendering blank slug and name
+			// makes an orphan look like an unnamed group (#2131).
+			slog.Warn("admin getUser: membership references an unresolved group",
+				"user_id", user.ID, "group_id", m.GroupID)
 		}
 		mems = append(mems, row)
 	}

@@ -380,7 +380,22 @@ type InMemoryAuthRateLimiter struct {
 	mu      sync.Mutex
 	windows map[string][]time.Time
 	failed  map[string]*inMemoryFailedLogin
+	// lastSweep is when sweepLocked last walked both maps. See sweepLocked
+	// for why a periodic walk is needed on top of the per-key eviction.
+	lastSweep time.Time
 }
+
+const (
+	// inMemoryRateLimitSweepInterval bounds how often a write pays for an
+	// O(n) walk of the maps.
+	inMemoryRateLimitSweepInterval = 5 * time.Minute
+	// inMemoryRateLimitMaxWindow is the longest window any limiter uses
+	// (publicScanGlobalCapWindow). A sliding-window entry whose newest
+	// timestamp is older than this cannot matter to any limiter, whichever
+	// key it belongs to — the maps mix keys with different windows, so the
+	// sweep uses the most conservative one.
+	inMemoryRateLimitMaxWindow = publicScanGlobalCapWindow
+)
 
 type inMemoryFailedLogin struct {
 	count       int
@@ -393,6 +408,40 @@ func NewInMemoryAuthRateLimiter() *InMemoryAuthRateLimiter {
 		now:     time.Now,
 		windows: make(map[string][]time.Time),
 		failed:  make(map[string]*inMemoryFailedLogin),
+	}
+}
+
+// sweepLocked drops entries that no future call can act on. The caller must
+// hold l.mu.
+//
+// Both maps evict per key, but only for the key the caller asked about — and
+// the keys that grow the map are precisely the ones nobody asks about twice.
+// An attacker walking distinct emails, or a client pool rotating source IPs,
+// therefore leaves one permanent entry per value for the process lifetime
+// (#2131). This is the memory limiter only; Redis expires its own keys.
+//
+// Amortized rather than scheduled: a janitor goroutine would give this struct
+// a lifecycle it does not otherwise have, and every caller already holds the
+// lock when it could sweep.
+func (l *InMemoryAuthRateLimiter) sweepLocked(now time.Time) {
+	if !l.lastSweep.IsZero() && now.Sub(l.lastSweep) < inMemoryRateLimitSweepInterval {
+		return
+	}
+	l.lastSweep = now
+
+	cutoff := now.Add(-inMemoryRateLimitMaxWindow)
+	for key, ts := range l.windows {
+		if len(ts) == 0 || !ts[len(ts)-1].After(cutoff) {
+			delete(l.windows, key)
+		}
+	}
+
+	for key, entry := range l.failed {
+		lockActive := !entry.lockedUntil.IsZero() && now.Before(entry.lockedUntil)
+		windowActive := !entry.expiresAt.IsZero() && now.Before(entry.expiresAt)
+		if !lockActive && !windowActive {
+			delete(l.failed, key)
+		}
 	}
 }
 
@@ -447,6 +496,7 @@ func (l *InMemoryAuthRateLimiter) checkRate(key string, limit int, window time.D
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.sweepLocked(now)
 
 	ts := l.windows[key]
 	// prune
@@ -525,6 +575,7 @@ func (l *InMemoryAuthRateLimiter) RecordFailedLogin(_ context.Context, email str
 	now := l.now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.sweepLocked(now)
 
 	entry := l.failed[key]
 	if entry == nil {
