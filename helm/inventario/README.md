@@ -171,6 +171,88 @@ helm upgrade --install inventario ./helm/inventario \
   --set-string secrets.existingSecret='inventario-runtime'
 ```
 
+## Database migrations
+
+Two things move the database forward, and they are not the same:
+
+- **Schema migrations** — `inventario db migrate up`. Generated files, applied in order, tracked in the revision table.
+- **Data migrations** — `inventario db migrate data`. Idempotent: creates the default tenant and the initial admin if they are missing.
+
+Both need the DB roles that `inventario db bootstrap` creates, and the `pg_trgm` extension it installs. `migrate up` checks for the extension up front and names it, rather than failing partway through the chain on `gin_trgm_ops`.
+
+### What runs when
+
+| | Plain Helm / Helmfile (default) | `setupJob.argocdMode=true` |
+| --- | --- | --- |
+| Bootstrap | setup Job, `pre-install,pre-upgrade` hook | setup Job, sync-wave `-5` |
+| Schema migration | same setup Job, after bootstrap | `migrate` init container on every app Deployment |
+| Data migration + seed | same setup Job, after migration | separate init-data Job, sync-wave `+5` |
+| Ordering guarantee | the whole sequence completes before the Deployment is touched | migration is pinned to the pod image that will run it |
+
+The default path is the simpler story when Helm is the deployment engine: one Job, one pod, three steps in order, and `helm upgrade --wait --wait-for-jobs` does not return until it finished. The ArgoCD path exists because Helm hooks do not map onto ArgoCD's sync phases — see [ArgoCD-managed migrations](#argocd-managed-migrations) below.
+
+### Migrations must be backward-compatible in both modes
+
+This is the part worth being blunt about, because it is easy to read the ArgoCD section and conclude otherwise.
+
+In the default path, the `pre-upgrade` hook migrates to completion **before** the rolling update starts, so old-revision pods serve traffic against the new schema for the whole rollout. In ArgoCD mode the migration happens as the first new pod starts, which shortens that window to the rollout itself — but old pods are still up, and still talking to the migrated schema, until the last one is replaced.
+
+Neither mode removes the requirement. Expand and contract over releases: add a column, deploy code that writes both, backfill, deploy code that reads the new one, drop the old one in a later release. The chart cannot enforce this and does not try.
+
+### Concurrency is safe
+
+In ArgoCD mode every app pod — apiserver and each worker — runs `migrate up` on start, so several can run at once during a rollout. That is fine: the migrator takes a PostgreSQL advisory lock (`ptah_migrate`) for the duration, so concurrent runners serialize rather than racing. A pod that finds the schema already current returns after a single round trip.
+
+### Preview before you sync
+
+Helm hooks do not render in `helm diff` or `helmfile diff`, so a diff will not show you that a release carries pending migrations. Ask the binary instead, from anywhere that can reach the database:
+
+```bash
+# What the database is at, and what this binary expects.
+kubectl -n <ns> exec deploy/<release>-inventario -- inventario db status
+
+# The full list of migration files this image carries.
+kubectl -n <ns> exec deploy/<release>-inventario -- inventario db migrate list
+
+# Fail loudly if the schema is behind the binary (useful as a gate).
+kubectl -n <ns> exec deploy/<release>-inventario -- inventario db migrate verify
+```
+
+Against the *new* image before deploying it, run the same commands in a throwaway pod:
+
+```bash
+kubectl -n <ns> run migrate-preview --rm -it --restart=Never \
+  --image=ghcr.io/denisvmedia/inventario:<new-tag> \
+  --env=INVENTARIO_DB_DSN="$MIGRATOR_DSN" -- inventario db status
+```
+
+`inventario db migrate up --dry-run` reports what it would apply without touching the database.
+
+### When a migration fails
+
+**Default path.** The setup Job fails, `helm upgrade --wait --wait-for-jobs` fails with it, and the Deployment is never touched — the old release keeps serving. Read the Job's logs, fix forward, re-run the upgrade.
+
+**ArgoCD mode.** The new pod's init container fails, the surge replica never becomes Ready, the rollout stalls at `progressDeadlineSeconds`, and the old pods keep serving. ArgoCD reports `Degraded`. Roll the image tag back; no schema intervention is needed, because a migration that failed did not commit.
+
+**A migration that half-applied.** A body that is not transactional — `CREATE INDEX CONCURRENTLY` is the usual case — can leave the schema between two states. The migrator records that and refuses to retry, because re-running an unknown-state migration is how you turn one problem into two. Reconcile by hand against the migration file, then let the retry through.
+
+**Rolling the schema back.** `helm rollback` and `helmfile` revert manifests, not schemas. `inventario db migrate down <target-version>` exists, and it is the right tool for a development database. In production prefer forward-fix: a down migration that drops a column drops the data in it, and if you followed expand/contract the old code runs against the new schema anyway, so rolling the image back is usually enough.
+
+### Helmfile
+
+Nothing special is required — Helmfile drives `helm upgrade --install`, which is the default path above. Two things are worth setting explicitly:
+
+```yaml
+releases:
+  - name: inventario
+    chart: ./helm/inventario
+    wait: true
+    waitForJobs: true    # without this, a failed migration Job does not fail the sync
+    timeout: 900
+```
+
+`waitForJobs` is the one that matters: without it Helmfile reports success as soon as the manifests are applied, and a failed setup Job is something you find out about later.
+
 ## ArgoCD-managed migrations
 
 When the chart is deployed via ArgoCD (rather than `helm install` directly), Helm hooks don't map cleanly to ArgoCD's PreSync / Sync / PostSync phases — a `pre-install` hook fires before the Postgres demo Deployment exists, and a `post-install` hook fires only after the main app Deployment is Healthy (which can't happen if the schema isn't migrated yet). Setting `setupJob.argocdMode=true` switches the chart to an ArgoCD-native layout that supports in-place upgrades across new migrations.
@@ -193,7 +275,7 @@ This is approach **A** from #1884: schema upgrades are coupled to the Deployment
 
 ### Caveats
 
-- **Migrations must be backward-compatible.** During the rolling update there is a window where old-image pods serve traffic against the newly migrated schema. This is the same expand-contract rule every rolling-update operator follows; the chart cannot enforce it. Plan multi-step renames / column drops over multiple releases.
+- **Migrations must be backward-compatible.** During the rolling update there is a window where old-image pods serve traffic against the newly migrated schema. ArgoCD mode shortens that window; it does not remove it, and neither does the default path — see [Database migrations](#database-migrations) above.
 - **Idempotent per-pod cost.** Every new app pod re-runs `inventario db migrate up`. The ptah migrator returns immediately when `schema_migrations.version` already equals the embedded max, so the steady-state cost is a single round-trip to Postgres per pod start.
 - **External Postgres still requires bootstrap.** With `demo.postgresql.enabled=false`, the bootstrap Job at wave -5 connects to the external Postgres using `setupJob.bootstrap.superuserDsn` (or the `SETUP_SUPERUSER_DSN` key in `secrets.existingSecret`). If your platform creates DB roles out-of-band, set `setupJob.bootstrap.enabled=false` — the chart will skip the bootstrap container; the operator is responsible for ensuring `inventario_migrator` exists before the Deployment starts, **and that the `pg_trgm` extension is installed**. It backs the trigram indexes. Bootstrap is the step that creates it, and the migrator role cannot: it has `CREATE` on the schema, not on the database. `inventario db migrate up` checks for it up front and names it, rather than failing on `gin_trgm_ops` partway through the chain.
 

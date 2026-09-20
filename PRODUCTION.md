@@ -676,10 +676,24 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
 
 - [ ] Cut a new release (Part A) → new immutable tag `vX.Y.(Z+1)`.
 - [ ] `helm upgrade --install inventario ./helm/inventario -n <NAMESPACE> -f values-prod.yaml --set image.tag=vX.Y.Z`.
+- [ ] **Look at the pending migrations before you upgrade.** Helm hooks do not render in
+  `helm diff`, so a diff will not tell you a release carries schema changes. Ask the new
+  image directly:
+
+  ```bash
+  kubectl -n <NAMESPACE> run migrate-preview --rm -it --restart=Never \
+    --image=ghcr.io/denisvmedia/inventario:vX.Y.Z \
+    --env=INVENTARIO_DB_DSN="$MIGRATOR_DSN" -- inventario db status
+  ```
+
 - [ ] The setup hook re-runs migrations idempotently. ⚠️ **Migrations must be
   backward-compatible** (expand-contract): during the rolling update, old-image pods
   briefly serve traffic against the newly migrated schema. Spread destructive renames /
-  drops across releases.
+  drops across releases. This holds in `argocdMode` too — it shortens the window, it does
+  not remove it. See the chart README, "Database migrations".
+- [ ] A failed migration fails the setup Job, and `--wait --wait-for-jobs` fails with it,
+  so the Deployment is never touched and the old release keeps serving. Read the Job logs,
+  fix forward, re-run. Do not reach for `migrate down` in production — see Appendix D.
 - [ ] Watch the rollout and the Grafana dashboard for error-rate / latency regressions.
 
 ## Appendix D — Rollback
@@ -688,8 +702,12 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
   (`helm history inventario -n <NAMESPACE>` to find it), or re-pin the previous image tag
   and `helm upgrade`.
 - [ ] ⚠️ Rolling the **image** back is safe; rolling a **schema** back is not automatic.
-  If the bad release included a migration, restore from a Postgres backup or apply a
-  forward fix — the embedded migrator does not auto-downgrade.
+  If the bad release included a migration, apply a forward fix or restore from a Postgres
+  backup — the embedded migrator does not auto-downgrade. `inventario db migrate down
+  <target-version>` exists and is the right tool on a development database; in production
+  a down migration that drops a column drops the data in it, and if you followed
+  expand-contract the old image runs against the new schema anyway, so rolling the image
+  back is usually enough on its own.
 
 ## Appendix E — Troubleshooting
 
