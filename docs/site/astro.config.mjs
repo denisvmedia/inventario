@@ -110,6 +110,10 @@ export default defineConfig({
           label: 'Install',
           items: [{ slug: 'self-hosting' }],
         },
+        {
+          label: 'Help',
+          items: [{ slug: 'troubleshooting' }],
+        },
       ],
     }),
   ],
