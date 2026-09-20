@@ -99,5 +99,23 @@ jobs:
             echo "Waiting for docker.yml run on $COMMIT_SHA (status=${STATUS:-none})... ($i/80)"
             sleep 15
           done
-          echo "::error::docker.yml did not complete for $COMMIT_SHA within 20 minutes"
+          # Say which of the three it was. "did not complete" reads as a build
+          # failure, and the usual cause is the opposite: the build is fine and
+          # still sitting in the queue. A median build here is 5 minutes and p90
+          # is 8, so a timeout means the fleet is backed up, not that the image
+          # is broken — and the fix is a re-run, not an investigation.
+          case "${STATUS:-none}" in
+            queued | waiting | pending | requested)
+              echo "::error::docker.yml for $COMMIT_SHA is still ${STATUS} after 20 minutes. The runner fleet is backed up; this is not a build failure. Re-run this job once the docker.yml run finishes."
+              ;;
+            in_progress)
+              echo "::error::docker.yml for $COMMIT_SHA is still running after 20 minutes, against a typical 5-8. Re-run this job once it finishes."
+              ;;
+            none | "")
+              echo "::error::no docker.yml run found for $COMMIT_SHA within 20 minutes. Check that docker.yml was triggered for this event at all."
+              ;;
+            *)
+              echo "::error::docker.yml did not complete for $COMMIT_SHA within 20 minutes (last status=${STATUS})"
+              ;;
+          esac
           exit 1
