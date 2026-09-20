@@ -41,13 +41,13 @@ func TestBackfillBatch_EmptyBlobDoesNotCountAsProgress(t *testing.T) {
 	c.Assert(bucket.WriteAll(ctx, "sized", []byte("0123456789"), nil), qt.IsNil)
 
 	reg := &stubBackfillRegistry{}
-	updated, advanced, failed, cancelled := backfillBatch(ctx, reg, bucket,
+	res := backfillBatch(ctx, reg, bucket,
 		[]*models.FileEntity{fileAt("empty"), fileAt("sized")})
 
-	c.Assert(cancelled, qt.IsFalse)
-	c.Assert(failed, qt.Equals, 0)
-	c.Assert(updated, qt.Equals, 2, qt.Commentf("both rows were written"))
-	c.Assert(advanced, qt.Equals, 1,
+	c.Assert(res.cancelled, qt.IsFalse)
+	c.Assert(res.failed, qt.Equals, 0)
+	c.Assert(res.updated, qt.Equals, 2, qt.Commentf("both rows were written"))
+	c.Assert(res.advanced, qt.Equals, 1,
 		qt.Commentf("only the sized blob leaves the pending set; the empty one stays selected"))
 }
 
@@ -61,11 +61,11 @@ func TestBackfillBatch_AllEmptyReportsNoProgress(t *testing.T) {
 	c.Assert(bucket.WriteAll(ctx, "a", []byte{}, nil), qt.IsNil)
 	c.Assert(bucket.WriteAll(ctx, "b", []byte{}, nil), qt.IsNil)
 
-	_, advanced, _, _ := backfillBatch(ctx, &stubBackfillRegistry{}, bucket,
+	res := backfillBatch(ctx, &stubBackfillRegistry{}, bucket,
 		[]*models.FileEntity{fileAt("a"), fileAt("b")})
 
 	// The caller breaks on this, which is what stops the spin.
-	c.Assert(advanced, qt.Equals, 0)
+	c.Assert(res.advanced, qt.Equals, 0)
 }
 
 func TestBackfillBatch_RespectsCancellation(t *testing.T) {
@@ -77,8 +77,8 @@ func TestBackfillBatch_RespectsCancellation(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer bucket.Close()
 
-	_, _, _, cancelled := backfillBatch(ctx, &stubBackfillRegistry{}, bucket,
+	res := backfillBatch(ctx, &stubBackfillRegistry{}, bucket,
 		[]*models.FileEntity{fileAt("a")})
 
-	c.Assert(cancelled, qt.IsTrue)
+	c.Assert(res.cancelled, qt.IsTrue)
 }
