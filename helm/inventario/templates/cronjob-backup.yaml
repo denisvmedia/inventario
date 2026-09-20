@@ -1,0 +1,141 @@
+{{- if .Values.backup.enabled }}
+{{- $fullName := include "inventario.fullname" . -}}
+{{- $secretName := include "inventario.secretName" . -}}
+{{- $claimName := .Values.backup.persistence.existingClaim | default (printf "%s-backups" $fullName) -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullName }}-backup
+  labels:
+    {{- include "inventario.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  {{- with .Values.backup.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  concurrencyPolicy: {{ .Values.backup.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ int .Values.backup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ int .Values.backup.failedJobsHistoryLimit }}
+  {{- with .Values.backup.startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ int . }}
+  {{- end }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "inventario.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backup
+    spec:
+      backoffLimit: {{ int .Values.backup.backoffLimit }}
+      {{- with .Values.backup.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ int . }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            {{- include "inventario.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+        spec:
+          {{- with .Values.image.pullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "inventario.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          {{- with .Values.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backup.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backup.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backup.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: backup
+              image: {{ printf "%s:%s" .Values.backup.image.repository .Values.backup.image.tag | quote }}
+              imagePullPolicy: {{ .Values.backup.image.pullPolicy }}
+              {{- with .Values.containerSecurityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+                  out="${BACKUP_DIR}/inventario-${stamp}.dump"
+                  mkdir -p "$BACKUP_DIR"
+
+                  # Positional args rather than an unquoted expansion: an
+                  # empty BACKUP_ROLE must add no argument at all, not an
+                  # empty one.
+                  if [ -n "${BACKUP_ROLE:-}" ]; then
+                    set -- --role="$BACKUP_ROLE"
+                  else
+                    set --
+                  fi
+
+                  # Write to .part first: a dump interrupted halfway is a file
+                  # of the right name and the wrong contents, and the retention
+                  # sweep below would happily keep it while deleting the last
+                  # good one.
+                  pg_dump "$@" \
+                    --format=custom \
+                    --no-owner \
+                    --no-privileges \
+                    --file="${out}.part" \
+                    "$BACKUP_DSN"
+
+                  # Reading the table of contents back is the cheapest thing
+                  # that distinguishes a backup from a file. It catches a
+                  # truncated write, which is the failure that otherwise waits
+                  # until the restore.
+                  pg_restore --list "${out}.part" > /dev/null
+
+                  mv "${out}.part" "$out"
+                  echo "wrote ${out} ($(wc -c < "$out") bytes)"
+
+                  # Prune only after a dump succeeded, so a failing job never
+                  # deletes the copy it could not replace.
+                  find "$BACKUP_DIR" -maxdepth 1 -name 'inventario-*.dump' \
+                    -mtime +{{ int .Values.backup.retentionDays }} -delete
+                  # Leftovers from a killed run. Kept a day so a currently
+                  # running dump is never swept.
+                  find "$BACKUP_DIR" -maxdepth 1 -name 'inventario-*.dump.part' \
+                    -mtime +1 -delete
+              env:
+                - name: BACKUP_DIR
+                  value: {{ .Values.backup.path | quote }}
+                - name: BACKUP_ROLE
+                  value: {{ .Values.backup.role | quote }}
+                - name: BACKUP_DSN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $secretName }}
+                      key: {{ .Values.backup.dsnSecretKey }}
+              volumeMounts:
+                - name: backups
+                  mountPath: {{ .Values.backup.path }}
+              {{- with .Values.backup.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          volumes:
+            - name: backups
+              {{- if .Values.backup.persistence.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ $claimName }}
+              {{- else }}
+              # No PVC: the dump lives for the lifetime of the pod. Only
+              # useful when something else in the pod ships it out.
+              emptyDir: {}
+              {{- end }}
+{{- end }}

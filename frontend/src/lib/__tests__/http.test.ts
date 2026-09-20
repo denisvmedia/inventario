@@ -519,6 +519,28 @@ describe("401 flow", () => {
     expect(navigate).not.toHaveBeenCalled()
   })
 
+  it("on /auth/login/mfa: does NOT call refresh, surfaces the server's message", async () => {
+    const refresh = vi.fn()
+    const navigate = vi.fn()
+    setNavigateToLogin(navigate)
+    server.use(
+      msw.post(api("/auth/login/mfa"), () =>
+        HttpResponse.json({ error: "Invalid code" }, { status: 401 })
+      ),
+      msw.post(api("/auth/refresh"), () => {
+        refresh()
+        return HttpResponse.json({ access_token: "t" })
+      })
+    )
+    // Step 1 issues no tokens, so there is no session to refresh — a 401
+    // here is a wrong code and the body is what the prompt has to render.
+    await expect(
+      http.post("/auth/login/mfa", { mfa_token: "challenge", totp_code: "000000" })
+    ).rejects.toMatchObject({ status: 401, data: { error: "Invalid code" } })
+    expect(refresh).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
   it("on a normal request: refreshes, retries, returns success", async () => {
     setAccessToken("expired")
     setCurrentGroupSlug("household")

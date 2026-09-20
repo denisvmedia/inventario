@@ -244,7 +244,8 @@ func (api *AuthAPI) handleMFASetup(w http.ResponseWriter, r *http.Request) {
 // @Param data body MFAVerifyRequest true "Verification code"
 // @Success 200 {object} MFAVerifyResponse "OK"
 // @Failure 400 {string} string "Bad Request"
-// @Failure 401 {string} string "Unauthorized — invalid code"
+// @Failure 401 {string} string "Unauthorized"
+// @Failure 422 {string} string "Invalid code"
 // @Router /auth/mfa/verify [post]
 func (api *AuthAPI) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 	user := appctx.UserFromContext(r.Context())
@@ -297,9 +298,13 @@ func (api *AuthAPI) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
+		// 422 rather than 401: the session is fine, the code is wrong. The
+		// frontend answers a 401 with a token refresh (lib/http.ts,
+		// handle401), so 401 here would rotate the refresh token on every
+		// mistyped digit and log the user out if that refresh ever failed.
 		errMsg := "invalid mfa code"
 		api.logAuth(r.Context(), "mfa_verify", &user.ID, &user.TenantID, false, r, &errMsg)
-		http.Error(w, "Invalid code", http.StatusUnauthorized)
+		http.Error(w, "Invalid code", http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -352,6 +357,7 @@ func (api *AuthAPI) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 // @Param data body MFADisableRequest true "Disable request"
 // @Success 200 {object} map[string]string "OK"
 // @Failure 401 {string} string "Unauthorized"
+// @Failure 422 {string} string "Invalid credentials or code"
 // @Router /auth/mfa/disable [post]
 func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 	user := appctx.UserFromContext(r.Context())
@@ -370,9 +376,10 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !services.VerifyPassword(user, req.Password) {
+		// 422, not 401 — see handleMFAVerify.
 		errMsg := "wrong password during mfa disable"
 		api.logAuth(r.Context(), "mfa_disable", &user.ID, &user.TenantID, false, r, &errMsg)
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		http.Error(w, "Invalid credentials", http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -389,7 +396,7 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !api.consumeAnyMFACode(r, user, row, req.TOTPCode, req.BackupCode, "mfa_disable") {
-		http.Error(w, "Invalid code", http.StatusUnauthorized)
+		http.Error(w, "Invalid code", http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -436,6 +443,7 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 // @Param data body MFAVerifyRequest true "Current TOTP code"
 // @Success 200 {object} MFAVerifyResponse "OK"
 // @Failure 401 {string} string "Unauthorized"
+// @Failure 422 {string} string "Invalid code"
 // @Router /auth/mfa/regenerate-backup-codes [post]
 func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *http.Request) {
 	user := appctx.UserFromContext(r.Context())
@@ -472,9 +480,10 @@ func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *htt
 		return
 	}
 	if !ok {
+		// 422, not 401 — see handleMFAVerify.
 		errMsg := "invalid code during regenerate-backup-codes"
 		api.logAuth(r.Context(), "mfa_regenerate", &user.ID, &user.TenantID, false, r, &errMsg)
-		http.Error(w, "Invalid code", http.StatusUnauthorized)
+		http.Error(w, "Invalid code", http.StatusUnprocessableEntity)
 		return
 	}
 	// Replay guard (RFC 6238 §5.2, #2124): commit the matched step via the
@@ -492,7 +501,7 @@ func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *htt
 	if !won {
 		errMsg := "replayed code during regenerate-backup-codes"
 		api.logAuth(r.Context(), "mfa_regenerate", &user.ID, &user.TenantID, false, r, &errMsg)
-		http.Error(w, "Invalid code", http.StatusUnauthorized)
+		http.Error(w, "Invalid code", http.StatusUnprocessableEntity)
 		return
 	}
 

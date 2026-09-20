@@ -16,6 +16,9 @@ the section matching the tag and publishes it as the GitHub Release body. See
   consent checkbox ([#2148](https://github.com/denisvmedia/inventario/issues/2148)).
 - k6 load profile (`load/k6/api-load.js`) and a weekly OWASP ZAP baseline scan
   of the public surface ([#848](https://github.com/denisvmedia/inventario/issues/848)).
+- Opt-in nightly `pg_dump` CronJob in the Helm chart (`backup.enabled`), with
+  retention, a read-back check on each dump, and alerts on backup age
+  ([#845](https://github.com/denisvmedia/inventario/issues/845)).
 
 ### Fixed
 
