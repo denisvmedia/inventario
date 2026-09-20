@@ -362,6 +362,12 @@ jobs:
           # platform admin. OFF by default in the binary — /api/v1/seed is
           # unauthenticated, so this must never be set in a real deployment.
           INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE: "true"
+          # Opt the seed into the back-office operator fixtures
+          # (operator@backoffice.test / support@backoffice.test) so the
+          # admin-section e2e suite (#2100) can sign in to the back-office
+          # plane. Same posture as the fixture above: OFF by default,
+          # never set in a real deployment.
+          INVENTARIO_SEED_BACKOFFICE_FIXTURE: "true"
           # Mount the public POST /api/v1/seed route (#2039) so the
           # "Seed test fixtures" step below can reach it. OFF by default in
           # the binary (it runs a privileged, RLS-bypassing operation); set

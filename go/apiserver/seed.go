@@ -29,6 +29,13 @@ const envSeedSystemAdminFixture = "INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE"
 // cross-tenant OAuth fixture.
 const envSeedAllowCreateTenant = "INVENTARIO_SEED_ALLOW_CREATE_TENANT"
 
+// envSeedBackofficeFixture is the opt-in env var that lets the seed
+// provision the back-office operator fixtures the admin e2e suite signs
+// in as (#2100). OFF by default for the same reason
+// envSeedSystemAdminFixture is: these are password-only platform
+// operators with MFA disabled, and /api/v1/seed is unauthenticated.
+const envSeedBackofficeFixture = "INVENTARIO_SEED_BACKOFFICE_FIXTURE"
+
 // envSeedAllowBlobUploads is the opt-in env var that lets the seed write
 // the bundled fixture *bytes* (photos, invoices, manuals) into the
 // configured blob bucket for a non-`test-org` tenant — not just the
@@ -101,6 +108,8 @@ func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 		// from the environment, never from the (attacker-controllable)
 		// request body.
 		SeedSystemAdmin: os.Getenv(envSeedSystemAdminFixture) == "true",
+		// Opt-in only — see envSeedBackofficeFixture.
+		SeedBackofficeOperators: os.Getenv(envSeedBackofficeFixture) == "true",
 		// Opt-in only — see envSeedAllowCreateTenant. Same env-gated
 		// pattern as SeedSystemAdmin: never sourced from the request
 		// body so a misconfigured production deployment can't be

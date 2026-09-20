@@ -75,6 +75,16 @@ type SeedOptions struct {
 	// the well-known `test-org` tenant.
 	SeedSystemAdmin bool
 
+	// SeedBackofficeOperators opts into provisioning the two back-office
+	// operator fixtures (platform_admin + support_agent) the admin e2e
+	// suite signs in as (#2100). OFF by default and for the same reason as
+	// SeedSystemAdmin: /api/v1/seed is unauthenticated, and these rows are
+	// password-only platform operators with MFA disabled. The seed handler
+	// reads INVENTARIO_SEED_BACKOFFICE_FIXTURE; only the e2e harness sets
+	// it. Unlike the other fixtures these rows are tenant-independent —
+	// `backoffice_users` has no tenant_id.
+	SeedBackofficeOperators bool
+
 	// UploadLocation is the gocloud-style blob URL the seed uses to
 	// publish bundled file fixtures (photos, invoices, manuals). When
 	// empty, the seed still creates file *rows* so the UI shows them,
@@ -155,14 +165,11 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 		return false, err
 	}
 
-	// Inside the well-known `test-org` test tenant, provision the extra
-	// fixture users (orphan / block-target / opt-in sysadmin) the e2e
-	// suite depends on. Extracted into seedTestOrgFixtures so SeedData
-	// itself stays under the gocognit budget.
-	if tenant.Slug == "test-org" {
-		if err := seedTestOrgFixtures(ctx, registrySet, tenant, users, opts); err != nil {
-			return false, err
-		}
+	// Provision the fixture identities the e2e suite depends on. Runs
+	// after the L-2 pre-existing-tenant guard so a refused seed creates
+	// none of them.
+	if err := seedFixtures(ctx, factorySet, registrySet, tenant, users, opts); err != nil {
+		return false, err
 	}
 
 	// Ensure user1 has a default group valued in CZK.
@@ -280,6 +287,30 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 	}
 
 	return false, nil
+}
+
+// seedFixtures provisions the non-demo fixture identities in one place:
+// the extra `test-org` tenant users, and the platform-wide back-office
+// operators. Each block gates itself (on the tenant slug, and on the
+// SeedBackofficeOperators opt-in respectively); hoisting them out of
+// SeedData keeps that orchestrator under the cognitive-complexity budget.
+func seedFixtures(
+	ctx context.Context,
+	factorySet *registry.FactorySet,
+	registrySet *registry.Set,
+	tenant *models.Tenant,
+	users []*models.User,
+	opts SeedOptions,
+) error {
+	if tenant.Slug == testOrgTenantSlug {
+		if err := seedTestOrgFixtures(ctx, registrySet, tenant, users, opts); err != nil {
+			return err
+		}
+	}
+	// Back-office operators hang off the FactorySet rather than the
+	// tenant-scoped registry set — `backoffice_users` has no tenant_id —
+	// so they are not gated on the tenant slug.
+	return ensureBackofficeOperators(ctx, factorySet, opts)
 }
 
 // seedTestOrgFixtures provisions the extra fixture users that only the
