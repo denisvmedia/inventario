@@ -142,12 +142,10 @@ func TestMigrator_Apply_DefaultPrivilegesFollowTheMigrationLogin(t *testing.T) {
 	t.Cleanup(func() {
 		// The role owns nothing but its default-ACL entries, which hold the
 		// DROP until they are gone.
-		if _, err := db.Exec("DROP OWNED BY " + login); err != nil {
-			t.Errorf("drop owned by %s: %v", login, err)
-		}
-		if _, err := db.Exec("DROP ROLE IF EXISTS " + login); err != nil {
-			t.Errorf("drop role %s: %v", login, err)
-		}
+		_, err := db.Exec("DROP OWNED BY " + login)
+		c.Check(err, qt.IsNil, qt.Commentf("drop owned by %s", login))
+		_, err = db.Exec("DROP ROLE IF EXISTS " + login)
+		c.Check(err, qt.IsNil, qt.Commentf("drop role %s", login))
 	})
 
 	err = bootstrap.New().Apply(context.Background(), bootstrap.ApplyArgs{
