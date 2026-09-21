@@ -225,6 +225,17 @@ func (m *Migrator) VerifySchemaUpToDate(ctx context.Context) error {
 	}
 	defer conn.Close()
 
+	// Read-only, and it has to be: the caller is usually the application,
+	// connecting as the role bootstrap grants USAGE on public and nothing
+	// more. Reading the revision table otherwise goes through ptah's
+	// Initialize, which issues CREATE TABLE IF NOT EXISTS — and PostgreSQL
+	// checks the schema's CREATE privilege before the IF NOT EXISTS
+	// short-circuit, so the statement fails even though the table is right
+	// there. Dry-run makes Initialize inspect instead of create; a missing
+	// table then reads as version 0, which is the same answer it would give
+	// (#2577).
+	conn.SchemaWriter().SetDryRun(true)
+
 	ptahMigrator, err := migrator.NewFSMigrator(conn, m.migFS)
 	if err != nil {
 		return errxtrace.Wrap("failed to create Ptah migrator", err)
