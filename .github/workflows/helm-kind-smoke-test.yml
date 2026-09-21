@@ -220,8 +220,19 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The setup Job's name carries the release revision, so find it by
+          # label first and query it by name — the same shape as the two
+          # assertions below, and one object rather than a List.
+          setup_jobs="$(kubectl get job -l app.kubernetes.io/component=setup \
+            -n "$K8S_NAMESPACE" -o name)"
+          echo "setup Jobs: ${setup_jobs:-<none>}"
+          [ "$(printf '%s\n' "$setup_jobs" | grep -c .)" -eq 1 ] || {
+            echo "Expected exactly one Job labeled app.kubernetes.io/component=setup" >&2
+            exit 1
+          }
+
           # Bootstrap-only setup Job — only the bootstrap init container.
-          setup_init="$(kubectl get job -l app.kubernetes.io/component=setup \
+          setup_init="$(kubectl get "$setup_jobs" \
             -n "$K8S_NAMESPACE" \
             -o jsonpath='{range .spec.template.spec.initContainers[*]}{.name}{"\n"}{end}')"
           echo "setup Job init containers:"
