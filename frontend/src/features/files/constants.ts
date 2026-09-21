@@ -209,10 +209,9 @@ export function isImageMime(mime: string | undefined): boolean {
   return !!mime && mime.startsWith("image/")
 }
 
-// PDFs render via the browser's native <embed> in the detail view. A
-// follow-up PR will swap this for a pdfjs-dist canvas viewer (port of
-// the legacy frontend/src/components/PDFViewerCanvas.vue) so we get
-// page nav + zoom + custom controls.
+// PDFs render through pdfjs-dist into a <canvas> (PdfViewer /
+// PdfFullViewer), not through a plugin element. That is what lets the
+// Content-Security-Policy keep `object-src 'none'`.
 export function isPdfMime(mime: string | undefined): boolean {
   return mime === "application/pdf"
 }

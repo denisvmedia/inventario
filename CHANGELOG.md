@@ -29,6 +29,8 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
+- Every response now carries a Content-Security-Policy
+  ([#2524](https://github.com/denisvmedia/inventario/issues/2524)).
 - Every response now carries `X-Content-Type-Options`, `X-Frame-Options` and
   `Referrer-Policy`, and `Strict-Transport-Security` over TLS. A stock install
   serves the SPA from the binary itself, with no proxy to add them
