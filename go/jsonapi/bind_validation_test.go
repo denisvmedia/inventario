@@ -154,17 +154,64 @@ func TestBind_ValidatesAttributes(t *testing.T) {
 				`"attributes":{"interval_days":36501}}}`,
 			wantErr: true,
 		},
+		// A field that is Required on create is not clearable on patch:
+		// `nil` is how a patch says "leave this alone", so an explicit zero
+		// is a request to blank a field the create contract says must have
+		// a value. The library skips a zero for every rule but Required,
+		// which is why each of these needs it (#2564).
 		{
-			// Recorded rather than asserted the other way: the library
-			// skips a zero value for every rule but Required, so Min(1)
-			// cannot see this one. The create path is covered because it
-			// carries Required; the patch path has nothing to lean on.
-			// Tracked separately — this test is about the rules running
-			// at all, not about how strong each one is.
-			name:   "maintenance patch: interval of zero slips past Min(1)",
+			name:   "maintenance patch: interval of zero is refused",
 			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.MaintenanceScheduleUpdateRequest{} },
 			payload: `{"data":{"id":"m1","type":"maintenance_schedules",` +
 				`"attributes":{"interval_days":0}}}`,
+			wantErr: true,
+		},
+		{
+			name:   "maintenance patch: blank title is refused",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.MaintenanceScheduleUpdateRequest{} },
+			payload: `{"data":{"id":"m1","type":"maintenance_schedules",` +
+				`"attributes":{"title":""}}}`,
+			wantErr: true,
+		},
+		{
+			name:    "loan patch: blank borrower name is refused",
+			target:  func() interface{ Bind(*http.Request) error } { return &jsonapi.CommodityLoanUpdateRequest{} },
+			payload: `{"data":{"id":"l1","type":"commodity_loans","attributes":{"borrower_name":""}}}`,
+			wantErr: true,
+		},
+		{
+			name:   "service patch: blank provider name is refused",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.CommodityServiceUpdateRequest{} },
+			payload: `{"data":{"id":"v1","type":"commodity_services",` +
+				`"attributes":{"provider_name":""}}}`,
+			wantErr: true,
+		},
+		{
+			name:   "supply link patch: blank url is refused",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.SupplyLinkUpdateRequest{} },
+			payload: `{"data":{"id":"s1","type":"commodity_supply_links",` +
+				`"attributes":{"url":""}}}`,
+			wantErr: true,
+		},
+		// The other side of the rule: a field the create path leaves
+		// optional stays clearable, or an optional note could be written
+		// once and never removed.
+		{
+			name:    "loan patch: blank borrower note clears it",
+			target:  func() interface{ Bind(*http.Request) error } { return &jsonapi.CommodityLoanUpdateRequest{} },
+			payload: `{"data":{"id":"l1","type":"commodity_loans","attributes":{"borrower_note":""}}}`,
+		},
+		{
+			name:   "service patch: blank reason clears it",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.CommodityServiceUpdateRequest{} },
+			payload: `{"data":{"id":"v1","type":"commodity_services",` +
+				`"attributes":{"reason":""}}}`,
+		},
+		{
+			name:   "supply link patch: blank notes clears them",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.SupplyLinkUpdateRequest{} },
+			payload: `{"data":{"id":"s1","type":"commodity_supply_links",` +
+				`"attributes":{"notes":""}}}`,
 		},
 	}
 

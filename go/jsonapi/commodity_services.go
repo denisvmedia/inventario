@@ -179,7 +179,7 @@ func (surd CommodityServiceUpdateRequestData) Validate() error {
 func (surd CommodityServiceUpdateRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0, 5)
 	if surd.ProviderName != nil {
-		fields = append(fields, validation.Field(&surd.ProviderName, validation.Length(1, 200)))
+		fields = append(fields, validation.Field(&surd.ProviderName, validation.Required, validation.Length(1, 200)))
 	}
 	if surd.ProviderContact != nil {
 		fields = append(fields, validation.Field(&surd.ProviderContact, validation.Length(0, 200)))
