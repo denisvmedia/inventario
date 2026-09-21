@@ -8,10 +8,16 @@ name: Wait for Docker image
 # exercised the change under review.
 #
 # This workflow polls the GitHub Actions API for the docker.yml run keyed
-# to the exact PR-HEAD / push commit and waits until it reports
-# status=completed + conclusion=success. Consumers receive the fully
-# qualified image reference (and the producer's run_id, for cross-workflow
-# artifact downloads like the darwin binary) as job outputs.
+# to the exact PR-HEAD / push commit, and waits for the two jobs that
+# actually produce something a consumer reads: the multi-arch manifest and
+# the darwin/arm64 binary. Consumers receive the fully qualified image
+# reference (and the producer's run_id, for cross-workflow artifact
+# downloads like the darwin binary) as job outputs.
+#
+# Waiting for the whole run instead would couple every image-dependent lane
+# to docker.yml's tail. The vulnerability scan runs after the manifest and
+# can sit queued for a quarter of an hour on a busy fleet, which is long
+# enough to burn this job's entire budget with the image already published.
 
 on:
   workflow_call:
@@ -67,18 +73,21 @@ jobs:
           esac
           echo "image=${IMAGE}:${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Find completed docker.yml run for this commit
+      - name: Wait for the docker.yml run to publish this commit's image
         id: find-run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           # 20-minute ceiling (80 * 15s). Longer than the typical 5-8 min
           # build to absorb queue wait on a busy runner fleet.
+          MERGE_JOB="Merge multi-arch manifest"
+          DARWIN_JOB="Build darwin/arm64 binary for e2e"
           for i in $(seq 1 80); do
             RUN_JSON="$(
               gh run list \
-                --repo "${{ github.repository }}" \
+                --repo "$REPO" \
                 --workflow "docker.yml" \
                 --commit "$COMMIT_SHA" \
                 --limit 1 \
@@ -87,15 +96,53 @@ jobs:
             STATUS="$(echo "$RUN_JSON" | jq -r '.[0].status // empty')"
             CONCLUSION="$(echo "$RUN_JSON" | jq -r '.[0].conclusion // empty')"
             RUN_ID="$(echo "$RUN_JSON" | jq -r '.[0].databaseId // empty')"
+
+            if [ -n "$RUN_ID" ]; then
+              JOBS="$(
+                gh run view "$RUN_ID" --repo "$REPO" --json jobs \
+                  --jq '.jobs[] | [.name, .status, (.conclusion // "")] | @tsv'
+              )"
+              # A skipped producer is a verdict, not a stall: docker.yml's
+              # path filters decided this commit needs no image, and the
+              # consumers gate on the same filters.
+              read -r VERDICT DETAIL <<<"$(
+                printf '%s\n' "$JOBS" | awk -F'\t' -v merge="$MERGE_JOB" -v darwin="$DARWIN_JOB" '
+                  $1 == merge || $1 == darwin {
+                    seen++
+                    if ($2 != "completed") pending++
+                    else if ($3 != "success" && $3 != "skipped") bad = bad $1 "=" $3 "; "
+                  }
+                  END {
+                    if (bad != "") print "failed " bad
+                    else if (seen < 2 || pending > 0) print "pending"
+                    else print "ready"
+                  }'
+              )"
+              case "$VERDICT" in
+                ready)
+                  echo "docker.yml run $RUN_ID published the image for $COMMIT_SHA"
+                  echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+                  exit 0
+                  ;;
+                failed)
+                  echo "::error::docker.yml run $RUN_ID did not publish an image for $COMMIT_SHA ($DETAIL)"
+                  exit 1
+                  ;;
+              esac
+            fi
+
+            # Reached only while a producer is still pending, or absent from a
+            # run that has no such job at all.
             if [ "$STATUS" = "completed" ]; then
               if [ "$CONCLUSION" = "success" ]; then
-                echo "docker.yml run $RUN_ID succeeded for $COMMIT_SHA"
+                echo "docker.yml run $RUN_ID for $COMMIT_SHA built no image; leaving the decision to the consumer"
                 echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
                 exit 0
               fi
               echo "::error::docker.yml run $RUN_ID for $COMMIT_SHA finished with conclusion=$CONCLUSION"
               exit 1
             fi
+
             echo "Waiting for docker.yml run on $COMMIT_SHA (status=${STATUS:-none})... ($i/80)"
             sleep 15
           done
@@ -109,13 +156,13 @@ jobs:
               echo "::error::docker.yml for $COMMIT_SHA is still ${STATUS} after 20 minutes. The runner fleet is backed up; this is not a build failure. Re-run this job once the docker.yml run finishes."
               ;;
             in_progress)
-              echo "::error::docker.yml for $COMMIT_SHA is still running after 20 minutes, against a typical 5-8 minute runtime. Re-run this job once it finishes."
+              echo "::error::docker.yml for $COMMIT_SHA has not published an image after 20 minutes, against a typical 5-8 minute build. Re-run this job once it finishes."
               ;;
             none | "")
               echo "::error::no docker.yml run found for $COMMIT_SHA within 20 minutes. Check that docker.yml was triggered for this event at all."
               ;;
             *)
-              echo "::error::docker.yml did not complete for $COMMIT_SHA within 20 minutes (last status=${STATUS})"
+              echo "::error::docker.yml did not publish an image for $COMMIT_SHA within 20 minutes (last status=${STATUS})"
               ;;
           esac
           exit 1
