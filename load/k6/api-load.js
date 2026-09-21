@@ -69,8 +69,8 @@ export const options = {
     // #848's targets.
     http_req_duration: ["p(95)<500"],
     http_req_failed: ["rate<0.01"],
-    // Login is once per VU and involves bcrypt, so it is slower by design
-    // and would drag the aggregate around if it were not separated out.
+    // Login happens once, in setup, and involves bcrypt, so it is slower by
+    // design and would drag the aggregate around if it were not separated out.
     "http_req_duration{endpoint:login}": ["p(95)<2000"],
     "http_req_duration{endpoint:list}": ["p(95)<500"],
     "http_req_duration{endpoint:search}": ["p(95)<800"],
@@ -78,7 +78,11 @@ export const options = {
 }
 
 // setup logs in once and resolves a group slug, so the VUs do not spend the
-// run re-deriving the same two facts.
+// run re-deriving the same two facts. The token it returns is shared by every
+// VU, which is deliberate: sign-in is rate limited per account, so a VU that
+// logs in for itself gets a 429 as soon as the profile is wider than that
+// limit. Modelling N concurrent *sessions* needs N accounts, which is a
+// different fixture than this profile carries.
 export function setup() {
   const session = login()
   const res = http.get(`${API}/groups`, authHeaders(session))
@@ -93,16 +97,13 @@ export function setup() {
   if (!slug) {
     fail("the first group has no slug")
   }
-  return { slug }
+  return { slug, token: session.token }
 }
 
 export default function (data) {
-  // Each VU signs in once and keeps the token, the way a browser session
-  // does. Logging in per iteration would measure bcrypt, not the API.
-  if (!__VU_SESSION) {
-    __VU_SESSION = login()
-  }
-  const headers = authHeaders(__VU_SESSION)
+  // The token comes from setup, so the run measures the read path rather
+  // than bcrypt — which is what this profile is for.
+  const headers = authHeaders({ token: data.token })
   const g = `${API}/g/${encodeURIComponent(data.slug)}`
 
   for (const path of ["/locations", "/areas", "/commodities"]) {
@@ -123,8 +124,6 @@ export default function (data) {
   // real user produces by an order of magnitude.
   sleep(1)
 }
-
-let __VU_SESSION = null
 
 function login() {
   const res = http.post(

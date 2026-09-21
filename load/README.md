@@ -39,6 +39,36 @@ These are properties of the hardware as much as of the code. A GitHub-hosted
 runner gives two vCPUs, shared with Postgres, Redis and the app itself; it will
 not hold 500 ms at 200 VUs, and a failure there says nothing about production.
 
+### Rate limits
+
+Sign-in is rate limited per account and the global limit is per IP, so a run
+wider than a handful of VUs trips both from one client. `setup` logs in once
+and shares the token, which handles the first; for the second, pass
+`--no-global-rate-limit` to the server under test. Leaving the limiters on
+measures the limiter rather than the API.
+
+### A measured baseline
+
+| | |
+| --- | --- |
+| Machine | Intel Xeon E-2276G @ 3.80GHz, 8 vCPU, 14 GB, Ubuntu 24.04 |
+| Layout | app, PostgreSQL 17 and k6 all on that one host, in Docker |
+| Image | `ghcr.io/denisvmedia/inventario:v0.1.0` |
+| Dataset | the seed fixture — 3 locations, 10 areas, 36 commodities, 55 files |
+
+| Profile | p95 | throughput | failures |
+| --- | --- | --- | --- |
+| smoke (5 VUs) | 25 ms | — | 0% |
+| load (100 VUs, 5 min) | 34 ms | 329 req/s | 0% |
+| stress (200 VUs, 5 min) | 240 ms | 529 req/s | 0% |
+
+Read those with two caveats. The dataset is small, so these are not p95 figures
+for a full library. And `load` is think-time bound rather than server bound:
+100 VUs with `sleep(1)` and four requests per iteration cannot offer much above
+400 req/s, so its 329 is the offered load, not a ceiling. Only `stress`
+approaches saturation, and it is the run that answers #848's "500+ RPS
+sustained".
+
 So CI runs the **smoke** profile only, weekly and on demand, and what it checks
 is that the script and the stack still work together and that nothing has become
 catastrophically slow. Take the numbers that matter on hardware you would
