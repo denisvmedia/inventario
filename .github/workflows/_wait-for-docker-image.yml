@@ -37,7 +37,7 @@ jobs:
   wait:
     name: Wait for Docker image
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     outputs:
       image: ${{ steps.tag.outputs.image }}
       run_id: ${{ steps.find-run.outputs.run_id }}
@@ -80,11 +80,15 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # 20-minute ceiling (80 * 15s). Longer than the typical 5-8 min
-          # build to absorb queue wait on a busy runner fleet.
+          # 40-minute ceiling (160 * 15s), against a build that usually
+          # takes 5-8. The ceiling is not sized for the build; it is sized
+          # for the queue in front of it. A backed-up fleet has put the
+          # manifest job 20 minutes out, and timing out there costs a full
+          # re-run of every lane downstream, while waiting costs one runner
+          # idling at four API calls a minute.
           MERGE_JOB="Merge multi-arch manifest"
           DARWIN_JOB="Build darwin/arm64 binary for e2e"
-          for i in $(seq 1 80); do
+          for i in $(seq 1 160); do
             RUN_JSON="$(
               gh run list \
                 --repo "$REPO" \
@@ -143,7 +147,7 @@ jobs:
               exit 1
             fi
 
-            echo "Waiting for docker.yml run on $COMMIT_SHA (status=${STATUS:-none})... ($i/80)"
+            echo "Waiting for docker.yml run on $COMMIT_SHA (status=${STATUS:-none})... ($i/160)"
             sleep 15
           done
           # Say which of the three it was. "did not complete" reads as a build
@@ -153,16 +157,16 @@ jobs:
           # is broken — and the fix is a re-run, not an investigation.
           case "${STATUS:-none}" in
             queued | waiting | pending | requested)
-              echo "::error::docker.yml for $COMMIT_SHA is still ${STATUS} after 20 minutes. The runner fleet is backed up; this is not a build failure. Re-run this job once the docker.yml run finishes."
+              echo "::error::docker.yml for $COMMIT_SHA is still ${STATUS} after 40 minutes. The runner fleet is backed up; this is not a build failure. Re-run this job once the docker.yml run finishes."
               ;;
             in_progress)
-              echo "::error::docker.yml for $COMMIT_SHA has not published an image after 20 minutes, against a typical 5-8 minute build. Re-run this job once it finishes."
+              echo "::error::docker.yml for $COMMIT_SHA has not published an image after 40 minutes, against a typical 5-8 minute build. Re-run this job once it finishes."
               ;;
             none | "")
-              echo "::error::no docker.yml run found for $COMMIT_SHA within 20 minutes. Check that docker.yml was triggered for this event at all."
+              echo "::error::no docker.yml run found for $COMMIT_SHA within 40 minutes. Check that docker.yml was triggered for this event at all."
               ;;
             *)
-              echo "::error::docker.yml did not publish an image for $COMMIT_SHA within 20 minutes (last status=${STATUS})"
+              echo "::error::docker.yml did not publish an image for $COMMIT_SHA within 40 minutes (last status=${STATUS})"
               ;;
           esac
           exit 1
