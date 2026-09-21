@@ -229,6 +229,17 @@ jobs:
             ./integration/...
         working-directory: go
 
+      - name: Run the schema-check privilege test
+        # The startup schema check runs as the application, which connects as
+        # a role with USAGE on public and no CREATE. Whether it needs CREATE is
+        # a privilege question, so it needs a real database — an in-memory
+        # registry has no privileges to deny (#2577). The test creates its own
+        # unprivileged role and drops it again.
+        env:
+          POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
+        run: go test -v -race -run TestVerifySchemaUpToDate ./schema/migrations/migrator/...
+        working-directory: go
+
       - name: Run backup .inb integration tests
         # #534: the signed .inb round trips on a REAL database — the only
         # Go-level coverage of two postgres-only behaviours the in-memory
