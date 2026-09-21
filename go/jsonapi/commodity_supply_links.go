@@ -164,13 +164,13 @@ func (surd SupplyLinkUpdateRequestData) Validate() error {
 func (surd SupplyLinkUpdateRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0, 3)
 	if surd.Label != nil {
-		fields = append(fields, validation.Field(surd.Label, validation.Required, validation.Length(1, 200)))
+		fields = append(fields, validation.Field(&surd.Label, validation.Required, validation.Length(1, 200)))
 	}
 	if surd.URL != nil {
-		fields = append(fields, validation.Field(surd.URL, validation.Required, validation.Length(1, 2048)))
+		fields = append(fields, validation.Field(&surd.URL, validation.Required, validation.Length(1, 2048)))
 	}
 	if surd.Notes != nil {
-		fields = append(fields, validation.Field(surd.Notes, validation.Length(0, 1000)))
+		fields = append(fields, validation.Field(&surd.Notes, validation.Length(0, 1000)))
 	}
 	return validation.ValidateStructWithContext(ctx, &surd, fields...)
 }

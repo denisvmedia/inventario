@@ -179,13 +179,13 @@ func (surd CommodityServiceUpdateRequestData) Validate() error {
 func (surd CommodityServiceUpdateRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0, 5)
 	if surd.ProviderName != nil {
-		fields = append(fields, validation.Field(surd.ProviderName, validation.Length(1, 200)))
+		fields = append(fields, validation.Field(&surd.ProviderName, validation.Length(1, 200)))
 	}
 	if surd.ProviderContact != nil {
-		fields = append(fields, validation.Field(surd.ProviderContact, validation.Length(0, 200)))
+		fields = append(fields, validation.Field(&surd.ProviderContact, validation.Length(0, 200)))
 	}
 	if surd.Reason != nil {
-		fields = append(fields, validation.Field(surd.Reason, validation.Length(0, 1000)))
+		fields = append(fields, validation.Field(&surd.Reason, validation.Length(0, 1000)))
 	}
 	// Pair gate for cost: BOTH or NEITHER on this PATCH.
 	fields = append(fields, validation.Field(&surd.CostCurrency, validation.By(func(any) error {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -90,6 +91,80 @@ func TestBind_ValidatesAttributes(t *testing.T) {
 			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.MaintenanceScheduleRequest{} },
 			payload: `{"data":{"type":"maintenance_schedules","attributes":` +
 				`{"title":"Oil change","interval_days":90}}}`,
+		},
+
+		// The patch surfaces carry a second defect of the same kind. Their
+		// rules were written as validation.Field(x.Field, ...) rather than
+		// validation.Field(&x.Field, ...), which the library answers with
+		// "field #N cannot be found in the struct" — an internal error, not
+		// a validation one. Dead code hid it; every patch below reaches it.
+		{
+			name:    "loan patch: note only",
+			target:  func() interface{ Bind(*http.Request) error } { return &jsonapi.CommodityLoanUpdateRequest{} },
+			payload: `{"data":{"id":"l1","type":"commodity_loans","attributes":{"borrower_note":"new note"}}}`,
+		},
+		{
+			name:   "loan patch: borrower name over the limit",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.CommodityLoanUpdateRequest{} },
+			payload: `{"data":{"id":"l1","type":"commodity_loans","attributes":{"borrower_name":"` +
+				strings.Repeat("x", 201) + `"}}}`,
+			wantErr: true,
+		},
+		{
+			name:    "loan patch: clearing due_back_at stays valid",
+			target:  func() interface{ Bind(*http.Request) error } { return &jsonapi.CommodityLoanUpdateRequest{} },
+			payload: `{"data":{"id":"l1","type":"commodity_loans","attributes":{"due_back_at":null}}}`,
+		},
+		{
+			name:   "supply link patch: label only",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.SupplyLinkUpdateRequest{} },
+			payload: `{"data":{"id":"s1","type":"commodity_supply_links",` +
+				`"attributes":{"label":"Renamed"}}}`,
+		},
+		{
+			name:   "supply link patch: url over the limit",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.SupplyLinkUpdateRequest{} },
+			payload: `{"data":{"id":"s1","type":"commodity_supply_links","attributes":{"url":"` +
+				strings.Repeat("u", 2049) + `"}}}`,
+			wantErr: true,
+		},
+		{
+			name:   "service patch: provider only",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.CommodityServiceUpdateRequest{} },
+			payload: `{"data":{"id":"v1","type":"commodity_services",` +
+				`"attributes":{"provider_name":"Acme"}}}`,
+		},
+		{
+			name:   "service patch: reason over the limit",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.CommodityServiceUpdateRequest{} },
+			payload: `{"data":{"id":"v1","type":"commodity_services","attributes":{"reason":"` +
+				strings.Repeat("r", 1001) + `"}}}`,
+			wantErr: true,
+		},
+		{
+			name:   "maintenance patch: title only",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.MaintenanceScheduleUpdateRequest{} },
+			payload: `{"data":{"id":"m1","type":"maintenance_schedules",` +
+				`"attributes":{"title":"Oil change"}}}`,
+		},
+		{
+			name:   "maintenance patch: interval above the ceiling",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.MaintenanceScheduleUpdateRequest{} },
+			payload: `{"data":{"id":"m1","type":"maintenance_schedules",` +
+				`"attributes":{"interval_days":36501}}}`,
+			wantErr: true,
+		},
+		{
+			// Recorded rather than asserted the other way: the library
+			// skips a zero value for every rule but Required, so Min(1)
+			// cannot see this one. The create path is covered because it
+			// carries Required; the patch path has nothing to lean on.
+			// Tracked separately — this test is about the rules running
+			// at all, not about how strong each one is.
+			name:   "maintenance patch: interval of zero slips past Min(1)",
+			target: func() interface{ Bind(*http.Request) error } { return &jsonapi.MaintenanceScheduleUpdateRequest{} },
+			payload: `{"data":{"id":"m1","type":"maintenance_schedules",` +
+				`"attributes":{"interval_days":0}}}`,
 		},
 	}
 

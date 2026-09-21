@@ -220,13 +220,13 @@ func (murd MaintenanceScheduleUpdateRequestData) Validate() error {
 func (murd MaintenanceScheduleUpdateRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0, 4)
 	if murd.Title != nil {
-		fields = append(fields, validation.Field(murd.Title, validation.Length(1, 200)))
+		fields = append(fields, validation.Field(&murd.Title, validation.Length(1, 200)))
 	}
 	if murd.IntervalDays != nil {
-		fields = append(fields, validation.Field(murd.IntervalDays, validation.Min(1), validation.Max(36500)))
+		fields = append(fields, validation.Field(&murd.IntervalDays, validation.Min(1), validation.Max(36500)))
 	}
 	if murd.Notes != nil {
-		fields = append(fields, validation.Field(murd.Notes, validation.Length(0, 1000)))
+		fields = append(fields, validation.Field(&murd.Notes, validation.Length(0, 1000)))
 	}
 	return validation.ValidateStructWithContext(ctx, &murd, fields...)
 }
