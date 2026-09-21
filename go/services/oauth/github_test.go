@@ -3,8 +3,11 @@ package oauth_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -258,4 +261,173 @@ func TestGitHubProvider_UnverifiedOnly(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(profile.Email, qt.Equals, "carol@example.com")
 	c.Assert(profile.EmailVerified, qt.IsFalse)
+}
+
+// routeFunc answers each request by URL, so one client can stand in for
+// GitHub's token endpoint, /user and /user/emails at once.
+type routeFunc func(*http.Request) (*http.Response, error)
+
+func (f routeFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func jsonResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+	}
+}
+
+// githubRoutes answers the three calls Exchange makes. An empty body for a
+// route means "fail this one with a 500", which is how the error paths below
+// are driven without a second fixture.
+type githubRoutes struct {
+	token  string
+	user   string
+	emails string
+}
+
+func githubProvider(c *qt.C, routes githubRoutes) *oauth.GitHubProvider {
+	c.Helper()
+	client := &http.Client{Transport: routeFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case strings.Contains(r.URL.Host, "github.com") && strings.Contains(r.URL.Path, "access_token"):
+			if routes.token == "" {
+				return jsonResponse(http.StatusInternalServerError, `{"error":"server_error"}`), nil
+			}
+			return jsonResponse(http.StatusOK, routes.token), nil
+		case r.URL.Path == "/user/emails":
+			if routes.emails == "" {
+				return jsonResponse(http.StatusForbidden, `{"message":"Bad credentials"}`), nil
+			}
+			return jsonResponse(http.StatusOK, routes.emails), nil
+		case r.URL.Path == "/user":
+			if routes.user == "" {
+				return jsonResponse(http.StatusUnauthorized, `{"message":"Bad credentials"}`), nil
+			}
+			return jsonResponse(http.StatusOK, routes.user), nil
+		}
+		return nil, fmt.Errorf("unexpected request to %s", r.URL.String())
+	})}
+
+	p, err := oauth.NewGitHubProvider(oauth.GitHubProviderConfig{
+		ClientID:     "id",
+		ClientSecret: "secret",
+		RedirectURL:  "https://app.test/callback",
+		HTTPClient:   client,
+	})
+	c.Assert(err, qt.IsNil)
+	return p
+}
+
+const githubToken = `{"access_token":"gho_test","token_type":"bearer"}`
+
+func TestGitHubExchange_PrefersThePrimaryVerifiedEmail(t *testing.T) {
+	c := qt.New(t)
+	p := githubProvider(c, githubRoutes{
+		token: githubToken,
+		user:  `{"id":42,"login":"octocat","name":"The Octocat","email":"public@example.com"}`,
+		emails: `[{"email":"other@example.com","primary":false,"verified":true},
+		           {"email":"primary@example.com","primary":true,"verified":true}]`,
+	})
+
+	profile, err := p.Exchange(context.Background(), "code", "verifier")
+	c.Assert(err, qt.IsNil)
+	c.Assert(profile.ProviderUserID, qt.Equals, "42")
+	// The /user payload's public email is NOT trusted for the verified flag —
+	// /user/emails is the authoritative source, so the primary row wins.
+	c.Assert(profile.Email, qt.Equals, "primary@example.com")
+	c.Assert(profile.EmailVerified, qt.IsTrue)
+	c.Assert(profile.DisplayName, qt.Equals, "The Octocat")
+}
+
+// A user whose primary address is unverified but who has another verified one
+// should still get in, on the verified address.
+func TestGitHubExchange_FallsBackToAnyVerifiedEmail(t *testing.T) {
+	c := qt.New(t)
+	p := githubProvider(c, githubRoutes{
+		token: githubToken,
+		user:  `{"id":7,"login":"octocat","name":""}`,
+		emails: `[{"email":"unverified@example.com","primary":true,"verified":false},
+		           {"email":"verified@example.com","primary":false,"verified":true}]`,
+	})
+
+	profile, err := p.Exchange(context.Background(), "code", "verifier")
+	c.Assert(err, qt.IsNil)
+	c.Assert(profile.Email, qt.Equals, "verified@example.com")
+	c.Assert(profile.EmailVerified, qt.IsTrue)
+	// No display name on the profile: the login is the readable fallback.
+	c.Assert(profile.DisplayName, qt.Equals, "octocat")
+}
+
+// With nothing verified anywhere, the /user email comes back with
+// EmailVerified=false. That flag is what stops the callback auto-linking an
+// address the user has not proven they own.
+func TestGitHubExchange_UnverifiedEmailIsMarkedUnverified(t *testing.T) {
+	c := qt.New(t)
+	p := githubProvider(c, githubRoutes{
+		token:  githubToken,
+		user:   `{"id":9,"login":"octocat","email":"public@example.com"}`,
+		emails: `[{"email":"public@example.com","primary":true,"verified":false}]`,
+	})
+
+	profile, err := p.Exchange(context.Background(), "code", "verifier")
+	c.Assert(err, qt.IsNil)
+	c.Assert(profile.Email, qt.Equals, "public@example.com")
+	c.Assert(profile.EmailVerified, qt.IsFalse)
+}
+
+func TestGitHubExchange_NoUsableEmail(t *testing.T) {
+	c := qt.New(t)
+	p := githubProvider(c, githubRoutes{
+		token:  githubToken,
+		user:   `{"id":9,"login":"octocat"}`,
+		emails: `[]`,
+	})
+
+	_, err := p.Exchange(context.Background(), "code", "verifier")
+	c.Assert(err, qt.IsNotNil)
+}
+
+// An id of zero means GitHub answered with something we cannot key an account
+// on; accepting it would collide every such user onto provider_user_id "0".
+func TestGitHubExchange_RejectsAMissingUserID(t *testing.T) {
+	c := qt.New(t)
+	p := githubProvider(c, githubRoutes{
+		token:  githubToken,
+		user:   `{"login":"octocat","email":"public@example.com"}`,
+		emails: `[{"email":"public@example.com","primary":true,"verified":true}]`,
+	})
+
+	_, err := p.Exchange(context.Background(), "code", "verifier")
+	c.Assert(err, qt.IsNotNil)
+}
+
+func TestGitHubExchange_SurfacesUpstreamFailures(t *testing.T) {
+	c := qt.New(t)
+
+	// Token endpoint refuses.
+	_, err := githubProvider(c, githubRoutes{user: `{"id":1}`, emails: `[]`}).
+		Exchange(context.Background(), "code", "verifier")
+	c.Assert(err, qt.IsNotNil)
+
+	// /user refuses — a 401 here must not be reported as a successful login.
+	_, err = githubProvider(c, githubRoutes{token: githubToken, emails: `[]`}).
+		Exchange(context.Background(), "code", "verifier")
+	c.Assert(err, qt.IsNotNil)
+
+	// /user/emails refuses (missing user:email scope is the usual cause).
+	_, err = githubProvider(c, githubRoutes{token: githubToken, user: `{"id":1,"login":"o"}`}).
+		Exchange(context.Background(), "code", "verifier")
+	c.Assert(err, qt.IsNotNil)
+}
+
+func TestGitHubExchange_RejectsMalformedJSON(t *testing.T) {
+	c := qt.New(t)
+	p := githubProvider(c, githubRoutes{
+		token: githubToken,
+		user:  `{"id": not-json`,
+	})
+
+	_, err := p.Exchange(context.Background(), "code", "verifier")
+	c.Assert(err, qt.IsNotNil)
 }
