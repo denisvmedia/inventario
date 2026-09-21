@@ -171,6 +171,14 @@ So today the workflow posts a notice and leaves bot pull requests for a human.
 To turn auto-merge back on, configure required checks on `master`; the workflow
 picks that up on its own, with no change here.
 
+`./scripts/set-branch-protection.sh` applies the set, and `--show` / `--remove`
+read it back and undo it. Choosing the contexts is the part that needs care, so
+the reasoning lives in the script next to the list rather than in someone's
+shell history: a job skipped by its `if:` reports `skipped` and passes, but a
+workflow skipped by a workflow-level `paths:` filter creates no check run at
+all, and requiring one of those blocks every unrelated pull request forever.
+See #2569 for how the eleven contexts were verified.
+
 ## GitHub Actions are pinned to commit SHAs
 
 Every third-party action is referenced by commit SHA with the version in a
