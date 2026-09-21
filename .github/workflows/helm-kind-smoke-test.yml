@@ -35,12 +35,14 @@ on:
       - 'go/**'
       - 'helm/**'
       - '.github/workflows/helm-kind-smoke-test.yml'
+      - '.github/workflows/_wait-for-docker-image.yml'
   pull_request:
     paths:
       - 'Dockerfile'
       - 'go/**'
       - 'helm/**'
       - '.github/workflows/helm-kind-smoke-test.yml'
+      - '.github/workflows/_wait-for-docker-image.yml'
 
 permissions:
   contents: read
