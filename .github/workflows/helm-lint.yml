@@ -280,6 +280,27 @@ jobs:
           --set-string run.all.autoscaling.metrics[0].external.target.averageValue=5
           > /tmp/inventario-hpa-external-render.yaml
 
+      - name: Install promtool
+        # Pinned, and the same version the script's Docker fallback uses, so a
+        # contributor without promtool on PATH runs the identical binary.
+        env:
+          PROMETHEUS_VERSION: 3.7.3
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/prometheus.tar.gz \
+            "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
+          tar -xzf /tmp/prometheus.tar.gz -C /tmp
+          sudo install -m 0755 \
+            "/tmp/prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool" /usr/local/bin/promtool
+          promtool --version
+
+      - name: Unit-test the alert rules
+        # The check below compares the alert SET between the chart and the dev
+        # stack. This runs the expressions: a join written on the wrong label
+        # produces an empty vector, at which point InventarioBackupStale can
+        # never fire and InventarioBackupNeverRan fires forever (#2574).
+        run: ./scripts/test-alert-rules.sh
+
       - name: Verify the monitoring resources render and the alert set matches
         run: |
           set -euo pipefail

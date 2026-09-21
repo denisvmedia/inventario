@@ -1,0 +1,128 @@
+# promtool unit tests for the backup alerts the chart ships.
+#
+# These two rules are the ones worth testing rather than reading. Both join
+# kube_job_status_completion_time to kube_job_owner on (namespace, job_name),
+# and a join whose labels do not line up produces an empty vector — at which
+# point InventarioBackupStale can never fire and InventarioBackupNeverRan
+# fires forever. An alert that cries wolf permanently gets silenced, and then
+# neither of them means anything.
+#
+# Run: ./scripts/test-alert-rules.sh
+rule_files:
+  - ../../../../.tmp-alert-rules/rendered.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  # A backup that completed recently: neither alert.
+  - interval: 1m
+    input_series:
+      - series: 'kube_job_status_completion_time{job="kube-state-metrics", namespace="default", job_name="inv-inventario-backup-1"}'
+        values: "1800 1800 1800 1800"
+      - series: 'kube_job_owner{job="kube-state-metrics", namespace="default", job_name="inv-inventario-backup-1", owner_kind="CronJob", owner_name="inv-inventario-backup"}'
+        values: "1 1 1 1"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: InventarioBackupStale
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: InventarioBackupNeverRan
+        exp_alerts: []
+
+  # A dump that completed at t=0 and nothing since. The ceiling is 36h, so
+  # the condition turns true just after 36h and the 30-minute `for` holds it
+  # pending until 36h30m.
+  - interval: 1m
+    input_series:
+      - series: 'kube_job_status_completion_time{job="kube-state-metrics", namespace="default", job_name="inv-inventario-backup-1"}'
+        values: "0+0x2250"
+      - series: 'kube_job_owner{job="kube-state-metrics", namespace="default", job_name="inv-inventario-backup-1", owner_kind="CronJob", owner_name="inv-inventario-backup"}'
+        values: "1+0x2250"
+    alert_rule_test:
+      # Just inside the ceiling: nothing yet.
+      - eval_time: 35h
+        alertname: InventarioBackupStale
+        exp_alerts: []
+      # Past the ceiling but inside `for`: pending, which is not firing.
+      - eval_time: 36h20m
+        alertname: InventarioBackupStale
+        exp_alerts: []
+      - eval_time: 36h40m
+        alertname: InventarioBackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              alertname: InventarioBackupStale
+            exp_annotations:
+              summary: "Inventario database backup is stale"
+              description: "The newest successful dump is 1d 12h 40m 0s old in namespace default."
+      # Something did complete, so this is not the never-ran case.
+      - eval_time: 36h40m
+        alertname: InventarioBackupNeverRan
+        exp_alerts: []
+
+  # No backup job has ever completed. The stale rule compares against an
+  # empty vector and stays quiet, which is why the second rule exists.
+  - interval: 1m
+    input_series:
+      - series: 'kube_job_owner{job="kube-state-metrics", namespace="default", job_name="inv-inventario-backup-1", owner_kind="CronJob", owner_name="inv-inventario-backup"}'
+        values: "1+0x1700"
+    alert_rule_test:
+      - eval_time: 27h
+        alertname: InventarioBackupStale
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: InventarioBackupNeverRan
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              alertname: InventarioBackupNeverRan
+            exp_annotations:
+              summary: "Inventario database backup has never completed"
+              description: "No successful dump has ever been recorded for inv-inventario-backup in namespace default."
+
+  # Someone else's CronJob in the same namespace must not count as ours.
+  # Without the owner join this would look like a healthy backup.
+  - interval: 1m
+    input_series:
+      - series: 'kube_job_status_completion_time{job="kube-state-metrics", namespace="default", job_name="some-other-cronjob-1"}'
+        values: "1800+0x1700"
+      - series: 'kube_job_owner{job="kube-state-metrics", namespace="default", job_name="some-other-cronjob-1", owner_kind="CronJob", owner_name="some-other-cronjob"}'
+        values: "1+0x1700"
+    alert_rule_test:
+      - eval_time: 27h
+        alertname: InventarioBackupNeverRan
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              alertname: InventarioBackupNeverRan
+            exp_annotations:
+              summary: "Inventario database backup has never completed"
+              description: "No successful dump has ever been recorded for inv-inventario-backup in namespace default."
+
+  # Two of our runs and somebody else's, all in one namespace — the ordinary
+  # shape, and the one that tells a join on job_name apart from a join on the
+  # scrape label. Stale must read the NEWEST of ours and ignore the stranger.
+  - interval: 1m
+    input_series:
+      - series: 'kube_job_status_completion_time{job="kube-state-metrics", namespace="default", job_name="inv-inventario-backup-1"}'
+        values: "0+0x2250"
+      - series: 'kube_job_owner{job="kube-state-metrics", namespace="default", job_name="inv-inventario-backup-1", owner_kind="CronJob", owner_name="inv-inventario-backup"}'
+        values: "1+0x2250"
+      - series: 'kube_job_status_completion_time{job="kube-state-metrics", namespace="default", job_name="inv-inventario-backup-2"}'
+        values: "126000+0x2250"
+      - series: 'kube_job_owner{job="kube-state-metrics", namespace="default", job_name="inv-inventario-backup-2", owner_kind="CronJob", owner_name="inv-inventario-backup"}'
+        values: "1+0x2250"
+      - series: 'kube_job_status_completion_time{job="kube-state-metrics", namespace="default", job_name="unrelated-cronjob-1"}'
+        values: "129000+0x2250"
+      - series: 'kube_job_owner{job="kube-state-metrics", namespace="default", job_name="unrelated-cronjob-1", owner_kind="CronJob", owner_name="unrelated-cronjob"}'
+        values: "1+0x2250"
+    alert_rule_test:
+      # The newest of ours completed at 126000s (35h), so at 36h40m the age
+      # is 6000s — inside the 36h ceiling. Quiet.
+      - eval_time: 36h40m
+        alertname: InventarioBackupStale
+        exp_alerts: []
+      - eval_time: 36h40m
+        alertname: InventarioBackupNeverRan
+        exp_alerts: []
