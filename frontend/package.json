@@ -81,7 +81,7 @@
     "jsdom": "29.1.1",
     "msw": "2.15.0",
     "openapi-typescript": "7.13.0",
-    "prettier": "3.9.6",
+    "prettier": "3.9.8",
     "size-limit": "13.0.3",
     "swagger2openapi": "7.0.8",
     "tailwindcss": "4.3.3",
