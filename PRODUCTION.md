@@ -439,10 +439,33 @@ is yours to configure.
 
 - [ ] **Point Alertmanager at a real receiver** (email/Slack/PagerDuty) and confirm a
   test alert arrives. The chart ships the rules that fire — `InventarioTargetDown`
-  (critical, 2m), `InventarioHighErrorRate` (5xx > 5% for 10m) and
-  `InventarioHighLatencyP95` (p95 > 1s for 10m) — but routing them is deployment-specific
-  and is the step that actually makes monitoring useful. Thresholds are tunable under
-  `metrics.prometheusRule.*`.
+  (critical, 2m), `InventarioHighErrorRate` (5xx > 5% for 10m),
+  `InventarioHighLatencyP95` (p95 > 1s for 10m) and, when `backup.enabled=true`,
+  `InventarioBackupStale` and `InventarioBackupNeverRan` — but routing them is
+  deployment-specific and is the step that actually makes monitoring useful. Thresholds
+  are tunable under `metrics.prometheusRule.*`.
+
+  `deploy/monitoring/alertmanager/alertmanager.yml` is a starting point rather than a
+  blank page: it carries the routing and the inhibition and leaves only the receivers
+  for you to fill. Copy it into your Alertmanager. It groups and inhibits on
+  `namespace`, which the chart stamps on every alert, so it applies unchanged to a
+  cluster running more than one release.
+
+  Then confirm the path rather than assuming it. Post an alert straight into
+  Alertmanager, skipping Prometheus — this tests the half that the rule unit tests
+  cannot reach:
+
+  ```bash
+  kubectl -n monitoring port-forward svc/alertmanager-operated 9093:9093 &
+  curl -s -XPOST http://localhost:9093/api/v2/alerts -H 'Content-Type: application/json' -d '[
+    {"labels":{"alertname":"InventarioBackupNeverRan","namespace":"inventario","severity":"critical"},
+     "annotations":{"summary":"delivery test, ignore"}}
+  ]'
+  ```
+
+  It should reach the receiver within `group_wait`. If it does not, the failure is in
+  routing or the receiver, not in the rules — `amtool config routes test
+  alertname=InventarioBackupNeverRan severity=critical` tells you which.
 - [ ] **Verify end to end**, not just that the resources exist:
 
   ```bash
