@@ -487,8 +487,56 @@ jobs:
       # Needed to list the PR's commits so we know which sha-<7> tags belong
       # to this PR (and only this PR).
       pull-requests: read
+      # Needed to see whether any workflow run for this PR is still consuming
+      # the images before they are deleted.
+      actions: read
     steps:
+      - name: Wait for this PR's runs to finish
+        id: drain
+        # Merging a pull request fires this job immediately, and the lanes it
+        # started are still pulling sha-<7>. Deleting underneath them turns a
+        # merged change red with `manifest unknown` — a failure that means
+        # "merged", which reads exactly like one that means "broken" (#2570).
+        #
+        # This run is excluded from the count: it is triggered by the same
+        # close event and attributed to the same commit, so it would never
+        # see itself finish.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SELF_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # 30-minute ceiling (120 * 15s), longer than a full e2e + kind pass
+          # on a busy fleet.
+          for i in $(seq 1 120); do
+            # gh's --jq takes a filter and nothing else — no --argjson — so
+            # this run is excluded in the shell rather than in jq.
+            busy="$(
+              gh run list --repo "$REPO" --commit "$HEAD_SHA" --limit 100 \
+                --json status,databaseId \
+                --jq '.[] | select(.status == "in_progress" or .status == "queued") | .databaseId' \
+                | grep -vxF "$SELF_RUN_ID" | grep -c . || true
+            )"
+            if [ "${busy:-0}" -eq 0 ]; then
+              echo "reclaim=true" >> "$GITHUB_OUTPUT"
+              echo "No runs left on $HEAD_SHA; safe to reclaim."
+              exit 0
+            fi
+            echo "Waiting for $busy run(s) on $HEAD_SHA to finish... ($i/120)"
+            sleep 15
+          done
+
+          # Not a failure. An image left behind costs storage until the next
+          # close or the time-based sweep; an image deleted early costs a
+          # re-run and a red check that means "merged". Leaving it is the
+          # cheaper mistake, so say so and stop.
+          echo "reclaim=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::Runs on $HEAD_SHA are still going after 30 minutes. Leaving this PR's images in place rather than deleting them from under a live lane; the next close or GHCR retention reclaims them."
+
       - name: Delete all GHCR image versions published by this PR
+        if: steps.drain.outputs.reclaim == 'true'
         # Reclaim every image this PR ever published — the final pr-<N>
         # version AND each per-commit sha-<7> version (we stopped deleting
         # those on push; see the merge job). We enumerate the PR's commits to
