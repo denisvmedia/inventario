@@ -96,12 +96,12 @@ type SupplyLinkRequestData struct {
 	Notes string `json:"notes,omitempty"`
 }
 
-func (srd *SupplyLinkRequestData) Validate() error {
+func (srd SupplyLinkRequestData) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
-func (srd *SupplyLinkRequestData) ValidateWithContext(ctx context.Context) error {
-	return validation.ValidateStructWithContext(ctx, srd,
+func (srd SupplyLinkRequestData) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, &srd,
 		validation.Field(&srd.Label, validation.Required, validation.Length(1, 200)),
 		validation.Field(&srd.URL, validation.Required, validation.Length(1, 2048)),
 		validation.Field(&srd.Notes, validation.Length(0, 1000)),
@@ -157,22 +157,22 @@ type SupplyLinkUpdateRequestData struct {
 	Notes *string `json:"notes,omitempty"`
 }
 
-func (surd *SupplyLinkUpdateRequestData) Validate() error {
+func (surd SupplyLinkUpdateRequestData) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
-func (surd *SupplyLinkUpdateRequestData) ValidateWithContext(ctx context.Context) error {
+func (surd SupplyLinkUpdateRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0, 3)
 	if surd.Label != nil {
-		fields = append(fields, validation.Field(surd.Label, validation.Required, validation.Length(1, 200)))
+		fields = append(fields, validation.Field(&surd.Label, validation.Required, validation.Length(1, 200)))
 	}
 	if surd.URL != nil {
-		fields = append(fields, validation.Field(surd.URL, validation.Required, validation.Length(1, 2048)))
+		fields = append(fields, validation.Field(&surd.URL, validation.Required, validation.Length(1, 2048)))
 	}
 	if surd.Notes != nil {
-		fields = append(fields, validation.Field(surd.Notes, validation.Length(0, 1000)))
+		fields = append(fields, validation.Field(&surd.Notes, validation.Length(0, 1000)))
 	}
-	return validation.ValidateStructWithContext(ctx, surd, fields...)
+	return validation.ValidateStructWithContext(ctx, &surd, fields...)
 }
 
 func (sudw *SupplyLinkUpdateRequestDataWrapper) ValidateWithContext(ctx context.Context) error {
@@ -218,12 +218,12 @@ type SupplyLinkReorderRequestAttributes struct {
 	IDs []string `json:"ids"`
 }
 
-func (sra *SupplyLinkReorderRequestAttributes) Validate() error {
+func (sra SupplyLinkReorderRequestAttributes) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
-func (sra *SupplyLinkReorderRequestAttributes) ValidateWithContext(ctx context.Context) error {
-	return validation.ValidateStructWithContext(ctx, sra,
+func (sra SupplyLinkReorderRequestAttributes) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, &sra,
 		validation.Field(&sra.IDs, validation.Required, validation.Each(validation.Required)),
 	)
 }

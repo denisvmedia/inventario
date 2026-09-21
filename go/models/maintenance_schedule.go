@@ -192,7 +192,7 @@ func (m *MaintenanceSchedule) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&m.CommodityID, rules.NotEmpty),
 		validation.Field(&m.Title, rules.NotEmpty, validation.Length(1, 200)),
 		validation.Field(&m.IntervalDays, validation.Required, validation.Min(1), validation.Max(36500)),
-		validation.Field(&m.NextDueAt, validation.Required),
+		validation.Field(&m.NextDueAt, validation.Required, DateFormat),
 		validation.Field(&m.LastDoneAt),
 		validation.Field(&m.Notes, validation.Length(0, 1000)),
 	)

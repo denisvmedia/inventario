@@ -246,11 +246,11 @@ type FileRequestData struct {
 // FileAttributes is an alias for FileRequestData for backward compatibility with tests
 type FileAttributes = FileRequestData
 
-func (frd *FileRequestData) Validate() error {
+func (frd FileRequestData) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
-func (frd *FileRequestData) ValidateWithContext(ctx context.Context) error {
+func (frd FileRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
@@ -270,7 +270,7 @@ func (frd *FileRequestData) ValidateWithContext(ctx context.Context) error {
 		)
 	}
 
-	return validation.ValidateStructWithContext(ctx, frd, fields...)
+	return validation.ValidateStructWithContext(ctx, &frd, fields...)
 }
 
 var _ render.Binder = (*FileUpdateRequest)(nil)
@@ -341,7 +341,7 @@ type FileUpdateRequestFileData struct {
 	LinkedEntityMeta string   `json:"linked_entity_meta,omitempty"` // metadata about the link
 }
 
-func (fur *FileUpdateRequestFileData) Validate() error {
+func (fur FileUpdateRequestFileData) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
@@ -370,7 +370,7 @@ func (fur *FileUpdateRequestFileData) Validate() error {
 // Note (#1989): the commodity meta enum here is still the legacy
 // images|invoices|manuals set. #1989 will migrate it to images|documents;
 // because this validator is now live, that swap can target this single spot.
-func (fur *FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) error {
+func (fur FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
@@ -408,7 +408,7 @@ func (fur *FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) e
 		)
 	}
 
-	return validation.ValidateStructWithContext(ctx, fur, fields...)
+	return validation.ValidateStructWithContext(ctx, &fur, fields...)
 }
 
 // SearchResponse represents a generic search response

@@ -185,7 +185,7 @@ func (s *CommodityService) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.ProviderName, rules.NotEmpty, validation.Length(1, 200)),
 		validation.Field(&s.ProviderContact, validation.Length(0, 200)),
 		validation.Field(&s.Reason, validation.Length(0, 1000)),
-		validation.Field(&s.SentAt, validation.Required),
+		validation.Field(&s.SentAt, validation.Required, DateFormat),
 		validation.Field(&s.ExpectedReturnAt),
 		validation.Field(&s.ReturnedAt),
 		validation.Field(&s.CostAmount, validation.By(func(any) error {

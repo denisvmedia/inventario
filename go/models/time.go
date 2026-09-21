@@ -74,6 +74,41 @@ func (d *Date) ValidateWithContext(_ context.Context) error {
 	return err
 }
 
+// DateFormat checks that a value holds a calendar date in YYYY-MM-DD. An
+// empty value passes, so pair it with validation.Required when the field is
+// mandatory.
+//
+// A non-pointer Date field needs this rule to be checked at all. Listing
+// the field on its own does nothing: validation.Field dereferences the
+// field pointer before asking whether the value satisfies Validatable, and
+// Date's validator keeps a pointer receiver so that a nil PDate validates
+// instead of panicking.
+var DateFormat validation.Rule = dateFormatRule{}
+
+type dateFormatRule struct{}
+
+func (dateFormatRule) Validate(value any) error {
+	var raw string
+	switch v := value.(type) {
+	case Date:
+		raw = string(v)
+	case *Date:
+		if v == nil {
+			return nil
+		}
+		raw = string(*v)
+	case string:
+		raw = v
+	default:
+		return nil
+	}
+	if raw == "" {
+		return nil
+	}
+	_, err := time.Parse(dateFormat, raw)
+	return err
+}
+
 // ToTime converts the Date to a time.Time. If the Date is nil, it returns a zero time.Time.
 func (d *Date) ToTime() time.Time {
 	if d == nil {
