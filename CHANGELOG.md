@@ -29,6 +29,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
+- `helm install --wait` no longer deadlocks with `demo.postgresql.enabled`: the
+  setup Job is applied alongside the database rather than as a post-install
+  hook that Helm cannot reach until the app pod is ready
+  ([#2540](https://github.com/denisvmedia/inventario/issues/2540)).
 - Every response now carries `X-Content-Type-Options`, `X-Frame-Options` and
   `Referrer-Policy`, and `Strict-Transport-Security` over TLS. A stock install
   serves the SPA from the binary itself, with no proxy to add them
