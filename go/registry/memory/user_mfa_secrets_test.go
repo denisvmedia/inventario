@@ -101,9 +101,9 @@ func TestUserMFASecrets_ConsumeBackupCodeAtomic_ValidatesInputs(t *testing.T) {
 // must observe consumed=true and the others must observe consumed=false.
 //
 // The memory impl's `r.lock.Lock()` is the unit-under-test here. The
-// postgres impl relies on `SELECT … FOR UPDATE` to provide the same
-// guarantee against a real DB; that path needs an integration test
-// against a live postgres which we don't run in unit-test CI.
+// postgres impl relies on `SELECT … FOR UPDATE` for the same guarantee
+// and is covered separately against a real database, in
+// registry/postgres/user_mfa_secrets_race_test.go.
 func TestUserMFASecrets_ConsumeBackupCodeAtomic_Concurrent(t *testing.T) {
 	c := qt.New(t)
 	r := memory.NewUserMFASecretRegistry()
