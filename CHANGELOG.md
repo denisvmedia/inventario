@@ -17,12 +17,18 @@ the section matching the tag and publishes it as the GitHub Release body. See
 - End-to-end coverage of the onboarding loop through the browser: register,
   verify by email, sign in, reset the password, sign in again
   ([#2114](https://github.com/denisvmedia/inventario/issues/2114)).
+- k6 load profile (`load/k6/api-load.js`) and a weekly OWASP ZAP baseline scan
+  of the public surface ([#848](https://github.com/denisvmedia/inventario/issues/848)).
 - Opt-in nightly `pg_dump` CronJob in the Helm chart (`backup.enabled`), with
   retention, a read-back check on each dump, and alerts on backup age
   ([#845](https://github.com/denisvmedia/inventario/issues/845)).
 
 ### Fixed
 
+- The concurrent-upload cap is enforced again when two requests race: the
+  middleware compared error messages instead of unwrapping the sentinel, so the
+  losing request went through above the cap
+  ([#2531](https://github.com/denisvmedia/inventario/issues/2531)).
 - Bootstrap now grants the app, worker and admin roles access to tables created
   by a migration login named anything other than `inventario_migrator`. With a
   custom name, every migrated table came out unreadable to the application

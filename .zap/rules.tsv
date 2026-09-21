@@ -1,0 +1,18 @@
+# ZAP baseline rule decisions (#848).
+#
+# Format: <ruleId>	<WARN|IGNORE|FAIL>	<reason>   (tab-separated)
+#
+# Every line here is a decision someone made, with the reason next to it.
+# That is the entire point of the file: a scanner whose findings are silenced
+# without a recorded reason is a scanner nobody can trust afterwards.
+#
+# IGNORE belongs to a rule that cannot apply to this application — not to one
+# that is inconvenient. A real finding gets fixed, or gets an issue and stays
+# WARN until it is.
+#
+# The scan runs unauthenticated against the public surface, which is what an
+# anonymous visitor sees: the SPA shell, /healthz, and the unauthenticated
+# auth endpoints. Anything behind a session is out of its reach by design —
+# that surface is covered by the Go handler tests.
+#
+# Rule ids: https://www.zaproxy.org/docs/alerts/

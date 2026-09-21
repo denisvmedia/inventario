@@ -64,5 +64,26 @@ jobs:
         working-directory: go
 
       - name: Run tests
-        run: go test -v -race ./...
+        # tee keeps the per-package "coverage: N%" lines for the summary step;
+        # pipefail keeps the pipeline's exit status the one that matters.
+        run: |
+          set -euo pipefail
+          go test -v -race -covermode=atomic -coverprofile=coverage-unit.out ./... 2>&1 \
+            | tee test-output.txt
         working-directory: go
+
+      - name: Coverage summary
+        # Runs on failure too: a red suite is when "which package is untested"
+        # is most worth seeing.
+        if: always()
+        run: ../.github/scripts/coverage-summary.sh test-output.txt coverage-unit.out "unit tests"
+        working-directory: go
+
+      - name: Upload the coverage profile
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: go-coverage-unit
+          path: go/coverage-unit.out
+          if-no-files-found: warn
+          retention-days: 14
