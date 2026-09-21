@@ -730,6 +730,13 @@ func (api *AuthAPI) revokeRefreshToken(ctx context.Context, rawToken string) {
 	if err != nil {
 		return
 	}
+	// The lookup returns revoked rows unfiltered, which is what reuse
+	// detection needs. Revocation is one-way here for the same reason it
+	// is in the registry: revoked_at records when the session ended, and
+	// replaying a dead cookie must not move it.
+	if rt.RevokedAt != nil {
+		return
+	}
 	now := time.Now()
 	rt.RevokedAt = &now
 	if _, err := api.refreshTokenRegistry.Update(ctx, *rt); err != nil {
