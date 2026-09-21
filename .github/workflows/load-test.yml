@@ -1,0 +1,77 @@
+name: Load Test
+
+# k6 against a full compose stack (#848).
+#
+# Manual and weekly, never on a pull request: a load test on a two-vCPU shared
+# runner measures the runner, and a red PR check that nobody can act on is how
+# a check stops being read. What this run is for is the script — that it still
+# logs in, still finds a group, still gets 200s — plus a catastrophic-slowdown
+# tripwire. The numbers that matter come from load/README.md's instructions on
+# real hardware.
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "k6 profile (smoke, load, stress)"
+        required: false
+        default: smoke
+        type: choice
+        options: [smoke, load, stress]
+  schedule:
+    - cron: '0 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  k6:
+    name: k6 (${{ inputs.profile || 'smoke' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      JWT_SECRET: "load-test-jwt-secret-exactly-32-chars!!"
+      FILE_SIGNING_KEY: "load-test-file-signing-key-32chars!!"
+      ADMIN_EMAIL: "admin@loadtest.example"
+      ADMIN_PASSWORD: "LoadTestPass1!"
+      # The profile reads; seeded data makes the lists non-empty, which is the
+      # difference between measuring the query and measuring an empty result.
+      SEED_DATABASE: "true"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Prepare host directories
+        run: mkdir -p .docker/init-state && chmod 777 .docker/init-state
+
+      - name: Build and start full stack
+        run: docker compose up --build --wait --wait-timeout 420
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@db07bd9765aac508ef18982e52ab937fe633a065 # v1.2.1
+
+      - name: Run k6
+        env:
+          BASE_URL: http://localhost:3333
+          USER_EMAIL: ${{ env.ADMIN_EMAIL }}
+          USER_PASSWORD: ${{ env.ADMIN_PASSWORD }}
+          PROFILE: ${{ inputs.profile || 'smoke' }}
+        run: k6 run --summary-export=k6-summary.json load/k6/api-load.js
+
+      - name: Upload the summary
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: k6-summary-${{ inputs.profile || 'smoke' }}
+          path: k6-summary.json
+          if-no-files-found: warn
+
+      - name: Print service logs on failure
+        if: failure()
+        run: docker compose logs
