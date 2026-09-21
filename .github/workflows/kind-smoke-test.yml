@@ -11,6 +11,7 @@ on:
       - 'init-scripts/**'
       - 'k8s/dev/**'
       - '.github/workflows/kind-smoke-test.yml'
+      - '.github/workflows/_wait-for-docker-image.yml'
   pull_request:
     paths:
       - 'Dockerfile'
@@ -20,6 +21,7 @@ on:
       - 'init-scripts/**'
       - 'k8s/dev/**'
       - '.github/workflows/kind-smoke-test.yml'
+      - '.github/workflows/_wait-for-docker-image.yml'
 
 # kind-smoke is a pure consumer: it pulls the sha-<7> image docker.yml
 # publishes for this commit, loads it into a kind cluster, and validates
