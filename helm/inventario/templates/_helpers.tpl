@@ -584,3 +584,152 @@ Usage (caller passes a dict so the helper knows which store's persistence to che
 checksum/recreate-on-deploy: {{ $imageTag | quote }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+The init-data script: data migrations, the back-office bootstrap, and the
+optional seed. Both Jobs that run it talk to the same database and have to
+behave identically, so it lives here instead of in either of them. It was
+copied between the two, and the copies had already begun to diverge in their
+comments (#2086).
+
+Runs as `sh -c` under `set -eu`, and takes the root context for dbRetry.*.
+The Job supplies APP_DB_DSN, MIGRATOR_DB_DSN and the INVENTARIO_MIGRATE_DATA_*
+environment the script reads.
+
+`indent` pads blank lines with spaces, so the `replace` puts them back the way
+a hand-written block scalar has them.
+
+Usage:
+  args:
+    - |
+      {{- include "inventario.initDataScript" . | nindent 6 | replace "\n      \n" "\n\n" }}
+*/}}
+{{- define "inventario.initDataScript" -}}
+set -eu
+export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
+# Shared with the `migrate` init container (dbRetry.*). These two wait on
+# the same database, and when their budgets diverged a stall the init
+# container rode out failed this Job alone, and with it
+# `helm install --wait-for-jobs` (#2243).
+attempts={{ int .Values.dbRetry.attempts }}
+interval={{ int .Values.dbRetry.intervalSeconds }}
+i=1
+while [ "$i" -le "$attempts" ]; do
+  if inventario db migrate data \
+    --default-tenant-name="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_NAME" \
+    --default-tenant-slug="$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG" \
+    --admin-email="$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
+    --admin-password="$INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD" \
+    --admin-name="$INVENTARIO_MIGRATE_DATA_ADMIN_NAME"; then
+    break
+  fi
+  echo "Initial data attempt $i/$attempts failed, retrying in ${interval}s..."
+  i=$((i + 1))
+  sleep "$interval"
+done
+if [ "$i" -gt "$attempts" ]; then
+  echo "Initial data setup failed after $attempts attempts"
+  exit 1
+fi
+
+# Auto-provision the back-office (platform-operator) identity for
+# /backoffice/login when enabled (#1967). Demo/preview only —
+# gated by backofficeUser.enabled. --ensure makes this a no-op
+# (exit 0) whenever ANY operator already exists, including one
+# seeded with a different email than this chart passes: a fresh
+# install (count=0) still CREATES the operator, while an
+# already-bootstrapped env (master/longevity) reports "nothing to
+# do" instead of failing the Job (which would red ArgoCD Degraded).
+# The bootstrap command reuses the INVENTARIO_DB_DSN exported above
+# (migrator DSN).
+if [ "${BACKOFFICE_USER_ENABLED:-false}" = "true" ]; then
+  if [ -z "${INVENTARIO_BACKOFFICE_BOOTSTRAP_PASSWORD:-}" ]; then
+    echo "backofficeUser.enabled=true but BACKOFFICE_USER_PASSWORD is empty; refusing to provision an operator with an uncapturable auto-generated password (set setupJob.initData.backofficeUserPassword for PR previews, or the BACKOFFICE_USER_PASSWORD key in secrets.existingSecret / the sops bundle for master+longevity)"
+    exit 1
+  fi
+  # Operator identity: prefer the sops-sourced BACKOFFICE_USER_EMAIL
+  # (apply-secrets.sh materializes it into inventario-admin from the
+  # bundle's backoffice.email on master/longevity) so /backoffice/login
+  # uses the bundle-defined address; fall back to the chart's
+  # backofficeUser.email when the Secret key is absent (PR previews). (#1967)
+  bo_email="${BACKOFFICE_USER_EMAIL:-$INVENTARIO_BACKOFFICE_BOOTSTRAP_EMAIL}"
+  k=1
+  while [ "$k" -le "$attempts" ]; do
+    if inventario backoffice bootstrap \
+      --email="$bo_email" \
+      --name="$INVENTARIO_BACKOFFICE_BOOTSTRAP_NAME" \
+      --role="$INVENTARIO_BACKOFFICE_BOOTSTRAP_ROLE" \
+      --password="$INVENTARIO_BACKOFFICE_BOOTSTRAP_PASSWORD" \
+      --mfa-enforced="$INVENTARIO_BACKOFFICE_BOOTSTRAP_MFA_ENFORCED" \
+      --ensure; then
+      break
+    fi
+    echo "Back-office bootstrap attempt $k/$attempts failed, retrying in ${interval}s..."
+    k=$((k + 1))
+    sleep "$interval"
+  done
+  if [ "$k" -gt "$attempts" ]; then
+    echo "Back-office bootstrap failed after $attempts attempts"
+    exit 1
+  fi
+fi
+
+if [ "${SEED_DATABASE:-false}" != "true" ]; then
+  echo "Skipping database seeding"
+  exit 0
+fi
+
+if [ "${SETUP_SKIP_SEED_ON_UPGRADE:-false}" = "true" ]; then
+  echo "Skipping database seeding during an upgrade to avoid duplicate demo data"
+  exit 0
+fi
+
+export INVENTARIO_DB_DSN="${INVENTARIO_SEED_DB_DSN:-$APP_DB_DSN}"
+seed_addr="${INVENTARIO_RUN_ADDR:-:3333}"
+case "$seed_addr" in
+  :*)
+    seed_url="http://127.0.0.1${seed_addr}"
+    ;;
+  0.0.0.0:*)
+    seed_url="http://127.0.0.1:${seed_addr#*:}"
+    ;;
+  localhost:*|127.0.0.1:*)
+    seed_url="http://${seed_addr}"
+    ;;
+  *)
+    echo "Unsupported INVENTARIO_RUN_ADDR '$seed_addr' for in-job seeding; falling back to http://127.0.0.1:3333"
+    seed_url="http://127.0.0.1:3333"
+    ;;
+esac
+
+inventario run &
+server_pid=$!
+trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
+
+j=1
+while [ "$j" -le 30 ]; do
+  if curl -sf "${seed_url}/readyz" > /dev/null; then
+    break
+  fi
+  echo "Waiting for temporary server... attempt $j/30"
+  j=$((j + 1))
+  sleep 1
+done
+if [ "$j" -gt 30 ]; then
+  echo "Temporary server did not become ready for seeding"
+  exit 1
+fi
+
+seed_json=$(printf '{"user_email":"%s","tenant_slug":"%s"}' \
+  "$INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL" \
+  "$INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG")
+printf '%s' "$seed_json" | curl -fsS -X POST \
+  -H 'Content-Type: application/json' \
+  --data-binary @- \
+  "${seed_url}/api/v1/seed"
+echo
+
+kill "$server_pid" 2>/dev/null || true
+wait "$server_pid" 2>/dev/null || true
+trap - EXIT
+{{- end -}}
