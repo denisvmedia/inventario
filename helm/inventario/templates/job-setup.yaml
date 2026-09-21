@@ -28,11 +28,28 @@
 {{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
 {{- $redisUrl := include "inventario.redisUrl" . -}}
 {{- $setupHook := .Values.setupJob.hookOverride | default (ternary "post-install,pre-upgrade" "pre-install,pre-upgrade" .Values.demo.postgresql.enabled) -}}
+{{- /*
+  The demo database is a main resource, so bootstrap cannot be a pre-install
+  hook (nothing to connect to) and a post-install hook deadlocks `--wait`:
+  Helm waits for the app pod, the app pod waits for the schema, and the hook
+  that would create it has not run yet (#2540).
+
+  So when the chart owns the database, the Job stops being a hook at all and
+  is applied alongside it, the way argocdMode already does. `--wait-for-jobs`
+  then covers it, and the bootstrap step's own retry rides out the database
+  starting. Jobs are immutable, so the name carries the release revision —
+  each upgrade creates a new one and Helm removes the previous.
+
+  An operator who set hookOverride explicitly keeps their hook; they asked
+  for it, and changing that silently would be worse than the deadlock.
+*/ -}}
+{{- $plainSetupJob := and .Values.demo.postgresql.enabled (not .Values.setupJob.argocdMode) (not .Values.setupJob.hookOverride) -}}
+{{- $setupName := ternary (printf "%s-setup-r%d" $fullName (int .Release.Revision)) (printf "%s-setup" $fullName) $plainSetupJob -}}
 {{- $usePersistentUploads := and .Values.persistence.enabled (hasPrefix "file://" (include "inventario.uploadLocation" .)) -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ $fullName }}-setup
+  name: {{ $setupName }}
   labels:
     {{- include "inventario.labels" . | nindent 4 }}
     app.kubernetes.io/component: setup
@@ -55,6 +72,9 @@ metadata:
     # produces a new Job pod that re-runs idempotent bootstrap).
     "argocd.argoproj.io/sync-wave": "-5"
     "argocd.argoproj.io/sync-options": "Force=true,Replace=true"
+    {{- else if $plainSetupJob }}
+    # Not a hook — see the note above. Applied with the demo database so the
+    # two can converge instead of waiting on each other.
     {{- else }}
     # Default: helm install / upgrade hooks. Behaves as before for non-
     # ArgoCD consumers (the operator runs `helm` directly).

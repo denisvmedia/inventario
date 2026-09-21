@@ -177,18 +177,10 @@ jobs:
           echo "Log capture running as PID $(cat /tmp/capture-pod-logs.pid)"
 
       - name: Install chart (demo)
-        # No --wait on this one, deliberately. The chart's DEFAULT arrangement
-        # with demo Postgres deadlocks under --wait: the setup Job is a
-        # post-install hook (the database is a main resource), Helm runs
-        # post-install hooks only after --wait reports the main resources
-        # ready, and the app pod cannot become ready until that Job has
-        # bootstrapped and migrated. That is #2540, and it is a defect in the
-        # chart rather than in this lane — the argocd lane never hit it
-        # because argocdMode drops the hook annotation.
-        #
-        # Without --wait the same install converges: Helm applies, runs the
-        # hook immediately, and the pod recovers on its next restart. Waiting
-        # explicitly below gives the same guarantee --wait would have.
+        # --wait works again here since #2540: with demo Postgres the setup
+        # Job is no longer a hook, so Helm applies it alongside the database
+        # and --wait-for-jobs covers it. The explicit waits below stay as the
+        # assertion that both actually completed.
         run: |
           set -euo pipefail
           helm upgrade --install "$RELEASE_NAME" helm/inventario \
@@ -201,10 +193,12 @@ jobs:
             ${{ matrix.install_values }} \
             --set setupJob.initData.seedDatabase=true \
             --set-string setupJob.initData.adminPassword="$ADMIN_PASSWORD" \
-            --timeout 8m
+            --wait --wait-for-jobs --timeout 8m
 
+          # By label, not by name: with demo Postgres the Job carries the
+          # release revision so each upgrade can create a new immutable one.
           kubectl -n "$K8S_NAMESPACE" wait --for=condition=complete \
-            "job/${RELEASE_NAME}-inventario-setup" --timeout=8m
+            job -l app.kubernetes.io/component=setup --timeout=8m
           kubectl -n "$K8S_NAMESPACE" rollout status \
             "deploy/${RELEASE_NAME}-inventario" --timeout=8m
 
@@ -228,8 +222,19 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The setup Job's name carries the release revision, so find it by
+          # label first and query it by name — the same shape as the two
+          # assertions below, and one object rather than a List.
+          setup_jobs="$(kubectl get job -l app.kubernetes.io/component=setup \
+            -n "$K8S_NAMESPACE" -o name)"
+          echo "setup Jobs: ${setup_jobs:-<none>}"
+          [ "$(printf '%s\n' "$setup_jobs" | grep -c .)" -eq 1 ] || {
+            echo "Expected exactly one Job labeled app.kubernetes.io/component=setup" >&2
+            exit 1
+          }
+
           # Bootstrap-only setup Job — only the bootstrap init container.
-          setup_init="$(kubectl get job "${RELEASE_NAME}-inventario-setup" \
+          setup_init="$(kubectl get "$setup_jobs" \
             -n "$K8S_NAMESPACE" \
             -o jsonpath='{range .spec.template.spec.initContainers[*]}{.name}{"\n"}{end}')"
           echo "setup Job init containers:"
