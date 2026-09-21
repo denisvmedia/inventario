@@ -150,15 +150,15 @@ type MaintenanceScheduleRequestData struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
-func (mrd *MaintenanceScheduleRequestData) Validate() error {
+func (mrd MaintenanceScheduleRequestData) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
-func (mrd *MaintenanceScheduleRequestData) ValidateWithContext(ctx context.Context) error {
-	return validation.ValidateStructWithContext(ctx, mrd,
+func (mrd MaintenanceScheduleRequestData) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, &mrd,
 		validation.Field(&mrd.Title, validation.Required, validation.Length(1, 200)),
 		validation.Field(&mrd.IntervalDays, validation.Required, validation.Min(1), validation.Max(36500)),
-		validation.Field(&mrd.NextDueAt),
+		validation.Field(&mrd.NextDueAt, models.DateFormat),
 		validation.Field(&mrd.LastDoneAt),
 		validation.Field(&mrd.Notes, validation.Length(0, 1000)),
 	)
@@ -213,11 +213,11 @@ type MaintenanceScheduleUpdateRequestData struct {
 	Enabled      *bool        `json:"enabled,omitempty"`
 }
 
-func (murd *MaintenanceScheduleUpdateRequestData) Validate() error {
+func (murd MaintenanceScheduleUpdateRequestData) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
-func (murd *MaintenanceScheduleUpdateRequestData) ValidateWithContext(ctx context.Context) error {
+func (murd MaintenanceScheduleUpdateRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0, 4)
 	if murd.Title != nil {
 		fields = append(fields, validation.Field(murd.Title, validation.Length(1, 200)))
@@ -228,7 +228,7 @@ func (murd *MaintenanceScheduleUpdateRequestData) ValidateWithContext(ctx contex
 	if murd.Notes != nil {
 		fields = append(fields, validation.Field(murd.Notes, validation.Length(0, 1000)))
 	}
-	return validation.ValidateStructWithContext(ctx, murd, fields...)
+	return validation.ValidateStructWithContext(ctx, &murd, fields...)
 }
 
 func (mudw *MaintenanceScheduleUpdateRequestDataWrapper) ValidateWithContext(ctx context.Context) error {

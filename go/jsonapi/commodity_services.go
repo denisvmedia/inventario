@@ -97,16 +97,16 @@ type CommodityServiceRequestData struct {
 	CostCurrency     string           `json:"cost_currency,omitempty"`
 }
 
-func (srd *CommodityServiceRequestData) Validate() error {
+func (srd CommodityServiceRequestData) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
-func (srd *CommodityServiceRequestData) ValidateWithContext(ctx context.Context) error {
-	return validation.ValidateStructWithContext(ctx, srd,
+func (srd CommodityServiceRequestData) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, &srd,
 		validation.Field(&srd.ProviderName, validation.Required, validation.Length(1, 200)),
 		validation.Field(&srd.ProviderContact, validation.Length(0, 200)),
 		validation.Field(&srd.Reason, validation.Length(0, 1000)),
-		validation.Field(&srd.SentAt, validation.Required),
+		validation.Field(&srd.SentAt, validation.Required, models.DateFormat),
 		validation.Field(&srd.CostCurrency, validation.By(func(any) error {
 			amountSet := srd.CostAmount != nil && !srd.CostAmount.IsZero()
 			currencySet := srd.CostCurrency != ""
@@ -172,11 +172,11 @@ type CommodityServiceUpdateRequestData struct {
 	CostCurrency     *string          `json:"cost_currency,omitempty"`
 }
 
-func (surd *CommodityServiceUpdateRequestData) Validate() error {
+func (surd CommodityServiceUpdateRequestData) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
-func (surd *CommodityServiceUpdateRequestData) ValidateWithContext(ctx context.Context) error {
+func (surd CommodityServiceUpdateRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0, 5)
 	if surd.ProviderName != nil {
 		fields = append(fields, validation.Field(surd.ProviderName, validation.Length(1, 200)))
@@ -197,7 +197,7 @@ func (surd *CommodityServiceUpdateRequestData) ValidateWithContext(ctx context.C
 		}
 		return nil
 	})))
-	return validation.ValidateStructWithContext(ctx, surd, fields...)
+	return validation.ValidateStructWithContext(ctx, &surd, fields...)
 }
 
 func (sudw *CommodityServiceUpdateRequestDataWrapper) ValidateWithContext(ctx context.Context) error {

@@ -184,11 +184,11 @@ type TagRequestData struct {
 	Color models.TagColor `json:"color" example:"muted" enums:"amber,green,blue,orange,red,muted"`
 }
 
-func (trd *TagRequestData) Validate() error {
+func (trd TagRequestData) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
-func (trd *TagRequestData) ValidateWithContext(ctx context.Context) error {
+func (trd TagRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
 		validation.Field(&trd.Kind, validation.Required, validation.By(func(value any) error {
@@ -208,7 +208,7 @@ func (trd *TagRequestData) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&trd.Label, validation.Required, validation.Length(1, 64)),
 		validation.Field(&trd.Color, validation.Required, validation.By(tagColorMembershipRule)),
 	)
-	return validation.ValidateStructWithContext(ctx, trd, fields...)
+	return validation.ValidateStructWithContext(ctx, &trd, fields...)
 }
 
 // tagColorMembershipRule rejects any TagColor value that is not in
@@ -276,11 +276,11 @@ type TagUpdateRequestData struct {
 	Color models.TagColor `json:"color,omitempty" example:"muted" enums:"amber,green,blue,orange,red,muted"`
 }
 
-func (turd *TagUpdateRequestData) Validate() error {
+func (turd TagUpdateRequestData) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
-func (turd *TagUpdateRequestData) ValidateWithContext(ctx context.Context) error {
+func (turd TagUpdateRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 	if turd.Slug != "" {
 		fields = append(fields,
@@ -301,7 +301,7 @@ func (turd *TagUpdateRequestData) ValidateWithContext(ctx context.Context) error
 	if turd.Color != "" {
 		fields = append(fields, validation.Field(&turd.Color, validation.By(tagColorMembershipRule)))
 	}
-	return validation.ValidateStructWithContext(ctx, turd, fields...)
+	return validation.ValidateStructWithContext(ctx, &turd, fields...)
 }
 
 func (tudw *TagUpdateRequestDataWrapper) ValidateWithContext(ctx context.Context) error {

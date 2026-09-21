@@ -170,7 +170,7 @@ func (l *CommodityLoan) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&l.BorrowerName, rules.NotEmpty, validation.Length(1, 200)),
 		validation.Field(&l.BorrowerContact, validation.Length(0, 200)),
 		validation.Field(&l.BorrowerNote, validation.Length(0, 1000)),
-		validation.Field(&l.LentAt, validation.Required),
+		validation.Field(&l.LentAt, validation.Required, DateFormat),
 		validation.Field(&l.DueBackAt),
 		validation.Field(&l.ReturnedAt),
 	)
