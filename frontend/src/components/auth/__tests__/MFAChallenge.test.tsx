@@ -89,7 +89,11 @@ describe("<MFAChallenge />", () => {
     })
     await user.type(await screen.findByTestId("mfa-code-input"), "000000")
     await user.click(screen.getByTestId("mfa-submit"))
-    await waitFor(() => expect(screen.getByTestId("mfa-server-error")).toBeInTheDocument())
+    // The server's own message, not whatever a doomed refresh produced:
+    // a 401 here is a bad code, and there is no session to refresh yet.
+    await waitFor(() =>
+      expect(screen.getByTestId("mfa-server-error")).toHaveTextContent("Invalid code")
+    )
     expect(onSuccess).not.toHaveBeenCalled()
   })
 

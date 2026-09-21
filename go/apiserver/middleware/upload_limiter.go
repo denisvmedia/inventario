@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"go.5x5.cz/inventario/appctx"
@@ -69,8 +70,12 @@ func UploadLimiter(concurrentUploadService services.ConcurrentUploadService) fun
 			// Start the upload (increment counter)
 			err = concurrentUploadService.StartUpload(r.Context(), user.ID, operationName)
 			if err != nil {
-				// If we can't start upload due to race condition, return 429
-				if registry.ErrTooManyRequests.Error() == err.Error() { // TODO: errors should be compared with errors.Is
+				// Two requests can both pass CanStartUpload; StartUpload is the
+				// atomic check that catches the second one. The service wraps
+				// the sentinel, so this has to unwrap rather than compare
+				// messages — a string comparison here never matched and the
+				// request went through above the cap (#2531).
+				if errors.Is(err, registry.ErrTooManyRequests) {
 					http.Error(w, "Too many concurrent uploads. Please try again later.", http.StatusTooManyRequests)
 					return
 				}

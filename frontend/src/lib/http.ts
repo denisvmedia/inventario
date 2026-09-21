@@ -70,6 +70,7 @@ const GROUP_SCOPED_PREFIXES = [
 // FE to surface the actual error body rather than re-fire a doomed refresh.
 const NON_REFRESHABLE_AUTH_PATHS = new Set([
   "/auth/login",
+  "/auth/login/mfa",
   "/auth/register",
   "/auth/refresh",
   "/backoffice/auth/login",

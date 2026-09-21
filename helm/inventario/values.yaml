@@ -1075,6 +1075,105 @@ persistence:
   size: 10Gi
 
 # ============================================================
+# Nightly pg_dump CronJob
+#
+# OFF by default, and that is the right default for most installs: a
+# managed Postgres (Neon, Supabase, Cloud SQL, DO) already takes
+# snapshots, and CloudNativePG has scheduled backups of its own. Turning
+# this on next to either of those buys a second copy of the same data and
+# a second thing to watch. It earns its keep when the database tier has
+# no backup story you can name — a Postgres you run yourself, or the
+# chart's own demo.postgresql.
+#
+# Read devdocs/disaster-recovery.md before relying on it. A dump sitting
+# on a PVC in the cluster it was taken from survives a bad migration or a
+# deleted row. It does not survive losing the cluster, so copy it
+# off-cluster (Velero over this PVC, or your own sync job) or use
+# `persistence.existingClaim` to point at a volume that already lives
+# somewhere else.
+# ============================================================
+backup:
+  enabled: false
+
+  # Cron schedule, in the cluster's timezone unless `timeZone` is set.
+  schedule: "0 2 * * *"
+  # IANA name, e.g. "Europe/Prague". Requires Kubernetes 1.27+.
+  timeZone: ""
+
+  # Dumps older than this are deleted at the end of each run. The pruning
+  # happens after a successful dump, so a run that fails never deletes the
+  # older copy it failed to replace.
+  retentionDays: 30
+
+  # pg_dump's major version must be >= the server's, so bump this when you
+  # upgrade Postgres. A too-old client refuses with "server version
+  # mismatch" rather than producing a partial dump.
+  image:
+    repository: postgres
+    tag: "17-alpine"
+    pullPolicy: IfNotPresent
+
+  # Which key of the chart's Secret holds the DSN to dump.
+  dsnSecretKey: INVENTARIO_DB_DSN
+
+  # pg_dump reads every table with `row_security = off`, which PostgreSQL
+  # allows only for a role that owns the table or holds BYPASSRLS.
+  # inventario_admin is the one role with that attribute, and the app login
+  # is a member of it, so pg_dump assumes it with SET ROLE. Leave this empty
+  # only when the DSN is a superuser or the table owner; with an ordinary
+  # login and no role, pg_dump fails on the first RLS table with "query
+  # would be affected by row-level security policy" — loudly, not silently,
+  # but it fails.
+  role: inventario_admin
+
+  # Where the dumps land inside the container.
+  path: /backups
+
+  persistence:
+    enabled: true
+    # Use a PVC that already exists instead of creating one. This is how you
+    # point the dumps at a volume that is replicated or backed up elsewhere.
+    existingClaim: ""
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+
+  # A run that overlaps the previous one would compete for the same volume
+  # and the same database; skip it instead.
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  # If the cluster was down at the scheduled time, still run when it comes
+  # back — within this window.
+  startingDeadlineSeconds: 3600
+  backoffLimit: 2
+  # Wall-clock cap for one run. A dump that hangs on a lock should fail and
+  # alert, not hold the volume until the next schedule.
+  activeDeadlineSeconds: 3600
+
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  # Alerts about the backups themselves, added to the chart's PrometheusRule
+  # when both this and metrics.prometheusRule.enabled are on.
+  #
+  # They read kube-state-metrics series (kube_job_status_completion_time,
+  # kube_job_owner). If kube-state-metrics is not installed, both rules
+  # evaluate against nothing and never fire — a backup alert that is itself
+  # silently broken. Check that those series exist before trusting these.
+  alert:
+    enabled: true
+    # How old the newest successful dump may get before it is a problem.
+    # 36h tolerates one missed nightly run and no more.
+    maxAgeHours: 36
+    for: 30m
+    # The "never completed at all" rule waits longer, so a fresh install
+    # does not page before its first scheduled run.
+    neverRanFor: 26h
+
+# ============================================================
 # Security context applied to all containers
 # ============================================================
 podSecurityContext:

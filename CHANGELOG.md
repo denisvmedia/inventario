@@ -14,6 +14,11 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 - Privacy Policy and Terms of Service pages, linked from the registration
   consent checkbox ([#2148](https://github.com/denisvmedia/inventario/issues/2148)).
+- k6 load profile (`load/k6/api-load.js`) and a weekly OWASP ZAP baseline scan
+  of the public surface ([#848](https://github.com/denisvmedia/inventario/issues/848)).
+- Opt-in nightly `pg_dump` CronJob in the Helm chart (`backup.enabled`), with
+  retention, a read-back check on each dump, and alerts on backup age
+  ([#845](https://github.com/denisvmedia/inventario/issues/845)).
 
 ### Fixed
 
@@ -21,6 +26,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
   `Referrer-Policy`, and `Strict-Transport-Security` over TLS. A stock install
   serves the SPA from the binary itself, with no proxy to add them
   ([#2523](https://github.com/denisvmedia/inventario/issues/2523)).
+- The concurrent-upload cap is enforced again when two requests race: the
+  middleware compared error messages instead of unwrapping the sentinel, so the
+  losing request went through above the cap
+  ([#2531](https://github.com/denisvmedia/inventario/issues/2531)).
 - Bootstrap now grants the app, worker and admin roles access to tables created
   by a migration login named anything other than `inventario_migrator`. With a
   custom name, every migrated table came out unreadable to the application

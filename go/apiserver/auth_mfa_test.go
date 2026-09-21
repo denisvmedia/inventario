@@ -184,12 +184,45 @@ func TestMFA_SetupVerifyDisable_HappyPath(t *testing.T) {
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
+// callNoAuth issues the request without a Bearer token, so RequireAuth
+// answers it. Pairs with the 422 cases below: 401 means "no session",
+// 422 means "the session is fine, the code is not".
+func (f *authMFAFixture) callNoAuth(t *testing.T, method, path string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	var buf bytes.Buffer
+	if body != nil {
+		if err := json.NewEncoder(&buf).Encode(body); err != nil {
+			t.Fatalf("encode body: %v", err)
+		}
+	}
+	req := httptest.NewRequest(method, path, &buf)
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	f.router.ServeHTTP(resp, req)
+	return resp
+}
+
+func TestMFA_MissingSessionStillAnswers401(t *testing.T) {
+	c := qt.New(t)
+	f := newAuthMFAFixture(t)
+	enrollAndEnable(t, f)
+
+	for _, path := range []string{
+		"/auth/mfa/verify",
+		"/auth/mfa/disable",
+		"/auth/mfa/regenerate-backup-codes",
+	} {
+		resp := f.callNoAuth(t, "POST", path, apiserver.MFAVerifyRequest{Code: "000000"})
+		c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized, qt.Commentf("path %s", path))
+	}
+}
+
 func TestMFA_Verify_RejectsBadCode(t *testing.T) {
 	c := qt.New(t)
 	f := newAuthMFAFixture(t)
 	f.call(t, "POST", "/auth/mfa/setup", nil)
 	resp := f.call(t, "POST", "/auth/mfa/verify", apiserver.MFAVerifyRequest{Code: "000000"})
-	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity)
 }
 
 func TestMFA_Setup_RejectsReenrollWhenEnabled(t *testing.T) {
@@ -217,14 +250,14 @@ func TestMFA_Disable_RequiresPasswordAndCode(t *testing.T) {
 		Password: "wrong-password",
 		TOTPCode: code,
 	})
-	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity)
 
 	// Right password but bad code — refused too.
 	resp = f.call(t, "POST", "/auth/mfa/disable", apiserver.MFADisableRequest{
 		Password: mfaTestPassword,
 		TOTPCode: "000000",
 	})
-	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity)
 }
 
 func TestMFA_Login_ChallengeAndComplete(t *testing.T) {
@@ -440,7 +473,7 @@ func TestMFA_Disable_NoOpWhenNotEnrolled(t *testing.T) {
 	resp = f.call(t, "POST", "/auth/mfa/disable", apiserver.MFADisableRequest{
 		Password: "wrong-password",
 	})
-	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity)
 }
 
 // mintMFAToken signs an arbitrary claims map with the given secret.
@@ -479,7 +512,7 @@ func TestMFA_Regenerate_RejectsReplayedCode(t *testing.T) {
 
 	// Same code, same time-step → replay rejected like a wrong code.
 	replay := f.call(t, "POST", "/auth/mfa/regenerate-backup-codes", apiserver.MFAVerifyRequest{Code: code})
-	c.Assert(replay.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(replay.Code, qt.Equals, http.StatusUnprocessableEntity)
 }
 
 func TestMFA_Regenerate_RequiresCurrentCode(t *testing.T) {
@@ -489,7 +522,7 @@ func TestMFA_Regenerate_RequiresCurrentCode(t *testing.T) {
 
 	// Bad code rejected.
 	resp := f.call(t, "POST", "/auth/mfa/regenerate-backup-codes", apiserver.MFAVerifyRequest{Code: "000000"})
-	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+	c.Assert(resp.Code, qt.Equals, http.StatusUnprocessableEntity)
 
 	// Real code returns a fresh set; old codes no longer work.
 	row, _ := f.mfaRegistry.GetByUser(context.Background(), f.user.TenantID, f.user.ID)
