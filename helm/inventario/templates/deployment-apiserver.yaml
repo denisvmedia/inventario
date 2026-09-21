@@ -56,8 +56,8 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.setupJob.argocdMode }}
-      # Migrate init container — argocdMode only (#1884). See deployment.yaml
+      {{- if eq (include "inventario.migrateInPod" .) "true" }}
+      # Migrate init container (#1884, #2086). See deployment.yaml
       # for the full rationale; same approach A semantics apply to the split
       # apiserver Deployment.
       initContainers:

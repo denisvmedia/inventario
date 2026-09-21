@@ -410,9 +410,36 @@ so this fails loudly rather than silently shipping broken links.
 {{- end -}}
 
 {{/*
-Migration init container, used by the app Deployment(s) in argocdMode so the
-schema is brought up to date by the same pod revision that runs the new image
-(approach A from #1884). Runs `inventario db migrate up` with MIGRATOR_DB_DSN
+Whether schema migrations run from an init container on the app Deployment(s)
+rather than from the setup Job. Returns the string "true" or "false".
+
+This is the ordering that has no old-image/new-schema window: the migration
+runs in the same pod revision as the image it is for, so no old pod ever
+serves traffic against a schema it was not built against. It arrived with
+ArgoCD support (#1884) and was reachable only through argocdMode, which left
+plain-Helm and Helmfile installs on the weaker hook ordering without saying so
+(#2086).
+
+setupJob.migrateInInitContainer decides it. Left unset it follows argocdMode,
+so nothing changes for an existing install of either kind; set it true to get
+the same ordering under plain Helm, or false to keep the hook ordering under
+ArgoCD.
+
+Usage:
+  {{- if eq (include "inventario.migrateInPod" .) "true" }}
+*/}}
+{{- define "inventario.migrateInPod" -}}
+{{- if kindIs "bool" .Values.setupJob.migrateInInitContainer -}}
+{{- .Values.setupJob.migrateInInitContainer -}}
+{{- else -}}
+{{- .Values.setupJob.argocdMode -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Migration init container, used by the app Deployment(s) when migrations run
+in the pod so the schema is brought up to date by the same pod revision that
+runs the new image (approach A from #1884). Runs `inventario db migrate up` with MIGRATOR_DB_DSN
 (falling back to INVENTARIO_DB_DSN); identical retry-loop semantics to the
 setup Job's migrate step. Idempotent — re-runs on every pod start, no-ops
 when schema is already at the embedded max version.

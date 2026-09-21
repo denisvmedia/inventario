@@ -855,6 +855,42 @@ setupJob:
   # See helm/inventario/README.md → "ArgoCD-managed migrations".
   argocdMode: false
 
+  # Where schema migrations run.
+  #
+  #   true  — from a `migrate` init container on every app Deployment, so the
+  #           schema is brought up by the same pod revision that runs the new
+  #           image. No window in which an old-image pod serves traffic
+  #           against a newer schema. The setup Job becomes bootstrap-only and
+  #           the default tenant / admin row moves to a separate init-data
+  #           Job that runs after the Deployment.
+  #   false — from the setup Job, before the rollout starts. Simpler, and it
+  #           means every old-revision pod serves traffic against the
+  #           already-migrated schema for the length of the rolling update.
+  #           That is an expand-contract requirement on your migrations, and
+  #           it is a real constraint rather than a theoretical one.
+  #
+  # Unset (the default) follows argocdMode, so neither an existing ArgoCD
+  # install nor an existing plain-Helm one changes behavior. Set it to true to
+  # get the safe ordering under plain Helm or Helmfile — which is what #2086
+  # was about, the ordering having been reachable only through argocdMode.
+  #
+  # Two caveats under plain Helm.
+  #
+  # The init-data Job becomes a post-install/post-upgrade hook, and without
+  # `helm upgrade --wait` Helm runs those as soon as the manifests are applied
+  # — before the new pods have finished migrating. The Job's own retry loop
+  # (dbRetry.*) covers that window; --wait removes it.
+  #
+  # And a FRESH INSTALL cannot combine this with demo.postgresql.enabled: the
+  # demo database is a main resource, so bootstrap has to be a post-install
+  # hook, and Helm runs post-install hooks only after the main resources are
+  # ready — which the app pod cannot become until bootstrap has created the
+  # migrator user. The chart refuses that combination rather than hanging
+  # until the retry budget runs out. Install with this off and upgrade into
+  # it, use an external database (where bootstrap is a pre-install hook and
+  # the ordering works), or use argocdMode, where sync waves order the two.
+  migrateInInitContainer: null
+
   # Hard wall-clock cap on the bootstrap/setup Job (templates/job-setup.yaml).
   #
   # WHY this exists: a setup Job pinned to an image tag that isn't in the

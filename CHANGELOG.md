@@ -14,6 +14,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 - Privacy Policy and Terms of Service pages, linked from the registration
   consent checkbox ([#2148](https://github.com/denisvmedia/inventario/issues/2148)).
+- `setupJob.migrateInInitContainer` makes the in-pod migration ordering
+  available without ArgoCD, so a plain Helm or Helmfile install no longer has
+  to migrate before the rollout starts
+  ([#2086](https://github.com/denisvmedia/inventario/issues/2086)).
 - End-to-end coverage of the onboarding loop through the browser: register,
   verify by email, sign in, reset the password, sign in again
   ([#2114](https://github.com/denisvmedia/inventario/issues/2114)).
