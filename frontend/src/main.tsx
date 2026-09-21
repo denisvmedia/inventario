@@ -1,10 +1,21 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
+import { config as configureZod } from "zod"
 
 import "./index.css"
 import { App } from "@/app/App"
 import { Providers } from "@/app/providers"
 import { initI18n } from "@/i18n"
+
+// Zod 4 compiles validators with `Function()` for speed, probing for the
+// capability with a `Function("")` inside a try/catch. The Content-Security-
+// Policy has no `unsafe-eval`, so the probe throws and Zod falls back to the
+// interpreted path — correct, but the attempt still fires a
+// `securitypolicyviolation` on every page that validates anything. Telling it
+// up front skips the probe, which keeps the CSP report clean and saves a
+// thrown exception. Set before the first render, which is before any schema
+// is used.
+configureZod({ jitless: true })
 
 const rootElement = document.getElementById("root")
 if (!rootElement) {
