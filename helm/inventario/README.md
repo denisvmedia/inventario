@@ -201,6 +201,15 @@ The init-data Job becomes a `post-upgrade` hook, and **without `helm upgrade --w
 
 And a **fresh install cannot combine it with `demo.postgresql.enabled`**. The demo database is a main resource, so bootstrap has to be a `post-install` hook; Helm runs post-install hooks only after the main resources are ready; and the app pod cannot become ready until bootstrap has created the migrator user. Nothing breaks that circle, so the chart refuses the combination outright rather than hanging until the retry budget runs out. Install with `migrateInInitContainer=false` and upgrade into it, use an external database — where bootstrap is a `pre-install` hook and the ordering works, which is the case this mode exists for — or use ArgoCD, where sync waves order the two explicitly.
 
+One caveat that belongs to the **first** column, not to the new one:
+`helm install --wait` with `demo.postgresql.enabled=true` deadlocks. The setup
+Job has to be a `post-install` hook there (the demo database is a main
+resource), Helm runs post-install hooks only after `--wait` reports the main
+resources ready, and the app pod cannot become ready until that Job has
+bootstrapped and migrated. Install the demo without `--wait`, or use
+`argocdMode`, until [#2540](https://github.com/denisvmedia/inventario/issues/2540)
+is fixed.
+
 The ArgoCD column exists because Helm hooks do not map onto ArgoCD's sync phases — see [ArgoCD-managed migrations](#argocd-managed-migrations) below.
 
 
