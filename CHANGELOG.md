@@ -25,6 +25,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
+- Every response now carries `X-Content-Type-Options`, `X-Frame-Options` and
+  `Referrer-Policy`, and `Strict-Transport-Security` over TLS. A stock install
+  serves the SPA from the binary itself, with no proxy to add them
+  ([#2523](https://github.com/denisvmedia/inventario/issues/2523)).
 - The concurrent-upload cap is enforced again when two requests race: the
   middleware compared error messages instead of unwrapping the sentinel, so the
   losing request went through above the cap

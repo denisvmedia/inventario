@@ -441,6 +441,10 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// per-request Sentry hub to the context for the non-panic 5xx capture in
 	// errors.go. No-op pass-through when SENTRY_DSN is unset.
 	r.Use(sentry.Middleware())
+	// Response headers a browser only honors when it is told to. On the root
+	// router so the embedded SPA gets them too — a stock compose install has
+	// nothing in front of the binary to add them.
+	r.Use(SecurityHeaders())
 
 	// r.Get("/", func(w http.ResponseWriter, _r *http.Request) {
 	//	w.Write([]byte("Welcome to Inventario!"))

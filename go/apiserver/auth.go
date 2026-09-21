@@ -814,7 +814,7 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Clear the refresh token cookie.
-	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	secureCookie := requestIsTLS(r)
 	// #nosec G124 -- HttpOnly + SameSiteStrict are set; Secure is true on HTTPS and intentionally false on plain-HTTP local dev.
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshTokenCookieName,
@@ -1660,7 +1660,7 @@ func writeRefreshCookie(w http.ResponseWriter, r *http.Request, value string, ma
 
 	// Set Secure flag only when the connection is already over HTTPS to allow
 	// local development over plain HTTP.
-	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	secureCookie := requestIsTLS(r)
 
 	// #nosec G124 -- HttpOnly + SameSiteStrict are set; Secure is true on HTTPS and intentionally false on plain-HTTP local dev.
 	http.SetCookie(w, &http.Cookie{
@@ -1686,7 +1686,7 @@ func writeRefreshCookie(w http.ResponseWriter, r *http.Request, value string, ma
 // the /auth/refresh success path. The cookie attributes match writeRefreshCookie
 // and clearRefreshCookie exactly, including the secureCookie computation.
 func clearLegacyRefreshCookie(w http.ResponseWriter, r *http.Request) {
-	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	secureCookie := requestIsTLS(r)
 	// #nosec G124 -- HttpOnly + SameSiteStrict are set; Secure is true on HTTPS and intentionally false on plain-HTTP local dev.
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshTokenCookieName,
@@ -1880,7 +1880,7 @@ func clearRefreshCookie(w http.ResponseWriter, r *http.Request) {
 	// Also evict any stale pre-#1750 cookie at the legacy /api/v1/auth path.
 	clearLegacyRefreshCookie(w, r)
 
-	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	secureCookie := requestIsTLS(r)
 	// #nosec G124 -- HttpOnly + SameSiteStrict are set; Secure is true on HTTPS and intentionally false on plain-HTTP local dev.
 	http.SetCookie(w, &http.Cookie{
 		Name:     refreshTokenCookieName,
