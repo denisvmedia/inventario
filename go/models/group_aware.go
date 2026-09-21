@@ -82,12 +82,18 @@ func (i *TenantGroupAwareEntityID) SetCreatedByUserID(userID string) {
 	i.CreatedByUserID = userID
 }
 
-func (*TenantGroupAwareEntityID) Validate() error {
+// Value receivers, deliberately. An owning model reaches these through
+// `validation.Field(&m.TenantGroupAwareEntityID)`, and the library
+// dereferences that pointer before asking whether the value satisfies
+// Validatable. With a pointer receiver it does not, so the embedded
+// check is skipped without a word and tenant_id, group_id and
+// created_by_user_id go unvalidated.
+func (TenantGroupAwareEntityID) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 
-func (i *TenantGroupAwareEntityID) ValidateWithContext(ctx context.Context) error {
-	return validation.ValidateStructWithContext(ctx, i,
+func (i TenantGroupAwareEntityID) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, &i,
 		validation.Field(&i.TenantID, rules.NotEmpty),
 		validation.Field(&i.GroupID, rules.NotEmpty),
 		validation.Field(&i.CreatedByUserID, rules.NotEmpty),
