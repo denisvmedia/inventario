@@ -53,6 +53,7 @@ tests:
           - exp_labels:
               severity: critical
               alertname: InventarioBackupStale
+              namespace: default
             exp_annotations:
               summary: "Inventario database backup is stale"
               description: "The newest successful dump is 1d 12h 40m 0s old in namespace default."
@@ -77,6 +78,7 @@ tests:
           - exp_labels:
               severity: critical
               alertname: InventarioBackupNeverRan
+              namespace: default
             exp_annotations:
               summary: "Inventario database backup has never completed"
               description: "No successful dump has ever been recorded for inv-inventario-backup in namespace default."
@@ -96,6 +98,7 @@ tests:
           - exp_labels:
               severity: critical
               alertname: InventarioBackupNeverRan
+              namespace: default
             exp_annotations:
               summary: "Inventario database backup has never completed"
               description: "No successful dump has ever been recorded for inv-inventario-backup in namespace default."
