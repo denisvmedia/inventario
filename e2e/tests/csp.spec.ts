@@ -16,7 +16,7 @@
  * this guard says nothing about — add one rather than assume.
  */
 import { test, expect, Page } from '@playwright/test';
-import { login, logout } from './includes/auth.js';
+import { login } from './includes/auth.js';
 
 declare global {
   interface Window {
@@ -70,11 +70,11 @@ test.describe('Content-Security-Policy', () => {
   test('the signed-in surfaces load without a violation', async ({ page }) => {
     const consoleHits = await watchForViolations(page);
 
-    // logout() first, the way delete-account.spec.ts does: an authenticated
-    // visit to /login is bounced by the router, so the form never renders and
-    // a bare login() waits forever on the email field.
-    await page.goto('/');
-    await logout(page);
+    // Straight to /login: every test gets a fresh context, so the browser is
+    // not signed in and the form renders. (Routing through "/" and logging out
+    // first cost two minutes on WebKit waiting for a user menu that a
+    // signed-out page never shows.)
+    await page.goto('/login');
     await login(page);
     await page.waitForLoadState('networkidle');
 
