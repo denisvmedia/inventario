@@ -133,8 +133,7 @@ func (f *IntField) Prompt(ctx context.Context) (any, error) {
 
 		err := fieldCopy.ReadAnswer()
 		if err != nil {
-			var answerErr AnswerError
-			if errors.As(err, &answerErr) {
+			if _, ok := errors.AsType[AnswerError](err); ok {
 				fmt.Fprintf(f.reader.output, "Error: %v\n", err)
 				continue
 			}
