@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/internal/utcclock"
 	"go.5x5.cz/inventario/registry/memory"
 	"go.5x5.cz/inventario/registry/postgres"
 )
@@ -57,6 +58,10 @@ func setupSlog() {
 }
 
 func main() {
+	// Before anything reads a clock. See the package comment: the schema's
+	// timestamp columns carry no zone, so the process has to supply one.
+	utcclock.Pin()
+
 	shared.SetEnvPrefix("INVENTARIO")
 	shared.SetConfigFile(configPath())
 
