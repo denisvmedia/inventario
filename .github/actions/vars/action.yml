@@ -4,6 +4,9 @@ outputs:
   node_version:
     description: "Node.js version"
     value: ${{ steps.node.outputs.NODE_VERSION }}
+  golangci_lint_version:
+    description: "Pinned golangci-lint version"
+    value: ${{ steps.golangci.outputs.GOLANGCI_LINT_VERSION }}
 runs:
   using: "composite"
   steps:
@@ -12,4 +15,14 @@ runs:
       run: |
         echo "NODE_VERSION=$(jq -r .volta.node package.json)" >> $GITHUB_OUTPUT
       working-directory: frontend
+      shell: bash
+
+    # The single pin for golangci-lint. go-lint.yml runs this version and
+    # copilot-setup-steps.yml installs it, so an agent's local lint matches
+    # what CI reports. Renovate keeps it current through the customManager in
+    # renovate.json; bump it there or here, not in a workflow.
+    - name: Expose the pinned golangci-lint version
+      id: golangci
+      run: |
+        echo "GOLANGCI_LINT_VERSION=v2.13.2" >> "$GITHUB_OUTPUT"
       shell: bash

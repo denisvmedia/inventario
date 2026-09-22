@@ -70,8 +70,10 @@ jobs:
           # Download Go module dependencies
           go mod download
           
-          # Install golangci-lint (version from workflow)
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin ${{ steps.vars.outputs.golangci_lint_version }}
+          # Install the same golangci-lint CI runs, so a lint failure here
+          # means the same thing it means in go-lint.yml (#1818).
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" "${{ steps.vars.outputs.golangci_lint_version }}"
         working-directory: go
 
       # swag is available via `go tool swag` (declared in go/go.mod's tool block).

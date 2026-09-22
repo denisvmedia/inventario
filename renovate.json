@@ -4,15 +4,19 @@
     "config:recommended"
   ],
   "timezone": "UTC",
-  "schedule": ["before 6am on monday"],
+  "schedule": [
+    "before 6am on monday"
+  ],
   "ignorePaths": [
     "**/node_modules/**",
     "design-mocks/**"
   ],
   "packageRules": [
     {
-      "description": "Auto-merge patch updates only (#2097). Minor and major are held for manual review. Auto-merge waits for branch-protection required checks (go-govulncheck, dependency-review, image scan) via platformAutomerge — those checks are the real gate, not Renovate. minimumReleaseAge adds a soak buffer against freshly-published-and-yanked patches.",
-      "matchUpdateTypes": ["patch"],
+      "description": "Auto-merge patch updates only (#2097). Minor and major are held for manual review. Auto-merge waits for branch-protection required checks (go-govulncheck, dependency-review, image scan) via platformAutomerge \u2014 those checks are the real gate, not Renovate. minimumReleaseAge adds a soak buffer against freshly-published-and-yanked patches.",
+      "matchUpdateTypes": [
+        "patch"
+      ],
       "automerge": true,
       "automergeType": "pr",
       "automergeStrategy": "squash",
@@ -20,8 +24,11 @@
       "minimumReleaseAge": "3 days"
     },
     {
-      "description": "Never auto-merge minor or major updates (#2097) — review the changelog and CI results manually.",
-      "matchUpdateTypes": ["minor", "major"],
+      "description": "Never auto-merge minor or major updates (#2097) \u2014 review the changelog and CI results manually.",
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
       "automerge": false
     },
     {
@@ -54,44 +61,80 @@
     },
     {
       "description": "Go modules configuration",
-      "matchManagers": ["gomod"],
-      "matchFileNames": ["go/**"],
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchFileNames": [
+        "go/**"
+      ],
       "allowedVersions": "!/^0\\./",
-      "schedule": ["before 6am on monday"]
+      "schedule": [
+        "before 6am on monday"
+      ]
     },
     {
       "description": "Frontend npm packages",
-      "matchManagers": ["npm"],
-      "matchFileNames": ["frontend/**"],
-      "schedule": ["before 6am on monday"]
+      "matchManagers": [
+        "npm"
+      ],
+      "matchFileNames": [
+        "frontend/**"
+      ],
+      "schedule": [
+        "before 6am on monday"
+      ]
     },
     {
-      "description": "E2E npm packages", 
-      "matchManagers": ["npm"],
-      "matchFileNames": ["e2e/**"],
-      "schedule": ["before 6am on monday"]
+      "description": "E2E npm packages",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchFileNames": [
+        "e2e/**"
+      ],
+      "schedule": [
+        "before 6am on monday"
+      ]
     },
     {
       "description": "GitHub Actions",
-      "matchManagers": ["github-actions"],
-      "schedule": ["before 6am on monday"]
+      "matchManagers": [
+        "github-actions"
+      ],
+      "schedule": [
+        "before 6am on monday"
+      ]
     },
     {
       "description": "Volta Node.js and npm version pinning",
-      "matchManagers": ["npm"],
-      "matchFileNames": ["frontend/package.json", "e2e/package.json"],
+      "matchManagers": [
+        "npm"
+      ],
+      "matchFileNames": [
+        "frontend/package.json",
+        "e2e/package.json"
+      ],
       "rangeStrategy": "pin",
-      "schedule": ["before 6am on monday"]
+      "schedule": [
+        "before 6am on monday"
+      ]
     },
     {
       "description": "Disallow major versions update for databases",
-      "matchDatasources": ["docker", "github-actions"],
-      "matchPackageNames": ["postgres"],
-      "matchUpdateTypes": ["major"],
+      "matchDatasources": [
+        "docker",
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "postgres"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
       "enabled": false
     },
     {
-      "description": "Vite + bundler ecosystem — never auto-merge. Even patch bumps can quietly swap or update the underlying bundler (rolldown is on a 1.0.0-rc.* line that ships breaking changes between rcs) and surface runtime regressions that lint/typecheck/unit tests can't catch. Driven by a past incident in this repo where a vite 8.x patch bump landed via auto-merge despite an E2E failure on the renovate PR run (see #1427). Manual review + green E2E on the bump PR is required.",
+      "description": "Vite + bundler ecosystem \u2014 never auto-merge. Even patch bumps can quietly swap or update the underlying bundler (rolldown is on a 1.0.0-rc.* line that ships breaking changes between rcs) and surface runtime regressions that lint/typecheck/unit tests can't catch. Driven by a past incident in this repo where a vite 8.x patch bump landed via auto-merge despite an E2E failure on the renovate PR run (see #1427). Manual review + green E2E on the bump PR is required.",
       "matchPackageNames": [
         "vite",
         "@vitejs/plugin-react",
@@ -101,16 +144,41 @@
       "automerge": false
     }
   ],
-  "postUpdateOptions": ["gomodTidy", "npmDedupe"],
+  "postUpdateOptions": [
+    "gomodTidy",
+    "npmDedupe"
+  ],
   "lockFileMaintenance": {
     "enabled": true,
-    "schedule": ["before 6am on monday"]
+    "schedule": [
+      "before 6am on monday"
+    ]
   },
-  "labels": ["dependencies"],
-  "assignees": ["denisgcm"],
-  "reviewers": ["denisgcm"],
+  "labels": [
+    "dependencies"
+  ],
+  "assignees": [
+    "denisgcm"
+  ],
+  "reviewers": [
+    "denisgcm"
+  ],
   "prConcurrentLimit": 10,
   "prHourlyLimit": 2,
   "commitMessagePrefix": "chore(deps):",
-  "semanticCommits": "enabled"
+  "semanticCommits": "enabled",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The golangci-lint pin lives in the vars action, which go-lint.yml and copilot-setup-steps.yml both read, so it is bumped in one place (#1818).",
+      "managerFilePatterns": [
+        "/^\\.github/actions/vars/action\\.yml$/"
+      ],
+      "matchStrings": [
+        "GOLANGCI_LINT_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "golangci/golangci-lint"
+    }
+  ]
 }
