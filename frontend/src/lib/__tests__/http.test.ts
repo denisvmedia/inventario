@@ -31,6 +31,9 @@ import { http as msw, HttpResponse } from "msw"
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
 beforeEach(() => {
+  // jsdom has no Web Locks; a test that stubbed one must not leak it into the
+  // next, which asserts the fallback path.
+  Reflect.deleteProperty(navigator as object, "locks")
   clearAuth()
   clearBackofficeAuth()
   __resetGroupContextForTests()
@@ -679,7 +682,109 @@ describe("401 flow", () => {
     expect(r1.ok).toBe("first")
     expect(r2.ok).toBe("second")
   })
+
+  // #2166: tabs share one access token in localStorage, so on a simultaneous
+  // expiry two of them present the same refresh cookie. The first rotates and
+  // revokes that row; the second is then replaying a revoked row, which reuse
+  // detection reads as theft and answers by revoking every session the user
+  // has. Both tabs land on /login.
+  //
+  // The lock callback here stands in for having queued behind a peer that
+  // rotated while we waited — the window the lock exists to close.
+  it("adopts a peer tab's token rather than replaying the cookie it rotated", async () => {
+    setAccessToken("shared-expiring-token")
+    setCurrentGroupSlug("household")
+    let refreshCalls = 0
+    let attempts = 0
+    server.use(
+      msw.get(api("/g/household/locations"), () => {
+        attempts++
+        if (attempts === 1) return HttpResponse.json(null, { status: 401 })
+        return HttpResponse.json({ ok: "adopted" })
+      }),
+      msw.post(api("/auth/refresh"), () => {
+        refreshCalls++
+        return HttpResponse.json({ access_token: "our-own-refresh" })
+      })
+    )
+    withStubbedWebLocks(() => setAccessToken("peer-rotated-token"))
+
+    const res = await http.get<{ ok: string }>("/locations")
+
+    expect(res.ok).toBe("adopted")
+    expect(refreshCalls).toBe(0)
+    expect(getAccessToken()).toBe("peer-rotated-token")
+  })
+
+  // The same lock, with no peer having rotated: the token is unchanged, so the
+  // tab does its own refresh exactly as before.
+  it("refreshes normally when no peer rotated while it held the lock", async () => {
+    setAccessToken("expired")
+    setCurrentGroupSlug("household")
+    let refreshCalls = 0
+    let attempts = 0
+    server.use(
+      msw.get(api("/g/household/locations"), () => {
+        attempts++
+        if (attempts === 1) return HttpResponse.json(null, { status: 401 })
+        return HttpResponse.json({ ok: "refreshed" })
+      }),
+      msw.post(api("/auth/refresh"), () => {
+        refreshCalls++
+        return HttpResponse.json({ access_token: "fresh" })
+      })
+    )
+    withStubbedWebLocks(() => {})
+
+    const res = await http.get<{ ok: string }>("/locations")
+
+    expect(res.ok).toBe("refreshed")
+    expect(refreshCalls).toBe(1)
+    expect(getAccessToken()).toBe("fresh")
+  })
+
+  // Without the API — an older browser — the behavior is what it was: a
+  // per-tab refresh, and the race stays possible.
+  it("falls back to a plain refresh where Web Locks is unavailable", async () => {
+    setAccessToken("expired")
+    setCurrentGroupSlug("household")
+    let refreshCalls = 0
+    let attempts = 0
+    server.use(
+      msw.get(api("/g/household/locations"), () => {
+        attempts++
+        if (attempts === 1) return HttpResponse.json(null, { status: 401 })
+        return HttpResponse.json({ ok: "no-locks" })
+      }),
+      msw.post(api("/auth/refresh"), () => {
+        refreshCalls++
+        return HttpResponse.json({ access_token: "fresh" })
+      })
+    )
+    expect((navigator as { locks?: unknown }).locks).toBeUndefined()
+
+    const res = await http.get<{ ok: string }>("/locations")
+
+    expect(res.ok).toBe("no-locks")
+    expect(refreshCalls).toBe(1)
+  })
 })
+
+// withStubbedWebLocks installs a navigator.locks whose request() runs
+// beforeCallback first, so a test can say what a peer tab did while this one
+// was queued. jsdom ships no Web Locks, so the global beforeEach clears it
+// again rather than each caller restoring it.
+function withStubbedWebLocks(beforeCallback: () => void) {
+  Object.defineProperty(navigator, "locks", {
+    configurable: true,
+    value: {
+      request: async <T>(_name: string, fn: () => Promise<T>): Promise<T> => {
+        beforeCallback()
+        return fn()
+      },
+    },
+  })
+}
 
 describe("impersonation auto-expiry (#1757)", () => {
   it("a 401 with a return-slot set recovers via POST /admin/impersonation/end, not /auth/refresh", async () => {
