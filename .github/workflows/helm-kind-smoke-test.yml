@@ -85,6 +85,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: resolve-build
     timeout-minutes: 30
+    # Nothing to smoke-test when docker.yml built no image for this commit.
+    # An empty reference used to reach `docker pull` and fail there with
+    # `manifest unknown`, which reads like a broken build rather than like a
+    # commit that needs none.
+    if: needs.resolve-build.outputs.built == 'true'
 
     strategy:
       # Report both arrangements, not just the first to break.
@@ -316,7 +321,7 @@ jobs:
           PF_PID=$!
           trap 'kill "$PF_PID" 2>/dev/null || true' EXIT
 
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3333/readyz > /dev/null; then
               echo "Inventario is ready"
               break

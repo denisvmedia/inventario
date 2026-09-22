@@ -150,10 +150,14 @@ jobs:
           case "$RESOLVE_RESULT" in
             success)
               if [ -z "$IMAGE" ]; then
-                echo "::error::The image resolver succeeded without naming an image."
-                exit 1
+                # docker.yml built nothing for this commit, so there is no
+                # image to test against — the same verdict a path-filter skip
+                # gives, arrived at one step later.
+                echo "::notice::docker.yml published no image for this commit; nothing to run against."
+                echo "run=false" >> "$GITHUB_OUTPUT"
+              else
+                echo "run=true" >> "$GITHUB_OUTPUT"
               fi
-              echo "run=true" >> "$GITHUB_OUTPUT"
               ;;
             skipped)
               # docker.yml builds nothing for this diff, so there is no image
@@ -448,7 +452,7 @@ jobs:
           nohup ./bin/inventario run > /tmp/inventario.log 2>&1 &
           echo $! > /tmp/inventario.pid
           echo "Waiting for http://localhost:3333/readyz..."
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             if curl -sf http://localhost:3333/readyz > /dev/null; then
               echo "Ready"
               exit 0
