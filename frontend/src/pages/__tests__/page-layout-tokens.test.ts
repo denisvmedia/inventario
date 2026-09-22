@@ -56,7 +56,6 @@ const SPECIAL_PURPOSE_PAGES = new Set<string>([
   "MaintenancePage.tsx",
   "NoGroupPage.tsx",
   "NotFound.tsx",
-  "Placeholder.tsx",
   "UnexpectedErrorPage.tsx",
   "RootRedirect.tsx",
   // Anonymous first-item flow (#1988): a full-screen centered hero CTA and a

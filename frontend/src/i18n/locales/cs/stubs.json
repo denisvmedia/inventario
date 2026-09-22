@@ -1,38 +1,10 @@
 {
-  "areaDetail": "Oblast",
-  "areaEdit": "Upravit oblast",
-  "backup": "Záloha",
-  "commodities": "Položky",
-  "commodityDetail": "Položka",
-  "commodityEdit": "Upravit položku",
-  "commodityNew": "Nová položka",
-  "commodityPrint": "Vytisknout položku",
-  "exportDetail": "Export",
-  "exportImport": "Import",
-  "exportNew": "Nový export",
-  "exportRestore": "Obnovit",
-  "exports": "Exporty",
-  "fileDetail": "Soubor",
-  "fileEdit": "Upravit soubor",
-  "fileNew": "Nahrát soubory",
-  "files": "Soubory",
   "forgotPassword": "Zapomenuté heslo",
-  "groupCreate": "Vytvořit skupinu",
-  "groupSettings": "Nastavení skupiny",
-  "helpCenter": "Centrum nápovědy",
   "inviteAccept": "Přijmout pozvánku",
-  "locationDetail": "Umístění",
-  "locationEdit": "Upravit umístění",
-  "locationNew": "Nové umístění",
-  "locations": "Umístění",
   "login": "Přihlásit se",
-  "members": "Členové",
   "noGroup": "Žádná skupina",
-  "plans": "Tarify",
-  "profile": "Profil",
   "register": "Vytvořit účet",
   "resetPassword": "Obnovit heslo",
-  "search": "Hledat",
   "surfaces": {
     "activeSessions": {
       "description": "Zobrazte a odvolejte zařízení přihlášená k vašemu účtu.",
@@ -91,8 +63,5 @@
       "title": "Novinky"
     }
   },
-  "tags": "Štítky",
-  "verifyEmail": "Ověřit e-mail",
-  "warranties": "Záruky",
-  "whatsNew": "Novinky"
+  "verifyEmail": "Ověřit e-mail"
 }

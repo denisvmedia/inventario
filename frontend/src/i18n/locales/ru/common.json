@@ -11,7 +11,6 @@
     "save": "Сохранить"
   },
   "brand": "Inventario",
-  "comingSoon": "Скоро будет доступно.",
   "documentTitle": "{{title}} · {{brand}}",
   "errors": {
     "generic": "Что-то пошло не так"

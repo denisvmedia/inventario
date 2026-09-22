@@ -11,7 +11,6 @@
     "save": "Save"
   },
   "brand": "Inventario",
-  "comingSoon": "Coming soon.",
   "documentTitle": "{{title}} · {{brand}}",
   "errors": {
     "generic": "Something went wrong"
