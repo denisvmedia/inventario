@@ -10,6 +10,7 @@ import (
 	"go.5x5.cz/inventario/cmd/internal/command"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
 	"go.5x5.cz/inventario/internal/defaults"
+	"go.5x5.cz/inventario/internal/filekit"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/services"
 	"go.5x5.cz/inventario/services/admin"
@@ -125,6 +126,8 @@ func (c *Command) deleteTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 	if uploadLocation == "" {
 		uploadLocation = defaults.GetUploadLocation()
 	}
+	// A Windows path is written `file://D:\...`, which url.Parse rejects (#251).
+	uploadLocation = filekit.NormalizeFileURL(uploadLocation)
 	adminService.SetFileService(services.NewFileService(adminService.FactorySet(), uploadLocation))
 
 	// Find the tenant to delete

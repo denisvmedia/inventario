@@ -2,7 +2,9 @@ package filekit_test
 
 import (
 	"fmt"
+	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,6 +124,85 @@ func TestUploadFileName_DotsInTheName(t *testing.T) {
 	for _, tc := range tests {
 		c.Run(tc.in, func(c *qt.C) {
 			c.Assert(filekit.UploadFileName(tc.in), qt.Equals, tc.want)
+		})
+	}
+}
+
+// #251: `--upload-location file://D:\Work\inventario/uploads?create_dir=1`,
+// which is what the Makefile builds on Windows, does not parse: url.Parse
+// reads `D` as the host and `:\Work\inventario` as its port.
+func TestNormalizeFileURL(t *testing.T) {
+	c := qt.New(t)
+
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "windows path with backslashes, as the Makefile writes it",
+			in:   `file://D:\Work\inventario/uploads?create_dir=1`,
+			want: "file:///D:/Work/inventario/uploads?create_dir=1",
+		},
+		{
+			// Parses, but with D: as the host, so the drive is dropped.
+			name: "windows path already using forward slashes",
+			in:   "file://D:/Work/inventario/uploads?create_dir=1",
+			want: "file:///D:/Work/inventario/uploads?create_dir=1",
+		},
+		{
+			name: "windows path already in the right shape",
+			in:   "file:///D:/Work/inventario/uploads?create_dir=1",
+			want: "file:///D:/Work/inventario/uploads?create_dir=1",
+		},
+		{
+			name: "lower-case drive letter",
+			in:   `file://c:\uploads`,
+			want: "file:///c:/uploads",
+		},
+		{
+			name: "posix absolute path is untouched",
+			in:   "file:///srv/uploads?create_dir=1",
+			want: "file:///srv/uploads?create_dir=1",
+		},
+		{
+			name: "posix relative path is untouched",
+			in:   "file://./uploads?create_dir=1",
+			want: "file://./uploads?create_dir=1",
+		},
+		{
+			// A POSIX directory may legitimately contain a backslash.
+			name: "backslash in a posix path is not a separator",
+			in:   `file:///srv/odd\name/uploads`,
+			want: `file:///srv/odd\name/uploads`,
+		},
+		{
+			name: "another scheme is untouched",
+			in:   "s3://my-bucket?region=eu-central-1",
+			want: "s3://my-bucket?region=eu-central-1",
+		},
+		{
+			name: "empty",
+			in:   "",
+			want: "",
+		},
+	} {
+		c.Run(tc.name, func(c *qt.C) {
+			got := filekit.NormalizeFileURL(tc.in)
+			c.Assert(got, qt.Equals, tc.want)
+
+			// Whatever comes out has to parse, and has to keep the drive in
+			// the path rather than in the authority.
+			u, err := url.Parse(got)
+			if tc.in == "" {
+				return
+			}
+			c.Assert(err, qt.IsNil, qt.Commentf("%q does not parse", got))
+			if strings.Contains(tc.in, ":\\") || strings.Contains(tc.in, "D:/") || strings.Contains(tc.in, "c:") {
+				c.Check(u.Host, qt.Equals, "", qt.Commentf("drive letter leaked into the authority of %q", got))
+				c.Check(strings.HasPrefix(u.Path, "/D:/") || strings.HasPrefix(u.Path, "/c:/"), qt.IsTrue,
+					qt.Commentf("path is %q", u.Path))
+			}
 		})
 	}
 }
