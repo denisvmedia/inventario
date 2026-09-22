@@ -796,8 +796,7 @@ func (api *groupsAPI) createInvite(w http.ResponseWriter, r *http.Request) {
 		// MaxBytesReader returns *http.MaxBytesError on overflow — map
 		// that to 413; anything else (transient network read failure)
 		// stays a 422 body-parse error.
-		var maxErr *http.MaxBytesError
-		if errors.As(readErr, &maxErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](readErr); ok {
 			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
