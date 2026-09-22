@@ -1161,6 +1161,11 @@ type RestoreStepRegistry interface {
 	// ListByRestoreOperation returns all restore steps for a restore operation
 	ListByRestoreOperation(ctx context.Context, restoreOperationID string) ([]*models.RestoreStep, error)
 
+	// ListByRestoreOperations returns the steps of several operations grouped
+	// by operation id. Listing them one at a time while iterating the
+	// operations nests a query inside an open cursor (#2469).
+	ListByRestoreOperations(ctx context.Context, restoreOperationIDs []string) (map[string][]models.RestoreStep, error)
+
 	// DeleteByRestoreOperation deletes all restore steps for a restore operation
 	DeleteByRestoreOperation(ctx context.Context, restoreOperationID string) error
 }

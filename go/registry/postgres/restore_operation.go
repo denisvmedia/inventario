@@ -96,19 +96,18 @@ func (r *RestoreOperationRegistry) List(ctx context.Context) ([]*models.RestoreO
 
 	reg := r.newSQLRegistry()
 
-	// Query the database for all restore operations (atomic operation)
+	// Drain the cursor before touching the steps. Loading them inside this
+	// loop opens a second transaction per row while this one is still open,
+	// so one List holds two connections for its whole duration (#2469).
 	for operation, err := range reg.Scan(ctx) {
 		if err != nil {
 			return nil, errxtrace.Wrap("failed to list restore operations", err)
 		}
-
-		// Load associated steps for each operation
-		err = r.loadSteps(ctx, &operation)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to load steps for operation", err)
-		}
-
 		operations = append(operations, &operation)
+	}
+
+	if err := r.attachSteps(ctx, operations); err != nil {
+		return nil, err
 	}
 
 	return operations, nil
@@ -229,15 +228,42 @@ func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID st
 		if err != nil {
 			return nil, errxtrace.Wrap("failed to list restore operations by export", err)
 		}
-
-		// Load associated steps for each operation
-		err = r.loadSteps(ctx, &operation)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to load steps for operation", err)
-		}
-
 		operations = append(operations, &operation)
 	}
 
+	if err := r.attachSteps(ctx, operations); err != nil {
+		return nil, err
+	}
+
 	return operations, nil
+}
+
+// attachSteps fills in Steps for a drained set of operations with one query,
+// so the cost is a single round trip rather than one per operation.
+func (r *RestoreOperationRegistry) attachSteps(ctx context.Context, operations []*models.RestoreOperation) error {
+	if len(operations) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(operations))
+	for _, operation := range operations {
+		ids = append(ids, operation.ID)
+	}
+
+	byOperation, err := r.restoreStepRegistry.ListByRestoreOperations(ctx, ids)
+	if err != nil {
+		return errxtrace.Wrap("failed to load steps for operations", err)
+	}
+
+	for _, operation := range operations {
+		// Never nil, so a caller ranging over Steps of an operation without
+		// any does not have to tell "none" from "not loaded".
+		steps := byOperation[operation.ID]
+		if steps == nil {
+			steps = []models.RestoreStep{}
+		}
+		operation.Steps = steps
+	}
+
+	return nil
 }

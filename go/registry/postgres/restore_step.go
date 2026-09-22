@@ -182,6 +182,24 @@ func (r *RestoreStepRegistry) ListByRestoreOperation(ctx context.Context, restor
 	return steps, nil
 }
 
+// ListByRestoreOperations groups the steps of several operations in one
+// query. Calling ListByRestoreOperation per operation while iterating those
+// operations nests a transaction inside an open cursor, which holds two
+// connections for the whole walk (#2469).
+func (r *RestoreStepRegistry) ListByRestoreOperations(ctx context.Context, operationIDs []string) (map[string][]models.RestoreStep, error) {
+	byOperation := make(map[string][]models.RestoreStep, len(operationIDs))
+
+	reg := r.newSQLRegistry()
+	for step, err := range reg.ScanByFieldIn(ctx, "restore_operation_id", operationIDs) {
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to list restore steps by operations", err)
+		}
+		byOperation[step.RestoreOperationID] = append(byOperation[step.RestoreOperationID], step)
+	}
+
+	return byOperation, nil
+}
+
 func (r *RestoreStepRegistry) DeleteByRestoreOperation(ctx context.Context, restoreOperationID string) error {
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {

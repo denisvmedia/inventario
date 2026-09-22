@@ -86,6 +86,25 @@ func (r *RLSGroupRepository[T, P]) ScanByField(ctx context.Context, field FieldV
 	}
 }
 
+func (r *RLSGroupRepository[T, P]) ScanByFieldIn(ctx context.Context, field string, values []string) iter.Seq2[T, error] {
+	return func(yield func(T, error) bool) {
+		tx, err := r.beginTx(ctx)
+		if err != nil {
+			var zero T
+			yield(zero, err)
+			return
+		}
+		defer tx.Rollback()
+
+		txreg := NewTxRegistry[T](tx, r.table)
+		for entity, err := range txreg.ScanByFieldIn(ctx, field, values) {
+			if !yield(entity, err) {
+				return
+			}
+		}
+	}
+}
+
 func (r *RLSGroupRepository[T, P]) ScanOneByField(ctx context.Context, field FieldValue, entity *T) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
