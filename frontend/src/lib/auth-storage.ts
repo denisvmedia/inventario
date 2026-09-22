@@ -1,5 +1,17 @@
 // Persistent auth-credential storage. Keys are stable across releases so
 // sessions survive client upgrades.
+//
+// The access token lives in localStorage rather than in a module variable, and
+// that is deliberate (#2479, #967 H7). An in-memory token dies with the tab,
+// so every reload and every new tab would have to spend a refresh round trip
+// before it could render anything.
+//
+// What makes the trade-off acceptable is where the durable credential is: the
+// refresh token is an httpOnly cookie that script cannot read. So script with
+// access to localStorage gets an access token whose exposure ends with its
+// TTL, not a session it can keep renewing. Moving the access token in-memory
+// would not change that — it would only shrink an already-bounded window, at
+// the cost of a refresh on every page load.
 const ACCESS_TOKEN_KEY = "inventario_token"
 const USER_KEY = "inventario_user"
 const CSRF_KEY = "inventario_csrf_token"

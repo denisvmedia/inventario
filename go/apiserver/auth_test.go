@@ -2479,3 +2479,91 @@ func TestAuthAPI_IsSystemAdminWireField(t *testing.T) {
 		c.Assert(body.User.IsSystemAdmin, qt.IsTrue)
 	})
 }
+
+// TestAuthAPI_Refresh_SuccessWritesAnAuditRow pins #2479 (#967 H5): login,
+// logout, MFA and reuse detection each leave a durable row, but a successful
+// rotation left none — so a session kept alive for weeks through rotation had
+// nothing between its login and its logout.
+func TestAuthAPI_Refresh_SuccessWritesAnAuditRow(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-refresh-audit", "tenant-refresh-audit"
+
+	refreshReg := memreg.NewRefreshTokenRegistry()
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+	auditReg := memreg.NewAuditLogRegistry()
+	auditSvc := services.NewAuditService(auditReg)
+	original := seedRefreshRow(t, refreshReg, userID, tenantID)
+
+	params := apiserver.AuthParams{
+		UserRegistry:         userReg,
+		RefreshTokenRegistry: refreshReg,
+		AuditService:         auditSvc,
+		JWTSecret:            jwtSecret,
+	}
+
+	resp := postRefresh(params, original)
+	c.Assert(resp.Code, qt.Equals, http.StatusOK)
+
+	logs, err := auditReg.List(context.Background())
+	c.Assert(err, qt.IsNil)
+
+	refreshRows := 0
+	for _, l := range logs {
+		if l.Action != "refresh" {
+			continue
+		}
+		refreshRows++
+		c.Check(l.Success, qt.IsTrue)
+		c.Check(l.UserID, qt.IsNotNil)
+		if l.UserID != nil {
+			c.Check(*l.UserID, qt.Equals, userID)
+		}
+	}
+	c.Assert(refreshRows, qt.Equals, 1, qt.Commentf("one rotation, one row"))
+
+	// A second rotation adds one more, so the trail follows the session rather
+	// than recording only its first hop.
+	rotated := refreshCookieValue(resp)
+	c.Assert(rotated, qt.Not(qt.Equals), "")
+	second := postRefresh(params, rotated)
+	c.Assert(second.Code, qt.Equals, http.StatusOK)
+
+	logs, err = auditReg.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	refreshRows = 0
+	for _, l := range logs {
+		if l.Action == "refresh" {
+			refreshRows++
+		}
+	}
+	c.Assert(refreshRows, qt.Equals, 2)
+}
+
+// A refresh that fails must not leave a success row behind.
+func TestAuthAPI_Refresh_FailureWritesNoRefreshRow(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	const userID, tenantID = "user-refresh-audit-fail", "tenant-refresh-audit-fail"
+
+	refreshReg := memreg.NewRefreshTokenRegistry()
+	userReg := &mockUserRegistryForAuth{users: map[string]*models.User{userID: newRefreshTestUser(userID, tenantID)}}
+	auditReg := memreg.NewAuditLogRegistry()
+	auditSvc := services.NewAuditService(auditReg)
+
+	params := apiserver.AuthParams{
+		UserRegistry:         userReg,
+		RefreshTokenRegistry: refreshReg,
+		AuditService:         auditSvc,
+		JWTSecret:            jwtSecret,
+	}
+
+	resp := postRefresh(params, "not-a-real-refresh-token")
+	c.Assert(resp.Code, qt.Equals, http.StatusUnauthorized)
+
+	logs, err := auditReg.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	for _, l := range logs {
+		c.Check(l.Action, qt.Not(qt.Equals), "refresh")
+	}
+}
