@@ -302,3 +302,109 @@ func TestMigrator_Apply_ContextCancellation_UnhappyPath(t *testing.T) {
 	err := migrator.Apply(ctx, args)
 	c.Assert(err, qt.IsNotNil, qt.Commentf("should fail with cancelled context"))
 }
+
+// #2428: the guards compared a SQL string literal against a stored role name.
+// CREATE USER interpolates the name unquoted, so PostgreSQL folded MyApp to
+// myapp while the guard kept looking for MyApp — always false, so CREATE USER
+// always ran. That broke the *first* apply, because the background-worker name
+// defaults to the operational one: the second block tried to create a role the
+// first had just made, and the single transaction rolled the whole file back.
+func TestMigrator_Apply_MixedCaseUsernameIsIdempotent(t *testing.T) {
+	dsn := getPostgresDSNorSkip(t)
+	c := qt.New(t)
+
+	args := bootstrap.ApplyArgs{
+		DSN: dsn,
+		Template: bootstrap.TemplateData{
+			Username:                    "MixedCaseApp",
+			UsernameForMigrations:       "MixedCaseMigrator",
+			UsernameForBackgroundWorker: "MixedCaseApp",
+		},
+	}
+
+	db, err := sql.Open("postgres", dsn)
+	c.Assert(err, qt.IsNil)
+	defer db.Close()
+
+	// Roles live in the cluster, not the database, so a test that leaves one
+	// behind changes what the next run is testing.
+	dropLoginRole(c, db, "mixedcaseapp")
+	dropLoginRole(c, db, "mixedcasemigrator")
+	defer func() {
+		dropLoginRole(c, db, "mixedcaseapp")
+		dropLoginRole(c, db, "mixedcasemigrator")
+	}()
+
+	err = bootstrap.New().Apply(context.Background(), args)
+	c.Assert(err, qt.IsNil, qt.Commentf("the first apply is the one that used to fail"))
+	err = bootstrap.New().Apply(context.Background(), args)
+	c.Assert(err, qt.IsNil, qt.Commentf("and the second must be a no-op"))
+
+	// The roles exist under the names PostgreSQL actually stores, which is what
+	// the operator has to put in the application DSN.
+	for _, role := range []string{"mixedcaseapp", "mixedcasemigrator"} {
+		var exists bool
+		err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1)", role).Scan(&exists)
+		c.Assert(err, qt.IsNil)
+		c.Check(exists, qt.IsTrue, qt.Commentf("role %s", role))
+	}
+	// And not under the spelling that was passed in.
+	var unfolded bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = 'MixedCaseApp')").Scan(&unfolded)
+	c.Assert(err, qt.IsNil)
+	c.Check(unfolded, qt.IsFalse)
+}
+
+// pg_user lists login roles only. A NOLOGIN role holding the name was invisible
+// to the old guard, so CREATE USER collided and took the whole file down with
+// it — nothing provisioned at all. Reading pg_roles turns that into a skip, so
+// the rest of the bootstrap still runs and the operator can grant LOGIN.
+func TestMigrator_Apply_SurvivesANoLoginRoleHoldingTheName(t *testing.T) {
+	dsn := getPostgresDSNorSkip(t)
+	c := qt.New(t)
+
+	db, err := sql.Open("postgres", dsn)
+	c.Assert(err, qt.IsNil)
+	defer db.Close()
+
+	const name = "nologin_squatter"
+	dropLoginRole(c, db, name)
+	_, err = db.Exec("CREATE ROLE " + name + " WITH NOLOGIN")
+	c.Assert(err, qt.IsNil)
+	defer dropLoginRole(c, db, name)
+
+	err = bootstrap.New().Apply(context.Background(), bootstrap.ApplyArgs{
+		DSN: dsn,
+		Template: bootstrap.TemplateData{
+			Username:                    name,
+			UsernameForMigrations:       name,
+			UsernameForBackgroundWorker: name,
+		},
+	})
+	c.Assert(err, qt.IsNil, qt.Commentf("a role already holding the name must not roll the file back"))
+
+	// The service roles the file also creates are there, which is the point:
+	// the failure used to leave the database untouched.
+	var exists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = 'inventario_app')").Scan(&exists)
+	c.Assert(err, qt.IsNil)
+	c.Check(exists, qt.IsTrue)
+}
+
+// dropLoginRole removes a role the way bootstrap leaves it: DROP ROLE refuses
+// while privileges are still granted to the name, and bootstrap grants it the
+// service roles, so the privileges go first.
+func dropLoginRole(c *qt.C, db *sql.DB, name string) {
+	c.Helper()
+
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1)", name).Scan(&exists)
+	c.Assert(err, qt.IsNil)
+	if !exists {
+		return
+	}
+	_, err = db.Exec("DROP OWNED BY " + name)
+	c.Assert(err, qt.IsNil)
+	_, err = db.Exec("DROP ROLE " + name)
+	c.Assert(err, qt.IsNil)
+}

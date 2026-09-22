@@ -12,10 +12,16 @@
 -- IMPORTANT: Execute these statements with a privileged database user
 --
 
+-- Each guard reads pg_roles rather than pg_user, and folds the name: pg_user
+-- lists login roles only, so a NOLOGIN role of the same name is invisible to it
+-- and the CREATE USER below collides anyway; and CREATE USER interpolates the
+-- name unquoted, so PostgreSQL stores MyApp as myapp while a bare string
+-- literal would keep looking for MyApp. #2428
+
 -- Create operational user if it doesn't exist
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_user WHERE usename = '{{.Username}}') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = lower('{{.Username}}')) THEN
         CREATE USER {{.Username}} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION;
         RAISE NOTICE 'Created user {{.Username}}';
     ELSE
@@ -26,7 +32,7 @@ END $$;
 -- Create migration user if it doesn't exist
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_user WHERE usename = '{{.UsernameForMigrations}}') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = lower('{{.UsernameForMigrations}}')) THEN
         CREATE USER {{.UsernameForMigrations}} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION;
         RAISE NOTICE 'Created user {{.UsernameForMigrations}}';
     ELSE
@@ -37,7 +43,7 @@ END $$;
 -- Create background worker user if it doesn't exist
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_user WHERE usename = '{{.UsernameForBackgroundWorker}}') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = lower('{{.UsernameForBackgroundWorker}}')) THEN
         CREATE USER {{.UsernameForBackgroundWorker}} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION;
         RAISE NOTICE 'Created user {{.UsernameForBackgroundWorker}}';
     ELSE
