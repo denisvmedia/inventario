@@ -25,8 +25,7 @@ func Move(fs afero.Fs, src, dst string) error {
 // Platform-independent check for cross-device error.
 func isCrossDeviceError(err error) bool {
 	// Unix: syscall.EXDEV, Windows: ERROR_NOT_SAME_DEVICE (17)
-	var errno syscall.Errno
-	if errors.As(err, &errno) {
+	if errno, ok := errors.AsType[syscall.Errno](err); ok {
 		return errno == syscall.EXDEV || errno == 17
 	}
 	return false

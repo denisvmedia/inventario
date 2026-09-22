@@ -14,7 +14,7 @@ func ZeroOfType[T any](t T) (zero T) {
 	if val.Kind() == reflect.Pointer && val.IsNil() {
 		// Create a new instance of the pointed-to type
 		newVal := reflect.New(val.Type().Elem())
-		result, _ := newVal.Interface().(T)
+		result, _ := reflect.TypeAssert[T](newVal)
 		return result
 	}
 

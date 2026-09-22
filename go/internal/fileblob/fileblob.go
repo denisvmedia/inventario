@@ -52,7 +52,7 @@
 //   - Attributes: os.FileInfo
 //   - CopyOptions.BeforeCopy: afero.File
 //   - WriterOptions.BeforeWrite: afero.File
-package fileblob // import "gocloud.dev/blob/fileblob"
+package fileblob
 
 import (
 	"context"

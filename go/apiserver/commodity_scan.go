@@ -366,8 +366,7 @@ func readPartBounded(r io.Reader, maxBytes int64) ([]byte, error) {
 // sentinel (400). The overall body-cap check happens earlier in handleScan
 // via bufferBody so the handler can keep sole control over the 413 response.
 func classifyMultipartReadErr(err error) error {
-	var oversized errOversizedPart
-	if errors.As(err, &oversized) {
+	if oversized, ok := errors.AsType[errOversizedPart](err); ok {
 		return oversized
 	}
 	return errBadMultipart{cause: err}
@@ -429,8 +428,7 @@ func (api *commodityScanAPI) recordOversizeAudit(ctx context.Context, tenantID, 
 // to the generic 500 path via renderEntityError so they're visible in
 // logs.
 func renderScanError(w http.ResponseWriter, r *http.Request, err error) {
-	var bad errBadMultipart
-	if errors.As(err, &bad) {
+	if _, ok := errors.AsType[errBadMultipart](err); ok {
 		_ = badRequest(w, r, err)
 		return
 	}

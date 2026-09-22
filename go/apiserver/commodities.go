@@ -633,8 +633,7 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 			//     failures, …) → renderEntityError, which maps NotFound to
 			//     404 per the swagger contract and unknown errors to 500
 			//     instead of masking them as user input problems.
-			var verrs validation.Errors
-			if errors.As(err, &verrs) {
+			if _, ok := errors.AsType[validation.Errors](err); ok {
 				unprocessableEntityError(w, r, err)
 				return
 			}
