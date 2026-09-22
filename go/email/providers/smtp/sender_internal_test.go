@@ -246,17 +246,37 @@ func TestBuildMIMEMessage_ParsesAsValidEmail(t *testing.T) {
 	c.Assert(decoded, qt.Equals, "Подтвердите свою учётную запись Inventario")
 }
 
-// mimeHeaderValue returns the value of the first `key: ` header in the
-// header block (everything before the first blank line) of a raw message.
+// mimeHeaderValue returns one header's value, unfolding continuation lines the
+// way a mail parser does: a line beginning with WSP continues the previous one,
+// and the CRLF between them is removed while the WSP is kept.
 func mimeHeaderValue(c *qt.C, raw, key string) string {
 	headers, _, ok := strings.Cut(raw, "\r\n\r\n")
 	c.Assert(ok, qt.IsTrue)
+
+	var value strings.Builder
+	collecting := false
 	for line := range strings.SplitSeq(headers, "\r\n") {
+		if collecting {
+			if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+				value.WriteString(line)
+				continue
+			}
+			break
+		}
 		if v, found := strings.CutPrefix(line, key+": "); found {
-			return v
+			value.WriteString(v)
+			collecting = true
 		}
 	}
-	return ""
+	return value.String()
+}
+
+// mimeHeaderLines returns the physical lines of the header block, so a test can
+// assert on line lengths rather than on the unfolded value.
+func mimeHeaderLines(c *qt.C, raw string) []string {
+	headers, _, ok := strings.Cut(raw, "\r\n\r\n")
+	c.Assert(ok, qt.IsTrue)
+	return strings.Split(headers, "\r\n")
 }
 
 // #2143: the bodies go into the MIME structure unescaped, so a guessable
@@ -297,4 +317,117 @@ func mimeBoundaryOf(c *qt.C, raw string) string {
 	boundary := params["boundary"]
 	c.Assert(boundary, qt.Not(qt.Equals), "")
 	return boundary
+}
+
+// #2142: mime.WordEncoder splits a long value into several encoded-words but
+// joins them with a single space, so the Subject arrives as one logical line
+// however long it grows. A few hundred Cyrillic runes pass the RFC 5322 hard
+// limit of 998 octets, which a strict server may reject or truncate.
+func TestBuildMIMEMessage_FoldsLongSubject(t *testing.T) {
+	c := qt.New(t)
+
+	// Long enough to exceed 998 octets once encoded: measured at ~250 runes.
+	name := strings.Repeat("Кириллица ", 40)
+	subject := "Напоминание: " + strings.TrimSpace(name) + " просрочен"
+	raw := string(buildMIMEMessage(sender.Message{
+		From:    "noreply@example.com",
+		To:      "user@example.com",
+		Subject: subject,
+		Text:    "text",
+		HTML:    "<p>html</p>",
+	}))
+
+	// Unencoded, this subject would be one line well past the limit.
+	c.Assert(len("Subject: "+encodeSubject(subject)) > headerLineHardLimit, qt.IsTrue,
+		qt.Commentf("the fixture no longer reproduces the overflow"))
+
+	for _, line := range mimeHeaderLines(c, raw) {
+		c.Check(len(line) <= headerLineHardLimit, qt.IsTrue,
+			qt.Commentf("header line of %d octets exceeds the RFC 5322 limit", len(line)))
+	}
+
+	// Folding must be reversible, and by a real parser rather than by the
+	// helper above: net/mail unfolds the continuation lines, then the
+	// encoded-words decode back to the original.
+	msg, err := mail.ReadMessage(strings.NewReader(raw))
+	c.Assert(err, qt.IsNil)
+	decoded, err := new(mime.WordDecoder).DecodeHeader(msg.Header.Get("Subject"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(decoded, qt.Equals, subject)
+}
+
+// The ASCII path is not encoded at all, so it has no encoded-word boundaries —
+// it folds at the spaces already in the subject.
+func TestBuildMIMEMessage_FoldsLongASCIISubject(t *testing.T) {
+	c := qt.New(t)
+
+	subject := "Reminder: " + strings.TrimSpace(strings.Repeat("widget ", 200)) + " is overdue"
+	raw := string(buildMIMEMessage(sender.Message{
+		From:    "noreply@example.com",
+		To:      "user@example.com",
+		Subject: subject,
+		Text:    "text",
+		HTML:    "<p>html</p>",
+	}))
+
+	c.Assert(len("Subject: "+subject) > headerLineHardLimit, qt.IsTrue,
+		qt.Commentf("the fixture no longer reproduces the overflow"))
+	for _, line := range mimeHeaderLines(c, raw) {
+		c.Check(len(line) <= headerLineHardLimit, qt.IsTrue)
+	}
+	c.Assert(mimeHeaderValue(c, raw, "Subject"), qt.Equals, subject)
+}
+
+// A token with no space in it has no fold point. Nothing legal can be done
+// except cut it, and the cut must still leave the line inside the limit.
+func TestBuildMIMEMessage_TruncatesUnfoldableSubject(t *testing.T) {
+	c := qt.New(t)
+
+	raw := string(buildMIMEMessage(sender.Message{
+		From:    "noreply@example.com",
+		To:      "user@example.com",
+		Subject: strings.Repeat("A", 2000),
+		Text:    "text",
+		HTML:    "<p>html</p>",
+	}))
+
+	for _, line := range mimeHeaderLines(c, raw) {
+		c.Check(len(line) <= headerLineHardLimit, qt.IsTrue,
+			qt.Commentf("unfoldable header line of %d octets", len(line)))
+	}
+}
+
+// A subject that already fits stays on one line, so the common message is
+// byte-for-byte what it was.
+func TestBuildMIMEMessage_ShortSubjectIsNotFolded(t *testing.T) {
+	c := qt.New(t)
+
+	raw := string(buildMIMEMessage(sender.Message{
+		From:    "noreply@example.com",
+		To:      "user@example.com",
+		Subject: "Welcome to Inventario",
+		Text:    "text",
+		HTML:    "<p>html</p>",
+	}))
+	c.Assert(raw, qt.Contains, "Subject: Welcome to Inventario\r\n")
+}
+
+// foldHeader inserts CRLF before an existing space rather than replacing it,
+// so unfolding restores the value exactly — including runs of spaces, where
+// only one space of the run becomes the fold point.
+func TestFoldHeader_IsReversible(t *testing.T) {
+	c := qt.New(t)
+
+	for _, value := range []string{
+		"short",
+		strings.TrimSpace(strings.Repeat("word ", 400)),
+		strings.TrimSpace(strings.Repeat("a  b   c ", 200)),
+	} {
+		folded := foldHeader("Subject", value)
+		unfolded := strings.ReplaceAll(folded, "\r\n", "")
+		c.Check(unfolded, qt.Equals, "Subject: "+value)
+		for line := range strings.SplitSeq(folded, "\r\n") {
+			c.Check(len(line) <= headerLineHardLimit, qt.IsTrue)
+		}
+	}
 }

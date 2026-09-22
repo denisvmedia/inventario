@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"go.5x5.cz/inventario/email/sender"
 )
@@ -164,7 +165,8 @@ func buildMIMEMessage(message sender.Message) []byte {
 	// RFC 2047-encode the Subject so non-ASCII (cs/ru) subjects render
 	// correctly in mail clients; encodeSubject never emits a raw CRLF, so
 	// this also closes the header-injection vector for the Subject. #2139
-	fmt.Fprintf(&b, "Subject: %s\r\n", encodeSubject(sanitizeHeader(message.Subject)))
+	b.WriteString(foldHeader("Subject", encodeSubject(sanitizeHeader(message.Subject))))
+	b.WriteString("\r\n")
 	if strings.TrimSpace(message.ReplyTo) != "" {
 		fmt.Fprintf(&b, "Reply-To: %s\r\n", sanitizeHeader(message.ReplyTo))
 	}
@@ -213,4 +215,65 @@ func encodeSubject(s string) string {
 		return b
 	}
 	return q
+}
+
+// RFC 5322 2.1.1: a line must not exceed 998 octets excluding the CRLF, and
+// should stay within 78. mime.WordEncoder splits a long value into several
+// encoded-words but joins them with a single space, so the whole Subject
+// arrives as one logical line however long it grows — a commodity name of a
+// few hundred Cyrillic runes is enough to pass 998, and a strict server may
+// reject or truncate that. #2142
+const (
+	headerLineSoftLimit = 78
+	headerLineHardLimit = 998
+)
+
+// foldHeader renders "Name: value" as one or more physical lines, breaking at
+// the spaces that separate encoded-words (or plain words). Folding inserts
+// CRLF *before* an existing space, so unfolding at the receiver removes the
+// CRLF and leaves the value byte-identical — runs of spaces survive, because
+// only one space of a run becomes the fold point.
+//
+// A single token longer than a whole line cannot be folded and is truncated
+// on a rune boundary. Only the pure-ASCII path can produce one: encodeSubject
+// caps every encoded-word at 75 octets.
+func foldHeader(name, value string) string {
+	line := name + ": " + value
+	if len(line) <= headerLineSoftLimit {
+		return line
+	}
+
+	var b strings.Builder
+	b.Grow(len(line) + len(line)/headerLineSoftLimit*2 + 8)
+
+	// The space after the colon is not a fold point: breaking there would
+	// leave a line holding nothing but the field name.
+	start, lastSpace := 0, -1
+	for i := len(name) + 2; i < len(line); i++ {
+		if line[i] == ' ' && i > start+1 {
+			lastSpace = i
+		}
+		if i-start+1 > headerLineSoftLimit && lastSpace > start {
+			b.WriteString(line[start:lastSpace])
+			b.WriteString("\r\n")
+			// The space at lastSpace becomes the next line's leading WSP,
+			// which is what makes the fold reversible.
+			start, lastSpace = lastSpace, -1
+		}
+	}
+	b.WriteString(truncateToLimit(line[start:]))
+	return b.String()
+}
+
+// truncateToLimit cuts a physical line that has no fold point left down to the
+// hard limit, on a rune boundary so a multi-byte value cannot be split.
+func truncateToLimit(line string) string {
+	if len(line) <= headerLineHardLimit {
+		return line
+	}
+	cut := headerLineHardLimit
+	for cut > 0 && !utf8.RuneStart(line[cut]) {
+		cut--
+	}
+	return line[:cut]
 }
