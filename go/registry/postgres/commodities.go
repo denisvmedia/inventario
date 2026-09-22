@@ -294,18 +294,14 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s %s`, r.tableNames.Commodities(), whereClause)
-		if err := tx.QueryRowContext(ctx, countQuery, whereArgs...).Scan(&total); err != nil {
-			return errxtrace.Wrap("failed to count commodities", err)
-		}
-
 		dataArgs := append([]any{}, whereArgs...)
 		dataArgs = append(dataArgs, limit, offset)
 		dataQuery := fmt.Sprintf(`
-			SELECT * FROM %s
+			SELECT *, %s FROM %s
 			%s
 			%s
 			LIMIT $%d OFFSET $%d`,
+			totalCountColumn,
 			r.tableNames.Commodities(),
 			whereClause,
 			orderClause,
@@ -318,15 +314,28 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 		}
 		defer rows.Close()
 
+		total = totalUnknown
 		for rows.Next() {
-			var commodity models.Commodity
-			if err := rows.StructScan(&commodity); err != nil {
+			var row commodityPage
+			if err := rows.StructScan(&row); err != nil {
 				return errxtrace.Wrap("failed to scan commodity", err)
 			}
-			commodities = append(commodities, &commodity)
+			commodities = append(commodities, &row.Commodity)
+			total = row.TotalCount
+		}
+		if err := rows.Err(); err != nil {
+			return err
 		}
 
-		return rows.Err()
+		if total == totalUnknown {
+			countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s %s`, r.tableNames.Commodities(), whereClause)
+			total, err = countRows(ctx, tx, countQuery, whereArgs...)
+			if err != nil {
+				return errxtrace.Wrap("failed to count commodities", err)
+			}
+		}
+
+		return nil
 	})
 	if err != nil {
 		return nil, 0, errxtrace.Wrap("failed to list paginated commodities", err)
@@ -676,3 +685,9 @@ func (r *CommodityRegistry) getArea(ctx context.Context, tx *sqlx.Tx, areaID str
 // Legacy file-related methods (GetImages/GetManuals/GetInvoices) were removed
 // under #1421 alongside the `images`/`invoices`/`manuals` SQL tables they
 // queried. Use the unified FileRegistry filtered by linked_entity_meta.
+
+// commodityPage carries the window function's total alongside the row (#1032).
+type commodityPage struct {
+	models.Commodity
+	TotalCount int `db:"total_count"`
+}
