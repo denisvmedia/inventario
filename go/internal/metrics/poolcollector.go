@@ -116,8 +116,7 @@ func (c *PoolCollector) Collect(ch chan<- prometheus.Metric) {
 func RegisterPoolCollector(p PoolStatProvider) (unregister func()) {
 	coll := NewPoolCollector(p)
 	if err := prometheus.DefaultRegisterer.Register(coll); err != nil {
-		var already prometheus.AlreadyRegisteredError
-		if errors.As(err, &already) {
+		if _, ok := errors.AsType[prometheus.AlreadyRegisteredError](err); ok {
 			// Identical collector already present — its stats, not this
 			// pool's, will be exported. Surface it; see the LIMITATION note.
 			slog.Warn("db pool metrics collector already registered; " +
