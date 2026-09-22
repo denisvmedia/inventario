@@ -17,6 +17,13 @@ global:
 rule_files:
   - /etc/prometheus/rules/*.yml
 
+# Where a firing rule goes. Without this the rules evaluate and nothing
+# leaves the machine, which looks identical to "nothing is wrong" (#2574).
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
 scrape_configs:
   # Prometheus self-scrape — cheap sanity signal.
   - job_name: prometheus

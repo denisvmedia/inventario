@@ -6,10 +6,16 @@ on:
       - master
     paths:
       - 'helm/**'
+      - 'deploy/monitoring/**'
+      - 'scripts/test-alert-rules.sh'
+      - 'scripts/test-alert-routing.sh'
       - '.github/workflows/helm-lint.yml'
   pull_request:
     paths:
       - 'helm/**'
+      - 'deploy/monitoring/**'
+      - 'scripts/test-alert-rules.sh'
+      - 'scripts/test-alert-routing.sh'
       - '.github/workflows/helm-lint.yml'
 
 concurrency:
@@ -294,12 +300,33 @@ jobs:
             "/tmp/prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool" /usr/local/bin/promtool
           promtool --version
 
+      - name: Install amtool
+        # Pinned to the version docker-compose runs, and the one the script's
+        # Docker fallback uses.
+        env:
+          ALERTMANAGER_VERSION: 0.28.1
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/alertmanager.tar.gz \
+            "https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/alertmanager-${ALERTMANAGER_VERSION}.linux-amd64.tar.gz"
+          tar -xzf /tmp/alertmanager.tar.gz -C /tmp
+          sudo install -m 0755 \
+            "/tmp/alertmanager-${ALERTMANAGER_VERSION}.linux-amd64/amtool" /usr/local/bin/amtool
+          amtool --version
+
       - name: Unit-test the alert rules
         # The check below compares the alert SET between the chart and the dev
         # stack. This runs the expressions: a join written on the wrong label
         # produces an empty vector, at which point InventarioBackupStale can
         # never fire and InventarioBackupNeverRan fires forever (#2574).
         run: ./scripts/test-alert-rules.sh
+
+      - name: Check the alert routing
+        # And this runs the other half: an alert that fires and an alert that
+        # reaches someone are different claims. Fails on an alert that is not
+        # in the expected map, so adding one forces a decision about where it
+        # pages (#2574).
+        run: ./scripts/test-alert-routing.sh
 
       - name: Verify the monitoring resources render and the alert set matches
         run: |

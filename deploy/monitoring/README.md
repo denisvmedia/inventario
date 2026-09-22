@@ -2,7 +2,8 @@
 
 Opt-in observability stack for local/dev use, added in issue #843. The
 application always exposes Prometheus metrics at `/metrics`; this directory adds
-a Prometheus to scrape them and a Grafana with a pre-provisioned dashboard.
+a Prometheus to scrape them, an Alertmanager to route what fires, and a Grafana
+with a pre-provisioned dashboard.
 
 ## Quick start
 
@@ -10,11 +11,12 @@ a Prometheus to scrape them and a Grafana with a pre-provisioned dashboard.
 docker compose --profile monitoring up -d
 ```
 
-| Service    | URL                     | Notes                                   |
-| ---------- | ----------------------- | --------------------------------------- |
-| App        | http://localhost:3333   | `/metrics` is the scrape target         |
-| Prometheus | http://localhost:9090   | Status → Targets shows `inventario` UP  |
-| Grafana    | http://localhost:3000   | dashboard **Inventario / Overview**     |
+| Service      | URL                   | Notes                                    |
+| ------------ | --------------------- | ---------------------------------------- |
+| App          | http://localhost:3333 | `/metrics` is the scrape target          |
+| Prometheus   | http://localhost:9090 | Status → Targets shows `inventario` UP   |
+| Alertmanager | http://localhost:9093 | Status → Config; alerts land here        |
+| Grafana      | http://localhost:3000 | dashboard **Inventario / Overview**      |
 
 Grafana default login is `admin` / `admin` (override with `GRAFANA_ADMIN_USER` /
 `GRAFANA_ADMIN_PASSWORD`). Anonymous **Viewer** access is enabled for dev
@@ -41,6 +43,8 @@ deploy/monitoring/
 ├── prometheus/
 │   ├── prometheus.yml            # scrape config (job: inventario → inventario:3333)
 │   └── rules/inventario.rules.yml# recording rules + alerts (5xx ratio, p95, target down)
+├── alertmanager/
+│   └── alertmanager.yml          # routing + inhibition; receivers are yours to fill
 └── grafana/
     └── provisioning/
         ├── datasources/prometheus.yml   # Prometheus datasource (uid inventario-prometheus)
@@ -112,6 +116,65 @@ crucially, does not double-count when more than one `run all`/worker replica is
 scraped. (Counter/histogram panels — request rate, latency — correctly keep
 `sum(rate(...))`, since those aggregate per-process activity across the fleet.)
 
+## Alerting
+
+Prometheus evaluates the rules and hands whatever fires to Alertmanager at
+`alertmanager:9093`. Without that hand-off the rules still evaluate and nothing
+leaves the machine, which from the outside is indistinguishable from nothing
+being wrong.
+
+`alertmanager/alertmanager.yml` ships the routing and leaves the receivers
+empty, because a chart cannot know where your pages should go and a default
+that guesses is either wrong or ignored. Three names are referenced by the
+routes — `default`, `backups`, `critical` — so keep them or rename them in both
+places.
+
+What the routing does:
+
+- Anything matching `InventarioBackup.*` goes to `backups` with `group_wait: 0s`
+  and a 12-hour `repeat_interval`. There is nothing to batch a backup alert
+  with, and a backup that has not run is no more informative 30 seconds later.
+- Everything else at `severity: critical` goes to `critical`.
+- `InventarioBackupNeverRan` inhibits `InventarioBackupStale` within the same
+  `namespace`. A backup that has never run makes "the newest dump is old"
+  redundant — there is no newest dump — and both fire together on a fresh
+  install whose backup config is broken. The `namespace` equality matters: a
+  broken backup in one namespace must not silence a real one elsewhere.
+
+To fill in a receiver, add a `*_configs` block under its name:
+
+```yaml
+receivers:
+  - name: backups
+    slack_configs:
+      - api_url: https://hooks.slack.com/services/...
+        channel: "#ops"
+```
+
+Check it before restarting, and confirm the routing still does what you expect:
+
+```bash
+docker compose --profile monitoring exec alertmanager \
+  amtool check-config /etc/alertmanager/alertmanager.yml
+docker compose --profile monitoring exec alertmanager \
+  amtool config routes test --config.file=/etc/alertmanager/alertmanager.yml \
+  alertname=InventarioBackupStale severity=warning
+```
+
+Then prove the path end to end rather than assuming it, by posting an alert
+directly to Alertmanager and waiting for it to arrive wherever you sent it:
+
+```bash
+curl -s -XPOST http://localhost:9093/api/v2/alerts -H 'Content-Type: application/json' -d '[
+  {"labels":{"alertname":"InventarioBackupNeverRan","namespace":"default","severity":"critical"},
+   "annotations":{"summary":"delivery test, ignore"}}
+]'
+```
+
+A rule that fires and a page that arrives are different claims. The first is
+unit-tested (`scripts/test-alert-rules.sh`); only you can check the second,
+because it ends at a receiver this repository does not own.
+
 ## Kubernetes
 
 For cluster scraping see the chart's **Metrics & scraping** section in
@@ -132,4 +195,10 @@ interface), never to the public internet.
 
 ```bash
 curl -X POST http://localhost:9090/-/reload   # --web.enable-lifecycle is set
+```
+
+Alertmanager has no lifecycle endpoint enabled here, so restart it instead:
+
+```bash
+docker compose --profile monitoring restart alertmanager
 ```

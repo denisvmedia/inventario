@@ -1,0 +1,65 @@
+# Alertmanager configuration for the local monitoring stack.
+#
+# This exists so the delivery path can be exercised before it matters. The
+# rules the chart ships fire correctly — that is unit-tested — but a rule that
+# fires and a page that arrives are different claims, and the second one is
+# the one an operator is betting on at 3am.
+#
+# The receiver below writes to Alertmanager's log and nowhere else. Swap it
+# for yours; everything above it is the part worth keeping.
+
+global:
+  # How long a firing alert stays "firing" after Prometheus stops sending it.
+  # Must exceed Prometheus's evaluation_interval by a comfortable margin.
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  # Group by alertname so a flapping rule is one notification, not a stream.
+  group_by: ["alertname", "namespace"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+  routes:
+    # Backup alerting first, because it is the one the runbook singles out:
+    # alerting on job *failure* misses the job that quietly stopped being
+    # scheduled, which is the usual way backups break. Both of these are
+    # about age and absence instead.
+    #
+    # group_wait is 0 here — there is nothing to batch with, and a backup
+    # that has not run is not more informative 30 seconds later.
+    - matchers:
+        - alertname =~ "InventarioBackup.*"
+      receiver: backups
+      group_wait: 0s
+      repeat_interval: 12h
+
+    # Everything critical that is not a backup.
+    - matchers:
+        - severity = "critical"
+      receiver: critical
+
+receivers:
+  # Replace each of these with a real receiver. The names are what the routes
+  # above refer to, so keep them or change both.
+  #
+  #   email_configs:   to, from, smarthost, auth_*
+  #   slack_configs:   api_url (or a global slack_api_url), channel
+  #   webhook_configs: url
+  #
+  # See https://prometheus.io/docs/alerting/latest/configuration/#receiver
+  - name: default
+  - name: backups
+  - name: critical
+
+inhibit_rules:
+  # A backup that has never run makes "the newest dump is old" redundant:
+  # there is no newest dump. Without this both fire together on a fresh
+  # install whose backup config is broken, and two pages for one fault is how
+  # people learn to ignore the second.
+  - source_matchers:
+      - alertname = "InventarioBackupNeverRan"
+    target_matchers:
+      - alertname = "InventarioBackupStale"
+    equal: ["namespace"]

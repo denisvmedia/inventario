@@ -12,6 +12,12 @@ the selectors legitimately differ, the alert set must not.
 
 Double-gated like the ServiceMonitor: the toggle AND the CRD, so enabling it
 on a cluster without the operator is a no-op rather than a render error.
+
+Every alert carries an explicit `namespace` label. The expressions are all
+scoped to the release namespace already, but sum(), max(), absent() and
+histogram_quantile() drop it on the way out, which would make two releases in
+different namespaces emit the same alert series — and Alertmanager cannot
+group or inhibit on a label that is not there.
 */ -}}
 {{- if and .Values.metrics.prometheusRule.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
 {{- $fullname := include "inventario.fullname" . -}}
@@ -61,6 +67,7 @@ spec:
           for: {{ .Values.metrics.prometheusRule.targetDownFor }}
           labels:
             severity: critical
+            namespace: {{ .Release.Namespace }}
           annotations:
             summary: "Inventario /metrics target is down"
             description: "Prometheus cannot scrape {{ `{{ $labels.instance }}` }} in namespace {{ .Release.Namespace }}."
@@ -74,6 +81,7 @@ spec:
           for: {{ .Values.metrics.prometheusRule.errorRateFor }}
           labels:
             severity: warning
+            namespace: {{ .Release.Namespace }}
           annotations:
             summary: "Inventario 5xx ratio above threshold"
             description: "Global server-error ratio is {{ `{{ $value | humanizePercentage }}` }} over the last 5m."
@@ -83,6 +91,7 @@ spec:
           for: {{ .Values.metrics.prometheusRule.latencyFor }}
           labels:
             severity: warning
+            namespace: {{ .Release.Namespace }}
           annotations:
             summary: "Inventario p95 latency above threshold"
             description: "Global p95 request latency is {{ `{{ $value }}` }}s over the last 5m."
@@ -115,6 +124,7 @@ spec:
           for: {{ .Values.backup.alert.for }}
           labels:
             severity: critical
+            namespace: {{ .Release.Namespace }}
           annotations:
             summary: "Inventario database backup is stale"
             description: "The newest successful dump is {{ `{{ $value | humanizeDuration }}` }} old in namespace {{ .Release.Namespace }}."
@@ -132,6 +142,7 @@ spec:
           for: {{ .Values.backup.alert.neverRanFor }}
           labels:
             severity: critical
+            namespace: {{ .Release.Namespace }}
           annotations:
             summary: "Inventario database backup has never completed"
             description: "No successful dump has ever been recorded for {{ $fullname }}-backup in namespace {{ .Release.Namespace }}."

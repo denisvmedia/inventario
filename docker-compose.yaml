@@ -301,6 +301,29 @@ services:
       retries: 5
       start_period: 20s
 
+  # Alertmanager exists here so the delivery path can be exercised, not just
+  # the rules. A rule that fires and a page that arrives are different claims
+  # (#2574). Its receivers are empty on purpose — swap in yours.
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./deploy/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    networks:
+      - inventario-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9093/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   grafana:
     image: grafana/grafana:11.4.0
     profiles: ["monitoring"]
@@ -561,6 +584,7 @@ volumes:
   redis-data:
 
   # Observability stack volumes (issue #843, monitoring profile)
+  alertmanager-data:
   prometheus-data:
   grafana-data:
 
