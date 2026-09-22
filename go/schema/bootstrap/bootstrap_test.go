@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -556,4 +557,54 @@ func TestMigrator_Apply_ReservedLoginName_UnhappyPath(t *testing.T) {
 	})
 
 	c.Assert(err, qt.ErrorIs, bootstrap.ErrReservedLoginName)
+}
+
+// #2428: the names are folded before they reach the template, so every string
+// the operator sees names the role PostgreSQL will actually have.
+func TestTemplateData_NormalizeFoldsLoginNames(t *testing.T) {
+	c := qt.New(t)
+
+	got := bootstrap.TemplateData{
+		Username:                    "MyApp",
+		UsernameForMigrations:       "MyAppMigrator",
+		UsernameForBackgroundWorker: "MYAPP",
+	}.Normalize()
+
+	c.Check(got.Username, qt.Equals, "myapp")
+	c.Check(got.UsernameForMigrations, qt.Equals, "myappmigrator")
+	c.Check(got.UsernameForBackgroundWorker, qt.Equals, "myapp")
+}
+
+// A name that is already lower case is untouched, so the common case produces
+// no advisory line.
+func TestTemplateData_NormalizeLeavesLowerCaseAlone(t *testing.T) {
+	c := qt.New(t)
+
+	in := bootstrap.TemplateData{
+		Username:                    "inventario",
+		UsernameForMigrations:       "inventario_migrator_login",
+		UsernameForBackgroundWorker: "inventario",
+	}
+	c.Check(in.Normalize(), qt.Equals, in)
+}
+
+// Apply is where an operator learns the name changed; without it they write a
+// DSN from what they typed and get "password authentication failed" with no
+// hint that the role is spelled differently.
+func TestMigrator_Apply_ReportsAFoldedLoginName(t *testing.T) {
+	c := qt.New(t)
+
+	var out strings.Builder
+	err := bootstrap.New().WithWriter(&out).Apply(context.Background(), bootstrap.ApplyArgs{
+		DSN: "postgres://user:pass@localhost:5432/db",
+		Template: bootstrap.TemplateData{
+			Username:                    "MyApp",
+			UsernameForMigrations:       "MyApp",
+			UsernameForBackgroundWorker: "MyApp",
+		},
+		DryRun: true,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Check(out.String(), qt.Contains, "--username=MyApp")
+	c.Check(out.String(), qt.Contains, "the role is myapp")
 }

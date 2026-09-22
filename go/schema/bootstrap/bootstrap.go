@@ -89,6 +89,41 @@ func (t TemplateData) Validate() error {
 	return nil
 }
 
+// Normalize folds the login names to lower case, which is what PostgreSQL
+// stores for the unquoted identifiers the template interpolates. Without it
+// `--username=MyApp` asks for a role the operator can never connect as: the
+// role is created as `myapp`, and a connection naming `MyApp` is refused.
+//
+// Folding here rather than only in the SQL keeps every later string honest —
+// the RAISE NOTICE lines, the printed SQL a DBA is handed, and the grants all
+// name the role that will actually exist.
+func (t TemplateData) Normalize() TemplateData {
+	t.Username = strings.ToLower(t.Username)
+	t.UsernameForMigrations = strings.ToLower(t.UsernameForMigrations)
+	t.UsernameForBackgroundWorker = strings.ToLower(t.UsernameForBackgroundWorker)
+	return t
+}
+
+// reportFolding tells the operator which names changed, so a DSN written from
+// what they typed does not fail authentication later with no explanation.
+// prefix is "-- " for the printed SQL, whose stream a DBA pipes straight into
+// psql and which must stay valid SQL.
+func reportFolding(w io.Writer, prefix string, before, after TemplateData) {
+	for _, f := range []struct {
+		flag, from, to string
+	}{
+		{"username", before.Username, after.Username},
+		{"username-for-migrations", before.UsernameForMigrations, after.UsernameForMigrations},
+		{"username-for-background-worker", before.UsernameForBackgroundWorker, after.UsernameForBackgroundWorker},
+	} {
+		if f.from == f.to {
+			continue
+		}
+		fmt.Fprintf(w, "%s--%s=%s: PostgreSQL stores an unquoted identifier folded, "+
+			"so the role is %s; use that name in the application DSN\n", prefix, f.flag, f.from, f.to)
+	}
+}
+
 // ApplyArgs contains arguments for applying bootstrap migrations
 type ApplyArgs struct {
 	DSN      string
@@ -130,6 +165,9 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 	if err := args.Template.Validate(); err != nil {
 		return err
 	}
+	normalized := args.Template.Normalize()
+	reportFolding(m.w, "", args.Template, normalized)
+	args.Template = normalized
 
 	// Get all SQL files from embedded filesystem
 	files, err := m.getSQLFiles()
@@ -291,6 +329,9 @@ func (m *Migrator) Print(templateData TemplateData) error {
 	if err := templateData.Validate(); err != nil {
 		return err
 	}
+	normalized := templateData.Normalize()
+	reportFolding(m.w, "-- ", templateData, normalized)
+	templateData = normalized
 
 	// Get all SQL files from embedded filesystem
 	files, err := m.getSQLFiles()
