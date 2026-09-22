@@ -85,6 +85,7 @@ import {
 } from "@/components/items/AiScanStep"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { cn } from "@/lib/utils"
+import { withId } from "@/lib/with-id"
 
 interface AreaOption {
   id?: string
@@ -1314,8 +1315,8 @@ function BasicsStep(props: any) {
                 <SelectValue placeholder={t("commodities:fields.locationPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                {visibleLocations.map((l) => (
-                  <SelectItem key={l.id} value={l.id ?? ""}>
+                {withId(visibleLocations).map((l) => (
+                  <SelectItem key={l.id} value={l.id}>
                     {l.name}
                   </SelectItem>
                 ))}
@@ -1356,8 +1357,8 @@ function BasicsStep(props: any) {
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {visibleAreas.map((a) => (
-                      <SelectItem key={a.id} value={a.id ?? ""}>
+                    {withId(visibleAreas).map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
                         {a.name}
                       </SelectItem>
                     ))}

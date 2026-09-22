@@ -81,6 +81,7 @@ import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
+import { withId } from "@/lib/with-id"
 
 const PER_PAGE = 24
 const VIEW_MODE_KEY = "commodities:viewMode"
@@ -727,8 +728,8 @@ export function CommoditiesListPage() {
               data-testid="bulk-move-area"
             >
               <option value="">{t("commodities:bulk.moveTargetPlaceholder")}</option>
-              {(areas.data ?? []).map((a) => (
-                <option key={a.id} value={a.id ?? ""}>
+              {withId(areas.data).map((a) => (
+                <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
               ))}

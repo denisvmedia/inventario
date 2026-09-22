@@ -25,6 +25,7 @@ import { LocationReport } from "@/features/reports/components/LocationReport"
 import type { PhotoSize } from "@/features/reports/components/PhotoSection"
 import { formatDateTime } from "@/lib/intl"
 import { cn } from "@/lib/utils"
+import { withId } from "@/lib/with-id"
 
 type ReportMode = "item" | "location"
 
@@ -264,8 +265,8 @@ export function InsuranceReportPage() {
                   <SelectValue placeholder={t("reports:insurance.selectItem")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {itemList.map((c) => (
-                    <SelectItem key={c.id} value={c.id ?? ""}>
+                  {withId(itemList).map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
                       {c.name}
                     </SelectItem>
                   ))}
@@ -284,8 +285,8 @@ export function InsuranceReportPage() {
                   <SelectValue placeholder={t("reports:insurance.selectLocation")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {locationList.map((l) => (
-                    <SelectItem key={l.id} value={l.id ?? ""}>
+                  {withId(locationList).map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
                       {l.icon ? `${l.icon} ` : ""}
                       {l.name}
                     </SelectItem>

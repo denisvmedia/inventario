@@ -29,6 +29,7 @@ import { areaSchema, type AreaFormInput } from "@/features/areas/schemas"
 import type { Location } from "@/features/locations/api"
 import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
+import { withId } from "@/lib/with-id"
 
 interface AreaFormDialogProps {
   open: boolean
@@ -221,8 +222,8 @@ export function AreaFormDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {locations.map((l) => (
-                        <SelectItem key={l.id} value={l.id ?? ""}>
+                      {withId(locations).map((l) => (
+                        <SelectItem key={l.id} value={l.id}>
                           {l.name}
                         </SelectItem>
                       ))}
