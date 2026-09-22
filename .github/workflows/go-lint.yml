@@ -46,6 +46,20 @@ jobs:
       - id: vars
         uses: ./.github/actions/vars
 
+      # An empty `version:` makes golangci-lint-action install `latest`, which
+      # is how this went unnoticed for so long — the lane stays green while
+      # linting with a binary nobody chose. Fail instead (#1818).
+      - name: Check the golangci-lint pin resolved
+        env:
+          VERSION: ${{ steps.vars.outputs.golangci_lint_version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VERSION" ]; then
+            echo "::error::the vars action exposed no golangci_lint_version; golangci-lint would silently fall back to latest"
+            exit 1
+          fi
+          echo "golangci-lint pinned to $VERSION"
+
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: 1.27.1
@@ -66,11 +80,9 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           args: --timeout=30m
-          # Pin to v2.11.4 — `vars` action doesn't output a
-          # `golangci_lint_version`, so leaving it parameterised resolved
-          # to `latest`, which started flagging pre-existing gosec/govet/
-          # modernize issues the moment v2.12.0 was released. Pinning
-          # keeps CI deterministic; bump in a separate PR alongside the
-          # corresponding code fixes.
-          version: v2.13.2
+          # Pinned, not `latest`: a new release flags pre-existing findings
+          # the moment it lands, and CI goes red for a diff that did not
+          # cause it. The pin lives in .github/actions/vars so this workflow
+          # and copilot-setup-steps.yml install the same binary (#1818).
+          version: ${{ steps.vars.outputs.golangci_lint_version }}
           working-directory: go
