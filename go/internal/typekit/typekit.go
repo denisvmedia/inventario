@@ -6,6 +6,29 @@ import (
 	"reflect"
 )
 
+// IsNil reports whether v is nil, including the case of an interface that
+// carries a type but holds a nil pointer.
+//
+// `v == nil` answers false for that one: the value is not the nil interface,
+// it is a non-nil interface describing a nil pointer. A pointer-receiver
+// method called on it runs with a nil receiver and panics at the first field
+// access — a long way from where the nil was handed over, and with a message
+// that says nothing about which dependency was missing.
+func IsNil(v any) bool {
+	if v == nil {
+		return true
+	}
+
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface,
+		reflect.Map, reflect.Pointer, reflect.Slice, reflect.UnsafePointer:
+		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
 func ZeroOfType[T any](t T) (zero T) {
 	// Use reflection to create a new instance of the type
 	val := reflect.ValueOf(t)
