@@ -88,6 +88,27 @@ func (r *RestoreStepRegistry) ListByRestoreOperation(ctx context.Context, restor
 	return steps, nil
 }
 
+func (r *RestoreStepRegistry) ListByRestoreOperations(_ context.Context, restoreOperationIDs []string) (map[string][]models.RestoreStep, error) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	wanted := make(map[string]struct{}, len(restoreOperationIDs))
+	for _, id := range restoreOperationIDs {
+		wanted[id] = struct{}{}
+	}
+
+	byOperation := make(map[string][]models.RestoreStep, len(restoreOperationIDs))
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		step := pair.Value
+		if _, ok := wanted[step.RestoreOperationID]; !ok {
+			continue
+		}
+		byOperation[step.RestoreOperationID] = append(byOperation[step.RestoreOperationID], *step)
+	}
+
+	return byOperation, nil
+}
+
 func (r *RestoreStepRegistry) DeleteByRestoreOperation(ctx context.Context, restoreOperationID string) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()

@@ -80,6 +80,50 @@ func (r *TxExecutor[T]) ScanByField(ctx context.Context, field FieldValue) iter.
 	}
 }
 
+// ScanByFieldIn returns an iterator over entities whose field matches any of
+// the values, in one query. The alternative — a query per value — costs a
+// round trip each, and when the caller is already iterating something else it
+// costs a second connection for the whole walk.
+//
+// sqlx.In expands the placeholder list and Rebind converts it to the driver's
+// dialect, so this does not depend on array support.
+func (r *TxExecutor[T]) ScanByFieldIn(ctx context.Context, field string, values []string) iter.Seq2[T, error] {
+	return func(yield func(T, error) bool) {
+		if len(values) == 0 {
+			return
+		}
+
+		query, args, err := sqlx.In(fmt.Sprintf("SELECT * FROM %s WHERE %s IN (?)", r.table, field), values)
+		if err != nil {
+			var zero T
+			yield(zero, err)
+			return
+		}
+
+		rows, err := r.tx.QueryxContext(ctx, r.tx.Rebind(query), args...)
+		if err != nil {
+			var zero T
+			yield(zero, err)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var entity T
+			err := rows.StructScan(&entity)
+			if !yield(entity, err) {
+				return
+			}
+		}
+
+		if err := rows.Err(); err != nil {
+			var zero T
+			yield(zero, err)
+			return
+		}
+	}
+}
+
 func (r *TxExecutor[T]) Insert(ctx context.Context, entity any) error {
 	var fields []string
 	var placeholders []string
