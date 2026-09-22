@@ -126,20 +126,15 @@ func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int, opt
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s%s`, r.tableNames.Areas(), whereClause)
-		if err := tx.QueryRowContext(ctx, countQuery, whereArgs...).Scan(&total); err != nil {
-			return errxtrace.Wrap("failed to count areas", err)
-		}
-
 		// LIMIT/OFFSET placeholders follow the WHERE arguments so a
 		// non-empty filter shifts them to $2/$3 rather than colliding
 		// with $1.
 		limitPlaceholder := fmt.Sprintf("$%d", len(whereArgs)+1)
 		offsetPlaceholder := fmt.Sprintf("$%d", len(whereArgs)+2)
 		dataQuery := fmt.Sprintf(`
-			SELECT * FROM %s%s
+			SELECT *, %s FROM %s%s
 			ORDER BY name, id
-			LIMIT %s OFFSET %s`, r.tableNames.Areas(), whereClause, limitPlaceholder, offsetPlaceholder)
+			LIMIT %s OFFSET %s`, totalCountColumn, r.tableNames.Areas(), whereClause, limitPlaceholder, offsetPlaceholder)
 
 		dataArgs := append(append([]any{}, whereArgs...), limit, offset)
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
@@ -148,15 +143,28 @@ func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int, opt
 		}
 		defer rows.Close()
 
+		total = totalUnknown
 		for rows.Next() {
-			var area models.Area
-			if err := rows.StructScan(&area); err != nil {
+			var row areaPage
+			if err := rows.StructScan(&row); err != nil {
 				return errxtrace.Wrap("failed to scan area", err)
 			}
-			areas = append(areas, &area)
+			areas = append(areas, &row.Area)
+			total = row.TotalCount
+		}
+		if err := rows.Err(); err != nil {
+			return err
 		}
 
-		return rows.Err()
+		if total == totalUnknown {
+			countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s%s`, r.tableNames.Areas(), whereClause)
+			total, err = countRows(ctx, tx, countQuery, whereArgs...)
+			if err != nil {
+				return errxtrace.Wrap("failed to count areas", err)
+			}
+		}
+
+		return nil
 	})
 	if err != nil {
 		return nil, 0, errxtrace.Wrap("failed to list paginated areas", err)
@@ -361,4 +369,10 @@ func (r *AreaRegistry) getLocation(ctx context.Context, tx *sqlx.Tx, id string) 
 		return nil, errxtrace.Wrap("failed to get location", err)
 	}
 	return &location, nil
+}
+
+// areaPage carries the window function's total alongside the row (#1032).
+type areaPage struct {
+	models.Area
+	TotalCount int `db:"total_count"`
 }

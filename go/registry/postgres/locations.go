@@ -122,15 +122,10 @@ func (r *LocationRegistry) ListPaginated(ctx context.Context, offset, limit int)
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s`, r.tableNames.Locations())
-		if err := tx.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
-			return errxtrace.Wrap("failed to count locations", err)
-		}
-
 		dataQuery := fmt.Sprintf(`
-			SELECT * FROM %s
+			SELECT *, %s FROM %s
 			ORDER BY name, id
-			LIMIT $1 OFFSET $2`, r.tableNames.Locations())
+			LIMIT $1 OFFSET $2`, totalCountColumn, r.tableNames.Locations())
 
 		rows, err := tx.QueryxContext(ctx, dataQuery, limit, offset)
 		if err != nil {
@@ -138,15 +133,28 @@ func (r *LocationRegistry) ListPaginated(ctx context.Context, offset, limit int)
 		}
 		defer rows.Close()
 
+		total = totalUnknown
 		for rows.Next() {
-			var location models.Location
-			if err := rows.StructScan(&location); err != nil {
+			var row locationPage
+			if err := rows.StructScan(&row); err != nil {
 				return errxtrace.Wrap("failed to scan location", err)
 			}
-			locations = append(locations, &location)
+			locations = append(locations, &row.Location)
+			total = row.TotalCount
+		}
+		if err := rows.Err(); err != nil {
+			return err
 		}
 
-		return rows.Err()
+		if total == totalUnknown {
+			countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s`, r.tableNames.Locations())
+			total, err = countRows(ctx, tx, countQuery)
+			if err != nil {
+				return errxtrace.Wrap("failed to count locations", err)
+			}
+		}
+
+		return nil
 	})
 	if err != nil {
 		return nil, 0, errxtrace.Wrap("failed to list paginated locations", err)
@@ -327,4 +335,11 @@ func (r *LocationRegistry) SearchByName(ctx context.Context, query string) ([]*m
 	}
 
 	return locations, nil
+}
+
+// locationPage carries the window function's total alongside the row. Go has
+// no way to embed a type parameter, so each paginated registry needs its own.
+type locationPage struct {
+	models.Location
+	TotalCount int `db:"total_count"`
 }
