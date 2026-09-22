@@ -345,9 +345,39 @@ function hasTypedProductError(body: unknown): boolean {
   })
 }
 
+// Name of the cross-tab lock. Tabs share one access token in localStorage, so
+// on a simultaneous expiry two of them present the same refresh cookie. The
+// first rotates and revokes that row; the second is then replaying a revoked
+// row, which reuse detection treats as theft and answers by revoking every
+// session the user has — both tabs land on /login (#2166, #967 H4).
+const AUTH_REFRESH_LOCK = "inventario-auth-refresh"
+
+// withAuthRefreshLock serializes refresh across tabs.
+//
+// Web Locks is the primitive that actually serializes. BroadcastChannel can
+// only announce a result, which does not help: by the time the first tab has
+// something to announce, the second has already sent its request. Where the
+// API is missing the behavior is what it was before — per-tab single-flight,
+// and the race stays possible.
+async function withAuthRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks
+  if (!locks) return fn()
+  return locks.request(AUTH_REFRESH_LOCK, fn) as Promise<T>
+}
+
 async function refreshAccessToken(): Promise<string> {
   if (refreshInFlight) return refreshInFlight
-  refreshInFlight = (async () => {
+  // Read before queueing for the lock: if it has changed by the time we hold
+  // the lock, a peer tab rotated while we waited.
+  const tokenBeforeLock = getAccessToken()
+  refreshInFlight = withAuthRefreshLock(async () => {
+    const current = getAccessToken()
+    if (current && current !== tokenBeforeLock) {
+      // A peer already rotated. Our cookie is the one it revoked, so sending
+      // it is the replay that would end every session. Adopt instead.
+      return current
+    }
+
     const url = `${BASE_URL}/auth/refresh`
     const response = await fetch(url, {
       method: "POST",
@@ -375,7 +405,7 @@ async function refreshAccessToken(): Promise<string> {
       setCsrfToken(payload.csrf_token)
     }
     return payload.access_token
-  })()
+  })
   try {
     return await refreshInFlight
   } finally {
