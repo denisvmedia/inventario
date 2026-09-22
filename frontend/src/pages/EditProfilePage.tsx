@@ -44,6 +44,7 @@ import { HttpError } from "@/lib/http"
 import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { withId } from "@/lib/with-id"
 
 // /profile/edit — two side-by-side forms in one page: profile fields
 // (name + default group) + password change. Email is intentionally
@@ -306,8 +307,8 @@ export function EditProfilePage() {
                       <SelectValue placeholder={t("settings:profile.defaultGroup")} />
                     </SelectTrigger>
                     <SelectContent>
-                      {groups?.map((g) => (
-                        <SelectItem key={g.id} value={g.id ?? ""}>
+                      {withId(groups).map((g) => (
+                        <SelectItem key={g.id} value={g.id}>
                           {g.name}
                         </SelectItem>
                       ))}

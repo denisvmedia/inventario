@@ -85,6 +85,7 @@ import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { APP_VERSION, shortAppVersion } from "@/lib/app-version"
+import { withId } from "@/lib/with-id"
 
 type SectionId = "account" | "appearance" | "notifications" | "privacy" | "help"
 
@@ -593,8 +594,8 @@ function DefaultGroupSelectorRow() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {groups?.map((g) => (
-              <SelectItem key={g.id} value={g.id ?? ""}>
+            {withId(groups).map((g) => (
+              <SelectItem key={g.id} value={g.id}>
                 {g.name}
               </SelectItem>
             ))}
