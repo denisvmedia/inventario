@@ -541,6 +541,11 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// path.
 	populateUserSystemAdminFlagFromAccessToken(accessTokenString, user)
 
+	// Login, logout, MFA and reuse detection each leave a row; a successful
+	// rotation did not, so a session kept alive for weeks through rotation had
+	// nothing durable between its login and its logout (#2479, #967 H5).
+	api.logAuth(r.Context(), "refresh", &user.ID, &user.TenantID, true, r, nil)
+
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
 
