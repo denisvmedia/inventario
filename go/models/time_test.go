@@ -3,6 +3,7 @@ package models_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -362,4 +363,42 @@ func TestPNow(t *testing.T) {
 	timestampTime := pTimestamp.ToTime()
 	c.Assert(timestampTime.After(before.Add(-time.Second)), qt.IsTrue)
 	c.Assert(timestampTime.Before(after.Add(time.Second)), qt.IsTrue)
+}
+
+// #2594: the timestamp columns carry no time zone, so PostgreSQL keeps the
+// wall clock and drops the offset. A Timestamp built from a +02:00 time would
+// be stored two hours ahead of the instant it meant. Normalizing here makes a
+// round trip through such a column an identity.
+func TestNewTimestamp_IsUTC(t *testing.T) {
+	c := qt.New(t)
+
+	for _, zone := range []string{"Europe/Prague", "America/Los_Angeles", "Asia/Kolkata"} {
+		loc, err := time.LoadLocation(zone)
+		c.Assert(err, qt.IsNil)
+
+		instant := time.Date(2026, 9, 22, 20, 47, 24, 0, loc)
+		ts := models.NewTimestamp(instant)
+
+		c.Check(strings.HasSuffix(string(ts), "Z"), qt.IsTrue,
+			qt.Commentf("%s produced %q", zone, ts))
+		// Same instant, stated in UTC — not the same wall clock.
+		c.Check(ts.ToTime().Equal(instant), qt.IsTrue,
+			qt.Commentf("%s: %q is not the instant it was built from", zone, ts))
+	}
+}
+
+// Scan takes whatever the driver hands back. A driver that returns a non-UTC
+// time.Time must not reintroduce the offset the column could not hold.
+func TestTimestamp_ScanNormalizesToUTC(t *testing.T) {
+	c := qt.New(t)
+
+	loc, err := time.LoadLocation("Europe/Prague")
+	c.Assert(err, qt.IsNil)
+
+	var ts models.Timestamp
+	instant := time.Date(2026, 9, 22, 20, 47, 24, 0, loc)
+	c.Assert(ts.Scan(instant), qt.IsNil)
+
+	c.Check(strings.HasSuffix(string(ts), "Z"), qt.IsTrue, qt.Commentf("got %q", ts))
+	c.Check(ts.ToTime().Equal(instant), qt.IsTrue)
 }

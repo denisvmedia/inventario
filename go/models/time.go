@@ -288,7 +288,7 @@ func (t *Timestamp) Scan(value any) error {
 	case []byte:
 		*t = Timestamp(v)
 	case time.Time:
-		*t = Timestamp(v.Format(timestampFormat))
+		*t = Timestamp(v.UTC().Format(timestampFormat))
 	default:
 		return fmt.Errorf("cannot scan %T into Timestamp", value)
 	}
@@ -304,9 +304,19 @@ func (t Timestamp) Value() (driver.Value, error) {
 	return string(t), nil
 }
 
-// NewTimestamp creates a new Timestamp from a time.Time.
+// NewTimestamp creates a new Timestamp from a time.Time, in UTC.
+//
+// The offset does not survive storage: every timestamp column but one is
+// `timestamp without time zone`, so PostgreSQL casts the RFC 3339 string and
+// keeps the wall clock while dropping the zone. Written from a host at +02:00,
+// 20:47+02:00 is stored as 20:47 and reads back as 20:47Z — two hours later
+// than the instant it was meant to be, and two hours adrift from the `now()`
+// an expiry check in SQL compares it against.
+//
+// Normalizing here rather than at each call site is what makes a round trip an
+// identity. The shipped container is UTC, so stored data does not move. #2594
 func NewTimestamp(t time.Time) Timestamp {
-	return Timestamp(t.Format(timestampFormat))
+	return Timestamp(t.UTC().Format(timestampFormat))
 }
 
 // NewPTimestamp creates a new PTimestamp from a time.Time.
