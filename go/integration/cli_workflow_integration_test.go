@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/backup/restore"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
 	usercreate "go.5x5.cz/inventario/cmd/inventario/users/create"
 	"go.5x5.cz/inventario/debug"
@@ -295,7 +296,7 @@ func setupAPIServer(t *testing.T, dsn string) (*httptest.Server, func()) {
 		JWTSecret:      jwtSecret,
 	}
 
-	handler := apiserver.APIServer(params, nil)
+	handler := apiserver.APIServer(params, restore.NoopStatusQuerier{})
 	server := httptest.NewServer(handler)
 
 	cleanup := func() {

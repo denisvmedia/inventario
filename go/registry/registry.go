@@ -1050,6 +1050,11 @@ type RestoreOperationRegistry interface {
 
 	// ListByExport returns all restore operations for an export
 	ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error)
+
+	// HasActive reports whether any restore operation is pending or running.
+	// Answering that with List means reading every operation and its steps to
+	// learn one bit, and the cost grows with the history (#1314).
+	HasActive(ctx context.Context) (bool, error)
 }
 
 // PreviewTokenInputs is the deterministic, replay-resistant payload

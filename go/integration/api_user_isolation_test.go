@@ -17,6 +17,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/backup/restore"
 	"go.5x5.cz/inventario/debug"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
@@ -102,7 +103,7 @@ func setupTestAPIServer(t *testing.T) (server *httptest.Server, fs *registry.Fac
 		JWTSecret:      jwtSecretBytes,
 	}
 
-	handler := apiserver.APIServer(params, nil)
+	handler := apiserver.APIServer(params, restore.NoopStatusQuerier{})
 	server = httptest.NewServer(handler)
 
 	cleanup = func() {

@@ -406,6 +406,14 @@ func MetricsTokenMiddleware(token string) func(http.Handler) http.Handler {
 }
 
 func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
+	// POST /exports/{id}/restores asks this unconditionally, so a nil here is
+	// a panic on the first request rather than at wiring time. Callers that do
+	// not care about the one-restore-at-a-time guard pass
+	// restore.NoopStatusQuerier{} (#1314).
+	if restoreStatus == nil {
+		panic("apiserver: restoreStatus is required; pass restore.NoopStatusQuerier{} when the guard is not wanted")
+	}
+
 	renderDecodeOnce.Do(func() {
 		render.Decode = JSONAPIAwareDecoder
 	})

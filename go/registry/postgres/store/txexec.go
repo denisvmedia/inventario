@@ -124,6 +124,28 @@ func (r *TxExecutor[T]) ScanByFieldIn(ctx context.Context, field string, values 
 	}
 }
 
+// ExistsByFieldIn reports whether any row matches one of the values. The
+// database stops at the first match, and nothing is scanned into a struct.
+func (r *TxExecutor[T]) ExistsByFieldIn(ctx context.Context, field string, values []string) (bool, error) {
+	if len(values) == 0 {
+		return false, nil
+	}
+
+	query, args, err := sqlx.In(
+		fmt.Sprintf("SELECT EXISTS (SELECT 1 FROM %s WHERE %s IN (?))", r.table, field),
+		values,
+	)
+	if err != nil {
+		return false, errxtrace.Wrap("failed to build the exists query", err)
+	}
+
+	var exists bool
+	if err := r.tx.QueryRowxContext(ctx, r.tx.Rebind(query), args...).Scan(&exists); err != nil {
+		return false, errxtrace.Wrap("failed to check existence", err)
+	}
+	return exists, nil
+}
+
 func (r *TxExecutor[T]) Insert(ctx context.Context, entity any) error {
 	var fields []string
 	var placeholders []string
