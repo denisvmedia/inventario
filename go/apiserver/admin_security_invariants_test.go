@@ -110,7 +110,7 @@ func TestAdminSecurityInvariant_RequestDTOsCannotCarryGrantField(t *testing.T) {
 						),
 					)
 				}
-				jsonTag := strings.SplitN(f.Tag.Get("json"), ",", 2)[0]
+				jsonTag, _, _ := strings.Cut(f.Tag.Get("json"), ",")
 				for _, banned := range bannedJSONTags {
 					c.Assert(jsonTag, qt.Not(qt.Equals), banned,
 						qt.Commentf(

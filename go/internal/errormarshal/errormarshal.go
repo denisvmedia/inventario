@@ -39,13 +39,11 @@ type jsonValidationError struct {
 func validationCodeTree(errs validation.Errors) map[string]any {
 	out := make(map[string]any, len(errs))
 	for field, e := range errs {
-		var nested validation.Errors
-		if errors.As(e, &nested) {
+		if nested, ok := errors.AsType[validation.Errors](e); ok {
 			out[field] = validationCodeTree(nested)
 			continue
 		}
-		var verr validation.Error
-		if errors.As(e, &verr) {
+		if verr, ok := errors.AsType[validation.Error](e); ok {
 			leaf := map[string]any{"code": verr.Code()}
 			// Omit empty params (the common case — required/blank errors carry
 			// none) rather than emitting "params":null on every field.
@@ -75,8 +73,7 @@ func MarshalError(aerr error) ([]byte, error) {
 	// own MarshalJSON discards (rendering only the English message). Surface
 	// them in a parallel `errorCodes` tree alongside the unchanged message
 	// tree so the FE can localize field-validation messages by code. #1990
-	var verrs validation.Errors
-	if errors.As(aerr, &verrs) {
+	if verrs, ok := errors.AsType[validation.Errors](aerr); ok {
 		msgData, err := verrs.MarshalJSON()
 		if err != nil {
 			return nil, err
