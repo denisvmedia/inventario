@@ -1,38 +1,10 @@
 {
-  "areaDetail": "Area",
-  "areaEdit": "Edit area",
-  "backup": "Backup",
-  "commodities": "Items",
-  "commodityDetail": "Item",
-  "commodityEdit": "Edit item",
-  "commodityNew": "New item",
-  "commodityPrint": "Print item",
-  "exportDetail": "Export",
-  "exportImport": "Import",
-  "exportNew": "New export",
-  "exportRestore": "Restore",
-  "exports": "Exports",
-  "fileDetail": "File",
-  "fileEdit": "Edit file",
-  "fileNew": "Upload files",
-  "files": "Files",
   "forgotPassword": "Forgot password",
-  "groupCreate": "Create group",
-  "groupSettings": "Group settings",
-  "helpCenter": "Help center",
   "inviteAccept": "Accept invite",
-  "locationDetail": "Location",
-  "locationEdit": "Edit location",
-  "locationNew": "New location",
-  "locations": "Locations",
   "login": "Sign in",
-  "members": "Members",
   "noGroup": "No group",
-  "plans": "Plans",
-  "profile": "Profile",
   "register": "Create account",
   "resetPassword": "Reset password",
-  "search": "Search",
   "surfaces": {
     "activeSessions": {
       "description": "View and revoke devices that are signed into your account.",
@@ -91,8 +63,5 @@
       "title": "What's new"
     }
   },
-  "tags": "Tags",
-  "verifyEmail": "Verify email",
-  "warranties": "Warranties",
-  "whatsNew": "What's new"
+  "verifyEmail": "Verify email"
 }

@@ -6,10 +6,10 @@ import { defineConfig } from "i18next-cli"
 //
 // `preservePatterns` covers dynamic keys we deliberately can't extract at
 // build time:
-//   - `stubs:*` — PlaceholderPage uses `t(`stubs:${titleKey}`)`. titleKey is
-//     a TS union narrowed against the en/stubs.json shape (compile-time
-//     safety), so a missing key here is caught by tsc rather than the
-//     extractor.
+//   - `stubs:surfaces.*` — ComingSoonPage and ComingSoonBanner build the key
+//     from a surface id, so the extractor sees only the template literal. The
+//     seven flat keys left in that namespace are RouteTitle titles referenced
+//     statically and need no pattern.
 //
 // `i18n:check` is what CI runs: it runs this extractor in dry-run mode and
 // fails when adding `t("foo.bar")` in code without a matching entry in en
@@ -52,7 +52,7 @@ export default defineConfig({
     //   supported languages, section ids, help-row ids), so the extractor
     //   sees only the template literal and can't enumerate the entries.
     preservePatterns: [
-      "stubs:*",
+      "stubs:surfaces.*",
       "common:nav.*",
       // errors:validation.* — backend field-validation messages keyed by the
       //   BE's stable validation code, resolved via

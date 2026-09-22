@@ -1,38 +1,10 @@
 {
-  "areaDetail": "Зона",
-  "areaEdit": "Изменить зону",
-  "backup": "Резервная копия",
-  "commodities": "Предметы",
-  "commodityDetail": "Предмет",
-  "commodityEdit": "Изменить предмет",
-  "commodityNew": "Новый предмет",
-  "commodityPrint": "Печать предмета",
-  "exportDetail": "Экспорт",
-  "exportImport": "Импорт",
-  "exportNew": "Новый экспорт",
-  "exportRestore": "Восстановление",
-  "exports": "Экспорты",
-  "fileDetail": "Файл",
-  "fileEdit": "Изменить файл",
-  "fileNew": "Загрузить файлы",
-  "files": "Файлы",
   "forgotPassword": "Забыли пароль",
-  "groupCreate": "Создать группу",
-  "groupSettings": "Настройки группы",
-  "helpCenter": "Центр помощи",
   "inviteAccept": "Принять приглашение",
-  "locationDetail": "Локация",
-  "locationEdit": "Изменить локацию",
-  "locationNew": "Новая локация",
-  "locations": "Локации",
   "login": "Войти",
-  "members": "Участники",
   "noGroup": "Без группы",
-  "plans": "Тарифы",
-  "profile": "Профиль",
   "register": "Создать аккаунт",
   "resetPassword": "Сбросить пароль",
-  "search": "Поиск",
   "surfaces": {
     "activeSessions": {
       "description": "Просмотр и отзыв устройств, выполнивших вход в вашу учётную запись.",
@@ -91,8 +63,5 @@
       "title": "Что нового"
     }
   },
-  "tags": "Теги",
-  "verifyEmail": "Подтвердить электронную почту",
-  "warranties": "Гарантии",
-  "whatsNew": "Что нового"
+  "verifyEmail": "Подтвердить электронную почту"
 }

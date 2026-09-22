@@ -11,7 +11,6 @@
     "save": "Uložit"
   },
   "brand": "Inventario",
-  "comingSoon": "Již brzy.",
   "documentTitle": "{{title}} · {{brand}}",
   "errors": {
     "generic": "Něco se pokazilo"
