@@ -16,6 +16,7 @@ import (
 	_ "go.5x5.cz/inventario/internal/aivision/anthropic" // register the anthropic provider via init()
 	_ "go.5x5.cz/inventario/internal/aivision/mock"      // register the mock provider via init()
 	_ "go.5x5.cz/inventario/internal/aivision/openai"    // register the openai provider via init()
+	"go.5x5.cz/inventario/internal/filekit"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
 )
@@ -60,8 +61,10 @@ func applyCORSConfig(cfg *Config, dsn string, params *apiserver.Params) error {
 // the caller.
 func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string) (_ serverSetup, err error) {
 	params := apiserver.Params{
-		FactorySet:     factorySet,
-		UploadLocation: cfg.UploadLocation,
+		FactorySet: factorySet,
+		// A Windows path arrives here as `file://D:\...`, which url.Parse
+		// rejects outright and gocloud never sees (#251).
+		UploadLocation: filekit.NormalizeFileURL(cfg.UploadLocation),
 		MaxUploadBytes: cfg.MaxUploadBytes,
 		StartTime:      time.Now(),
 	}

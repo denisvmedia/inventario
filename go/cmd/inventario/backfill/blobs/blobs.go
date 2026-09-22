@@ -18,6 +18,7 @@ import (
 
 	"go.5x5.cz/inventario/cmd/internal/command"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/internal/filekit"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services/blobbackfill"
 )
@@ -97,7 +98,7 @@ func (c *Command) run(cfg *Config, dbConfig *shared.DatabaseConfig) error {
 		return errxtrace.Wrap("failed to create registry factory set", err)
 	}
 
-	svc := blobbackfill.New(factorySet, cfg.UploadLocation)
+	svc := blobbackfill.New(factorySet, filekit.NormalizeFileURL(cfg.UploadLocation))
 	stats, err := svc.Run(c.Cmd().Context(), blobbackfill.Options{DryRun: cfg.DryRun})
 	if err != nil {
 		return errxtrace.Wrap("backfill aborted", err)

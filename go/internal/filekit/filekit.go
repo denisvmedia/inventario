@@ -98,3 +98,43 @@ func getMultiPartExtension(filePath string) string {
 	}
 	return ext
 }
+
+// driveLetterPrefix reports whether s starts with a Windows drive letter, as
+// in `D:` — the shape that tells a Windows path from a POSIX one.
+func driveLetterPrefix(s string) bool {
+	if len(s) < 2 || s[1] != ':' {
+		return false
+	}
+	c := s[0]
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+// NormalizeFileURL rewrites a file:// URL that names a Windows path so it
+// parses, and parses as the path that was meant.
+//
+// `file://D:\Work\uploads` does not parse at all: url.Parse reads `D` as the
+// host and `:\Work\uploads` as its port, and reports `invalid port`. Repairing
+// only the separators is not enough either — `file://D:/Work/uploads` parses,
+// but with `D:` as the *host* and `/Work/uploads` as the path, so the drive is
+// silently dropped. Both want the authority left empty and the drive inside
+// the path: `file:///D:/Work/uploads`.
+//
+// Only a path that begins with a drive letter is touched. A POSIX directory
+// name may legitimately contain a backslash, and this must not rewrite it.
+func NormalizeFileURL(raw string) string {
+	rest, ok := strings.CutPrefix(raw, "file://")
+	if !ok {
+		return raw
+	}
+
+	path, query, hasQuery := strings.Cut(rest, "?")
+	if !driveLetterPrefix(strings.TrimPrefix(path, "/")) {
+		return raw
+	}
+
+	normalized := "file:///" + strings.ReplaceAll(strings.TrimPrefix(path, "/"), `\`, "/")
+	if hasQuery {
+		normalized += "?" + query
+	}
+	return normalized
+}
