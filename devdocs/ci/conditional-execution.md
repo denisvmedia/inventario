@@ -40,6 +40,16 @@ matters more than wall-time.
    edit didn't break it.
 4. A job that evaluates to `false` in its `if:` is reported as `success`
    (skipped) by GitHub. It does not block merges.
+5. A **matrix** job is the exception, and it matters for branch protection.
+   The matrix expands only when the job runs, so a matrix job that skips
+   reports one check run under its unexpanded name, the literal string
+   `E2E Tests (${{ matrix.browser }})`, rather than `E2E Tests (chromium)`.
+   A required context that sometimes does not exist stays "Expected — waiting
+   for status" and blocks the merge forever, so a matrix job meant to be
+   required has to run and decide inside its steps. `e2e-tests-linux` does
+   that: its first step reads the image resolver's result and either runs the
+   suite, reports green because the diff builds no image, or fails because the
+   build did.
 
 ## Filter quick-reference
 
@@ -161,8 +171,8 @@ markdownlint-cli2 --fix          # auto-fix what's auto-fixable
 - **No structural refactor** of the frontend workflows. `npm ci` and
   `npm run build` are still repeated across four workflows; deduplication
   is tracked separately.
-- **No new aggregator/required-check job.** None of these check names are
-  currently required in branch protection, so a skipped job's implicit
-  `success` is sufficient.
+- **No new aggregator/required-check job.** A skipped job's implicit `success`
+  is sufficient for every check name here, with the matrix caveat in rule 5
+  above.
 - **No `merge_group` trigger.** Merge-queue compatibility is a separate
   feature; this PR keeps the existing trigger surface intact.

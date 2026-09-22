@@ -23,11 +23,16 @@
 # Go-only, frontend-only, helm-only, workflow-only, Dockerfile-only and
 # dependency-bump diffs.
 #
-# `E2E Tests (chromium)` is deliberately absent. It is the most valuable lane
-# on the list, and it is the one that does not always report: when the matrix
-# is skipped before expansion the check appears under its unexpanded name,
-# `E2E Tests (${{ matrix.browser }})`, and the per-browser context never
-# exists. Requiring it would block any pull request in that shape.
+# `E2E Tests (chromium)` needs its own note, because it used to be the one
+# context that could not be required. A matrix expands only when its job runs,
+# so a skipped `e2e-tests-linux` reported under the unexpanded name
+# `E2E Tests (${{ matrix.browser }})` and the per-browser context did not
+# exist at all. The job now always runs and decides in its first step, so the
+# name is always there — verified on a diff that builds no image, where the
+# resolver skips and the check still reports as `E2E Tests (chromium)`.
+#
+# Firefox and webkit stay out: both are genuinely conditional on the diff, and
+# their per-browser names come and go with the matrix decision.
 set -euo pipefail
 
 REPO="${REPO:-denisvmedia/inventario}"
@@ -48,7 +53,8 @@ read -r -d '' PROTECTION <<'JSON' || true
       "Test Frontend (React)",
       "embed smoke test",
       "markdownlint-cli2",
-      "dependency-review"
+      "dependency-review",
+      "E2E Tests (chromium)"
     ]
   },
   "enforce_admins": false,
@@ -61,10 +67,17 @@ JSON
 
 case "${1:-apply}" in
   --show)
-    gh api "repos/${REPO}/branches/${BRANCH}/protection" \
+    # An unprotected branch answers 404, which is an answer rather than an
+    # error — say so instead of leaking the API's message.
+    # gh prints the 404 body on stdout, so capture rather than redirect.
+    if current=$(gh api "repos/${REPO}/branches/${BRANCH}/protection" \
       --jq '{strict: .required_status_checks.strict,
              contexts: .required_status_checks.contexts,
-             enforce_admins: .enforce_admins.enabled}'
+             enforce_admins: .enforce_admins.enabled}' 2> /dev/null); then
+      printf '%s\n' "$current"
+    else
+      echo "${REPO}@${BRANCH} has no branch protection."
+    fi
     ;;
   --remove)
     gh api -X DELETE "repos/${REPO}/branches/${BRANCH}/protection"
