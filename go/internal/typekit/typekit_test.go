@@ -1534,3 +1534,48 @@ func TestExtractDBFields_ErrorCases(t *testing.T) {
 		})
 	})
 }
+
+// IsNil exists for the case `== nil` gets wrong: an interface carrying a type
+// whose value is a nil pointer. A pointer-receiver method on one of those runs
+// with a nil receiver and panics far from where the nil was passed.
+func TestIsNil(t *testing.T) {
+	c := qt.New(t)
+
+	type someStruct struct{}
+
+	var nilPtr *someStruct
+	var nilMap map[string]int
+	var nilSlice []int
+	var nilChan chan int
+	var nilFunc func()
+	var nilIface error
+
+	c.Run("nil interface", func(c *qt.C) {
+		c.Check(typekit.IsNil(nil), qt.IsTrue)
+	})
+
+	c.Run("interface holding a nil pointer", func(c *qt.C) {
+		// `v == nil` is false here — staticcheck will say the comparison is
+		// never true — which is exactly what the helper exists for.
+		var v any = nilPtr
+		c.Check(typekit.IsNil(v), qt.IsTrue)
+	})
+
+	c.Run("other nilable kinds", func(c *qt.C) {
+		c.Check(typekit.IsNil(nilMap), qt.IsTrue)
+		c.Check(typekit.IsNil(nilSlice), qt.IsTrue)
+		c.Check(typekit.IsNil(nilChan), qt.IsTrue)
+		c.Check(typekit.IsNil(nilFunc), qt.IsTrue)
+		c.Check(typekit.IsNil(nilIface), qt.IsTrue)
+	})
+
+	c.Run("non-nil values", func(c *qt.C) {
+		c.Check(typekit.IsNil(&someStruct{}), qt.IsFalse)
+		c.Check(typekit.IsNil(someStruct{}), qt.IsFalse)
+		c.Check(typekit.IsNil(0), qt.IsFalse)
+		c.Check(typekit.IsNil(""), qt.IsFalse)
+		c.Check(typekit.IsNil(false), qt.IsFalse)
+		c.Check(typekit.IsNil(map[string]int{}), qt.IsFalse)
+		c.Check(typekit.IsNil([]int{}), qt.IsFalse)
+	})
+}

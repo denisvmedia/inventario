@@ -113,6 +113,20 @@ func (r *RestoreOperationRegistry) List(ctx context.Context) ([]*models.RestoreO
 	return operations, nil
 }
 
+// HasActive answers with one query that stops at the first match. The caller
+// wants a single bit, and List would read every operation and its steps to
+// produce it (#1314).
+func (r *RestoreOperationRegistry) HasActive(ctx context.Context) (bool, error) {
+	exists, err := r.newSQLRegistry().ExistsByFieldIn(ctx, "status", []string{
+		string(models.RestoreStatusPending),
+		string(models.RestoreStatusRunning),
+	})
+	if err != nil {
+		return false, errxtrace.Wrap("failed to check for active restore operations", err)
+	}
+	return exists, nil
+}
+
 func (r *RestoreOperationRegistry) Count(ctx context.Context) (int, error) {
 	reg := r.newSQLRegistry()
 

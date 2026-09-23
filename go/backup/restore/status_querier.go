@@ -3,7 +3,6 @@ package restore
 import (
 	"context"
 
-	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
 
@@ -33,14 +32,15 @@ func NewRegistryStatusQuerier(registrySet *registry.Set) *RegistryStatusQuerier 
 // HasRunningRestores returns true if any restore operation in the registry is
 // currently running or pending.
 func (q *RegistryStatusQuerier) HasRunningRestores(ctx context.Context) (bool, error) {
-	restoreOperations, err := q.registrySet.RestoreOperationRegistry.List(ctx)
-	if err != nil {
-		return false, err
-	}
-	for _, op := range restoreOperations {
-		if op.Status == models.RestoreStatusRunning || op.Status == models.RestoreStatusPending {
-			return true, nil
-		}
-	}
+	return q.registrySet.RestoreOperationRegistry.HasActive(ctx)
+}
+
+// NoopStatusQuerier reports that nothing is running. It exists so a caller
+// that does not care about the one-restore-at-a-time guard can still be wired
+// with something, rather than with nil (#1314).
+type NoopStatusQuerier struct{}
+
+// HasRunningRestores always reports false.
+func (NoopStatusQuerier) HasRunningRestores(context.Context) (bool, error) {
 	return false, nil
 }

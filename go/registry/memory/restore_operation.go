@@ -87,6 +87,19 @@ func (f *RestoreOperationRegistryFactory) CreateServiceRegistry() registry.Resto
 	}
 }
 
+func (r *RestoreOperationRegistry) HasActive(_ context.Context) (bool, error) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		switch pair.Value.Status {
+		case models.RestoreStatusPending, models.RestoreStatusRunning:
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()

@@ -32,6 +32,7 @@ import (
 	_ "go.5x5.cz/inventario/internal/fileblob" // register the in-memory + file blob drivers
 	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/internal/observability/sentry"
+	"go.5x5.cz/inventario/internal/typekit"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -406,6 +407,20 @@ func MetricsTokenMiddleware(token string) func(http.Handler) http.Handler {
 }
 
 func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
+	// POST /exports/{id}/restores asks this unconditionally, so a nil here is
+	// a panic on the first request rather than at wiring time. Callers that do
+	// not care about the one-restore-at-a-time guard pass
+	// restore.NoopStatusQuerier{} (#1314).
+	//
+	// typekit.IsNil rather than `== nil`, because the shape a wiring mistake
+	// actually takes is a typed nil: declare a *RegistryStatusQuerier, leave
+	// it unset on some branch, pass it. That is not the nil interface, so it
+	// walks past a bare comparison and panics later with a nil dereference
+	// that names nothing.
+	if typekit.IsNil(restoreStatus) {
+		panic("apiserver: restoreStatus is required; pass restore.NoopStatusQuerier{} when the guard is not wanted")
+	}
+
 	renderDecodeOnce.Do(func() {
 		render.Decode = JSONAPIAwareDecoder
 	})

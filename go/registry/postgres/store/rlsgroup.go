@@ -136,6 +136,16 @@ func (r *RLSGroupRepository[T, P]) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+func (r *RLSGroupRepository[T, P]) ExistsByFieldIn(ctx context.Context, field string, values []string) (bool, error) {
+	tx, err := r.beginTx(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	return NewTxRegistry[T](tx, r.table).ExistsByFieldIn(ctx, field, values)
+}
+
 func (r *RLSGroupRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) (T, error) {
 	var zero T
 
