@@ -319,9 +319,16 @@ jobs:
     # Webkit is the most expensive e2e lane and adds the least signal for
     # backend-only PRs. Skip when the diff is purely backend/image inputs.
     # Forced on for any frontend / e2e / CI diff, master push, or v* tag.
+    #
+    # And only when there is something to run against: this lane downloads the
+    # darwin binary from the docker.yml run the waiter resolved, so with no
+    # image built that run has no such artifact and download-artifact fails
+    # before a single test starts. Unlike the linux lane this is not a matrix
+    # job, so skipping it reports under its own name and passes.
     if: >-
-      github.event_name != 'pull_request' ||
-      needs.changes.outputs.run_webkit == 'true'
+      (github.event_name != 'pull_request' ||
+      needs.changes.outputs.run_webkit == 'true') &&
+      needs.resolve-build.outputs.built == 'true'
     timeout-minutes: 45
 
     env:
