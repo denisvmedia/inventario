@@ -176,3 +176,5 @@ markdownlint-cli2 --fix          # auto-fix what's auto-fixable
   above.
 - **No `merge_group` trigger.** Merge-queue compatibility is a separate
   feature; this PR keeps the existing trigger surface intact.
+
+<!-- verification scratch: remove before merge -->
