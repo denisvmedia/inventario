@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { pdfjsLib } from "@/lib/pdfjs"
+import { detachableCopy, getCachedPdfBytes, rememberBytes } from "@/lib/pdf-bytes-cache"
 
 const MIN_SCALE = 0.25
 const MAX_SCALE = 5
@@ -286,12 +287,18 @@ export function PdfFullViewer({ url, title, onClose }: PdfFullViewerProps) {
     setError(null)
     setProgress(null)
     setPage(1)
-    const task = pdfjsLib.getDocument({ url })
+    // See PdfViewer: the inline panel and this reader share one byte cache, so
+    // expanding an already-open PDF does not download it again (#1977).
+    const cached = getCachedPdfBytes(url)
+    const task = cached
+      ? pdfjsLib.getDocument({ data: detachableCopy(cached) })
+      : pdfjsLib.getDocument({ url })
     task.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
       if (!cancelled) setProgress(total > 0 ? Math.min(1, loaded / total) : null)
     }
     task.promise
       .then(async (doc) => {
+        if (!cached) rememberBytes(doc, url)
         const first = await doc.getPage(1)
         if (cancelled) return
         const vp = first.getViewport({ scale: 1 })

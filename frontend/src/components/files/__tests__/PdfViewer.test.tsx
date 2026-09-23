@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { initI18n } from "@/i18n"
+import { __resetPdfBytesCacheForTests } from "@/lib/pdf-bytes-cache"
 
 // Drive the canvas size off `scale` so a zoom change is observable as a
 // change in the canvas's *displayed* (CSS) size. The component renders at
@@ -39,6 +40,9 @@ vi.mock("@/lib/pdfjs", () => {
   const doc = {
     numPages: 3,
     getPage: vi.fn(() => Promise.resolve(pageProxy)),
+    // The real PDFDocumentProxy has this; it is how the byte cache gets at
+    // what pdf.js downloaded (#1977).
+    getData: vi.fn(() => Promise.resolve(new Uint8Array([37, 80, 68, 70]))),
   }
   return {
     pdfjsLib: {
@@ -74,6 +78,7 @@ beforeEach(() => {
   lastTask = null
   cancelMock.mockClear()
   renderMock.mockClear()
+  __resetPdfBytesCacheForTests()
 })
 
 async function renderViewer() {
@@ -246,5 +251,81 @@ describe("<PdfViewer />", () => {
     } finally {
       pendingDoc = false
     }
+  })
+})
+
+// #1977: the inline panel and the fullscreen reader each loaded the document
+// independently, and the download endpoint answers `no-store`, so opening a
+// PDF and expanding it downloaded the same file twice — as did every
+// close-and-reopen.
+describe("byte cache", () => {
+  const SIGNED = "/api/v1/files/download/files/file-1?sig=a&exp=1&uid=u&fid=file-1"
+  const SIGNED_INLINE = `${SIGNED}&disposition=inline`
+
+  async function mountAt(url: string) {
+    const { PdfViewer } = await import("@/components/files/PdfViewer")
+    const view = render(<PdfViewer url={url} />)
+    await screen.findByTestId("pdf-viewer-canvas")
+    return view
+  }
+
+  it("loads from the URL the first time and from memory the second", async () => {
+    const { pdfjsLib } = await import("@/lib/pdfjs")
+    const getDocument = vi.mocked(pdfjsLib.getDocument)
+    getDocument.mockClear()
+
+    const first = await mountAt(SIGNED)
+    expect(getDocument).toHaveBeenCalledTimes(1)
+    expect(getDocument.mock.calls[0][0]).toHaveProperty("url", SIGNED)
+
+    // Let the getData promise settle so the bytes land in the cache.
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    first.unmount()
+
+    await mountAt(SIGNED)
+    expect(getDocument).toHaveBeenCalledTimes(2)
+    const second = getDocument.mock.calls[1][0] as Record<string, unknown>
+    expect(second).not.toHaveProperty("url")
+    expect(second.data).toBeInstanceOf(Uint8Array)
+  })
+
+  it("reuses the bytes across the inline and attachment URLs of one file", async () => {
+    const { pdfjsLib } = await import("@/lib/pdfjs")
+    const getDocument = vi.mocked(pdfjsLib.getDocument)
+    getDocument.mockClear()
+
+    const first = await mountAt(SIGNED)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    first.unmount()
+
+    // The fullscreen reader is handed the other disposition's URL — a
+    // different string, the same file.
+    await mountAt(SIGNED_INLINE)
+    const second = getDocument.mock.calls[1][0] as Record<string, unknown>
+    expect(second).not.toHaveProperty("url")
+    expect(second.data).toBeInstanceOf(Uint8Array)
+  })
+
+  it("still loads from the URL for a different file", async () => {
+    const { pdfjsLib } = await import("@/lib/pdfjs")
+    const getDocument = vi.mocked(pdfjsLib.getDocument)
+    getDocument.mockClear()
+
+    const first = await mountAt(SIGNED)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    first.unmount()
+
+    const other = "/api/v1/files/download/files/file-2?sig=a&exp=1&uid=u&fid=file-2"
+    await mountAt(other)
+    expect(getDocument.mock.calls[1][0]).toHaveProperty("url", other)
   })
 })

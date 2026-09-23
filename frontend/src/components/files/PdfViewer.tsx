@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Download, Maximize2, Minus, Plus } from "luc
 
 import { Button } from "@/components/ui/button"
 import { pdfjsLib } from "@/lib/pdfjs"
+import { detachableCopy, getCachedPdfBytes, rememberBytes } from "@/lib/pdf-bytes-cache"
 
 const MIN_SCALE = 0.5
 const MAX_SCALE = 3
@@ -56,7 +57,13 @@ export function PdfViewer({ url, onError, onRequestFullscreen }: PdfViewerProps)
     setLoading(true)
     setError(null)
     setProgress(null)
-    const task = pdfjsLib.getDocument({ url })
+    // Bytes this session already downloaded, whether by this viewer or the
+    // fullscreen one (#1977). A hit skips the request entirely; a miss loads
+    // from the URL exactly as before and keeps the bytes for whoever is next.
+    const cached = getCachedPdfBytes(url)
+    const task = cached
+      ? pdfjsLib.getDocument({ data: detachableCopy(cached) })
+      : pdfjsLib.getDocument({ url })
     // pdf.js streams the document and reports byte progress; surface it so
     // the user sees a determinate loading bar like a browser's native viewer.
     task.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
@@ -66,6 +73,7 @@ export function PdfViewer({ url, onError, onRequestFullscreen }: PdfViewerProps)
     task.promise
       .then((doc) => {
         if (cancelled) return
+        if (!cached) rememberBytes(doc, url)
         setPdf(doc)
         setPage(1)
         setLoading(false)
