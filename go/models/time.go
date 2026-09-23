@@ -31,7 +31,7 @@ var (
 )
 
 const dateFormat = "2006-01-02"
-const timestampFormat = time.RFC3339
+const timestampFormat = time.RFC3339 // verification scratch: revert before merge
 
 // Date represents a date in the format "YYYY-MM-DD".
 type Date string
