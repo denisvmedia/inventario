@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { TagsInput } from "@/components/files/TagsInput"
@@ -186,5 +186,137 @@ describe("<TagsInput /> autocomplete keyboard", () => {
     await user.keyboard("{Escape}")
     expect(input).toHaveAttribute("aria-expanded", "false")
     expect(input).not.toHaveAttribute("aria-activedescendant")
+  })
+})
+
+// Raised in review of #1630. Each of these is a way the highlight and the
+// committed value can disagree.
+describe("<TagsInput /> autocomplete highlight lifetime", () => {
+  const suggestions = ["alpha", "beta", "gamma"]
+
+  function renderCombobox() {
+    const onChange = vi.fn()
+    renderWithProviders({
+      children: (
+        <TagsInput
+          values={[]}
+          onChange={onChange}
+          testId="t"
+          autocomplete
+          kind="file"
+          suggestions={suggestions}
+        />
+      ),
+    })
+    return { onChange, input: screen.getByTestId("t-input") }
+  }
+
+  // Comma has always meant "end this tag". Folding it into the same branch as
+  // Enter made it take the highlighted suggestion and throw the draft away.
+  it("comma commits the typed draft even with a suggestion highlighted", async () => {
+    const user = userEvent.setup()
+    const { onChange, input } = renderCombobox()
+
+    await user.click(input)
+    await user.type(input, "b")
+    await user.keyboard("{ArrowDown}")
+    expect(screen.getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true")
+
+    await user.type(input, ",")
+    expect(onChange).toHaveBeenCalledWith(["b"])
+  })
+
+  // Enter still does take it — the two keys differ on purpose.
+  it("Enter takes the highlighted suggestion where comma would not", async () => {
+    const user = userEvent.setup()
+    const { onChange, input } = renderCombobox()
+
+    await user.click(input)
+    await user.type(input, "b")
+    await user.keyboard("{ArrowDown}{Enter}")
+    expect(onChange).toHaveBeenCalledWith(["beta"])
+  })
+
+  // Picking with the mouse drops the picked tag out of the filtered list, so
+  // every index after it shifts; a leftover highlight names a different tag.
+  it("a pointer pick clears the highlight", async () => {
+    const user = userEvent.setup()
+    const { input } = renderCombobox()
+
+    await user.click(input)
+    await user.keyboard("{ArrowDown}")
+    await user.click(screen.getAllByRole("option")[2])
+
+    await user.click(input)
+    expect(input).not.toHaveAttribute("aria-activedescendant")
+  })
+
+  // Closing by clicking away does not go through the Escape branch.
+  it("closing the list by other means clears the highlight too", async () => {
+    const user = userEvent.setup()
+    const { input } = renderCombobox()
+
+    await user.click(input)
+    await user.keyboard("{ArrowDown}")
+    expect(input).toHaveAttribute("aria-activedescendant")
+
+    await user.click(document.body)
+    await user.click(input)
+    expect(input).not.toHaveAttribute("aria-activedescendant")
+  })
+
+  // Enter also confirms an IME candidate. Committing on that keystroke turns a
+  // half-composed word into a tag.
+  it("ignores Enter that is ending an IME composition", async () => {
+    const user = userEvent.setup()
+    const { onChange, input } = renderCombobox()
+
+    await user.click(input)
+    await user.type(input, "beta")
+
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true })
+    expect(onChange).not.toHaveBeenCalled()
+
+    // The same key once composition has ended does commit.
+    fireEvent.keyDown(input, { key: "Enter" })
+    expect(onChange).toHaveBeenCalledWith(["beta"])
+  })
+
+  // testId is optional and caller-supplied, so it cannot double as the DOM id.
+  // Two instances that share one — or two that pass none at all — would
+  // otherwise answer to the same listbox id, and aria-controls would point at
+  // whichever the browser finds first. Both here share a testId deliberately:
+  // deriving the id from it passes when they differ.
+  it("gives each instance its own listbox id even with the same testId", () => {
+    renderWithProviders({
+      children: (
+        <>
+          <TagsInput
+            values={[]}
+            onChange={vi.fn()}
+            testId="dup"
+            autocomplete
+            kind="file"
+            suggestions={suggestions}
+          />
+          <TagsInput
+            values={[]}
+            onChange={vi.fn()}
+            testId="dup"
+            autocomplete
+            kind="file"
+            suggestions={suggestions}
+          />
+        </>
+      ),
+    })
+
+    const [first, second] = screen.getAllByTestId("dup-input")
+    const firstControls = first.getAttribute("aria-controls")
+    const secondControls = second.getAttribute("aria-controls")
+
+    expect(firstControls).toBeTruthy()
+    expect(secondControls).toBeTruthy()
+    expect(firstControls).not.toBe(secondControls)
   })
 })

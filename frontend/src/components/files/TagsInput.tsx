@@ -1,5 +1,5 @@
 import { Plus, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
@@ -107,7 +107,11 @@ export function TagsInput({
   // -1 means "nothing highlighted", which is a valid state: Enter then
   // commits the typed draft, as it did before there was a keyboard path.
   const [activeIndex, setActiveIndex] = useState(-1)
-  const listboxId = `${testId ?? "tags"}-listbox`
+  // useId, not testId: testId is optional and caller-controlled, so two
+  // instances can share one — and then both listboxes answer to the same DOM
+  // id and aria-controls points at whichever the browser finds first.
+  const instanceId = useId()
+  const listboxId = `${instanceId}-listbox`
   const optionId = (i: number) => `${listboxId}-option-${i}`
   // The list is re-filtered on every keystroke, so an index held across a
   // filter change would point at a different tag — or past the end.
@@ -126,6 +130,9 @@ export function TagsInput({
   }
 
   function pick(slug: string) {
+    // Whatever index was highlighted refers to the list before this pick; the
+    // picked tag drops out of it, so everything after shifts up by one.
+    setActiveIndex(-1)
     if (values.includes(slug)) return
     onChange([...values, slug])
     setDraft("")
@@ -206,12 +213,18 @@ export function TagsInput({
             e.preventDefault()
             setActiveIndex(e.key === "Home" ? 0 : visibleSuggestions.length - 1)
           } else if (e.key === "Enter" || e.key === ",") {
+            // Enter also ends an IME composition. Committing here would eat
+            // the keystroke that confirms the candidate and turn a
+            // half-composed word into a tag.
+            if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) {
+              return
+            }
             e.preventDefault()
-            // A highlighted suggestion wins; with nothing highlighted this
-            // commits the typed draft, which is what Enter always did.
-            if (activeSuggestion !== undefined) {
+            // Only Enter takes the highlighted suggestion. Comma has always
+            // meant "end this tag", so highlighting `beta` and typing a comma
+            // after `b` must still produce `b`, not `beta`.
+            if (e.key === "Enter" && activeSuggestion !== undefined) {
               pick(activeSuggestion)
-              setActiveIndex(-1)
             } else {
               commit()
             }
@@ -254,7 +267,15 @@ export function TagsInput({
     <div className="flex flex-col gap-1.5" data-testid={testId}>
       {label ? <Label>{label}</Label> : null}
       {autocomplete ? (
-        <Popover open={dropdownOpen} onOpenChange={setOpen}>
+        <Popover
+          open={dropdownOpen}
+          onOpenChange={(nextOpen) => {
+            setOpen(nextOpen)
+            // A click outside closes the list without going through the
+            // Escape branch; the highlight must not survive into the reopen.
+            if (!nextOpen) setActiveIndex(-1)
+          }}
+        >
           <PopoverAnchor asChild>{inputAndChips}</PopoverAnchor>
           <PopoverContent
             align="start"
