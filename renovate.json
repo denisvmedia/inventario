@@ -142,6 +142,19 @@
         "rolldown"
       ],
       "automerge": false
+    },
+    {
+      "description": "go-lint.yml reads the golangci-lint version from the vars action, so the action's `version:` input holds an expression. Renovate already skips it as `invalid-value`; disabling it says so on purpose, and records that the customManager above is what bumps the real pin, so nobody puts a literal back here to 'fix' the skip (#1818).",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepTypes": [
+        "uses-with"
+      ],
+      "matchPackageNames": [
+        "golangci/golangci-lint"
+      ],
+      "enabled": false
     }
   ],
   "postUpdateOptions": [
@@ -175,7 +188,7 @@
         "/^\\.github/actions/vars/action\\.yml$/"
       ],
       "matchStrings": [
-        "GOLANGCI_LINT_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+        "GOLANGCI_LINT_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)"
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "golangci/golangci-lint"
