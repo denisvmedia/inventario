@@ -1,0 +1,53 @@
+name: CI Lint
+
+# Nothing checked the workflows themselves, which is how a verdict that read a
+# skipped producer as a published image reached master. Runs on every pull
+# request rather than behind a path filter: it takes under a minute, and a
+# workflow-level filter creates no check run at all on the pull requests it
+# skips, which is what stops a context from being required.
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.7
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          sudo install -m 0755 /tmp/actionlint /usr/local/bin/actionlint
+          actionlint --version
+
+      - name: Lint the workflows
+        # shellcheck runs through actionlint over every `run:` block, so this
+        # also covers the shell the workflows are made of. Severity matches
+        # example-smoke-test, which has always run shellcheck at `warning`:
+        # the info-level notes are mostly SC2015 on `[ test ] || { fail; }`,
+        # which is the intended shape here and not an accident.
+        env:
+          SHELLCHECK_OPTS: -S warning
+        run: actionlint
+
+      - name: Test the Docker image waiter's verdict
+        # Ten lines of awk that every image-dependent lane hangs on, and until
+        # now nothing ran them.
+        run: ./scripts/test-image-waiter-verdict.sh
