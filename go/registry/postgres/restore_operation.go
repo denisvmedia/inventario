@@ -127,6 +127,17 @@ func (r *RestoreOperationRegistry) HasActive(ctx context.Context) (bool, error) 
 	return exists, nil
 }
 
+// ClaimPending flips an operation from pending to running, letting the
+// database pick the winner when two workers race for the same row (#2472).
+func (r *RestoreOperationRegistry) ClaimPending(ctx context.Context, id string) (bool, error) {
+	claimed, err := r.newSQLRegistry().ClaimByStatus(ctx, id,
+		string(models.RestoreStatusPending), string(models.RestoreStatusRunning))
+	if err != nil {
+		return false, errxtrace.Wrap("failed to claim pending restore operation", err)
+	}
+	return claimed, nil
+}
+
 func (r *RestoreOperationRegistry) Count(ctx context.Context) (int, error) {
 	reg := r.newSQLRegistry()
 

@@ -222,12 +222,13 @@ run:
     archive:
       # Bundles exports, imports, and restores. They share the archive
       # code path and a single queue-depth scaling signal.
-      # Keep replicaCount at 1. Each replica enforces its own
-      # app.maxConcurrentRestores (and export/import) limit, so cluster-wide
-      # concurrency is replicaCount * maxConcurrent per family — and a
-      # pending job is claimed per process, not in the database, so two
-      # replicas can pick up the same row and run it twice. A second replica
-      # needs the DB-level claim first.
+      # A pending job is claimed with a conditional UPDATE, so two replicas
+      # racing for the same row get one winner and it cannot be run twice
+      # (#2472). What is left to weigh before raising replicaCount is that
+      # each replica enforces its own app.maxConcurrentRestores (and
+      # export/import) limit, so cluster-wide concurrency is
+      # replicaCount * maxConcurrent per family — divide the per-replica
+      # limits if you want the total to stay where it was.
       enabled: false
     emails:
       enabled: false
