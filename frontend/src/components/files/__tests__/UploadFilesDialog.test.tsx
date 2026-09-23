@@ -97,9 +97,14 @@ describe("<UploadFilesDialog />", () => {
       new File(["x"], "song.mp3", { type: "audio/mpeg" }),
     ])
     await user.click(screen.getByTestId("files-upload-next"))
-    // Wait for the metadata step to render with one select per file.
-    await waitFor(() => expect(screen.getAllByRole("combobox")).toHaveLength(3))
-    const all = screen.getAllByRole("combobox") as HTMLSelectElement[]
+    // Wait for the metadata step to render with one select per file. Narrowed
+    // to the <select> elements: the per-file tag input is a combobox too now
+    // that it implements the ARIA pattern (#1630), so the bare role query
+    // would match six.
+    const categorySelects = () =>
+      screen.getAllByRole("combobox").filter((el) => el.tagName === "SELECT") as HTMLSelectElement[]
+    await waitFor(() => expect(categorySelects()).toHaveLength(3))
+    const all = categorySelects()
     expect(all[0].value).toBe("images")
     expect(all[1].value).toBe("documents")
     expect(all[2].value).toBe("other")
