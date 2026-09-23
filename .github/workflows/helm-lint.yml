@@ -4,19 +4,7 @@ on:
   push:
     branches:
       - master
-    paths:
-      - 'helm/**'
-      - 'deploy/monitoring/**'
-      - 'scripts/test-alert-rules.sh'
-      - 'scripts/test-alert-routing.sh'
-      - '.github/workflows/helm-lint.yml'
   pull_request:
-    paths:
-      - 'helm/**'
-      - 'deploy/monitoring/**'
-      - 'scripts/test-alert-rules.sh'
-      - 'scripts/test-alert-routing.sh'
-      - '.github/workflows/helm-lint.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -27,9 +15,37 @@ permissions:
   pull-requests: read
 
 jobs:
+  # Resolve which ecosystems this PR touches. See .github/filters.yml +
+  # devdocs/ci/conditional-execution.md. A workflow-level `paths:` filter
+  # creates no check run at all on the pull requests it skips, which is what
+  # keeps a context from being required (#1816, #2569); the gate below leaves
+  # a `skipped` check instead, which branch protection treats as passing.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      helm: ${{ steps.filter.outputs.helm }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        with:
+          filters: .github/filters.yml
+
   lint:
     name: Lint Helm chart
     runs-on: ubuntu-latest
+    needs: changes
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.helm == 'true' ||
+      needs.changes.outputs.ci == 'true'
 
     steps:
       - name: Checkout code

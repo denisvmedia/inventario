@@ -3,25 +3,7 @@ name: Kind Smoke Test
 on:
   push:
     branches: [master]
-    paths:
-      - 'Dockerfile'
-      - 'go/**'
-      - 'frontend/**'
-      - 'scripts/**'
-      - 'init-scripts/**'
-      - 'k8s/dev/**'
-      - '.github/workflows/kind-smoke-test.yml'
-      - '.github/workflows/_wait-for-docker-image.yml'
   pull_request:
-    paths:
-      - 'Dockerfile'
-      - 'go/**'
-      - 'frontend/**'
-      - 'scripts/**'
-      - 'init-scripts/**'
-      - 'k8s/dev/**'
-      - '.github/workflows/kind-smoke-test.yml'
-      - '.github/workflows/_wait-for-docker-image.yml'
 
 # kind-smoke is a pure consumer: it pulls the sha-<7> image docker.yml
 # publishes for this commit, loads it into a kind cluster, and validates
@@ -40,6 +22,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Resolve which ecosystems this PR touches. See .github/filters.yml +
+  # devdocs/ci/conditional-execution.md. A workflow-level `paths:` filter
+  # creates no check run at all on the pull requests it skips, which is what
+  # keeps a context from being required (#1816, #2569); the gate below leaves
+  # a `skipped` check instead, which branch protection treats as passing.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      image_inputs: ${{ steps.filter.outputs.image_inputs }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        with:
+          filters: .github/filters.yml
+
   # Wait for docker.yml to finish for this SHA and resolve the immutable
   # sha-<7> image reference. A naive "does the tag exist on GHCR?" check
   # (what this workflow used to do) can happily consume the PREVIOUS
@@ -48,6 +53,11 @@ jobs:
   resolve-build:
     name: Resolve build artifacts
     uses: ./.github/workflows/_wait-for-docker-image.yml
+    needs: changes
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.image_inputs == 'true' ||
+      needs.changes.outputs.ci == 'true'
 
   # A cancelled or failed image build used to take every lane below it with
   # it: the waiter cancels, its dependents report SKIPPED, and the pull
