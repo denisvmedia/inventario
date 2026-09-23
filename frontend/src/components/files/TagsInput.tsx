@@ -104,6 +104,16 @@ export function TagsInput({
       : []
   const dropdownOpen = !!autocomplete && open && visibleSuggestions.length > 0
 
+  // -1 means "nothing highlighted", which is a valid state: Enter then
+  // commits the typed draft, as it did before there was a keyboard path.
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const listboxId = `${testId ?? "tags"}-listbox`
+  const optionId = (i: number) => `${listboxId}-option-${i}`
+  // The list is re-filtered on every keystroke, so an index held across a
+  // filter change would point at a different tag — or past the end.
+  const activeClamped = activeIndex < visibleSuggestions.length ? activeIndex : -1
+  const activeSuggestion = activeClamped >= 0 ? visibleSuggestions[activeClamped] : undefined
+
   function commit() {
     const trimmed = draft.trim()
     if (!trimmed) return
@@ -156,7 +166,21 @@ export function TagsInput({
         // when the user clears all chips.
         placeholder={values.length === 0 ? placeholder : undefined}
         list={datalistId}
-        onChange={(e) => setDraft(e.target.value)}
+        {...(autocomplete
+          ? {
+              role: "combobox" as const,
+              "aria-expanded": dropdownOpen,
+              "aria-controls": listboxId,
+              "aria-autocomplete": "list" as const,
+              "aria-activedescendant":
+                activeSuggestion !== undefined ? optionId(activeClamped) : undefined,
+            }
+          : {})}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          // The filtered list is about to change under the highlight.
+          setActiveIndex(-1)
+        }}
         onFocus={() => {
           if (autocomplete) setOpen(true)
         }}
@@ -170,12 +194,31 @@ export function TagsInput({
           if (autocomplete) setOpen(true)
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === ",") {
+          if (dropdownOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
             e.preventDefault()
-            commit()
+            const last = visibleSuggestions.length - 1
+            setActiveIndex((i) => {
+              const from = i < visibleSuggestions.length ? i : -1
+              if (e.key === "ArrowDown") return from >= last ? 0 : from + 1
+              return from <= 0 ? last : from - 1
+            })
+          } else if (dropdownOpen && (e.key === "Home" || e.key === "End")) {
+            e.preventDefault()
+            setActiveIndex(e.key === "Home" ? 0 : visibleSuggestions.length - 1)
+          } else if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault()
+            // A highlighted suggestion wins; with nothing highlighted this
+            // commits the typed draft, which is what Enter always did.
+            if (activeSuggestion !== undefined) {
+              pick(activeSuggestion)
+              setActiveIndex(-1)
+            } else {
+              commit()
+            }
           } else if (e.key === "Escape" && open) {
             e.preventDefault()
             setOpen(false)
+            setActiveIndex(-1)
           } else if (e.key === "Backspace" && draft === "" && values.length > 0) {
             onChange(values.slice(0, -1))
           }
@@ -249,11 +292,13 @@ export function TagsInput({
               if (anchorRef.current?.contains(e.target as Node)) e.preventDefault()
             }}
             data-testid={testId ? `${testId}-dropdown` : undefined}
+            id={listboxId}
             role="listbox"
           >
-            {visibleSuggestions.map((s) => (
+            {visibleSuggestions.map((s, i) => (
               <button
                 key={s}
+                id={optionId(i)}
                 type="button"
                 // `onMouseDown` (not onClick) so we fire BEFORE the
                 // input's blur handler runs and tears the dropdown
@@ -262,9 +307,14 @@ export function TagsInput({
                   e.preventDefault()
                   pick(s)
                 }}
-                className="block w-full cursor-pointer px-2 py-1 text-left hover:bg-accent hover:text-accent-foreground"
+                onMouseEnter={() => setActiveIndex(i)}
+                className={cn(
+                  "block w-full cursor-pointer px-2 py-1 text-left hover:bg-accent hover:text-accent-foreground",
+                  i === activeClamped && "bg-accent text-accent-foreground"
+                )}
                 role="option"
-                aria-selected="false"
+                aria-selected={i === activeClamped}
+                data-active={i === activeClamped ? "true" : undefined}
               >
                 {s}
               </button>
