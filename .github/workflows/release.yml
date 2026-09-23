@@ -6,17 +6,11 @@ on:
     tags:
       - 'v*'
   # PR -> dry-run: validate goreleaser config + binaries can still be built
-  # before they're irreversibly tagged. Path filter narrows triggers to
-  # changes that can plausibly break the goreleaser pipeline. Runs for
-  # every PR (not only master-targeted ones) so PR-train branches exercise
-  # the dry-run before they eventually land on master.
+  # before they're irreversibly tagged. Runs for every PR (not only
+  # master-targeted ones) so PR-train branches exercise the dry-run before they
+  # eventually land on master; the `changes` job below narrows it to diffs that
+  # can plausibly break the goreleaser pipeline.
   pull_request:
-    paths:
-      - '.goreleaser.yaml'
-      - 'go/**'
-      - 'frontend/**'
-      - 'Makefile'
-      - '.github/workflows/release.yml'
 
 permissions:
   contents: write
@@ -26,11 +20,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Resolve which ecosystems this PR touches. See .github/filters.yml +
+  # devdocs/ci/conditional-execution.md. A workflow-level `paths:` filter
+  # creates no check run at all on the pull requests it skips, which is what
+  # keeps a context from being required (#1816, #2569); the gate below leaves
+  # a `skipped` check instead, which branch protection treats as passing.
+  #
+  # Only the pull-request dry-run is gated. A tag push is a release and always
+  # runs.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      image_inputs: ${{ steps.filter.outputs.image_inputs }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        with:
+          filters: .github/filters.yml
+
   goreleaser:
     # Docker images are built and pushed by docker.yml on the same tag push
     # (push: tags: ['v*']). This job only owns binaries, archives and the
     # GitHub Release, so QEMU/Buildx/ghcr login are not needed here.
     runs-on: ubuntu-latest
+    needs: changes
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.image_inputs == 'true' ||
+      needs.changes.outputs.ci == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

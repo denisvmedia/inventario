@@ -121,6 +121,20 @@ image_inputs:
   - 'infra/helm-overlays/**'
   - 'infra/argocd/**'
 
+# ---- Helm chart and the monitoring stack it renders ----------------------
+# helm-lint does more than lint the chart: it renders the alert rules and runs
+# promtool and amtool over them, so the inputs live outside helm/ too.
+helm:
+  - 'helm/**'
+  - 'deploy/monitoring/**'
+  - 'scripts/test-alert-rules.sh'
+  - 'scripts/test-alert-routing.sh'
+
+# ---- Renovate configuration ----------------------------------------------
+# The only input renovate-config-validator reads.
+renovate_config:
+  - 'renovate.json'
+
 # ---- Markdown lint -------------------------------------------------------
 # Any markdown file anywhere in the repo, plus the linter's own config.
 # Used by `markdown-lint.yml` to skip the run when no documentation

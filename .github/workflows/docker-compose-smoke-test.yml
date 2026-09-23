@@ -3,23 +3,7 @@ name: Docker Compose Smoke Test
 on:
   push:
     branches: [master]
-    paths:
-      - 'docker-compose.yaml'
-      - 'Dockerfile'
-      - 'go/**'
-      - 'frontend/**'
-      - 'scripts/**'
-      - 'init-scripts/**'
-      - '.github/workflows/docker-compose-smoke-test.yml'
   pull_request:
-    paths:
-      - 'docker-compose.yaml'
-      - 'Dockerfile'
-      - 'go/**'
-      - 'frontend/**'
-      - 'scripts/**'
-      - 'init-scripts/**'
-      - '.github/workflows/docker-compose-smoke-test.yml'
 
 permissions:
   contents: read
@@ -29,9 +13,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Resolve which ecosystems this PR touches. See .github/filters.yml +
+  # devdocs/ci/conditional-execution.md. A workflow-level `paths:` filter
+  # creates no check run at all on the pull requests it skips, which is what
+  # keeps a context from being required (#1816, #2569); the gate below leaves
+  # a `skipped` check instead, which branch protection treats as passing.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      image_inputs: ${{ steps.filter.outputs.image_inputs }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        with:
+          filters: .github/filters.yml
+
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
+    needs: changes
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.image_inputs == 'true' ||
+      needs.changes.outputs.ci == 'true'
     timeout-minutes: 20
 
     env:
