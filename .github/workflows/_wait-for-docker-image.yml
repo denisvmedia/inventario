@@ -120,21 +120,37 @@ jobs:
               # run for the same commit whose producers are all skipped; being
               # the newer run, it is the one matched here, while the build it
               # superseded was cancelled mid-flight.
+              #
+              # The two jobs are not interchangeable. The manifest is what says
+              # whether an image exists; the darwin binary is a separate
+              # artifact only the macOS e2e lane reads, and docker.yml skips it
+              # unless the diff touches frontend, e2e or ci. A Go-only change
+              # therefore produces a successful manifest and a skipped binary,
+              # which is an ordinary state and not a contradiction.
               read -r VERDICT DETAIL <<<"$(
                 printf '%s\n' "$JOBS" | awk -F'\t' -v merge="$MERGE_JOB" -v darwin="$DARWIN_JOB" '
-                  $1 == merge || $1 == darwin {
-                    seen++
+                  $1 == merge {
+                    seen_merge = 1
                     if ($2 != "completed") pending++
-                    else if ($3 == "success") ok++
-                    else if ($3 == "skipped") skip++
-                    else bad = bad $1 "=" $3 "; "
+                    else merge_c = $3
+                  }
+                  $1 == darwin {
+                    seen_darwin = 1
+                    if ($2 != "completed") pending++
+                    else darwin_c = $3
                   }
                   END {
-                    if (bad != "") print "failed " bad
-                    else if (seen < 2 || pending > 0) print "pending"
-                    else if (ok == seen) print "ready"
-                    else if (skip == seen) print "none"
-                    else print "failed mixed:" ok "-success/" skip "-skipped"
+                    if (!seen_merge || !seen_darwin || pending > 0) {
+                      print "pending"
+                    } else if (merge_c != "success" && merge_c != "skipped") {
+                      print "failed " merge "=" merge_c
+                    } else if (darwin_c != "success" && darwin_c != "skipped") {
+                      print "failed " darwin "=" darwin_c
+                    } else if (merge_c == "success") {
+                      print "ready"
+                    } else {
+                      print "none"
+                    }
                   }'
               )"
               case "$VERDICT" in

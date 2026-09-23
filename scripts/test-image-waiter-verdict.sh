@@ -58,15 +58,24 @@ check() {
   fi
 }
 
-both() { printf '%s\tcompleted\t%s\n%s\tcompleted\t%s' "$MERGE_JOB" "$1" "$DARWIN_JOB" "$2"; }
+jobs() { printf '%s\t%s\t%s\n%s\t%s\t%s' "$MERGE_JOB" "$1" "$2" "$DARWIN_JOB" "$3" "$4"; }
 
-check "both producers succeeded"            ready   "$(both success success)"
-check "both producers skipped"              none    "$(both skipped skipped)"
-check "manifest cancelled"                  failed  "$(both cancelled success)"
-check "darwin binary failed"                failed  "$(both success failure)"
-check "one succeeded, one skipped"          failed  "$(both success skipped)"
-check "manifest still running"              pending "$(printf '%s\tin_progress\t\n%s\tcompleted\tsuccess' "$MERGE_JOB" "$DARWIN_JOB")"
-check "darwin job absent from the run"      pending "$(printf '%s\tcompleted\tsuccess' "$MERGE_JOB")"
-check "unrelated jobs are ignored"          pending "$(printf 'Scan image for vulnerabilities\tcompleted\tsuccess')"
+# The manifest says whether an image exists. The darwin binary is a separate
+# artifact only the macOS e2e lane reads, and docker.yml skips it unless the
+# diff touches frontend, e2e or ci — so a Go-only change legitimately produces
+# a successful manifest beside a skipped binary.
+check "image built, binary built"              ready   "$(jobs completed success completed success)"
+check "image built, binary not needed"         ready   "$(jobs completed success completed skipped)"
+check "nothing built at all"                   none    "$(jobs completed skipped completed skipped)"
+check "no image, but a binary somehow"         none    "$(jobs completed skipped completed success)"
+check "manifest cancelled"                     failed  "$(jobs completed cancelled completed success)"
+check "manifest failed"                        failed  "$(jobs completed failure completed skipped)"
+check "binary failed"                          failed  "$(jobs completed success completed failure)"
+check "binary cancelled"                       failed  "$(jobs completed success completed cancelled)"
+check "manifest still running"                 pending "$(jobs in_progress '' completed success)"
+check "binary still running"                   pending "$(jobs completed success in_progress '')"
+check "binary absent from the run"             pending "$(printf '%s\tcompleted\tsuccess' "$MERGE_JOB")"
+check "manifest absent from the run"           pending "$(printf '%s\tcompleted\tsuccess' "$DARWIN_JOB")"
+check "unrelated jobs are ignored"             pending "$(printf 'Scan image for vulnerabilities\tcompleted\tsuccess')"
 
 exit "$failed"
