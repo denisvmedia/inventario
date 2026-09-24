@@ -261,6 +261,16 @@ type Config struct {
 	OAuthGoogleTokenURLOverride    string `yaml:"-" env:"OAUTH_GOOGLE_TOKEN_URL_OVERRIDE" env-default:""`
 	OAuthGoogleUserInfoURLOverride string `yaml:"-" env:"OAUTH_GOOGLE_USERINFO_URL_OVERRIDE" env-default:""`
 
+	// OAuthGitHub{Auth,Token,User,UserEmails}URLOverride are the same
+	// TEST-ONLY hook for GitHub's four endpoints (#1929). GitHub needs
+	// four rather than three because the profile and the verified email
+	// come from separate calls (/user and /user/emails). NEVER set these
+	// in a production deployment.
+	OAuthGitHubAuthURLOverride       string `yaml:"-" env:"OAUTH_GITHUB_AUTH_URL_OVERRIDE" env-default:""`
+	OAuthGitHubTokenURLOverride      string `yaml:"-" env:"OAUTH_GITHUB_TOKEN_URL_OVERRIDE" env-default:""`
+	OAuthGitHubUserURLOverride       string `yaml:"-" env:"OAUTH_GITHUB_USER_URL_OVERRIDE" env-default:""`
+	OAuthGitHubUserEmailsURLOverride string `yaml:"-" env:"OAUTH_GITHUB_USER_EMAILS_URL_OVERRIDE" env-default:""`
+
 	// TestTenantHeaderEnabled is a TEST-ONLY hook that lets a request
 	// override the Host-derived tenant via the X-Inventario-Test-Tenant
 	// header (#1851). It exists exclusively so the Playwright e2e suite

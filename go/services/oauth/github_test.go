@@ -431,3 +431,91 @@ func TestGitHubExchange_RejectsMalformedJSON(t *testing.T) {
 	_, err := p.Exchange(context.Background(), "code", "verifier")
 	c.Assert(err, qt.IsNotNil)
 }
+
+// TestGitHubProvider_HonorsEndpointOverrides pins the test-only hook #1929
+// added so the e2e stub can stand in for GitHub. It asserts the destinations,
+// not just that the exchange succeeded: an override that reached the config
+// struct but not the request would still produce a valid-looking profile here
+// while talking to api.github.com in the e2e run.
+func TestGitHubProvider_HonorsEndpointOverrides(t *testing.T) {
+	c := qt.New(t)
+
+	stub := "http://127.0.0.1:9/gh"
+	var seen []string
+	client := &http.Client{Transport: routeFunc(func(r *http.Request) (*http.Response, error) {
+		seen = append(seen, r.URL.String())
+		switch r.URL.Path {
+		case "/gh/token":
+			return jsonResponse(http.StatusOK, githubToken), nil
+		case "/gh/user":
+			return jsonResponse(http.StatusOK, `{"id":7,"login":"stubcat","name":"Stub Cat"}`), nil
+		case "/gh/user/emails":
+			return jsonResponse(http.StatusOK, `[{"email":"stub@example.com","primary":true,"verified":true}]`), nil
+		}
+		return nil, fmt.Errorf("request escaped the stub: %s", r.URL.String())
+	})}
+
+	p, err := oauth.NewGitHubProvider(oauth.GitHubProviderConfig{
+		ClientID:      "id",
+		ClientSecret:  "secret",
+		RedirectURL:   "https://app.test/callback",
+		AuthURL:       stub + "/authorize",
+		TokenURL:      stub + "/token",
+		UserURL:       stub + "/user",
+		UserEmailsURL: stub + "/user/emails",
+		HTTPClient:    client,
+	})
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(p.AuthCodeURL("state", "challenge"), qt.Contains, stub+"/authorize")
+
+	profile, err := p.Exchange(context.Background(), "code", "verifier")
+	c.Assert(err, qt.IsNil)
+	c.Check(profile.ProviderUserID, qt.Equals, "7")
+	c.Check(profile.Email, qt.Equals, "stub@example.com")
+	c.Check(profile.EmailVerified, qt.IsTrue)
+	c.Check(profile.DisplayName, qt.Equals, "Stub Cat")
+
+	for _, u := range seen {
+		c.Check(u, qt.Contains, "127.0.0.1:9",
+			qt.Commentf("every call has to land on the stub, not on GitHub"))
+	}
+	c.Check(seen, qt.HasLen, 3)
+}
+
+// Without overrides the provider still addresses GitHub. This is the half that
+// keeps the override from becoming the default by accident.
+func TestGitHubProvider_DefaultsToGitHubEndpoints(t *testing.T) {
+	c := qt.New(t)
+
+	var seen []string
+	client := &http.Client{Transport: routeFunc(func(r *http.Request) (*http.Response, error) {
+		seen = append(seen, r.URL.String())
+		switch {
+		case strings.Contains(r.URL.Path, "access_token"):
+			return jsonResponse(http.StatusOK, githubToken), nil
+		case r.URL.Path == "/user/emails":
+			return jsonResponse(http.StatusOK, `[{"email":"real@example.com","primary":true,"verified":true}]`), nil
+		case r.URL.Path == "/user":
+			return jsonResponse(http.StatusOK, `{"id":8,"login":"realcat"}`), nil
+		}
+		return nil, fmt.Errorf("unexpected request to %s", r.URL.String())
+	})}
+
+	p, err := oauth.NewGitHubProvider(oauth.GitHubProviderConfig{
+		ClientID:     "id",
+		ClientSecret: "secret",
+		RedirectURL:  "https://app.test/callback",
+		HTTPClient:   client,
+	})
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(p.AuthCodeURL("state", "challenge"), qt.Contains, "github.com/login/oauth/authorize")
+
+	_, err = p.Exchange(context.Background(), "code", "verifier")
+	c.Assert(err, qt.IsNil)
+	c.Check(seen, qt.HasLen, 3)
+	for _, u := range seen {
+		c.Check(u, qt.Contains, "github.com")
+	}
+}

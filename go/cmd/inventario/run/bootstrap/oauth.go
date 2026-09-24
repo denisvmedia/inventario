@@ -81,10 +81,18 @@ func buildOAuth(cfg *Config) (oauthSetup, error) {
 	}
 
 	if id, secret := strings.TrimSpace(cfg.OAuthGitHubClientID), strings.TrimSpace(cfg.OAuthGitHubClientSecret); id != "" && secret != "" {
+		overrides, err := resolveGitHubOverrides(cfg)
+		if err != nil {
+			return oauthSetup{}, err
+		}
 		provider, err := oauth.NewGitHubProvider(oauth.GitHubProviderConfig{
-			ClientID:     id,
-			ClientSecret: secret,
-			RedirectURL:  base + "/api/v1/auth/oauth/github/callback",
+			ClientID:      id,
+			ClientSecret:  secret,
+			RedirectURL:   base + "/api/v1/auth/oauth/github/callback",
+			AuthURL:       overrides.AuthURL,
+			TokenURL:      overrides.TokenURL,
+			UserURL:       overrides.UserURL,
+			UserEmailsURL: overrides.UserEmailsURL,
 		})
 		if err != nil {
 			return oauthSetup{}, fmt.Errorf("oauth bootstrap: github: %w", err)
@@ -146,6 +154,58 @@ func resolveGoogleOverrides(cfg *Config) (googleOverrides, error) {
 			"auth_override", ov.AuthURL,
 			"token_override", ov.TokenURL,
 			"userinfo_override", ov.UserInfoURL)
+	}
+	return ov, nil
+}
+
+// githubOverrides holds the resolved (auth, token, user, user-emails)
+// endpoint URL overrides. Empty fields mean "use the real GitHub endpoint";
+// all four non-empty means the e2e stub server is wired in.
+type githubOverrides struct {
+	AuthURL       string
+	TokenURL      string
+	UserURL       string
+	UserEmailsURL string
+}
+
+// resolveGitHubOverrides is resolveGoogleOverrides for GitHub, with four
+// endpoints instead of three: GitHub serves the profile and the verified
+// email addresses from separate URLs.
+//
+// The all-or-nothing rule carries the same reason. A partial set would mix
+// the stub's authorize URL with the real GitHub token endpoint, handing the
+// authorization code and the client secret to GitHub when the stub is the
+// expected recipient. The e2e harness only ever flips all four together;
+// refuse to start in any other shape so a misconfiguration cannot land in
+// production quietly.
+func resolveGitHubOverrides(cfg *Config) (githubOverrides, error) {
+	ov := githubOverrides{
+		AuthURL:       strings.TrimSpace(cfg.OAuthGitHubAuthURLOverride),
+		TokenURL:      strings.TrimSpace(cfg.OAuthGitHubTokenURLOverride),
+		UserURL:       strings.TrimSpace(cfg.OAuthGitHubUserURLOverride),
+		UserEmailsURL: strings.TrimSpace(cfg.OAuthGitHubUserEmailsURLOverride),
+	}
+	count := 0
+	for _, v := range []string{ov.AuthURL, ov.TokenURL, ov.UserURL, ov.UserEmailsURL} {
+		if v != "" {
+			count++
+		}
+	}
+	if count != 0 && count != 4 {
+		return githubOverrides{}, fmt.Errorf(
+			"oauth bootstrap: github endpoint overrides must set auth, token, user, and user-emails together (got auth=%q, token=%q, user=%q, user_emails=%q)",
+			ov.AuthURL, ov.TokenURL, ov.UserURL, ov.UserEmailsURL,
+		)
+	}
+	if count == 4 {
+		// LOUD warning: these overrides should never appear in a
+		// production deployment. The e2e harness flips them on so the
+		// stub server can serve GitHub's four endpoints.
+		slog.Warn("OAuth: GitHub endpoint overrides active — TEST-ONLY; never set in production",
+			"auth_override", ov.AuthURL,
+			"token_override", ov.TokenURL,
+			"user_override", ov.UserURL,
+			"user_emails_override", ov.UserEmailsURL)
 	}
 	return ov, nil
 }
