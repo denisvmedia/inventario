@@ -27,6 +27,8 @@ export function stats(
   slug: string,
   data: {
     tags_total: number
+    commodity_tags_total?: number
+    file_tags_total?: number
     items_tagged: number
     items_untagged: number
     files_tagged: number

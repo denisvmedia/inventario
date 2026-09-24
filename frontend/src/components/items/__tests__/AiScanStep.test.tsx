@@ -33,8 +33,10 @@ function renderStep(overrides?: {
   onSkip?: () => void
 }) {
   setCurrentGroupSlug(SLUG)
-  const onAccept = overrides?.onAccept ?? vi.fn()
-  const onSkip = overrides?.onSkip ?? vi.fn()
+  // Wrapped rather than defaulted: an override would widen the type to a plain
+  // function and the callers read .mock.calls off it.
+  const onAccept = vi.fn(overrides?.onAccept)
+  const onSkip = vi.fn(overrides?.onSkip)
   renderWithProviders({
     children: <AiScanStep slug={SLUG} defaultCurrency="USD" onAccept={onAccept} onSkip={onSkip} />,
   })

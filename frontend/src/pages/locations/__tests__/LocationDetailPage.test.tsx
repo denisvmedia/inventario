@@ -348,7 +348,6 @@ describe("<LocationDetailPage />", () => {
     const init = {
       bubbles: true,
       cancelable: true,
-      // @ts-expect-error partial init is intentional
       dataTransfer: { types: ["Files"], files: [], dropEffect: "none" },
     }
     fireEvent.dragEnter(page, init)

@@ -7,6 +7,7 @@ import userEvent from "@testing-library/user-event"
 import { NoGroupPage } from "@/pages/NoGroupPage"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
+import { capture } from "@/test/capture"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -95,12 +96,12 @@ describe("<NoGroupPage />", () => {
   })
 
   it("submits the new group and navigates directly to /g/<new-slug>", async () => {
-    let captured: { data?: { attributes?: { name?: string } } } | null = null
+    const captured = capture<{ data?: { attributes?: { name?: string } } }>()
     server.use(
       ...baseHandlers,
       msw.post(api("/groups"), async ({ request }) => {
-        captured = (await request.json()) as typeof captured
-        const name = captured?.data?.attributes?.name ?? ""
+        captured.value = (await request.json()) as typeof captured.value
+        const name = captured.value?.data?.attributes?.name ?? ""
         return HttpResponse.json(
           {
             data: {
@@ -131,7 +132,7 @@ describe("<NoGroupPage />", () => {
     await waitFor(() =>
       expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/household")
     )
-    expect(captured?.data?.attributes?.name).toBe("Household")
+    expect(captured.value?.data?.attributes?.name).toBe("Household")
   })
 
   it("surfaces an inline server error on POST failure", async () => {

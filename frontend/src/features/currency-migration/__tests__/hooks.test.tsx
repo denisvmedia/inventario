@@ -34,6 +34,13 @@ function makeWrapper() {
   return { client, Wrapper }
 }
 
+// pollOption reads the refetchInterval the hook installs. It lives on the
+// observer options; Query.options is typed as the narrower QueryOptions, which
+// does not declare it, so the read needs a cast in one place rather than three.
+function pollOption(query: { options: unknown }): (q: unknown) => false | number {
+  return (query.options as { refetchInterval: (q: unknown) => false | number }).refetchInterval
+}
+
 describe("useCurrencyMigration (detail)", () => {
   it("fetches a migration by id and exposes it through query state", async () => {
     server.use(
@@ -99,11 +106,11 @@ describe("useCurrencyMigration (detail)", () => {
     })
     expect(queries).toHaveLength(1)
     const observer = queries[0]
-    expect(typeof observer.options.refetchInterval).toBe("function")
-    const completedSig = (
-      observer.options.refetchInterval as (q: typeof observer) => false | number
-    )(observer)
-    expect(completedSig).toBe(false)
+    // The cadence is an observer option; Query.options is typed as the
+    // narrower QueryOptions, which does not carry it.
+    const poll = pollOption(observer)
+    expect(typeof poll).toBe("function")
+    expect(poll(observer)).toBe(false)
   })
 })
 
@@ -127,9 +134,7 @@ describe("useCurrencyMigrations (list)", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     const queries = client.getQueryCache().findAll({ queryKey: currencyMigrationKeys.list(SLUG) })
     const observer = queries[0]
-    const sig = (observer.options.refetchInterval as (q: typeof observer) => false | number)(
-      observer
-    )
+    const sig = pollOption(observer)(observer)
     expect(sig).toBe(5_000)
   })
 })

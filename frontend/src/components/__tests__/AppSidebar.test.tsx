@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { http, HttpResponse } from "msw"
+import { http } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 
@@ -79,7 +79,7 @@ describe("<AppSidebar /> — group-section gating (#1886)", () => {
     // of the test, which is exactly the loading branch the gate covers.
     server.use(
       ...authHandlers.signedIn(),
-      http.get(apiUrl("/groups"), () => new Promise<HttpResponse>(() => {}))
+      http.get(apiUrl("/groups"), () => new Promise<never>(() => {}))
     )
     renderSidebar("/no-group")
     // Personal renders unconditionally — using it as the readiness probe

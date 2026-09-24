@@ -17,7 +17,7 @@ function makeWrapper(storageKey = "test-density") {
 
 describe("useDensity", () => {
   it("defaults to comfortable and writes data-density on <html>", () => {
-    render(<DensityProvider />)
+    render(<DensityProvider>{null}</DensityProvider>)
     expect(document.documentElement.getAttribute("data-density")).toBe("comfortable")
   })
 

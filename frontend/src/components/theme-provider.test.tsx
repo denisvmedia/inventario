@@ -34,7 +34,7 @@ describe("useTheme", () => {
 
   it("rehydrates from localStorage on mount", () => {
     window.localStorage.setItem("test-theme", "dark")
-    render(<ThemeProvider storageKey="test-theme" />)
+    render(<ThemeProvider storageKey="test-theme">{null}</ThemeProvider>)
     expect(document.documentElement.classList.contains("dark")).toBe(true)
   })
 })

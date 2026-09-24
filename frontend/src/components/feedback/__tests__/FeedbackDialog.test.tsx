@@ -8,6 +8,7 @@ import { FeedbackDialog } from "@/components/feedback/FeedbackDialog"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
+import { capture } from "@/test/capture"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -56,11 +57,11 @@ beforeEach(() => {
 
 describe("<FeedbackDialog />", () => {
   it("submits the form and closes on success", async () => {
-    let received: Record<string, unknown> | null = null
+    const received = capture<Record<string, unknown>>()
     server.use(
       ...baseUserHandlers,
       msw.post(api("/feedback"), async ({ request }) => {
-        received = (await request.json()) as Record<string, unknown>
+        received.value = (await request.json()) as Record<string, unknown>
         return HttpResponse.json({ status: "accepted" }, { status: 202 })
       })
     )
@@ -81,19 +82,19 @@ describe("<FeedbackDialog />", () => {
     await user.click(screen.getByTestId("feedback-submit"))
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
-    expect(received).not.toBeNull()
-    expect(received?.type).toBe("bug")
-    expect(received?.message).toBe("Login bounces me back after 2FA verification.")
-    expect(received?.reply_to_email).toBe("alex@example.com")
-    expect(received?.diagnostics).toMatchObject({ app_version: expect.any(String) })
+    expect(received.value).toBeDefined()
+    expect(received.value?.type).toBe("bug")
+    expect(received.value?.message).toBe("Login bounces me back after 2FA verification.")
+    expect(received.value?.reply_to_email).toBe("alex@example.com")
+    expect(received.value?.diagnostics).toMatchObject({ app_version: expect.any(String) })
   })
 
   it("omits the diagnostics payload when the checkbox is cleared", async () => {
-    let received: Record<string, unknown> | null = null
+    const received = capture<Record<string, unknown>>()
     server.use(
       ...baseUserHandlers,
       msw.post(api("/feedback"), async ({ request }) => {
-        received = (await request.json()) as Record<string, unknown>
+        received.value = (await request.json()) as Record<string, unknown>
         return HttpResponse.json({ status: "accepted" }, { status: 202 })
       })
     )
@@ -105,8 +106,8 @@ describe("<FeedbackDialog />", () => {
     await user.type(screen.getByTestId("feedback-message"), "hello there")
     await user.click(screen.getByTestId("feedback-submit"))
 
-    await waitFor(() => expect(received).not.toBeNull())
-    expect(received?.diagnostics).toBeUndefined()
+    await waitFor(() => expect(received.value).toBeDefined())
+    expect(received.value?.diagnostics).toBeUndefined()
   })
 
   it("surfaces a validation error when the message is empty", async () => {
