@@ -223,7 +223,7 @@ describe("<CommodityFilesTab />", () => {
       ...fileHandlers.detail(
         SLUG,
         photoFixture.id,
-        { id: photoFixture.id, ...photoFixture },
+        { ...photoFixture },
         { url: "https://files.example.com/photo/raw" }
       )
     )

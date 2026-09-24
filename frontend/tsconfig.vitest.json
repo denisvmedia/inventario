@@ -5,6 +5,11 @@
     "types": ["vite/client", "vitest/globals", "node", "@testing-library/jest-dom", "jest-axe"],
     "noEmit": true
   },
+  // tsconfig.app.json excludes the test files so the app build does not
+  // compile them. That exclude is inherited through `extends` and filters
+  // what `include` below matches, which left this project empty. Clearing it
+  // here is what puts the tests back in a program.
+  "exclude": [],
   "include": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",

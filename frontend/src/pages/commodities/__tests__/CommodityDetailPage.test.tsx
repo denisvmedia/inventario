@@ -7,6 +7,7 @@ import { axe } from "jest-axe"
 import { CommodityDetailPage, CommodityDetailSheet } from "@/pages/commodities/CommodityDetailPage"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
+import { capture } from "@/test/capture"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { areaHandlers, commodityHandlers, fileHandlers, groupHandlers } from "@/test/handlers"
@@ -351,7 +352,6 @@ describe("<CommodityDetailPage />", () => {
       cancelable: true,
       // jsdom-friendly partial DataTransfer — the hook only reads
       // `types`, `files`, and `dropEffect`.
-      // @ts-expect-error partial init is intentional
       dataTransfer: { types: ["Files"], files: [], dropEffect: "none" },
     }
     fireEvent.dragEnter(page, init)
@@ -480,7 +480,7 @@ describe("<CommodityDetailPage />", () => {
   // status_date / sale_price into the PATCH payload.
   it("threads sale_price + status_date into the PATCH when marking as sold", async () => {
     const user = userEvent.setup()
-    let capturedBody: Record<string, unknown> | null = null
+    const capturedBody = capture<Record<string, unknown>>()
     server.use(
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
@@ -491,7 +491,7 @@ describe("<CommodityDetailPage />", () => {
         `*/api/v1/g/${encodeURIComponent(SLUG)}/commodities/${encodeURIComponent(ID)}`,
         async ({ request }) => {
           const json = (await request.json()) as { data?: { attributes?: Record<string, unknown> } }
-          capturedBody = json.data?.attributes ?? null
+          capturedBody.value = json.data?.attributes
           return (await import("msw")).HttpResponse.json({
             data: {
               ...commodityFixture,
@@ -506,10 +506,10 @@ describe("<CommodityDetailPage />", () => {
     const priceInput = await screen.findByTestId("status-transition-sale-price")
     await user.type(priceInput, "150")
     await user.click(screen.getByTestId("status-transition-confirm"))
-    await waitFor(() => expect(capturedBody).not.toBeNull())
-    expect(capturedBody?.status).toBe("sold")
-    expect(capturedBody?.sale_price).toBe(150)
-    expect(String(capturedBody?.status_date ?? "")).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    await waitFor(() => expect(capturedBody.value).toBeDefined())
+    expect(capturedBody.value?.status).toBe("sold")
+    expect(capturedBody.value?.sale_price).toBe(150)
+    expect(String(capturedBody.value?.status_date ?? "")).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
   it("has no axe violations on a populated detail", async () => {

@@ -9,6 +9,7 @@ import { MembersPage } from "@/pages/groups/MembersPage"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
+import { capture } from "@/test/capture"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -208,7 +209,7 @@ describe("<MembersPage />", () => {
 
   it("admin can open the invite dialog, pick a role, and send an email invite", async () => {
     let createCalls = 0
-    let lastCreateBody: { email?: string; role?: string } | null = null
+    const lastCreateBody = capture<{ email?: string; role?: string }>()
     server.use(
       groupsHandler,
       userMe(),
@@ -231,7 +232,7 @@ describe("<MembersPage />", () => {
         const body = (await request.json()) as {
           data?: { attributes?: { email?: string; role?: string } }
         }
-        lastCreateBody = body?.data?.attributes ?? {}
+        lastCreateBody.value = body?.data?.attributes ?? {}
         return HttpResponse.json(
           {
             data: {
@@ -241,8 +242,8 @@ describe("<MembersPage />", () => {
                 id: "inv1",
                 token: "tok-abc",
                 expires_at: "2026-05-01T00:00:00Z",
-                invitee_email: lastCreateBody?.email,
-                role: lastCreateBody?.role ?? "user",
+                invitee_email: lastCreateBody.value?.email,
+                role: lastCreateBody.value?.role ?? "user",
               },
             },
           },
@@ -258,9 +259,9 @@ describe("<MembersPage />", () => {
     await user.type(within(dialog).getByTestId("invite-email-input"), "guest@example.com")
     await user.click(within(dialog).getByTestId("invite-send"))
     await waitFor(() => expect(createCalls).toBe(1))
-    expect(lastCreateBody?.email).toBe("guest@example.com")
+    expect(lastCreateBody.value?.email).toBe("guest@example.com")
     // Default role is "user" when the admin doesn't change the select.
-    expect(lastCreateBody?.role).toBe("user")
+    expect(lastCreateBody.value?.role).toBe("user")
   })
 
   it("renders the role legend with all four roles", async () => {

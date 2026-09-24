@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
 import { CreateGroupPage } from "@/pages/groups/CreateGroupPage"
+import { capture } from "@/test/capture"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -51,11 +52,11 @@ describe("<CreateGroupPage />", () => {
   })
 
   it("posts /groups and navigates to /g/{slug} on success", async () => {
-    let captured: { data?: { attributes?: Record<string, unknown> } } | null = null
+    const captured = capture<{ data?: { attributes?: Record<string, unknown> } }>()
     server.use(
       msw.get(api("/currencies"), () => HttpResponse.json(["EUR", "GBP", "USD"])),
       msw.post(api("/groups"), async ({ request }) => {
-        captured = (await request.json()) as typeof captured
+        captured.value = (await request.json()) as typeof captured.value
         return HttpResponse.json(
           {
             data: {
@@ -90,7 +91,7 @@ describe("<CreateGroupPage />", () => {
     // Currency uppercases through the schema's .toUpperCase() pipe, and
     // the icon snaps to the picked emoji. Submitting the wrong shape
     // would have surfaced a 422 instead of a 201 here.
-    expect(captured?.data?.attributes).toMatchObject({
+    expect(captured.value?.data?.attributes).toMatchObject({
       name: "Household",
       group_currency: "EUR",
       icon: "🏠",
