@@ -21,12 +21,83 @@ export function list(
   meta: Record<string, unknown> = {}
 ) {
   return [
-    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/files`), () =>
-      HttpResponse.json({
-        data: items.map((it) => ({ ...it.attributes, id: it.id })),
-        meta: { files: items.length, total: items.length, ...meta },
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/files`), ({ request }) => {
+      const params = new URL(request.url).searchParams
+      const matched = items.filter((it) => matches(it.attributes, params))
+      // `limit` caps at 100 on the BE and defaults to 20; mirroring the
+      // default matters, because a caller that forgets `perPage` gets a
+      // truncated page in production too.
+      const limit = Math.min(Number(params.get("limit")) || 20, 100)
+      const page = Math.max(Number(params.get("page")) || 1, 1)
+      const start = Math.min((page - 1) * limit, matched.length)
+      const paged = matched.slice(start, start + limit)
+      return HttpResponse.json({
+        data: paged.map((it) => ({ ...it.attributes, id: it.id })),
+        meta: { files: paged.length, total: matched.length, ...meta },
       })
-    ),
+    }),
+  ]
+}
+
+// matches applies the filters apiserver/files.go::listFiles applies, so a
+// component that ignored its own filter state would fail its test instead of
+// being handed a conveniently pre-filtered fixture. `tags` is containment
+// (`tags @> $1`), so every requested tag has to be present; `search` is an
+// ILIKE substring over the same four columns the registry searches.
+function matches(attrs: Record<string, unknown>, params: URLSearchParams): boolean {
+  const category = params.get("category")
+  if (category && attrs.category !== category) return false
+
+  const linkedType = params.get("linked_entity_type")
+  const linkedId = params.get("linked_entity_id")
+  if (linkedType && attrs.linked_entity_type !== linkedType) return false
+  if (linkedId && attrs.linked_entity_id !== linkedId) return false
+
+  const type = params.get("type")
+  if (type && attrs.type !== type) return false
+
+  const tags = (params.get("tags") ?? "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean)
+  const own = Array.isArray(attrs.tags) ? (attrs.tags as string[]) : []
+  if (!tags.every((t) => own.includes(t))) return false
+
+  const search = params.get("search")?.trim().toLowerCase()
+  if (search) {
+    const haystack = ["title", "description", "path", "original_path"]
+      .map((k) => String(attrs[k] ?? "").toLowerCase())
+      .join("\u0000")
+    if (!haystack.includes(search)) return false
+  }
+
+  return true
+}
+
+// countsFromFiles answers /files/category-counts out of the same fixture the
+// list handler serves, honoring the same query parameters — including the
+// linked-entity pair, which is what an entity's Files tab sends so its chips
+// agree with the list beneath them. Prefer it over `counts` whenever a test
+// renders both surfaces: literal numbers cannot disagree with the list, which
+// is exactly the bug worth catching.
+export function countsFromFiles(
+  slug: string,
+  items: Array<{ id: string; attributes: Record<string, unknown> }> = []
+) {
+  return [
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/files/category-counts`), ({ request }) => {
+      const params = new URL(request.url).searchParams
+      const matched = items.filter((it) => matches(it.attributes, params))
+      const inCategory = (c: string) => matched.filter((it) => it.attributes.category === c).length
+      const data = {
+        images: inCategory("images"),
+        documents: inCategory("documents"),
+        other: inCategory("other"),
+        all: matched.length,
+        bytes: { images: 0, documents: 0, other: 0, all: 0 },
+      }
+      return HttpResponse.json({ data })
+    }),
   ]
 }
 

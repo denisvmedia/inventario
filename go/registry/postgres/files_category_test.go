@@ -59,7 +59,7 @@ func TestFileRegistry_Postgres_CategoryFilter(t *testing.T) {
 
 	t.Run("CountByCategory returns all three buckets, even empty ones", func(t *testing.T) {
 		c := qt.New(t)
-		counts, bytes, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, nil)
+		counts, bytes, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, nil, nil, nil)
 		c.Assert(err, qt.IsNil)
 		// #1622: three buckets — invoices collapsed into documents.
 		c.Assert(counts, qt.HasLen, 3)
@@ -74,7 +74,7 @@ func TestFileRegistry_Postgres_CategoryFilter(t *testing.T) {
 
 	t.Run("CountByCategory respects search filter", func(t *testing.T) {
 		c := qt.New(t)
-		counts, _, err := registrySet.FileRegistry.CountByCategory(ctx, "manual", nil, nil)
+		counts, _, err := registrySet.FileRegistry.CountByCategory(ctx, "manual", nil, nil, nil, nil)
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 0)
@@ -82,7 +82,7 @@ func TestFileRegistry_Postgres_CategoryFilter(t *testing.T) {
 
 	t.Run("CountByCategory filters by tag (#1622)", func(t *testing.T) {
 		c := qt.New(t)
-		counts, _, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, []string{models.FileTagInvoice})
+		counts, _, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, []string{models.FileTagInvoice}, nil, nil)
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 0)
@@ -242,4 +242,70 @@ func categoryPostgresSeed() []models.FileEntity {
 		mk("manual-1", "application/pdf", ".pdf", models.FileCategoryDocuments, "manual"),
 		mk("clip-1", "video/mp4", ".mp4", models.FileCategoryOther),
 	}
+}
+
+// TestFileRegistry_Postgres_CountByCategory_LinkedEntity is the SQL half of
+// the scope an entity's Files tab needs. The memory registry filters in Go;
+// this proves the same predicate reaches the GROUP BY, where a missing WHERE
+// clause would silently count the group instead.
+func TestFileRegistry_Postgres_CountByCategory_LinkedEntity(t *testing.T) {
+	c := qt.New(t)
+
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	user := getTestUser(c, registrySet)
+	ctx := appctx.WithUser(c.Context(), user)
+
+	now := time.Now()
+	mk := func(name, mime, ext string, cat models.FileCategory, commodityID string) models.FileEntity {
+		return models.FileEntity{
+			Title:            name,
+			Type:             models.FileTypeFromMIME(mime),
+			Category:         cat,
+			LinkedEntityType: "commodity",
+			LinkedEntityID:   commodityID,
+			CreatedAt:        now,
+			UpdatedAt:        now,
+			File: &models.File{
+				Path:         name,
+				OriginalPath: name + ext,
+				Ext:          ext,
+				MIMEType:     mime,
+			},
+		}
+	}
+	for _, fe := range []models.FileEntity{
+		mk("a-photo", "image/jpeg", ".jpg", models.FileCategoryImages, "com-a"),
+		mk("a-manual", "application/pdf", ".pdf", models.FileCategoryDocuments, "com-a"),
+		mk("b-photo-1", "image/jpeg", ".jpg", models.FileCategoryImages, "com-b"),
+		mk("b-photo-2", "image/png", ".png", models.FileCategoryImages, "com-b"),
+		mk("b-clip", "video/mp4", ".mp4", models.FileCategoryOther, "com-b"),
+	} {
+		fe.TenantID = user.TenantID
+		fe.CreatedByUserID = user.ID
+		_, err := registrySet.FileRegistry.Create(ctx, fe)
+		c.Assert(err, qt.IsNil)
+	}
+
+	linkedType := "commodity"
+	comA, comB := "com-a", "com-b"
+
+	countsA, _, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, nil, &linkedType, &comA)
+	c.Assert(err, qt.IsNil)
+	c.Check(countsA[models.FileCategoryImages], qt.Equals, 1)
+	c.Check(countsA[models.FileCategoryDocuments], qt.Equals, 1)
+	c.Check(countsA[models.FileCategoryOther], qt.Equals, 0)
+
+	countsB, _, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, nil, &linkedType, &comB)
+	c.Assert(err, qt.IsNil)
+	c.Check(countsB[models.FileCategoryImages], qt.Equals, 2)
+	c.Check(countsB[models.FileCategoryDocuments], qt.Equals, 0)
+	c.Check(countsB[models.FileCategoryOther], qt.Equals, 1)
+
+	all, _, err := registrySet.FileRegistry.CountByCategory(ctx, "", nil, nil, nil, nil)
+	c.Assert(err, qt.IsNil)
+	c.Check(all[models.FileCategoryImages], qt.Equals, 3)
+	c.Check(all[models.FileCategoryDocuments], qt.Equals, 1)
+	c.Check(all[models.FileCategoryOther], qt.Equals, 1)
 }

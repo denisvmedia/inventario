@@ -600,10 +600,14 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 }
 
 // listCategoryCounts returns per-category file counts for the current group,
-// scoped by the same `type`/`search`/`tags` filters as GET /files. The four
-// buckets (images/invoices/documents/other) are always present in the
-// response so the FE tile renderer can rely on a stable shape; `all` is the
-// sum across the four buckets.
+// scoped by the same `type`/`search`/`tags`/linked-entity filters as GET
+// /files. The four buckets (images/invoices/documents/other) are always
+// present in the response so the FE tile renderer can rely on a stable shape;
+// `all` is the sum across the four buckets.
+//
+// The linked-entity pair matters for the counts an entity's Files tab shows
+// beside its own list: without it the chips would count the whole group while
+// the list under them holds one commodity's files.
 //
 // @Summary File category counts
 // @Description Per-category file counts, respecting the same filters as GET /files
@@ -614,6 +618,8 @@ func (api *filesAPI) generateSignedURL(w http.ResponseWriter, r *http.Request) {
 // @Param type query string false "Filter by file type" Enums(image,document,video,audio,archive,other)
 // @Param search query string false "Search in title, description, and file paths"
 // @Param tags query string false "Filter by tags (comma-separated)"
+// @Param linked_entity_type query string false "Narrow to files linked to this entity type (requires linked_entity_id)"
+// @Param linked_entity_id query string false "Narrow to files linked to this entity id (requires linked_entity_type)"
 // @Success 200 {object} jsonapi.FileCategoryCountsResponse "OK"
 // @Router /g/{groupSlug}/files/category-counts [get].
 func (api *filesAPI) listCategoryCounts(w http.ResponseWriter, r *http.Request) {
@@ -641,7 +647,16 @@ func (api *filesAPI) listCategoryCounts(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	counts, bytes, err := registrySet.FileRegistry.CountByCategory(r.Context(), searchParam, fileType, tags)
+	linkedEntityType, linkedEntityID, linkedErr := parseLinkedEntityParams(
+		r.URL.Query().Get("linked_entity_type"),
+		r.URL.Query().Get("linked_entity_id"),
+	)
+	if linkedErr != nil {
+		badRequest(w, r, linkedErr)
+		return
+	}
+
+	counts, bytes, err := registrySet.FileRegistry.CountByCategory(r.Context(), searchParam, fileType, tags, linkedEntityType, linkedEntityID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

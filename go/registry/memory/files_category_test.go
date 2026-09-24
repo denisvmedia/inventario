@@ -67,7 +67,7 @@ func TestFileRegistry_Memory_FilterByCategory(t *testing.T) {
 
 	t.Run("CountByCategory returns all three buckets (#1622)", func(t *testing.T) {
 		c := qt.New(t)
-		counts, bytes, err := reg.CountByCategory(ctx, "", nil, nil)
+		counts, bytes, err := reg.CountByCategory(ctx, "", nil, nil, nil, nil)
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts, qt.HasLen, 3)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 2)
@@ -81,7 +81,7 @@ func TestFileRegistry_Memory_FilterByCategory(t *testing.T) {
 
 	t.Run("CountByCategory respects tag filter", func(t *testing.T) {
 		c := qt.New(t)
-		counts, bytes, err := reg.CountByCategory(ctx, "", nil, []string{"manual"})
+		counts, bytes, err := reg.CountByCategory(ctx, "", nil, []string{"manual"}, nil, nil)
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 0)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
@@ -91,7 +91,7 @@ func TestFileRegistry_Memory_FilterByCategory(t *testing.T) {
 
 	t.Run("CountByCategory filters by invoice tag (post-#1622)", func(t *testing.T) {
 		c := qt.New(t)
-		counts, _, err := reg.CountByCategory(ctx, "", nil, []string{models.FileTagInvoice})
+		counts, _, err := reg.CountByCategory(ctx, "", nil, []string{models.FileTagInvoice}, nil, nil)
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts[models.FileCategoryImages], qt.Equals, 0)
 		c.Assert(counts[models.FileCategoryDocuments], qt.Equals, 1)
@@ -304,7 +304,7 @@ func TestFileRegistry_Memory_CountByCategory_Bytes(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 	}
 
-	counts, bytes, err := reg.CountByCategory(ctx, "", nil, nil)
+	counts, bytes, err := reg.CountByCategory(ctx, "", nil, nil, nil, nil)
 	c.Assert(err, qt.IsNil)
 	c.Assert(counts[models.FileCategoryImages], qt.Equals, 2)
 	c.Assert(bytes[models.FileCategoryImages], qt.Equals, int64(1024+2048))
@@ -375,4 +375,76 @@ func TestFileRegistry_Memory_SumSizeBreakdown(t *testing.T) {
 	c.Assert(breakdown.Other, qt.Equals, int64(16384))
 	c.Assert(breakdown.Exports, qt.Equals, int64(32768))
 	c.Assert(breakdown.Total(), qt.Equals, int64(1024+2048+4096+8192+16384+32768))
+}
+
+// TestFileRegistry_Memory_CountByCategory_LinkedEntity covers the scope an
+// entity's Files tab needs: the chip counts sit above a list of one
+// commodity's files, so counting the whole group would put a number on the
+// chip that the list underneath cannot account for.
+func TestFileRegistry_Memory_CountByCategory_LinkedEntity(t *testing.T) {
+	c := qt.New(t)
+
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "user-1"},
+			TenantID: "tenant-1",
+		},
+	})
+	ctx = appctx.WithGroup(ctx, &models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "group-1"},
+			TenantID: "tenant-1",
+		},
+		Slug: "g1",
+	})
+
+	reg := memory.NewFileRegistryFactory().MustCreateUserRegistry(ctx)
+	mk := func(name, mime, ext string, cat models.FileCategory, commodityID string) models.FileEntity {
+		return models.FileEntity{
+			Title:            name,
+			Type:             models.FileTypeFromMIME(mime),
+			Category:         cat,
+			LinkedEntityType: "commodity",
+			LinkedEntityID:   commodityID,
+			File: &models.File{
+				Path:         name,
+				OriginalPath: name + ext,
+				Ext:          ext,
+				MIMEType:     mime,
+			},
+		}
+	}
+	seed := []models.FileEntity{
+		mk("a-photo", "image/jpeg", ".jpg", models.FileCategoryImages, "com-a"),
+		mk("a-manual", "application/pdf", ".pdf", models.FileCategoryDocuments, "com-a"),
+		mk("b-photo-1", "image/jpeg", ".jpg", models.FileCategoryImages, "com-b"),
+		mk("b-photo-2", "image/png", ".png", models.FileCategoryImages, "com-b"),
+		mk("b-clip", "video/mp4", ".mp4", models.FileCategoryOther, "com-b"),
+	}
+	for _, fe := range seed {
+		_, err := reg.Create(ctx, fe)
+		c.Assert(err, qt.IsNil)
+	}
+
+	linkedType := "commodity"
+	comA, comB := "com-a", "com-b"
+
+	countsA, _, err := reg.CountByCategory(ctx, "", nil, nil, &linkedType, &comA)
+	c.Assert(err, qt.IsNil)
+	c.Check(countsA[models.FileCategoryImages], qt.Equals, 1)
+	c.Check(countsA[models.FileCategoryDocuments], qt.Equals, 1)
+	c.Check(countsA[models.FileCategoryOther], qt.Equals, 0)
+
+	countsB, _, err := reg.CountByCategory(ctx, "", nil, nil, &linkedType, &comB)
+	c.Assert(err, qt.IsNil)
+	c.Check(countsB[models.FileCategoryImages], qt.Equals, 2)
+	c.Check(countsB[models.FileCategoryDocuments], qt.Equals, 0)
+	c.Check(countsB[models.FileCategoryOther], qt.Equals, 1)
+
+	// No pair means the whole group, which is what the Files page tiles want.
+	all, _, err := reg.CountByCategory(ctx, "", nil, nil, nil, nil)
+	c.Assert(err, qt.IsNil)
+	c.Check(all[models.FileCategoryImages], qt.Equals, 3)
+	c.Check(all[models.FileCategoryDocuments], qt.Equals, 1)
+	c.Check(all[models.FileCategoryOther], qt.Equals, 1)
 }

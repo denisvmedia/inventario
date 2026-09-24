@@ -16,6 +16,7 @@ import { isImageMime } from "@/features/files/constants"
 import { useFiles } from "@/features/files/hooks"
 import { useFilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { Pagination, pageWithin } from "@/components/common/Pagination"
 
 // Files panel for entity-detail pages (commodity / location / area).
 // Renders files attached to the given linked entity via the unified
@@ -78,10 +79,16 @@ export function EntityFilesPanel({
   // leaves the entity-detail page (#1963 follow-up).
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
+  // The header shows the true total, so every file it counts has to be
+  // reachable — the panel renders one page and the pager walks the rest
+  // (#2467).
+  const [requestedPage, setPage] = useState(1)
+
   const filesQuery = useFiles(
     {
       linkedEntityType,
       linkedEntityId,
+      page: requestedPage,
       perPage: pageSize,
     },
     { enabled: !!linkedEntityId && !!slug }
@@ -89,6 +96,7 @@ export function EntityFilesPanel({
 
   const files = filesQuery.data?.files ?? []
   const total = filesQuery.data?.total ?? 0
+  const { page, totalPages } = pageWithin(requestedPage, setPage, filesQuery.data?.total, pageSize)
 
   // This entity's photos, in grid order, for the fullscreen viewer's gallery.
   const imageSiblings: GalleryImage[] = files
@@ -160,6 +168,16 @@ export function EntityFilesPanel({
             gridClassName="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
           />
         )}
+        {totalPages > 1 ? (
+          <div className="pt-4">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onChange={setPage}
+              testId="entity-files-panel-pagination"
+            />
+          </div>
+        ) : null}
       </CardContent>
       <FileDetailSheet
         fileId={selectedId}

@@ -254,8 +254,8 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 // keeping the response shape stable for the FE tile renderer. The second
 // returned map carries per-category byte totals (sum of size_bytes); the
 // FE uses it to render the cumulative "{N} files · {Y} total" footer.
-func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, map[models.FileCategory]int64, error) {
-	files, err := r.Search(ctx, query, fileType, nil, tags, nil, nil)
+func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string, linkedEntityType, linkedEntityID *string) (map[models.FileCategory]int, map[models.FileCategory]int64, error) {
+	files, err := r.Search(ctx, query, fileType, nil, tags, linkedEntityType, linkedEntityID)
 	if err != nil {
 		return nil, nil, err
 	}

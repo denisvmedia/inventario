@@ -40,12 +40,22 @@ export function listForCommodity(slug: string, commodityID: string, items: LoanA
 // ref attached so the page renders the "Item" column.
 export function listGroup(slug: string, items: LoanWithCommodity[] = []) {
   return [
-    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/loans`), () =>
-      HttpResponse.json({
-        data: items,
-        meta: { loans: items.length, total: items.length },
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/loans`), ({ request }) => {
+      // GET /loans paginates server-side (commodity_loans.go::listGroupLoans),
+      // so the mock slices too — otherwise a page-2 request would be answered
+      // with page 1 and a pager test would pass without a pager. `state` is
+      // left to the caller's fixture: deriving open/overdue/returned from the
+      // dates here would just be a second implementation of it.
+      const params = new URL(request.url).searchParams
+      const perPage = Math.min(Number(params.get("per_page")) || 50, 100)
+      const page = Math.max(Number(params.get("page")) || 1, 1)
+      const start = Math.min((page - 1) * perPage, items.length)
+      const paged = items.slice(start, start + perPage)
+      return HttpResponse.json({
+        data: paged,
+        meta: { loans: paged.length, total: items.length },
       })
-    ),
+    }),
   ]
 }
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { QueryClient } from "@tanstack/react-query"
 import { Route } from "react-router-dom"
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
@@ -24,12 +25,14 @@ const groupFixture: Schema<"models.LocationGroup">[] = [
 
 interface RenderOptions {
   onAttachClick?: () => void
+  queryClient?: QueryClient
 }
 
 function renderTab(opts: RenderOptions = {}) {
   setAccessToken("good-token")
   const onAttachClick = opts.onAttachClick ?? vi.fn()
   return renderWithProviders({
+    queryClient: opts.queryClient,
     initialPath: `/g/${SLUG}/commodities/${COMMODITY}`,
     routes: (
       <Route
@@ -103,12 +106,24 @@ const documentFixture = {
   created_at: "2026-04-03T10:00:00Z",
 }
 
+type Fixture = { id: string; attributes: Record<string, unknown> }
+
+// The chip counts come from the category-counts endpoint and the list is a
+// page, so a render needs both handlers. Both read the same fixture, which is
+// what lets a test catch a count that disagrees with the list under it.
+function seed(items: Fixture[], listMeta: Record<string, unknown> = {}) {
+  return [
+    ...groupHandlers.list(groupFixture),
+    ...fileHandlers.list(SLUG, items, listMeta),
+    ...fileHandlers.countsFromFiles(SLUG, items),
+  ]
+}
+
 describe("<CommodityFilesTab />", () => {
-  it("renders the chip-bar with derived counts and filters by chip", async () => {
+  it("renders the chip-bar with server counts and filters by chip", async () => {
     const user = userEvent.setup()
     server.use(
-      ...groupHandlers.list(groupFixture),
-      ...fileHandlers.list(SLUG, [
+      ...seed([
         { id: photoFixture.id, attributes: photoFixture },
         { id: invoiceFixture.id, attributes: invoiceFixture },
         { id: documentFixture.id, attributes: documentFixture },
@@ -120,10 +135,10 @@ describe("<CommodityFilesTab />", () => {
     // query resolved against the seeded fixture (and therefore GroupContext
     // + slug rewrite have settled).
     await screen.findByTestId("commodity-files-chip-all-count")
-    // Total = 3. Images = 1 (photo). Documents = 2 — the invoice file now
-    // lives in `documents` (post-#1622) plus the manual. The Invoices chip
-    // counts by tag, so it picks up only the invoice-tagged row; documents
-    // and invoices intentionally overlap.
+    // Total = 3. Images = 1 (photo). Documents = 2 — the invoice file lives
+    // in `documents` (post-#1622) plus the manual. The Invoices chip counts
+    // by tag, so it picks up only the invoice-tagged row; documents and
+    // invoices intentionally overlap.
     expect(screen.getByTestId("commodity-files-chip-all-count")).toHaveTextContent("3")
     expect(screen.getByTestId("commodity-files-chip-images-count")).toHaveTextContent("1")
     expect(screen.getByTestId("commodity-files-chip-invoices-count")).toHaveTextContent("1")
@@ -142,7 +157,7 @@ describe("<CommodityFilesTab />", () => {
 
   it("switches the upload-zone copy by active chip", async () => {
     const user = userEvent.setup()
-    server.use(...groupHandlers.list(groupFixture), ...fileHandlers.list(SLUG, []))
+    server.use(...seed([]))
     renderTab()
     const zone = await screen.findByTestId("commodity-files-upload-zone")
     expect(zone).toHaveTextContent(/Drop files or/i)
@@ -159,7 +174,7 @@ describe("<CommodityFilesTab />", () => {
   it("fires onAttachClick when the upload zone is activated", async () => {
     const user = userEvent.setup()
     const onAttachClick = vi.fn()
-    server.use(...groupHandlers.list(groupFixture), ...fileHandlers.list(SLUG, []))
+    server.use(...seed([]))
     renderTab({ onAttachClick })
     const zone = await screen.findByTestId("commodity-files-upload-zone")
     await user.click(zone)
@@ -167,10 +182,7 @@ describe("<CommodityFilesTab />", () => {
   })
 
   it("renders files as a FileCard grid by default", async () => {
-    server.use(
-      ...groupHandlers.list(groupFixture),
-      ...fileHandlers.list(SLUG, [{ id: photoFixture.id, attributes: photoFixture }])
-    )
+    server.use(...seed([{ id: photoFixture.id, attributes: photoFixture }]))
     renderTab()
     expect(await screen.findByTestId(`file-card-${photoFixture.id}`)).toBeInTheDocument()
     expect(screen.getByTestId("commodity-files-grid")).toBeInTheDocument()
@@ -179,10 +191,7 @@ describe("<CommodityFilesTab />", () => {
 
   it("toggles between grid and list view", async () => {
     const user = userEvent.setup()
-    server.use(
-      ...groupHandlers.list(groupFixture),
-      ...fileHandlers.list(SLUG, [{ id: documentFixture.id, attributes: documentFixture }])
-    )
+    server.use(...seed([{ id: documentFixture.id, attributes: documentFixture }]))
     renderTab()
     // Default = grid → FileCard.
     expect(await screen.findByTestId(`file-card-${documentFixture.id}`)).toBeInTheDocument()
@@ -198,10 +207,7 @@ describe("<CommodityFilesTab />", () => {
 
   it("renders the chip-aware empty state when no files match the active chip", async () => {
     const user = userEvent.setup()
-    server.use(
-      ...groupHandlers.list(groupFixture),
-      ...fileHandlers.list(SLUG, [{ id: invoiceFixture.id, attributes: invoiceFixture }])
-    )
+    server.use(...seed([{ id: invoiceFixture.id, attributes: invoiceFixture }]))
     renderTab()
     // Default = All chip; the invoice card is visible.
     await screen.findByTestId(`file-card-${invoiceFixture.id}`)
@@ -215,8 +221,7 @@ describe("<CommodityFilesTab />", () => {
   it("opens the right-side FileDetailSheet in place (not fullscreen) when a file is activated (#1966)", async () => {
     const user = userEvent.setup()
     server.use(
-      ...groupHandlers.list(groupFixture),
-      ...fileHandlers.list(SLUG, [{ id: photoFixture.id, attributes: photoFixture }], {
+      ...seed([{ id: photoFixture.id, attributes: photoFixture }], {
         signed_urls: { [photoFixture.id]: { url: "https://files.example.com/photo/raw" } },
       }),
       // The side panel fetches the file detail when opened.
@@ -240,15 +245,123 @@ describe("<CommodityFilesTab />", () => {
   })
 
   it("surfaces an error alert when the list endpoint 500s", async () => {
-    server.use(...groupHandlers.list(groupFixture), ...fileHandlers.error(SLUG, 500))
+    // The first matching handler wins, so the 500 goes ahead of the list
+    // handler seed() registers.
+    server.use(...fileHandlers.error(SLUG, 500), ...seed([]))
     renderTab()
     expect(await screen.findByTestId("commodity-files-error")).toBeInTheDocument()
   })
 
+  it("pages past the first 24 files and starts a chip switch at page one", async () => {
+    const user = userEvent.setup()
+    // 30 documents and 30 images: two pages each, and three pages under the
+    // All chip.
+    const docs: Fixture[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `f-${i}`,
+      attributes: {
+        ...documentFixture,
+        id: `f-${i}`,
+        title: `Manual ${i}`,
+        path: `manual-${i}`,
+        tags: [],
+      },
+    }))
+    const images: Fixture[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `i-${i}`,
+      attributes: {
+        ...photoFixture,
+        id: `i-${i}`,
+        title: `Photo ${i}`,
+        path: `photo-${i}`,
+      },
+    }))
+    server.use(...seed([...docs, ...images]))
+    renderTab()
+    expect(await screen.findByTestId("file-card-f-0")).toBeInTheDocument()
+    expect(screen.queryByTestId("file-card-f-24")).toBeNull()
+
+    await user.click(screen.getByTestId("commodity-files-pagination-page-2"))
+    expect(await screen.findByTestId("file-card-f-24")).toBeInTheDocument()
+    expect(screen.queryByTestId("file-card-f-0")).toBeNull()
+
+    // The images chip has two pages of its own, so page 2 would still be in
+    // range — only a reset puts the user at the first image.
+    await user.click(screen.getByTestId("commodity-files-chip-images"))
+    expect(await screen.findByTestId("file-card-i-0")).toBeInTheDocument()
+    expect(screen.queryByTestId("file-card-i-24")).toBeNull()
+  })
+
+  it("folds back to a page that exists when the last one empties out", async () => {
+    const user = userEvent.setup()
+    // 25 documents: page 2 holds exactly one file, so deleting it leaves the
+    // requested page past the end.
+    const many: Fixture[] = Array.from({ length: 25 }, (_, i) => ({
+      id: `f-${i}`,
+      attributes: {
+        ...documentFixture,
+        id: `f-${i}`,
+        title: `Manual ${i}`,
+        path: `manual-${i}`,
+        tags: [],
+      },
+    }))
+    // The handler closes over this array, so shrinking it in place is what a
+    // delete looks like from the component's side.
+    server.use(...seed(many))
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    renderTab({ queryClient })
+    await screen.findByTestId("file-card-f-0")
+    await user.click(screen.getByTestId("commodity-files-pagination-page-2"))
+    expect(await screen.findByTestId("file-card-f-24")).toBeInTheDocument()
+
+    many.pop()
+    await queryClient.invalidateQueries()
+
+    // Page 2 no longer exists. Without the fold the component would sit on an
+    // empty page 2 with the pager hidden — nothing on screen and no way back.
+    expect(await screen.findByTestId("file-card-f-0")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-files-empty")).toBeNull()
+    // The page-1 query was invalidated too, so its cached total catches up a
+    // beat later and the now-single page drops the control.
+    await waitFor(() => expect(screen.queryByTestId("commodity-files-pagination")).toBeNull())
+  })
+
+  it("counts only this commodity's files, not the group's", async () => {
+    // A second commodity's files share the group. The chips sit above this
+    // commodity's list, so a count that includes the neighbour is a number
+    // the list underneath cannot account for.
+    const mine: Fixture[] = [
+      { id: photoFixture.id, attributes: photoFixture },
+      { id: documentFixture.id, attributes: documentFixture },
+    ]
+    const theirs: Fixture[] = Array.from({ length: 7 }, (_, i) => ({
+      id: `other-${i}`,
+      attributes: {
+        ...photoFixture,
+        id: `other-${i}`,
+        title: `Neighbour ${i}`,
+        path: `neighbour-${i}`,
+        linked_entity_id: "com-2",
+      },
+    }))
+    server.use(...seed([...mine, ...theirs]))
+    renderTab()
+    await screen.findByTestId("commodity-files-chip-all-count")
+    expect(screen.getByTestId("commodity-files-chip-all-count")).toHaveTextContent("2")
+    expect(screen.getByTestId("commodity-files-chip-images-count")).toHaveTextContent("1")
+    expect(screen.queryByTestId("file-card-other-0")).toBeNull()
+  })
+
+  it("hides the pager when everything fits on one page", async () => {
+    server.use(...seed([{ id: photoFixture.id, attributes: photoFixture }]))
+    renderTab()
+    await screen.findByTestId(`file-card-${photoFixture.id}`)
+    expect(screen.queryByTestId("commodity-files-pagination")).toBeNull()
+  })
+
   it("is axe-clean in the populated state", async () => {
     server.use(
-      ...groupHandlers.list(groupFixture),
-      ...fileHandlers.list(SLUG, [
+      ...seed([
         { id: photoFixture.id, attributes: photoFixture },
         { id: invoiceFixture.id, attributes: invoiceFixture },
       ])

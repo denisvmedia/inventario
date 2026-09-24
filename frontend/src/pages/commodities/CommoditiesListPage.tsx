@@ -5,8 +5,6 @@ import {
   ArrowUpDown,
   Calendar,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   EyeOff,
   LayoutGrid,
@@ -82,6 +80,7 @@ import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 import { withId } from "@/lib/with-id"
+import { Pagination } from "@/components/common/Pagination"
 
 const PER_PAGE = 24
 const VIEW_MODE_KEY = "commodities:viewMode"
@@ -695,7 +694,12 @@ export function CommoditiesListPage() {
         )}
 
         {totalPages > 1 ? (
-          <Pagination page={page} totalPages={totalPages} onChange={goToPage} />
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onChange={goToPage}
+            testId="commodities-pagination"
+          />
         ) : null}
       </Page>
 
@@ -1506,81 +1510,4 @@ function CommoditiesTable({
       </ul>
     </Card>
   )
-}
-
-// ---- Pagination ---------------------------------------------------------
-
-interface PaginationProps {
-  page: number
-  totalPages: number
-  onChange: (page: number) => void
-}
-
-function Pagination({ page, totalPages, onChange }: PaginationProps) {
-  const { t } = useTranslation()
-  const pages = pageRange(page, totalPages)
-  return (
-    <nav
-      className="flex items-center justify-center gap-1"
-      aria-label={t("commodities:pagination.label")}
-      data-testid="commodities-pagination"
-    >
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-8"
-        onClick={() => onChange(page - 1)}
-        disabled={page <= 1}
-        aria-label={t("commodities:pagination.previous")}
-      >
-        <ChevronLeft className="size-4" aria-hidden="true" />
-      </Button>
-      {pages.map((p, i) =>
-        p === "ellipsis" ? (
-          <span key={`e-${i}`} className="px-2 text-sm text-muted-foreground" aria-hidden="true">
-            …
-          </span>
-        ) : (
-          <Button
-            key={p}
-            variant={p === page ? "secondary" : "ghost"}
-            size="sm"
-            className="size-8"
-            onClick={() => onChange(p)}
-            aria-current={p === page ? "page" : undefined}
-            data-testid={`pagination-page-${p}`}
-          >
-            {p}
-          </Button>
-        )
-      )}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-8"
-        onClick={() => onChange(page + 1)}
-        disabled={page >= totalPages}
-        aria-label={t("commodities:pagination.next")}
-      >
-        <ChevronRight className="size-4" aria-hidden="true" />
-      </Button>
-    </nav>
-  )
-}
-
-// pageRange returns the page numbers to render plus "ellipsis" markers.
-// Always includes 1 and totalPages; collapses the middle when there are
-// gaps. Caller treats "ellipsis" as a non-clickable separator.
-function pageRange(current: number, total: number): Array<number | "ellipsis"> {
-  if (total <= 7) {
-    return Array.from({ length: total }, (_, i) => i + 1)
-  }
-  const out: Array<number | "ellipsis"> = [1]
-  const start = Math.max(2, current - 1)
-  const end = Math.min(total - 1, current + 1)
-  if (start > 2) out.push("ellipsis")
-  for (let p = start; p <= end; p++) out.push(p)
-  if (end < total - 1) out.push("ellipsis")
-  out.push(total)
-  return out
 }

@@ -115,6 +115,52 @@ describe("<LoansListPage />", () => {
     expect(screen.getByTestId("lent-state-open")).toHaveAttribute("aria-selected", "true")
   })
 
+  it("pages past the first 50 loans and resets the page on a state switch", async () => {
+    const user = userEvent.setup()
+    // 60 loans: two pages of the 50-per-page list.
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      id: `loan-${i}`,
+      commodity_id: `c${i}`,
+      borrower_name: `Borrower ${i}`,
+      lent_at: "2026-04-01",
+      due_back_at: "2026-04-15",
+      returned_at: null,
+      commodity: { id: `c${i}`, name: `Item ${i}` },
+    }))
+    server.use(...groupHandlers.list(groupFixture), ...loanHandlers.listGroup(SLUG, many))
+    renderPage()
+    expect(await screen.findByTestId("lent-row-loan-0")).toBeInTheDocument()
+    expect(screen.queryByTestId("lent-row-loan-50")).toBeNull()
+
+    await user.click(screen.getByTestId("loans-pagination-page-2"))
+    expect(await screen.findByTestId("lent-row-loan-50")).toBeInTheDocument()
+    expect(screen.queryByTestId("lent-row-loan-0")).toBeNull()
+
+    // A state switch reshuffles the set, so it goes back to page one — page 2
+    // of the old filter is not a meaningful position in the new one.
+    await user.click(screen.getByTestId("lent-state-returned"))
+    expect(await screen.findByTestId("lent-row-loan-0")).toBeInTheDocument()
+  })
+
+  it("hides the pager when everything fits on one page", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...loanHandlers.listGroup(SLUG, [
+        {
+          id: "loan-1",
+          commodity_id: "c1",
+          borrower_name: "Alice",
+          lent_at: "2026-04-01",
+          returned_at: null,
+          commodity: { id: "c1", name: "Cordless Drill" },
+        },
+      ])
+    )
+    renderPage()
+    await screen.findByTestId("lent-row-loan-1")
+    expect(screen.queryByTestId("loans-pagination")).toBeNull()
+  })
+
   it("is axe-clean once data has loaded", async () => {
     server.use(...groupHandlers.list(groupFixture), ...loanHandlers.listGroup(SLUG, []))
     const { baseElement } = renderPage()
