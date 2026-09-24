@@ -137,6 +137,12 @@ export INVENTARIO_RUN_ADDR=":3333"
 export INVENTARIO_RUN_UPLOAD_LOCATION="file:///var/lib/inventario/uploads?create_dir=1"
 export INVENTARIO_RUN_PUBLIC_URL="https://inventario.example.com"   # used in email links
 
+# Object storage instead of a local directory. A non-AWS S3 endpoint needs
+# `endpoint` and `use_path_style=true` alongside `region`; credentials come from
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY rather than the URL. See DOCKER.md,
+# "S3-compatible storage", and PRODUCTION.md section B4 for the R2 checklist.
+# export INVENTARIO_RUN_UPLOAD_LOCATION="s3://inventario?prefix=uploads/&region=auto&endpoint=https://<account-id>.r2.cloudflarestorage.com&use_path_style=true"
+
 # Security configuration (BOTH REQUIRED for production)
 # If either is left empty the app auto-generates an ephemeral key at boot and logs
 # it — that breaks user sessions / MFA (JWT) and every signed file URL (file signing
