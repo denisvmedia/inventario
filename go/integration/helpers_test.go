@@ -3,11 +3,28 @@ package integration_test
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"testing"
 
 	"go.5x5.cz/inventario/cmd/inventario/db/bootstrap/apply"
 	"go.5x5.cz/inventario/cmd/inventario/db/migrate/up"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/internal/pgtest"
 )
+
+// testDSN returns the DSN of the PostgreSQL this suite runs against. TestMain
+// guarantees there is one outside short mode, either from POSTGRES_TEST_DSN or
+// from the embedded server it starts, so reaching the skip below means short
+// mode or a TestMain that did not run.
+func testDSN(t testing.TB) string {
+	t.Helper()
+	pgtest.SkipIfShort(t)
+	dsn := os.Getenv(pgtest.DSNEnv)
+	if dsn == "" {
+		t.Skip("no PostgreSQL available for this suite")
+	}
+	return dsn
+}
 
 // setupFreshDatabase runs bootstrap and migration commands to set up a fresh database
 // This is a shared helper function used by multiple integration tests

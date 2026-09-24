@@ -62,23 +62,31 @@ func TestCLIWorkflowIntegration(t *testing.T)
 
 ### Prerequisites
 
-1. **PostgreSQL Database**: A PostgreSQL database must be available for testing
-2. **Environment Variable**: Set `POSTGRES_TEST_DSN` with the database connection string
+None. The suite brings its own PostgreSQL: `TestMain` calls `internal/pgtest`,
+which starts an embedded server on a free port and stops it when the package
+finishes. The server binary is downloaded once and cached under
+`~/.embedded-postgres-go`, so the first run is slower than the rest.
+
+Set `POSTGRES_TEST_DSN` to point the suite at a database you already have —
+that is what the PostgreSQL CI lane does with its service container, and it
+skips starting anything.
+
+`go test -short` skips the whole suite rather than starting a server.
 
 ### Local Testing
 
 #### Using Go Test Directly
 
 ```bash
-# Set the PostgreSQL DSN
-export POSTGRES_TEST_DSN="postgres://user:password@localhost:5432/test_db?sslmode=disable"
-
-# Run the integration tests
 cd go
 go test ./integration/... -v
 
 # Or just the CLI workflow test
 go test ./integration/... -run TestCLIWorkflowIntegration -v
+
+# Against a database you already have
+POSTGRES_TEST_DSN="postgres://user:password@localhost:5432/test_db?sslmode=disable" \
+  go test ./integration/... -v
 ```
 
 #### Using the Test Scripts

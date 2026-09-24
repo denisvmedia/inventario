@@ -1,0 +1,123 @@
+// Package pgtest provides a PostgreSQL instance for tests that need a real
+// one.
+//
+// A test package calls [Start] from its TestMain. When POSTGRES_TEST_DSN is
+// set the value is returned as-is, so CI keeps pointing the suite at its
+// service container; otherwise an embedded server is downloaded once, cached,
+// and started on a free port for the lifetime of the package's tests. That is
+// what lets postgres-only behaviour — row-level security, the SQL the memory
+// registry does not run, constraint violations the Go side never reaches — be
+// covered by the ordinary `go test ./...` pass rather than only by a lane with
+// a service container attached (#1953).
+//
+// What it does not change: the role that owns the schema is the application
+// role, here as in CI. Permission bugs that only appear when the database is
+// owned by somebody else stay invisible to both, and reproducing those still
+// needs an external database with a separate owner.
+package pgtest
+
+import (
+	"fmt"
+	"math"
+	"net"
+	"os"
+	"testing"
+	"time"
+
+	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
+)
+
+// DSNEnv is the override. Set it and Start hands it straight back, which is
+// how the postgres CI lane keeps using its service container.
+const DSNEnv = "POSTGRES_TEST_DSN"
+
+const (
+	user     = "inventario"
+	password = "inventario"
+	database = "inventario"
+)
+
+// Start returns a DSN and a stop function. Call it from TestMain and defer
+// nothing — TestMain has no cleanup stack, so the returned function has to be
+// called before os.Exit:
+//
+//	func TestMain(m *testing.M) {
+//		dsn, stop := pgtest.Start()
+//		code := m.Run()
+//		stop()
+//		os.Setenv(pgtest.DSNEnv, dsn) // if the suite reads it back
+//		os.Exit(code)
+//	}
+//
+// The caller owns the schema: Start hands over an empty database and does not
+// bootstrap or migrate it.
+//
+// A failure to start is fatal rather than a skip. A test that silently stops
+// running is the thing this package exists to remove; if the embedded server
+// cannot start, that is worth failing over.
+func Start() (dsn string, stop func()) {
+	if existing := os.Getenv(DSNEnv); existing != "" {
+		return existing, func() {}
+	}
+
+	port, err := freePort()
+	if err != nil {
+		panic(fmt.Sprintf("pgtest: no free port: %v", err))
+	}
+
+	// Each instance gets its own runtime directory: `go test ./...` runs
+	// packages in parallel, and two servers sharing a data directory
+	// corrupt each other. The binaries cache underneath the user's home is
+	// shared on purpose — it is read-only once populated, and re-downloading
+	// per package would dominate the run.
+	runtimePath, err := os.MkdirTemp("", "pgtest-")
+	if err != nil {
+		panic(fmt.Sprintf("pgtest: no runtime dir: %v", err))
+	}
+
+	pg := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().
+		Username(user).
+		Password(password).
+		Database(database).
+		Port(port).
+		RuntimePath(runtimePath).
+		StartTimeout(90 * time.Second))
+
+	if err := pg.Start(); err != nil {
+		_ = os.RemoveAll(runtimePath)
+		panic(fmt.Sprintf("pgtest: start: %v", err))
+	}
+
+	dsn = fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?sslmode=disable", user, password, port, database)
+	return dsn, func() {
+		_ = pg.Stop()
+		_ = os.RemoveAll(runtimePath)
+	}
+}
+
+// SkipIfShort keeps `go test -short` free of the startup cost. The suites that
+// use this package take seconds rather than milliseconds, which is what short
+// mode is for.
+func SkipIfShort(t testing.TB) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping: needs a PostgreSQL instance")
+	}
+}
+
+// freePort asks the kernel for an unused port and immediately gives it back.
+// The window between release and the server's bind is a race in principle;
+// in practice the alternative is a fixed port, which collides for real as
+// soon as two packages run at once.
+func freePort() (uint32, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	port := l.Addr().(*net.TCPAddr).Port
+	if port <= 0 || port > math.MaxUint16 {
+		return 0, fmt.Errorf("port out of range: %d", port)
+	}
+	return uint32(port), nil
+}

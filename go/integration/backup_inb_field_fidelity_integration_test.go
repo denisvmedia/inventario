@@ -5,7 +5,6 @@ package integration_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -45,11 +44,7 @@ import (
 func TestINBFieldFidelityRoundTripPostgres(t *testing.T) {
 	c := qt.New(t)
 
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		t.Skip("POSTGRES_TEST_DSN environment variable not set")
-		return
-	}
+	dsn := testDSN(t)
 
 	c.Assert(setupFreshDatabase(dsn), qt.IsNil, qt.Commentf("failed to set up fresh database"))
 

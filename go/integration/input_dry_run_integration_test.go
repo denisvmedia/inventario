@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"bytes"
-	"os"
 	"strings"
 	"testing"
 
@@ -62,10 +61,7 @@ func TestInputSystemDryRunIntegration(t *testing.T) {
 	t.Log("🧪 Testing input system integration with dry-run mode...")
 
 	// Set up a test tenant for user creation tests
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn != "" {
-		setupTestTenant(t, dsn)
-	}
+	setupTestTenant(t, testDSN(t))
 
 	// Test tenant creation with new input system
 	t.Run("TenantCreateInteractiveDryRun", func(t *testing.T) {
@@ -104,10 +100,7 @@ func testTenantCreateInteractiveDryRun(t *testing.T) {
 	simulatedInput := "Test Organization Interactive\n\nexample.com\n"
 
 	// Use the PostgreSQL test database for dry-run tests since bootstrap migrations require PostgreSQL
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		c.Skip("POSTGRES_TEST_DSN not set")
-	}
+	dsn := testDSN(t)
 	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
 	cmd := tenantcreate.New(dbConfig)
 
@@ -148,10 +141,7 @@ func testTenantCreateNonInteractiveDryRun(t *testing.T) {
 	t.Log("🏢 Testing tenant creation in non-interactive mode (dry-run)...")
 
 	// Use the PostgreSQL test database for dry-run tests since bootstrap migrations require PostgreSQL
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		c.Skip("POSTGRES_TEST_DSN not set")
-	}
+	dsn := testDSN(t)
 	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
 	cmd := tenantcreate.New(dbConfig)
 
@@ -190,10 +180,7 @@ func testUserCreateInteractiveDryRun(t *testing.T) {
 	t.Log("👤 Testing user creation in interactive mode (dry-run)...")
 
 	// Use the PostgreSQL test database for dry-run tests since bootstrap migrations require PostgreSQL
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		c.Skip("POSTGRES_TEST_DSN not set")
-	}
+	dsn := testDSN(t)
 	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
 	cmd := usercreate.New(dbConfig)
 
@@ -232,10 +219,7 @@ func testUserCreateNonInteractiveDryRun(t *testing.T) {
 	t.Log("👤 Testing user creation in non-interactive mode (dry-run)...")
 
 	// Use the PostgreSQL test database for dry-run tests since bootstrap migrations require PostgreSQL
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		c.Skip("POSTGRES_TEST_DSN not set")
-	}
+	dsn := testDSN(t)
 	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
 	cmd := usercreate.New(dbConfig)
 
@@ -263,7 +247,11 @@ func testUserCreateNonInteractiveDryRun(t *testing.T) {
 	c.Assert(outputStr, qt.Contains, "DRY RUN")
 	c.Assert(outputStr, qt.Contains, "testuser-ni@example.com")
 	c.Assert(outputStr, qt.Contains, "Test User Non-Interactive")
-	c.Assert(outputStr, qt.Contains, "Role:     user")
+	// A user carries no role of its own: #1222 moved roles onto group
+	// membership and dropped the --role flag along with the model field.
+	// What the dry run has to show is where the account lands, which is the
+	// tenant it resolved.
+	c.Assert(outputStr, qt.Contains, "Tenant:   ")
 
 	t.Log("✅ Non-interactive user creation (dry-run) completed successfully")
 }
@@ -275,10 +263,7 @@ func testValidationErrorHandlingDryRun(t *testing.T) {
 	t.Log("🔍 Testing validation error handling (dry-run)...")
 
 	// Use the PostgreSQL test database for dry-run tests since bootstrap migrations require PostgreSQL
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		c.Skip("POSTGRES_TEST_DSN not set")
-	}
+	dsn := testDSN(t)
 	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
 	cmd := usercreate.New(dbConfig)
 
@@ -317,10 +302,7 @@ func TestPasswordValidationDryRun(t *testing.T) {
 	t.Log("🔒 Testing password validation in dry-run mode...")
 
 	// Use the PostgreSQL test database for dry-run tests since bootstrap migrations require PostgreSQL
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		c.Skip("POSTGRES_TEST_DSN not set")
-	}
+	dsn := testDSN(t)
 	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
 	cmd := usercreate.New(dbConfig)
 
@@ -365,10 +347,7 @@ func TestSlugGenerationDryRun(t *testing.T) {
 	t.Log("🏷️ Testing slug generation in dry-run mode...")
 
 	// Use the PostgreSQL test database for dry-run tests since bootstrap migrations require PostgreSQL
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		c.Skip("POSTGRES_TEST_DSN not set")
-	}
+	dsn := testDSN(t)
 	dbConfig := &shared.DatabaseConfig{DBDSN: dsn}
 	cmd := tenantcreate.New(dbConfig)
 
