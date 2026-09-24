@@ -17,6 +17,3 @@ spec:
     - name: api
       port: 9000
       targetPort: api
-    - name: console
-      port: 9001
-      targetPort: console

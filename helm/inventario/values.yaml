@@ -1316,18 +1316,43 @@ demo:
     #   - A separate init Job creates the bucket for the app
     enabled: false
 
-    # Pulled from quay.io, not Docker Hub: MinIO withdrew the docker.io/minio/minio
-    # repository, so the same RELEASE tag there now fails with
-    # "pull access denied, repository does not exist". quay.io serves the
-    # identical digest and is already where mcImage below comes from.
-    image: quay.io/minio/minio:RELEASE.2025-01-20T14-49-07Z
+    # SeaweedFS, not MinIO. MinIO withdrew anonymous pulls of its images
+    # everywhere: docker.io/minio went first, and quay.io now answers 401 for
+    # every tag including the RELEASE ones this chart pinned. There is no
+    # public mirror on ghcr.io either. What the demo needs is an S3 endpoint
+    # rather than MinIO specifically, and this one is pullable without
+    # credentials.
+    #
+    # The values keys keep the `minio` name: they name the role, and renaming
+    # them would break every overlay that sets demo.minio.enabled.
+    #
+    # One behavior changed with the server: this one runs without S3
+    # authentication, so rootUser/rootPassword below are no longer enforced —
+    # they are still handed to the app because the SDK will not sign a request
+    # without a key pair. The demo bundle is for previews and local clusters,
+    # both reachable only from inside them; do not point a public deployment
+    # at it.
+    image: chrislusf/seaweedfs:3.97
 
-    # Image for the `mc` client run by the one-shot bucket-create Job.
-    # Pinned to an immutable RELEASE tag (NOT :latest): in argocdMode that Job
-    # sits on an early sync-wave on the critical path, so a floating-tag drift
-    # or a transient registry hiccup must not be able to wedge the sync. Bump
-    # deliberately alongside `image` above.
-    mcImage: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    # Arguments for the object-store container. Exposed because they belong to
+    # whichever server `image` names — replacing it means replacing these.
+    args:
+      - server
+      - -dir=/data
+      - -s3
+      - -s3.port=9000
+      - -ip.bind=0.0.0.0
+
+    # Readiness path on the S3 port. SeaweedFS has no dedicated health route
+    # there and answers 200 on / once it is listening.
+    readinessPath: /
+
+    # Image for the one-shot bucket-create Job. The AWS CLI rather than a
+    # server-specific client, so the Job survives a change of object store.
+    # Pinned to an immutable tag (NOT :latest): in argocdMode that Job sits on
+    # an early sync-wave on the critical path, so a floating-tag drift or a
+    # transient registry hiccup must not be able to wedge the sync.
+    mcImage: amazon/aws-cli:2.32.7
 
     rootUser: minioadmin
     rootPassword: minioadmin123

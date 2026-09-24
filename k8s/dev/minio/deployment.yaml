@@ -29,8 +29,18 @@ spec:
       securityContext:
         fsGroup: 1000
       containers:
+        # SeaweedFS, not MinIO. MinIO withdrew anonymous pulls of its images:
+        # quay.io answers 401 for every tag including the ones pinned here
+        # before, docker.io/minio was withdrawn earlier still, and ghcr.io has
+        # no public mirror. The dev stack needs an S3 endpoint, not MinIO
+        # specifically, and this one is pullable without credentials.
+        #
+        # The resource keeps the name `minio` because the service hostname is
+        # baked into the app's UPLOAD_LOCATION and into the workflows and
+        # scripts that wait on it. Renaming is worth doing on its own, not
+        # inside the change that unbreaks the pull.
         - name: minio
-          image: quay.io/minio/minio:latest
+          image: chrislusf/seaweedfs:3.97
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 1000
@@ -38,20 +48,18 @@ spec:
             runAsNonRoot: true
           args:
             - server
-            - /data
-            - --console-address
-            - :9001
-          envFrom:
-            - secretRef:
-                name: minio-credentials
+            - -dir=/data
+            - -s3
+            - -s3.port=9000
+            - -ip.bind=0.0.0.0
           ports:
             - name: api
               containerPort: 9000
-            - name: console
-              containerPort: 9001
           readinessProbe:
             httpGet:
-              path: /minio/health/ready
+              # The S3 gateway answers 200 on / once it is listening.
+              # SeaweedFS has no dedicated readiness path on this port.
+              path: /
               port: api
             initialDelaySeconds: 5
             periodSeconds: 5

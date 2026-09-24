@@ -22,28 +22,42 @@ spec:
     spec:
       restartPolicy: OnFailure
       containers:
-        - name: mc
-          image: quay.io/minio/mc:latest
+        # The AWS CLI rather than a server-specific client: creating a bucket
+        # is plain S3, so this step does not have to be replaced again the
+        # next time the object store behind the `minio` service changes.
+        - name: create-bucket
+          image: amazon/aws-cli:2.32.7
           imagePullPolicy: IfNotPresent
           env:
-            - name: MC_CONFIG_DIR
-              value: /tmp/.mc
+            # SeaweedFS runs without authentication in this stack, so the
+            # values are only here because the SDK refuses to sign without
+            # them. The secret still carries the pair the app uses.
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: MINIO_ROOT_USER
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: MINIO_ROOT_PASSWORD
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
           envFrom:
             - secretRef:
                 name: minio-credentials
-          volumeMounts:
-            - name: mc-config
-              mountPath: /tmp/.mc
           command:
             - /bin/sh
             - -c
             - |
               set -e
-              until mc alias set dev http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
-                echo "Waiting for MinIO to become ready..."
+              until aws --endpoint-url http://minio:9000 s3api list-buckets >/dev/null 2>&1; do
+                echo "Waiting for the object store to become ready..."
                 sleep 2
               done
-              mc mb --ignore-existing dev/"$MINIO_BUCKET_NAME"
-      volumes:
-        - name: mc-config
-          emptyDir: {}
+              # create-bucket is not idempotent: an existing bucket is a
+              # BucketAlreadyOwnedByYou error, which is the outcome we want.
+              aws --endpoint-url http://minio:9000 s3api create-bucket \
+                --bucket "$MINIO_BUCKET_NAME" \
+                || aws --endpoint-url http://minio:9000 s3api head-bucket --bucket "$MINIO_BUCKET_NAME"
