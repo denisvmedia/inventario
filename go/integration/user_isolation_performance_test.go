@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -20,11 +19,7 @@ import (
 // BenchmarkUserIsolation_ConcurrentUsers benchmarks user isolation with
 // concurrent users, each in their own group.
 func BenchmarkUserIsolation_ConcurrentUsers(b *testing.B) {
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		b.Skip("POSTGRES_TEST_DSN environment variable not set")
-		return
-	}
+	dsn := testDSN(b)
 
 	c := qt.New(b)
 

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -34,11 +33,7 @@ func TestCLIWorkflowIntegration(t *testing.T) {
 	postgres.Register()
 
 	// Get PostgreSQL DSN or skip test
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		t.Skip("POSTGRES_TEST_DSN environment variable not set")
-		return
-	}
+	dsn := testDSN(t)
 
 	// Step 1: Setup fresh database with bootstrap and migrations
 	t.Log("🔧 Setting up fresh database with bootstrap and migrations...")

@@ -63,6 +63,17 @@ jobs:
         run: go mod download
         working-directory: go
 
+      # The integration suite starts its own PostgreSQL when POSTGRES_TEST_DSN
+      # is unset (internal/pgtest, #1953). The server binary is downloaded on
+      # first use and cached here, so only a version bump pays for it.
+      - name: Cache the embedded PostgreSQL binaries
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.embedded-postgres-go
+          key: embedded-postgres-${{ runner.os }}-${{ hashFiles('go/go.sum') }}
+          restore-keys: |
+            embedded-postgres-${{ runner.os }}-
+
       - name: Run tests
         # tee keeps the per-package "coverage: N%" lines for the summary step;
         # pipefail keeps the pipeline's exit status the one that matters.

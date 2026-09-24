@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -43,11 +42,7 @@ func setupTestDatabase(t *testing.T) (*registry.FactorySet, func()) {
 // test when it is unset (the CI gate that does set it is issue #2094).
 func mustTestDSN(t *testing.T) string {
 	t.Helper()
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		t.Skip("POSTGRES_TEST_DSN environment variable not set")
-	}
-	return dsn
+	return testDSN(t)
 }
 
 // createTestTenant creates a real, active tenant row. location_groups and users

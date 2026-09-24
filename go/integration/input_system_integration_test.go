@@ -3,7 +3,6 @@ package integration_test
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -34,11 +33,7 @@ func TestInputSystemIntegration(t *testing.T) {
 	c := qt.New(t)
 
 	// Get PostgreSQL DSN or skip test
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		t.Skip("POSTGRES_TEST_DSN environment variable not set")
-		return
-	}
+	dsn := testDSN(t)
 
 	// Setup fresh database
 	t.Log("🔧 Setting up fresh database for input system testing...")
