@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -331,7 +330,6 @@ func (r *AreaRegistry) newSQLRegistry() *store.RLSGroupRepository[models.Area, *
 	if r.service {
 		return store.NewGroupServiceSQLRegistry[models.Area](r.dbx, r.tableNames.Areas())
 	}
-	slog.Info("Creating new group-aware SQL registry for areas", "createdByUserID", r.createdByUserID)
 	return store.NewGroupAwareSQLRegistry[models.Area](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.Areas())
 }
 

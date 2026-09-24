@@ -51,9 +51,6 @@ func commodityCtx() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			commodityID := chi.URLParam(r, "commodityID")
 
-			// Add debug logging for CI debugging
-			slog.Info("CommodityCtx: Loading commodity", "commodity_id", commodityID, "method", r.Method, "path", r.URL.Path)
-
 			regSet := RegistrySetFromContext(r.Context())
 			if regSet == nil {
 				http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
@@ -67,8 +64,6 @@ func commodityCtx() func(http.Handler) http.Handler {
 				renderEntityError(w, r, err)
 				return
 			}
-
-			slog.Info("CommodityCtx: Successfully loaded commodity", "commodity_id", commodityID, "commodity_name", commodity.Name)
 
 			ctx := context.WithValue(r.Context(), commodityCtxKey, commodity)
 			ctx = context.WithValue(ctx, entityIDKey, commodityID)
