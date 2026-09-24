@@ -38,8 +38,10 @@ type RestoreWorker struct {
 	mu             sync.RWMutex
 	stopped        bool
 	semaphore      *semaphore.Weighted
-	// See ExportWorker.inFlight. A restore processed twice replays an archive
-	// over live data, which is the worst of the three (#2131).
+	// See ExportWorker.inFlight: a per-process short-circuit on top of the
+	// registry claim, not the guarantee itself. A restore processed twice
+	// replays an archive over live data, which is the worst of the three
+	// (#2131, #2472).
 	inFlight sync.Map
 }
 
@@ -193,11 +195,29 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 			continue
 		}
 
-		// Attempt to acquire a semaphore slot to limit concurrent goroutines
+		// Take the slot before the claim. A claim that lands without one
+		// leaves the row running with nobody running it, and the next tick
+		// only looks at pending rows.
 		if !w.semaphore.TryAcquire(1) {
 			w.inFlight.Delete(restoreOp.ID)
 			slog.Warn("Failed to acquire semaphore for restore, another restore is in progress, skipping...")
 			return
+		}
+
+		// Claim the row before dispatching: the condition is in the write, so
+		// exactly one caller wins it however many replicas are polling (#2472).
+		claimed, claimErr := w.registrySet.RestoreOperationRegistry.ClaimPending(ctx, restoreOp.ID)
+		if claimErr != nil {
+			w.semaphore.Release(1)
+			w.inFlight.Delete(restoreOp.ID)
+			slog.Error("Failed to claim restore operation", "restore_operation_id", restoreOp.ID, "error", claimErr)
+			continue
+		}
+		if !claimed {
+			// Another worker got there first, or the row moved on.
+			w.semaphore.Release(1)
+			w.inFlight.Delete(restoreOp.ID)
+			continue
 		}
 
 		go func(restoreOperationID string) {

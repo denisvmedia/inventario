@@ -37,14 +37,13 @@ type ExportWorker struct {
 	mu            sync.RWMutex
 	stopped       bool
 	semaphore     *semaphore.Weighted
-	// inFlight guards against processing the same row twice. The status flip
-	// to in_progress happens inside the spawned goroutine, so a tick that
-	// fires while a slow export is still starting lists it as pending again
-	// and produces a second artifact (#2131).
+	// inFlight skips a row this process has already dispatched, saving the
+	// round trip the claim below would otherwise make on every tick (#2131).
 	//
-	// Per process: it covers replicaCount=1, which is what the chart
-	// documents for this worker family. A claim that survives replicas needs
-	// a conditional UPDATE in the registry — see the follow-up issue.
+	// It is no longer what makes the guarantee. ClaimPending moves the row
+	// from pending under a condition the database evaluates, so two replicas
+	// racing for it get one winner (#2472); this set is an optimisation on
+	// top of that, not the thing standing between one artifact and two.
 	inFlight sync.Map
 }
 
@@ -191,11 +190,29 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 			continue
 		}
 
-		// Block until we can acquire a semaphore slot to limit concurrent goroutines
+		// Take the slot before the claim. A claim that lands without one
+		// leaves the row running with nobody running it, and the next tick
+		// only looks at pending rows. This blocks until a slot frees up.
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
 			w.inFlight.Delete(export.ID)
 			slog.Error("Failed to acquire semaphore", "error", err)
 			return
+		}
+
+		// Claim the row before dispatching: the condition is in the write, so
+		// exactly one caller wins it however many replicas are polling (#2472).
+		claimed, claimErr := reg.ClaimPending(ctx, export.ID)
+		if claimErr != nil {
+			w.semaphore.Release(1)
+			w.inFlight.Delete(export.ID)
+			slog.Error("Failed to claim export", "export_id", export.ID, "error", claimErr)
+			continue
+		}
+		if !claimed {
+			// Another worker got there first, or the row moved on.
+			w.semaphore.Release(1)
+			w.inFlight.Delete(export.ID)
+			continue
 		}
 
 		go func(exportID string) {

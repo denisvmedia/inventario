@@ -36,8 +36,8 @@ type ImportWorker struct {
 	mu            sync.RWMutex
 	stopped       bool
 	semaphore     *semaphore.Weighted
-	// See ExportWorker.inFlight: the status flip happens inside the spawned
-	// goroutine, so a tick during a slow start re-lists a pending row.
+	// See ExportWorker.inFlight: a per-process short-circuit on top of the
+	// registry claim, not the guarantee itself (#2472).
 	inFlight sync.Map
 }
 
@@ -181,11 +181,29 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 			continue
 		}
 
-		// Block until we can acquire a semaphore slot to limit concurrent goroutines
+		// Take the slot before the claim. A claim that lands without one
+		// leaves the row running with nobody running it, and the next tick
+		// only looks at pending rows. This blocks until a slot frees up.
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
 			w.inFlight.Delete(export.ID)
 			slog.Error("Failed to acquire semaphore", "error", err)
 			return
+		}
+
+		// Claim the row before dispatching: the condition is in the write, so
+		// exactly one caller wins it however many replicas are polling (#2472).
+		claimed, claimErr := expReg.ClaimPending(ctx, export.ID)
+		if claimErr != nil {
+			w.semaphore.Release(1)
+			w.inFlight.Delete(export.ID)
+			slog.Error("Failed to claim import", "export_id", export.ID, "error", claimErr)
+			continue
+		}
+		if !claimed {
+			// Another worker got there first, or the row moved on.
+			w.semaphore.Release(1)
+			w.inFlight.Delete(export.ID)
+			continue
 		}
 
 		go func(exportID, sourceFilePath string) {
