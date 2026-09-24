@@ -7,10 +7,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 // The global test setup mocks sonner to a no-op (renders nothing). Re-mock
 // it locally with a spy so the block / unblock success-toast assertions can
 // check the wrapper delegated — vi.mock hoists per-file so this wins.
-vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
-}))
-
 import { toast } from "sonner"
 
 import { AuthProvider } from "@/features/auth/AuthContext"

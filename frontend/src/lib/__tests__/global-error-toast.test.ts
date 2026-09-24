@@ -1,12 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("sonner", () => {
-  const error = vi.fn()
-  return {
-    toast: { error },
-  }
-})
-
 import { toast } from "sonner"
 
 import { notifyGlobalServerError } from "@/lib/global-error-toast"

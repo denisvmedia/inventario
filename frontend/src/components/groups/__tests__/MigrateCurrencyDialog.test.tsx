@@ -4,30 +4,10 @@ import { Route } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
-// Local sonner mock so the feature-disabled tests can assert that the
-// toast was fired with the specific i18n key (#1616). The global setup
-// stubs sonner as no-ops; the per-file mock wins because vi.mock is
-// hoisted. Keep the surface minimal — the wizard only ever calls
-// `toast.error` here, the rest of sonner.toast.* is filled in just to
-// match the imported shape so the bundle resolves.
-vi.mock("sonner", () => {
-  const noop = vi.fn()
-  return {
-    Toaster: () => null,
-    toast: Object.assign(noop, {
-      success: noop,
-      error: vi.fn(),
-      info: noop,
-      warning: noop,
-      message: noop,
-      promise: noop,
-      dismiss: vi.fn(),
-      loading: noop,
-      custom: noop,
-    }),
-  }
-})
-
+// The feature-disabled tests assert the toast carried the specific i18n key
+// (#1616). test/setup.ts mocks sonner once with a separate spy per variant,
+// so `toast.error` below is that spy, cleared between tests by the shared
+// afterEach.
 import { toast } from "sonner"
 
 import {

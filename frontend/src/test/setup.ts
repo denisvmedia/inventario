@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from "vitest"
 import { cleanup, configure } from "@testing-library/react"
 import { toHaveNoViolations } from "jest-axe"
 
+import { resetGlobalMockSpies } from "./global-mocks"
 import { server } from "./server"
 import { initI18n } from "@/i18n"
 import { markBootRefreshAttemptedForTests } from "@/features/auth/bootRefresh"
@@ -30,16 +31,22 @@ configure({ asyncUtilTimeout: 5000 })
 // import on first use. Mocking it globally keeps the auth-form tests fast
 // and deterministic — the per-component meter test still re-mocks locally
 // (vi.mock hoists per file) when it needs to assert behavior end-to-end.
-vi.mock("@zxcvbn-ts/core", () => ({
+vi.mock("@zxcvbn-ts/core", async () => {
+  const { zxcvbnSpies } = await import("./global-mocks")
   // v4 scores via a ZxcvbnFactory instance (the global zxcvbn()/zxcvbnOptions
   // singletons were removed); the constructor accepts the dictionary options
   // and check() returns the result.
-  ZxcvbnFactory: class {
-    check() {
-      return { score: 0, feedback: { suggestions: [] } }
-    }
-  },
-}))
+  return {
+    ZxcvbnFactory: class {
+      constructor(...args: unknown[]) {
+        zxcvbnSpies.factory(...args)
+      }
+      check(...args: unknown[]) {
+        return zxcvbnSpies.check(...args)
+      }
+    },
+  }
+})
 vi.mock("@zxcvbn-ts/language-common", () => ({
   adjacencyGraphs: {},
   dictionary: {},
@@ -49,21 +56,23 @@ vi.mock("@zxcvbn-ts/language-en", () => ({
   dictionary: {},
 }))
 
-vi.mock("sonner", () => {
-  const id = "stub-toast-id"
-  const noop = vi.fn(() => id)
+// sonner and zxcvbn are mocked for the whole suite. The spies live in
+// test/global-mocks so a test can assert on them without re-mocking the
+// module locally — see that file for why a local mock is a problem here.
+vi.mock("sonner", async () => {
+  const { toastSpies } = await import("./global-mocks")
   return {
     Toaster: () => null,
-    toast: Object.assign(noop, {
-      success: noop,
-      error: noop,
-      info: noop,
-      warning: noop,
-      message: noop,
-      promise: noop,
-      dismiss: vi.fn(),
-      loading: noop,
-      custom: noop,
+    toast: Object.assign(toastSpies.base, {
+      success: toastSpies.success,
+      error: toastSpies.error,
+      info: toastSpies.info,
+      warning: toastSpies.warning,
+      message: toastSpies.message,
+      promise: toastSpies.promise,
+      dismiss: toastSpies.dismiss,
+      loading: toastSpies.loading,
+      custom: toastSpies.custom,
     }),
   }
 })
@@ -160,6 +169,9 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   server.resetHandlers()
+  // The shared mocks live for the whole worker, so their call history has to
+  // be dropped per test rather than per file.
+  resetGlobalMockSpies()
   // ThemeProvider writes `light`/`dark` classes on <html>, DensityProvider
   // writes `data-density`. RTL's cleanup() unmounts the React tree but
   // doesn't revert these mutations, so without an explicit reset the next
