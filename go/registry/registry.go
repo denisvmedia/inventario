@@ -343,6 +343,12 @@ type ExportRegistry interface {
 
 	// HardDelete permanently deletes an export from the database
 	HardDelete(ctx context.Context, id string) error
+
+	// ClaimPending moves an export from pending to in_progress and reports
+	// whether this caller is the one that moved it. The condition lives in
+	// the write, so two workers racing for the same row get one true and one
+	// false instead of both producing an artifact (#2472).
+	ClaimPending(ctx context.Context, id string) (bool, error)
 }
 
 type FileRegistry interface {
@@ -1055,6 +1061,12 @@ type RestoreOperationRegistry interface {
 	// Answering that with List means reading every operation and its steps to
 	// learn one bit, and the cost grows with the history (#1314).
 	HasActive(ctx context.Context) (bool, error)
+
+	// ClaimPending moves an operation from pending to running and reports
+	// whether this caller is the one that moved it. Two workers racing for
+	// the same row get one true and one false, rather than both replaying a
+	// restore over live data (#2472).
+	ClaimPending(ctx context.Context, id string) (bool, error)
 }
 
 // PreviewTokenInputs is the deterministic, replay-resistant payload

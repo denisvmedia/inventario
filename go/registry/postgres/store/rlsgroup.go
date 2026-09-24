@@ -146,6 +146,23 @@ func (r *RLSGroupRepository[T, P]) ExistsByFieldIn(ctx context.Context, field st
 	return NewTxRegistry[T](tx, r.table).ExistsByFieldIn(ctx, field, values)
 }
 
+func (r *RLSGroupRepository[T, P]) ClaimByStatus(ctx context.Context, id, from, to string) (bool, error) {
+	tx, err := r.beginTx(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback() //nolint:errcheck // the commit below is what matters
+
+	claimed, err := NewTxRegistry[T](tx, r.table).ClaimByStatus(ctx, id, from, to)
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, errxtrace.Wrap("failed to commit claim", err)
+	}
+	return claimed, nil
+}
+
 func (r *RLSGroupRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) (T, error) {
 	var zero T
 
