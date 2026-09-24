@@ -278,7 +278,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// stop here and return a short-lived mfa_token. Logic extracted
 	// into maybeIssueMFAChallenge to keep login()'s cyclomatic /
 	// nesting complexity inside the linter budgets.
-	if handled := api.maybeIssueMFAChallenge(w, r, user, tenantID); handled {
+	if handled := api.maybeIssueMFAChallenge(w, r, user, tenantID, models.LoginMethodPassword); handled {
 		return
 	}
 
@@ -1429,7 +1429,7 @@ func (api *AuthAPI) userMFAEnabled(ctx context.Context, user *models.User) (bool
 //
 // Lookup errors are treated as 500 — failing open here would silently
 // bypass MFA for an enrolled user during a transient registry blip.
-func (api *AuthAPI) maybeIssueMFAChallenge(w http.ResponseWriter, r *http.Request, user *models.User, tenantID string) bool {
+func (api *AuthAPI) maybeIssueMFAChallenge(w http.ResponseWriter, r *http.Request, user *models.User, tenantID string, method models.LoginMethod) bool {
 	if api.mfaRegistry == nil {
 		return false
 	}
@@ -1446,14 +1446,14 @@ func (api *AuthAPI) maybeIssueMFAChallenge(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 
-	mfaToken, _, terr := api.issueMFAToken(user)
+	mfaToken, _, terr := api.issueMFAToken(user, method)
 	if terr != nil {
 		slog.Error("Failed to issue MFA challenge token", "user_id", user.ID, "error", terr)
 		http.Error(w, "Failed to start MFA challenge", http.StatusInternalServerError)
 		return true
 	}
 	api.logAuth(r.Context(), "login_mfa_required", &user.ID, &user.TenantID, true, r, nil)
-	api.recordLoginEvent(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeMFARequired, r)
+	api.recordLoginEventWithMethod(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeMFARequired, method, r)
 	w.Header().Set("Content-Type", "application/json")
 	if encErr := json.NewEncoder(w).Encode(LoginMFARequiredResponse{
 		MFARequired: true,

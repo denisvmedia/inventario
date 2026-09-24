@@ -569,3 +569,133 @@ func TestMagicLinkVerify_DisabledAccountDoesNotBurnTheLink(t *testing.T) {
 	c.Assert(mlt.IsClaimed(), qt.IsFalse,
 		qt.Commentf("a 403 must leave the token usable once the account is re-enabled"))
 }
+
+// #1993: the second leg of an MFA sign-in is the shared POST /auth/login/mfa,
+// which had no way of knowing how the first leg was passed and so recorded
+// every completion as a password login. An MFA-enrolled user signing in by
+// magic link therefore showed up in login_events as `password`.
+//
+// This also closes the coverage gap the issue names: the magic-link -> MFA
+// path was only ever driven as far as the challenge, never to a session.
+func TestMagicLinkVerify_MFACompletionRecordsMagicLink(t *testing.T) {
+	c := qt.New(t)
+	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
+	user := makeMagicLinkUser(true)
+
+	userReg := user2Reg(user)
+	mlReg := memreg.NewMagicLinkTokenRegistry()
+	mfaReg := memreg.NewUserMFASecretRegistry()
+	loginEventReg := memreg.NewLoginEventRegistry()
+	mfaSvc, err := services.NewMFAService(jwtSecret)
+	c.Assert(err, qt.IsNil)
+
+	tenant := &models.Tenant{
+		EntityID: models.EntityID{ID: user.TenantID},
+		Status:   models.TenantStatusActive,
+	}
+	authHandler := apiserver.Auth(apiserver.AuthParams{
+		UserRegistry:          userReg,
+		RefreshTokenRegistry:  memreg.NewRefreshTokenRegistry(),
+		MagicLinkRegistry:     mlReg,
+		MFARegistry:           mfaReg,
+		MFAService:            mfaSvc,
+		LoginEventRegistry:    loginEventReg,
+		EmailService:          &recordingMagicLinkEmailService{},
+		MagicLinkLoginEnabled: true,
+		JWTSecret:             jwtSecret,
+	})
+	router := chi.NewRouter()
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(apiserver.WithTenant(r.Context(), tenant)))
+		})
+	})
+	router.Route("/auth", authHandler)
+
+	bearer := mintMagicLinkBearer(t, jwtSecret, user.ID)
+	callAuthed := func(method, path string, body any) *httptest.ResponseRecorder {
+		var buf bytes.Buffer
+		if body != nil {
+			c.Assert(json.NewEncoder(&buf).Encode(body), qt.IsNil)
+		}
+		req := httptest.NewRequest(method, path, &buf)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		return resp
+	}
+
+	setup := callAuthed(http.MethodPost, "/auth/mfa/setup", nil)
+	c.Assert(setup.Code, qt.Equals, http.StatusOK)
+	var setupResp apiserver.MFASetupResponse
+	c.Assert(json.NewDecoder(setup.Body).Decode(&setupResp), qt.IsNil)
+	code, err := totp.GenerateCodeCustom(setupResp.Secret, time.Now(), totp.ValidateOpts{
+		Period: 30, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(callAuthed(http.MethodPost, "/auth/mfa/verify",
+		apiserver.MFAVerifyRequest{Code: code}).Code, qt.Equals, http.StatusOK)
+
+	// Leg one: redeem a magic link. The user has MFA, so this is a challenge.
+	token, err := models.GenerateMagicLinkToken()
+	c.Assert(err, qt.IsNil)
+	_, err = mlReg.Create(t.Context(), models.MagicLinkToken{
+		UserID:    user.ID,
+		TenantID:  user.TenantID,
+		Email:     user.Email,
+		Token:     token,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+	})
+	c.Assert(err, qt.IsNil)
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/magic-link/verify",
+		bytes.NewBufferString(`{"token":"`+token+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	c.Assert(resp.Code, qt.Equals, http.StatusOK)
+
+	var challenge apiserver.LoginMFARequiredResponse
+	c.Assert(json.NewDecoder(resp.Body).Decode(&challenge), qt.IsNil)
+	c.Assert(challenge.MFARequired, qt.IsTrue)
+	c.Assert(challenge.MFAToken, qt.Not(qt.Equals), "")
+
+	// Leg two: finish the TOTP step through the shared endpoint. Replay
+	// tracking is per scope, so the enrollment code above does not block this
+	// one — the same trick auth_mfa_test.go uses for /mfa/disable.
+	stepTwoCode, err := totp.GenerateCodeCustom(setupResp.Secret, time.Now(), totp.ValidateOpts{
+		Period: 30, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
+	})
+	c.Assert(err, qt.IsNil)
+
+	var body bytes.Buffer
+	c.Assert(json.NewEncoder(&body).Encode(map[string]string{
+		"mfa_token": challenge.MFAToken,
+		"totp_code": stepTwoCode,
+	}), qt.IsNil)
+	mfaReq := httptest.NewRequest(http.MethodPost, "/auth/login/mfa", &body)
+	mfaReq.Header.Set("Content-Type", "application/json")
+	mfaResp := httptest.NewRecorder()
+	router.ServeHTTP(mfaResp, mfaReq)
+
+	c.Assert(mfaResp.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", mfaResp.Body.String()))
+	c.Assert(refreshCookieSet(mfaResp), qt.IsTrue, qt.Commentf("step two mints a full session"))
+
+	// The row that matters. Both legs must say magic_link — the challenge and
+	// the completion — or an operator reading login_events sees a password
+	// sign-in that never happened.
+	events, err := loginEventReg.List(t.Context())
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(events) > 0, qt.IsTrue)
+	for _, ev := range events {
+		c.Check(ev.Method, qt.Equals, models.LoginMethodMagicLink,
+			qt.Commentf("outcome=%s", ev.Outcome))
+	}
+	outcomes := make(map[models.LoginOutcome]int, len(events))
+	for _, ev := range events {
+		outcomes[ev.Outcome]++
+	}
+	c.Check(outcomes[models.LoginOutcomeMFARequired], qt.Equals, 1)
+	c.Check(outcomes[models.LoginOutcomeOK], qt.Equals, 1)
+}

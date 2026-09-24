@@ -585,7 +585,8 @@ func (api *AuthAPI) loginMFA(w http.ResponseWriter, r *http.Request) {
 
 	if !api.consumeAnyMFACode(r, user, row, req.TOTPCode, req.BackupCode, "login_mfa") {
 		api.maybeRecordFailedLogin(r.Context(), user.Email)
-		api.recordLoginEvent(r.Context(), claims.TenantID, user.Email, &user.ID, models.LoginOutcomeBadMFA, r)
+		api.recordLoginEventWithMethod(r.Context(), claims.TenantID, user.Email, &user.ID,
+			models.LoginOutcomeBadMFA, claims.Method, r)
 		http.Error(w, "Invalid code", http.StatusUnauthorized)
 		return
 	}
@@ -669,7 +670,10 @@ func (api *AuthAPI) issueMFALoginSession(w http.ResponseWriter, r *http.Request,
 
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
 	api.logAuth(r.Context(), "login_mfa", &user.ID, &user.TenantID, true, r, nil)
-	api.recordLoginEvent(r.Context(), claims.TenantID, user.Email, &user.ID, models.LoginOutcomeOK, r)
+	// claims.Method, not a constant: this endpoint is shared, so the only
+	// thing that knows how the first leg was passed is the token (#1993).
+	api.recordLoginEventWithMethod(r.Context(), claims.TenantID, user.Email, &user.ID,
+		models.LoginOutcomeOK, claims.Method, r)
 
 	// Stamp the wire-only is_system_admin advisory flag (#1784).
 	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, user)
@@ -752,15 +756,19 @@ func (api *AuthAPI) consumeTOTPCode(ctx context.Context, user *models.User, row 
 // endpoint and *only* that endpoint. We piggyback on api.jwtSecret
 // because rotating that already invalidates all access tokens — so
 // using it here doesn't expand the rotation blast radius.
-func (api *AuthAPI) issueMFAToken(user *models.User) (string, time.Time, error) {
+func (api *AuthAPI) issueMFAToken(user *models.User, method models.LoginMethod) (string, time.Time, error) {
 	expiresAt := time.Now().Add(mfaTokenExpiration)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"jti":        uuid.New().String(),
-		"user_id":    user.ID,
-		"tenant_id":  user.TenantID,
-		"token_type": mfaTokenType,
-		"exp":        expiresAt.Unix(),
-		"iat":        time.Now().Unix(),
+		"jti":       uuid.New().String(),
+		"user_id":   user.ID,
+		"tenant_id": user.TenantID,
+		// How the first leg was passed. Step 2 is the same endpoint whichever
+		// it was, so without this a magic-link sign-in by an MFA-enrolled user
+		// is recorded as a password login (#1993).
+		"login_method": string(method),
+		"token_type":   mfaTokenType,
+		"exp":          expiresAt.Unix(),
+		"iat":          time.Now().Unix(),
 	})
 	signed, err := token.SignedString(api.jwtSecret)
 	return signed, expiresAt, err
@@ -776,6 +784,10 @@ type mfaTokenClaims struct {
 	TenantID  string
 	JTI       string
 	ExpiresAt time.Time
+	// Method is how the first leg was passed. Absent on a token minted
+	// before #1993 — one of those can still be in flight for its TTL — so
+	// it falls back to password, which is what those tokens recorded.
+	Method models.LoginMethod
 }
 
 // parseMFAToken decodes a token previously issued by issueMFAToken
@@ -823,5 +835,10 @@ func (api *AuthAPI) parseMFAToken(tokenString string) (mfaTokenClaims, error) {
 	}
 	out.JTI, _ = claims["jti"].(string)
 	out.ExpiresAt = time.Unix(int64(expFloat), 0)
+	if method, _ := claims["login_method"].(string); method != "" {
+		out.Method = models.LoginMethod(method)
+	} else {
+		out.Method = models.LoginMethodPassword
+	}
 	return out, nil
 }
