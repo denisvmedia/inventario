@@ -41,18 +41,30 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: mc
+        # The AWS CLI rather than a server-specific client: creating a bucket
+        # is plain S3, so this step does not have to be rewritten the next time
+        # the demo object store changes.
+        - name: create-bucket
           image: {{ .Values.demo.minio.mcImage | quote }}
           imagePullPolicy: IfNotPresent
           env:
-            - name: MC_CONFIG_DIR
-              value: /tmp/.mc
+            # The demo object store runs without authentication; the values are
+            # only here because the SDK refuses to sign a request without them.
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "inventario.demoMinioSecretName" . }}
+                  key: MINIO_ROOT_USER
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "inventario.demoMinioSecretName" . }}
+                  key: MINIO_ROOT_PASSWORD
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
           envFrom:
             - secretRef:
                 name: {{ include "inventario.demoMinioSecretName" . }}
-          volumeMounts:
-            - name: mc-config
-              mountPath: /tmp/.mc
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -62,18 +74,19 @@ spec:
             - -c
             - |
               set -e
+              endpoint={{ include "inventario.minioEndpointUrl" . }}
               i=0
-              until mc alias set demo {{ include "inventario.minioEndpointUrl" . }} "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+              until aws --endpoint-url "$endpoint" s3api list-buckets >/dev/null 2>&1; do
                 i=$((i+1))
                 if [ "$i" -ge 60 ]; then
-                  echo "MinIO not ready after 120s; giving up" >&2
+                  echo "Object store not ready after 120s; giving up" >&2
                   exit 1
                 fi
-                echo "Waiting for MinIO to become ready..."
+                echo "Waiting for the object store to become ready..."
                 sleep 2
               done
-              mc mb --ignore-existing demo/"$MINIO_BUCKET_NAME"
-      volumes:
-        - name: mc-config
-          emptyDir: {}
+              # create-bucket is not idempotent: an existing bucket is an
+              # already-exists error, which is the outcome this job wants.
+              aws --endpoint-url "$endpoint" s3api create-bucket --bucket "$MINIO_BUCKET_NAME" \
+                || aws --endpoint-url "$endpoint" s3api head-bucket --bucket "$MINIO_BUCKET_NAME"
 {{- end }}

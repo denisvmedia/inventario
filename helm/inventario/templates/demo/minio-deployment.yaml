@@ -51,10 +51,7 @@ spec:
           image: {{ .Values.demo.minio.image | quote }}
           imagePullPolicy: IfNotPresent
           args:
-            - server
-            - /data
-            - --console-address
-            - :9001
+            {{- toYaml .Values.demo.minio.args | nindent 12 }}
           envFrom:
             - secretRef:
                 name: {{ include "inventario.demoMinioSecretName" . }}
@@ -69,12 +66,9 @@ spec:
             - name: api
               containerPort: 9000
               protocol: TCP
-            - name: console
-              containerPort: 9001
-              protocol: TCP
           readinessProbe:
             httpGet:
-              path: /minio/health/ready
+              path: {{ .Values.demo.minio.readinessPath | quote }}
               port: api
             initialDelaySeconds: 5
             periodSeconds: 5
