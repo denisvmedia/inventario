@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest"
 import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from "vitest"
-import { cleanup } from "@testing-library/react"
+import { cleanup, configure } from "@testing-library/react"
 import { toHaveNoViolations } from "jest-axe"
 
 import { server } from "./server"
@@ -8,6 +8,15 @@ import { initI18n } from "@/i18n"
 import { markBootRefreshAttemptedForTests } from "@/features/auth/bootRefresh"
 
 expect.extend(toHaveNoViolations)
+
+// findBy*/waitFor carry their own 1s budget, separate from the 15s
+// testTimeout vitest.config.ts sets. That 1s is what the heaviest renders
+// exceed under forks-pool contention — the same contention the config
+// comment describes — so a test that is waiting for a render, not for a
+// missing element, reports a timeout instead of the assertion it was about
+// to make. A wrong assertion still fails; it takes 5s to say so, and only
+// for the tests that actually wait.
+configure({ asyncUtilTimeout: 5000 })
 
 // Quiet sonner globally for the test suite. The real `<Toaster />` portals
 // into document.body and the toast queue persists across renders — both
