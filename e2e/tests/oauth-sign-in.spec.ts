@@ -49,24 +49,31 @@
  * emits a loud slog.Warn when they are set. NEVER turn these on in a
  * production deployment.
  */
-import { test, expect, APIRequestContext, Browser, BrowserContext, Page } from '@playwright/test';
-import { seedTenant } from '../setup/setup-stack.js';
-import { login, TEST_CREDENTIALS } from './includes/auth.js';
+import {
+  test,
+  expect,
+  APIRequestContext,
+  Browser,
+  BrowserContext,
+  Page,
+} from "@playwright/test";
+import { seedTenant } from "../setup/setup-stack.js";
+import { login, TEST_CREDENTIALS } from "./includes/auth.js";
 
 // Toggle the provider exercised by the test. Today: "google". Adding
 // "github" needs a stub server expansion (it's currently Google-shaped)
 // and a third env-var triple in setup-stack.ts. Doing one provider is
 // enough for the acceptance criteria.
-const PROVIDER = 'google' as const;
+const PROVIDER = "google" as const;
 
 // Deterministic stub profile used by both the create branch and the
 // re-sign-in branch. The `sub` is what the BE keys the OAuth identity
 // row on; the `email` lands on users.email; the `name` seeds users.name.
 const STUB_PROFILE = {
-  sub: 'stub-google-sub-1394',
-  email: 'oauth-user-1394@example.test',
+  sub: "stub-google-sub-1394",
+  email: "oauth-user-1394@example.test",
   emailVerified: true,
-  name: 'OAuth Test User',
+  name: "OAuth Test User",
 };
 
 const STUB_PORT = Number(process.env.OAUTH_STUB_PORT) || 4444;
@@ -88,9 +95,9 @@ const TEST_TIMEOUT_MS = 60_000;
 // implementation. Pinning the OAuth describes to serial-within-file
 // removes the race without forcing the rest of the e2e suite to run
 // single-worker.
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: "serial" });
 
-test.describe('#1394 OAuth sign-in — Google provider via stub @oauth', () => {
+test.describe("#1394 OAuth sign-in — Google provider via stub @oauth", () => {
   // Long timeout: the BE redirect chain + stub round-trip + JWT mint can
   // legitimately take a few seconds on a busy laptop; the default 30s
   // expect() timeout is fine but we widen the test budget here.
@@ -102,18 +109,18 @@ test.describe('#1394 OAuth sign-in — Google provider via stub @oauth', () => {
     // sees that flag at boot, so without it the BE has no OAuth providers
     // registered and the test cannot execute.
     test.skip(
-      process.env.OAUTH_STUB_ENABLED !== 'true',
-      'OAuth e2e requires OAUTH_STUB_ENABLED=true and a running stub stack (see spec header).'
+      process.env.OAUTH_STUB_ENABLED !== "true",
+      "OAuth e2e requires OAUTH_STUB_ENABLED=true and a running stub stack (see spec header).",
     );
 
     // Probe the stub server for liveness. Failing early here gives a
     // clearer error than a downstream redirect timing out.
     const probe = await fetch(`${STUB_BASE_URL}/userinfo`, {
-      headers: { Authorization: 'Bearer stub-access-token' },
+      headers: { Authorization: "Bearer stub-access-token" },
     });
     if (!probe.ok) {
       throw new Error(
-        `OAuth stub /userinfo not reachable at ${STUB_BASE_URL} (status ${probe.status}). Did setup-stack.ts start the stub?`
+        `OAuth stub /userinfo not reachable at ${STUB_BASE_URL} (status ${probe.status}). Did setup-stack.ts start the stub?`,
       );
     }
   });
@@ -125,16 +132,21 @@ test.describe('#1394 OAuth sign-in — Google provider via stub @oauth', () => {
     await setStubProfile(STUB_PROFILE);
   });
 
-  test('full happy-path: create → re-sign-in → unlink guard', async ({ browser, request }) => {
+  test("full happy-path: create → re-sign-in → unlink guard", async ({
+    browser,
+    request,
+  }) => {
     // ---- Step 1+2+3: anonymous sign-in flow ----
     const firstContext = await browser.newContext();
     const firstPage = await firstContext.newPage();
 
-    await firstPage.goto('/login');
+    await firstPage.goto("/login");
     // OAuth row visibility — driven by GET /auth/oauth/providers returning
     // the Google entry. Failing here means the BE didn't pick up the stub
     // env vars (check setup-stack.ts logging).
-    const googleButton = firstPage.locator(`[data-testid="oauth-${PROVIDER}-button"]`);
+    const googleButton = firstPage.locator(
+      `[data-testid="oauth-${PROVIDER}-button"]`,
+    );
     await expect(googleButton).toBeVisible({ timeout: 10_000 });
 
     // Click → browser navigates through the BE start handler → stub
@@ -142,9 +154,15 @@ test.describe('#1394 OAuth sign-in — Google provider via stub @oauth', () => {
     // hidden behind a single user action; wait for the URL to settle
     // back on the FE app root.
     await Promise.all([
-      firstPage.waitForURL((url) => url.pathname === '/' || url.pathname === '/no-group' || url.pathname === '/login', {
-        timeout: 20_000,
-      }),
+      firstPage.waitForURL(
+        (url) =>
+          url.pathname === "/" ||
+          url.pathname === "/no-group" ||
+          url.pathname === "/login",
+        {
+          timeout: 20_000,
+        },
+      ),
       googleButton.click(),
     ]);
 
@@ -162,18 +180,30 @@ test.describe('#1394 OAuth sign-in — Google provider via stub @oauth', () => {
     // access token (the cookie path is what the FE's http.ts walks on a
     // 401). Spending the cookie via /auth/refresh gives us a Bearer
     // token we can use for the rest of the assertions.
-    const refreshResp = await oauthRequest.post('/api/v1/auth/refresh', {
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    const refreshResp = await oauthRequest.post("/api/v1/auth/refresh", {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
       data: {},
     });
-    expect(refreshResp.status(), `refresh failed: ${await refreshResp.text()}`).toBe(200);
-    const refreshBody = (await refreshResp.json()) as { access_token: string; csrf_token?: string };
+    expect(
+      refreshResp.status(),
+      `refresh failed: ${await refreshResp.text()}`,
+    ).toBe(200);
+    const refreshBody = (await refreshResp.json()) as {
+      access_token: string;
+      csrf_token?: string;
+    };
     expect(refreshBody.access_token).toBeTruthy();
     const firstAccessToken = refreshBody.access_token;
 
     // /auth/me — the new user must exist with has_password=false.
-    const meResp = await oauthRequest.get('/api/v1/auth/me', {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${firstAccessToken}` },
+    const meResp = await oauthRequest.get("/api/v1/auth/me", {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${firstAccessToken}`,
+      },
     });
     expect(meResp.status(), `auth/me failed: ${await meResp.text()}`).toBe(200);
     const me = (await meResp.json()) as {
@@ -188,25 +218,40 @@ test.describe('#1394 OAuth sign-in — Google provider via stub @oauth', () => {
     const firstUserId = me.id;
 
     // ---- Step 4b: login_events row with method=oauth_google outcome=ok ----
-    const historyResp = await oauthRequest.get('/api/v1/users/me/login-history', {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${firstAccessToken}` },
-    });
-    expect(historyResp.status(), `login-history failed: ${await historyResp.text()}`).toBe(200);
+    const historyResp = await oauthRequest.get(
+      "/api/v1/users/me/login-history",
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${firstAccessToken}`,
+        },
+      },
+    );
+    expect(
+      historyResp.status(),
+      `login-history failed: ${await historyResp.text()}`,
+    ).toBe(200);
     const history = (await historyResp.json()) as {
       events: Array<{ method: string; outcome: string }>;
     };
     expect(history.events.length).toBeGreaterThan(0);
     const oauthEvent = history.events.find(
-      (e) => e.method === `oauth_${PROVIDER}` && e.outcome === 'ok'
+      (e) => e.method === `oauth_${PROVIDER}` && e.outcome === "ok",
     );
-    expect(oauthEvent, `expected one method=oauth_${PROVIDER} outcome=ok login event; got ${JSON.stringify(history.events)}`).toBeTruthy();
+    expect(
+      oauthEvent,
+      `expected one method=oauth_${PROVIDER} outcome=ok login event; got ${JSON.stringify(history.events)}`,
+    ).toBeTruthy();
 
     // ---- Step 5: sign out (clear cookies + access token) ----
     // POST /auth/logout to drop the refresh-token cookie and revoke the
     // server-side session. Then drop the browser context so the second
     // sign-in run starts from a clean cookie jar.
-    const logoutResp = await oauthRequest.post('/api/v1/auth/logout', {
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${firstAccessToken}` },
+    const logoutResp = await oauthRequest.post("/api/v1/auth/logout", {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${firstAccessToken}`,
+      },
       data: {},
     });
     expect(logoutResp.status()).toBeLessThan(500);
@@ -218,43 +263,73 @@ test.describe('#1394 OAuth sign-in — Google provider via stub @oauth', () => {
     // users.id — i.e. the find branch ran, not find-or-create.
     const secondContext = await browser.newContext();
     const secondPage = await secondContext.newPage();
-    await secondPage.goto('/login');
-    const googleButton2 = secondPage.locator(`[data-testid="oauth-${PROVIDER}-button"]`);
+    await secondPage.goto("/login");
+    const googleButton2 = secondPage.locator(
+      `[data-testid="oauth-${PROVIDER}-button"]`,
+    );
     await expect(googleButton2).toBeVisible({ timeout: 10_000 });
     await Promise.all([
-      secondPage.waitForURL((url) => url.pathname === '/' || url.pathname === '/no-group' || url.pathname === '/login', {
-        timeout: 20_000,
-      }),
+      secondPage.waitForURL(
+        (url) =>
+          url.pathname === "/" ||
+          url.pathname === "/no-group" ||
+          url.pathname === "/login",
+        {
+          timeout: 20_000,
+        },
+      ),
       googleButton2.click(),
     ]);
 
     const secondRequest = secondContext.request;
-    const refresh2 = await secondRequest.post('/api/v1/auth/refresh', {
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    const refresh2 = await secondRequest.post("/api/v1/auth/refresh", {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
       data: {},
     });
-    expect(refresh2.status(), `second refresh failed: ${await refresh2.text()}`).toBe(200);
+    expect(
+      refresh2.status(),
+      `second refresh failed: ${await refresh2.text()}`,
+    ).toBe(200);
     const refresh2Body = (await refresh2.json()) as { access_token: string };
     const secondAccessToken = refresh2Body.access_token;
 
-    const me2Resp = await secondRequest.get('/api/v1/auth/me', {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${secondAccessToken}` },
+    const me2Resp = await secondRequest.get("/api/v1/auth/me", {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${secondAccessToken}`,
+      },
     });
     expect(me2Resp.status()).toBe(200);
-    const me2 = (await me2Resp.json()) as { id: string; email: string; has_password: boolean };
-    expect(me2.id, 'second sign-in must reuse the same user — find-by-identity should run, not create').toBe(firstUserId);
+    const me2 = (await me2Resp.json()) as {
+      id: string;
+      email: string;
+      has_password: boolean;
+    };
+    expect(
+      me2.id,
+      "second sign-in must reuse the same user — find-by-identity should run, not create",
+    ).toBe(firstUserId);
     expect(me2.email).toBe(STUB_PROFILE.email);
     expect(me2.has_password).toBe(false);
 
     // ---- Step 7: unlink guard — DELETE /auth/oauth/google must 409 ----
     // The new user has no password AND only one linked identity (Google),
     // so unlink would lock them out. The BE refuses with 409.
-    const unlinkResp = await secondRequest.delete(`/api/v1/auth/oauth/${PROVIDER}`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${secondAccessToken}` },
-    });
+    const unlinkResp = await secondRequest.delete(
+      `/api/v1/auth/oauth/${PROVIDER}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${secondAccessToken}`,
+        },
+      },
+    );
     expect(
       unlinkResp.status(),
-      `unlink-guard: expected 409 for last sign-in method (got ${unlinkResp.status()})`
+      `unlink-guard: expected 409 for last sign-in method (got ${unlinkResp.status()})`,
     ).toBe(409);
 
     await secondContext.close();
@@ -268,12 +343,14 @@ test.describe('#1394 OAuth sign-in — Google provider via stub @oauth', () => {
  */
 async function setStubProfile(profile: typeof STUB_PROFILE): Promise<void> {
   const resp = await fetch(`${STUB_BASE_URL}/__control__/profile`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(profile),
   });
   if (!resp.ok) {
-    throw new Error(`stub set-profile failed: ${resp.status} ${await resp.text()}`);
+    throw new Error(
+      `stub set-profile failed: ${resp.status} ${await resp.text()}`,
+    );
   }
 }
 
@@ -317,38 +394,38 @@ async function setStubProfile(profile: typeof STUB_PROFILE): Promise<void> {
 // `t1851-other` is minted in beforeAll via seedTenant. The slug is
 // namespaced with the issue number so a parallel suite that one day
 // uses a "tenant2" slug doesn't collide.
-const TENANT_1_SLUG = 'test-org';
-const TENANT_2_SLUG = 't1851-other';
+const TENANT_1_SLUG = "test-org";
+const TENANT_2_SLUG = "t1851-other";
 
 // Deterministic alice profile — created on tenant-1 in setup, then
 // replayed on tenant-2 to exercise the LoginOutcomeTenantMismatch
 // redirect. The `sub` keys the global (provider, provider_user_id)
 // lookup that triggers the guard.
 const ALICE_PROFILE = {
-  sub: 'stub-google-sub-1851-alice',
-  email: 'alice-1851@example.test',
+  sub: "stub-google-sub-1851-alice",
+  email: "alice-1851@example.test",
   emailVerified: true,
-  name: 'Alice Cross-Tenant',
+  name: "Alice Cross-Tenant",
 };
 
-test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tenant', () => {
+test.describe("#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tenant", () => {
   test.setTimeout(TEST_TIMEOUT_MS);
 
   test.beforeAll(async () => {
     test.skip(
-      process.env.OAUTH_STUB_ENABLED !== 'true',
-      'OAuth cross-tenant e2e requires OAUTH_STUB_ENABLED=true (see spec header).'
+      process.env.OAUTH_STUB_ENABLED !== "true",
+      "OAuth cross-tenant e2e requires OAUTH_STUB_ENABLED=true (see spec header).",
     );
 
     // Liveness probe — the stub server must be up before the BE
     // redirect chain runs through it. A clear error here beats a
     // downstream timeout.
     const probe = await fetch(`${STUB_BASE_URL}/userinfo`, {
-      headers: { Authorization: 'Bearer stub-access-token' },
+      headers: { Authorization: "Bearer stub-access-token" },
     });
     if (!probe.ok) {
       throw new Error(
-        `OAuth stub /userinfo not reachable at ${STUB_BASE_URL} (status ${probe.status}). Did setup-stack.ts start the stub?`
+        `OAuth stub /userinfo not reachable at ${STUB_BASE_URL} (status ${probe.status}). Did setup-stack.ts start the stub?`,
       );
     }
 
@@ -365,7 +442,7 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
     await setStubProfile(ALICE_PROFILE);
   });
 
-  test('callback on tenant-2 with identity owned by tenant-1 → redirected to tenant_mismatch, no session', async ({
+  test("callback on tenant-2 with identity owned by tenant-1 → redirected to tenant_mismatch, no session", async ({
     browser,
   }) => {
     // ---- Setup: register alice on tenant-1 via OAuth ----
@@ -376,14 +453,24 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
     const tenant1 = await newTenantContext(browser, TENANT_1_SLUG);
     await runOAuthFlowOnTenantContext(tenant1.page);
 
-    const tenant1AccessToken = await refreshAndExpectSuccess(tenant1.context.request, TENANT_1_SLUG);
-    const aliceOnTenant1 = await fetchMe(tenant1.context.request, tenant1AccessToken, TENANT_1_SLUG);
+    const tenant1AccessToken = await refreshAndExpectSuccess(
+      tenant1.context.request,
+      TENANT_1_SLUG,
+    );
+    const aliceOnTenant1 = await fetchMe(
+      tenant1.context.request,
+      tenant1AccessToken,
+      TENANT_1_SLUG,
+    );
     expect(aliceOnTenant1.email).toBe(ALICE_PROFILE.email);
     const aliceOnTenant1ID = aliceOnTenant1.id;
 
     // Sign out so the second attempt isn't already authenticated.
-    await tenant1.context.request.post('/api/v1/auth/logout', {
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tenant1AccessToken}` },
+    await tenant1.context.request.post("/api/v1/auth/logout", {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${tenant1AccessToken}`,
+      },
       data: {},
     });
     await tenant1.context.close();
@@ -396,14 +483,18 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
     // /login?oauth_error=tenant_mismatch.
     const tenant2 = await newTenantContext(browser, TENANT_2_SLUG);
 
-    await tenant2.page.goto('/login');
-    const googleButton = tenant2.page.locator(`[data-testid="oauth-${PROVIDER}-button"]`);
+    await tenant2.page.goto("/login");
+    const googleButton = tenant2.page.locator(
+      `[data-testid="oauth-${PROVIDER}-button"]`,
+    );
     await expect(googleButton).toBeVisible({ timeout: 10_000 });
 
     await Promise.all([
       tenant2.page.waitForURL(
-        (url) => url.pathname === '/login' && url.search.includes('oauth_error=tenant_mismatch'),
-        { timeout: 20_000 }
+        (url) =>
+          url.pathname === "/login" &&
+          url.search.includes("oauth_error=tenant_mismatch"),
+        { timeout: 20_000 },
       ),
       googleButton.click(),
     ]);
@@ -412,20 +503,27 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
     // surfaces the banner from the existing oauth_error query handler
     // (#1394). The URL itself is the load-bearing assertion for the
     // BE-level guard.
-    expect(tenant2.page.url(), 'callback must end at /login?oauth_error=tenant_mismatch').toContain(
-      'oauth_error=tenant_mismatch'
-    );
+    expect(
+      tenant2.page.url(),
+      "callback must end at /login?oauth_error=tenant_mismatch",
+    ).toContain("oauth_error=tenant_mismatch");
 
     // No refresh-token cookie issued — the BE writes the cookie only
     // on the success branch. /auth/refresh must therefore reject the
     // empty cookie jar with 401.
-    const tenant2Refresh = await tenant2.context.request.post('/api/v1/auth/refresh', {
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      data: {},
-    });
+    const tenant2Refresh = await tenant2.context.request.post(
+      "/api/v1/auth/refresh",
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        data: {},
+      },
+    );
     expect(
       tenant2Refresh.status(),
-      `tenant-2 refresh must fail (no session minted): got ${tenant2Refresh.status()}`
+      `tenant-2 refresh must fail (no session minted): got ${tenant2Refresh.status()}`,
     ).toBe(401);
 
     // Alice's tenant-1 identity must be unchanged: she still exists
@@ -434,16 +532,24 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
     // touched her tenant assignment.
     const tenant1Recheck = await newTenantContext(browser, TENANT_1_SLUG);
     await runOAuthFlowOnTenantContext(tenant1Recheck.page);
-    const aliceRefreshAfter = await refreshAndExpectSuccess(tenant1Recheck.context.request, TENANT_1_SLUG);
-    const aliceAfter = await fetchMe(tenant1Recheck.context.request, aliceRefreshAfter, TENANT_1_SLUG);
-    expect(aliceAfter.id, 'alice must remain the same tenant-1 user — cross-tenant attempt must not have created a duplicate').toBe(
-      aliceOnTenant1ID
+    const aliceRefreshAfter = await refreshAndExpectSuccess(
+      tenant1Recheck.context.request,
+      TENANT_1_SLUG,
     );
+    const aliceAfter = await fetchMe(
+      tenant1Recheck.context.request,
+      aliceRefreshAfter,
+      TENANT_1_SLUG,
+    );
+    expect(
+      aliceAfter.id,
+      "alice must remain the same tenant-1 user — cross-tenant attempt must not have created a duplicate",
+    ).toBe(aliceOnTenant1ID);
     await tenant1Recheck.context.close();
     await tenant2.context.close();
   });
 
-  test('tenant-1 session targeting tenant-2 host must not leak tenant-1 data', async ({
+  test("tenant-1 session targeting tenant-2 host must not leak tenant-1 data", async ({
     browser,
   }) => {
     // Sign alice in on tenant-1 to get a bearer token, then point
@@ -455,8 +561,15 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
     // cross-tenant read of OTHER users' data on tenant-2.
     const tenant1 = await newTenantContext(browser, TENANT_1_SLUG);
     await runOAuthFlowOnTenantContext(tenant1.page);
-    const accessToken = await refreshAndExpectSuccess(tenant1.context.request, TENANT_1_SLUG);
-    const alice = await fetchMe(tenant1.context.request, accessToken, TENANT_1_SLUG);
+    const accessToken = await refreshAndExpectSuccess(
+      tenant1.context.request,
+      TENANT_1_SLUG,
+    );
+    const alice = await fetchMe(
+      tenant1.context.request,
+      accessToken,
+      TENANT_1_SLUG,
+    );
     expect(alice.email).toBe(ALICE_PROFILE.email);
 
     // Probe /api/v1/auth/me cross-tenant. The endpoint reads the
@@ -477,18 +590,24 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
     // alice has no default group, so the endpoint 404s on both the
     // baseline and the cross-tenant request — the response gives no
     // signal about isolation.)
-    const crossTenantMeResp = await tenant1.context.request.get('/api/v1/auth/me', {
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-        'X-Inventario-Test-Tenant': TENANT_2_SLUG,
+    const crossTenantMeResp = await tenant1.context.request.get(
+      "/api/v1/auth/me",
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          "X-Inventario-Test-Tenant": TENANT_2_SLUG,
+        },
       },
-    });
+    );
     if (crossTenantMeResp.status() === 200) {
-      const crossMe = (await crossTenantMeResp.json()) as { id: string; email: string };
+      const crossMe = (await crossTenantMeResp.json()) as {
+        id: string;
+        email: string;
+      };
       expect(
         crossMe.id,
-        '/auth/me with cross-tenant override must NOT return a different user — JWT identity is the boundary'
+        "/auth/me with cross-tenant override must NOT return a different user — JWT identity is the boundary",
       ).toBe(alice.id);
       expect(crossMe.email).toBe(ALICE_PROFILE.email);
     } else {
@@ -501,13 +620,16 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
     // A row attributed to a different user.id would mean the
     // cross-tenant request crossed the JWT-identity boundary —
     // exactly the leak this test guards against.
-    const crossTenantHistoryResp = await tenant1.context.request.get('/api/v1/users/me/login-history', {
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-        'X-Inventario-Test-Tenant': TENANT_2_SLUG,
+    const crossTenantHistoryResp = await tenant1.context.request.get(
+      "/api/v1/users/me/login-history",
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          "X-Inventario-Test-Tenant": TENANT_2_SLUG,
+        },
       },
-    });
+    );
     if (crossTenantHistoryResp.status() === 200) {
       const history = (await crossTenantHistoryResp.json()) as {
         events?: Array<{ user_id?: string; user_email?: string }>;
@@ -516,7 +638,7 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
         if (ev.user_id !== undefined) {
           expect(
             ev.user_id,
-            `cross-tenant login-history must NOT contain events for any user other than alice (saw ${ev.user_id})`
+            `cross-tenant login-history must NOT contain events for any user other than alice (saw ${ev.user_id})`,
           ).toBe(alice.id);
         }
         if (ev.user_email !== undefined) {
@@ -541,10 +663,10 @@ test.describe('#1851 OAuth sign-in — cross-tenant isolation @oauth @cross-tena
  */
 async function newTenantContext(
   browser: Browser,
-  tenantSlug: string
+  tenantSlug: string,
 ): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({
-    extraHTTPHeaders: { 'X-Inventario-Test-Tenant': tenantSlug },
+    extraHTTPHeaders: { "X-Inventario-Test-Tenant": tenantSlug },
   });
   const page = await context.newPage();
   return { context, page };
@@ -558,13 +680,16 @@ async function newTenantContext(
  * on a specific landing URL should not use this helper.
  */
 async function runOAuthFlowOnTenantContext(page: Page): Promise<void> {
-  await page.goto('/login');
+  await page.goto("/login");
   const googleButton = page.locator(`[data-testid="oauth-${PROVIDER}-button"]`);
   await expect(googleButton).toBeVisible({ timeout: 10_000 });
   await Promise.all([
     page.waitForURL(
-      (url) => url.pathname === '/' || url.pathname === '/no-group' || url.pathname === '/login',
-      { timeout: 20_000 }
+      (url) =>
+        url.pathname === "/" ||
+        url.pathname === "/no-group" ||
+        url.pathname === "/login",
+      { timeout: 20_000 },
     ),
     googleButton.click(),
   ]);
@@ -578,18 +703,21 @@ async function runOAuthFlowOnTenantContext(page: Page): Promise<void> {
  */
 async function refreshAndExpectSuccess(
   request: APIRequestContext,
-  tenantSlug: string
+  tenantSlug: string,
 ): Promise<string> {
-  const refreshResp = await request.post('/api/v1/auth/refresh', {
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+  const refreshResp = await request.post("/api/v1/auth/refresh", {
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     data: {},
   });
   expect(
     refreshResp.status(),
-    `refresh on tenant '${tenantSlug}' failed: ${await refreshResp.text()}`
+    `refresh on tenant '${tenantSlug}' failed: ${await refreshResp.text()}`,
   ).toBe(200);
   const body = (await refreshResp.json()) as { access_token: string };
-  expect(body.access_token, `tenant '${tenantSlug}' refresh did not return an access token`).toBeTruthy();
+  expect(
+    body.access_token,
+    `tenant '${tenantSlug}' refresh did not return an access token`,
+  ).toBeTruthy();
   return body.access_token;
 }
 
@@ -600,14 +728,17 @@ async function refreshAndExpectSuccess(
 async function fetchMe(
   request: APIRequestContext,
   accessToken: string,
-  tenantSlug: string
+  tenantSlug: string,
 ): Promise<{ id: string; email: string; name: string; has_password: boolean }> {
-  const meResp = await request.get('/api/v1/auth/me', {
-    headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` },
+  const meResp = await request.get("/api/v1/auth/me", {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
   expect(
     meResp.status(),
-    `/auth/me on tenant '${tenantSlug}' failed: ${await meResp.text()}`
+    `/auth/me on tenant '${tenantSlug}' failed: ${await meResp.text()}`,
   ).toBe(200);
   return meResp.json();
 }
@@ -646,26 +777,26 @@ async function fetchMe(
 // Distinct from STUB_PROFILE / ALICE_PROFILE so the global (provider, sub)
 // uniqueness never collides with the sign-in or cross-tenant suites.
 const LINK_PROFILE = {
-  sub: 'stub-google-sub-1395-link',
-  email: 'connected-accounts-1395@example.test',
+  sub: "stub-google-sub-1395-link",
+  email: "connected-accounts-1395@example.test",
   emailVerified: true,
-  name: 'Connected Accounts Linker',
+  name: "Connected Accounts Linker",
 };
 
-test.describe('#1395 Connected accounts — link/unlink via Settings UI @oauth', () => {
+test.describe("#1395 Connected accounts — link/unlink via Settings UI @oauth", () => {
   test.setTimeout(TEST_TIMEOUT_MS);
 
   test.beforeAll(async () => {
     test.skip(
-      process.env.OAUTH_STUB_ENABLED !== 'true',
-      'Connected-accounts e2e requires OAUTH_STUB_ENABLED=true and a running stub stack (see spec header).'
+      process.env.OAUTH_STUB_ENABLED !== "true",
+      "Connected-accounts e2e requires OAUTH_STUB_ENABLED=true and a running stub stack (see spec header).",
     );
     const probe = await fetch(`${STUB_BASE_URL}/userinfo`, {
-      headers: { Authorization: 'Bearer stub-access-token' },
+      headers: { Authorization: "Bearer stub-access-token" },
     });
     if (!probe.ok) {
       throw new Error(
-        `OAuth stub /userinfo not reachable at ${STUB_BASE_URL} (status ${probe.status}). Did setup-stack.ts start the stub?`
+        `OAuth stub /userinfo not reachable at ${STUB_BASE_URL} (status ${probe.status}). Did setup-stack.ts start the stub?`,
       );
     }
   });
@@ -674,68 +805,145 @@ test.describe('#1395 Connected accounts — link/unlink via Settings UI @oauth',
     await setStubProfile(LINK_PROFILE);
   });
 
-  test('password admin links Google, unlinks (guard lists methods), re-links — password stays valid', async ({
+  test("password admin links Google, unlinks (guard lists methods), re-links — password stays valid", async ({
     browser,
   }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
 
     // ---- sign in as the seeded password admin via the real login form ----
-    await page.goto('/login');
+    await page.goto("/login");
     await login(page, undefined, TEST_CREDENTIALS);
 
     // Start from a known baseline — an earlier aborted run may have left the
     // Google identity attached to admin.
-    await ensureGoogleUnlinked(context.request);
+    await ensureUnlinked(context.request);
 
     // ---- Settings → Privacy & Security: Google starts unlinked ----
     await openPrivacySection(page);
-    const googleRow = page.locator('[data-testid="connected-account-row-google"]');
-    await expect(googleRow).toHaveAttribute('data-linked', 'false', { timeout: 15_000 });
+    const googleRow = page.locator(
+      '[data-testid="connected-account-row-google"]',
+    );
+    await expect(googleRow).toHaveAttribute("data-linked", "false", {
+      timeout: 15_000,
+    });
 
     // ---- link Google ----
     // The click does window.location.assign('/api/v1/auth/oauth/google/link/start'),
     // a top-level navigation with no Authorization header. The gap-C fix
     // authenticates it from the refresh cookie; the BE then 302s through the
     // stub and lands back on /settings.
-    await linkGoogleAndReturn(page);
+    await linkProviderAndReturn(page, "google");
     await openPrivacySection(page);
     await expect(
-      page.locator('[data-testid="connected-account-row-google"]')
-    ).toHaveAttribute('data-linked', 'true', { timeout: 15_000 });
+      page.locator('[data-testid="connected-account-row-google"]'),
+    ).toHaveAttribute("data-linked", "true", { timeout: 15_000 });
 
     // ---- unlink: the confirmation must spell out the surviving methods ----
-    await page.locator('[data-testid="connected-account-unlink-google"]').click();
-    const dialog = page.getByTestId('confirm-dialog');
+    await page
+      .locator('[data-testid="connected-account-unlink-google"]')
+      .click();
+    const dialog = page.getByTestId("confirm-dialog");
     await expect(dialog).toBeVisible({ timeout: 10_000 });
     // admin keeps a password, so the guard names it rather than blocking.
-    await expect(dialog).toContainText('password set');
-    await page.getByTestId('confirm-accept').click();
+    await expect(dialog).toContainText("password set");
+    await page.getByTestId("confirm-accept").click();
     await expect(
-      page.locator('[data-testid="connected-account-row-google"]')
-    ).toHaveAttribute('data-linked', 'false', { timeout: 15_000 });
+      page.locator('[data-testid="connected-account-row-google"]'),
+    ).toHaveAttribute("data-linked", "false", { timeout: 15_000 });
 
     // ---- re-link (the link flow works repeatedly, not just once) ----
-    await linkGoogleAndReturn(page);
+    await linkProviderAndReturn(page, "google");
     await openPrivacySection(page);
     await expect(
-      page.locator('[data-testid="connected-account-row-google"]')
-    ).toHaveAttribute('data-linked', 'true', { timeout: 15_000 });
+      page.locator('[data-testid="connected-account-row-google"]'),
+    ).toHaveAttribute("data-linked", "true", { timeout: 15_000 });
 
     // ---- password remains a valid sign-in method throughout ----
     // A fresh password login must still succeed even after the account gained,
     // lost, and regained an OAuth identity.
-    const pwLogin = await context.request.post('/api/v1/auth/login', {
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      data: { email: TEST_CREDENTIALS.email, password: TEST_CREDENTIALS.password },
+    const pwLogin = await context.request.post("/api/v1/auth/login", {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      data: {
+        email: TEST_CREDENTIALS.email,
+        password: TEST_CREDENTIALS.password,
+      },
     });
     expect(
       pwLogin.status(),
-      `password must remain a valid sign-in method: login returned ${pwLogin.status()} ${await pwLogin.text()}`
+      `password must remain a valid sign-in method: login returned ${pwLogin.status()} ${await pwLogin.text()}`,
     ).toBe(200);
 
     // ---- cleanup: leave admin in its baseline password-only state ----
-    await ensureGoogleUnlinked(context.request);
+    await ensureUnlinked(context.request);
+    await context.close();
+  });
+
+  // The #1395 acceptance criterion in full: the account moves between
+  // providers and never loses its password. GitHub is the leg that could not
+  // be driven until the provider gained endpoint overrides (#1929), and it is
+  // worth its own pass rather than a parameterization of the Google one — the
+  // BE reads GitHub's profile from two endpoints with a different shape, so
+  // "the same flow with a different string" is exactly what is not being
+  // asserted here.
+  test("password admin links Google, unlinks, then links GitHub — password stays valid", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    await page.goto("/login");
+    await login(page, undefined, TEST_CREDENTIALS);
+
+    await ensureUnlinked(context.request, ["google", "github"]);
+
+    await openPrivacySection(page);
+    await expectLinked(page, "google", false);
+    await expectLinked(page, "github", false);
+
+    // ---- link Google ----
+    await linkProviderAndReturn(page, "google");
+    await openPrivacySection(page);
+    await expectLinked(page, "google", true);
+
+    // ---- unlink Google ----
+    await page
+      .locator('[data-testid="connected-account-unlink-google"]')
+      .click();
+    const dialog = page.getByTestId("confirm-dialog");
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId("confirm-accept").click();
+    await expectLinked(page, "google", false);
+
+    // ---- link GitHub ----
+    // The stub serves GitHub's split profile: /gh/user carries the numeric id
+    // the BE persists as the subject, /gh/user/emails the verified address.
+    await linkProviderAndReturn(page, "github");
+    await openPrivacySection(page);
+    await expectLinked(page, "github", true);
+    // Linking GitHub does not resurrect the unlinked Google identity.
+    await expectLinked(page, "google", false);
+
+    // ---- password remains a valid sign-in method throughout ----
+    const pwLogin = await context.request.post("/api/v1/auth/login", {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      data: {
+        email: TEST_CREDENTIALS.email,
+        password: TEST_CREDENTIALS.password,
+      },
+    });
+    expect(
+      pwLogin.status(),
+      `password must remain a valid sign-in method: login returned ${pwLogin.status()} ${await pwLogin.text()}`,
+    ).toBe(200);
+
+    await ensureUnlinked(context.request, ["google", "github"]);
     await context.close();
   });
 });
@@ -747,43 +955,73 @@ test.describe('#1395 Connected accounts — link/unlink via Settings UI @oauth',
  * re-open it after each top-level OAuth navigation.
  */
 async function openPrivacySection(page: Page): Promise<void> {
-  await page.goto('/settings');
-  await expect(page.getByTestId('settings-page')).toBeVisible({ timeout: 20_000 });
-  await page.getByTestId('settings-nav-privacy').click();
-  await expect(page.getByTestId('section-privacy')).toBeVisible({ timeout: 10_000 });
+  await page.goto("/settings");
+  await expect(page.getByTestId("settings-page")).toBeVisible({
+    timeout: 20_000,
+  });
+  await page.getByTestId("settings-nav-privacy").click();
+  await expect(page.getByTestId("section-privacy")).toBeVisible({
+    timeout: 10_000,
+  });
 }
 
 /**
- * linkGoogleAndReturn clicks the Link button and waits for the BE redirect
- * chain (link/start → stub → callback → /settings) to land back on the FE.
- * Assumes the Privacy section is already open so the Link control is present.
+ * linkProviderAndReturn clicks a provider's Link button and waits for the BE
+ * redirect chain (link/start → stub → callback → /settings) to land back on
+ * the FE. Assumes the Privacy section is already open so the control is
+ * present.
  */
-async function linkGoogleAndReturn(page: Page): Promise<void> {
-  await expect(page.locator('[data-testid="connected-account-link-google"]')).toBeVisible({
+async function linkProviderAndReturn(
+  page: Page,
+  provider: "google" | "github",
+): Promise<void> {
+  await expect(
+    page.locator(`[data-testid="connected-account-link-${provider}"]`),
+  ).toBeVisible({
     timeout: 10_000,
   });
   await Promise.all([
-    page.waitForURL((url) => url.pathname === '/settings', { timeout: 30_000 }),
-    page.locator('[data-testid="connected-account-link-google"]').click(),
+    page.waitForURL((url) => url.pathname === "/settings", { timeout: 30_000 }),
+    page.locator(`[data-testid="connected-account-link-${provider}"]`).click(),
   ]);
 }
 
+/** expectLinked asserts a provider row's linked state after re-opening the section. */
+async function expectLinked(
+  page: Page,
+  provider: "google" | "github",
+  linked: boolean,
+): Promise<void> {
+  await expect(
+    page.locator(`[data-testid="connected-account-row-${provider}"]`),
+  ).toHaveAttribute("data-linked", String(linked), { timeout: 15_000 });
+}
+
 /**
- * ensureGoogleUnlinked removes any Google identity attached to the currently
- * signed-in account, so the test starts and ends from a password-only
- * baseline. Spends the refresh cookie for a bearer; treats a non-200 refresh
- * (not signed in) as nothing-to-clean, and any DELETE status as success — the
- * post-condition "Google is not linked" holds for 204 (removed) and 404
- * (already absent) alike.
+ * ensureUnlinked removes the named identities from the currently signed-in
+ * account, so a test starts and ends from a password-only baseline. Spends the
+ * refresh cookie for a bearer; treats a non-200 refresh (not signed in) as
+ * nothing-to-clean, and any DELETE status as success — the post-condition "not
+ * linked" holds for 204 (removed) and 404 (already absent) alike.
  */
-async function ensureGoogleUnlinked(request: APIRequestContext): Promise<void> {
-  const refresh = await request.post('/api/v1/auth/refresh', {
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+async function ensureUnlinked(
+  request: APIRequestContext,
+  providers: Array<"google" | "github"> = ["google"],
+): Promise<void> {
+  const refresh = await request.post("/api/v1/auth/refresh", {
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     data: {},
   });
   if (refresh.status() !== 200) return;
-  const { access_token: accessToken } = (await refresh.json()) as { access_token: string };
-  await request.delete('/api/v1/auth/oauth/google', {
-    headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` },
-  });
+  const { access_token: accessToken } = (await refresh.json()) as {
+    access_token: string;
+  };
+  for (const provider of providers) {
+    await request.delete(`/api/v1/auth/oauth/${provider}`, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+  }
 }

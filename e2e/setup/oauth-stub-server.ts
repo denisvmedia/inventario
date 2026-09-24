@@ -2,12 +2,17 @@
  * OAuth provider stub server for the #1394 e2e flow.
  *
  * Stands up a single Node http.Server that pretends to be Google's three
- * OAuth endpoints (/authorize, /token, /userinfo). The Inventario backend
- * is launched with the INVENTARIO_RUN_OAUTH_GOOGLE_AUTH_URL_OVERRIDE,
- * _TOKEN_URL_OVERRIDE and _USERINFO_URL_OVERRIDE env vars pointing at
- * this stub, so the BE's OAuth flow performs the full token exchange +
- * userinfo fetch against a local server with no outbound network calls
- * to Google.
+ * OAuth endpoints (/authorize, /token, /userinfo) and GitHub's four
+ * (/gh/authorize, /gh/token, /gh/user, /gh/user/emails). The Inventario
+ * backend is launched with the matching *_URL_OVERRIDE env vars pointing
+ * at this stub, so the BE's OAuth flow performs the full token exchange +
+ * profile fetch against a local server with no outbound network calls to
+ * either provider.
+ *
+ * The two providers share one active profile, so a test sets the fixture
+ * once and can drive either leg with it. They do not share paths: a
+ * mis-wired override then 404s instead of quietly answering with the
+ * other provider's shape.
  *
  * Flow:
  *
@@ -24,6 +29,11 @@
  *      the stub returns a deterministic sub + email + name + verified
  *      flag controlled by setProfile().
  *
+ * GitHub (#1929) runs the same three steps under /gh, then splits the
+ * profile across two calls the way GitHub does: /gh/user carries the
+ * numeric id and display name, /gh/user/emails carries the address with
+ * its primary and verified flags. Both read the same active profile.
+ *
  * The default port is 4444 (fixed so tests can hard-code overrides in
  * setup-stack.ts). Override via OAUTH_STUB_PORT.
  *
@@ -32,8 +42,13 @@
  * layer emits a loud slog.Warn whenever the override env vars are set
  * so a misconfigured deployment is caught early.
  */
-import { createServer, Server, IncomingMessage, ServerResponse } from 'node:http';
-import { URL } from 'node:url';
+import {
+  createServer,
+  Server,
+  IncomingMessage,
+  ServerResponse,
+} from "node:http";
+import { URL } from "node:url";
 
 export interface OAuthStubProfile {
   /** Stable subject identifier returned at /userinfo. */
@@ -52,10 +67,10 @@ export interface OAuthStubProfile {
  * sequential test cases without restarting.
  */
 let activeProfile: OAuthStubProfile = {
-  sub: 'stub-user-default',
-  email: 'oauth-default@example.test',
+  sub: "stub-user-default",
+  email: "oauth-default@example.test",
   emailVerified: true,
-  name: 'Default Stub User',
+  name: "Default Stub User",
 };
 
 /**
@@ -70,10 +85,10 @@ export function setProfile(profile: Partial<OAuthStubProfile>): void {
 /** Reset the profile back to the module default. */
 export function resetProfile(): void {
   activeProfile = {
-    sub: 'stub-user-default',
-    email: 'oauth-default@example.test',
+    sub: "stub-user-default",
+    email: "oauth-default@example.test",
     emailVerified: true,
-    name: 'Default Stub User',
+    name: "Default Stub User",
   };
 }
 
@@ -89,27 +104,29 @@ let server: Server | null = null;
  *          goes into OAUTH_GOOGLE_TOKEN_URL_OVERRIDE; /userinfo into
  *          OAUTH_GOOGLE_USERINFO_URL_OVERRIDE.
  */
-export async function startOAuthStub(port = Number(process.env.OAUTH_STUB_PORT) || 4444): Promise<string> {
+export async function startOAuthStub(
+  port = Number(process.env.OAUTH_STUB_PORT) || 4444,
+): Promise<string> {
   if (server) {
     const address = server.address();
-    if (address && typeof address === 'object') {
+    if (address && typeof address === "object") {
       return `http://127.0.0.1:${address.port}`;
     }
   }
 
   await new Promise<void>((resolve, reject) => {
     const srv = createServer(handleRequest);
-    srv.once('error', reject);
-    srv.listen(port, '127.0.0.1', () => {
-      srv.removeListener('error', reject);
+    srv.once("error", reject);
+    srv.listen(port, "127.0.0.1", () => {
+      srv.removeListener("error", reject);
       server = srv;
       resolve();
     });
   });
 
   const address = server!.address();
-  if (!address || typeof address !== 'object') {
-    throw new Error('OAuth stub: listen() returned without an address');
+  if (!address || typeof address !== "object") {
+    throw new Error("OAuth stub: listen() returned without an address");
   }
   const url = `http://127.0.0.1:${address.port}`;
   console.log(`[oauth-stub] listening at ${url}`);
@@ -123,7 +140,7 @@ export async function stopOAuthStub(): Promise<void> {
     server!.close(() => resolve());
   });
   server = null;
-  console.log('[oauth-stub] stopped');
+  console.log("[oauth-stub] stopped");
 }
 
 /**
@@ -134,17 +151,40 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   // Best-effort error logging — the BE will surface a 400/500 if anything
   // here misbehaves, but logging the URL makes diagnostics painless.
   try {
-    const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
-    if (url.pathname === '/authorize' && req.method === 'GET') {
+    const url = new URL(
+      req.url || "/",
+      `http://${req.headers.host || "127.0.0.1"}`,
+    );
+    if (url.pathname === "/authorize" && req.method === "GET") {
       handleAuthorize(url, res);
       return;
     }
-    if (url.pathname === '/token' && req.method === 'POST') {
+    if (url.pathname === "/token" && req.method === "POST") {
       handleToken(req, res);
       return;
     }
-    if (url.pathname === '/userinfo' && req.method === 'GET') {
+    if (url.pathname === "/userinfo" && req.method === "GET") {
       handleUserInfo(req, res);
+      return;
+    }
+    // GitHub's leg (#1929). /gh/authorize and /gh/token behave exactly
+    // like the Google ones — the difference between the providers starts
+    // at the profile — but they get their own paths so a half-wired
+    // override set is a 404 rather than a silent success.
+    if (url.pathname === "/gh/authorize" && req.method === "GET") {
+      handleAuthorize(url, res);
+      return;
+    }
+    if (url.pathname === "/gh/token" && req.method === "POST") {
+      handleToken(req, res);
+      return;
+    }
+    if (url.pathname === "/gh/user" && req.method === "GET") {
+      handleGitHubUser(req, res);
+      return;
+    }
+    if (url.pathname === "/gh/user/emails" && req.method === "GET") {
+      handleGitHubUserEmails(req, res);
       return;
     }
     // Control plane: tests POST a JSON Profile to /__control__/profile
@@ -153,17 +193,17 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     // node processes from this stub, so an in-memory setProfile() call
     // from a test wouldn't reach this module — the control endpoint
     // bridges that gap.
-    if (url.pathname === '/__control__/profile' && req.method === 'POST') {
+    if (url.pathname === "/__control__/profile" && req.method === "POST") {
       handleSetProfile(req, res);
       return;
     }
     res.statusCode = 404;
-    res.setHeader('content-type', 'text/plain');
+    res.setHeader("content-type", "text/plain");
     res.end(`stub-not-found: ${req.method} ${url.pathname}`);
   } catch (err) {
-    console.error('[oauth-stub] handler error:', err);
+    console.error("[oauth-stub] handler error:", err);
     res.statusCode = 500;
-    res.end('stub-error');
+    res.end("stub-error");
   }
 }
 
@@ -174,18 +214,18 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
  * ?code=stub-code so the BE's exchange step runs.
  */
 function handleAuthorize(url: URL, res: ServerResponse): void {
-  const state = url.searchParams.get('state') || '';
-  const redirectURI = url.searchParams.get('redirect_uri') || '';
+  const state = url.searchParams.get("state") || "";
+  const redirectURI = url.searchParams.get("redirect_uri") || "";
   if (!redirectURI) {
     res.statusCode = 400;
-    res.end('stub: missing redirect_uri');
+    res.end("stub: missing redirect_uri");
     return;
   }
   const callback = new URL(redirectURI);
-  callback.searchParams.set('code', 'stub-authorization-code');
-  callback.searchParams.set('state', state);
+  callback.searchParams.set("code", "stub-authorization-code");
+  callback.searchParams.set("state", state);
   res.statusCode = 302;
-  res.setHeader('location', callback.toString());
+  res.setHeader("location", callback.toString());
   res.end();
 }
 
@@ -195,27 +235,32 @@ function handleAuthorize(url: URL, res: ServerResponse): void {
  * care about token expiry here; expires_in is included for completeness.
  */
 function handleToken(req: IncomingMessage, res: ServerResponse): void {
-  let body = '';
-  req.on('data', (chunk) => {
+  let body = "";
+  req.on("data", (chunk) => {
     body += chunk.toString();
   });
-  req.on('end', () => {
+  req.on("end", () => {
     const params = new URLSearchParams(body);
-    const codeVerifier = params.get('code_verifier');
+    const codeVerifier = params.get("code_verifier");
     if (!codeVerifier) {
       res.statusCode = 400;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ error: 'invalid_request', error_description: 'missing code_verifier' }));
+      res.setHeader("content-type", "application/json");
+      res.end(
+        JSON.stringify({
+          error: "invalid_request",
+          error_description: "missing code_verifier",
+        }),
+      );
       return;
     }
     res.statusCode = 200;
-    res.setHeader('content-type', 'application/json');
+    res.setHeader("content-type", "application/json");
     res.end(
       JSON.stringify({
-        access_token: 'stub-access-token',
-        token_type: 'Bearer',
+        access_token: "stub-access-token",
+        token_type: "Bearer",
         expires_in: 3600,
-      })
+      }),
     );
   });
 }
@@ -227,21 +272,21 @@ function handleToken(req: IncomingMessage, res: ServerResponse): void {
  * the caller can confirm the update.
  */
 function handleSetProfile(req: IncomingMessage, res: ServerResponse): void {
-  let body = '';
-  req.on('data', (chunk) => {
+  let body = "";
+  req.on("data", (chunk) => {
     body += chunk.toString();
   });
-  req.on('end', () => {
+  req.on("end", () => {
     try {
       const partial = body ? JSON.parse(body) : {};
       activeProfile = { ...activeProfile, ...partial };
       res.statusCode = 200;
-      res.setHeader('content-type', 'application/json');
+      res.setHeader("content-type", "application/json");
       res.end(JSON.stringify(activeProfile));
     } catch (err) {
       res.statusCode = 400;
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ error: 'bad-json', message: String(err) }));
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ error: "bad-json", message: String(err) }));
     }
   });
 }
@@ -252,21 +297,106 @@ function handleSetProfile(req: IncomingMessage, res: ServerResponse): void {
  * shape we ship here.
  */
 function handleUserInfo(req: IncomingMessage, res: ServerResponse): void {
-  const auth = req.headers.authorization || '';
-  if (auth !== 'Bearer stub-access-token') {
+  const auth = req.headers.authorization || "";
+  if (auth !== "Bearer stub-access-token") {
     res.statusCode = 401;
-    res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ error: 'invalid_token' }));
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ error: "invalid_token" }));
     return;
   }
   res.statusCode = 200;
-  res.setHeader('content-type', 'application/json');
+  res.setHeader("content-type", "application/json");
   res.end(
     JSON.stringify({
       sub: activeProfile.sub,
       email: activeProfile.email,
       email_verified: activeProfile.emailVerified,
       name: activeProfile.name,
-    })
+    }),
+  );
+}
+
+/**
+ * GitHub's numeric user id, derived from the profile's `sub` so one
+ * fixture drives both providers. The backend rejects id 0 and persists
+ * the value as the provider subject, so it has to be stable for a given
+ * sub and non-zero: a test that links the same identity twice depends on
+ * getting the same id back.
+ */
+function githubUserID(sub: string): number {
+  let hash = 0;
+  for (let i = 0; i < sub.length; i++) {
+    hash = (hash * 31 + sub.charCodeAt(i)) % 2_000_000_000;
+  }
+  return hash === 0 ? 1 : hash;
+}
+
+/** The login GitHub would show. Derived from the email's local part. */
+function githubLogin(email: string): string {
+  const local = email.split("@")[0] || "stub";
+  return local.replace(/[^A-Za-z0-9-]/g, "-");
+}
+
+function requireStubToken(req: IncomingMessage, res: ServerResponse): boolean {
+  const auth = req.headers.authorization || "";
+  // GitHub's own client sends "Bearer" via oauth2.Token.SetAuthHeader,
+  // but their docs also show "token <t>"; accept both so the assertion
+  // is about the token value rather than the scheme.
+  if (
+    auth !== "Bearer stub-access-token" &&
+    auth !== "token stub-access-token"
+  ) {
+    res.statusCode = 401;
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ message: "Bad credentials" }));
+    return false;
+  }
+  return true;
+}
+
+/**
+ * /gh/user returns the shape the BE reads from api.github.com/user: the
+ * numeric id it persists as the provider subject, the login it falls back
+ * to for a display name, and the name itself.
+ *
+ * `email` is deliberately null. That is what GitHub returns for a user who
+ * keeps their address private, and it is the case worth stubbing: it forces
+ * the BE through /user/emails, which is where the verified flag lives.
+ */
+function handleGitHubUser(req: IncomingMessage, res: ServerResponse): void {
+  if (!requireStubToken(req, res)) return;
+  res.statusCode = 200;
+  res.setHeader("content-type", "application/json");
+  res.end(
+    JSON.stringify({
+      id: githubUserID(activeProfile.sub),
+      login: githubLogin(activeProfile.email),
+      name: activeProfile.name,
+      email: null,
+    }),
+  );
+}
+
+/**
+ * /gh/user/emails returns one row: the active profile's address, marked
+ * primary, with `verified` following the profile's emailVerified flag. An
+ * unverified fixture therefore reaches the BE as an unverified primary,
+ * which is what must stop auto-linking.
+ */
+function handleGitHubUserEmails(
+  req: IncomingMessage,
+  res: ServerResponse,
+): void {
+  if (!requireStubToken(req, res)) return;
+  res.statusCode = 200;
+  res.setHeader("content-type", "application/json");
+  res.end(
+    JSON.stringify([
+      {
+        email: activeProfile.email,
+        primary: true,
+        verified: activeProfile.emailVerified,
+      },
+    ]),
   );
 }

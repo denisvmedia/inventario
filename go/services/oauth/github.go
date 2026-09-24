@@ -54,6 +54,15 @@ type GitHubProviderConfig struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
+	// AuthURL, TokenURL, UserURL and UserEmailsURL are test-only
+	// overrides that point the four GitHub endpoints at a local stub.
+	// Empty fields keep github.Endpoint + the api.github.com URLs above.
+	// Wiring is gated at the bootstrap layer, which refuses a partial
+	// set — see resolveGitHubOverrides (#1929).
+	AuthURL       string
+	TokenURL      string
+	UserURL       string
+	UserEmailsURL string
 	// HTTPClient overrides the *http.Client used to fetch /user and
 	// /user/emails. nil → http.DefaultClient.
 	HTTPClient *http.Client
@@ -63,8 +72,10 @@ type GitHubProviderConfig struct {
 // Scopes are fixed at `read:user user:email` so the app can read the
 // public profile and the verified primary email.
 type GitHubProvider struct {
-	cfg        *oauth2.Config
-	httpClient *http.Client
+	cfg           *oauth2.Config
+	httpClient    *http.Client
+	userURL       string
+	userEmailsURL string
 }
 
 // NewGitHubProvider constructs a GitHubProvider from cfg. Returns an
@@ -83,15 +94,32 @@ func NewGitHubProvider(cfg GitHubProviderConfig) (*GitHubProvider, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
+	endpoint := githuboauth.Endpoint
+	if cfg.AuthURL != "" {
+		endpoint.AuthURL = cfg.AuthURL
+	}
+	if cfg.TokenURL != "" {
+		endpoint.TokenURL = cfg.TokenURL
+	}
+	userURL := githubUserURL
+	if cfg.UserURL != "" {
+		userURL = cfg.UserURL
+	}
+	userEmailsURL := githubUserEmailsURL
+	if cfg.UserEmailsURL != "" {
+		userEmailsURL = cfg.UserEmailsURL
+	}
 	return &GitHubProvider{
 		cfg: &oauth2.Config{
 			ClientID:     cfg.ClientID,
 			ClientSecret: cfg.ClientSecret,
 			RedirectURL:  cfg.RedirectURL,
 			Scopes:       []string{"read:user", "user:email"},
-			Endpoint:     githuboauth.Endpoint,
+			Endpoint:     endpoint,
 		},
-		httpClient: client,
+		httpClient:    client,
+		userURL:       userURL,
+		userEmailsURL: userEmailsURL,
 	}, nil
 }
 
@@ -148,7 +176,7 @@ func (p *GitHubProvider) Exchange(ctx context.Context, code, codeVerifier string
 // fetchUser GETs /user and decodes the subset we need. Helper extracted so
 // the body close / status check / json decode logic isn't repeated inline.
 func (p *GitHubProvider) fetchUser(ctx context.Context, tok *oauth2.Token) (githubUserResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubUserURL, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.userURL, http.NoBody)
 	if err != nil {
 		return githubUserResponse{}, errxtrace.Wrap("oauth/github: build /user request", err)
 	}
@@ -180,7 +208,7 @@ func (p *GitHubProvider) fetchUser(ctx context.Context, tok *oauth2.Token) (gith
 // emails list so the verified flag is grounded in /user/emails (the
 // authoritative source).
 func (p *GitHubProvider) resolvePrimaryEmail(ctx context.Context, tok *oauth2.Token, userEmail string) (string, bool, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubUserEmailsURL, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.userEmailsURL, http.NoBody)
 	if err != nil {
 		return "", false, errxtrace.Wrap("oauth/github: build /user/emails request", err)
 	}
