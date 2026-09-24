@@ -40,7 +40,8 @@
     "search": "Hledat",
     "system": "Nastavení",
     "tags": "Štítky",
-    "warranties": "Záruky"
+    "warranties": "Záruky",
+    "help": "Nápověda"
   },
   "onboarding": {
     "ariaLabel": "Prohlídka produktu",

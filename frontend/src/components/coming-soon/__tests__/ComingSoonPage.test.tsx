@@ -14,9 +14,9 @@ describe("<ComingSoonPage />", () => {
   })
 
   it("links to the GitHub tracker issue with target=_blank rel=noopener", () => {
-    render(<ComingSoonPage surface="helpCenter" />)
+    render(<ComingSoonPage surface="whatsNew" />)
     const link = screen.getByRole("link")
-    expect(link).toHaveAttribute("href", "https://github.com/denisvmedia/inventario/issues/1384")
+    expect(link).toHaveAttribute("href", "https://github.com/denisvmedia/inventario/issues/1386")
     expect(link).toHaveAttribute("target", "_blank")
     expect(link.getAttribute("rel")).toContain("noopener")
   })

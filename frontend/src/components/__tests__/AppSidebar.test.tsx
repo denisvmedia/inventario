@@ -91,4 +91,26 @@ describe("<AppSidebar /> — group-section gating (#1886)", () => {
     expect(screen.getByTestId("sidebar-inventory-group")).toBeInTheDocument()
     expect(screen.getByTestId("sidebar-manage-group")).toBeInTheDocument()
   })
+
+  // #1384 — the help entry point. It sits in the footer rather than in the
+  // Personal section because it resolves to the same page as Preferences, and
+  // the nav rows match on pathname alone, so two rows pointing at /settings
+  // would light up together.
+  //
+  // The group query is withGroupQuery's job and is covered in its own tests
+  // (including the case this call site introduces: a path that already
+  // carries a query).
+  it("links Help at the settings help section", async () => {
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list())
+    renderSidebar("/g/household")
+    const help = await screen.findByTestId("sidebar-help")
+    expect(help.getAttribute("href")).toBe("/settings?section=help")
+  })
+
+  it("offers Help to a user with no group", async () => {
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list([]))
+    renderSidebar("/no-group")
+    const help = await screen.findByTestId("sidebar-help")
+    expect(help.getAttribute("href")).toBe("/settings?section=help")
+  })
 })

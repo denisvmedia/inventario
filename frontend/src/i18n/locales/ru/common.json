@@ -40,7 +40,8 @@
     "search": "Поиск",
     "system": "Настройки",
     "tags": "Теги",
-    "warranties": "Гарантии"
+    "warranties": "Гарантии",
+    "help": "Помощь"
   },
   "onboarding": {
     "ariaLabel": "Обзор продукта",

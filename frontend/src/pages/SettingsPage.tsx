@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import {
   ArrowRight,
   Bell,
@@ -116,6 +116,14 @@ const SECTIONS: SectionMeta[] = [
   { id: "help", icon: CircleHelp },
 ]
 
+// sectionFromParam maps `?section=` onto a tab. Anything unrecognized — a
+// stale link, a typo, a section that used to exist — lands on Account rather
+// than rendering an empty pane.
+function sectionFromParam(raw: string | null): SectionId {
+  const match = SECTIONS.find((s) => s.id === raw)
+  return match ? match.id : "account"
+}
+
 // SettingsPage — preferences hub. Two-pane layout:
 //   - left rail: section nav + sign-out shortcut
 //   - right pane: the selected section's content
@@ -133,7 +141,20 @@ export function SettingsPage() {
   // #1888 — landing tab is Account, not Appearance: most users open
   // Preferences for email/password/MFA/profile (Account), not for theme
   // and density (Appearance). Appearance remains a sibling tab.
-  const [active, setActive] = useState<SectionId>("account")
+  //
+  // The selection lives in `?section=` rather than component state so a
+  // section can be linked to: /help redirects here, the sidebar's Help row
+  // points at the help section, and a reload keeps the user where they were
+  // instead of dropping them back on Account (#1384).
+  const [searchParams, setSearchParams] = useSearchParams()
+  const active = sectionFromParam(searchParams.get("section"))
+  const setActive = (next: SectionId) => {
+    const params = new URLSearchParams(searchParams)
+    params.set("section", next)
+    // Replace: switching tabs is not a navigation the back button should
+    // have to walk through one step at a time.
+    setSearchParams(params, { replace: true })
+  }
 
   return (
     <>

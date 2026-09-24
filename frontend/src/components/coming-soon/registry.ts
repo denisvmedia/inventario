@@ -15,7 +15,6 @@ import {
   Database,
   FileEdit,
   Files,
-  HelpCircle,
   Link2,
   Monitor,
   ScrollText,
@@ -43,7 +42,6 @@ export interface StubSurface {
 export const SURFACES = {
   // Page-level stubs (full routes).
   plans: { icon: CreditCard, tracker: 1389, kind: "page" },
-  helpCenter: { icon: HelpCircle, tracker: 1384, kind: "page" },
   whatsNew: { icon: Sparkles, tracker: 1386, kind: "page" },
 
   // Inline-only stubs (used inside other pages once those pages land).
