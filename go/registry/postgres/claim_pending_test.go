@@ -119,6 +119,8 @@ func raceToClaimPg(c *qt.C, n int, claim func() (bool, error)) int32 {
 	c.Helper()
 
 	var won int32
+	var mu sync.Mutex
+	var errs []error
 	var start sync.WaitGroup
 	var done sync.WaitGroup
 	start.Add(1)
@@ -129,12 +131,21 @@ func raceToClaimPg(c *qt.C, n int, claim func() (bool, error)) int32 {
 			defer done.Done()
 			start.Wait()
 			ok, err := claim()
-			if err == nil && ok {
+			if err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+				return
+			}
+			if ok {
 				atomic.AddInt32(&won, 1)
 			}
 		}()
 	}
 	start.Done()
 	done.Wait()
+	// An error is not a lost race. Folding the two together would let the
+	// one-winner assertion hold while every other caller was failing.
+	c.Assert(errs, qt.HasLen, 0)
 	return won
 }

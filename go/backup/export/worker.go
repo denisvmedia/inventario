@@ -190,28 +190,29 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 			continue
 		}
 
-		// Claim the row before dispatching. The status flip used to happen
-		// inside the spawned goroutine, so a tick firing while a slow job was
-		// still starting listed it as pending again; the in-process set above
-		// closed that for one replica, and this closes it for any number —
-		// the condition is in the write, so exactly one caller wins (#2472).
+		// Take the slot before the claim. A claim that lands without one
+		// leaves the row running with nobody running it, and the next tick
+		// only looks at pending rows. This blocks until a slot frees up.
+		if err := w.semaphore.Acquire(ctx, 1); err != nil {
+			w.inFlight.Delete(export.ID)
+			slog.Error("Failed to acquire semaphore", "error", err)
+			return
+		}
+
+		// Claim the row before dispatching: the condition is in the write, so
+		// exactly one caller wins it however many replicas are polling (#2472).
 		claimed, claimErr := reg.ClaimPending(ctx, export.ID)
 		if claimErr != nil {
+			w.semaphore.Release(1)
 			w.inFlight.Delete(export.ID)
 			slog.Error("Failed to claim export", "export_id", export.ID, "error", claimErr)
 			continue
 		}
 		if !claimed {
 			// Another worker got there first, or the row moved on.
+			w.semaphore.Release(1)
 			w.inFlight.Delete(export.ID)
 			continue
-		}
-
-		// Block until we can acquire a semaphore slot to limit concurrent goroutines
-		if err := w.semaphore.Acquire(ctx, 1); err != nil {
-			w.inFlight.Delete(export.ID)
-			slog.Error("Failed to acquire semaphore", "error", err)
-			return
 		}
 
 		go func(exportID string) {

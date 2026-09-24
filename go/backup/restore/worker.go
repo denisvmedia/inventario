@@ -195,28 +195,29 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 			continue
 		}
 
-		// Claim the row before dispatching. The status flip used to happen
-		// inside the spawned goroutine, so a tick firing while a slow job was
-		// still starting listed it as pending again; the in-process set above
-		// closed that for one replica, and this closes it for any number —
-		// the condition is in the write, so exactly one caller wins (#2472).
+		// Take the slot before the claim. A claim that lands without one
+		// leaves the row running with nobody running it, and the next tick
+		// only looks at pending rows.
+		if !w.semaphore.TryAcquire(1) {
+			w.inFlight.Delete(restoreOp.ID)
+			slog.Warn("Failed to acquire semaphore for restore, another restore is in progress, skipping...")
+			return
+		}
+
+		// Claim the row before dispatching: the condition is in the write, so
+		// exactly one caller wins it however many replicas are polling (#2472).
 		claimed, claimErr := w.registrySet.RestoreOperationRegistry.ClaimPending(ctx, restoreOp.ID)
 		if claimErr != nil {
+			w.semaphore.Release(1)
 			w.inFlight.Delete(restoreOp.ID)
 			slog.Error("Failed to claim restore operation", "restore_operation_id", restoreOp.ID, "error", claimErr)
 			continue
 		}
 		if !claimed {
 			// Another worker got there first, or the row moved on.
+			w.semaphore.Release(1)
 			w.inFlight.Delete(restoreOp.ID)
 			continue
-		}
-
-		// Attempt to acquire a semaphore slot to limit concurrent goroutines
-		if !w.semaphore.TryAcquire(1) {
-			w.inFlight.Delete(restoreOp.ID)
-			slog.Warn("Failed to acquire semaphore for restore, another restore is in progress, skipping...")
-			return
 		}
 
 		go func(restoreOperationID string) {
