@@ -217,6 +217,7 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 	}
 
 	maybeWireTestTenantHeader(cfg, &params)
+	wireCatchAllTenant(cfg, &params)
 
 	if err = validation.Validate(params); err != nil {
 		slog.Error("Invalid server parameters", "error", err)
@@ -373,4 +374,18 @@ func maybeWireTestTenantHeader(cfg *Config, params *apiserver.Params) {
 	}
 	params.TenantResolver = &apiserver.TestHeaderTenantResolver{Inner: inner}
 	params.TestTenantHeaderEnabled = true
+}
+
+// wireCatchAllTenant carries cfg.TenantCatchAllSlug into the server params and
+// says so at startup. The warning is the point: with a catch-all set, any host
+// that reaches the server is served that tenant, which is what a deployment
+// separating tenants by domain must not have.
+func wireCatchAllTenant(cfg *Config, params *apiserver.Params) {
+	slug := strings.TrimSpace(cfg.TenantCatchAllSlug)
+	if slug == "" {
+		return
+	}
+	slog.Warn("Catch-all tenant is configured — every unresolved Host is served this tenant",
+		"tenant_slug", slug)
+	params.CatchAllTenantSlug = slug
 }
