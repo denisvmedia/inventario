@@ -437,12 +437,20 @@ second factor on next sign-in, and can re-enable MFA from Settings.
 
 ### Logs and Debugging
 
-There is no log-level knob (`LOG_LEVEL` / `INVENTARIO_LOG_LEVEL` are not consumed).
-The only logging control is the output format — set it to `json` for structured logs:
+Two knobs, both read from the environment at startup:
 
 ```bash
-export INVENTARIO_LOG_FORMAT=json
+export INVENTARIO_LOG_FORMAT=json   # text (default) or json
+export INVENTARIO_LOG_LEVEL=debug   # debug, info (default), warn, error
 ./inventario run
 ```
+
+`INVENTARIO_LOG_LEVEL` also takes the offset form slog understands — `debug+2`,
+`info-4` — for verbosity between the named levels. A value that is not a level
+name is reported on stderr and the server starts at info rather than refusing
+to boot.
+
+Debug is genuinely verbose: it includes a line per registry read. Turn it on to
+answer a question, not as a standing setting.
 
 For more detailed troubleshooting, check the application logs and PostgreSQL logs.

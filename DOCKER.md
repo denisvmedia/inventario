@@ -150,8 +150,11 @@ Create a `docker-compose.override.yml` file for development-specific settings:
 services:
   inventario:
     environment:
-      # The only logging knob is the output format; there is no log-level env var.
+      # Output format: text (default) or json.
       INVENTARIO_LOG_FORMAT: json
+      # Threshold: debug, info (default), warn, error. Debug includes a line
+      # per registry read, so it is for answering a question, not for leaving on.
+      INVENTARIO_LOG_LEVEL: info
     volumes:
       - ./custom-config:/app/config
 ```
