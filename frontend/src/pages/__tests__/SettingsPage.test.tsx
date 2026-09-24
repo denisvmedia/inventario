@@ -21,9 +21,9 @@ import { __resetHttpForTests } from "@/lib/http"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
-function LocationProbe() {
+function LocationProbe({ testId = "loc" }: { testId?: string }) {
   const loc = useLocation()
-  return <div data-testid="loc" data-pathname={loc.pathname} />
+  return <div data-testid={testId} data-pathname={loc.pathname} data-search={loc.search} />
 }
 
 function renderSettings(initialPath: string = "/settings") {
@@ -42,6 +42,12 @@ function renderSettings(initialPath: string = "/settings") {
                     <ConfirmProvider>
                       <KeyboardShortcutsProvider>
                         <SettingsPage />
+                        {/* The catch-all probe below only renders when no
+                            other route matches, so /settings needs its own to
+                            read the query back. Under a different id, because
+                            tests that assert "we did not navigate away" read
+                            the absence of the catch-all one. */}
+                        <LocationProbe testId="settings-loc" />
                       </KeyboardShortcutsProvider>
                     </ConfirmProvider>
                   </GroupProvider>
@@ -563,5 +569,56 @@ describe("<SettingsPage />", () => {
     expect(screen.queryByTestId("keyboard-shortcuts-dialog")).not.toBeInTheDocument()
     await user.click(row)
     expect(await screen.findByTestId("keyboard-shortcuts-dialog")).toBeVisible()
+  })
+})
+
+// #1384 — the section lives in the URL so it can be linked to: /help
+// redirects here, the sidebar's Help row points straight at the help section,
+// and a reload keeps the user where they were.
+describe("<SettingsPage /> section routing", () => {
+  it("opens the section named by ?section=", async () => {
+    server.use(...baseHandlers)
+    renderSettings("/settings?section=help")
+    expect(await screen.findByTestId("section-help")).toBeInTheDocument()
+    expect(screen.queryByTestId("section-account")).toBeNull()
+  })
+
+  it("lands on Account with no parameter", async () => {
+    server.use(...baseHandlers)
+    renderSettings("/settings")
+    expect(await screen.findByTestId("section-account")).toBeInTheDocument()
+  })
+
+  // A stale link or a typo should not render an empty pane.
+  it("falls back to Account for an unknown section", async () => {
+    server.use(...baseHandlers)
+    renderSettings("/settings?section=nonsense")
+    expect(await screen.findByTestId("section-account")).toBeInTheDocument()
+  })
+
+  it("writes the section to the URL when a tab is clicked", async () => {
+    const user = userEvent.setup()
+    server.use(...baseHandlers)
+    renderSettings("/settings")
+    await screen.findByTestId("section-account")
+    await user.click(screen.getByTestId("settings-nav-privacy"))
+    expect(await screen.findByTestId("section-privacy")).toBeInTheDocument()
+    expect(screen.getByTestId("settings-loc").getAttribute("data-search")).toContain(
+      "section=privacy"
+    )
+  })
+
+  // Other query parameters carry the active group (?g=slug); dropping them on
+  // a tab click would strand the user's group context.
+  it("keeps the other query parameters", async () => {
+    const user = userEvent.setup()
+    server.use(...baseHandlers)
+    renderSettings("/settings?g=household")
+    await screen.findByTestId("section-account")
+    await user.click(screen.getByTestId("settings-nav-help"))
+    await screen.findByTestId("section-help")
+    const search = screen.getByTestId("settings-loc").getAttribute("data-search") ?? ""
+    expect(search).toContain("g=household")
+    expect(search).toContain("section=help")
   })
 })

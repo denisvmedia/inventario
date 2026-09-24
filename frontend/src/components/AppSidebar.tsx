@@ -2,6 +2,7 @@ import {
   CalendarClock,
   ChevronsUpDown,
   FileBarChart,
+  CircleHelp,
   FolderOpen,
   HandCoins,
   HardDriveDownload,
@@ -50,6 +51,7 @@ import { GroupSelector } from "@/components/GroupSelector"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { withGroupQuery } from "@/lib/group-aware-url"
+import { SETTINGS_HELP_URL } from "@/lib/settings-url"
 import { useNavLabel } from "@/lib/nav-labels"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -434,6 +436,19 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
+          {/* Help sits in the footer rather than in PERSONAL above because
+              it resolves to the same page as Preferences. A NavRow matches on
+              pathname alone, so two rows pointing at /settings would light up
+              together; here the row is its own control and the highlight
+              question does not arise (#1384). */}
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip={t("common:nav.help")} data-testid="sidebar-help">
+              <Link to={withGroupQuery(SETTINGS_HELP_URL, currentGroup?.slug)}>
+                <CircleHelp className="size-4" />
+                <span>{t("common:nav.help")}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

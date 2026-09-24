@@ -41,4 +41,12 @@ describe("withGroupQuery", () => {
     // shouldn't break if it sees a hyphen, plus, or space.
     expect(withGroupQuery("/profile", "a b+c")).toBe("/profile?g=a+b%2Bc")
   })
+
+  // The sidebar's Help row (#1384) points at /settings?section=help, so the
+  // merge has to keep the caller's own query rather than replacing it.
+  it("merges g= into a path that already carries a query", () => {
+    expect(withGroupQuery("/settings?section=help", "household")).toBe(
+      "/settings?section=help&g=household"
+    )
+  })
 })

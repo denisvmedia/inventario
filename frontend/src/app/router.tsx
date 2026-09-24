@@ -1,5 +1,7 @@
 import { Suspense, lazy } from "react"
 import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom"
+
+import { SETTINGS_HELP_URL } from "@/lib/settings-url"
 import type { Location } from "react-router-dom"
 
 import { AuthProvider } from "@/features/auth/AuthContext"
@@ -318,7 +320,12 @@ export function AppRoutes() {
               (resolved from the registry); #1417 is the umbrella aggregator
               issue, not the destination of these links. */}
           <Route path="/plans" element={<ComingSoonPage surface="plans" />} />
-          <Route path="/help" element={<ComingSoonPage surface="helpCenter" />} />
+          {/* /help is not its own page: everything it would hold — docs,
+              shortcuts, what's new, feedback, the version footer — already
+              lives in Settings → Help. The route stays so existing links and
+              the sidebar's Help row keep resolving, and sends the user to
+              that section (#1384). */}
+          <Route path="/help" element={<Navigate to={SETTINGS_HELP_URL} replace />} />
           {/* Keyboard shortcuts (#1385) is a click-to-open modal owned
               by Shell.tsx via KeyboardShortcutsProvider, not a routed
               page — Settings → Help → Keyboard shortcuts opens it
