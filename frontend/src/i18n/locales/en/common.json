@@ -83,6 +83,11 @@
       }
     }
   },
+  "pagination": {
+    "label": "Pagination",
+    "next": "Next page",
+    "previous": "Previous page"
+  },
   "serverError": {
     "conflict": {
       "title": "This conflicts with another change"

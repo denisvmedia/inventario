@@ -17,11 +17,11 @@ import type { GalleryImage } from "@/components/files/ImageViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isImageMime } from "@/features/files/constants"
-import { useFiles } from "@/features/files/hooks"
-import type { ListedFile } from "@/features/files/api"
+import { useFileCategoryCounts, useFiles } from "@/features/files/hooks"
 import { useFilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { cn } from "@/lib/utils"
+import { Pagination, pageWithin } from "@/components/common/Pagination"
 
 // CommodityFilesTab is the Commodity-detail Files tab. It keeps the
 // segmented chip-bar (All / Images / Invoices / Documents / Other) and
@@ -101,11 +101,10 @@ const CHIPS: ChipDef[] = [
   },
 ]
 
-// Per-page cap for the underlying `useFiles({ linkedEntity… })` query.
-// The chip-bar derives counts from the loaded set, so this also caps the
-// count displayed; 100 is well above the realistic per-commodity
-// attachment count and keeps a single round-trip covering all chips.
-const PAGE_SIZE = 100
+// Per-page cap for the underlying `useFiles({ linkedEntity… })` query. The
+// pager reaches everything past it (#2467); a page this size keeps the common
+// commodity to a single round trip.
+const PAGE_SIZE = 24
 
 export interface CommodityFilesTabProps {
   commodityId: string
@@ -136,7 +135,13 @@ export function CommodityFilesTab({
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
 
-  const [activeChip, setActiveChip] = useState<FilesTabCategory>("all")
+  const [activeChip, setActiveChipState] = useState<FilesTabCategory>("all")
+  const setActiveChip = (next: FilesTabCategory) => {
+    setActiveChipState(next)
+    // A new chip starts at the top: page 3 of the old bucket is not a
+    // meaningful position in the new one.
+    setPage(1)
+  }
   // Grid/list toggle, shared with the location/area panel via the same
   // localStorage key (entity-detail surfaces default to grid).
   const [viewMode, setViewMode] = useFilesViewMode("files:entityViewMode", "grid")
@@ -144,37 +149,49 @@ export function CommodityFilesTab({
   // leaves the commodity detail page (mirrors EntityFilesPanel, #1963).
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  // Single query fans all chips; client-side filtering keeps chip-toggle
-  // latency at zero. The badge query in `CommodityDetailPage` uses
-  // perPage=1 to fetch only meta.total and lives in a different cache
-  // slot on purpose.
+  // The list is one page of the active chip's filter, resolved server-side;
+  // the chip counts come from the category-counts endpoint, so a commodity
+  // with more files than a page still shows totals it can reach (#2467).
+  // The badge query in `CommodityDetailPage` uses perPage=1 to fetch only
+  // meta.total and lives in a different cache slot on purpose.
+  const linkedTo = { linkedEntityType: "commodity", linkedEntityId: commodityId } as const
+  const [requestedPage, setPage] = useState(1)
   const filesQuery = useFiles(
-    { linkedEntityType: "commodity", linkedEntityId: commodityId, perPage: PAGE_SIZE },
+    {
+      ...linkedTo,
+      page: requestedPage,
+      perPage: PAGE_SIZE,
+      ...chipFilter(activeChip),
+    },
+    { enabled: !!commodityId && !!slug }
+  )
+  const countsQuery = useFileCategoryCounts(linkedTo, { enabled: !!commodityId && !!slug })
+  // The invoices chip is a tag-based view, not a category, so the counts
+  // endpoint cannot answer it — one more page-of-one for its total.
+  const invoiceCountQuery = useFiles(
+    { ...linkedTo, tags: ["invoice"], perPage: 1 },
     { enabled: !!commodityId && !!slug }
   )
   // Stable reference for downstream useMemo deps — a `?? []` fallback
   // would mint a fresh array each render and bust the memos every time.
   const files = useMemo(() => filesQuery.data?.files ?? [], [filesQuery.data?.files])
 
-  const counts = useMemo(() => deriveCounts(files), [files])
-
-  const visible = useMemo(() => {
-    if (activeChip === "all") return files
-    // Post-#1622: the "invoices" chip filters by the `invoice` tag — the
-    // FileCategory enum dropped its `invoices` value. Every other chip
-    // still matches BE FileCategory 1:1.
-    if (activeChip === "invoices") {
-      return files.filter(
-        (row) => Array.isArray(row.file.tags) && row.file.tags.includes("invoice")
-      )
-    }
-    return files.filter((row) => row.file.category === activeChip)
-  }, [files, activeChip])
+  const counts = useMemo<Record<FilesTabCategory, number>>(
+    () => ({
+      all: countsQuery.data?.all ?? 0,
+      images: countsQuery.data?.images ?? 0,
+      documents: countsQuery.data?.documents ?? 0,
+      other: countsQuery.data?.other ?? 0,
+      invoices: invoiceCountQuery.data?.total ?? 0,
+    }),
+    [countsQuery.data, invoiceCountQuery.data]
+  )
+  const { page, totalPages } = pageWithin(requestedPage, setPage, filesQuery.data?.total, PAGE_SIZE)
 
   // This commodity's photos, in grid order, for the fullscreen viewer's
   // gallery navigation inside the detail sheet. Memoized like `files` /
-  // `counts` / `visible` so a re-render doesn't hand FileDetailSheet a
-  // fresh array reference each time.
+  // `counts` so a re-render doesn't hand FileDetailSheet a fresh array
+  // reference each time.
   const imageSiblings: GalleryImage[] = useMemo(
     () =>
       files
@@ -289,7 +306,7 @@ export function CommodityFilesTab({
               />
             ))}
           </div>
-        ) : visible.length === 0 ? (
+        ) : files.length === 0 ? (
           <div
             className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-8 text-center"
             data-testid="commodity-files-empty"
@@ -309,7 +326,7 @@ export function CommodityFilesTab({
               />
             </div>
             <FileCollection
-              items={visible}
+              items={files}
               viewMode={viewMode}
               onOpen={(id) => setSelectedId(id)}
               coverState={coverState}
@@ -317,6 +334,14 @@ export function CommodityFilesTab({
               coverBusy={coverBusy}
               idPrefix="commodity-files"
             />
+            {totalPages > 1 ? (
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onChange={setPage}
+                testId="commodity-files-pagination"
+              />
+            ) : null}
           </div>
         )}
       </div>
@@ -336,29 +361,11 @@ export function CommodityFilesTab({
   )
 }
 
-// deriveCounts collapses a loaded file set into the five chip counts.
-// `all` is the total; `images` / `documents` / `other` match the BE
-// `models.FileCategory` enum 1:1. The `invoices` chip is a synthetic
-// tag-based filter (post-#1622) — it counts files carrying the `invoice`
-// tag regardless of category (they live in `documents` now). A file can
-// be in both `documents` (its category bucket) and `invoices` (its
-// tag-based view); the two counts overlap on purpose.
-function deriveCounts(rows: ListedFile[]): Record<FilesTabCategory, number> {
-  const counts: Record<FilesTabCategory, number> = {
-    all: rows.length,
-    images: 0,
-    invoices: 0,
-    documents: 0,
-    other: 0,
-  }
-  for (const row of rows) {
-    const cat = row.file.category
-    if (cat === "images" || cat === "documents" || cat === "other") {
-      counts[cat] += 1
-    }
-    if (Array.isArray(row.file.tags) && row.file.tags.includes("invoice")) {
-      counts.invoices += 1
-    }
-  }
-  return counts
+// chipFilter turns a chip into the server-side filter it stands for. The
+// invoices chip is a tag-based view rather than a category — the FileCategory
+// enum dropped that value in #1622 — so it filters on the tag instead.
+function chipFilter(chip: FilesTabCategory) {
+  if (chip === "all") return {}
+  if (chip === "invoices") return { tags: ["invoice"] }
+  return { category: chip }
 }

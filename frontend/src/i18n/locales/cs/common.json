@@ -15,6 +15,10 @@
   "errors": {
     "generic": "Něco se pokazilo"
   },
+  "listError": {
+    "title": "Seznam se nepodařilo načíst",
+    "description": "Požadavek selhal, proto se nic nezobrazuje. Neznamená to, že je seznam prázdný."
+  },
   "loading": "Načítání…",
   "nav": {
     "backup": "Záloha",
@@ -78,6 +82,11 @@
         "title": "Vítejte v {{brand}}"
       }
     }
+  },
+  "pagination": {
+    "label": "Stránkování",
+    "next": "Další stránka",
+    "previous": "Předchozí stránka"
   },
   "serverError": {
     "conflict": {
@@ -149,9 +158,5 @@
     "then": "poté",
     "title": "Klávesové zkratky"
   },
-  "trackedBy": "Sledováno pomocí {{ref}}.",
-  "listError": {
-    "title": "Seznam se nepodařilo načíst",
-    "description": "Požadavek selhal, proto se nic nezobrazuje. Neznamená to, že je seznam prázdný."
-  }
+  "trackedBy": "Sledováno pomocí {{ref}}."
 }

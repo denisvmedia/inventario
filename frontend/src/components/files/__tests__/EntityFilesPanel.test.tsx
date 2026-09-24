@@ -68,29 +68,35 @@ describe("<EntityFilesPanel />", () => {
       ...fileHandlers.list(SLUG, [
         {
           id: "f-1",
-          title: "Receipt",
-          path: "receipt-1",
-          ext: ".pdf",
-          mime_type: "application/pdf",
-          category: "documents",
-          type: "document",
-          linked_entity_type: "commodity",
-          linked_entity_id: COMMODITY,
-          tags: ["tax"],
-          created_at: "2026-04-01T10:00:00Z",
+          attributes: {
+            id: "f-1",
+            title: "Receipt",
+            path: "receipt-1",
+            ext: ".pdf",
+            mime_type: "application/pdf",
+            category: "documents",
+            type: "document",
+            linked_entity_type: "commodity",
+            linked_entity_id: COMMODITY,
+            tags: ["tax"],
+            created_at: "2026-04-01T10:00:00Z",
+          },
         },
         {
           id: "f-2",
-          title: "Photo",
-          path: "photo-1",
-          ext: ".jpg",
-          mime_type: "image/jpeg",
-          category: "images",
-          type: "image",
-          linked_entity_type: "commodity",
-          linked_entity_id: COMMODITY,
-          tags: [],
-          created_at: "2026-04-02T10:00:00Z",
+          attributes: {
+            id: "f-2",
+            title: "Photo",
+            path: "photo-1",
+            ext: ".jpg",
+            mime_type: "image/jpeg",
+            category: "images",
+            type: "image",
+            linked_entity_type: "commodity",
+            linked_entity_id: COMMODITY,
+            tags: [],
+            created_at: "2026-04-02T10:00:00Z",
+          },
         },
       ])
     )
@@ -160,22 +166,83 @@ describe("<EntityFilesPanel />", () => {
     expect(screen.queryByTestId("file-image-viewer")).not.toBeInTheDocument()
   })
 
+  it("pages past the first 24 files", async () => {
+    const user = userEvent.setup()
+    // 30 files: two pages at the default page size of 24.
+    const many = Array.from({ length: 30 }, (_, i) => ({
+      id: `f-${i}`,
+      attributes: {
+        id: `f-${i}`,
+        title: `Doc ${i}`,
+        path: `doc-${i}`,
+        ext: ".pdf",
+        mime_type: "application/pdf",
+        category: "documents",
+        type: "document",
+        linked_entity_type: "commodity",
+        linked_entity_id: COMMODITY,
+        size_bytes: 2048,
+        tags: [],
+        created_at: "2026-04-01T10:00:00Z",
+      },
+    }))
+    server.use(...groupHandlers.list(groupFixture), ...fileHandlers.list(SLUG, many))
+    renderPanel()
+    expect(await screen.findByTestId("file-card-f-0")).toBeInTheDocument()
+    expect(screen.queryByTestId("file-card-f-24")).toBeNull()
+
+    await user.click(screen.getByTestId("entity-files-panel-pagination-page-2"))
+    expect(await screen.findByTestId("file-card-f-24")).toBeInTheDocument()
+    expect(screen.queryByTestId("file-card-f-0")).toBeNull()
+  })
+
+  it("hides the pager when everything fits on one page", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [
+        {
+          id: "f-one",
+          attributes: {
+            id: "f-one",
+            title: "Only",
+            path: "only",
+            ext: ".pdf",
+            mime_type: "application/pdf",
+            category: "documents",
+            type: "document",
+            linked_entity_type: "commodity",
+            linked_entity_id: COMMODITY,
+            size_bytes: 2048,
+            tags: [],
+            created_at: "2026-04-01T10:00:00Z",
+          },
+        },
+      ])
+    )
+    renderPanel()
+    await screen.findByTestId("file-card-f-one")
+    expect(screen.queryByTestId("entity-files-panel-pagination")).toBeNull()
+  })
+
   it("is axe-clean in the populated state", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       ...fileHandlers.list(SLUG, [
         {
           id: "f-1",
-          title: "Receipt",
-          path: "receipt-1",
-          ext: ".pdf",
-          mime_type: "application/pdf",
-          category: "documents",
-          type: "document",
-          linked_entity_type: "commodity",
-          linked_entity_id: COMMODITY,
-          tags: [],
-          created_at: "2026-04-01T10:00:00Z",
+          attributes: {
+            id: "f-1",
+            title: "Receipt",
+            path: "receipt-1",
+            ext: ".pdf",
+            mime_type: "application/pdf",
+            category: "documents",
+            type: "document",
+            linked_entity_type: "commodity",
+            linked_entity_id: COMMODITY,
+            tags: [],
+            created_at: "2026-04-01T10:00:00Z",
+          },
         },
       ])
     )

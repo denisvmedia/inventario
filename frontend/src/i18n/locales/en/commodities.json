@@ -404,7 +404,6 @@
     "viewList": "List view"
   },
   "pagination": {
-    "label": "Pagination",
     "next": "Next page",
     "pageOf": "Page {{page}} of {{total}}",
     "previous": "Previous page"

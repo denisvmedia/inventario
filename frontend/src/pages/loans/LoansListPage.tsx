@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 
@@ -11,6 +12,7 @@ import { daysOverdue, isOpen, type LoanState } from "@/features/loans/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
+import { Pagination, pageWithin } from "@/components/common/Pagination"
 
 const VALID_STATES: readonly LoanState[] = ["all", "open", "overdue", "returned"]
 
@@ -22,6 +24,8 @@ function parseState(raw: string | null): LoanState {
 // loans with a state filter (open / overdue / returned / all). Each
 // row links to the parent commodity so the user can drill into the
 // Lend tab there to mark a return or update the borrower contact.
+const PAGE_SIZE = 50
+
 export function LoansListPage() {
   const { t } = useTranslation(["loans", "common"])
   const { currentGroup } = useCurrentGroup()
@@ -29,7 +33,11 @@ export function LoansListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const state = parseState(searchParams.get("state"))
 
-  const list = useGroupLoans({ state, perPage: 50 })
+  // One page of PAGE_SIZE, with meta.total driving the pager that reaches the
+  // rest (#2467).
+  const [requestedPage, setPage] = useState(1)
+  const list = useGroupLoans({ state, page: requestedPage, perPage: PAGE_SIZE })
+  const { page, totalPages } = pageWithin(requestedPage, setPage, list.data?.total, PAGE_SIZE)
 
   function setState(next: LoanState) {
     const params = new URLSearchParams(searchParams)
@@ -39,6 +47,9 @@ export function LoansListPage() {
       params.set("state", next)
     }
     setSearchParams(params, { replace: true })
+    // A new filter starts at the top: page 7 of the old set is not a
+    // meaningful position in the new one.
+    setPage(1)
   }
 
   return (
@@ -153,6 +164,16 @@ export function LoansListPage() {
               </tbody>
             </table>
           )}
+          {totalPages > 1 ? (
+            <div className="pt-4">
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onChange={setPage}
+                testId="loans-pagination"
+              />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </Page>
