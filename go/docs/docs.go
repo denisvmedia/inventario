@@ -5269,6 +5269,18 @@ const docTemplate = `{
                         "description": "Filter by tags (comma-separated)",
                         "name": "tags",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Narrow to files linked to this entity type (requires linked_entity_id)",
+                        "name": "linked_entity_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Narrow to files linked to this entity id (requires linked_entity_type)",
+                        "name": "linked_entity_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {

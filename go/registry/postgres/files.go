@@ -453,7 +453,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 // shape. The second returned map carries the per-category sum of
 // size_bytes — the FE consumes it to render the cumulative
 // "{N} files · {Y} total" footer alongside the tile counts.
-func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string) (map[models.FileCategory]int, map[models.FileCategory]int64, error) {
+func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileType *models.FileType, tags []string, linkedEntityType, linkedEntityID *string) (map[models.FileCategory]int, map[models.FileCategory]int64, error) {
 	counts := map[models.FileCategory]int{
 		models.FileCategoryImages:    0,
 		models.FileCategoryDocuments: 0,
@@ -467,7 +467,7 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		conditions, args, _ := buildSearchConditions(query, fileType, nil, tags, nil, nil, 1)
+		conditions, args, _ := buildSearchConditions(query, fileType, nil, tags, linkedEntityType, linkedEntityID, 1)
 
 		whereClause := ""
 		if len(conditions) > 0 {

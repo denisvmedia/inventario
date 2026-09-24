@@ -109,19 +109,13 @@ const documentFixture = {
 type Fixture = { id: string; attributes: Record<string, unknown> }
 
 // The chip counts come from the category-counts endpoint and the list is a
-// page, so a render needs both handlers. Counting the fixture here keeps the
-// two consistent the way the server keeps them consistent.
+// page, so a render needs both handlers. Both read the same fixture, which is
+// what lets a test catch a count that disagrees with the list under it.
 function seed(items: Fixture[], listMeta: Record<string, unknown> = {}) {
-  const inCategory = (c: string) => items.filter((it) => it.attributes.category === c).length
   return [
     ...groupHandlers.list(groupFixture),
     ...fileHandlers.list(SLUG, items, listMeta),
-    ...fileHandlers.counts(SLUG, {
-      all: items.length,
-      images: inCategory("images"),
-      documents: inCategory("documents"),
-      other: inCategory("other"),
-    }),
+    ...fileHandlers.countsFromFiles(SLUG, items),
   ]
 }
 
@@ -330,6 +324,32 @@ describe("<CommodityFilesTab />", () => {
     // The page-1 query was invalidated too, so its cached total catches up a
     // beat later and the now-single page drops the control.
     await waitFor(() => expect(screen.queryByTestId("commodity-files-pagination")).toBeNull())
+  })
+
+  it("counts only this commodity's files, not the group's", async () => {
+    // A second commodity's files share the group. The chips sit above this
+    // commodity's list, so a count that includes the neighbour is a number
+    // the list underneath cannot account for.
+    const mine: Fixture[] = [
+      { id: photoFixture.id, attributes: photoFixture },
+      { id: documentFixture.id, attributes: documentFixture },
+    ]
+    const theirs: Fixture[] = Array.from({ length: 7 }, (_, i) => ({
+      id: `other-${i}`,
+      attributes: {
+        ...photoFixture,
+        id: `other-${i}`,
+        title: `Neighbour ${i}`,
+        path: `neighbour-${i}`,
+        linked_entity_id: "com-2",
+      },
+    }))
+    server.use(...seed([...mine, ...theirs]))
+    renderTab()
+    await screen.findByTestId("commodity-files-chip-all-count")
+    expect(screen.getByTestId("commodity-files-chip-all-count")).toHaveTextContent("2")
+    expect(screen.getByTestId("commodity-files-chip-images-count")).toHaveTextContent("1")
+    expect(screen.queryByTestId("file-card-other-0")).toBeNull()
   })
 
   it("hides the pager when everything fits on one page", async () => {

@@ -122,6 +122,10 @@ export async function getCategoryCounts(
   if (options.type) params.set("type", options.type)
   if (options.search?.trim()) params.set("search", options.search.trim())
   if (options.tags?.length) params.set("tags", options.tags.join(","))
+  if (options.linkedEntityType && options.linkedEntityId) {
+    params.set("linked_entity_type", options.linkedEntityType)
+    params.set("linked_entity_id", options.linkedEntityId)
+  }
   const qs = params.toString()
   const path = qs ? `/files/category-counts?${qs}` : "/files/category-counts"
   const body = await http.get<CategoryCountsEnvelope>(path, { signal: options.signal })

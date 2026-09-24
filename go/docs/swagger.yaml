@@ -8325,6 +8325,14 @@ paths:
         in: query
         name: tags
         type: string
+      - description: Narrow to files linked to this entity type (requires linked_entity_id)
+        in: query
+        name: linked_entity_type
+        type: string
+      - description: Narrow to files linked to this entity id (requires linked_entity_type)
+        in: query
+        name: linked_entity_id
+        type: string
       produces:
       - application/vnd.api+json
       responses:

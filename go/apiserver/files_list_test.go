@@ -343,3 +343,102 @@ func TestFilesDelete_UnknownID(t *testing.T) {
 	env.handler.ServeHTTP(rr, req)
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
+
+// The chip counts on a commodity's Files tab come from this endpoint and sit
+// directly above that commodity's file list. Without the linked-entity pair
+// they would count the whole group, which is a number the list underneath
+// cannot account for.
+func TestFilesCategoryCounts_ScopesToTheLinkedEntity(t *testing.T) {
+	c := qt.New(t)
+
+	params, owner, group := newParams()
+	ownerCtx := createTestUserContextWithGroup(owner.ID, owner.TenantID, group.ID)
+	set := must.Must(params.FactorySet.CreateUserRegistrySet(ownerCtx))
+
+	seed := []struct {
+		title       string
+		category    models.FileCategory
+		fileType    models.FileType
+		mime        string
+		ext         string
+		commodityID string
+	}{
+		{"a-photo", models.FileCategoryImages, models.FileTypeImage, "image/jpeg", ".jpg", "com-a"},
+		{"a-manual", models.FileCategoryDocuments, models.FileTypeDocument, "application/pdf", ".pdf", "com-a"},
+		{"b-photo-1", models.FileCategoryImages, models.FileTypeImage, "image/jpeg", ".jpg", "com-b"},
+		{"b-photo-2", models.FileCategoryImages, models.FileTypeImage, "image/png", ".png", "com-b"},
+	}
+	for _, s := range seed {
+		must.Must(set.FileRegistry.Create(ownerCtx, models.FileEntity{
+			Title:            s.title,
+			Type:             s.fileType,
+			Category:         s.category,
+			LinkedEntityType: "commodity",
+			LinkedEntityID:   s.commodityID,
+			File: &models.File{
+				Path:         s.title,
+				OriginalPath: s.title + s.ext,
+				Ext:          s.ext,
+				MIMEType:     s.mime,
+			},
+		}))
+	}
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	token := createTestJWTToken(owner.ID)
+
+	type bucket struct {
+		Images    int `json:"images"`
+		Documents int `json:"documents"`
+		Other     int `json:"other"`
+		All       int `json:"all"`
+	}
+	counts := func(c *qt.C, query string) (bucket, int) {
+		c.Helper()
+		req := httptest.NewRequest(http.MethodGet,
+			"/api/v1/g/"+group.Slug+"/files/category-counts"+query, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			return bucket{}, rr.Code
+		}
+		var body struct {
+			Data bucket `json:"data"`
+		}
+		c.Assert(json.Unmarshal(rr.Body.Bytes(), &body), qt.IsNil)
+		return body.Data, rr.Code
+	}
+
+	comA, status := counts(c, "?linked_entity_type=commodity&linked_entity_id=com-a")
+	c.Assert(status, qt.Equals, http.StatusOK)
+	c.Check(comA.Images, qt.Equals, 1)
+	c.Check(comA.Documents, qt.Equals, 1)
+	c.Check(comA.Other, qt.Equals, 0)
+	c.Check(comA.All, qt.Equals, 2)
+
+	comB, status := counts(c, "?linked_entity_type=commodity&linked_entity_id=com-b")
+	c.Assert(status, qt.Equals, http.StatusOK)
+	c.Check(comB.Images, qt.Equals, 2)
+	c.Check(comB.Documents, qt.Equals, 0)
+	c.Check(comB.Other, qt.Equals, 0)
+	c.Check(comB.All, qt.Equals, 2)
+
+	// No pair is the Files page's own view: the whole group, which holds
+	// unlinked files too. Asserted against the scoped answers rather than a
+	// literal, so the fixture can grow without rewriting the expectation.
+	all, status := counts(c, "")
+	c.Assert(status, qt.Equals, http.StatusOK)
+	c.Check(all.All, qt.Equals, all.Images+all.Documents+all.Other)
+	c.Check(all.Images >= comA.Images+comB.Images, qt.IsTrue)
+	c.Check(all.Documents >= comA.Documents+comB.Documents, qt.IsTrue)
+	c.Check(all.All > comA.All+comB.All, qt.IsTrue,
+		qt.Commentf("the group holds more than these two commodities' files"))
+
+	// Half a pair is a filter the caller believes is applied and is not, so
+	// it is rejected here the same way GET /files rejects it.
+	_, status = counts(c, "?linked_entity_type=commodity")
+	c.Check(status, qt.Equals, http.StatusBadRequest)
+	_, status = counts(c, "?linked_entity_id=com-a")
+	c.Check(status, qt.Equals, http.StatusBadRequest)
+}

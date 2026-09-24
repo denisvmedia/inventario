@@ -43,12 +43,15 @@ export function list(
 // component that ignored its own filter state would fail its test instead of
 // being handed a conveniently pre-filtered fixture. `tags` is containment
 // (`tags @> $1`), so every requested tag has to be present; `search` is an
-// ILIKE substring over the same four columns the registry searches. The
-// linked-entity pair is not modeled: handlers are registered per entity, so
-// a fixture only ever holds that entity's files.
+// ILIKE substring over the same four columns the registry searches.
 function matches(attrs: Record<string, unknown>, params: URLSearchParams): boolean {
   const category = params.get("category")
   if (category && attrs.category !== category) return false
+
+  const linkedType = params.get("linked_entity_type")
+  const linkedId = params.get("linked_entity_id")
+  if (linkedType && attrs.linked_entity_type !== linkedType) return false
+  if (linkedId && attrs.linked_entity_id !== linkedId) return false
 
   const type = params.get("type")
   if (type && attrs.type !== type) return false
@@ -69,6 +72,33 @@ function matches(attrs: Record<string, unknown>, params: URLSearchParams): boole
   }
 
   return true
+}
+
+// countsFromFiles answers /files/category-counts out of the same fixture the
+// list handler serves, honoring the same query parameters — including the
+// linked-entity pair, which is what an entity's Files tab sends so its chips
+// agree with the list beneath them. Prefer it over `counts` whenever a test
+// renders both surfaces: literal numbers cannot disagree with the list, which
+// is exactly the bug worth catching.
+export function countsFromFiles(
+  slug: string,
+  items: Array<{ id: string; attributes: Record<string, unknown> }> = []
+) {
+  return [
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/files/category-counts`), ({ request }) => {
+      const params = new URL(request.url).searchParams
+      const matched = items.filter((it) => matches(it.attributes, params))
+      const inCategory = (c: string) => matched.filter((it) => it.attributes.category === c).length
+      const data = {
+        images: inCategory("images"),
+        documents: inCategory("documents"),
+        other: inCategory("other"),
+        all: matched.length,
+        bytes: { images: 0, documents: 0, other: 0, all: 0 },
+      }
+      return HttpResponse.json({ data })
+    }),
+  ]
 }
 
 export function counts(

@@ -6205,6 +6205,10 @@ export type paths = {
                     search?: string;
                     /** @description Filter by tags (comma-separated) */
                     tags?: string;
+                    /** @description Narrow to files linked to this entity type (requires linked_entity_id) */
+                    linked_entity_type?: string;
+                    /** @description Narrow to files linked to this entity id (requires linked_entity_type) */
+                    linked_entity_id?: string;
                 };
                 header?: never;
                 path: {
