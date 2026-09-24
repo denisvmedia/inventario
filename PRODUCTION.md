@@ -218,8 +218,13 @@ than one replica (set `persistence.enabled=false`).
   form, which `gocloud.dev/s3blob` v0.45 parses for `endpoint`/`region`/`prefix`):
 
   ```text
-  s3://<R2_BUCKET>?prefix=uploads/&region=auto&endpoint=https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com
+  s3://<R2_BUCKET>?prefix=uploads/&region=auto&endpoint=https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com&use_path_style=true
   ```
+
+  `use_path_style=true` addresses the bucket as `<endpoint>/<bucket>/<key>`.
+  R2 accepts the virtual-hosted form too, so this is about keeping one form
+  that works everywhere: the same URL against MinIO without it resolves
+  `<bucket>.<endpoint>`, which has no DNS.
 
 - [ ] Put the R2 credentials in the Secret as `AWS_ACCESS_KEY_ID` /
   `AWS_SECRET_ACCESS_KEY`.
@@ -235,6 +240,12 @@ than one replica (set `persistence.enabled=false`).
   ```
 
   Try without them first; add if uploads fail.
+
+- [ ] Nothing to do for signed downloads. Inventario's signed URL is its own —
+  an HMAC over the path, file id, user and expiry that points back at
+  `/api/v1/files/download/...` — and the handler streams the object out of the
+  bucket with an ordinary read. The bucket is never reachable from the browser
+  and the provider never has to support presigned URLs.
 
 ### B5. Email — SMTP2GO
 

@@ -236,3 +236,45 @@ services:
           memory: 512M
           cpus: '0.5'
 ```
+
+### S3-compatible storage (R2, MinIO, Backblaze, Wasabi)
+
+The `s3://` location is not AWS-only. A non-AWS endpoint needs three more query
+parameters, because `region` alone tells the SDK nothing about where to send
+the request:
+
+```text
+s3://<bucket>?prefix=uploads/&region=auto&endpoint=https://<host>&use_path_style=true
+```
+
+- `endpoint` — the provider's S3 API host. For Cloudflare R2 that is
+  `https://<account-id>.r2.cloudflarestorage.com`.
+- `region` — `auto` for R2; whatever the provider names otherwise. It is part
+  of the request signature, so it has to be set even where it means nothing.
+- `use_path_style=true` — addresses the bucket as `<endpoint>/<bucket>/<key>`
+  instead of `<bucket>.<endpoint>/<key>`. R2 accepts both, but a provider that
+  does not publish per-bucket DNS (MinIO, for one) fails to resolve the
+  virtual-hosted form, so path style is the portable choice.
+- `disable_https=true` — only for a plain-HTTP endpoint such as a local MinIO.
+
+Credentials come from the environment, not the URL:
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. For R2 these are the access
+key id and secret of an R2 API token with Object Read & Write.
+
+```yaml
+services:
+  inventario:
+    environment:
+      INVENTARIO_RUN_UPLOAD_LOCATION: "s3://inventario?prefix=uploads/&region=auto&endpoint=https://<account-id>.r2.cloudflarestorage.com&use_path_style=true"
+      AWS_ACCESS_KEY_ID: "<r2-access-key-id>"
+      AWS_SECRET_ACCESS_KEY: "<r2-secret-access-key>"
+```
+
+Downloads do not depend on the provider being able to presign. Inventario's
+signed URL is its own: an HMAC over the path, file id, user and expiry that
+points back at `/api/v1/files/download/...`, and the handler streams the object
+out of the bucket. Any backend that can serve a plain read works, and the
+object store itself never needs to be reachable from the browser.
+
+See [`PRODUCTION.md`](PRODUCTION.md) for the R2 checklist, including the
+`aws-sdk-go-v2` checksum settings some accounts need.
