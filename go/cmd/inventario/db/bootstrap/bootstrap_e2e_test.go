@@ -3,7 +3,6 @@ package bootstrap_test
 import (
 	"bytes"
 	"database/sql"
-	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -14,15 +13,13 @@ import (
 	"go.5x5.cz/inventario/cmd/inventario/db/bootstrap/apply"
 	"go.5x5.cz/inventario/cmd/inventario/db/bootstrap/printcmd"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/internal/pgtest"
 )
 
 func getPostgresDSNOrSkip(t *testing.T) string {
 	t.Helper()
 
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		t.Skip("POSTGRES_TEST_DSN environment variable not set")
-	}
+	dsn := pgtest.DSN(t)
 
 	// Try to connect to verify PostgreSQL is available
 	db, err := sql.Open("postgres", dsn)

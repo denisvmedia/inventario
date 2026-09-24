@@ -3,7 +3,6 @@ package postgres_test
 import (
 	"context"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/shopspring/decimal"
 
+	"go.5x5.cz/inventario/internal/pgtest"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/registry/postgres"
@@ -200,33 +200,33 @@ func createRegistrySetFromPool(pool *pgxpool.Pool) *registry.FactorySet {
 	return factorySet
 }
 
-// skipIfNoPostgreSQL checks if PostgreSQL is available for testing and skips the test if not.
+// skipIfNoPostgreSQL returns the DSN of the PostgreSQL this suite runs
+// against. pgtest hands back POSTGRES_TEST_DSN when it is set and otherwise
+// starts an embedded server the first time a test asks (#1953), so the only
+// case that still skips is short mode.
+//
+// The connection is probed here rather than at first use: a DSN that points
+// at nothing produces a clearer failure from one place than from whichever
+// query happened to run first.
 func skipIfNoPostgreSQL(t *testing.T) string {
 	t.Helper()
 
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	// if dsn == "" {
-	//	dsn = "postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
-	// }
-	if dsn == "" {
-		t.Skip("Skipping PostgreSQL tests: POSTGRES_TEST_DSN environment variable not set")
-	}
+	dsn := pgtest.DSN(t)
 
 	u, err := url.Parse(dsn)
 	if err != nil {
-		t.Skipf("Skipping PostgreSQL tests: failed to parse DSN: %v", err)
+		t.Fatalf("failed to parse DSN: %v", err)
 	}
 	dsn = u.String()
 
-	// Test connection
 	pool, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
-		t.Skipf("Skipping PostgreSQL tests: failed to connect to database: %v", err)
+		t.Fatalf("failed to connect to the test database: %v", err)
 	}
 	defer pool.Close()
 
 	if err := pool.Ping(t.Context()); err != nil {
-		t.Skipf("Skipping PostgreSQL tests: failed to ping database: %v", err)
+		t.Fatalf("failed to ping the test database: %v", err)
 	}
 
 	return dsn
