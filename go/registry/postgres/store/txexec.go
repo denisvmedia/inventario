@@ -146,6 +146,27 @@ func (r *TxExecutor[T]) ExistsByFieldIn(ctx context.Context, field string, value
 	return exists, nil
 }
 
+// ClaimByStatus moves a row from one status to another and reports whether
+// this caller is the one that moved it. The condition is in the UPDATE, so
+// the database decides the winner — two callers racing for the same row get
+// one true and one false rather than both proceeding.
+//
+// The alternative, a read followed by an unconditional write, has a window
+// between the two in which the other caller reads the same value (#2472).
+func (r *TxExecutor[T]) ClaimByStatus(ctx context.Context, id, from, to string) (bool, error) {
+	query := fmt.Sprintf("UPDATE %s SET status = $1 WHERE id = $2 AND status = $3", r.table)
+
+	res, err := r.tx.ExecContext(ctx, query, to, id, from)
+	if err != nil {
+		return false, errxtrace.Wrap("failed to claim row", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, errxtrace.Wrap("failed to read rows affected on claim", err)
+	}
+	return affected == 1, nil
+}
+
 func (r *TxExecutor[T]) Insert(ctx context.Context, entity any) error {
 	var fields []string
 	var placeholders []string

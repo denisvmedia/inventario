@@ -309,6 +309,17 @@ func (r *ExportRegistry) HardDelete(ctx context.Context, id string) error {
 	return err
 }
 
+// ClaimPending flips an export from pending to in_progress, letting the
+// database pick the winner when two workers race for the same row (#2472).
+func (r *ExportRegistry) ClaimPending(ctx context.Context, id string) (bool, error) {
+	claimed, err := r.newSQLRegistry().ClaimByStatus(ctx, id,
+		string(models.ExportStatusPending), string(models.ExportStatusInProgress))
+	if err != nil {
+		return false, errxtrace.Wrap("failed to claim pending export", err)
+	}
+	return claimed, nil
+}
+
 func (r *ExportRegistry) newSQLRegistry() *store.RLSGroupRepository[models.Export, *models.Export] {
 	if r.service {
 		return store.NewGroupServiceSQLRegistry[models.Export](r.dbx, r.tableNames.Exports())

@@ -100,6 +100,23 @@ func (r *RestoreOperationRegistry) HasActive(_ context.Context) (bool, error) {
 	return false, nil
 }
 
+// ClaimPending flips an operation from pending to running under the write
+// lock, so two callers racing for the same row get one true and one false —
+// the in-memory equivalent of the conditional UPDATE the postgres registry
+// issues (#2472).
+func (r *RestoreOperationRegistry) ClaimPending(_ context.Context, id string) (bool, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	op, ok := r.items.Get(id)
+	if !ok || op.Status != models.RestoreStatusPending {
+		return false, nil
+	}
+	op.Status = models.RestoreStatusRunning
+	r.items.Set(id, op)
+	return true, nil
+}
+
 func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()

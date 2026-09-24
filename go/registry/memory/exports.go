@@ -201,6 +201,23 @@ func (r *ExportRegistry) ListDeleted(ctx context.Context) ([]*models.Export, err
 	return deletedExports, nil
 }
 
+// ClaimPending flips an export from pending to in_progress under the write
+// lock, so two callers racing for the same row get one true and one false —
+// the in-memory equivalent of the conditional UPDATE the postgres registry
+// issues (#2472).
+func (r *ExportRegistry) ClaimPending(_ context.Context, id string) (bool, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	export, ok := r.items.Get(id)
+	if !ok || export.Status != models.ExportStatusPending {
+		return false, nil
+	}
+	export.Status = models.ExportStatusInProgress
+	r.items.Set(id, export)
+	return true, nil
+}
+
 // HardDelete permanently deletes an export from the database
 func (r *ExportRegistry) HardDelete(ctx context.Context, id string) error {
 	return r.Registry.Delete(ctx, id)
