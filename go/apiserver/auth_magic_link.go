@@ -222,7 +222,7 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	// MFA hand-off (load-bearing): if the user has TOTP enrolled, return the
 	// short-lived mfa_token and let the client finish via the existing
 	// POST /auth/login/mfa. Magic link is never an MFA bypass.
-	if api.maybeIssueMFAChallenge(w, r, user, tenantID) {
+	if api.maybeIssueMFAChallenge(w, r, user, tenantID, models.LoginMethodMagicLink) {
 		return
 	}
 
