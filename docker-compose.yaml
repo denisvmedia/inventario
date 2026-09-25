@@ -279,7 +279,7 @@ services:
   # stack stay lean and unaffected.
   # ---------------------------------------------------------------------------
   prometheus:
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v3.15.0
     profiles: ["monitoring"]
     restart: unless-stopped
     depends_on:
