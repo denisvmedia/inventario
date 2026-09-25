@@ -235,6 +235,11 @@ const (
 	FieldNameWarrantyExpiresAt     FieldName = "warranty_expires_at"
 	FieldNameComments              FieldName = "comments"
 	FieldNameTags                  FieldName = "tags"
+	// FieldNameDocumentType classifies a scanned document so the FE can
+	// pre-select the matching tag on attach. Commodity documents all share the
+	// `documents` bucket, and invoice-vs-manual is a tag (#1989), so this is
+	// what lets a scanned receipt arrive already tagged.
+	FieldNameDocumentType FieldName = "document_type"
 )
 
 // AllFieldNames is the closed set used by tests and by the prompt
@@ -251,4 +256,5 @@ var AllFieldNames = []FieldName{
 	FieldNameWarrantyExpiresAt,
 	FieldNameComments,
 	FieldNameTags,
+	FieldNameDocumentType,
 }

@@ -214,9 +214,8 @@ type INBCommodity struct {
 	// file's DB id after the commodity's files are recreated.
 	CoverFileID string `json:"coverFileId,omitempty"`
 
-	Images   []INBFileRef `json:"images,omitempty"`
-	Invoices []INBFileRef `json:"invoices,omitempty"`
-	Manuals  []INBFileRef `json:"manuals,omitempty"`
+	Images    []INBFileRef `json:"images,omitempty"`
+	Documents []INBFileRef `json:"documents,omitempty"`
 }
 
 // INBFileRef is a reference to a commodity-attached file. Path is the file's

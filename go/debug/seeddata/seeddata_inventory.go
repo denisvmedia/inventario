@@ -3,7 +3,6 @@ package seeddata
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -709,12 +708,12 @@ func attachCommodityFiles(ctx context.Context, set *registry.Set, uploader blobU
 		}
 	}
 	if spec.IncludeInvoice {
-		if _, err := attachCommodityFile(ctx, set, uploader, user, group, created, fixtureInvoice, "invoices", deriveTitle(spec.Name, "invoice"), nil); err != nil {
+		if _, err := attachCommodityFile(ctx, set, uploader, user, group, created, fixtureInvoice, "documents", deriveTitle(spec.Name, "invoice"), []string{models.FileTagInvoice}); err != nil {
 			return fmt.Errorf("attach invoice for %q: %w", spec.Name, err)
 		}
 	}
 	if spec.IncludeManual {
-		if _, err := attachCommodityFile(ctx, set, uploader, user, group, created, fixtureManual, "manuals", deriveTitle(spec.Name, "manual"), nil); err != nil {
+		if _, err := attachCommodityFile(ctx, set, uploader, user, group, created, fixtureManual, "documents", deriveTitle(spec.Name, "manual"), []string{models.FileTagManual}); err != nil {
 			return fmt.Errorf("attach manual for %q: %w", spec.Name, err)
 		}
 	}
@@ -805,7 +804,7 @@ func attachFile(ctx context.Context, args attachArgs, linkedEntityType, linkedEn
 		Description:      "",
 		Type:             models.FileTypeFromMIME(mime),
 		Category:         models.FileCategoryFromContext(linkedEntityType, args.Meta, mime),
-		Tags:             mergeSeedAutoTags(args.Tags, linkedEntityType, args.Meta),
+		Tags:             args.Tags,
 		LinkedEntityType: linkedEntityType,
 		LinkedEntityID:   linkedEntityID,
 		LinkedEntityMeta: args.Meta,
@@ -824,19 +823,4 @@ func attachFile(ctx context.Context, args attachArgs, linkedEntityType, linkedEn
 		return "", fmt.Errorf("create file row for %s: %w", args.Title, err)
 	}
 	return created.ID, nil
-}
-
-// mergeSeedAutoTags clones the explicit per-fixture tag list and appends
-// any conventional auto-tags implied by the linked-entity bucket — same
-// rule the apiserver applies on create/update (post-#1622), so seeded
-// rows stay consistent with what an interactive upload would produce.
-// Returns a fresh slice; never mutates the input.
-func mergeSeedAutoTags(explicit []string, linkedEntityType, linkedEntityMeta string) []string {
-	out := append([]string(nil), explicit...)
-	for _, t := range models.AutoTagsForContext(linkedEntityType, linkedEntityMeta) {
-		if !slices.Contains(out, t) {
-			out = append(out, t)
-		}
-	}
-	return out
 }

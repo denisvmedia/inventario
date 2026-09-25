@@ -83,6 +83,10 @@ func TestAllFieldNames_Closed(t *testing.T) {
 	expected := []string{
 		"name", "short_name", "type", "original_price", "original_price_currency",
 		"serial_number", "urls", "purchase_date", "warranty_expires_at", "comments", "tags",
+		// document_type classifies a scanned document so the FE can pre-select
+		// the invoice/manual tag on attach (#1989). Every provider's canned or
+		// parsed result has to carry it, which is what this list is for.
+		"document_type",
 	}
 	c.Assert(aivision.AllFieldNames, qt.DeepEquals, expected)
 }

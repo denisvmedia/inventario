@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -646,8 +647,7 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	// Register file refs so the later file members know which commodity (and
 	// bucket) they belong to.
 	w.registerFileRefs(c.ID, "images", c.Images)
-	w.registerFileRefs(c.ID, "invoices", c.Invoices)
-	w.registerFileRefs(c.ID, "manuals", c.Manuals)
+	w.registerFileRefs(c.ID, "documents", c.Documents)
 	return nil
 }
 
@@ -863,7 +863,7 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 
 	w.deleteSupersededBlob(staleBlobKey, blobKey)
 
-	w.incBucketStat(pending.link)
+	w.incBucketStat(pending.link, pending.ref.Tags)
 	return nil
 }
 
@@ -969,19 +969,27 @@ func (w *inbWalker) streamFileBytes(blobKey string, r io.Reader, size int64) (in
 }
 
 // incBucketStat increments the per-bucket file counter. ImageCount/InvoiceCount/
-// ManualCount are legacy COMMODITY-scoped counters, so a location/area file (whose
+// ManualCount are COMMODITY-scoped counters, so a location/area file (whose
 // buckets are images/files) or a standalone file must NOT inflate them — those
 // only feed the unified FileCount (issue #2235).
-func (w *inbWalker) incBucketStat(link inbFileLink) {
+//
+// Invoices and manuals no longer have buckets of their own; both live in
+// `documents` and the kind is a tag (#1989). The two counters stay because the
+// exports screen shows them, so they are derived from the tags the same way the
+// export side derives them.
+func (w *inbWalker) incBucketStat(link inbFileLink, tags []string) {
 	if link.linkedType != "commodity" {
 		return
 	}
 	switch link.meta {
 	case "images":
 		w.stats.ImageCount++
-	case "invoices":
-		w.stats.InvoiceCount++
-	case "manuals":
-		w.stats.ManualCount++
+	case "documents":
+		if slices.Contains(tags, models.FileTagInvoice) {
+			w.stats.InvoiceCount++
+		}
+		if slices.Contains(tags, models.FileTagManual) {
+			w.stats.ManualCount++
+		}
 	}
 }

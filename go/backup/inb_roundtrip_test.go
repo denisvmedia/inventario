@@ -114,7 +114,7 @@ func newInbFixture(c *qt.C) *inbFixture {
 }
 
 // attachCommodityFile creates an image FileEntity linked to the fixture's first
-// commodity (in the given bucket: images/invoices/manuals) and writes a blob of
+// commodity (in the given bucket: images or documents) and writes a blob of
 // the given size to its tenant-namespaced key. Returns the file's UUID.
 func (f *inbFixture) attachCommodityFile(c *qt.C, bucketMeta string, size int) string {
 	return f.attachCommodityFileFull(c, bucketMeta, "photo", "photo", ".jpg", "image/jpeg", size)
@@ -641,7 +641,7 @@ func TestINBRoundTrip_FilePathAndSizePreserved(t *testing.T) {
 	f := newInbFixture(c)
 
 	const size = 4096
-	fileUUID := f.attachCommodityFileFull(c, "invoices", "invoice-2024-01", "January invoice", ".pdf", "application/pdf", size)
+	fileUUID := f.attachCommodityFileFull(c, "documents", "invoice-2024-01", "January invoice", ".pdf", "application/pdf", size)
 
 	blobKey, _ := f.runExport(c, signer)
 	final, err := restoreInb(c, f, signer, blobKey)

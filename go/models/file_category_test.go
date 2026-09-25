@@ -47,17 +47,20 @@ func TestFileCategoryFromContext(t *testing.T) {
 		mime             string
 		want             models.FileCategory
 	}{
-		// Legacy commodity bucket names take precedence over MIME type so the
-		// "manuals" bucket lands in Documents even for image scans.
+		// The commodity bucket takes precedence over MIME type, so a scanned
+		// receipt lands in Documents even though it is a JPEG.
 		{"commodity/images PDF still images by bucket name",
 			"commodity", "images", "application/pdf", models.FileCategoryImages},
-		{"commodity/manuals image still documents by bucket name",
-			"commodity", "manuals", "image/jpeg", models.FileCategoryDocuments},
-		// #1622: the `invoices` bucket collapsed into the `documents`
-		// category — the "this is an invoice" semantic is carried by the
-		// FileTagInvoice tag, added separately via AutoTagsForContext.
-		{"commodity/invoices image lands in documents (per #1622)",
-			"commodity", "invoices", "image/jpeg", models.FileCategoryDocuments},
+		{"commodity/documents image still documents by bucket name",
+			"commodity", "documents", "image/jpeg", models.FileCategoryDocuments},
+		// #1989 collapsed the commodity buckets to images|documents; invoice
+		// and manual are tags on a documents-bucket file, not buckets. A stale
+		// client sending the old name gets no bucket hint and falls through to
+		// MIME rather than being silently treated as documents.
+		{"commodity/invoices is no longer a bucket, falls through to MIME",
+			"commodity", "invoices", "image/jpeg", models.FileCategoryImages},
+		{"commodity/manuals is no longer a bucket, falls through to MIME",
+			"commodity", "manuals", "application/pdf", models.FileCategoryDocuments},
 		{"location/images uses images bucket",
 			"location", "images", "image/png", models.FileCategoryImages},
 		// Location/files has no bucket-name hint; falls through to MIME.
