@@ -22,7 +22,7 @@
   },
   "overridesComment": "Pin a single Vite so @tailwindcss/vite shares Astro's instance. Astro 7 depends on Vite 8; leaving this at a 7.x pin holds Astro on a Vite it cannot drive, and `astro build` dies with \"rollupOptions.input should not be an html file when building for SSR\".",
   "overrides": {
-    "vite": "8.0.16",
+    "vite": "8.3.1",
     "nanoid": "^3.3.18"
   },
   "devDependencies": {
