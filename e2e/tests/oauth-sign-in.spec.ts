@@ -20,11 +20,20 @@
  *
  * The spec self-skips when OAUTH_STUB_ENABLED!=='true' so it can sit in
  * the suite without forcing every CI lane to spin up the stub. The
- * GitHub provider is intentionally NOT exercised here — the flow is
- * provider-agnostic on the BE, so one provider proves the find-or-
- * create-or-link branch end-to-end. The spec is parameterised via
- * `PROVIDER` so a future test can add GitHub by flipping a single
- * constant.
+ * "E2E Tests (oauth)" job is the lane that does set it: it starts the stub
+ * on the runner host and layers docker-compose.e2e-oauth.yaml over the
+ * stack, so a forged identity provider is configuration no other spec runs
+ * against. That job also fails on a skip, so this spec cannot go quiet
+ * again (#2634).
+ *
+ * The @cross-tenant describe below is excluded there and stays a local run:
+ * it seeds a second tenant through /api/v1/seed, which the base compose file
+ * refuses to mount on the long-running service on purpose.
+ *
+ * The sign-in flow is provider-agnostic on the BE, so the #1394 happy path
+ * runs Google alone and is parameterised via `PROVIDER`. GitHub is covered
+ * by the second #1395 linking test, which is where the two providers have to
+ * coexist on one account.
  *
  * Flow:
  *
