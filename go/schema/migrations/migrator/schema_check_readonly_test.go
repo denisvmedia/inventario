@@ -3,13 +3,13 @@ package migrator_test
 import (
 	"context"
 	"database/sql"
-	"os"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"go.5x5.cz/inventario/internal/pgtest"
 	"go.5x5.cz/inventario/schema/migrations/migrator"
 )
 
@@ -25,10 +25,7 @@ import (
 func TestVerifySchemaUpToDate_DoesNotNeedCreate(t *testing.T) {
 	c := qt.New(t)
 
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		t.Skip("POSTGRES_TEST_DSN environment variable not set")
-	}
+	dsn := pgtest.DSN(t)
 
 	ctx := context.Background()
 	admin, err := sql.Open("pgx", dsn)

@@ -10,16 +10,14 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/lib/pq" // PostgreSQL driver
 
+	"go.5x5.cz/inventario/internal/pgtest"
 	"go.5x5.cz/inventario/schema/bootstrap"
 )
 
 func getPostgresDSNorSkip(t *testing.T) string {
 	t.Helper()
 
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		t.Skip("POSTGRES_TEST_DSN environment variable not set")
-	}
+	dsn := pgtest.DSN(t)
 
 	// Try to connect to verify PostgreSQL is available
 	db, err := sql.Open("postgres", dsn)

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"os"
 	"testing"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	_ "github.com/lib/pq" // PostgreSQL driver
 
 	"go.5x5.cz/inventario/cmd/inventario/db/setup"
+	"go.5x5.cz/inventario/internal/pgtest"
 	"go.5x5.cz/inventario/models"
 )
 
@@ -154,8 +154,8 @@ func TestDataSetupManager_SetupInitialDataset_UpdateExistingUser(t *testing.T) {
 	// Create existing user with temporary tenant_id (to simulate user that needs to be moved to default tenant)
 	existingUserID := uuid.New().String()
 	_, err = db.Exec(`
-		INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $1, $7, $8)`,
+		INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		existingUserID, "existing@example.com", "hash", "Existing User", true, tempTenantID, time.Now(), time.Now())
 	c.Assert(err, qt.IsNil)
 
@@ -183,7 +183,8 @@ func TestDataSetupManager_SetupInitialDataset_AssignUserIDsToEntities(t *testing
 	db := setupTestDatabase(c)
 	defer db.Close()
 
-	// Create a temporary tenant and user first (since tenant_id and user_id are NOT NULL with FK constraints)
+	// Create a temporary tenant and user first: tenant_id is NOT NULL with an
+	// FK, and the entities below reference the user.
 	tempTenantID := "temp-tenant-" + uuid.New().String()
 	_, err := db.Exec(`
 		INSERT INTO tenants (id, name, slug, domain, status, settings, created_at, updated_at)
@@ -193,8 +194,8 @@ func TestDataSetupManager_SetupInitialDataset_AssignUserIDsToEntities(t *testing
 
 	tempUserID := uuid.New().String()
 	_, err = db.Exec(`
-		INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $1, $7, $8)`,
+		INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		tempUserID, "temp@example.com", "hash", "Temp User", true, tempTenantID, time.Now(), time.Now())
 	c.Assert(err, qt.IsNil)
 
@@ -202,8 +203,8 @@ func TestDataSetupManager_SetupInitialDataset_AssignUserIDsToEntities(t *testing
 	testGroupID := uuid.New().String()
 	testGroupSlug := uuid.New().String()[:22]
 	_, err = db.Exec(`
-		INSERT INTO location_groups (id, uuid, slug, name, status, created_by, tenant_id, user_id, created_at, updated_at)
-		VALUES ($1, $1, $2, 'Test Group', 'active', $3, $4, $3, $5, $6)`,
+		INSERT INTO location_groups (id, uuid, slug, name, status, created_by, tenant_id, created_at, updated_at)
+		VALUES ($1, $1, $2, 'Test Group', 'active', $3, $4, $5, $6)`,
 		testGroupID, testGroupSlug, tempUserID, tempTenantID, time.Now(), time.Now())
 	c.Assert(err, qt.IsNil)
 
@@ -301,11 +302,8 @@ func TestDefaultSetupOptions(t *testing.T) {
 // setupTestDatabase creates a test database for testing
 // This function will skip the test if PostgreSQL test database is not available
 func setupTestDatabase(c *qt.C) *sql.DB {
-	// Use environment variable for database DSN
-	dsn := os.Getenv("POSTGRES_TEST_DSN")
-	if dsn == "" {
-		c.Skip("POSTGRES_TEST_DSN environment variable not set")
-	}
+	dsn := pgtest.DSN(c)
+	prepareSchema(c.TB.(*testing.T), dsn)
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {

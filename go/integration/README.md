@@ -62,10 +62,14 @@ func TestCLIWorkflowIntegration(t *testing.T)
 
 ### Prerequisites
 
-None. The suite brings its own PostgreSQL: `TestMain` calls `internal/pgtest`,
-which starts an embedded server on a free port and stops it when the package
-finishes. The server binary is downloaded once and cached under
-`~/.embedded-postgres-go`, so the first run is slower than the rest.
+None. The suite brings its own PostgreSQL: `internal/pgtest` starts an
+embedded server on a free port the first time a test asks for a DSN, and
+`TestMain` stops it when the package finishes. The server binary is downloaded
+once and cached under `~/.embedded-postgres-go`, so the first run is slower
+than the rest.
+
+The same applies to `registry/postgres`, `schema/bootstrap`,
+`schema/migrations/migrator` and the `cmd/inventario/db` suites.
 
 Set `POSTGRES_TEST_DSN` to point the suite at a database you already have —
 that is what the PostgreSQL CI lane does with its service container, and it
