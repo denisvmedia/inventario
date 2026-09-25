@@ -29,8 +29,16 @@ spec:
       securityContext:
         fsGroup: 1000
       containers:
+        # Silo, a maintained fork of the MinIO server. MinIO withdrew anonymous
+        # pulls of its own images — quay.io answers 401 for every tag and
+        # docker.io/minio went earlier still — which is what broke this stack.
+        # The fork keeps the S3 API, the MINIO_* variables, the /minio/* routes
+        # and the on-disk format, so everything below is unchanged.
+        #
+        # Pinned rather than :latest, because a floating tag is how the pull
+        # broke without a commit.
         - name: minio
-          image: quay.io/minio/minio:latest
+          image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 1000

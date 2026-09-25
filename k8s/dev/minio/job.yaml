@@ -22,8 +22,10 @@ spec:
     spec:
       restartPolicy: OnFailure
       containers:
+        # The same image as the server: it ships the client as /usr/bin/mcli
+        # with an `mc` symlink, so the commands below are unchanged.
         - name: mc
-          image: quay.io/minio/mc:latest
+          image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
           imagePullPolicy: IfNotPresent
           env:
             - name: MC_CONFIG_DIR
@@ -40,7 +42,7 @@ spec:
             - |
               set -e
               until mc alias set dev http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
-                echo "Waiting for MinIO to become ready..."
+                echo "Waiting for the object store to become ready..."
                 sleep 2
               done
               mc mb --ignore-existing dev/"$MINIO_BUCKET_NAME"
