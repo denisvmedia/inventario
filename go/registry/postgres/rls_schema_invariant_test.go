@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -131,11 +130,11 @@ func TestSchema_EveryTenantScopedTableIsProtectedByRLS(t *testing.T) {
 				c.Assert(rows.Scan(&name, &qual, &withCheck), qt.IsNil)
 				appPolicies++
 
-				c.Check(strings.Contains(qual, tenantPredicate), qt.IsTrue,
+				c.Check(qual, qt.Contains, tenantPredicate,
 					qt.Commentf("policy %q returns rows with no tenant predicate: USING (%s)", name, qual))
 				// NULL for a policy that governs reads only.
 				if withCheck != "" {
-					c.Check(strings.Contains(withCheck, tenantPredicate), qt.IsTrue,
+					c.Check(withCheck, qt.Contains, tenantPredicate,
 						qt.Commentf("policy %q accepts writes with no tenant predicate: WITH CHECK (%s)", name, withCheck))
 				}
 			}
