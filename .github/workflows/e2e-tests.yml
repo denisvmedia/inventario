@@ -302,6 +302,185 @@ jobs:
         if: always() && steps.gate.outputs.run == 'true'
         run: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml down -v
 
+  # The @oauth specs self-skip unless OAUTH_STUB_ENABLED=true, and nothing set
+  # it, so Google sign-in, GitHub sign-in and account linking had no CI
+  # coverage at all (#2634). They get their own job rather than a flag on the
+  # lanes above, because a forged identity provider is configuration no other
+  # spec should run against.
+  #
+  # Chromium only: these are redirects and form posts, so a second browser
+  # engine repeats the same assertions at twice the cost.
+  e2e-tests-oauth:
+    name: E2E Tests (oauth)
+    runs-on: ubuntu-latest
+    needs: [changes, resolve-build]
+    timeout-minutes: 30
+    if: ${{ !cancelled() && needs.changes.result == 'success' }}
+
+    env:
+      INVENTARIO_IMAGE: ${{ needs.resolve-build.outputs.image }}
+      OAUTH_STUB_PORT: "4444"
+
+    steps:
+      - name: Decide whether there is an image to test
+        id: gate
+        env:
+          RESOLVE_RESULT: ${{ needs.resolve-build.result }}
+          IMAGE: ${{ needs.resolve-build.outputs.image }}
+        run: |
+          set -euo pipefail
+          case "$RESOLVE_RESULT" in
+            success)
+              if [ -z "$IMAGE" ]; then
+                echo "::notice::docker.yml published no image for this commit; nothing to run against."
+                echo "run=false" >> "$GITHUB_OUTPUT"
+              else
+                echo "run=true" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            skipped)
+              echo "::notice::No image is built for this diff; nothing to run against."
+              echo "run=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::The image build ended as '$RESOLVE_RESULT'; refusing to report green."
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout code
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - id: vars
+        if: steps.gate.outputs.run == 'true'
+        uses: ./.github/actions/vars
+
+      - name: Set up Node.js
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ steps.vars.outputs.node_version }}
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install e2e dependencies
+        if: steps.gate.outputs.run == 'true'
+        run: cd e2e && npm ci
+
+      - name: Cache Playwright browsers
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('e2e/package-lock.json') }}
+
+      - name: Install Playwright browser (chromium)
+        if: steps.gate.outputs.run == 'true'
+        run: cd e2e && npx playwright install --with-deps chromium
+
+      - name: Log in to GHCR
+        if: steps.gate.outputs.run == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare host directories
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          mkdir -p .docker/init-state .docker/inventario/uploads
+          chmod 777 .docker/init-state .docker/inventario/uploads
+
+      # Before the stack, not after: the backend reads the endpoint overrides
+      # at boot, so a stub that starts with Playwright's global setup would
+      # already be too late. 0.0.0.0 because the backend reaches it from
+      # inside a container, across the Docker host gateway.
+      - name: Start the OAuth stub
+        if: steps.gate.outputs.run == 'true'
+        env:
+          OAUTH_STUB_HOST: "0.0.0.0"
+        run: |
+          set -euo pipefail
+          cd e2e
+          nohup npm run oauth-stub > "$RUNNER_TEMP/oauth-stub.log" 2>&1 &
+          for _ in $(seq 1 40); do
+            # 404 is the stub answering; it has no route at /.
+            if curl -fsS -o /dev/null "http://localhost:${OAUTH_STUB_PORT}/authorize" \
+               || curl -sS -o /dev/null "http://localhost:${OAUTH_STUB_PORT}/"; then
+              echo "OAuth stub is up on :${OAUTH_STUB_PORT}"
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "::error::The OAuth stub never came up."
+          cat "$RUNNER_TEMP/oauth-stub.log"
+          exit 1
+
+      - name: Bring up the Inventario stack (pre-built image)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
+          FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
+          ADMIN_EMAIL: "admin@test-org.com"
+          ADMIN_PASSWORD: "TestPassword123"
+          ADMIN_NAME: "Test Administrator"
+          DEFAULT_TENANT_NAME: "Test Organization"
+          DEFAULT_TENANT_SLUG: "test-org"
+          DEFAULT_TENANT_REGISTRATION_MODE: "open"
+          SEED_DATABASE: "true"
+        run: |
+          docker pull "$INVENTARIO_IMAGE"
+          docker compose \
+            -f docker-compose.yaml \
+            -f docker-compose.e2e.yaml \
+            -f docker-compose.e2e-oauth.yaml \
+            up -d --wait --wait-timeout 300 --no-build inventario
+
+      # @cross-tenant is excluded: those two need /api/v1/seed on the
+      # long-running service, which the base compose file refuses on purpose.
+      # They stay a local run — see the spec header.
+      - name: Run the OAuth suite
+        if: steps.gate.outputs.run == 'true'
+        env:
+          USE_PREBUILT: "true"
+          OAUTH_STUB_ENABLED: "true"
+          PLAYWRIGHT_JSON_OUTPUT_NAME: oauth-report.json
+        run: |
+          cd e2e && npx playwright test --project=chromium \
+            --grep "@oauth" --grep-invert "@cross-tenant" \
+            --reporter=list,html,json
+
+      # A spec that quietly rejoins the skipped set is the failure this job
+      # exists to prevent, and a skipped test reports green on its own.
+      - name: Assert nothing was skipped
+        if: always() && steps.gate.outputs.run == 'true'
+        run: cd e2e && node scripts/assert-report.mjs oauth-report.json 3
+
+      - name: Dump logs on failure
+        if: failure() && steps.gate.outputs.run == 'true'
+        run: |
+          docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
+            -f docker-compose.e2e-oauth.yaml logs
+          echo "--- oauth stub ---"
+          cat "$RUNNER_TEMP/oauth-stub.log" || true
+
+      - name: Upload test results
+        if: always() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-report-oauth
+          path: e2e/playwright-report/
+          retention-days: 30
+
+      - name: Tear down
+        if: always() && steps.gate.outputs.run == 'true'
+        run: |
+          pkill -f run-oauth-stub.ts || true
+          docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
+            -f docker-compose.e2e-oauth.yaml down -v
+
   # macOS webkit consumes the darwin/arm64 binary that docker.yml produced
   # for this commit. No Go rebuild here — macos-latest is Apple Silicon, so
   # the binary runs natively. The embedded frontend bundle is built with the

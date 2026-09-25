@@ -1,0 +1,59 @@
+# OAuth layer for the e2e stack, applied on top of docker-compose.e2e.yaml by
+# the "E2E Tests (oauth)" job in .github/workflows/e2e-tests.yml.
+#
+#   docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
+#     -f docker-compose.e2e-oauth.yaml up -d --wait --no-build inventario
+#
+# It is a separate file because the main e2e lanes must not see any of this:
+# the specs it enables are the only ones that need a forged identity provider,
+# and every other spec should run against the same configuration a real
+# deployment has.
+#
+# The stub itself runs on the host (`npm run oauth-stub` in e2e/), started
+# before the stack because the backend reads these overrides at boot. That
+# splits the URLs two ways, which is why the auth endpoints and the token /
+# profile endpoints do not share a host:
+#
+#   - /authorize is where the BROWSER is redirected, so it must be the address
+#     the browser can reach: localhost, the same origin the test started at.
+#   - /token, /userinfo and the GitHub profile endpoints are fetched by the
+#     BACKEND from inside the container, which reaches the host through the
+#     Docker gateway.
+#
+# The cross-tenant specs (@cross-tenant) are deliberately not run here. They
+# need /api/v1/seed on the long-running service, which the base compose file
+# refuses on purpose, plus the test-tenant header gate. Those stay a local
+# run — see the spec header.
+#
+# NEVER apply this file to a real deployment. The endpoints it points at forge
+# authorization codes and verify nothing.
+
+services:
+  inventario:
+    # Lets the container resolve the stub listening on the runner's host. The
+    # stub binds 0.0.0.0 there (OAUTH_STUB_HOST) for the same reason.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_ID: "stub-client-id"
+      INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_SECRET: "stub-client-secret"
+      INVENTARIO_RUN_OAUTH_GITHUB_CLIENT_ID: "stub-github-client-id"
+      INVENTARIO_RUN_OAUTH_GITHUB_CLIENT_SECRET: "stub-github-client-secret"
+      # Where the BE sends the browser back after the callback. In pre-built
+      # mode the SPA and the API share :3333, so this is also the origin the
+      # test's cookies and localStorage are scoped to.
+      INVENTARIO_RUN_OAUTH_REDIRECT_BASE_URL: "http://localhost:3333"
+      # Fixed so the BE does not mint and log a random one; the specs never
+      # verify a state across restarts.
+      INVENTARIO_RUN_OAUTH_STATE_KEY: "e2e-stub-oauth-state-key-32-bytes!"
+      # Browser-facing.
+      INVENTARIO_RUN_OAUTH_GOOGLE_AUTH_URL_OVERRIDE: "http://localhost:${OAUTH_STUB_PORT:-4444}/authorize"
+      INVENTARIO_RUN_OAUTH_GITHUB_AUTH_URL_OVERRIDE: "http://localhost:${OAUTH_STUB_PORT:-4444}/gh/authorize"
+      # Backend-facing. GitHub needs four rather than three: the profile and
+      # the verified address come from separate endpoints, and the bootstrap
+      # layer refuses a partial set.
+      INVENTARIO_RUN_OAUTH_GOOGLE_TOKEN_URL_OVERRIDE: "http://host.docker.internal:${OAUTH_STUB_PORT:-4444}/token"
+      INVENTARIO_RUN_OAUTH_GOOGLE_USERINFO_URL_OVERRIDE: "http://host.docker.internal:${OAUTH_STUB_PORT:-4444}/userinfo"
+      INVENTARIO_RUN_OAUTH_GITHUB_TOKEN_URL_OVERRIDE: "http://host.docker.internal:${OAUTH_STUB_PORT:-4444}/gh/token"
+      INVENTARIO_RUN_OAUTH_GITHUB_USER_URL_OVERRIDE: "http://host.docker.internal:${OAUTH_STUB_PORT:-4444}/gh/user"
+      INVENTARIO_RUN_OAUTH_GITHUB_USER_EMAILS_URL_OVERRIDE: "http://host.docker.internal:${OAUTH_STUB_PORT:-4444}/gh/user/emails"

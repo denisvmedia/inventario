@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "stack": "cross-env START_STACK=true tsx setup/run-stack.ts",
+    "oauth-stub": "tsx setup/run-oauth-stub.ts",
     "test": "playwright test",
     "test:record": "playwright test --config=playwright.config.ts",
     "test:commodity-crud": "playwright test commodity-simple-crud.spec.ts --project=chromium",

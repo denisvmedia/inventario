@@ -37,6 +37,11 @@
  * The default port is 4444 (fixed so tests can hard-code overrides in
  * setup-stack.ts). Override via OAUTH_STUB_PORT.
  *
+ * The bind address defaults to 127.0.0.1. OAUTH_STUB_HOST widens it, which
+ * the CI OAuth lane needs: the backend runs in a container there and reaches
+ * the stub across the Docker host gateway, so a loopback-only listener is
+ * invisible to it.
+ *
  * NEVER ship this module in a production binary — it intentionally
  * forges authorization codes and verifies nothing. The Go bootstrap
  * layer emits a loud slog.Warn whenever the override env vars are set
@@ -106,6 +111,7 @@ let server: Server | null = null;
  */
 export async function startOAuthStub(
   port = Number(process.env.OAUTH_STUB_PORT) || 4444,
+  host = process.env.OAUTH_STUB_HOST || "127.0.0.1",
 ): Promise<string> {
   if (server) {
     const address = server.address();
@@ -117,7 +123,7 @@ export async function startOAuthStub(
   await new Promise<void>((resolve, reject) => {
     const srv = createServer(handleRequest);
     srv.once("error", reject);
-    srv.listen(port, "127.0.0.1", () => {
+    srv.listen(port, host, () => {
       srv.removeListener("error", reject);
       server = srv;
       resolve();
