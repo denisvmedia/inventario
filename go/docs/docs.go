@@ -13455,7 +13455,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "linked_entity_meta": {
-                    "description": "LinkedEntityMeta contains metadata about the link type\nFor commodities: \"images\", \"invoices\", \"manuals\"\nFor exports: \"xml-1.0\" (version of the export file format)",
+                    "description": "LinkedEntityMeta contains metadata about the link type\nFor commodities: \"images\", \"documents\"\nFor exports: \"xml-1.0\" (version of the export file format)",
                     "type": "string"
                 },
                 "linked_entity_type": {
