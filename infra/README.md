@@ -1055,11 +1055,19 @@ infra/
 | vcluster standalone | `v0.34.0` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `VCLUSTER_VERSION` |
 | Kubernetes (inside vcluster) | `v1.34.0` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `K8S_VERSION` |
 | Tailscale CLI | latest from the official installer | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) (idempotent re-install) |
-| Tailscale Operator chart | latest in `tailscale/tailscale-operator` repo | (not pinned yet) |
-| ArgoCD chart | latest in `argo/argo-cd` repo | (not pinned yet) |
+| Tailscale Operator chart | `1.102.4` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `TS_OPERATOR_CHART_VERSION` |
+| ArgoCD chart | `10.9.2` (appVersion v3.5.3) | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `ARGOCD_CHART_VERSION` |
+| reflector chart | `10.0.65` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `REFLECTOR_CHART_VERSION` |
 | Velero chart | `12.0.1` (appVersion 1.18.0) | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `VELERO_CHART_VERSION` |
 | Velero CLI | `v1.18.0` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `VELERO_CLI_VERSION` |
 | velero-plugin-for-aws | `v1.13.1` | [`infra/vm/helm-values/velero.yaml`](./vm/helm-values/velero.yaml) `initContainers[].image` |
 
-The two "not pinned yet" rows will get version pins in a follow-up; the
-trade-off in Phase 1 was time-to-first-preview over reproducibility.
+Every chart this VM installs is pinned (#1946). An unpinned `helm upgrade
+--install` resolves to whatever the repo index says on the day, which means
+`make bootstrap` and `make recover` on a clean VM are not reproducible and an
+upstream release can break recovery at the worst moment.
+
+The chart versions carry `# renovate:` comments that a custom manager in
+[`renovate.json`](../renovate.json) reads, so they arrive as reviewable bump
+PRs instead of either drifting silently or freezing forever. Pinning a chart
+is only half the job; the other half is having something that moves it.

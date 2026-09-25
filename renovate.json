@@ -192,6 +192,16 @@
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "golangci/golangci-lint"
+    },
+    {
+      "customType": "regex",
+      "description": "Chart and tool versions in infra/vm/vm-install.sh are shell variables, which no manager reads. Pinning them made bootstrap reproducible (#1946); this is what keeps them from freezing there.",
+      "managerFilePatterns": [
+        "/^infra/vm/vm-install\\.sh$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?\\s+\\w+_VERSION=\"(?<currentValue>[^\"]+)\""
+      ]
     }
   ]
 }

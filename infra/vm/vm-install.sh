@@ -20,14 +20,30 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # --- Pinned versions ---
+#
+# Every chart this script installs is pinned. An unpinned `helm upgrade
+# --install` resolves to whatever the repo index says today, so `make
+# bootstrap` and `make recover` on a clean VM stop being reproducible and an
+# upstream release can break recovery at the worst possible moment (#1946).
+#
+# The `# renovate:` comments are read by the custom manager in renovate.json,
+# so these bump through a reviewable PR rather than drifting silently or
+# freezing forever.
 VCLUSTER_VERSION="v0.34.0"
 K8S_VERSION="v1.34.0"
 # Velero (#1865): chart + matching CLI. The velero-plugin-for-aws image is
 # pinned in infra/vm/helm-values/velero.yaml alongside the rest of the static
 # config. Keep the CLI version aligned with the chart's appVersion so
 # `make restore-longevity` speaks the same API as the in-cluster server.
+# renovate: datasource=helm depName=velero registryUrl=https://vmware-tanzu.github.io/helm-charts
 VELERO_CHART_VERSION="12.0.1"     # appVersion 1.18.0
 VELERO_CLI_VERSION="v1.18.0"
+# renovate: datasource=helm depName=tailscale-operator registryUrl=https://pkgs.tailscale.com/helmcharts
+TS_OPERATOR_CHART_VERSION="1.102.4"
+# renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
+ARGOCD_CHART_VERSION="10.9.2"      # appVersion v3.5.3
+# renovate: datasource=helm depName=reflector registryUrl=https://emberstack.github.io/helm-charts
+REFLECTOR_CHART_VERSION="10.0.65"
 TS_HOSTNAME="${TS_HOSTNAME:-inv-vcl01}"
 
 note() { printf '\n==> %s\n' "$*" >&2; }
@@ -266,6 +282,7 @@ $(printf '%s' "$TS_OAUTH_ID" | sed 's/^/    /')
 $(printf '%s' "$TS_OAUTH_SECRET" | sed 's/^/    /')
 EOF
     "$HELM" upgrade --install tailscale-operator tailscale/tailscale-operator \
+        --version "$TS_OPERATOR_CHART_VERSION" \
         --namespace tailscale \
         --values "$TS_OP_STATIC_VALUES" \
         --values "$TS_OAUTH_VALUES" \
@@ -283,6 +300,7 @@ note "Installing/upgrading ArgoCD"
 "$HELM" repo add argo https://argoproj.github.io/argo-helm >/dev/null 2>&1 || true
 "$HELM" repo update >/dev/null
 "$HELM" upgrade --install argocd argo/argo-cd \
+    --version "$ARGOCD_CHART_VERSION" \
     --namespace argocd \
     --set 'configs.params.server\.insecure=true' \
     --set 'configs.params.applicationsetcontroller\.policy=sync' \
@@ -302,6 +320,7 @@ note "Installing/upgrading reflector"
 "$HELM" repo add emberstack https://emberstack.github.io/helm-charts >/dev/null 2>&1 || true
 "$HELM" repo update >/dev/null
 "$HELM" upgrade --install reflector emberstack/reflector \
+    --version "$REFLECTOR_CHART_VERSION" \
     --namespace reflector --create-namespace \
     --wait --timeout 5m
 
