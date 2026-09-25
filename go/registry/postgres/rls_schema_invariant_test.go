@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -12,6 +13,12 @@ import (
 // every tenant can read — and neither shows up as a failing query, the rows
 // just come back. The table list comes from the live schema so a new table
 // cannot miss this by being absent from a list.
+
+// tenantPredicate is what a policy has to consult to be tenant-scoped at all.
+// Matching the call rather than the whole expression keeps this from becoming a
+// second copy of the annotations: the shape differs per table (some add a group
+// or a user), the tenant leg does not.
+const tenantPredicate = "get_current_tenant_id()"
 
 // rlsExemptTables are the tenant_id-carrying tables that run without RLS on
 // purpose. Every entry carries its reason.
@@ -103,13 +110,38 @@ func TestSchema_EveryTenantScopedTableIsProtectedByRLS(t *testing.T) {
 			// owner-bypass never reaches the application. #2633 covers whether
 			// a single-role install is supported.
 
-			var policies int
-			err = pool.QueryRow(t.Context(),
-				`SELECT COUNT(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = $1`,
-				table).Scan(&policies)
+			// Counting policies cannot see the regression this test is for.
+			// Every table here also carries a background-worker policy with
+			// USING (true), so a count stays positive when the application
+			// policy is dropped or weakened. Permissive policies are OR-ed,
+			// so one wide-open policy beside a scoped one is the whole table.
+			rows, err := pool.Query(t.Context(), `
+				SELECT policyname, COALESCE(qual, ''), COALESCE(with_check, '')
+				FROM pg_policies
+				WHERE schemaname = 'public'
+				  AND tablename = $1
+				  AND permissive = 'PERMISSIVE'
+				  AND roles && ARRAY['inventario_app', 'public']::name[]`, table)
 			c.Assert(err, qt.IsNil)
-			c.Check(policies > 0, qt.IsTrue,
-				qt.Commentf("RLS is on with no policy"))
+			defer rows.Close()
+
+			appPolicies := 0
+			for rows.Next() {
+				var name, qual, withCheck string
+				c.Assert(rows.Scan(&name, &qual, &withCheck), qt.IsNil)
+				appPolicies++
+
+				c.Check(strings.Contains(qual, tenantPredicate), qt.IsTrue,
+					qt.Commentf("policy %q returns rows with no tenant predicate: USING (%s)", name, qual))
+				// NULL for a policy that governs reads only.
+				if withCheck != "" {
+					c.Check(strings.Contains(withCheck, tenantPredicate), qt.IsTrue,
+						qt.Commentf("policy %q accepts writes with no tenant predicate: WITH CHECK (%s)", name, withCheck))
+				}
+			}
+			c.Assert(rows.Err(), qt.IsNil)
+			c.Check(appPolicies > 0, qt.IsTrue,
+				qt.Commentf("RLS is on with no policy for the application role"))
 		})
 	}
 }
