@@ -175,11 +175,11 @@ func logStartupInfo(mode Mode, addr, dsn string) {
 	}
 	switch mode {
 	case ModeAPIServer:
-		slog.Info("Starting API server", "addr", addr, "db-dsn", parsedDSN.String())
+		slog.Info("Starting API server", "addr", addr, "db_dsn", parsedDSN.String())
 	case ModeWorkers:
-		slog.Info("Starting workers", "db-dsn", parsedDSN.String())
+		slog.Info("Starting workers", "db_dsn", parsedDSN.String())
 	default:
-		slog.Info("Starting server", "addr", addr, "db-dsn", parsedDSN.String())
+		slog.Info("Starting server", "addr", addr, "db_dsn", parsedDSN.String())
 	}
 }
 
@@ -229,7 +229,9 @@ const schemaVerifyTimeout = 30 * time.Second
 func resolveFactorySet(dsn string) (*registry.FactorySet, error) {
 	registrySetFn, ok := registry.GetRegistry(dsn)
 	if !ok {
-		slog.Error("Unknown registry", "dsn", dsn)
+		// Redacted: a Postgres DSN carries the password, and this is the one
+		// path that logged it raw. logStartupInfo masks the same value.
+		slog.Error("Unknown registry", "dsn", shared.RedactDSN(dsn))
 		return nil, errors.New("unknown registry")
 	}
 	slog.Info("Selected database registry", "registry_type", fmt.Sprintf("%T", registrySetFn))

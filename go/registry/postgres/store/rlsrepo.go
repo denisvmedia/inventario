@@ -21,7 +21,6 @@ type RLSRepository[T any, P ptrTenantAware[T]] struct {
 }
 
 func NewUserAwareSQLRegistry[T any, P ptrTenantUserAware[T]](dbx *sqlx.DB, userID, tenantID string, table TableName) *RLSRepository[T, P] {
-	// slog.Info("Creating new user aware SQL registry", "table", table, "userID", userID)
 	return &RLSRepository[T, P]{
 		dbx:      dbx,
 		userID:   userID,
