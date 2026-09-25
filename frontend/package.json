@@ -93,7 +93,7 @@
   "overridesComment": "nanoid is pinned to a patched 3.x for postcss, which asks for ^3.3.16 and would otherwise resolve below the GHSA fix line. tmp and uuid are the same kind of transitive-advisory pin.",
   "overrides": {
     "tmp": "0.2.7",
-    "uuid": "11.1.1",
+    "uuid": "14.0.2",
     "nanoid": "3.3.19",
     "lighthouse": "13.5.0"
   },
