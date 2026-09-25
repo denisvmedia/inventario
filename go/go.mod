@@ -13,7 +13,7 @@ require go.5x5.cz/inventario/frontend v0.0.0
 replace go.5x5.cz/inventario/frontend => ../frontend
 
 require (
-	github.com/alicebob/miniredis/v2 v2.38.0
+	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/aws/aws-sdk-go-v2 v1.47.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.5
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.74.0
