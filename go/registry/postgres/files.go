@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/appctx"
@@ -306,53 +306,53 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 	return files, nil
 }
 
-// buildSearchConditions assembles WHERE-clause fragments shared by Search,
-// ListPaginated, and CountByCategory. Returns the conditions slice, the
-// positional args, and the next parameter index so callers can append more
-// filters without re-numbering.
-func buildSearchConditions(query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string, startIndex int) ([]string, []any, int) {
-	var conditions []string
-	var args []any
-	argIndex := startIndex
-
-	if fileType != nil {
-		conditions = append(conditions, fmt.Sprintf("type = $%d", argIndex))
-		args = append(args, *fileType)
-		argIndex++
+// fileWhere assembles the WHERE clause shared by Search, ListPaginated, and
+// CountByCategory. Returns nil when no filter applies, so a caller can tell an
+// unfiltered query from an empty clause.
+func fileWhere(query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) *sqlb.WhereClause {
+	cond := sqlb.NewCond()
+	wc := sqlb.NewWhereClause()
+	added := false
+	add := func(expr string) {
+		wc.AddWhereExpr(cond.Args, expr)
+		added = true
 	}
 
+	if fileType != nil {
+		add(cond.Equal("type", *fileType))
+	}
 	if fileCategory != nil {
-		conditions = append(conditions, fmt.Sprintf("category = $%d", argIndex))
-		args = append(args, *fileCategory)
-		argIndex++
+		add(cond.Equal("category", *fileCategory))
 	}
 
 	// Linked-entity filter: both type+id must be supplied together or both
 	// nil. Mismatched callers (one nil, one not) get no filter — the
 	// interface contract documents this; mirroring the memory path.
 	if linkedEntityType != nil && linkedEntityID != nil {
-		conditions = append(conditions,
-			fmt.Sprintf("linked_entity_type = $%d AND linked_entity_id = $%d", argIndex, argIndex+1))
-		args = append(args, *linkedEntityType, *linkedEntityID)
-		argIndex += 2
+		add(cond.Equal("linked_entity_type", *linkedEntityType))
+		add(cond.Equal("linked_entity_id", *linkedEntityID))
 	}
 
 	if len(tags) > 0 {
-		conditions = append(conditions, fmt.Sprintf("tags @> $%d", argIndex))
 		tagsJSON, _ := json.Marshal(tags)
-		args = append(args, tagsJSON)
-		argIndex++
+		// Containment, so every requested tag has to be present.
+		add(fmt.Sprintf("tags @> %s", cond.Args.Add(tagsJSON)))
 	}
 
 	if query != "" {
-		searchCondition := fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d OR path ILIKE $%d OR original_path ILIKE $%d)", argIndex, argIndex+1, argIndex+2, argIndex+3)
-		conditions = append(conditions, searchCondition)
-		searchPattern := "%" + query + "%"
-		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
-		argIndex += 4
+		pattern := "%" + query + "%"
+		add(cond.Or(
+			cond.ILike("title", pattern),
+			cond.ILike("description", pattern),
+			cond.ILike("path", pattern),
+			cond.ILike("original_path", pattern),
+		))
 	}
 
-	return conditions, args, argIndex
+	if !added {
+		return nil
+	}
+	return wc
 }
 
 func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) ([]*models.FileEntity, error) {
@@ -360,17 +360,14 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		conditions, args, _ := buildSearchConditions(query, fileType, fileCategory, tags, linkedEntityType, linkedEntityID, 1)
-
-		whereClause := ""
-		if len(conditions) > 0 {
-			whereClause = "WHERE " + strings.Join(conditions, " AND ")
+		sb := newSelect().
+			Select("*").
+			From(string(r.tableNames.Files())).
+			OrderByDesc("created_at")
+		if where := fileWhere(query, fileType, fileCategory, tags, linkedEntityType, linkedEntityID); where != nil {
+			sb.AddWhereClause(where)
 		}
-
-		sqlQuery := fmt.Sprintf(`
-			SELECT * FROM %s
-			%s
-			ORDER BY created_at DESC`, r.tableNames.Files(), whereClause)
+		sqlQuery, args := sb.Build()
 
 		rows, err := tx.QueryxContext(ctx, sqlQuery, args...)
 		if err != nil {
@@ -402,26 +399,28 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		conditions, args, _ := buildSearchConditions("", fileType, fileCategory, nil, linkedEntityType, linkedEntityID, 1)
+		where := fileWhere("", fileType, fileCategory, nil, linkedEntityType, linkedEntityID)
 
-		whereClause := ""
-		if len(conditions) > 0 {
-			whereClause = "WHERE " + strings.Join(conditions, " AND ")
+		countSB := newSelect().Select("COUNT(*)").From(string(r.tableNames.Files()))
+		if where != nil {
+			countSB.AddWhereClause(where)
 		}
-
-		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s %s`, r.tableNames.Files(), whereClause)
-		err := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+		countQuery, countArgs := countSB.Build()
+		err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total)
 		if err != nil {
 			return errxtrace.Wrap("failed to count files", err)
 		}
 
-		dataArgs := append([]any{}, args...)
-		dataArgs = append(dataArgs, limit, offset)
-		dataQuery := fmt.Sprintf(`
-			SELECT * FROM %s
-			%s
-			ORDER BY created_at DESC
-			LIMIT $%d OFFSET $%d`, r.tableNames.Files(), whereClause, len(args)+1, len(args)+2)
+		dataSB := newSelect().
+			Select("*").
+			From(string(r.tableNames.Files())).
+			OrderByDesc("created_at").
+			Limit(limit).
+			Offset(offset)
+		if where != nil {
+			dataSB.AddWhereClause(where)
+		}
+		dataQuery, dataArgs := dataSB.Build()
 
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
@@ -467,19 +466,16 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		conditions, args, _ := buildSearchConditions(query, fileType, nil, tags, linkedEntityType, linkedEntityID, 1)
-
-		whereClause := ""
-		if len(conditions) > 0 {
-			whereClause = "WHERE " + strings.Join(conditions, " AND ")
-		}
-
 		// COALESCE keeps NULL sums (an entirely empty bucket on this
 		// scoped query) from blowing up the int64 scan.
-		sqlQuery := fmt.Sprintf(`
-			SELECT category, COUNT(*), COALESCE(SUM(size_bytes), 0) FROM %s
-			%s
-			GROUP BY category`, r.tableNames.Files(), whereClause)
+		sb := newSelect().
+			Select("category", "COUNT(*)", "COALESCE(SUM(size_bytes), 0)").
+			From(string(r.tableNames.Files())).
+			GroupBy("category")
+		if where := fileWhere(query, fileType, nil, tags, linkedEntityType, linkedEntityID); where != nil {
+			sb.AddWhereClause(where)
+		}
+		sqlQuery, args := sb.Build()
 
 		rows, err := tx.QueryxContext(ctx, sqlQuery, args...)
 		if err != nil {

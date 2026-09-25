@@ -10,6 +10,7 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
 
@@ -286,27 +287,23 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 		limit = 0
 	}
 
-	whereClause, whereArgs := buildCommodityWhere(opts, string(r.tableNames.Commodities()), string(r.tableNames.CommodityLoans()))
-	orderClause := buildCommodityOrder(opts)
+	where := commodityWhere(opts, string(r.tableNames.Commodities()), string(r.tableNames.CommodityLoans()))
 
 	var commodities []*models.Commodity
 	var total int
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		dataArgs := append([]any{}, whereArgs...)
-		dataArgs = append(dataArgs, limit, offset)
-		dataQuery := fmt.Sprintf(`
-			SELECT *, %s FROM %s
-			%s
-			%s
-			LIMIT $%d OFFSET $%d`,
-			totalCountColumn,
-			r.tableNames.Commodities(),
-			whereClause,
-			orderClause,
-			len(whereArgs)+1, len(whereArgs)+2,
-		)
+		dataSB := newSelect().
+			Select("*", totalCountColumn).
+			From(string(r.tableNames.Commodities())).
+			Limit(limit).
+			Offset(offset)
+		if where != nil {
+			dataSB.AddWhereClause(where)
+		}
+		applyCommodityOrder(dataSB, opts)
+		dataQuery, dataArgs := dataSB.Build()
 
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
@@ -328,8 +325,14 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 		}
 
 		if total == totalUnknown {
-			countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s %s`, r.tableNames.Commodities(), whereClause)
-			total, err = countRows(ctx, tx, countQuery, whereArgs...)
+			countSB := newSelect().
+				Select("COUNT(*)").
+				From(string(r.tableNames.Commodities()))
+			if where != nil {
+				countSB.AddWhereClause(where)
+			}
+			countQuery, countArgs := countSB.Build()
+			total, err = countRows(ctx, tx, countQuery, countArgs...)
 			if err != nil {
 				return errxtrace.Wrap("failed to count commodities", err)
 			}
@@ -344,41 +347,98 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	return commodities, total, nil
 }
 
-// buildCommodityWhere assembles the WHERE clause + args for filtered list
-// queries. Returns ("", nil) when opts is the zero value, so the caller's
-// SQL stays identical to the pre-filtering era (avoiding a regression in
-// query plans for the common "no filter" path). commoditiesTable and
-// loansTable carry the resolved table names so the LentOut filter's
-// EXISTS subquery stays correct under a TableNames override (schema
-// prefix, sharded suffix, test overrides) instead of hard-coding the
-// default identifiers.
-// commodityAreaCond builds the AreaID / Unassigned WHERE predicate (issue
-// #1986). An explicit AreaID yields a `area_id = $idx` clause with an arg
-// (hasArg=true); Unassigned alone yields `area_id IS NULL` with no arg
-// (hasArg=false); neither yields an empty cond. AreaID wins when both are set.
-func commodityAreaCond(opts registry.CommodityListOptions, idx int) (cond string, arg any, hasArg bool) {
+// commodityWhere assembles the WHERE clause for the filtered list queries.
+// Both table names are passed in so a TableNames override flows through to the
+// correlated subquery's outer reference too — hard-coding "commodities.id"
+// would silently break the join on any non-default deployment.
+//
+// The count and the data query share one clause, so the total always describes
+// the page.
+func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansTable string) *sqlb.WhereClause {
+	cond := sqlb.NewCond()
+	wc := sqlb.NewWhereClause()
+	added := false
+	add := func(expr string) {
+		wc.AddWhereExpr(cond.Args, expr)
+		added = true
+	}
+
+	// Default view: hide drafts unless caller asked to see them.
+	if !opts.IncludeInactive {
+		add(cond.Equal("draft", false))
+		// Implicit status='in_use' applies only when the caller hasn't
+		// chosen specific statuses — see the equivalent comment in the
+		// memory implementation for the full rationale.
+		if len(opts.Statuses) == 0 {
+			add(cond.Equal("status", string(models.CommodityStatusInUse)))
+		}
+	}
+
+	if len(opts.Types) > 0 {
+		add(cond.In("type", anyStrings(opts.Types)...))
+	}
+	if len(opts.Statuses) > 0 {
+		add(cond.In("status", anyStrings(opts.Statuses)...))
+	}
+	if expr := commodityAreaExpr(cond, opts); expr != "" {
+		add(expr)
+	}
+	if q := strings.TrimSpace(opts.Search); q != "" {
+		// LOWER() + LIKE rather than ILIKE so the existing functional
+		// index (commodities_name_lower_idx) is hit. ILIKE bypasses
+		// the index on Postgres < 14 because the planner can't see
+		// the case-folded form.
+		pattern := cond.Args.Add("%" + strings.ToLower(q) + "%")
+		add(fmt.Sprintf("(LOWER(name) LIKE %s OR LOWER(short_name) LIKE %s)", pattern, pattern))
+	}
+	if expr := warrantyStatusExpr(cond, opts); expr != "" {
+		add(expr)
+	}
+	if opts.WarrantyExpiresBefore != "" {
+		// Same empty-string defense as the warranty-status branches —
+		// '' would lexicographically match `< cutoff` and pollute the
+		// result with "no warranty" rows.
+		add(cond.And(
+			"warranty_expires_at IS NOT NULL",
+			"warranty_expires_at <> ''",
+			cond.LessThan("warranty_expires_at", opts.WarrantyExpiresBefore),
+		))
+	}
+	if expr := lentOutExpr(opts.LentOut, commoditiesTable, loansTable); expr != "" {
+		add(expr)
+	}
+
+	// nil rather than an empty clause: AddWhereClause on an empty one leaves a
+	// stray double space where WHERE would have been.
+	if !added {
+		return nil
+	}
+	return wc
+}
+
+// commodityAreaExpr builds the AreaID / Unassigned predicate (issue #1986).
+// AreaID wins when both are set; neither yields an empty string.
+func commodityAreaExpr(cond *sqlb.Cond, opts registry.CommodityListOptions) string {
 	switch {
 	case opts.AreaID != "":
-		return fmt.Sprintf("area_id = $%d", idx), opts.AreaID, true
+		return cond.Equal("area_id", opts.AreaID)
 	case opts.Unassigned:
-		return "area_id IS NULL", nil, false
+		return cond.IsNull("area_id")
 	default:
-		return "", nil, false
+		return ""
 	}
 }
 
-// buildWarrantyStatusCond builds the computed-warranty-status disjunction for the
-// WHERE clause, starting placeholders at startIdx. Returns the parenthesized
-// condition (empty when no statuses are requested), the ordered args it consumed,
-// and the next free placeholder index. Each status maps to a closed-form
-// predicate on warranty_expires_at; multiple statuses are OR-ed, then AND-ed into
-// the surrounding WHERE. Every non-`none` predicate guards against
-// an empty `warranty_expires_at` alongside the NULL check — empty strings reach the
+// warrantyStatusExpr builds the computed-warranty-status disjunction, empty
+// when no statuses are requested. Each status maps to a closed-form predicate
+// on warranty_expires_at. Every non-`none` predicate guards against an empty
+// `warranty_expires_at` alongside the NULL check — empty strings reach the
 // column via the PDate zero value and would otherwise satisfy `expired`'s `<`
-// test (an empty string sorts below any ISO date), surfacing "no warranty" rows.
-func buildWarrantyStatusCond(opts registry.CommodityListOptions, startIdx int) (string, []any, int) {
+// test, an empty string sorting below any ISO date, surfacing "no warranty"
+// rows.
+func warrantyStatusExpr(cond *sqlb.Cond, opts registry.CommodityListOptions) string {
 	if len(opts.WarrantyStatuses) == 0 {
-		return "", nil, startIdx
+		return ""
 	}
 	now := opts.WarrantyNow
 	if now.IsZero() {
@@ -387,123 +447,45 @@ func buildWarrantyStatusCond(opts registry.CommodityListOptions, startIdx int) (
 	today := now.UTC().Format("2006-01-02")
 	cutoff := now.UTC().AddDate(0, 0, models.WarrantyExpiringWindowDays).Format("2006-01-02")
 
-	idx := startIdx
-	var args []any
 	var disj []string
 	for _, s := range opts.WarrantyStatuses {
 		switch s {
 		case registry.WarrantyStatusFilterNone:
-			disj = append(disj, "(warranty_expires_at IS NULL OR warranty_expires_at = '')")
+			disj = append(disj, cond.Or(
+				cond.IsNull("warranty_expires_at"),
+				cond.Equal("warranty_expires_at", ""),
+			))
 		case registry.WarrantyStatusFilterExpired:
-			disj = append(disj, fmt.Sprintf("(warranty_expires_at IS NOT NULL AND warranty_expires_at <> '' AND warranty_expires_at < $%d)", idx))
-			args = append(args, today)
-			idx++
+			disj = append(disj, cond.And(
+				"warranty_expires_at IS NOT NULL",
+				"warranty_expires_at <> ''",
+				cond.LessThan("warranty_expires_at", today),
+			))
 		case registry.WarrantyStatusFilterExpiring:
-			disj = append(disj, fmt.Sprintf("(warranty_expires_at <> '' AND warranty_expires_at >= $%d AND warranty_expires_at <= $%d)", idx, idx+1))
-			args = append(args, today, cutoff)
-			idx += 2
+			disj = append(disj, cond.And(
+				"warranty_expires_at <> ''",
+				cond.GreaterEqualThan("warranty_expires_at", today),
+				cond.LessEqualThan("warranty_expires_at", cutoff),
+			))
 		case registry.WarrantyStatusFilterActive:
-			disj = append(disj, fmt.Sprintf("(warranty_expires_at <> '' AND warranty_expires_at > $%d)", idx))
-			args = append(args, cutoff)
-			idx++
+			disj = append(disj, cond.And(
+				"warranty_expires_at <> ''",
+				cond.GreaterThan("warranty_expires_at", cutoff),
+			))
 		}
 	}
 	if len(disj) == 0 {
-		return "", nil, startIdx
+		return ""
 	}
-	return "(" + strings.Join(disj, " OR ") + ")", args, idx
+	return cond.Or(disj...)
 }
 
-func buildCommodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansTable string) (string, []any) {
-	var conds []string
-	var args []any
-	idx := 1
-
-	// Default view: hide drafts unless caller asked to see them.
-	if !opts.IncludeInactive {
-		conds = append(conds, fmt.Sprintf("draft = $%d", idx))
-		args = append(args, false)
-		idx++
-		// Implicit status='in_use' applies only when the caller hasn't
-		// chosen specific statuses — see the equivalent comment in the
-		// memory implementation for the full rationale.
-		if len(opts.Statuses) == 0 {
-			conds = append(conds, fmt.Sprintf("status = $%d", idx))
-			args = append(args, string(models.CommodityStatusInUse))
-			idx++
-		}
-	}
-
-	if len(opts.Types) > 0 {
-		placeholders := make([]string, len(opts.Types))
-		for i, t := range opts.Types {
-			placeholders[i] = fmt.Sprintf("$%d", idx)
-			args = append(args, string(t))
-			idx++
-		}
-		conds = append(conds, fmt.Sprintf("type IN (%s)", strings.Join(placeholders, ", ")))
-	}
-	if len(opts.Statuses) > 0 {
-		placeholders := make([]string, len(opts.Statuses))
-		for i, s := range opts.Statuses {
-			placeholders[i] = fmt.Sprintf("$%d", idx)
-			args = append(args, string(s))
-			idx++
-		}
-		conds = append(conds, fmt.Sprintf("status IN (%s)", strings.Join(placeholders, ", ")))
-	}
-	if cond, arg, hasArg := commodityAreaCond(opts, idx); cond != "" {
-		conds = append(conds, cond)
-		if hasArg {
-			args = append(args, arg)
-			idx++
-		}
-	}
-	if q := strings.TrimSpace(opts.Search); q != "" {
-		// LOWER() + LIKE rather than ILIKE so the existing functional
-		// index (commodities_name_lower_idx) is hit. ILIKE bypasses
-		// the index on Postgres < 14 because the planner can't see
-		// the case-folded form.
-		conds = append(conds, fmt.Sprintf("(LOWER(name) LIKE $%d OR LOWER(short_name) LIKE $%d)", idx, idx))
-		args = append(args, "%"+strings.ToLower(q)+"%")
-		idx++
-	}
-
-	if cond, wargs, nextIdx := buildWarrantyStatusCond(opts, idx); cond != "" {
-		conds = append(conds, cond)
-		args = append(args, wargs...)
-		idx = nextIdx
-	}
-	if opts.WarrantyExpiresBefore != "" {
-		// Same empty-string defense as the warranty-status branches —
-		// '' would lexicographically match `< cutoff` and pollute the
-		// result with "no warranty" rows.
-		conds = append(conds, fmt.Sprintf("(warranty_expires_at IS NOT NULL AND warranty_expires_at <> '' AND warranty_expires_at < $%d)", idx))
-		args = append(args, opts.WarrantyExpiresBefore)
-		// idx is unused below — LentOut doesn't add a parameter.
-	}
-
-	if c := buildLentOutCond(opts.LentOut, commoditiesTable, loansTable); c != "" {
-		conds = append(conds, c)
-	}
-
-	if len(conds) == 0 {
-		return "", nil
-	}
-	return "WHERE " + strings.Join(conds, " AND "), args
-}
-
-// buildLentOutCond returns the EXISTS / NOT EXISTS subquery for the
-// LentOut filter, or "" when the filter is inactive. Both table names
-// are passed in so a TableNames override (schema prefix, sharded
-// suffix, test stub) flows through to the correlated subquery's outer
-// reference too — hard-coding "commodities.id" would silently break
-// the join on any non-default deployment. Split out of
-// buildCommodityWhere to keep the parent under the gocyclo threshold;
-// the partial index `idx_commodity_loans_active` (returned_at IS NULL)
-// keeps the subquery cheap on the storage side. RLS on commodity_loans
-// constrains the inner SELECT to the caller's tenant+group automatically.
-func buildLentOutCond(lentOut *bool, commoditiesTable, loansTable string) string {
+// lentOutExpr returns the EXISTS / NOT EXISTS subquery for the LentOut filter,
+// or "" when the filter is inactive. The partial index
+// `idx_commodity_loans_active` (returned_at IS NULL) keeps the subquery cheap;
+// RLS on commodity_loans constrains the inner SELECT to the caller's
+// tenant+group automatically.
+func lentOutExpr(lentOut *bool, commoditiesTable, loansTable string) string {
 	if lentOut == nil {
 		return ""
 	}
@@ -528,7 +510,7 @@ func buildLentOutCond(lentOut *bool, commoditiesTable, loansTable string) string
 // seed pushing the catalogue to ~36 rows, a lowercase-starting user
 // commodity would otherwise jump to page 2 and out of any test's
 // default-viewport assertions.
-func buildCommodityOrder(opts registry.CommodityListOptions) string {
+func applyCommodityOrder(sb *sqlb.SelectBuilder, opts registry.CommodityListOptions) {
 	field := opts.SortField
 	if !field.IsValid() {
 		field = registry.CommoditySortName
@@ -550,20 +532,23 @@ func buildCommodityOrder(opts registry.CommodityListOptions) string {
 		column = "name"
 		caseInsensitive = true
 	}
-	dir := "ASC"
-	if opts.SortDesc {
-		dir = "DESC"
-	}
 	// id tiebreaker mirrors the primary direction so paging stays stable
 	// across duplicate-name rows AND matches the memory backend, where
 	// SortStableFunc reverses the entire comparator (including the id
 	// tiebreaker) on SortDesc=true. Without this, the two backends
 	// disagree on the order of rows that share a sort-field value —
 	// page boundaries jump between memory and postgres on the same query.
+	expr := column
 	if caseInsensitive {
-		return fmt.Sprintf("ORDER BY LOWER(%s) %s, id %s", column, dir, dir)
+		expr = "LOWER(" + column + ")"
 	}
-	return fmt.Sprintf("ORDER BY %s %s, id %s", column, dir, dir)
+	// Per-column direction, not sb.Desc(): that appends one keyword after the
+	// whole list, which would leave the leading column ascending.
+	if opts.SortDesc {
+		sb.OrderByDesc(expr).OrderByDesc("id")
+	} else {
+		sb.OrderByAsc(expr).OrderByAsc("id")
+	}
 }
 
 func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
