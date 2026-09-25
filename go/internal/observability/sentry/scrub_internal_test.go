@@ -64,6 +64,12 @@ func TestClientOptions_WiresScrubAndPIIControls(t *testing.T) {
 	c.Assert(opts.Environment, qt.Equals, "prod")
 	c.Assert(opts.TracesSampleRate, qt.Equals, 0.2)
 	c.Assert(opts.EnableTracing, qt.IsTrue) // rate > 0
+	// SendDefaultPII is deprecated in favour of DataCollection, and still the
+	// control that matters here: with DataCollection left nil the SDK derives
+	// the collection config from this flag, and false selects the conservative
+	// path — no request bodies, cookies off, headers and query params on the
+	// deny-list extended with the user-identifying terms.
+	//nolint:staticcheck // SA1019: the effective control while DataCollection is nil.
 	c.Assert(opts.SendDefaultPII, qt.IsFalse)
 
 	// Both hooks must be wired AND must scrub. Drive a secret-bearing event
