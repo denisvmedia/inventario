@@ -393,7 +393,7 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `demo.recreateOnDeploy` | `false` | Wipe the emptyDir-backed demo Postgres/MinIO/Redis on every deploy by keying a pod-template annotation to the resolved app image tag (so a changing `sha-<7>` tag rolls the pod → fresh DB/bucket → setup + init-data Jobs re-seed). For the disposable master env ONLY. **Hard render error if combined with demo persistence** — it can never roll-wipe a PVC-backed (longevity) store. NEVER enable in production; PR previews leave it `false`. |
 | `demo.postgresql.enabled` | `false` | Turn on in-cluster demo PostgreSQL. |
 | `demo.redis.enabled` | `false` | Turn on in-cluster demo Redis. |
-| `demo.minio.enabled` | `false` | Turn on in-cluster demo MinIO and S3-style uploads. |
+| `demo.minio.enabled` | `false` | Turn on the in-cluster demo object store and S3-style uploads. Silo, a maintained MinIO fork, since MinIO withdrew anonymous image pulls; the values keys keep the `minio` name because they name the role. |
 | `quota.enabled` | `false` | Render a namespace-scoped `ResourceQuota` + `LimitRange` (#1866). Enable on multi-tenant namespaces such as PR previews; raise `quota.hard.*` when enabling `demo.*` or split mode. See [Namespace quotas](#namespace-quotas-opt-in). |
 | `quota.hard` | see `values.yaml` | Map passed straight into `ResourceQuota.spec.hard`. |
 | `quota.limitRange.enabled` | `true` | Set to `false` to skip the chart's `LimitRange` (e.g. when a cluster-wide LimitRange is already in place). |

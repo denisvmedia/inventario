@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -215,10 +216,7 @@ func (h *HostTenantResolver) ResolveTenant(r *http.Request) (string, error) {
 		return "", nil // single-tenant: middleware picks the one tenant from the registry
 	}
 
-	host := r.Host
-	if idx := strings.Index(host, ":"); idx != -1 {
-		host = host[:idx]
-	}
+	host := normalizeHost(r.Host)
 
 	if !strings.HasSuffix(host, "."+h.BaseDomain) {
 		// In multi-tenant mode every request must come from a known subdomain.
@@ -238,6 +236,17 @@ func (h *HostTenantResolver) ResolveTenant(r *http.Request) (string, error) {
 	return subdomain, nil
 }
 
+// normalizeHost reduces a Host header to the name a tenant is keyed by:
+// lowercase, no port, no trailing dot. All three are legal in a Host header
+// and none of them changes which host is meant, so comparing without
+// normalizing rejects requests that should have resolved.
+func normalizeHost(host string) string {
+	if idx := strings.Index(host, ":"); idx != -1 {
+		host = host[:idx]
+	}
+	return strings.ToLower(strings.TrimSuffix(host, "."))
+}
+
 // PublicTenantMiddleware resolves the tenant from the request and stores it in
 // the context so that both public and authenticated handlers can call TenantIDFromContext.
 // It does not require a JWT and is safe to place before auth middleware.
@@ -245,19 +254,44 @@ func (h *HostTenantResolver) ResolveTenant(r *http.Request) (string, error) {
 // When the resolver returns an empty slug (single-tenant mode), the middleware
 // fetches the system-wide default tenant via GetDefault, which is enforced by a
 // partial unique index to guarantee only one tenant can be marked as default.
-func PublicTenantMiddleware(resolver TenantResolver, tenantRegistry registry.TenantRegistry) func(http.Handler) http.Handler {
+//
+// catchAllSlug names a tenant to serve when the Host resolves to nothing —
+// either because it lies outside the configured base domain or because no
+// tenant carries that slug (#1035). Empty disables it, which is the default
+// and leaves both cases answering 503 and 404 as before.
+//
+// It is a deployment decision, not a convenience: with it set, any host that
+// reaches the server is served that tenant's login page. That is what makes it
+// useful for local development and for a single-tenant deployment behind an
+// arbitrary hostname, and what makes it wrong for a deployment whose tenants
+// are separated by domain. The bootstrap layer warns at startup when it is on.
+func PublicTenantMiddleware(resolver TenantResolver, tenantRegistry registry.TenantRegistry, catchAllSlug string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			slug, err := resolver.ResolveTenant(r)
 			if err != nil {
-				slog.Error("Tenant resolution failed", "error", err, "host", r.Host)
-				http.Error(w, "Tenant resolution failed", http.StatusServiceUnavailable)
-				return
+				if catchAllSlug == "" {
+					slog.Error("Tenant resolution failed", "error", err, "host", r.Host)
+					http.Error(w, "Tenant resolution failed", http.StatusServiceUnavailable)
+					return
+				}
+				slog.Debug("Host did not resolve; using the catch-all tenant",
+					"host", r.Host, "catch_all", catchAllSlug, "error", err)
+				slug = catchAllSlug
 			}
 
 			var tenant *models.Tenant
 			if slug != "" {
 				tenant, err = tenantRegistry.GetBySlug(r.Context(), slug)
+				// Only a missing tenant falls through to the catch-all. A
+				// database error has to stay an error: answering it with
+				// somebody else's tenant would turn an outage into a silent
+				// mis-route.
+				if errors.Is(err, registry.ErrNotFound) && catchAllSlug != "" && slug != catchAllSlug {
+					slog.Debug("No tenant for host; using the catch-all tenant",
+						"host", r.Host, "slug", slug, "catch_all", catchAllSlug)
+					tenant, err = tenantRegistry.GetBySlug(r.Context(), catchAllSlug)
+				}
 				if err != nil {
 					http.Error(w, "Tenant not found", http.StatusNotFound)
 					return

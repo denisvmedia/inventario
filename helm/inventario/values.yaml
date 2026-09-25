@@ -1316,18 +1316,27 @@ demo:
     #   - A separate init Job creates the bucket for the app
     enabled: false
 
-    # Pulled from quay.io, not Docker Hub: MinIO withdrew the docker.io/minio/minio
-    # repository, so the same RELEASE tag there now fails with
-    # "pull access denied, repository does not exist". quay.io serves the
-    # identical digest and is already where mcImage below comes from.
-    image: quay.io/minio/minio:RELEASE.2025-01-20T14-49-07Z
+    # Silo, a maintained fork of the MinIO server. MinIO withdrew anonymous
+    # pulls of its own images everywhere: docker.io/minio went first, and
+    # quay.io now answers 401 for every tag, including the RELEASE ones this
+    # chart used to pin. The fork keeps the S3 API, the MINIO_* variables, the
+    # /minio/* routes and the on-disk format, so the templates, the secret and
+    # the health probe are unchanged.
+    #
+    # The values keys keep the `minio` name: they name the role, and renaming
+    # them would break every overlay that sets demo.minio.enabled.
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
 
-    # Image for the `mc` client run by the one-shot bucket-create Job.
+    # Image for the `mc` client run by the one-shot bucket-create Job. The same
+    # image as above: it ships the client as /usr/bin/mcli with an `mc`
+    # symlink. Named separately so an operator can still point the Job
+    # somewhere else.
+    #
     # Pinned to an immutable RELEASE tag (NOT :latest): in argocdMode that Job
     # sits on an early sync-wave on the critical path, so a floating-tag drift
     # or a transient registry hiccup must not be able to wedge the sync. Bump
     # deliberately alongside `image` above.
-    mcImage: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    mcImage: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
 
     rootUser: minioadmin
     rootPassword: minioadmin123

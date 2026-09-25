@@ -70,6 +70,12 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 		"Honor the X-Inventario-Test-Tenant request header for tenant resolution "+
 			"(#1851 e2e cross-tenant flows; for testing only — do not use in production)",
 	)
+	flags.StringVar(
+		&cfg.TenantCatchAllSlug,
+		"tenant-catch-all-slug",
+		cfg.TenantCatchAllSlug,
+		"Tenant slug to serve when the request Host resolves to no tenant (#1035); empty disables the fallback",
+	)
 	flags.StringVar(&cfg.GlobalRateTrustedProxies, "global-rate-trusted-proxies", cfg.GlobalRateTrustedProxies, "Comma-separated trusted proxy CIDRs/IPs used when resolving client IP for global rate limiting")
 	flags.StringVar(&cfg.CSRFRedisURL, "csrf-redis-url", cfg.CSRFRedisURL, "Redis URL for CSRF token storage (e.g., redis://localhost:6379/0); omit to use in-memory storage")
 	flags.StringVar(&cfg.AllowedOrigins, "allowed-origins", cfg.AllowedOrigins, "Comma-separated list of allowed CORS origins (e.g., https://example.com)")
