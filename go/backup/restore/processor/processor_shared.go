@@ -440,8 +440,8 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 			msg := fmt.Sprintf("Failed to list commodities for ownership validation of %s: %v", originalXMLID, err)
 			stats.Errors = append(stats.Errors, msg)
 			slog.Error("commodity ownership validation list failed",
-				"restoreOperationID", l.restoreOperationID,
-				"originalXMLID", originalXMLID,
+				"restore_operation_id", l.restoreOperationID,
+				"original_xml_id", originalXMLID,
 				"error", err,
 			)
 			return err
