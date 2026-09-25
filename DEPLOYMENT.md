@@ -137,6 +137,15 @@ export INVENTARIO_RUN_ADDR=":3333"
 export INVENTARIO_RUN_UPLOAD_LOCATION="file:///var/lib/inventario/uploads?create_dir=1"
 export INVENTARIO_RUN_PUBLIC_URL="https://inventario.example.com"   # used in email links
 
+# Tenant of last resort. The server resolves the tenant from the request Host;
+# a host it cannot resolve is refused. Naming a tenant here serves that tenant
+# instead, which is what a single-tenant install reachable under an arbitrary
+# hostname wants, and what local development against localhost wants. Leave it
+# empty on a deployment whose tenants are separated by domain: with it set,
+# every unknown host is served this tenant. The server warns at startup when
+# it is on.
+# export INVENTARIO_RUN_TENANT_CATCH_ALL_SLUG="your-org"
+
 # Object storage instead of a local directory. A non-AWS S3 endpoint needs
 # `endpoint` and `use_path_style=true` alongside `region`; credentials come from
 # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY rather than the URL. See DOCKER.md,

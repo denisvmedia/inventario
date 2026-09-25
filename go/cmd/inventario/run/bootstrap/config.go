@@ -282,6 +282,19 @@ type Config struct {
 	// callback, public-tenant-context handlers) onto an arbitrary tenant.
 	// The bootstrap layer logs a loud warning when this is enabled.
 	TestTenantHeaderEnabled bool `yaml:"-" env:"TEST_TENANT_HEADER_ENABLED" env-default:"false"`
+
+	// TenantCatchAllSlug names the tenant to serve when the request Host
+	// resolves to nothing — a host outside the configured base domain, or a
+	// subdomain no tenant carries (#1035). Empty, the default, leaves those
+	// requests answering 503 and 404 as they do today.
+	//
+	// It exists for the deployments where Host-based resolution is noise:
+	// local development against localhost or an /etc/hosts name, and
+	// single-tenant installs reachable under whatever hostname the operator
+	// put in front. Set it on a deployment whose tenants are separated by
+	// domain and every unknown host is served this tenant instead of being
+	// refused, so the server says so at startup.
+	TenantCatchAllSlug string `yaml:"tenant_catch_all_slug" env:"TENANT_CATCH_ALL_SLUG" env-default:""`
 }
 
 // SetDefaults applies repository-wide defaults for fields left at their zero

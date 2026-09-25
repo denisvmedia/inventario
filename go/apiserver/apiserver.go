@@ -186,6 +186,13 @@ type Params struct {
 	CSRFService                csrf.Service                       // CSRF token service (Redis or in-memory)
 	CORSConfig                 CORSConfig                         // CORS configuration for API routes
 	TenantResolver             TenantResolver                     // resolves host → tenant; nil = single-tenant (HostTenantResolver with no BaseDomain)
+	// CatchAllTenantSlug names the tenant to serve when the Host resolves to
+	// nothing — outside the base domain, or a slug no tenant carries (#1035).
+	// Empty disables it and both cases answer as they did before. Wired from
+	// INVENTARIO_RUN_TENANT_CATCH_ALL_SLUG; the bootstrap layer warns at
+	// startup when it is set, because with it on, any host that reaches the
+	// server is served this tenant.
+	CatchAllTenantSlug string
 	// TestTenantHeaderEnabled is the TEST-ONLY gate for the #1851 cross-tenant
 	// e2e fixture: exempts the namespaced X-Inventario-Test-Tenant header from
 	// the rejectTenantHeader scan AND lets the tenant resolver consult that
@@ -557,7 +564,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Resolve tenant from request host and place it in context for all handlers,
 		// including public ones (login, registration, password reset).
-		r.Use(PublicTenantMiddleware(tenantResolver, params.FactorySet.TenantRegistry))
+		r.Use(PublicTenantMiddleware(tenantResolver, params.FactorySet.TenantRegistry, params.CatchAllTenantSlug))
 
 		// Auth routes have dedicated per-endpoint rate limiters (login, registration,
 		// password-reset); applying the global per-IP limit here would lock users out
