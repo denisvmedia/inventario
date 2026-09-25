@@ -68,7 +68,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
-    "@vitest/coverage-v8": "5.0.1",
+    "@vitest/coverage-v8": "5.0.2",
     "eslint": "10.11.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-jsx-a11y": "6.10.2",
@@ -88,7 +88,7 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.62.0",
     "vite": "8.3.0",
-    "vitest": "5.0.1"
+    "vitest": "5.0.2"
   },
   "overridesComment": "nanoid is pinned to a patched 3.x for postcss, which asks for ^3.3.16 and would otherwise resolve below the GHSA fix line. tmp and uuid are the same kind of transitive-advisory pin.",
   "overrides": {
