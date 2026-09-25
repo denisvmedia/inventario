@@ -4,30 +4,9 @@ import { Route } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
-// Local sonner mock per-file: the global setup turns `toast.error` into a
-// no-op (test/setup.ts) so the tree never portals an actual <Toaster /> —
-// fine for everything else, but here we need to assert the wrapper picked
-// the typed-code copy instead of the generic fallback. `vi.mock` hoists
-// per-file, so this override wins inside this file only.
-vi.mock("sonner", () => {
-  const toastError = vi.fn(() => "stub-toast-id")
-  const noop = vi.fn(() => "stub-toast-id")
-  return {
-    Toaster: () => null,
-    toast: Object.assign(noop, {
-      success: noop,
-      error: toastError,
-      info: noop,
-      warning: noop,
-      message: noop,
-      promise: noop,
-      dismiss: vi.fn(),
-      loading: noop,
-      custom: noop,
-    }),
-  }
-})
-
+// These assert the wrapper picked the typed-code copy rather than the generic
+// fallback, so they need `toast.error` to be its own spy. test/setup.ts mocks
+// sonner once with a separate spy per variant and clears them between tests.
 import { toast } from "sonner"
 
 import { MembersPage } from "@/pages/groups/MembersPage"

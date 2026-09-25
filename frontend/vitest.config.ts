@@ -2,6 +2,19 @@ import path from "node:path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vitest/config"
 
+// Test files that cannot share a module registry with the rest of the suite.
+//
+// The two pdf.js viewers mock `@/lib/pdfjs` differently from each other. The
+// password meter programs the shared zxcvbn spies and resets the component's
+// module-level loader cache per test; both of those are module state that
+// outlives a file once the registry is shared, and it showed up as an
+// occasional failure under `--sequence.shuffle`.
+const OWN_REGISTRY = [
+  "src/components/files/__tests__/PdfViewer.test.tsx",
+  "src/components/files/__tests__/PdfFullViewer.test.tsx",
+  "src/components/auth/__tests__/PasswordStrengthMeter.test.tsx",
+]
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -13,7 +26,35 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // Two projects, differing only in isolation.
+    //
+    // A jsdom environment costs more than the tests that run in it: the suite
+    // was creating one per file, 34% of tracked time, and sharing it takes the
+    // run from 94s to about 30s (#2617). Sharing the environment also shares
+    // the module registry, which is fine as long as no two files mock the same
+    // module differently — the toast spies moved into setup.ts for exactly
+    // that reason.
+    //
+    // The two pdf.js viewers are the case that cannot be resolved that way:
+    // both mock `@/lib/pdfjs`, and they need different documents out of it
+    // (progress-task control and getData on one side, viewport scaling on the
+    // other). They keep a registry of their own.
+    projects: [
+      {
+        test: {
+          name: "shared-env",
+          isolate: false,
+          include: ["src/**/*.{test,spec}.{ts,tsx}"],
+          exclude: OWN_REGISTRY,
+        },
+      },
+      {
+        test: {
+          name: "own-registry",
+          include: OWN_REGISTRY,
+        },
+      },
+    ],
     // Vitest's 5 s default per-test budget was calibrated for pure-JS
     // unit tests. Our heaviest integration walks (CommodityFormDialog
     // wizard, CommoditiesListPage create flow, admin-search pages)

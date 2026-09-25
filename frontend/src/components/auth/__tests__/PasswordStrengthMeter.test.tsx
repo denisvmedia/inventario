@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
 import { axe } from "jest-axe"
 
@@ -7,34 +7,19 @@ import {
   scorePassword,
   __resetZxcvbnLoader,
 } from "@/components/auth/PasswordStrengthMeter"
+import { zxcvbnSpies } from "@/test/global-mocks"
 
-// Mock the zxcvbn-ts modules so each test controls scoring + load timing
-// independently. The real package would (a) load the ~150 KB English
-// dictionary on every test that mounts the meter and (b) leak microtasks
-// across tests via the module-level loader cache.
-const zxcvbnMock = vi.fn()
+// test/setup.ts mocks the zxcvbn-ts modules for the whole suite: the real
+// package would load the ~150 KB English dictionary on every test that mounts
+// the meter, and leak microtasks across tests through its module-level loader
+// cache. The spies behind that mock are programmable, which is what these
+// tests need — scoring and load timing, per test.
+//
 // v4 configures scoring through the ZxcvbnFactory constructor rather than the
-// old zxcvbnOptions.setOptions singleton. factoryMock stands in for that
-// construction step so a test can make it throw to simulate a load failure.
-const factoryMock = vi.fn()
-vi.mock("@zxcvbn-ts/core", () => ({
-  ZxcvbnFactory: class {
-    constructor(...args: unknown[]) {
-      factoryMock(...args)
-    }
-    check(...args: unknown[]) {
-      return zxcvbnMock(...args)
-    }
-  },
-}))
-vi.mock("@zxcvbn-ts/language-common", () => ({
-  adjacencyGraphs: {},
-  dictionary: {},
-}))
-vi.mock("@zxcvbn-ts/language-en", () => ({
-  translations: {},
-  dictionary: {},
-}))
+// old zxcvbnOptions.setOptions singleton, so `factory` stands in for the
+// construction step and a test can make it throw to simulate a load failure.
+const zxcvbnMock = zxcvbnSpies.check
+const factoryMock = zxcvbnSpies.factory
 
 beforeEach(() => {
   zxcvbnMock.mockReset()

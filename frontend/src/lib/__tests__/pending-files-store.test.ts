@@ -22,12 +22,26 @@ function entry(name: string, body = "bytes", tags: string[] = []): StoredPending
   return { id: `p-${name}`, file: new File([body], name, { type: "image/png" }), tags }
 }
 
+const DB_VERSION = 1
+
 // writeRaw puts an arbitrary value under `key`, bypassing savePendingFiles,
 // so the reader's shape check can be driven with records it would never
 // write itself (an older release, a hand-edited store).
+//
+// It opens at the store's own version and creates the object store the same
+// way the store does. Opening without a version creates the database at
+// version 1 with nothing in it, and every later call then fails with
+// NotFoundError because the upgrade that would have created the store never
+// fires again — which is a failure that depends on whether this helper or
+// the store touched IndexedDB first.
 async function writeRaw(key: string, value: unknown): Promise<void> {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME)
+    const req = indexedDB.open(DB_NAME, DB_VERSION)
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(STORE_NAME)) {
+        req.result.createObjectStore(STORE_NAME)
+      }
+    }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
   })
