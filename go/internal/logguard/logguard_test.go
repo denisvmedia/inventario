@@ -112,6 +112,43 @@ func TestNoRawDSNReachesALogCall(t *testing.T) {
 		"a DSN carries its password; wrap it in shared.RedactDSN before logging\n%s", report.String()))
 }
 
+// TestBareNameSeesThroughParentheses pins the unwrapping, because the shape it
+// guards against survives formatting: gofmt leaves a redundant `(dsn)` exactly
+// as written, so a parenthesized leak reads as ordinary code in review and the
+// guard has to be the thing that notices.
+func TestBareNameSeesThroughParentheses(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		src  string
+		want string
+	}{
+		{name: "identifier", src: "dsn", want: "dsn"},
+		{name: "parenthesized", src: "(dsn)", want: "dsn"},
+		{name: "doubly parenthesized", src: "((dsn))", want: "dsn"},
+		{name: "selector", src: "cfg.DBDSN", want: "DBDSN"},
+		{name: "parenthesized selector", src: "(cfg.DBDSN)", want: "DBDSN"},
+		// A call has passed through something; deciding whether that something
+		// redacts is beyond what a name can tell us.
+		{name: "call", src: "shared.RedactDSN(dsn)", want: ""},
+		{name: "parenthesized call", src: "(shared.RedactDSN(dsn))", want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			expr, err := parser.ParseExpr(tc.src)
+			c.Assert(err, qt.IsNil)
+
+			got, ok := bareName(expr)
+			if tc.want == "" {
+				c.Check(ok, qt.IsFalse, qt.Commentf("%s should not read as a bare name", tc.src))
+				return
+			}
+			c.Assert(ok, qt.IsTrue, qt.Commentf("%s should read as a bare name", tc.src))
+			c.Check(got, qt.Equals, tc.want)
+		})
+	}
+}
+
 // isSlogCall reports whether the call is slog.Error/Warn/Info/Debug, with or
 // without the Context suffix.
 func isSlogCall(call *ast.CallExpr) bool {
@@ -134,7 +171,18 @@ func isSlogCall(call *ast.CallExpr) bool {
 // bareName returns the trailing identifier of an expression that carries a
 // value straight through — an identifier or a field selector. Anything else,
 // a call above all, returns false.
+//
+// Parentheses are unwrapped first. gofmt keeps a redundant `(dsn)`, so without
+// this the guard reads a parenthesized leak as "not a bare name" and passes.
 func bareName(e ast.Expr) (string, bool) {
+	for {
+		paren, ok := e.(*ast.ParenExpr)
+		if !ok {
+			break
+		}
+		e = paren.X
+	}
+
 	switch v := e.(type) {
 	case *ast.Ident:
 		return v.Name, true
@@ -146,6 +194,14 @@ func bareName(e ast.Expr) (string, bool) {
 }
 
 func exprString(e ast.Expr) string {
+	for {
+		paren, ok := e.(*ast.ParenExpr)
+		if !ok {
+			break
+		}
+		e = paren.X
+	}
+
 	switch v := e.(type) {
 	case *ast.Ident:
 		return v.Name
