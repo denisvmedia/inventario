@@ -1,0 +1,65 @@
+name: Schema Artifact Sync
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+# No workflow-level `paths:` filter on purpose: that shape creates no check run
+# at all when it does not match, which leaves a required context waiting forever
+# (#2569). The `changes` job below gates it instead, and a job skipped by its
+# `if:` reports as passing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      go_schema_artifact: ${{ steps.filter.outputs.go_schema_artifact }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        with:
+          filters: .github/filters.yml
+
+  schema-artifact:
+    name: Check Schema Artifact Sync
+    runs-on: ubuntu-latest
+    needs: changes
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.go_schema_artifact == 'true' ||
+      needs.changes.outputs.ci == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: 1.27.1
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Re-render the schema artifact
+        run: make schema-hcl
+
+      - name: Check for uncommitted changes in go/schema/schema.hcl
+        run: |
+          if ! git diff --exit-code -- go/schema/schema.hcl; then
+            echo "go/schema/schema.hcl is out of sync with the model annotations." >&2
+            echo "Run 'make schema-hcl' and commit the result." >&2
+            exit 1
+          fi
