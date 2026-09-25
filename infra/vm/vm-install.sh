@@ -36,7 +36,7 @@ K8S_VERSION="v1.34.0"
 # config. Keep the CLI version aligned with the chart's appVersion so
 # `make restore-longevity` speaks the same API as the in-cluster server.
 # renovate: datasource=helm depName=velero registryUrl=https://vmware-tanzu.github.io/helm-charts
-VELERO_CHART_VERSION="12.0.1"     # appVersion 1.18.0
+VELERO_CHART_VERSION="12.2.0"     # appVersion 1.18.0
 VELERO_CLI_VERSION="v1.18.0"
 # renovate: datasource=helm depName=tailscale-operator registryUrl=https://pkgs.tailscale.com/helmcharts
 TS_OPERATOR_CHART_VERSION="1.102.4"
