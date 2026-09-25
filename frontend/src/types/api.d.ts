@@ -12175,7 +12175,7 @@ export type components = {
             linked_entity_id?: string;
             /**
              * @description LinkedEntityMeta contains metadata about the link type
-             *     For commodities: "images", "invoices", "manuals"
+             *     For commodities: "images", "documents"
              *     For exports: "xml-1.0" (version of the export file format)
              */
             linked_entity_meta?: string;

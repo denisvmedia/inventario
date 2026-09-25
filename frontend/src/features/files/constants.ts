@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   File as FileIcon,
   FileArchive,
   FileImage,
@@ -133,7 +134,7 @@ export interface FileVisualMeta {
   // Stable identifier for the bucket — useful in tests and as a
   // `data-mime-group` attribute so we can assert "this card uses the
   // PDF palette" without coupling to the exact Tailwind utility.
-  group: "image" | "pdf" | "archive" | "invoice" | "document" | "other"
+  group: "image" | "pdf" | "archive" | "invoice" | "manual" | "document" | "other"
 }
 
 export function getFileVisualMeta(
@@ -159,6 +160,19 @@ export function getFileVisualMeta(
       colorClass: "text-chart-1",
       bgClass: "bg-chart-1/10",
       group: "invoice",
+    }
+  }
+  // Manuals share the `documents` bucket with everything else (#1989), so the
+  // tag is the only thing that distinguishes one. It gets a glyph rather than
+  // a chip of its own: the mock files manuals under Documents on purpose —
+  // invoices earn a chip because they feed reports, a manual is a document you
+  // look up.
+  if (tags.includes("manual")) {
+    return {
+      icon: BookOpen,
+      colorClass: "text-chart-2",
+      bgClass: "bg-chart-2/10",
+      group: "manual",
     }
   }
   if (mime === "application/pdf") {
