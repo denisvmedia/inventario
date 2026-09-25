@@ -45,9 +45,13 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
-  # Mailpit — local SMTP catch-all for email testing
+  # Mailpit — local SMTP catch-all for email testing.
+  # Pinned to the same minor the Helm chart's demo mail catcher uses
+  # (helm/inventario/values.yaml). Every other image in this file carries a
+  # version; :latest was the one that did not, and a floating third-party tag
+  # is how this stack breaks without a commit touching it.
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.31
     restart: unless-stopped
     environment:
       MP_MAX_MESSAGES: ${MAILPIT_MAX_MESSAGES:-500}
