@@ -309,7 +309,7 @@ services:
   # the rules. A rule that fires and a page that arrives are different claims
   # (#2574). Its receivers are empty on purpose — swap in yours.
   alertmanager:
-    image: prom/alertmanager:v0.28.1
+    image: prom/alertmanager:v0.34.1
     profiles: ["monitoring"]
     restart: unless-stopped
     command:
