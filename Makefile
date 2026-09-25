@@ -197,6 +197,13 @@ swagger: swagger-backend codegen-frontend
 swagger-backend:
 	cd $(BACKEND_DIR) && $(GO_CMD) tool swag init --output docs
 
+# Re-render go/schema/schema.hcl from the //ptah:schema:* annotations. The
+# annotations stay the source of truth; this is a derived artifact, and
+# `Schema Artifact Sync` in CI fails on a stale one. See #2420.
+.PHONY: schema-hcl
+schema-hcl:
+	./scripts/generate-schema-hcl.sh
+
 # Regenerate the React frontend's TypeScript types from go/docs/swagger.json.
 # Normally invoked transitively via `make swagger`; kept as its own target
 # so dev workflows can regen FE-only after a manual swagger.json edit.

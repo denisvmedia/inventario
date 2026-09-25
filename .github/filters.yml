@@ -46,6 +46,17 @@ go_swagger:
   - 'go/**'
   - 'Makefile'
 
+# ---- Derived schema artifact ---------------------------------------------
+# go/schema/schema.hcl is rendered from the //ptah:schema:* annotations, which
+# live only under go/models/. The generator script and the Makefile target are
+# in here too, so a change to how it is produced re-checks the output.
+go_schema_artifact:
+  - 'go/models/**'
+  - 'go/schema/schema.hcl'
+  - 'go/go.mod'
+  - 'scripts/generate-schema-hcl.sh'
+  - 'Makefile'
+
 # ---- Frontend (React) ----------------------------------------------------
 # Anything under frontend/. Includes the Makefile because it carries
 # frontend targets too.

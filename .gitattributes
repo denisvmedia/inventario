@@ -26,3 +26,8 @@
 #*.dll binary
 #*.so binary
 #*.dylib binary
+
+# Rendered from the //ptah:schema:* annotations by scripts/generate-schema-hcl.sh.
+# Marked generated so a 4k-line re-render collapses in PR diffs instead of
+# burying the model change that caused it.
+go/schema/schema.hcl linguist-generated=true

@@ -323,6 +323,7 @@ Support for multiple database backends via DSN:
 - Migration filenames are timestamped (`<unix-seconds>_<snake_case>.{up,down}.sql`); the script picks the timestamp.
 - **Migration version MUST be a real Unix timestamp in UTC ≤ the current `date -u +%s`.** Never invent a "fake-future" prefix to dodge a collision: the migrator treats version IDs as monotonic real timestamps, and a value greater than wall-clock now will break audit reasoning ("when did this migration land?") and any tooling that filters by `created_at`. If the generator's output collides with another in-flight migration, rebase + regenerate (it will pick the next real second). Renaming a generated migration to a value greater than `now` is the worst possible workaround — always pick a real timestamp ≤ now that preserves cross-migration ordering against already-merged migrations. A CI guard fails the build if any file under `go/schema/migrations/_sqldata/` carries a version prefix > now.
 - After generating, `make lint-migrations` (requires `POSTGRES_TEST_DSN`) must report no pending schema changes.
+- **`go/schema/schema.hcl` is a derived artifact, not a second source of truth.** The annotations across 46 model files declare 541 columns interleaved with Go struct fields, which cannot be read as a schema and cannot be diffed between two commits without diffing all 46 files. `make schema-hcl` renders them into one HCL file covering every table, index, RLS policy and function. Regenerate and commit it whenever a `//ptah:schema:*` annotation changes; the `Check Schema Artifact Sync` CI job re-renders and fails on a diff. Never edit the file by hand — it carries a `DO NOT EDIT` header and the next regeneration discards the edit. The six warnings about opaque SQL function bodies are expected: the plpgsql bodies of the RLS helpers are raw strings in the annotations too.
 
 ### API Design
 - RESTful endpoints following JSON:API specification
@@ -354,6 +355,7 @@ Support for multiple database backends via DSN:
 2. Generate the migration with `./scripts/generate-migration.sh <name>` — never hand-write the SQL.
 3. Apply locally: `./inventario db migrate up --db-dsn=<dsn>` (use `--dry-run` first if unsure).
 4. Update tests to reflect schema changes.
+5. Re-render the derived schema artifact with `make schema-hcl` and commit it (see below).
 
 ### Frontend Component Development
 1. Follow existing patterns in `frontend/src/components` and `frontend/src/features`
