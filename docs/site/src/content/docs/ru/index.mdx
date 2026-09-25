@@ -1,0 +1,38 @@
+---
+title: Inventario
+description: Приложение для домашней инвентаризации, которое помнит всё, что у вас есть.
+template: splash
+hero:
+  title: Inventario
+  tagline: Каталог всего, что у вас есть — предметы, фотографии, гарантии и где всё это лежит.
+  image:
+    alt: Логотип Inventario
+    file: ../../../assets/logo.svg
+  actions:
+    - text: Начало работы
+      link: ./getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: Открыть на GitHub
+      link: https://github.com/denisvmedia/inventario
+      icon: external
+      variant: minimal
+---
+
+import { LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+## Разделы руководства
+
+<CardGrid>
+  <LinkCard title="Начало работы" href="./getting-started/" description="Добавьте первый предмет и освойтесь в приложении." />
+  <LinkCard title="Предметы" href="./items/" description="Записывайте всё, чем владеете: фотографии, локации, теги и цены." />
+  <LinkCard title="Локации и зоны" href="./locations-and-areas/" description="Раскладывайте предметы по локациям и зонам." />
+  <LinkCard title="Теги" href="./tags/" description="Помечайте предметы и файлы произвольными тегами." />
+  <LinkCard title="Файлы и фотографии" href="./files-and-photos/" description="Прикладывайте чеки и инструкции, распознавайте предметы через ИИ." />
+  <LinkCard title="Гарантии, займы и обслуживание" href="./warranties-loans-maintenance/" description="Не пропускайте окончание гарантии, возврат и плановое обслуживание." />
+  <LinkCard title="Отчёты" href="./reports/" description="Готовьте отчёт для страховой по одному предмету или целой локации." />
+  <LinkCard title="Резервные копии" href="./backup-and-restore/" description="Выгружайте подписанные копии и восстанавливайте их когда нужно." />
+  <LinkCard title="Группы и совместный доступ" href="./groups-and-sharing/" description="Открывайте инвентарь тем, кому доверяете." />
+  <LinkCard title="Настройки и аккаунт" href="./settings-and-account/" description="Предпочтения, безопасность, двухфакторная аутентификация и сессии." />
+  <LinkCard title="Свой сервер" href="./self-hosting/" description="Запустите Inventario на своей инфраструктуре." />
+</CardGrid>

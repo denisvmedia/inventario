@@ -1,0 +1,38 @@
+---
+title: Inventario
+description: Aplikace pro domácí inventář, která si pamatuje všechno, co vlastníte.
+template: splash
+hero:
+  title: Inventario
+  tagline: Katalog všeho, co vlastníte — položky, fotky, záruky a místo, kde to všechno leží.
+  image:
+    alt: Logo Inventario
+    file: ../../../assets/logo.svg
+  actions:
+    - text: Začínáme
+      link: ./getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: Zobrazit na GitHubu
+      link: https://github.com/denisvmedia/inventario
+      icon: external
+      variant: minimal
+---
+
+import { LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+## Obsah příručky
+
+<CardGrid>
+  <LinkCard title="Začínáme" href="./getting-started/" description="Přidejte první položku a zorientujte se v aplikaci." />
+  <LinkCard title="Položky" href="./items/" description="Zapište všechno, co vlastníte — fotky, umístění, štítky a ceny." />
+  <LinkCard title="Umístění a oblasti" href="./locations-and-areas/" description="Roztřiďte položky do umístění a oblastí." />
+  <LinkCard title="Štítky" href="./tags/" description="Označujte položky a soubory volnými štítky." />
+  <LinkCard title="Soubory a fotky" href="./files-and-photos/" description="Připojte účtenky a návody a nechte položky načíst pomocí AI." />
+  <LinkCard title="Záruky, zápůjčky a údržba" href="./warranties-loans-maintenance/" description="Mějte přehled o konci záruky, vrácení a plánované údržbě." />
+  <LinkCard title="Sestavy" href="./reports/" description="Vytvořte sestavu pro pojišťovnu k jedné položce nebo celému umístění." />
+  <LinkCard title="Zálohování a obnova" href="./backup-and-restore/" description="Exportujte podepsané zálohy a kdykoli je obnovte." />
+  <LinkCard title="Skupiny a sdílení" href="./groups-and-sharing/" description="Sdílejte inventář s lidmi, kterým důvěřujete." />
+  <LinkCard title="Nastavení a účet" href="./settings-and-account/" description="Předvolby, zabezpečení, dvoufázové ověření a relace." />
+  <LinkCard title="Vlastní hosting" href="./self-hosting/" description="Provozujte Inventario na vlastní infrastruktuře." />
+</CardGrid>
