@@ -40,7 +40,7 @@
     "lucide-react": "1.24.0",
     "pdfjs-dist": "6.2.108",
     "qrcode.react": "4.2.0",
-    "radix-ui": "1.4.3",
+    "radix-ui": "1.6.7",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-hook-form": "7.81.0",
