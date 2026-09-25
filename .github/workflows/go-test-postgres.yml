@@ -214,12 +214,12 @@ jobs:
         # database and are not isolation-safe when run together (see #1953).
         # The load/perf variants (TestUserIsolation_LoadTesting /
         # _PerformanceRegression) are excluded — they are not negative-isolation
-        # coverage and would add CI flake/runtime. NOTE: the raw-SQL
-        # ./models -tags integration RLS tests are intentionally NOT wired here
-        # — they assert the pre-groups, tenant-only policy shape (INSERT
-        # locations with no group_id, set_tenant_context) and need their own
-        # modernization; the registry-level ./integration suite supersedes that
-        # coverage.
+        # coverage and would add CI flake/runtime. The raw-SQL ./models RLS
+        # tests this note used to point at are gone (#2627): they asserted the
+        # pre-groups, tenant-only policy shape and never compiled. The
+        # schema-level half is now
+        # registry/postgres/rls_schema_invariant_test.go, which runs in the
+        # default pass.
         env:
           POSTGRES_TEST_DSN: "postgres://inventario_test:test_password@localhost:5432/inventario_test?sslmode=disable"
         run: |

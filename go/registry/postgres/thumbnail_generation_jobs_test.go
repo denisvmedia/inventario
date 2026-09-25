@@ -1,5 +1,3 @@
-//go:build integration
-
 package postgres_test
 
 import (
@@ -14,30 +12,25 @@ import (
 	"go.5x5.cz/inventario/registry/postgres"
 )
 
+// A miss has to arrive as registry.ErrNotFound: the API layer's error mapping
+// keys on the sentinel, so a raw driver error becomes a 500 for a question
+// with a legitimate "no" answer.
 func TestThumbnailGenerationJobRegistry_GetJobByFileID_NotFound(t *testing.T) {
 	c := qt.New(t)
 
-	// Connect to test database
-	dsn := "postgres://inventario:inventario_password@localhost:5432/inventario?sslmode=disable"
-	db, err := sqlx.Open("postgres", dsn)
+	_, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	db, err := sqlx.Open("postgres", skipIfNoPostgreSQL(t))
 	c.Assert(err, qt.IsNil)
 	defer db.Close()
+	c.Assert(db.Ping(), qt.IsNil)
 
-	// Test connection
-	err = db.Ping()
-	c.Assert(err, qt.IsNil)
+	// Service registry, because the thumbnail worker runs with no tenant in
+	// context.
+	jobRegistry := postgres.NewFactorySet(db).ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry()
 
-	// Create factory set with PostgreSQL
-	factorySet := postgres.NewFactorySet(db)
-
-	// Create service registry (bypasses RLS)
-	jobRegistry := factorySet.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry()
-
-	// Try to get a job for a non-existent file ID
-	nonExistentFileID := "non-existent-file-id"
-	job, err := jobRegistry.GetJobByFileID(context.Background(), nonExistentFileID)
-
-	// Should return ErrNotFound, not a generic SQL error
-	c.Assert(err, qt.Equals, registry.ErrNotFound)
+	job, err := jobRegistry.GetJobByFileID(context.Background(), "non-existent-file-id")
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	c.Assert(job, qt.IsNil)
 }
