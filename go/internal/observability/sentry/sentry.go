@@ -78,7 +78,9 @@ func Init(cfg Config) (flush func(timeout time.Duration) bool, err error) {
 
 // clientOptions builds the Sentry SDK options for cfg. Extracted from Init so
 // the data-exfiltration controls are unit-testable without binding a global
-// client: SendDefaultPII is left at its false default — which makes the SDK
+// client: SendDefaultPII is left at its false default — deprecated since
+// sentry-go v0.49.0 in favour of DataCollection, but still what the SDK derives
+// the collection config from while DataCollection is nil — which makes the SDK
 // scrub sensitive request headers (Authorization, Cookie, api-key, …), drop the
 // cookie value and omit the client IP, so the JWT bearer and the httpOnly
 // refresh-token cookie are safe — and scrubRequestData is wired as BOTH
