@@ -788,8 +788,8 @@ google.golang.org/genproto/googleapis/rpc v0.0.0-20260921155816-b14227669459/go.
 google.golang.org/grpc v1.19.0/go.mod h1:mqu4LbDTu4XGKhr4mRzUsmM4RtVoemTSY81AxZiDr8c=
 google.golang.org/grpc v1.20.1/go.mod h1:10oTOabMzJvdu6/UiuZezV6QK5dSlG84ov/aaiqXj38=
 google.golang.org/grpc v1.21.1/go.mod h1:oYelfM1adQP15Ek0mdvEgi9Df8B9CZIaU1084ijfRaM=
-google.golang.org/grpc v1.85.0-dev.0.20260922031938-d331f1108320 h1:T1DnDmWAr434dR6Hvpw8J4gAQzv+DUX1LEo/GMFpN5Y=
-google.golang.org/grpc v1.85.0-dev.0.20260922031938-d331f1108320/go.mod h1:Ovl0ECo4xx5r4kn/6d4BPSNB7OIFuu6EAjOzjtVAKaM=
+google.golang.org/grpc v1.85.0-dev.0.20260924115737-1274845c21b3 h1:Y+XzJWmcVrs48o3xHt0sWAXiaxfJWU45DAeIcDAP06Y=
+google.golang.org/grpc v1.85.0-dev.0.20260924115737-1274845c21b3/go.mod h1:Ovl0ECo4xx5r4kn/6d4BPSNB7OIFuu6EAjOzjtVAKaM=
 google.golang.org/protobuf v1.36.12 h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=
 google.golang.org/protobuf v1.36.12/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
 gopkg.in/alecthomas/kingpin.v2 v2.2.6/go.mod h1:FMv+mEhP44yOT+4EoQTLFTRgOQ1FBLkstjWtayDeSgw=
@@ -844,8 +844,8 @@ olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 h1:slmdOY3vp8a7KQbHkL
 olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3/go.mod h1:oVgVk4OWVDi43qWBEyGhXgYxt7+ED4iYNpTngSLX2Iw=
 oras.land/oras-go/v2 v2.6.2 h1:N04RXngAp1LJKTG6ifz3xHPipasEkWr+hFmInja5YKo=
 oras.land/oras-go/v2 v2.6.2/go.mod h1:PlTtg4JTDJkDe8yVHpM2wz7/YDc00GVas+i4jAW2TZ4=
-ptah.run v0.8.0 h1:bSzJUPOveKW9TA1oU3DfcAmDZK+jNOlIWVJRfIAecr8=
-ptah.run v0.8.0/go.mod h1:iYFxafr1TvMQF4ZOnv6XdjFlT6Ijgr1qTISYhJyWDtE=
+ptah.run v0.8.1 h1:wpcutGDn0/+Be9zlnVZo+fW+5nAVmPDJg9HRpo0xDMk=
+ptah.run v0.8.1/go.mod h1:DZXzY29wu9suTBNvXv62u34q73pb32IcP5/GKr6XUVI=
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
 sigs.k8s.io/yaml v1.6.0 h1:G8fkbMSAFqgEFgh4b1wmtzDnioxFCUgTZhlbj5P9QYs=
 sigs.k8s.io/yaml v1.6.0/go.mod h1:796bPqUfzR/0jLAl6XjHl3Ck7MiyVv8dbTdyT3/pMf4=
