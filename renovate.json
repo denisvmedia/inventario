@@ -1,5 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Renovate owns dependency version updates for this repository. .github/dependabot.yml was removed once it did — PR #232 introduced Renovate to replace Dependabot and the switch was left half-finished, so both bots proposed the same bumps for months.",
+    "Dependabot security updates are unaffected: those come from the repository's security settings, not from dependabot.yml, and stay on.",
+    "design-mocks/ is excluded below because it is a read-only mirror of github.com/denisvmedia/inventario-design synchronized by an external tool (see AGENTS.md). A bump there would be wiped on the next sync."
+  ],
   "extends": [
     "config:recommended"
   ],
@@ -13,7 +18,7 @@
   ],
   "packageRules": [
     {
-      "description": "Auto-merge patch updates only (#2097). Minor and major are held for manual review. Auto-merge waits for branch-protection required checks (go-govulncheck, dependency-review, image scan) via platformAutomerge \u2014 those checks are the real gate, not Renovate. minimumReleaseAge adds a soak buffer against freshly-published-and-yanked patches.",
+      "description": "Auto-merge patch updates only (#2097). Minor and major are held for manual review. Auto-merge waits for branch-protection required checks (go-govulncheck, dependency-review, image scan) via platformAutomerge — those checks are the real gate, not Renovate. minimumReleaseAge adds a soak buffer against freshly-published-and-yanked patches.",
       "matchUpdateTypes": [
         "patch"
       ],
@@ -24,7 +29,7 @@
       "minimumReleaseAge": "3 days"
     },
     {
-      "description": "Never auto-merge minor or major updates (#2097) \u2014 review the changelog and CI results manually.",
+      "description": "Never auto-merge minor or major updates (#2097) — review the changelog and CI results manually.",
       "matchUpdateTypes": [
         "minor",
         "major"
@@ -134,7 +139,7 @@
       "enabled": false
     },
     {
-      "description": "Vite + bundler ecosystem \u2014 never auto-merge. Even patch bumps can quietly swap or update the underlying bundler (rolldown is on a 1.0.0-rc.* line that ships breaking changes between rcs) and surface runtime regressions that lint/typecheck/unit tests can't catch. Driven by a past incident in this repo where a vite 8.x patch bump landed via auto-merge despite an E2E failure on the renovate PR run (see #1427). Manual review + green E2E on the bump PR is required.",
+      "description": "Vite + bundler ecosystem — never auto-merge. Even patch bumps can quietly swap or update the underlying bundler (rolldown is on a 1.0.0-rc.* line that ships breaking changes between rcs) and surface runtime regressions that lint/typecheck/unit tests can't catch. Driven by a past incident in this repo where a vite 8.x patch bump landed via auto-merge despite an E2E failure on the renovate PR run (see #1427). Manual review + green E2E on the bump PR is required.",
       "matchPackageNames": [
         "vite",
         "@vitejs/plugin-react",
