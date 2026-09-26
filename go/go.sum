@@ -844,8 +844,8 @@ olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 h1:slmdOY3vp8a7KQbHkL
 olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3/go.mod h1:oVgVk4OWVDi43qWBEyGhXgYxt7+ED4iYNpTngSLX2Iw=
 oras.land/oras-go/v2 v2.6.2 h1:N04RXngAp1LJKTG6ifz3xHPipasEkWr+hFmInja5YKo=
 oras.land/oras-go/v2 v2.6.2/go.mod h1:PlTtg4JTDJkDe8yVHpM2wz7/YDc00GVas+i4jAW2TZ4=
-ptah.run v0.8.1 h1:wpcutGDn0/+Be9zlnVZo+fW+5nAVmPDJg9HRpo0xDMk=
-ptah.run v0.8.1/go.mod h1:DZXzY29wu9suTBNvXv62u34q73pb32IcP5/GKr6XUVI=
+ptah.run v0.7.0 h1:qNNk05OV3UNkY9cRZ/kqUSAcdXABkyueT6LSS4ygzAA=
+ptah.run v0.7.0/go.mod h1:24GbW2YljWtztflvuBnoTKuxbjY20E+O0Olj4XzDl2I=
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
 sigs.k8s.io/yaml v1.6.0 h1:G8fkbMSAFqgEFgh4b1wmtzDnioxFCUgTZhlbj5P9QYs=
 sigs.k8s.io/yaml v1.6.0/go.mod h1:796bPqUfzR/0jLAl6XjHl3Ck7MiyVv8dbTdyT3/pMf4=
