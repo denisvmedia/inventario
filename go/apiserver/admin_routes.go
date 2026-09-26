@@ -329,6 +329,11 @@ func adminBackofficeRoutes(
 	r.Post("/users/{userID}/block", usersAPI.blockUser)
 	r.Post("/users/{userID}/unblock", usersAPI.unblockUser)
 
+	// #2479 / #967 H6: end every session for a user without disabling the
+	// account. The same teardown block runs, minus the is_active flip — an
+	// operator previously had to block and immediately unblock to get it.
+	r.Post("/users/{userID}/sessions/revoke", usersAPI.revokeSessions)
+
 	// #1748: cross-tenant groups admin. List + detail bypass RLS at
 	// the registry layer (SET LOCAL row_security = off); DELETE flips
 	// status to pending_deletion (idempotent) and the existing

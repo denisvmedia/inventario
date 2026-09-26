@@ -42,6 +42,13 @@ const (
 	// successful unblock. Unblock has no force variant — re-activating
 	// an account is symmetric for admins and non-admins.
 	AuditActionAdminUserUnblock = "admin.user_unblock"
+	// AuditActionAdminUserSessionsRevoke is the audit-row Action emitted
+	// when an operator ends every live session for a user without
+	// disabling the account (#2479, #967 H6). Distinct from
+	// admin.user_block because the outcome is different: the user can
+	// sign straight back in, and an audit reader should not have to
+	// read a breadcrumb to tell the two apart.
+	AuditActionAdminUserSessionsRevoke = "admin.user_sessions_revoke"
 )
 
 // JSON:API error codes returned by the block / unblock endpoints. Kept
@@ -418,7 +425,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 		// fires for peer-admin re-blocks. Runs above the
 		// admin-without-force guard so re-blocking an already-blocked
 		// peer admin is a 200 no-op rather than a surprising 422.
-		cascadeErrMsg := api.applyBlockCascade(r, target.ID)
+		cascadeErrMsg := api.revokeLiveSessions(r, target.ID)
 		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, false)
 		api.writeUserEnvelope(w, r, http.StatusOK, target)
 		return
@@ -464,7 +471,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	// invariant; the cascade failures get logged for operator
 	// awareness and the audit row records ErrMsg if either step
 	// blipped.
-	cascadeErrMsg := api.applyBlockCascade(r, target.ID)
+	cascadeErrMsg := api.revokeLiveSessions(r, target.ID)
 	api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, forced)
 	// Reuse the targetIsAdmin lookup the --force guard already did
 	// instead of doing a second SystemAdminGrantRegistry.Exists call
@@ -627,13 +634,19 @@ func decoderAtEOF(dec *json.Decoder) bool {
 	return errors.Is(err, io.EOF)
 }
 
-// applyBlockCascade tears down the user's live sessions after the
+// revokeLiveSessions tears down the user's live sessions: the durable half by
+// revoking their refresh tokens, and the live half by blacklisting access tokens
+// issued before now. Shared by block (where it is the cascade) and by the
+// standalone session revoke (#2479, #967 H6), which is the same teardown without
+// touching is_active.
+//
+// Originally written for the block cascade after the
 // is_active flip has committed. Returns the concatenated error message
 // (or "" on success) so the audit row records the cause when either
 // step blipped; both steps run regardless of the other's outcome so a
 // transient refresh-token failure doesn't keep stale access tokens
 // alive.
-func (api *adminUsersAPI) applyBlockCascade(r *http.Request, userID string) string {
+func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, userID string) string {
 	var msgs []string
 	if api.factorySet != nil && api.factorySet.RefreshTokenRegistry != nil {
 		if err := api.factorySet.RefreshTokenRegistry.RevokeByUserID(r.Context(), userID); err != nil {

@@ -120,6 +120,10 @@ table "audit_logs" {
     type = TEXT
     null = true
   }
+  column "request_id" {
+    type = TEXT
+    null = true
+  }
   primary_key {
     columns = [column.id]
   }
@@ -128,6 +132,9 @@ table "audit_logs" {
   }
   index "audit_logs_entity_idx" {
     columns = [column.entity_type, column.entity_id]
+  }
+  index "audit_logs_request_id_idx" {
+    columns = [column.request_id]
   }
   index "audit_logs_tenant_id_idx" {
     columns = [column.tenant_id]

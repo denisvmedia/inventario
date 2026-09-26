@@ -147,6 +147,26 @@ func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
 	}()
 }
 
+// Length caps on the login body (#2479, #967 H8).
+//
+// Neither is a security boundary: the tenant-scan middleware already caps the
+// whole request body, and bcrypt ignores input past 72 bytes, so a long password
+// was never going to cost more than the copy. What they buy is that an absurd
+// value is refused at the edge with a clear answer instead of travelling through
+// the rate limiter, a registry lookup and a hash comparison to arrive at the same
+// place.
+const (
+	// loginEmailMaxLen is the longest address SMTP has to carry — RFC 5321
+	// section 4.5.3.1.3, a 256-octet path minus the angle brackets. Measured in
+	// bytes rather than runes because that is what the limit is about.
+	loginEmailMaxLen = 254
+	// loginPasswordMaxLen is deliberately generous. bcrypt stops reading at 72
+	// bytes, so anything past that is already ignored; the cap exists to bound
+	// what a client can make the server copy, not to tell users how long a
+	// passphrase may be.
+	loginPasswordMaxLen = 1024
+)
+
 // LoginRequest is the body for POST /auth/login.
 type LoginRequest struct {
 	Email    string `json:"email"`
@@ -202,6 +222,13 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 
 	if req.Email == "" || req.Password == "" {
 		http.Error(w, "Email and password are required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Email) > loginEmailMaxLen || len(req.Password) > loginPasswordMaxLen {
+		// Refused before the lookup, so the answer cannot depend on whether the
+		// account exists — a length this far out is a client bug or a probe
+		// either way, and neither is worth a bcrypt comparison.
+		http.Error(w, "Email or password is too long", http.StatusBadRequest)
 		return
 	}
 
