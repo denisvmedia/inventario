@@ -960,6 +960,80 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/users/{userID}/sessions/revoke": {
+            "post": {
+                "description": "Revokes the user's refresh tokens and blacklists access tokens issued before now, without changing whether the account is active. The user can sign in again immediately. Idempotent: a user with no live sessions is a 200.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "End every session for a user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reason for ending the sessions",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminRevokeSessionsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Sessions revoked",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Missing user id or malformed body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "No such user",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Reason missing or too long",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "500": {
+                        "description": "Revocation failed",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/users/{userID}/unblock": {
             "post": {
                 "description": "Sets the user's ` + "`" + `is_active` + "`" + ` flag back to true. Does NOT re-issue tokens — the user must log in again.\nDoes NOT clear the JWT-blacklist staleness threshold either, so any access tokens that were issued before the block stay rejected until the iat-staleness ring expires.\nBody-validation rejections surface as 422 with ` + "`" + `admin.block.reason_required` + "`" + ` (missing or blank ` + "`" + `reason` + "`" + `) or ` + "`" + `admin.block.reason_too_long` + "`" + ` (reason exceeds 500 characters); the codes are shared with the block endpoint.",
@@ -8554,6 +8628,19 @@ const docTemplate = `{
                 },
                 "timestamp": {
                     "type": "string"
+                }
+            }
+        },
+        "apiserver.AdminRevokeSessionsRequest": {
+            "type": "object",
+            "required": [
+                "reason"
+            ],
+            "properties": {
+                "reason": {
+                    "description": "Reason is the free-form justification for ending the sessions\n(max 500 chars).",
+                    "type": "string",
+                    "maxLength": 500
                 }
             }
         },

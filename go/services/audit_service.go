@@ -134,6 +134,7 @@ func (s *AuditService) LogAuth(ctx context.Context, ev AuthEvent) {
 	if ev.Request != nil {
 		entry.IPAddress = clientIPFromRequest(ev.Request)
 		entry.UserAgent = ev.Request.UserAgent()
+		entry.RequestID = requestIDFromRequest(ev.Request)
 	}
 
 	if _, err := s.auditRegistry.Create(ctx, entry); err != nil {
@@ -176,6 +177,7 @@ func (s *AuditService) LogAdmin(ctx context.Context, ev AdminEvent) {
 	if ev.Request != nil {
 		entry.IPAddress = clientIPFromRequest(ev.Request)
 		entry.UserAgent = ev.Request.UserAgent()
+		entry.RequestID = requestIDFromRequest(ev.Request)
 	}
 
 	// When the caller supplied any breadcrumb fields, encode them as a
@@ -343,6 +345,19 @@ func impersonatorFromContext(ctx context.Context) *string {
 		return &by
 	}
 	return nil
+}
+
+// requestIDFromRequest returns the request's correlation id, or nil when there
+// is none — off the HTTP path, or before the middleware that sets it.
+//
+// Read through appctx rather than from the router directly so this package does
+// not depend on which router the HTTP layer happens to use.
+func requestIDFromRequest(r *http.Request) *string {
+	id := appctx.RequestIDFromContext(r.Context())
+	if id == "" {
+		return nil
+	}
+	return new(id)
 }
 
 // clientIPFromRequest extracts the real client IP from the request, respecting

@@ -290,3 +290,64 @@ func TestAuditService_LogAuth_IPExtraction(t *testing.T) {
 		})
 	}
 }
+
+// #2479 / #967 H5: the correlation id reaches the audit row. Both event kinds
+// go through the same request-derived block, so both are checked — LogAuth is
+// what the refresh path calls, and a long-lived session's only durable trace
+// between login and logout is its refresh rows.
+func TestAuditService_RequestIDFromContext(t *testing.T) {
+	c := qt.New(t)
+
+	const id = "req-abc-123"
+	withID := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
+	withID = withID.WithContext(appctx.WithRequestID(withID.Context(), id))
+
+	c.Run("LogAuth stamps it", func(c *qt.C) {
+		reg := memory.NewAuditLogRegistry()
+		services.NewAuditService(reg).LogAuth(context.Background(), services.AuthEvent{
+			Action:  "refresh",
+			Success: true,
+			Request: withID,
+		})
+		rows, err := reg.List(context.Background())
+		c.Assert(err, qt.IsNil)
+		c.Assert(rows, qt.HasLen, 1)
+		c.Assert(rows[0].RequestID, qt.IsNotNil)
+		c.Assert(*rows[0].RequestID, qt.Equals, id)
+	})
+
+	c.Run("LogAdmin stamps it", func(c *qt.C) {
+		reg := memory.NewAuditLogRegistry()
+		services.NewAuditService(reg).LogAdmin(context.Background(), services.AdminEvent{
+			Action:  "admin.user_sessions_revoke",
+			Success: true,
+			Request: withID,
+		})
+		rows, err := reg.List(context.Background())
+		c.Assert(err, qt.IsNil)
+		c.Assert(rows, qt.HasLen, 1)
+		c.Assert(rows[0].RequestID, qt.IsNotNil)
+		c.Assert(*rows[0].RequestID, qt.Equals, id)
+	})
+
+	// Nil rather than empty string, so a row with no request is distinguishable
+	// from one whose request had no id — and so the column stays NULL for the
+	// workers and CLI commands that write most of the rows with no request at
+	// all.
+	c.Run("no request id leaves the column null", func(c *qt.C) {
+		for _, name := range []string{"no request", "request without an id"} {
+			c.Run(name, func(c *qt.C) {
+				ev := services.AuthEvent{Action: "login", Success: true}
+				if name == "request without an id" {
+					ev.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
+				}
+				reg := memory.NewAuditLogRegistry()
+				services.NewAuditService(reg).LogAuth(context.Background(), ev)
+				rows, err := reg.List(context.Background())
+				c.Assert(err, qt.IsNil)
+				c.Assert(rows, qt.HasLen, 1)
+				c.Assert(rows[0].RequestID, qt.IsNil)
+			})
+		}
+	})
+}

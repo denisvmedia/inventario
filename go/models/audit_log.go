@@ -60,6 +60,17 @@ type AuditLog struct {
 	// inside an impersonation session (#1745 foundation, #1750 primitive).
 	//ptah:schema:field name="impersonated_by" type="TEXT"
 	ImpersonatedBy *string `json:"impersonated_by,omitempty" db:"impersonated_by"`
+
+	// RequestID is the correlation id of the HTTP request that produced this
+	// row, carried down from the router through appctx (#2479, #967 H5).
+	//
+	// Nullable because most of the point is that it is often absent: a row
+	// written by a worker or a CLI command belongs to no request. Without it a
+	// log line and an audit row are joinable only by timestamp and user, which
+	// is enough to guess a correlation and not enough to prove one — two
+	// requests from the same user in the same second are indistinguishable.
+	//ptah:schema:field name="request_id" type="TEXT"
+	RequestID *string `json:"request_id,omitempty" db:"request_id"`
 }
 
 // GetID returns the audit log entry's unique identifier.
@@ -135,5 +146,10 @@ type AuditLogIndexes struct {
 
 	// Composite index for entity lookups
 	//ptah:schema:index name="audit_logs_entity_idx" fields="entity_type,entity_id" table="audit_logs"
+	_ int
+
+	// The correlation id exists to be looked up by, which is the only query it
+	// has: "show me everything this request did".
+	//ptah:schema:index name="audit_logs_request_id_idx" fields="request_id" table="audit_logs"
 	_ int
 }

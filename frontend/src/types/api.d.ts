@@ -1218,6 +1218,100 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/admin/users/{userID}/sessions/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End every session for a user
+         * @description Revokes the user's refresh tokens and blacklists access tokens issued before now, without changing whether the account is active. The user can sign in again immediately. Idempotent: a user with no live sessions is a 200.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description User ID */
+                    userID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Reason for ending the sessions */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.AdminRevokeSessionsRequest"];
+                };
+            };
+            responses: {
+                /** @description Sessions revoked */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": {
+                            [key: string]: string;
+                        };
+                    };
+                };
+                /** @description Missing user id or malformed body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description No such user */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Reason missing or too long */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Revocation failed */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/users/{userID}/unblock": {
         parameters: {
             query?: never;
@@ -9885,6 +9979,13 @@ export type components = {
         "apiserver.AdminPingResponse": {
             ok?: boolean;
             timestamp?: string;
+        };
+        "apiserver.AdminRevokeSessionsRequest": {
+            /**
+             * @description Reason is the free-form justification for ending the sessions
+             *     (max 500 chars).
+             */
+            reason: string;
         };
         "apiserver.AdminUnblockRequest": {
             /** @description Reason is the free-form justification for the unblock (max 500 chars). */

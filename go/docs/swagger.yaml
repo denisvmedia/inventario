@@ -62,6 +62,17 @@ definitions:
       timestamp:
         type: string
     type: object
+  apiserver.AdminRevokeSessionsRequest:
+    properties:
+      reason:
+        description: |-
+          Reason is the free-form justification for ending the sessions
+          (max 500 chars).
+        maxLength: 500
+        type: string
+    required:
+    - reason
+    type: object
   apiserver.AdminUnblockRequest:
     properties:
       reason:
@@ -5241,6 +5252,58 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Start an impersonation session (back-office operator)
+      tags:
+      - admin
+  /admin/users/{userID}/sessions/revoke:
+    post:
+      consumes:
+      - application/json
+      description: 'Revokes the user''s refresh tokens and blacklists access tokens
+        issued before now, without changing whether the account is active. The user
+        can sign in again immediately. Idempotent: a user with no live sessions is
+        a 200.'
+      parameters:
+      - description: User ID
+        in: path
+        name: userID
+        required: true
+        type: string
+      - description: Reason for ending the sessions
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.AdminRevokeSessionsRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Sessions revoked
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Missing user id or malformed body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: No such user
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Reason missing or too long
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "500":
+          description: Revocation failed
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: End every session for a user
       tags:
       - admin
   /admin/users/{userID}/unblock:
