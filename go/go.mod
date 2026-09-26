@@ -59,7 +59,7 @@ require (
 	golang.org/x/term v0.46.0
 	golang.org/x/text v0.42.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
-	google.golang.org/grpc v1.85.0-dev.0.20260922031938-d331f1108320
+	google.golang.org/grpc v1.86.0-dev
 	ptah.run v0.8.0
 )
 
