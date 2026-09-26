@@ -33,6 +33,12 @@ type recordedMaintenanceEmail struct {
 	thresholdDays int
 }
 
+// SendWeeklyDigestEmail satisfies the interface; these tests do not exercise
+// the digest.
+func (r *recordingMaintenanceEmailService) SendWeeklyDigestEmail(_ context.Context, _, _ string, _ services.WeeklyDigestEmail) error {
+	return nil
+}
+
 func (r *recordingMaintenanceEmailService) SendVerificationEmail(_ context.Context, _, _, _ string) error {
 	return nil
 }

@@ -118,6 +118,9 @@ func (c *Command) run() error {
 	stopMaintenanceReminder := bootstrap.StartMaintenanceReminderWorker(ctx, rs, c.cfg)
 	defer stopMaintenanceReminder()
 
+	stopWeeklyDigest := bootstrap.StartWeeklyDigestWorker(ctx, rs, c.cfg)
+	defer stopWeeklyDigest()
+
 	stopCurrencyMigration := bootstrap.StartCurrencyMigrationWorker(ctx, rs, c.cfg)
 	defer stopCurrencyMigration()
 

@@ -27,6 +27,8 @@ type asyncEmailObservation struct {
 }
 
 type blockingEmailService struct {
+	// Embedded so a new EmailService method does not need a no-op added here.
+	services.StubEmailService
 	release         <-chan struct{}
 	passwordResetCh chan asyncEmailObservation
 	verificationCh  chan asyncEmailObservation

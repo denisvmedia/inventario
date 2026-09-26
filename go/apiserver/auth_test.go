@@ -179,6 +179,8 @@ func (m *mockTokenBlacklisterForAuth) UnblacklistUser(_ context.Context, _ strin
 }
 
 type mockEmailServiceForAuth struct {
+	// Embedded so a new EmailService method does not need a no-op added here.
+	services.StubEmailService
 	mu                   sync.Mutex
 	passwordChangedCalls int
 	passwordChangedCh    chan struct{}

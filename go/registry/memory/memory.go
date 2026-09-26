@@ -119,6 +119,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.GroupNotificationPrefRegistry = NewGroupNotificationPrefRegistry()
 	fs.WarrantyReminderRegistry = NewWarrantyReminderRegistry()
 	fs.StorageQuotaReminderRegistry = NewStorageQuotaReminderRegistry()
+	fs.WeeklyDigestSendRegistry = NewWeeklyDigestSendRegistry()
 	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry()
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistryFactory()
 	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry()

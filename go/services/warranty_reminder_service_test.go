@@ -37,6 +37,12 @@ type recordedWarrantyEmail struct {
 	thresholdDays int
 }
 
+// SendWeeklyDigestEmail satisfies the interface; these tests do not exercise
+// the digest.
+func (r *recordingEmailService) SendWeeklyDigestEmail(_ context.Context, _, _ string, _ services.WeeklyDigestEmail) error {
+	return nil
+}
+
 func (r *recordingEmailService) SendVerificationEmail(_ context.Context, _ string, _ string, _ string) error {
 	return nil
 }
@@ -99,6 +105,12 @@ func (r *recordingEmailService) snapshot() []recordedWarrantyEmail {
 // returns errors from every Send* call. Used by the
 // EnqueueFailureRetries regression test to simulate a queue outage.
 type failingEmailService struct{}
+
+// SendWeeklyDigestEmail satisfies the interface; these tests do not exercise
+// the digest.
+func (f *failingEmailService) SendWeeklyDigestEmail(_ context.Context, _, _ string, _ services.WeeklyDigestEmail) error {
+	return nil
+}
 
 func (failingEmailService) SendVerificationEmail(_ context.Context, _ string, _ string, _ string) error {
 	return errors.New("queue down")

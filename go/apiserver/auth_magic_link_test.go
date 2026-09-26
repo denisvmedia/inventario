@@ -29,6 +29,8 @@ import (
 // email. A mutex guards the counter because SendMagicLinkEmail fires from the
 // handler's detached goroutine.
 type recordingMagicLinkEmailService struct {
+	// Embedded so a new EmailService method does not need a no-op added here.
+	services.StubEmailService
 	mu        sync.Mutex
 	calls     int
 	lastTo    string

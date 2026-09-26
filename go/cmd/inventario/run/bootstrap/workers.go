@@ -354,6 +354,60 @@ func StartStorageQuotaReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg 
 	return worker.Stop
 }
 
+// StartWeeklyDigestWorker wires and starts the weekly digest worker (#1391).
+//
+// Unlike the reminder workers this one has a schedule of its own: it ticks
+// hourly and sends only on Monday at the configured UTC hour, so the digest
+// lands on the calendar rather than on whatever moment the process started.
+// Per-group notification preferences gate each group's contribution against
+// notifications.CategoryWeeklyDigest.
+func StartWeeklyDigestWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
+	appURL, settingsURL := buildWeeklyDigestURLBuilders(cfg.PublicURL)
+	prefs := notifications.NewService(rs.FactorySet.SettingsRegistryFactory)
+	prefs.SetGroupPrefs(rs.FactorySet.GroupNotificationPrefRegistry)
+	service := services.NewWeeklyDigestService(
+		rs.FactorySet,
+		rs.EmailLifecycle.Service,
+		appURL,
+		settingsURL,
+		buildCommodityURLBuilder(cfg.PublicURL),
+	).WithPreferences(prefs)
+
+	opts := []services.WeeklyDigestOption{
+		services.WithWeeklyDigestInterval(rs.WorkerDurations.WeeklyDigestInterval),
+		services.WithWeeklyDigestSendHour(cfg.WeeklyDigestSendHourUTC),
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithWeeklyDigestPauseController(rs.PauseController))
+	}
+	worker := services.NewWeeklyDigestWorker(service, opts...)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
+// buildWeeklyDigestURLBuilders returns the "open the app" and "notification
+// settings" link builders for the digest email. Both return empty when no
+// public URL is configured, and the template then drops the link.
+func buildWeeklyDigestURLBuilders(publicURL string) (appURLBuilder, settingsURLBuilder func(string) string) {
+	publicURL = strings.TrimRight(strings.TrimSpace(publicURL), "/")
+	if publicURL == "" {
+		return nil, nil
+	}
+	appURLBuilder = func(groupSlug string) string {
+		if groupSlug == "" {
+			return ""
+		}
+		return publicURL + "/g/" + groupSlug
+	}
+	settingsURLBuilder = func(groupSlug string) string {
+		if groupSlug == "" {
+			return ""
+		}
+		return publicURL + "/g/" + groupSlug + "/settings/notifications"
+	}
+	return appURLBuilder, settingsURLBuilder
+}
+
 // StartBusinessMetricsWorker wires and starts the installation-wide
 // business-metrics collector (#843). It mirrors the reminder-worker
 // wiring: pulls the configured interval from rs.WorkerDurations and owns

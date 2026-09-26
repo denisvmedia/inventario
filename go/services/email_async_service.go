@@ -263,6 +263,21 @@ func (s *AsyncEmailService) SendStorageQuotaWarningEmail(ctx context.Context, to
 	})
 }
 
+// SendWeeklyDigestEmail enqueues the weekly digest (#1391).
+func (s *AsyncEmailService) SendWeeklyDigestEmail(ctx context.Context, to, name string, digest WeeklyDigestEmail) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType:      emailTemplateWeeklyDigest,
+		To:                to,
+		Name:              name,
+		DigestWeekStart:   digest.WeekStart,
+		DigestWeekEnd:     digest.WeekEnd,
+		DigestGroups:      digest.Groups,
+		DigestUpcoming:    digest.Upcoming,
+		DigestURL:         digest.URL,
+		DigestSettingsURL: digest.SettingsURL,
+	})
+}
+
 // SendMaintenanceReminderEmail enqueues a maintenance reminder
 // (#1368). ThresholdDays encodes the matched threshold (14 / 7 / 1)
 // or 0 for an overdue notice.

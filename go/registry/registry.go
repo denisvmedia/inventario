@@ -1543,6 +1543,29 @@ type WarrantyReminderRegistry interface {
 // fires a fresh email. There is no user-facing surface on this table.
 //
 // All operations run under the background-worker RLS bypass.
+// WeeklyDigestSendRegistry is the idempotency store for the weekly digest
+// worker (#1391). The digest is per user and covers a calendar week, so the
+// (user_id, week_start) pair is what a send is recorded against.
+type WeeklyDigestSendRegistry interface {
+	// ClaimWeek records that this user's week has been sent and reports
+	// whether this call is the one that recorded it. A false answer means
+	// somebody else got there first and the caller must not send.
+	//
+	// Claiming before sending rather than after is deliberate: for a weekly
+	// summary a missed digest is cheaper than a duplicate one. See
+	// models.WeeklyDigestSend.
+	ClaimWeek(ctx context.Context, send models.WeeklyDigestSend) (bool, error)
+
+	// ReleaseWeek drops one user's claim on a week, so a send that failed after
+	// the claim can be retried on the next tick instead of losing the week.
+	ReleaseWeek(ctx context.Context, userID string, weekStart time.Time) error
+
+	// DeleteSentBefore removes claims for weeks starting before weekStart and
+	// returns how many went. The rows only exist to stop a second send inside
+	// one week.
+	DeleteSentBefore(ctx context.Context, weekStart time.Time) (int, error)
+}
+
 type StorageQuotaReminderRegistry interface {
 	// HasSent reports whether a reminder row already exists for the
 	// given (group, threshold) tuple. Used by the worker to skip the
@@ -2403,6 +2426,7 @@ type Set struct {
 	GroupPurger                    GroupPurger                   // GroupPurger bulk-removes group-scoped entities during the purge worker's tick
 	WarrantyReminderRegistry       WarrantyReminderRegistry      // WarrantyReminderRegistry is the idempotency store for the warranty reminder worker; service-mode only
 	StorageQuotaReminderRegistry   StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the idempotency store for the storage quota warning worker; service-mode only (#1585)
+	WeeklyDigestSendRegistry       WeeklyDigestSendRegistry      // WeeklyDigestSendRegistry is the idempotency store for the weekly digest worker; service-mode only (#1391)
 	MaintenanceReminderRegistry    MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the idempotency store for the maintenance reminder worker; service-mode only (#1368)
 	CurrencyMigrationRegistry      CurrencyMigrationRegistry     // Currency migration operation rows + audit + HMAC token signing (issue #1550 / epic #202)
 	CommodityScanAuditRegistry     CommodityScanAuditRegistry    // CommodityScanAuditRegistry records every AI vision scan request (#1720); also backs the per-user rate limiter

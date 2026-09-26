@@ -102,6 +102,9 @@ var userDeleteByUserID = []func(t store.TableNames) string{
 
 	// Per-user/per-group notification overrides.
 	func(t store.TableNames) string { return string(t.GroupNotificationPrefs()) },
+
+	// Weekly digest idempotency claims (#1391).
+	func(t store.TableNames) string { return string(t.WeeklyDigestSends()) },
 }
 
 // PurgeUserDependents clears every user-scoped auth/identity row (and nulls the

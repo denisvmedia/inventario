@@ -83,6 +83,25 @@ type emailJob struct {
 	ReplyToEmail     string   `json:"reply_to_email,omitempty"`
 	FeedbackMessage  string   `json:"feedback_message,omitempty"`
 	DiagnosticsLines []string `json:"diagnostics_lines,omitempty"`
+
+	// Weekly digest fields (#1391), populated only by
+	// AsyncEmailService.SendWeeklyDigestEmail.
+	//
+	// The per-group counts and the upcoming list travel as numbers and dates
+	// rather than as pre-formatted sentences, unlike the storage breakdown
+	// above: the recipient's language is known to the renderer and not to the
+	// service, so a sentence assembled at the send site would arrive in English
+	// inside a Czech email. The templates phrase them as label-and-number for a
+	// related reason — that needs no plural agreement, which Czech and Russian
+	// both inflect three ways.
+	DigestWeekStart string                    `json:"digest_week_start,omitempty"`
+	DigestWeekEnd   string                    `json:"digest_week_end,omitempty"`
+	DigestGroups    []WeeklyDigestGroupCounts `json:"digest_groups,omitempty"`
+	DigestUpcoming  []WeeklyDigestUpcoming    `json:"digest_upcoming,omitempty"`
+	DigestURL       string                    `json:"digest_url,omitempty"`
+	// DigestSettingsURL points at the notification settings of the first group
+	// in the digest, which is where the toggle that produced this email lives.
+	DigestSettingsURL string `json:"digest_settings_url,omitempty"`
 }
 
 // newEmailQueue selects Redis-backed queueing when configured; otherwise it

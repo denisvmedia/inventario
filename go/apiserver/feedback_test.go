@@ -26,6 +26,8 @@ import (
 // layer. Other EmailService methods are no-ops — the feedback handler
 // only calls SendFeedbackEmail.
 type capturingFeedbackEmailService struct {
+	// Embedded so a new EmailService method does not need a no-op added here.
+	services.StubEmailService
 	mu               sync.Mutex
 	calls            int
 	lastTo           string

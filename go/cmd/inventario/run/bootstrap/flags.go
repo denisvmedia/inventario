@@ -71,6 +71,19 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 			"(#1851 e2e cross-tenant flows; for testing only — do not use in production)",
 	)
 	flags.StringVar(
+		&cfg.WeeklyDigestInterval,
+		"weekly-digest-interval",
+		cfg.WeeklyDigestInterval,
+		"How often the weekly digest worker wakes up (#1391); the send window opens on Monday at "+
+			"--weekly-digest-send-hour-utc and stays open until the week ends, and only the first tick in it sends",
+	)
+	flags.IntVar(
+		&cfg.WeeklyDigestSendHourUTC,
+		"weekly-digest-send-hour-utc",
+		cfg.WeeklyDigestSendHourUTC,
+		"Hour on Monday, in UTC, from which the weekly digest may be sent (0-23)",
+	)
+	flags.StringVar(
 		&cfg.TenantCatchAllSlug,
 		"tenant-catch-all-slug",
 		cfg.TenantCatchAllSlug,

@@ -1,0 +1,31 @@
+Hi {{.Name}},
+
+Here is what happened in your Inventario groups between {{.DigestWeekStart}} and {{.DigestWeekEnd}}.
+{{range .DigestGroups}}
+{{.GroupName}}
+{{- if .ItemsAdded}}
+  Items added: {{.ItemsAdded}}
+{{- end}}
+{{- if .ItemsChanged}}
+  Items changed: {{.ItemsChanged}}
+{{- end}}
+{{- if .FilesAdded}}
+  Files attached: {{.FilesAdded}}
+{{- end}}
+{{end}}
+{{- if .DigestUpcoming}}
+Coming up
+{{- range .DigestUpcoming}}
+{{if eq .Kind "warranty"}}  Warranty expires {{.Date}}: {{.Name}} ({{.GroupName}}){{else}}  Maintenance due {{.Date}}: {{.Name}} ({{.GroupName}}){{end}}
+{{- if .URL}}
+    {{.URL}}
+{{- end}}
+{{- end}}
+{{end}}
+{{- if .DigestURL}}
+Open Inventario: {{.DigestURL}}
+{{end}}
+{{- if .DigestSettingsURL}}
+To stop receiving this, turn off the weekly digest in your notification settings:
+{{.DigestSettingsURL}}
+{{end}}

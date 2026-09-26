@@ -162,6 +162,7 @@ func (c *Command) run() error {
 			bootstrap.StartLoanReminderWorker,
 			bootstrap.StartMaintenanceReminderWorker,
 			bootstrap.StartCurrencyMigrationWorker,
+			bootstrap.StartWeeklyDigestWorker,
 			bootstrap.StartBusinessMetricsWorker,
 		}},
 	}

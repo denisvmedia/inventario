@@ -86,6 +86,32 @@ alerts, and which channels to use. Those reminders tie into your inventory; see
 [Warranties, loans & maintenance](../warranties-loans-maintenance/) for what they
 cover.
 
+### Weekly digest
+
+The weekly digest is one email on Monday morning summarising the week just gone.
+Unlike the other notifications it is **off by default** — switch it on per group
+in **Notifications** if you want it.
+
+Each digest covers Monday to Sunday and lists, for every group you switched it
+on for:
+
+- how many items were added, how many were changed, and how many files were
+  attached;
+- warranties expiring in the next 30 days and maintenance due in the next 14,
+  nearest first.
+
+A few things worth knowing:
+
+- **One email, not one per group.** If you switched the digest on for several
+  groups, they all appear in the same message.
+- **A quiet week sends nothing.** If none of your groups saw any activity, no
+  digest is sent — there is nothing to report.
+- **It never repeats.** You get at most one digest per week, even if the server
+  restarts. If the server happens to be down on Monday morning, the digest
+  arrives later that week rather than being skipped.
+- Every digest carries a link straight back to the setting, so you can turn it
+  off from the email.
+
 ## Change your password
 
 Everything below lives in the **Privacy & security** section of Preferences,

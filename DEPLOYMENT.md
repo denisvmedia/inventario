@@ -154,6 +154,15 @@ export INVENTARIO_RUN_PUBLIC_URL="https://inventario.example.com"   # used in em
 # redirect from a slug host to that tenant's own domain.
 # export INVENTARIO_RUN_TENANT_BASE_DOMAIN="inventario.example.com"
 
+# Weekly digest schedule. The worker wakes up on the interval below; the send
+# window opens on Monday at the given UTC hour and stays open until the week
+# ends, so an instance that was down or paused at that hour catches up on its
+# next tick instead of skipping the week. At most one digest per user per week
+# either way. The digest itself is opt-in: a user has to switch it on per group,
+# so changing these does not start mailing anybody who did not ask.
+# export INVENTARIO_RUN_WEEKLY_DIGEST_INTERVAL="1h"
+# export INVENTARIO_RUN_WEEKLY_DIGEST_SEND_HOUR_UTC="9"
+
 # Object storage instead of a local directory. A non-AWS S3 endpoint needs
 # `endpoint` and `use_path_style=true` alongside `region`; credentials come from
 # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY rather than the URL. See DOCKER.md,

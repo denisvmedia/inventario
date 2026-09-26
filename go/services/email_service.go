@@ -76,6 +76,16 @@ type EmailService interface {
 	// than printing a relative URL.
 	SendLoanReminderEmail(ctx context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error
 
+	// SendWeeklyDigestEmail requests delivery of the weekly digest: what
+	// happened in the recipient's groups over the covered week, and what is
+	// coming up (#1391).
+	//
+	// Counts and dates rather than sentences: the recipient's language is
+	// resolved by the renderer, so wording assembled here would arrive in the
+	// wrong one. The caller has already decided there is something to say — an
+	// empty digest is not sent.
+	SendWeeklyDigestEmail(ctx context.Context, to, name string, digest WeeklyDigestEmail) error
+
 	// SendMaintenanceReminderEmail requests delivery of a "maintenance
 	// due in N days" notification (#1368). thresholdDays is the
 	// reminder cadence the worker matched (14 / 7 / 1, or 0 for an
@@ -392,6 +402,15 @@ func (s *StubEmailService) SendLoanReminderEmail(_ context.Context, to, name, co
 	}
 	//nolint:sloglint // structured fields are constructed dynamically.
 	slog.Info("STUB email: loan reminder", attrs...)
+	return nil
+}
+
+// SendWeeklyDigestEmail logs the weekly digest without sending anything.
+func (s *StubEmailService) SendWeeklyDigestEmail(_ context.Context, to, name string, digest WeeklyDigestEmail) error {
+	slog.Info("Stub email service: weekly digest",
+		"to", to, "name", name,
+		"week_start", digest.WeekStart, "week_end", digest.WeekEnd,
+		"groups", len(digest.Groups), "upcoming", len(digest.Upcoming))
 	return nil
 }
 

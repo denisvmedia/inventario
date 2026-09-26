@@ -3400,6 +3400,51 @@ table "warranty_reminders" {
   }
 }
 
+table "weekly_digest_sends" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for per-user weekly digest send isolation"
+  }
+  column "week_start" {
+    type = DATE
+  }
+  column "sent_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_user" {
+    columns = [column.user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_weekly_digest_sends_user_week" {
+    unique = true
+    columns = [column.user_id, column.week_start]
+  }
+  index "idx_weekly_digest_sends_week_start" {
+    columns = [column.week_start]
+  }
+}
+
 table "worker_control" {
   column "worker_type" {
     type = TEXT
@@ -4117,5 +4162,23 @@ policy "warranty_reminder_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   comment = "Ensures warranty reminders are accessible only by their tenant and group"
+}
+
+policy "weekly_digest_send_background_worker_access" {
+  on = table.weekly_digest_sends
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows the digest worker to record sends across every tenant, where no user context exists"
+}
+
+policy "weekly_digest_send_isolation" {
+  on = table.weekly_digest_sends
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''"
+  comment = "Ensures a digest send record is visible only to the user it was sent to, within their tenant"
 }
 

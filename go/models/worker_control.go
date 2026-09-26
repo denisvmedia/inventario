@@ -45,6 +45,8 @@ const (
 	WorkerTypeMaintenanceReminder WorkerType = "maintenance-reminder"
 	// WorkerTypeCurrencyMigration pauses the currency migration worker.
 	WorkerTypeCurrencyMigration WorkerType = "currency-migration"
+	// WorkerTypeWeeklyDigest pauses the weekly digest worker (#1391).
+	WorkerTypeWeeklyDigest WorkerType = "weekly-digest"
 	// WorkerTypeOrphanFileGC pauses the orphan-file GC sweeper (#2237).
 	// This is the only DESTRUCTIVE periodic worker in the set: pausing it
 	// is the operator's emergency stop, so the constant MUST also appear
@@ -73,6 +75,7 @@ var allWorkerTypes = []WorkerType{
 	WorkerTypeLoanReminder,
 	WorkerTypeMaintenanceReminder,
 	WorkerTypeCurrencyMigration,
+	WorkerTypeWeeklyDigest,
 	WorkerTypeOrphanFileGC,
 }
 
@@ -104,6 +107,7 @@ func (w WorkerType) IsValid() bool {
 		WorkerTypeLoanReminder,
 		WorkerTypeMaintenanceReminder,
 		WorkerTypeCurrencyMigration,
+		WorkerTypeWeeklyDigest,
 		WorkerTypeOrphanFileGC:
 		return true
 	}

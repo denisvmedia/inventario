@@ -32,6 +32,7 @@ const (
 	emailTemplateLoanReminder        emailTemplateType = "loan_reminder"
 	emailTemplateMaintenanceReminder emailTemplateType = "maintenance_reminder"
 	emailTemplateFeedback            emailTemplateType = "feedback"
+	emailTemplateWeeklyDigest        emailTemplateType = "weekly_digest"
 )
 
 type renderedEmail struct {
@@ -115,6 +116,16 @@ type emailTemplateData struct {
 	ReplyToEmail     string
 	Message          string
 	DiagnosticsLines []string
+	// Weekly digest fields (#1391). DigestGroups always has at least one
+	// entry — an empty digest is not sent — and DigestUpcoming may be empty.
+	// DigestURL / DigestSettingsURL may be empty, and the template drops the
+	// matching link when so.
+	DigestWeekStart   string
+	DigestWeekEnd     string
+	DigestGroups      []WeeklyDigestGroupCounts
+	DigestUpcoming    []WeeklyDigestUpcoming
+	DigestURL         string
+	DigestSettingsURL string
 }
 
 // emailTemplateLanguages lists the locales we ship templates + subjects
@@ -134,6 +145,7 @@ var emailTemplateBasenames = map[emailTemplateType]string{
 	emailTemplateWarrantyReminder:    "warranty_reminder",
 	emailTemplateGroupInvite:         "group_invite",
 	emailTemplateStorageQuotaWarning: "storage_quota_warning",
+	emailTemplateWeeklyDigest:        "weekly_digest",
 	emailTemplateLoanReminder:        "loan_reminder",
 	emailTemplateMaintenanceReminder: "maintenance_reminder",
 	emailTemplateFeedback:            "feedback",
@@ -262,6 +274,12 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 		ReplyToEmail:       strings.TrimSpace(job.ReplyToEmail),
 		Message:            job.FeedbackMessage,
 		DiagnosticsLines:   job.DiagnosticsLines,
+		DigestWeekStart:    strings.TrimSpace(job.DigestWeekStart),
+		DigestWeekEnd:      strings.TrimSpace(job.DigestWeekEnd),
+		DigestGroups:       job.DigestGroups,
+		DigestUpcoming:     job.DigestUpcoming,
+		DigestURL:          strings.TrimSpace(job.DigestURL),
+		DigestSettingsURL:  strings.TrimSpace(job.DigestSettingsURL),
 	}
 	if data.Name == "" {
 		data.Name = "there"
@@ -326,6 +344,7 @@ var emailSubjects = map[string]map[emailTemplateType]string{
 		emailTemplateWarrantyReminder:    "Inventario warranty reminder",
 		emailTemplateGroupInvite:         "You're invited to a group on Inventario",
 		emailTemplateStorageQuotaWarning: "Your group is approaching its storage quota",
+		emailTemplateWeeklyDigest:        "Your inventory this week",
 		emailTemplateLoanReminder:        "Inventario loan reminder",
 		emailTemplateMaintenanceReminder: "Inventario maintenance reminder",
 		emailTemplateFeedback:            "Inventario feedback",
@@ -339,6 +358,7 @@ var emailSubjects = map[string]map[emailTemplateType]string{
 		emailTemplateWarrantyReminder:    "Připomenutí záruky Inventario",
 		emailTemplateGroupInvite:         "Máte pozvánku do skupiny v Inventariu",
 		emailTemplateStorageQuotaWarning: "Vaše skupina se blíží svému úložnému limitu",
+		emailTemplateWeeklyDigest:        "Váš inventář tento týden",
 		emailTemplateLoanReminder:        "Připomenutí zápůjčky Inventario",
 		emailTemplateMaintenanceReminder: "Připomenutí údržby v Inventariu",
 	},
@@ -351,6 +371,7 @@ var emailSubjects = map[string]map[emailTemplateType]string{
 		emailTemplateWarrantyReminder:    "Напоминание о гарантии Inventario",
 		emailTemplateGroupInvite:         "Вас пригласили в группу в Inventario",
 		emailTemplateStorageQuotaWarning: "Ваша группа приближается к лимиту квоты хранилища",
+		emailTemplateWeeklyDigest:        "Ваш инвентарь на этой неделе",
 		emailTemplateLoanReminder:        "Напоминание о займе Inventario",
 		emailTemplateMaintenanceReminder: "Напоминание об обслуживании в Inventario",
 	},
