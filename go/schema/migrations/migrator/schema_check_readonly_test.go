@@ -3,6 +3,7 @@ package migrator_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 
@@ -62,11 +63,22 @@ func TestVerifySchemaUpToDate_DoesNotNeedCreate(t *testing.T) {
 
 	// The check itself: reads the version, creates nothing. Either answer is
 	// fine — up to date, or behind — as long as it is not a permission error.
-	err = migrator.NewWithFallback(probeDSN, "").VerifySchemaUpToDate(ctx)
-	if err != nil {
-		c.Assert(err.Error(), qt.Not(qt.Contains), "permission denied",
-			qt.Commentf("the schema check still needs CREATE"))
+	assertSchemaCheckReached(c, migrator.NewWithFallback(probeDSN, "").VerifySchemaUpToDate(ctx))
+}
+
+// assertSchemaCheckReached fails unless the check actually completed. Its two
+// legitimate answers are nil (the database is current) and ErrSchemaLagsBinary
+// (it is behind) — both mean the version was read. Anything else is the read
+// itself failing, and asserting only that the message lacks "permission
+// denied" or "owned by" would let a broken query pass: a typo'd column name
+// produces an error that satisfies both of those.
+func assertSchemaCheckReached(c *qt.C, err error) {
+	c.Helper()
+
+	if err == nil || errors.Is(err, migrator.ErrSchemaLagsBinary) {
+		return
 	}
+	c.Fatalf("schema check did not read the version: %v", err)
 }
 
 // swapCredentials rewrites the user and password of a postgres URL, keeping
@@ -145,10 +157,5 @@ func TestVerifySchemaUpToDate_ReadsATableItDoesNotOwn(t *testing.T) {
 		qt.Commentf("the probe owns schema_migrations; the ownership refusal cannot fire"))
 
 	probeDSN := swapCredentials(c, dsn, role, password)
-	err = migrator.NewWithFallback(probeDSN, "").VerifySchemaUpToDate(ctx)
-	if err != nil {
-		c.Assert(err.Error(), qt.Not(qt.Contains), "owned by",
-			qt.Commentf("the schema check still routes the read through Ptah's metadata path"))
-		c.Assert(err.Error(), qt.Not(qt.Contains), "permission denied")
-	}
+	assertSchemaCheckReached(c, migrator.NewWithFallback(probeDSN, "").VerifySchemaUpToDate(ctx))
 }
