@@ -105,6 +105,19 @@ type User struct {
 	// so removing a group silently clears the preference instead of blocking the delete.
 	//ptah:schema:field name="default_group_id" type="TEXT" foreign="location_groups(id)" foreign_key_name="fk_user_default_group" on_delete="SET NULL"
 	DefaultGroupID *string `json:"default_group_id" db:"default_group_id"`
+	// AvatarPath is the blob key of the user's profile photo, or nil when they
+	// have none and the UI falls back to their initials (#1382).
+	//
+	// The key ends in a revision number (`avatars/<user>/3.jpg`) which exists to
+	// bust browser caches: replacing a photo writes a new key rather than
+	// overwriting one, so nothing has to reason about cache headers to make the
+	// new picture show up.
+	//
+	// Not user input: it is set by the avatar endpoints, which decide the key
+	// after validating and re-encoding what was uploaded. A client that could
+	// choose it could point a user's avatar at any object in the bucket.
+	//ptah:schema:field name="avatar_path" type="TEXT"
+	AvatarPath *string `json:"avatar_path" db:"avatar_path" userinput:"false"`
 	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"

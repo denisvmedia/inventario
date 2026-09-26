@@ -47,6 +47,9 @@ type groupsAPI struct {
 	// deployment to terminate spoofable proxy headers upstream). Same
 	// source-of-truth password-reset / verification emails use.
 	publicBaseURL string
+	// avatarService backs the member profile photo route (#1382). Nil leaves it
+	// unmounted, so a test that does not care about avatars needs no wiring.
+	avatarService *services.AvatarService
 }
 
 func groupFromContext(ctx context.Context) *models.LocationGroup {
@@ -290,6 +293,7 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 		auditService:  auditService,
 		emailService:  params.EmailService,
 		publicBaseURL: strings.TrimSpace(params.PublicURL),
+		avatarService: services.NewAvatarService(params.FactorySet, params.UploadLocation),
 	}
 	return func(r chi.Router) {
 		r.Get("/", api.listGroups)
@@ -301,6 +305,13 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 
 			r.Get("/", api.getGroup)
 			r.Get("/members", api.listMembers)
+			// A member's photo is readable by anyone in the group, which is the
+			// check this subtree already applies. Mounted here rather than under
+			// a bare user id so the authorization rule has somewhere to live.
+			if api.avatarService != nil {
+				avatars := &avatarsAPI{avatarService: api.avatarService}
+				r.Get("/members/{memberUserID}/avatar", avatars.handleGetMemberAvatar)
+			}
 			r.Post("/leave", api.leaveGroup)
 
 			// Admin-or-owner operations: member management, invites,

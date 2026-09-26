@@ -934,6 +934,10 @@ func (api *AuthAPI) writeCSRFHeader(w http.ResponseWriter, ctx context.Context, 
 
 // AuthParams holds all dependencies needed by the auth API.
 type AuthParams struct {
+	// AvatarService backs the profile photo routes (#1382). Nil leaves them
+	// unmounted, which is what a test that does not care about avatars gets.
+	AvatarService *services.AvatarService
+
 	UserRegistry            registry.UserRegistry
 	RefreshTokenRegistry    registry.RefreshTokenRegistry
 	GroupMembershipRegistry registry.GroupMembershipRegistry
@@ -1019,6 +1023,15 @@ func Auth(params AuthParams) func(r chi.Router) {
 		r.With(requireAuth).Put("/me", api.handleUpdateCurrentUser)
 		r.With(requireAuth).Post("/change-password", api.handleChangePassword)
 		r.With(requireAuth).Delete("/me", api.handleDeleteCurrentUser)
+		// Profile photo (#1382). The read is here as well as under the group
+		// subtree: a user can always fetch their own, and fellow members reach
+		// it through the group route, which is where the membership check is.
+		if params.AvatarService != nil {
+			avatars := &avatarsAPI{avatarService: params.AvatarService}
+			r.With(requireAuth).Post("/me/avatar", avatars.handleUploadAvatar)
+			r.With(requireAuth).Delete("/me/avatar", avatars.handleDeleteAvatar)
+			r.With(requireAuth).Get("/me/avatar", avatars.handleGetOwnAvatar)
+		}
 		// MFA routes (#1645): all gated by the same auth middleware as /me
 		// so an existing access token is required to enroll, manage, and
 		// disable MFA. The login-completion endpoint (POST /login/mfa) is

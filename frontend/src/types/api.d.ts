@@ -2091,6 +2091,144 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/auth/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get your own profile photo */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The avatar image */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "image/jpeg": string;
+                    };
+                };
+                /** @description Authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "image/jpeg": string;
+                    };
+                };
+                /** @description No avatar set */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "image/jpeg": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Upload a profile photo
+         * @description Replaces the caller's avatar. The image is center-cropped to a square, scaled to 512px and re-encoded as JPEG, which also drops any EXIF metadata the original carried.
+         *     Accepts JPEG or PNG up to 2 MB, detected from the content rather than from the declared type or the filename.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /**
+                         * Format: binary
+                         * @description Image file
+                         */
+                        avatar: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The stored avatar path */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: string;
+                        };
+                    };
+                };
+                /** @description Not an image, or larger than 2 MB */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        /**
+         * Remove the profile photo
+         * @description Clears the caller's avatar and deletes the stored image. Idempotent: removing an avatar that is not there succeeds.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/mfa/disable": {
         parameters: {
             query?: never;
@@ -8867,6 +9005,65 @@ export type paths = {
         };
         trace?: never;
     };
+    "/groups/{groupID}/members/{memberUserID}/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a group member's profile photo */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID or slug */
+                    groupID: string;
+                    /** @description Member user ID */
+                    memberUserID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The avatar image */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "image/jpeg": string;
+                    };
+                };
+                /** @description Not a member of this group */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "image/jpeg": string;
+                    };
+                };
+                /** @description No avatar set, or not a member of this group */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "image/jpeg": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/invites/{token}": {
         parameters: {
             query?: never;
@@ -12588,6 +12785,20 @@ export type components = {
         /** @enum {string} */
         "models.TenantStatus": "active" | "suspended" | "inactive";
         "models.User": {
+            /**
+             * @description AvatarPath is the blob key of the user's profile photo, or nil when they
+             *     have none and the UI falls back to their initials (#1382).
+             *
+             *     The key ends in a revision number (`avatars/<user>/3.jpg`) which exists to
+             *     bust browser caches: replacing a photo writes a new key rather than
+             *     overwriting one, so nothing has to reason about cache headers to make the
+             *     new picture show up.
+             *
+             *     Not user input: it is set by the avatar endpoints, which decide the key
+             *     after validating and re-encoding what was uploaded. A client that could
+             *     choose it could point a user's avatar at any object in the bucket.
+             */
+            avatar_path?: string;
             created_at?: string;
             /**
              * @description DefaultGroupID is the user's preferred landing group after login.
