@@ -415,6 +415,9 @@ func TestWeeklyDigestService_ListsUpcomingWarranties(t *testing.T) {
 	var names []string
 	for _, u := range sends[0].digest.Upcoming {
 		c.Assert(u.Kind, qt.Equals, services.WeeklyDigestUpcomingWarranty)
+		// The template ends each line with the group name; left unset it
+		// renders as an empty pair of brackets.
+		c.Assert(u.GroupName, qt.Equals, "Household")
 		names = append(names, u.Name)
 	}
 	c.Assert(names, qt.DeepEquals, []string{"Soon", "Later"},

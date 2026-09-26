@@ -246,7 +246,14 @@ func (d *digestDraft) add(group *models.LocationGroup, a groupActivity) {
 	if !counts.Empty() {
 		d.groups = append(d.groups, counts)
 	}
-	d.upcoming = append(d.upcoming, a.upcoming...)
+	// The group name is stamped here rather than while collecting, because the
+	// activity is shared by every member of the group and the name is what the
+	// "coming up" line ends with. Left unset it renders as an empty pair of
+	// brackets.
+	for _, u := range a.upcoming {
+		u.GroupName = group.Name
+		d.upcoming = append(d.upcoming, u)
+	}
 }
 
 // deliver claims the week and hands the digest to the email service.

@@ -107,7 +107,8 @@ A few things worth knowing:
 - **A quiet week sends nothing.** If none of your groups saw any activity, no
   digest is sent — there is nothing to report.
 - **It never repeats.** You get at most one digest per week, even if the server
-  restarts.
+  restarts. If the server happens to be down on Monday morning, the digest
+  arrives later that week rather than being skipped.
 - Every digest carries a link straight back to the setting, so you can turn it
   off from the email.
 

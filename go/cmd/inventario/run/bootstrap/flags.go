@@ -74,14 +74,14 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 		&cfg.WeeklyDigestInterval,
 		"weekly-digest-interval",
 		cfg.WeeklyDigestInterval,
-		"How often the weekly digest worker wakes up (#1391); it sends on Monday at --weekly-digest-send-hour-utc "+
-			"and does nothing on the other ticks",
+		"How often the weekly digest worker wakes up (#1391); the send window opens on Monday at "+
+			"--weekly-digest-send-hour-utc and stays open until the week ends, and only the first tick in it sends",
 	)
 	flags.IntVar(
 		&cfg.WeeklyDigestSendHourUTC,
 		"weekly-digest-send-hour-utc",
 		cfg.WeeklyDigestSendHourUTC,
-		"Hour on Monday, in UTC, at which the weekly digest is sent (0-23)",
+		"Hour on Monday, in UTC, from which the weekly digest may be sent (0-23)",
 	)
 	flags.StringVar(
 		&cfg.TenantCatchAllSlug,

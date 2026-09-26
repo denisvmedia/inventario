@@ -41,12 +41,17 @@ type Config struct {
 	WarrantyReminderInterval         string `yaml:"warranty_reminder_interval" env:"WARRANTY_REMINDER_INTERVAL" env-default:""`
 	StorageQuotaReminderInterval     string `yaml:"storage_quota_reminder_interval" env:"STORAGE_QUOTA_REMINDER_INTERVAL" env-default:""`
 	// WeeklyDigestInterval is how often the digest worker wakes up, not how
-	// often it sends: it sends on Monday at WeeklyDigestSendHourUTC and does
-	// nothing on the other ticks (#1391).
+	// often it sends: the send window opens on Monday at WeeklyDigestSendHourUTC
+	// and stays open until the week ends, and the per-week claim means only the
+	// first tick inside it sends anything (#1391).
 	WeeklyDigestInterval string `yaml:"weekly_digest_interval" env:"WEEKLY_DIGEST_INTERVAL" env-default:""`
 	// WeeklyDigestSendHourUTC is the hour on Monday, in UTC, at which the digest
 	// goes out. Per-user timezones are a follow-up.
-	WeeklyDigestSendHourUTC      int    `yaml:"weekly_digest_send_hour_utc" env:"WEEKLY_DIGEST_SEND_HOUR_UTC" env-default:"0"`
+	//
+	// The default is -1 rather than 0 so that "unset" and "midnight" stay
+	// distinguishable: with 0 as the zero value, an operator asking for 00:00
+	// would have it silently replaced by the built-in default.
+	WeeklyDigestSendHourUTC      int    `yaml:"weekly_digest_send_hour_utc" env:"WEEKLY_DIGEST_SEND_HOUR_UTC" env-default:"-1"`
 	LoanReminderInterval         string `yaml:"loan_reminder_interval" env:"LOAN_REMINDER_INTERVAL" env-default:""`
 	LoanReminderDueSoonDays      int    `yaml:"loan_reminder_due_soon_days" env:"LOAN_REMINDER_DUE_SOON_DAYS" env-default:"0"`
 	MaintenanceReminderInterval  string `yaml:"maintenance_reminder_interval" env:"MAINTENANCE_REMINDER_INTERVAL" env-default:""`
@@ -384,9 +389,9 @@ func (c *Config) setWeeklyDigestDefaults() {
 	if c.WeeklyDigestInterval == "" {
 		c.WeeklyDigestInterval = defaults.GetWeeklyDigestInterval()
 	}
-	// Zero is indistinguishable from unset for an int, and midnight UTC is not
-	// a sensible default for a digest, so zero takes the default too.
-	if c.WeeklyDigestSendHourUTC <= 0 || c.WeeklyDigestSendHourUTC > 23 {
+	// Negative means unset (see the field doc); anything outside a day is a
+	// mistake worth correcting rather than honouring. Zero is a valid hour.
+	if c.WeeklyDigestSendHourUTC < 0 || c.WeeklyDigestSendHourUTC > 23 {
 		c.WeeklyDigestSendHourUTC = defaults.GetWeeklyDigestSendHourUTC()
 	}
 }

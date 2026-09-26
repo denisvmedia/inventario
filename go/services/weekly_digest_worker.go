@@ -175,7 +175,12 @@ func (w *WeeklyDigestWorker) tick(ctx context.Context) {
 	}
 
 	now := w.clock().UTC()
-	if now.Weekday() != time.Monday || now.Hour() != w.sendHour {
+	// From Monday at the send hour to the end of the week, not just during that
+	// one hour. A process that is down, paused or mid-deploy at 09:00 would
+	// otherwise skip the week entirely; with the whole week open it catches up
+	// on its next tick, and the per-week claim is what keeps that from being a
+	// second email.
+	if now.Before(WeekStartUTC(now).Add(time.Duration(w.sendHour) * time.Hour)) {
 		return
 	}
 

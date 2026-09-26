@@ -9,6 +9,31 @@ import (
 	"go.5x5.cz/inventario/cmd/inventario/run/bootstrap"
 )
 
+// Midnight has to survive SetDefaults. An int config field whose zero value
+// means "unset" cannot express 00:00, which is why the field defaults to -1
+// (#1391).
+func TestSetDefaults_WeeklyDigestSendHour(t *testing.T) {
+	c := qt.New(t)
+
+	for _, tc := range []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"unset takes the default", -1, 9},
+		{"midnight is kept", 0, 0},
+		{"a normal hour is kept", 17, 17},
+		{"out of range takes the default", 24, 9},
+		{"far negative takes the default", -5, 9},
+	} {
+		c.Run(tc.name, func(c *qt.C) {
+			cfg := &bootstrap.Config{WeeklyDigestSendHourUTC: tc.in}
+			cfg.SetDefaults()
+			c.Assert(cfg.WeeklyDigestSendHourUTC, qt.Equals, tc.want)
+		})
+	}
+}
+
 func TestParseWorkerDurations_Valid(t *testing.T) {
 	c := qt.New(t)
 
