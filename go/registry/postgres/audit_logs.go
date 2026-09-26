@@ -22,13 +22,13 @@ var _ registry.AuditLogRegistry = (*AuditLogRegistry)(nil)
 // It uses a NonRLSRepository because the writer runs outside any tenant context:
 // auth events are recorded before a session exists and CLI actions have no tenant
 // at all, which is why TenantID is nullable. Most rows do carry a tenant, so this
-// is not a tenant-less table. What makes the missing policy safe is that nothing
-// reads it — every use of this registry is Create.
+// is not a tenant-less table.
 //
-// A tenant-visible read needs an RLS policy and an RLSRepository, together. The
-// policy alone is not enough: a reader left on this repository never switches
-// roles, so it keeps the login's inherited inventario_background_worker
-// membership along with that role's USING (true) policy, and sees every tenant.
+// The table carries an inventario_app tenant-isolation policy, and a reader on
+// this repository does not meet it. NonRLSRepository never switches roles, so
+// the connection keeps its inherited inventario_background_worker membership
+// along with that role's USING (true) policy, and sees every tenant. A
+// tenant-visible read needs an RLSRepository as well as the policy.
 type AuditLogRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames

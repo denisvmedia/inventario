@@ -77,6 +77,28 @@ func (a *AuditLog) GetUUID() string {
 	return a.UUID
 }
 
+// Row-level security for audit_logs, the same two-policy shape the other 31
+// tenant-scoped models carry (#2633).
+//
+// The tenant policy is a backstop rather than the boundary in force today: the
+// only read is ListByTenant, which takes the tenant as an argument, and its
+// registry connects without switching to inventario_app. What the policy buys
+// is that a read path built on an RLS repository returns nothing rather than
+// another tenant's security events when it forgets the argument.
+//
+// tenant_id is nullable here, and a NULL fails the predicate rather than
+// matching every tenant — which is the wanted answer: an event with no tenant
+// is a system event and is not any tenant's to read.
+//
+// The worker policy is what keeps the back-office plane working. Cross-tenant
+// admin reads and writes run as inventario_background_worker, exactly as they
+// do for login_events, whose own worker policy covers the login flow writing
+// outside any user context.
+//
+//ptah:schema:rls:enable table="audit_logs" comment="Enable RLS for multi-tenant audit log isolation"
+//ptah:schema:rls:policy name="audit_log_tenant_isolation" table="audit_logs" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''" comment="Audit rows are tenant-isolated; a system event with no tenant belongs to none"
+//ptah:schema:rls:policy name="audit_log_background_worker_access" table="audit_logs" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows the back-office plane and workers to read and write audit rows across tenants"
+
 // SetUUID sets the audit log entry's immutable UUID.
 func (a *AuditLog) SetUUID(uuid string) {
 	a.UUID = uuid

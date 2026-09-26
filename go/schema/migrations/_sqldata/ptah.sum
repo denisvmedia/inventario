@@ -1,5 +1,7 @@
-h1:mGbyBbL+XBXFuphS5QjtdE2H2pc/wmxcJ7GPKKb3MZM=
+h1:cBaq5mbubKbStXKM1Ra0A+SRefzLoCC0KJy1GHBtPxI=
 1789480900_initial_schema.down.sql h1:1b5WJAVMPaNbRsvj+nzs1R6KLQEEm8xv7OkV0gANX8w=
 1789480900_initial_schema.up.sql h1:isJ61I94xBD3lTD8QEQyAyDKIg4ld2KQSYG8JLxvQJ4=
 1789504168_enable_rls_on_operation_slots.down.sql h1:fZyTow/In0YkYczSN7gM6igXsUSxyJgRjo4QOLf1pWI=
 1789504168_enable_rls_on_operation_slots.up.sql h1:Qb98RhVPbl62LGpmOayfCOvUeG4pUiO8gxcLXihIZtg=
+1790414220_enable_rls_on_audit_logs.down.sql h1:y8NMWVC16oRVxwLZrp5+XXH1wopeMEWdU4gUYrgEeWo=
+1790414220_enable_rls_on_audit_logs.up.sql h1:glq9CSxMUK9xnutQkXSUTctAjwQYBH77QAnhrj80Muw=

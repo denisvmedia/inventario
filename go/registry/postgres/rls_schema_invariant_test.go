@@ -27,10 +27,6 @@ var rlsExemptTables = map[string]string{
 	"email_verifications": "token lookup precedes tenant context",
 	"magic_link_tokens":   "token lookup precedes tenant context",
 	"password_resets":     "token lookup precedes tenant context",
-
-	// Not structurally exempt like the token tables: reads take the tenant as
-	// an argument, so nothing in the database backs the boundary up (#2633).
-	"audit_logs": "reads are scoped by an explicit argument, not by policy (#2633)",
 }
 
 // tenantScopedTables returns the public tables carrying a tenant_id column,

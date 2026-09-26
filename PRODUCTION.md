@@ -205,6 +205,14 @@ persistence/HA) — never use it in production.
 - [ ] Record two DSNs for the Secret:
   - `INVENTARIO_DB_DSN` — app user: `postgres://inventario:…@<host>:5432/inventario?sslmode=require`
   - `MIGRATOR_DB_DSN` — migrator user (falls back to the app DSN if omitted).
+- [ ] ⚠️ **The app user must not own the tables.** Tenant isolation is enforced in the
+  database by row-level security, and PostgreSQL does not apply a table's policies to
+  that table's owner. Point both DSNs at the same user and every tenant policy becomes
+  a no-op: the application would be free to read any tenant's rows, and only the
+  application's own filtering would stand between them. `inventario db bootstrap`
+  produces the two-role split for you; a single-role install is not a supported shape.
+  (`FORCE ROW LEVEL SECURITY`, which would make policies apply to the owner too, is
+  deliberately not set — see #2633.)
 
 ### B4. Object storage — Cloudflare R2
 

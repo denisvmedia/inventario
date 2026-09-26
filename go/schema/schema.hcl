@@ -66,6 +66,10 @@ table "areas" {
 }
 
 table "audit_logs" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant audit log isolation"
+  }
   column "id" {
     type = TEXT
   }
@@ -3519,6 +3523,24 @@ policy "area_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   comment = "Ensures areas can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "audit_log_background_worker_access" {
+  on = table.audit_logs
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows the back-office plane and workers to read and write audit rows across tenants"
+}
+
+policy "audit_log_tenant_isolation" {
+  on = table.audit_logs
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''"
+  comment = "Audit rows are tenant-isolated; a system event with no tenant belongs to none"
 }
 
 policy "commodity_background_worker_access" {
