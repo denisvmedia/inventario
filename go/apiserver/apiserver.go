@@ -857,7 +857,12 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	})
 
 	// use Frontend as a root directory
-	r.Handle("/*", FrontendHandler())
+	// The SPA, and the only place the canonical-domain redirect belongs: these
+	// are document requests, so moving them to the tenant's own domain is
+	// something a browser can follow. The API deliberately keeps answering on
+	// the slug host (#1036).
+	r.With(CanonicalDomainRedirect(tenantResolver, params.FactorySet.TenantRegistry)).
+		Handle("/*", FrontendHandler())
 
 	return r
 }

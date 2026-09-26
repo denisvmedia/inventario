@@ -216,6 +216,9 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		return serverSetup{}, err
 	}
 
+	// Before maybeWireTestTenantHeader, which wraps whatever resolver is in
+	// place — wiring after it would wrap nothing and drop the base domain.
+	wireTenantBaseDomain(cfg, &params)
 	maybeWireTestTenantHeader(cfg, &params)
 	wireCatchAllTenant(cfg, &params)
 
@@ -374,6 +377,25 @@ func maybeWireTestTenantHeader(cfg *Config, params *apiserver.Params) {
 	}
 	params.TenantResolver = &apiserver.TestHeaderTenantResolver{Inner: inner}
 	params.TestTenantHeaderEnabled = true
+}
+
+// wireTenantBaseDomain installs the subdomain-per-tenant resolver when a base
+// domain is configured. Left empty, params.TenantResolver stays nil and the
+// server falls back to single-tenant mode, where every host is served the
+// tenant marked default.
+//
+// Custom per-tenant domains do not depend on this: the tenant middleware looks
+// the request host up against tenants.domain before it consults the resolver at
+// all. What the base domain adds is the slug-per-subdomain scheme, and with it
+// the redirect from a slug host to a tenant's own domain (#1036).
+func wireTenantBaseDomain(cfg *Config, params *apiserver.Params) {
+	domain := strings.ToLower(strings.TrimSpace(cfg.TenantBaseDomain))
+	if domain == "" {
+		return
+	}
+	slog.Info("Multi-tenant host resolution enabled — subdomains name tenants",
+		"base_domain", domain)
+	params.TenantResolver = &apiserver.HostTenantResolver{BaseDomain: domain}
 }
 
 // wireCatchAllTenant carries cfg.TenantCatchAllSlug into the server params and

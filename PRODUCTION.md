@@ -326,6 +326,33 @@ than one replica (set `persistence.enabled=false`).
 - [ ] nginx only: add `nginx.ingress.kubernetes.io/proxy-body-size: "100m"` so large file
   uploads aren't rejected.
 
+#### Hostnames and tenants
+
+The server resolves the tenant from the request `Host`. Three shapes, in
+increasing order of setup:
+
+- **One hostname, one tenant** — the default. Nothing to configure: every host is
+  served the tenant marked default.
+- **A subdomain per tenant** — put `INVENTARIO_RUN_TENANT_BASE_DOMAIN` in the
+  runtime Secret (the chart loads it as env; there is no chart value for it, the
+  same as the catch-all), and `acme.<domain>` resolves the tenant whose slug is
+  `acme`. The ingress then needs a wildcard host and a wildcard certificate,
+  which cert-manager issues over DNS-01 only. A host outside the domain is
+  refused unless `INVENTARIO_RUN_TENANT_CATCH_ALL_SLUG` names a tenant to fall
+  back to.
+- **A tenant's own domain** — set the tenant's `domain`
+  (`inventario tenants update <slug> --domain=inventory.acme.com`), point that
+  name at the same ingress, and add it to `ingress.hosts` and `ingress.tls`.
+  This works whether or not a base domain is configured. Where both are, a
+  request arriving on the slug host is answered with a 302 to the tenant's own
+  domain, keeping the path and query; the API keeps answering on both, so a
+  client already pointed at the slug host is unaffected.
+
+The `domain` column is matched against the request host exactly, so it must be a
+lowercase hostname with no scheme and no port — `inventory.acme.com`, not
+`https://Inventory.Acme.com:443`. The CLI refuses anything else rather than
+storing a tenant nobody can reach.
+
 ### B9. Install and verify
 
 - [ ] Assemble your `values-prod.yaml` ([Appendix A](#appendix-a-worked-values-prodyaml-k3s))

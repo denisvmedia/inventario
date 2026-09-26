@@ -295,6 +295,17 @@ type Config struct {
 	// domain and every unknown host is served this tenant instead of being
 	// refused, so the server says so at startup.
 	TenantCatchAllSlug string `yaml:"tenant_catch_all_slug" env:"TENANT_CATCH_ALL_SLUG" env-default:""`
+
+	// TenantBaseDomain is the domain whose subdomains name tenants, so
+	// `acme.inventario.com` resolves the tenant with slug `acme`. Empty, the
+	// default, is single-tenant mode: every host is served the tenant marked
+	// default, which is what a self-hosted install behind one hostname wants.
+	//
+	// It does not gate custom domains. A tenant reached by the domain on its
+	// own row resolves whether or not this is set; what this adds is the
+	// slug-per-subdomain scheme alongside it, and with it the redirect from a
+	// slug host to the tenant's own domain (#1036).
+	TenantBaseDomain string `yaml:"tenant_base_domain" env:"TENANT_BASE_DOMAIN" env-default:""`
 }
 
 // SetDefaults applies repository-wide defaults for fields left at their zero

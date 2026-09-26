@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"go.5x5.cz/inventario/appctx"
@@ -268,6 +269,18 @@ func normalizeHost(host string) string {
 func PublicTenantMiddleware(resolver TenantResolver, tenantRegistry registry.TenantRegistry, catchAllSlug string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// A tenant that brought its own domain is addressed by a host
+			// that carries no slug at all, so the domain is checked first and
+			// slug resolution stays exactly as it was. `tenants.domain` is
+			// indexed for this lookup (#1036).
+			if tenant, ok := tenantByRequestDomain(w, r, tenantRegistry); ok {
+				if tenant == nil {
+					return // the lookup failed and the response is already written
+				}
+				serveResolvedTenant(w, r, next, tenant)
+				return
+			}
+
 			slug, err := resolver.ResolveTenant(r)
 			if err != nil {
 				if catchAllSlug == "" {
@@ -306,13 +319,146 @@ func PublicTenantMiddleware(resolver TenantResolver, tenantRegistry registry.Ten
 				}
 			}
 
-			if tenant.Status != models.TenantStatusActive {
-				http.Error(w, "Tenant suspended", http.StatusForbidden)
-				return
-			}
-
-			ctx := WithTenant(r.Context(), tenant)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			serveResolvedTenant(w, r, next, tenant)
 		})
 	}
+}
+
+// tenantByRequestDomain looks the request host up as a tenant's custom domain.
+//
+// The three-way answer is what the caller needs: a tenant to serve, "no
+// tenant owns this host, carry on with slug resolution", and "the lookup
+// itself failed", which must not be mistaken for the second. A database error
+// answered by falling through would serve whichever tenant the slug path
+// picks, turning an outage into a mis-route.
+//
+// ok reports that the caller is done; tenant is nil when the response has
+// already been written.
+func tenantByRequestDomain(w http.ResponseWriter, r *http.Request, tenantRegistry registry.TenantRegistry) (tenant *models.Tenant, ok bool) {
+	host := normalizeHost(r.Host)
+	if host == "" {
+		return nil, false
+	}
+
+	tenant, err := tenantRegistry.GetByDomain(r.Context(), host)
+	switch {
+	case err == nil:
+		return tenant, true
+	case errors.Is(err, registry.ErrNotFound), errors.Is(err, registry.ErrFieldRequired):
+		return nil, false
+	default:
+		slog.Error("Custom-domain tenant lookup failed", "error", err, "host", host)
+		http.Error(w, "Tenant resolution failed", http.StatusServiceUnavailable)
+		return nil, true
+	}
+}
+
+// serveResolvedTenant puts the tenant in the context and continues, refusing
+// a tenant that is not active.
+func serveResolvedTenant(w http.ResponseWriter, r *http.Request, next http.Handler, tenant *models.Tenant) {
+	if tenant.Status != models.TenantStatusActive {
+		http.Error(w, "Tenant suspended", http.StatusForbidden)
+		return
+	}
+
+	next.ServeHTTP(w, r.WithContext(WithTenant(r.Context(), tenant)))
+}
+
+// CanonicalDomainRedirect sends a request that arrived on a tenant's
+// slug-based host to the custom domain that tenant configured, keeping the
+// path and the query.
+//
+// It belongs on the routes that serve documents, not on the API: redirecting
+// an XHR moves it to another origin, and a 302 on a POST turns it into a GET.
+// A client that already talks to the API on the slug host keeps working.
+//
+// 302 rather than 301 because `Domain` is a mutable column. A browser caches a
+// permanent redirect indefinitely, so a tenant that later drops its custom
+// domain would leave its users bouncing to a host that no longer answers.
+//
+// The comparison uses `r.Host`, the same host tenant resolution reads.
+// `X-Forwarded-Host` decides nothing here on purpose: it comes from the client
+// unless a proxy overwrites it, and letting it choose the tenant would be a
+// way to ask for somebody else's.
+func CanonicalDomainRedirect(resolver TenantResolver, tenantRegistry registry.TenantRegistry) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			target, ok := canonicalRedirectTarget(r, resolver, tenantRegistry)
+			if !ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// #nosec G710 -- the host is not request-controlled:
+			// canonicalRedirectTarget takes it from tenants.domain and returns
+			// nothing unless models.IsValidTenantDomain accepts it as a bare
+			// hostname, so only the path and query come from the request. See
+			// TestCanonicalDomainRedirect_ARowThatIsNotAHostnameCannotRedirectAway.
+			http.Redirect(w, r, target, http.StatusFound)
+		})
+	}
+}
+
+// canonicalRedirectTarget returns the absolute URL a slug-hosted request
+// should be sent to, or ok=false when it should be served where it is.
+//
+// Every "serve it here" case is deliberate: a host outside the base domain is
+// already a custom domain or the catch-all, a host with no slug is
+// single-tenant mode, an unresolvable slug is the handler's 404 to give, and a
+// tenant with no domain has no canonical host to move to.
+func canonicalRedirectTarget(r *http.Request, resolver TenantResolver, tenantRegistry registry.TenantRegistry) (string, bool) {
+	slug, err := resolver.ResolveTenant(r)
+	if err != nil || slug == "" {
+		return "", false
+	}
+
+	tenant, err := tenantRegistry.GetBySlug(r.Context(), slug)
+	if err != nil || tenant.Domain == nil {
+		return "", false
+	}
+
+	canonical := normalizeHost(*tenant.Domain)
+	if canonical == normalizeHost(r.Host) {
+		return "", false
+	}
+	// normalizeHost lowercases and drops a port and a trailing dot; it does not
+	// make a hostname out of something that is not one. A stored value carrying
+	// a slash, a userinfo marker or a query would put a different origin in the
+	// Location header, so a row that is not a hostname redirects nowhere.
+	if !models.IsValidTenantDomain(canonical) {
+		slog.Error("Tenant domain is not a hostname; not redirecting",
+			"tenant_slug", tenant.Slug, "domain", *tenant.Domain)
+		return "", false
+	}
+
+	// Built through url.URL so the path and query are escaped into their own
+	// components. What keeps the origin fixed is the hostname check above, not
+	// this — String() does not sanitize a Host that is already wrong.
+	target := url.URL{
+		Scheme:   requestScheme(r),
+		Host:     canonical,
+		Path:     r.URL.Path,
+		RawQuery: r.URL.RawQuery,
+	}
+	return target.String(), true
+}
+
+// requestScheme reports the scheme the client used, reading
+// `X-Forwarded-Proto` when a proxy terminated TLS.
+func requestScheme(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	fwd := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")))
+	if fwd == "" {
+		return scheme
+	}
+	// Pick the first proto when the header lists multiple hops.
+	if i := strings.Index(fwd, ","); i >= 0 {
+		fwd = strings.TrimSpace(fwd[:i])
+	}
+	if fwd == "http" || fwd == "https" {
+		return fwd
+	}
+	return scheme
 }
