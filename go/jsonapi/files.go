@@ -196,9 +196,8 @@ func (frdw *FileRequestDataWrapper) ValidateWithContext(ctx context.Context) err
 			return errors.New("linked entity meta is required for commodity files")
 		}
 		if frdw.Attributes.LinkedEntityMeta != "images" &&
-			frdw.Attributes.LinkedEntityMeta != "invoices" &&
-			frdw.Attributes.LinkedEntityMeta != "manuals" {
-			return errors.New("linked entity meta must be one of: images, invoices, manuals")
+			frdw.Attributes.LinkedEntityMeta != "documents" {
+			return errors.New("linked entity meta must be one of: images, documents")
 		}
 	}
 
@@ -266,7 +265,7 @@ func (frd FileRequestData) ValidateWithContext(ctx context.Context) error {
 	if frd.LinkedEntityType == "commodity" {
 		fields = append(fields,
 			validation.Field(&frd.LinkedEntityID, validation.Required),
-			validation.Field(&frd.LinkedEntityMeta, validation.Required, validation.In("images", "invoices", "manuals")),
+			validation.Field(&frd.LinkedEntityMeta, validation.Required, validation.In("images", "documents")),
 		)
 	}
 
@@ -392,7 +391,7 @@ func (fur FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) er
 	case "commodity":
 		fields = append(fields,
 			validation.Field(&fur.LinkedEntityID, validation.Required),
-			validation.Field(&fur.LinkedEntityMeta, validation.In("", "images", "invoices", "manuals")),
+			validation.Field(&fur.LinkedEntityMeta, validation.In("", "images", "documents")),
 		)
 	case "export":
 		fields = append(fields,

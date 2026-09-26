@@ -118,6 +118,12 @@ func ResponseSchema() map[string]any {
 	// so any drift only costs a dropped type guess, never a bad write.
 	commodityTypes := []string{"white_goods", "electronics", "equipment", "furniture", "clothes", "other"}
 
+	// documentTypes are the kinds a scanned document can be classified as.
+	// `invoice` and `manual` map to the tags of the same name; the rest are
+	// there so the model has somewhere honest to put a document that is
+	// neither, rather than forcing one of the two.
+	documentTypes := []string{"invoice", "manual", "receipt", "warranty", "other"}
+
 	fields := map[string]any{
 		FieldNameName:                  fieldGuessString,
 		FieldNameShortName:             fieldGuessStringMax(40),
@@ -130,6 +136,7 @@ func ResponseSchema() map[string]any {
 		FieldNameWarrantyExpiresAt:     fieldGuessString,
 		FieldNameComments:              fieldGuessString,
 		FieldNameTags:                  fieldGuessStringArray,
+		FieldNameDocumentType:          fieldGuessEnum(documentTypes),
 	}
 
 	warningSchema := map[string]any{

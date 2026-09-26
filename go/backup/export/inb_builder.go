@@ -6,6 +6,7 @@ import (
 	"archive/tar"
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -862,7 +863,7 @@ func (b *inbBuilder) planCommodityFiles(locSlug string, com *models.Commodity, i
 
 			b.stats.BinaryDataSize += cand.size
 			b.stats.FileCount++
-			incBucketStat(b.stats, bucket)
+			incBucketStat(b.stats, bucket, ref.Tags)
 		}
 	}
 	return pending
@@ -1037,13 +1038,13 @@ func (b *inbBuilder) flushPendingFile(pf pendingFile) error {
 
 // commodityFileBuckets is the fixed iteration order for a commodity's attachment
 // buckets, so the archive layout is deterministic.
-var commodityFileBuckets = []string{"images", "invoices", "manuals"}
+var commodityFileBuckets = []string{"images", "documents"}
 
 // isCommodityFileBucket reports whether a linked_entity_meta value is one of the
-// three commodity attachment buckets.
+// two commodity attachment buckets.
 func isCommodityFileBucket(meta string) bool {
 	switch meta {
-	case "images", "invoices", "manuals":
+	case "images", "documents":
 		return true
 	default:
 		return false
@@ -1068,22 +1069,29 @@ func appendFileRef(com *INBCommodity, bucket string, ref INBFileRef) {
 	switch bucket {
 	case "images":
 		com.Images = append(com.Images, ref)
-	case "invoices":
-		com.Invoices = append(com.Invoices, ref)
-	case "manuals":
-		com.Manuals = append(com.Manuals, ref)
+	case "documents":
+		com.Documents = append(com.Documents, ref)
 	}
 }
 
 // incBucketStat increments the per-bucket stat counter.
-func incBucketStat(stats *types.ExportStats, bucket string) {
+//
+// InvoiceCount and ManualCount outlive the buckets they were named after: the
+// archive now carries one `documents` section and the kind lives on a tag, but
+// both numbers are on the exports screen, so they are derived rather than
+// dropped. A document with neither tag counts towards neither, which is what
+// the old buckets did for a file nobody filed.
+func incBucketStat(stats *types.ExportStats, bucket string, tags []string) {
 	switch bucket {
 	case "images":
 		stats.ImageCount++
-	case "invoices":
-		stats.InvoiceCount++
-	case "manuals":
-		stats.ManualCount++
+	case "documents":
+		if slices.Contains(tags, models.FileTagInvoice) {
+			stats.InvoiceCount++
+		}
+		if slices.Contains(tags, models.FileTagManual) {
+			stats.ManualCount++
+		}
 	}
 }
 

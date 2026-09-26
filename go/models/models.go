@@ -165,11 +165,13 @@ const (
 	FileCategoryOther     FileCategory = "other"
 )
 
-// FileTagInvoice is the conventional tag added to files that previously
-// landed in the `invoices` category. Issue #1622 collapsed that category
-// into `documents`; the tag preserves the "this is an invoice" semantic
-// without re-introducing a fourth top-level bucket.
-const FileTagInvoice = "invoice"
+// FileTagInvoice and FileTagManual carry the kind of a commodity document.
+// The bucket is `documents` for both; what distinguishes an invoice from a
+// manual is the tag, so neither needs a top-level bucket of its own (#1989).
+const (
+	FileTagInvoice = "invoice"
+	FileTagManual  = "manual"
+)
 
 // ValidFileCategories is the closed set accepted by validation and the
 // GET /files?category= filter.
@@ -180,20 +182,16 @@ var ValidFileCategories = []FileCategory{
 }
 
 // FileCategoryFromContext picks the user-meaningful category for a newly
-// uploaded file. Legacy commodity/location bucket names take precedence over
-// the MIME-type fallback so a "manuals" bucket lands in Documents even when
-// the file is e.g. a JPEG scan, matching the mock's tile semantics.
+// uploaded file. The bucket takes precedence over the MIME-type fallback so a
+// `documents` bucket lands in Documents even when the file is e.g. a JPEG
+// scan of a receipt, matching the mock's tile semantics.
 func FileCategoryFromContext(linkedEntityType, linkedEntityMeta, mimeType string) FileCategory {
 	switch linkedEntityType {
 	case "commodity":
 		switch linkedEntityMeta {
 		case "images":
 			return FileCategoryImages
-		case "invoices", "manuals":
-			// `invoices` collapsed into `documents` per #1622 — the
-			// "this is an invoice" semantic now lives on the
-			// FileTagInvoice tag, attached by the caller alongside
-			// the category. `manuals` was always Documents.
+		case "documents":
 			return FileCategoryDocuments
 		}
 	case "location":
@@ -202,19 +200,6 @@ func FileCategoryFromContext(linkedEntityType, linkedEntityMeta, mimeType string
 		}
 	}
 	return FileCategoryFromMIME(mimeType)
-}
-
-// AutoTagsForContext returns the conventional tag(s) that should be
-// auto-attached to a freshly uploaded file based on its linked-entity
-// bucket. Currently only the legacy commodity/invoices bucket
-// contributes a tag — the migration in #1622 dropped the `invoices`
-// FileCategory and shifted its meaning onto FileTagInvoice. Callers
-// must merge the returned slice into FileEntity.Tags before persisting.
-func AutoTagsForContext(linkedEntityType, linkedEntityMeta string) []string {
-	if linkedEntityType == "commodity" && linkedEntityMeta == "invoices" {
-		return []string{FileTagInvoice}
-	}
-	return nil
 }
 
 // FileCategoryFromMIME is the MIME-only fallback used when no linked-entity
@@ -312,7 +297,7 @@ type FileEntity struct {
 	LinkedEntityID string `json:"linked_entity_id" db:"linked_entity_id"`
 
 	// LinkedEntityMeta contains metadata about the link type
-	// For commodities: "images", "invoices", "manuals"
+	// For commodities: "images", "documents"
 	// For exports: "xml-1.0" (version of the export file format)
 	//ptah:schema:field name="linked_entity_meta" type="TEXT"
 	LinkedEntityMeta string `json:"linked_entity_meta" db:"linked_entity_meta"`
@@ -427,7 +412,7 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 		switch fe.LinkedEntityType {
 		case "commodity":
 			fields = append(fields,
-				validation.Field(&fe.LinkedEntityMeta, validation.In("images", "invoices", "manuals")),
+				validation.Field(&fe.LinkedEntityMeta, validation.In("images", "documents")),
 			)
 		case "export":
 			fields = append(fields,

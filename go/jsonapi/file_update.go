@@ -11,7 +11,7 @@ import (
 type CommodityFileUpdateRequest struct {
 	Data struct {
 		ID         string                    `json:"id"`
-		Type       string                    `json:"type" example:"images" enums:"images,manuals,invoices"`
+		Type       string                    `json:"type" example:"images" enums:"images,documents"`
 		Attributes CommodityFileUpdateParams `json:"attributes"`
 	} `json:"data"`
 }
@@ -31,7 +31,7 @@ func (cfur *CommodityFileUpdateRequest) Bind(_r *http.Request) error {
 		return errors.New("missing type")
 	}
 
-	if cfur.Data.Type != "images" && cfur.Data.Type != "manuals" && cfur.Data.Type != "invoices" {
+	if cfur.Data.Type != "images" && cfur.Data.Type != "documents" {
 		return errors.New("invalid type")
 	}
 

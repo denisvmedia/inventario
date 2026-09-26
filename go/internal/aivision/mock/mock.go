@@ -223,6 +223,11 @@ func DefaultResult() aivision.ScanResult {
 			aivision.FieldNameWarrantyExpiresAt: {Value: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02"), Confidence: 0.45},
 			aivision.FieldNameComments:          {Value: "Black over-ear wireless headphones with active noise cancellation.", Confidence: 0.65},
 			aivision.FieldNameTags:              {Value: []string{"audio", "headphones", "wireless"}, Confidence: 0.60},
+			// The canned photo is a product shot rather than a document, so
+			// the honest classification is "other" — a mock that always said
+			// "invoice" would make the FE's pre-selection look right for the
+			// wrong reason.
+			aivision.FieldNameDocumentType: {Value: "other", Confidence: 0.40},
 		},
 		Warnings: []aivision.Warning{
 			{Code: "low_confidence", Field: aivision.FieldNamePurchaseDate, Detail: "purchase date inferred from packaging design only"},

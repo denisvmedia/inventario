@@ -3783,7 +3783,7 @@ definitions:
       linked_entity_meta:
         description: |-
           LinkedEntityMeta contains metadata about the link type
-          For commodities: "images", "invoices", "manuals"
+          For commodities: "images", "documents"
           For exports: "xml-1.0" (version of the export file format)
         type: string
       linked_entity_type:

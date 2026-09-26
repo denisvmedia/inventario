@@ -158,9 +158,8 @@ type INBCommodity struct {
 	// created (the file does not yet exist when the commodity row is created).
 	CoverFileID string `json:"coverFileId,omitempty"`
 
-	Images   []INBFileRef `json:"images,omitempty"`
-	Invoices []INBFileRef `json:"invoices,omitempty"`
-	Manuals  []INBFileRef `json:"manuals,omitempty"`
+	Images    []INBFileRef `json:"images,omitempty"`
+	Documents []INBFileRef `json:"documents,omitempty"`
 }
 
 // INBFileRef references a commodity-attached file. Path is the file's location
