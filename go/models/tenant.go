@@ -139,6 +139,24 @@ func (*Tenant) Validate() error {
 	return ErrMustUseValidateWithContext
 }
 
+// IsValidTenantDomain reports whether s is the shape a tenant domain has to be
+// in to be usable: a bare lowercase hostname, matched against the normalized
+// request host verbatim.
+//
+// Validation refuses to store anything else, and this exists for the code that
+// reads a row back and has to act on it. A value that predates the rule, or one
+// written by hand, is still whatever is in the column — and "evil.test/x" put
+// into a redirect URL is a redirect to evil.test.
+func IsValidTenantDomain(s string) bool {
+	return s != "" && len(s) <= 255 && domainPattern.MatchString(s)
+}
+
+// domainPattern matches a lowercase hostname: labels of letters, digits and
+// inner hyphens, joined by dots. It deliberately rejects a scheme, a port, a
+// trailing dot and any uppercase letter, because the resolver compares the
+// normalized request host against this column verbatim.
+var domainPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
+
 func (t *Tenant) ValidateWithContext(ctx context.Context) error {
 	// Compile regex pattern for slug validation
 	slugPattern := regexp.MustCompile(`^[a-z0-9-]+$`)
@@ -157,9 +175,17 @@ func (t *Tenant) ValidateWithContext(ctx context.Context) error {
 		fields = append(fields, validation.Field(&t.RegistrationMode))
 	}
 
-	// Only validate domain length if it's not empty
+	// Only validate the domain when one is set — it is optional.
+	//
+	// The pattern is what makes host-based resolution work: the Host header a
+	// request arrives with is lowercased and stripped of its port before the
+	// lookup, and the lookup matches the column exactly, so a domain stored
+	// as "Acme.COM" or "acme.com:8080" would never be found. Rejecting those
+	// on write gives the operator an error instead of a tenant that silently
+	// cannot be reached. Same reasoning as the slug pattern above.
 	if t.Domain != nil && *t.Domain != "" {
-		fields = append(fields, validation.Field(&t.Domain, validation.Length(1, 255)))
+		fields = append(fields, validation.Field(&t.Domain,
+			validation.Length(1, 255), validation.Match(domainPattern)))
 	}
 
 	return validation.ValidateStructWithContext(ctx, t, fields...)

@@ -146,6 +146,14 @@ export INVENTARIO_RUN_PUBLIC_URL="https://inventario.example.com"   # used in em
 # it is on.
 # export INVENTARIO_RUN_TENANT_CATCH_ALL_SLUG="your-org"
 
+# Subdomain-per-tenant resolution. Set this and `acme.<domain>` resolves the
+# tenant whose slug is `acme`; leave it empty and every host is served the
+# tenant marked default, which is what a single-tenant install wants. It does
+# not gate per-tenant custom domains: a tenant reached by the domain on its own
+# row resolves either way. What it adds is the slug scheme, and with it the
+# redirect from a slug host to that tenant's own domain.
+# export INVENTARIO_RUN_TENANT_BASE_DOMAIN="inventario.example.com"
+
 # Object storage instead of a local directory. A non-AWS S3 endpoint needs
 # `endpoint` and `use_path_style=true` alongside `region`; credentials come from
 # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY rather than the URL. See DOCKER.md,

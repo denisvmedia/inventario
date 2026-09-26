@@ -135,6 +135,12 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 # Update tenant registration mode (open, approval, closed)
 ./inventario tenants update acme --registration-mode=approval
 
+# Give a tenant its own domain. Point that name at the server and it resolves
+# this tenant; a lowercase hostname with no scheme and no port is required,
+# because it is matched against the request Host exactly. See PRODUCTION.md,
+# "Hostnames and tenants".
+./inventario tenants update acme --domain=inventory.acme.com
+
 # Delete tenant with confirmation
 ./inventario tenants delete acme
 

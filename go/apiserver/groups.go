@@ -927,19 +927,7 @@ func (api *groupsAPI) buildInviteURL(r *http.Request, token string) string {
 		)
 	}
 
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	if fwd := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))); fwd != "" {
-		// Pick the first proto when the header lists multiple hops.
-		if i := strings.Index(fwd, ","); i >= 0 {
-			fwd = strings.TrimSpace(fwd[:i])
-		}
-		if fwd == "http" || fwd == "https" {
-			scheme = fwd
-		}
-	}
+	scheme := requestScheme(r)
 	host := r.Host
 	if fwdHost := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); fwdHost != "" {
 		if i := strings.Index(fwdHost, ","); i >= 0 {

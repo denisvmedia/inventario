@@ -220,3 +220,68 @@ func TestTenant_UnmarshalJSON(t *testing.T) {
 		c.Assert(*tenant.Domain, qt.Equals, "test.example.com")
 	})
 }
+
+// The domain column is matched against the normalized request Host verbatim,
+// so a value that cannot equal a normalized host is a tenant nobody can
+// reach. Rejecting it on write turns that into an error the operator sees
+// (#1036).
+func TestTenant_ValidateWithContext_Domain(t *testing.T) {
+	valid := func(domain string) *models.Tenant {
+		return &models.Tenant{
+			Name:   "Test Tenant",
+			Slug:   "test-tenant",
+			Status: models.TenantStatusActive,
+			Domain: new(domain),
+		}
+	}
+
+	t.Run("accepted", func(t *testing.T) {
+		for _, domain := range []string{
+			"acme.com",
+			"inventory.acme.co.uk",
+			"my-shop.example.test",
+			"a.b",
+			"localhost",
+			"x1-2y.example.com",
+		} {
+			t.Run(domain, func(t *testing.T) {
+				c := qt.New(t)
+				c.Assert(valid(domain).ValidateWithContext(context.Background()), qt.IsNil)
+			})
+		}
+	})
+
+	t.Run("refused", func(t *testing.T) {
+		for _, tc := range []struct{ name, domain string }{
+			{"uppercase", "Acme.com"},
+			{"with a port", "acme.com:8080"},
+			{"with a scheme", "https://acme.com"},
+			{"trailing dot", "acme.com."},
+			{"leading dot", ".acme.com"},
+			{"with a path", "acme.com/inventory"},
+			{"underscore", "my_shop.example.com"},
+			{"hyphen at a label edge", "-acme.com"},
+			{"double dot", "acme..com"},
+			{"a space", "acme .com"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				c := qt.New(t)
+				err := valid(tc.domain).ValidateWithContext(context.Background())
+				c.Assert(err, qt.IsNotNil)
+				c.Assert(err.Error(), qt.Contains, "domain")
+			})
+		}
+	})
+
+	// An absent domain and an empty one are both "no custom domain", and
+	// neither may be refused: most tenants have none.
+	t.Run("no domain is fine", func(t *testing.T) {
+		c := qt.New(t)
+		tenant := valid("acme.com")
+		tenant.Domain = nil
+		c.Assert(tenant.ValidateWithContext(context.Background()), qt.IsNil)
+
+		tenant.Domain = new("")
+		c.Assert(tenant.ValidateWithContext(context.Background()), qt.IsNil)
+	})
+}
