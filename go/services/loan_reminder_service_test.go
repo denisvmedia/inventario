@@ -40,6 +40,12 @@ type recordedLoanEmail struct {
 	daysDelta     int
 }
 
+// SendWeeklyDigestEmail satisfies the interface; these tests do not exercise
+// the digest.
+func (r *recordingLoanEmailService) SendWeeklyDigestEmail(_ context.Context, _, _ string, _ services.WeeklyDigestEmail) error {
+	return nil
+}
+
 func (r *recordingLoanEmailService) SendVerificationEmail(_ context.Context, _ string, _ string, _ string) error {
 	return nil
 }
@@ -104,6 +110,12 @@ func (r *recordingLoanEmailService) snapshot() []recordedLoanEmail {
 // type (not embedding recordingLoanEmailService) so the per-method
 // receivers don't drag the sync.Mutex through a copy.
 type failingLoanEmailService struct{}
+
+// SendWeeklyDigestEmail satisfies the interface; these tests do not exercise
+// the digest.
+func (f *failingLoanEmailService) SendWeeklyDigestEmail(_ context.Context, _, _ string, _ services.WeeklyDigestEmail) error {
+	return nil
+}
 
 func (failingLoanEmailService) SendVerificationEmail(_ context.Context, _, _, _ string) error {
 	return nil

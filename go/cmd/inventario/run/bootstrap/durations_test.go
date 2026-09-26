@@ -23,6 +23,7 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 		GroupPurgeInterval:               "7m",
 		WarrantyReminderInterval:         "30m",
 		StorageQuotaReminderInterval:     "20m",
+		WeeklyDigestInterval:             "25m",
 		LoanReminderInterval:             "45m",
 		MaintenanceReminderInterval:      "55m",
 		CurrencyMigrationInterval:        "8s",
@@ -43,6 +44,7 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 	// than failing the parse, unlike the fail-fast worker intervals above.
 	c.Assert(got.WorkerControlRefreshInterval, qt.Equals, 10*time.Second)
 	c.Assert(got.ExportPollInterval, qt.Equals, 11*time.Second)
+	c.Assert(got.WeeklyDigestInterval, qt.Equals, 25*time.Minute)
 	c.Assert(got.ImportPollInterval, qt.Equals, 12*time.Second)
 	c.Assert(got.RestorePollInterval, qt.Equals, 13*time.Second)
 	c.Assert(got.RefreshTokenCleanupInterval, qt.Equals, 2*time.Hour)

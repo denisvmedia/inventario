@@ -1,0 +1,31 @@
+Здравствуйте, {{.Name}}!
+
+Вот что происходило в ваших группах Inventario с {{.DigestWeekStart}} по {{.DigestWeekEnd}}.
+{{range .DigestGroups}}
+{{.GroupName}}
+{{- if .ItemsAdded}}
+  Добавлено предметов: {{.ItemsAdded}}
+{{- end}}
+{{- if .ItemsChanged}}
+  Изменено предметов: {{.ItemsChanged}}
+{{- end}}
+{{- if .FilesAdded}}
+  Прикреплено файлов: {{.FilesAdded}}
+{{- end}}
+{{end}}
+{{- if .DigestUpcoming}}
+Скоро
+{{- range .DigestUpcoming}}
+{{if eq .Kind "warranty"}}  Гарантия истекает {{.Date}}: {{.Name}} ({{.GroupName}}){{else}}  Обслуживание {{.Date}}: {{.Name}} ({{.GroupName}}){{end}}
+{{- if .URL}}
+    {{.URL}}
+{{- end}}
+{{- end}}
+{{end}}
+{{- if .DigestURL}}
+Открыть Inventario: {{.DigestURL}}
+{{end}}
+{{- if .DigestSettingsURL}}
+Чтобы больше не получать это письмо, отключите еженедельную сводку в настройках уведомлений:
+{{.DigestSettingsURL}}
+{{end}}

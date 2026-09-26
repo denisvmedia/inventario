@@ -35,6 +35,8 @@ type Workers struct {
 	GroupPurgeInterval               string // Group purge worker interval (e.g., "5m")
 	WarrantyReminderInterval         string // Warranty reminder worker interval (e.g., "1h")
 	StorageQuotaReminderInterval     string // Storage quota warning worker interval (e.g., "1h")
+	WeeklyDigestInterval             string // Weekly digest worker tick interval (e.g., "1h"); the send itself is weekly
+	WeeklyDigestSendHourUTC          int    // UTC hour on Monday at which the weekly digest is sent (default 9)
 	LoanReminderInterval             string // Loan reminder worker interval (e.g., "1h")
 	LoanReminderDueSoonDays          int    // Forward-looking window for the loan due-soon reminder (default 7)
 	MaintenanceReminderInterval      string // Maintenance reminder worker interval (e.g., "1h")
@@ -109,6 +111,8 @@ func New() Config {
 			GroupPurgeInterval:               "5m",
 			WarrantyReminderInterval:         "1h",
 			StorageQuotaReminderInterval:     "1h",
+			WeeklyDigestInterval:             "1h",
+			WeeklyDigestSendHourUTC:          9,
 			LoanReminderInterval:             "1h",
 			LoanReminderDueSoonDays:          7,
 			MaintenanceReminderInterval:      "1h",
@@ -254,6 +258,20 @@ func GetOrphanFileGCMode() string {
 // warranty reminder sweeps.
 func GetWarrantyReminderInterval() string {
 	return defaultConfig.Workers.WarrantyReminderInterval
+}
+
+// GetWeeklyDigestInterval returns the default weekly digest tick interval
+// (#1391). The worker ticks hourly and sends on Monday at
+// GetWeeklyDigestSendHourUTC, so the schedule follows the calendar rather than
+// the moment the process started.
+func GetWeeklyDigestInterval() string {
+	return defaultConfig.Workers.WeeklyDigestInterval
+}
+
+// GetWeeklyDigestSendHourUTC returns the UTC hour on Monday at which the weekly
+// digest goes out (#1391).
+func GetWeeklyDigestSendHourUTC() int {
+	return defaultConfig.Workers.WeeklyDigestSendHourUTC
 }
 
 // GetStorageQuotaReminderInterval returns the default interval

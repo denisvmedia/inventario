@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="cs">
+<body>
+<p>Dobrý den, {{.Name}},</p>
+<p>Zde je přehled toho, co se ve vašich skupinách Inventario dělo
+od {{.DigestWeekStart}} do {{.DigestWeekEnd}}.</p>
+{{- range .DigestGroups}}
+<p><strong>{{.GroupName}}</strong></p>
+<ul>
+{{- if .ItemsAdded}}
+<li>Přidané předměty: {{.ItemsAdded}}</li>
+{{- end}}
+{{- if .ItemsChanged}}
+<li>Změněné předměty: {{.ItemsChanged}}</li>
+{{- end}}
+{{- if .FilesAdded}}
+<li>Připojené soubory: {{.FilesAdded}}</li>
+{{- end}}
+</ul>
+{{- end}}
+{{- if .DigestUpcoming}}
+<p><strong>Blíží se</strong></p>
+<ul>
+{{- range .DigestUpcoming}}
+<li>
+{{- if eq .Kind "warranty"}}Záruka končí {{.Date}}:{{else}}Údržba {{.Date}}:{{end}}
+{{- if .URL}} <a href="{{.URL}}">{{.Name}}</a>{{else}} {{.Name}}{{end}}
+({{.GroupName}})</li>
+{{- end}}
+</ul>
+{{- end}}
+{{- if .DigestURL}}
+<p>Otevřít Inventario: <a href="{{.DigestURL}}">{{.DigestURL}}</a></p>
+{{- end}}
+{{- if .DigestSettingsURL}}
+<p>Pokud tento e-mail nechcete dostávat, vypněte týdenní přehled v
+nastavení oznámení: <a href="{{.DigestSettingsURL}}">{{.DigestSettingsURL}}</a></p>
+{{- end}}
+</body>
+</html>

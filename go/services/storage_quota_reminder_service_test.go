@@ -39,6 +39,12 @@ type recordedStorageQuotaEmail struct {
 	settingsURL      string
 }
 
+// SendWeeklyDigestEmail satisfies the interface; these tests do not exercise
+// the digest.
+func (r *recordingStorageQuotaEmailService) SendWeeklyDigestEmail(_ context.Context, _, _ string, _ services.WeeklyDigestEmail) error {
+	return nil
+}
+
 func (r *recordingStorageQuotaEmailService) SendVerificationEmail(_ context.Context, _ string, _ string, _ string) error {
 	return nil
 }

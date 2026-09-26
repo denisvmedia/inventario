@@ -35,6 +35,7 @@ type TableNames struct {
 	CommoditySupplyLinks     func() TableName
 	WarrantyReminders        func() TableName
 	StorageQuotaReminders    func() TableName
+	WeeklyDigestSends        func() TableName
 	MaintenanceSchedules     func() TableName
 	MaintenanceReminders     func() TableName
 	CurrencyMigrations       func() TableName
@@ -81,6 +82,7 @@ var DefaultTableNames = TableNames{
 	CommoditySupplyLinks:     func() TableName { return "commodity_supply_links" },
 	WarrantyReminders:        func() TableName { return "warranty_reminders" },
 	StorageQuotaReminders:    func() TableName { return "storage_quota_reminders" },
+	WeeklyDigestSends:        func() TableName { return "weekly_digest_sends" },
 	MaintenanceSchedules:     func() TableName { return "maintenance_schedules" },
 	MaintenanceReminders:     func() TableName { return "maintenance_reminders" },
 	CurrencyMigrations:       func() TableName { return "currency_migrations" },

@@ -52,12 +52,24 @@ func TestEmailTemplateRenderer_AllTypesAllLangsRender(t *testing.T) {
 		FromEmail:             "alex@example.com",
 		FeedbackMessage:       "hello",
 		DiagnosticsLines:      []string{"x: y"},
+		DigestWeekStart:       "2026-09-14",
+		DigestWeekEnd:         "2026-09-20",
+		DigestGroups: []WeeklyDigestGroupCounts{
+			{GroupName: "Household", ItemsAdded: 4, ItemsChanged: 2, FilesAdded: 7},
+		},
+		DigestUpcoming: []WeeklyDigestUpcoming{
+			{Kind: WeeklyDigestUpcomingWarranty, GroupName: "Household", Name: "Drill", Date: "2026-10-03", URL: "https://example.com/c/1"},
+			{Kind: WeeklyDigestUpcomingMaintenance, GroupName: "Household", Name: "Boiler service", Date: "2026-09-29"},
+		},
+		DigestURL:         "https://example.com/",
+		DigestSettingsURL: "https://example.com/settings",
 	}
 	types := []emailTemplateType{
 		emailTemplateVerification, emailTemplatePasswordReset, emailTemplateMagicLink,
 		emailTemplatePasswordChange, emailTemplateWelcome, emailTemplateWarrantyReminder,
 		emailTemplateGroupInvite, emailTemplateStorageQuotaWarning, emailTemplateLoanReminder,
 		emailTemplateMaintenanceReminder, emailTemplateFeedback,
+		emailTemplateWeeklyDigest,
 	}
 	for _, lang := range []string{"en", "cs", "ru"} {
 		for _, tt := range types {

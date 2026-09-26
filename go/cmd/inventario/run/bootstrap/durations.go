@@ -23,6 +23,7 @@ type WorkerDurations struct {
 	GroupPurgeInterval               time.Duration
 	WarrantyReminderInterval         time.Duration
 	StorageQuotaReminderInterval     time.Duration
+	WeeklyDigestInterval             time.Duration
 	LoanReminderInterval             time.Duration
 	MaintenanceReminderInterval      time.Duration
 	CurrencyMigrationInterval        time.Duration
@@ -71,6 +72,7 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		{"group-purge-interval", cfg.GroupPurgeInterval, &out.GroupPurgeInterval},
 		{"warranty-reminder-interval", cfg.WarrantyReminderInterval, &out.WarrantyReminderInterval},
 		{"storage-quota-reminder-interval", cfg.StorageQuotaReminderInterval, &out.StorageQuotaReminderInterval},
+		{"weekly-digest-interval", cfg.WeeklyDigestInterval, &out.WeeklyDigestInterval},
 		{"loan-reminder-interval", cfg.LoanReminderInterval, &out.LoanReminderInterval},
 		{"maintenance-reminder-interval", cfg.MaintenanceReminderInterval, &out.MaintenanceReminderInterval},
 		{"currency-migration-interval", cfg.CurrencyMigrationInterval, &out.CurrencyMigrationInterval},

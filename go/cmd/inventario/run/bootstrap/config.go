@@ -40,12 +40,19 @@ type Config struct {
 	GroupPurgeInterval               string `yaml:"group_purge_interval" env:"GROUP_PURGE_INTERVAL" env-default:""`
 	WarrantyReminderInterval         string `yaml:"warranty_reminder_interval" env:"WARRANTY_REMINDER_INTERVAL" env-default:""`
 	StorageQuotaReminderInterval     string `yaml:"storage_quota_reminder_interval" env:"STORAGE_QUOTA_REMINDER_INTERVAL" env-default:""`
-	LoanReminderInterval             string `yaml:"loan_reminder_interval" env:"LOAN_REMINDER_INTERVAL" env-default:""`
-	LoanReminderDueSoonDays          int    `yaml:"loan_reminder_due_soon_days" env:"LOAN_REMINDER_DUE_SOON_DAYS" env-default:"0"`
-	MaintenanceReminderInterval      string `yaml:"maintenance_reminder_interval" env:"MAINTENANCE_REMINDER_INTERVAL" env-default:""`
-	CurrencyMigrationInterval        string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
-	BusinessMetricsInterval          string `yaml:"business_metrics_interval" env:"BUSINESS_METRICS_INTERVAL" env-default:""`
-	WorkerControlRefreshInterval     string `yaml:"worker_control_refresh_interval" env:"WORKER_CONTROL_REFRESH_INTERVAL" env-default:""`
+	// WeeklyDigestInterval is how often the digest worker wakes up, not how
+	// often it sends: it sends on Monday at WeeklyDigestSendHourUTC and does
+	// nothing on the other ticks (#1391).
+	WeeklyDigestInterval string `yaml:"weekly_digest_interval" env:"WEEKLY_DIGEST_INTERVAL" env-default:""`
+	// WeeklyDigestSendHourUTC is the hour on Monday, in UTC, at which the digest
+	// goes out. Per-user timezones are a follow-up.
+	WeeklyDigestSendHourUTC      int    `yaml:"weekly_digest_send_hour_utc" env:"WEEKLY_DIGEST_SEND_HOUR_UTC" env-default:"0"`
+	LoanReminderInterval         string `yaml:"loan_reminder_interval" env:"LOAN_REMINDER_INTERVAL" env-default:""`
+	LoanReminderDueSoonDays      int    `yaml:"loan_reminder_due_soon_days" env:"LOAN_REMINDER_DUE_SOON_DAYS" env-default:"0"`
+	MaintenanceReminderInterval  string `yaml:"maintenance_reminder_interval" env:"MAINTENANCE_REMINDER_INTERVAL" env-default:""`
+	CurrencyMigrationInterval    string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
+	BusinessMetricsInterval      string `yaml:"business_metrics_interval" env:"BUSINESS_METRICS_INTERVAL" env-default:""`
+	WorkerControlRefreshInterval string `yaml:"worker_control_refresh_interval" env:"WORKER_CONTROL_REFRESH_INTERVAL" env-default:""`
 	// Orphan-file GC (#2237). Mode is off | report | delete and is validated
 	// at startup — an unknown value fails fast rather than silently defaulting
 	// a destructive knob.
@@ -370,6 +377,20 @@ func (c *Config) SetDefaults() {
 
 // setWorkerDefaults applies defaults to background worker tunables (concurrency
 // limits and poll intervals for export, import, restore, and refresh-token workers).
+// setWeeklyDigestDefaults fills in the weekly digest schedule (#1391). Split
+// out of setWorkerDefaults, which is a long enough chain of these already that
+// the complexity linter refuses another branch in it.
+func (c *Config) setWeeklyDigestDefaults() {
+	if c.WeeklyDigestInterval == "" {
+		c.WeeklyDigestInterval = defaults.GetWeeklyDigestInterval()
+	}
+	// Zero is indistinguishable from unset for an int, and midnight UTC is not
+	// a sensible default for a digest, so zero takes the default too.
+	if c.WeeklyDigestSendHourUTC <= 0 || c.WeeklyDigestSendHourUTC > 23 {
+		c.WeeklyDigestSendHourUTC = defaults.GetWeeklyDigestSendHourUTC()
+	}
+}
+
 func (c *Config) setWorkerDefaults() {
 	if c.MaxConcurrentExports == 0 {
 		c.MaxConcurrentExports = defaults.GetMaxConcurrentExports()
@@ -410,6 +431,7 @@ func (c *Config) setWorkerDefaults() {
 	if c.StorageQuotaReminderInterval == "" {
 		c.StorageQuotaReminderInterval = defaults.GetStorageQuotaReminderInterval()
 	}
+	c.setWeeklyDigestDefaults()
 	if c.LoanReminderInterval == "" {
 		c.LoanReminderInterval = defaults.GetLoanReminderInterval()
 	}

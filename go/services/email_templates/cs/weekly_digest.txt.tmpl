@@ -1,0 +1,31 @@
+Dobrý den, {{.Name}},
+
+Zde je přehled toho, co se ve vašich skupinách Inventario dělo od {{.DigestWeekStart}} do {{.DigestWeekEnd}}.
+{{range .DigestGroups}}
+{{.GroupName}}
+{{- if .ItemsAdded}}
+  Přidané předměty: {{.ItemsAdded}}
+{{- end}}
+{{- if .ItemsChanged}}
+  Změněné předměty: {{.ItemsChanged}}
+{{- end}}
+{{- if .FilesAdded}}
+  Připojené soubory: {{.FilesAdded}}
+{{- end}}
+{{end}}
+{{- if .DigestUpcoming}}
+Blíží se
+{{- range .DigestUpcoming}}
+{{if eq .Kind "warranty"}}  Záruka končí {{.Date}}: {{.Name}} ({{.GroupName}}){{else}}  Údržba {{.Date}}: {{.Name}} ({{.GroupName}}){{end}}
+{{- if .URL}}
+    {{.URL}}
+{{- end}}
+{{- end}}
+{{end}}
+{{- if .DigestURL}}
+Otevřít Inventario: {{.DigestURL}}
+{{end}}
+{{- if .DigestSettingsURL}}
+Pokud tento e-mail nechcete dostávat, vypněte týdenní přehled v nastavení oznámení:
+{{.DigestSettingsURL}}
+{{end}}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<body>
+<p>Здравствуйте, {{.Name}}!</p>
+<p>Вот что происходило в ваших группах Inventario с {{.DigestWeekStart}}
+по {{.DigestWeekEnd}}.</p>
+{{- range .DigestGroups}}
+<p><strong>{{.GroupName}}</strong></p>
+<ul>
+{{- if .ItemsAdded}}
+<li>Добавлено предметов: {{.ItemsAdded}}</li>
+{{- end}}
+{{- if .ItemsChanged}}
+<li>Изменено предметов: {{.ItemsChanged}}</li>
+{{- end}}
+{{- if .FilesAdded}}
+<li>Прикреплено файлов: {{.FilesAdded}}</li>
+{{- end}}
+</ul>
+{{- end}}
+{{- if .DigestUpcoming}}
+<p><strong>Скоро</strong></p>
+<ul>
+{{- range .DigestUpcoming}}
+<li>
+{{- if eq .Kind "warranty"}}Гарантия истекает {{.Date}}:{{else}}Обслуживание {{.Date}}:{{end}}
+{{- if .URL}} <a href="{{.URL}}">{{.Name}}</a>{{else}} {{.Name}}{{end}}
+({{.GroupName}})</li>
+{{- end}}
+</ul>
+{{- end}}
+{{- if .DigestURL}}
+<p>Открыть Inventario: <a href="{{.DigestURL}}">{{.DigestURL}}</a></p>
+{{- end}}
+{{- if .DigestSettingsURL}}
+<p>Чтобы больше не получать это письмо, отключите еженедельную сводку в
+настройках уведомлений: <a href="{{.DigestSettingsURL}}">{{.DigestSettingsURL}}</a></p>
+{{- end}}
+</body>
+</html>

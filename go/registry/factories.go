@@ -199,6 +199,7 @@ type FactorySet struct {
 	UserContentOwnershipChecker           UserContentOwnershipChecker   // UserContentOwnershipChecker is the read-only pre-check for self-service account deletion (#2147)
 	WarrantyReminderRegistry              WarrantyReminderRegistry      // WarrantyReminderRegistry is the worker idempotency store; service-mode only
 	StorageQuotaReminderRegistry          StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the storage quota warning worker idempotency store; service-mode only (#1585)
+	WeeklyDigestSendRegistry              WeeklyDigestSendRegistry      // WeeklyDigestSendRegistry is the weekly digest worker idempotency store; service-mode only (#1391)
 	MaintenanceReminderRegistry           MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the maintenance reminder worker idempotency store; service-mode only (#1368)
 	CurrencyMigrationRegistryFactory      CurrencyMigrationRegistryFactory
 	CommodityScanAuditRegistry            CommodityScanAuditRegistry // AI vision scan audit log (#1720); service-mode (writes audit rows even when the calling RLS context has been cancelled)
@@ -387,6 +388,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		GroupPurger:                    fs.GroupPurger,
 		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
 		StorageQuotaReminderRegistry:   fs.StorageQuotaReminderRegistry,
+		WeeklyDigestSendRegistry:       fs.WeeklyDigestSendRegistry,
 		MaintenanceReminderRegistry:    fs.MaintenanceReminderRegistry,
 		CurrencyMigrationRegistry:      currencyMigrationRegistry,
 		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
@@ -432,6 +434,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		GroupPurger:                    fs.GroupPurger,
 		WarrantyReminderRegistry:       fs.WarrantyReminderRegistry,
 		StorageQuotaReminderRegistry:   fs.StorageQuotaReminderRegistry,
+		WeeklyDigestSendRegistry:       fs.WeeklyDigestSendRegistry,
 		MaintenanceReminderRegistry:    fs.MaintenanceReminderRegistry,
 		CurrencyMigrationRegistry:      fs.CurrencyMigrationRegistryFactory.CreateServiceRegistry(),
 		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
