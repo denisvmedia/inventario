@@ -107,7 +107,7 @@ func TestAvatarService_NormalisesWhatItStores(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(strings.HasPrefix(key, "avatars/"+f.userID+"/1-"), qt.IsTrue, qt.Commentf("got %s", key))
 	c.Assert(strings.HasSuffix(key, ".jpg"), qt.IsTrue, qt.Commentf("got %s", key))
-	c.Assert(f.avatarPath(c), qt.Not(qt.IsNil))
+	c.Assert(f.avatarPath(c), qt.IsNotNil)
 	c.Assert(*f.avatarPath(c), qt.Equals, key)
 
 	reader, contentType, err := f.svc.Open(context.Background(), f.userID)
@@ -138,13 +138,13 @@ func TestAvatarService_ReplacementBumpsTheRevisionAndCleansUp(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	c.Assert(second, qt.Not(qt.Equals), first)
-	c.Assert(strings.Contains(second, "/2-"), qt.IsTrue, qt.Commentf("got %s", second))
+	c.Assert(second, qt.Contains, "/2-")
 	c.Assert(f.exists(c, second), qt.IsTrue)
 	c.Assert(f.exists(c, first), qt.IsFalse, qt.Commentf("the replaced image was left behind"))
 
 	third, err := f.svc.Store(ctx, f.userID, bytes.NewReader(pngBytes(c, 300, 300)))
 	c.Assert(err, qt.IsNil)
-	c.Assert(strings.Contains(third, "/3-"), qt.IsTrue, qt.Commentf("got %s", third))
+	c.Assert(third, qt.Contains, "/3-")
 }
 
 // Removal clears the row and the object, and removing nothing is not an error —
@@ -236,7 +236,7 @@ func TestAvatarService_SizeCapBoundary(t *testing.T) {
 
 	c.Run("one byte over the limit is refused", func(c *qt.C) {
 		padded := append(append([]byte(nil), body...), bytes.Repeat([]byte{0}, limit+1-len(body))...)
-		c.Assert(len(padded), qt.Equals, limit+1)
+		c.Assert(padded, qt.HasLen, limit+1)
 		_, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(padded))
 		c.Assert(err, qt.ErrorIs, services.ErrAvatarTooLarge)
 	})
@@ -245,7 +245,7 @@ func TestAvatarService_SizeCapBoundary(t *testing.T) {
 		// Trailing bytes after IEND are ignored, so this is a decodable image
 		// of exactly the maximum size.
 		padded := append(append([]byte(nil), body...), bytes.Repeat([]byte{0}, limit-len(body))...)
-		c.Assert(len(padded), qt.Equals, limit)
+		c.Assert(padded, qt.HasLen, limit)
 		_, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(padded))
 		c.Assert(err, qt.IsNil)
 	})
@@ -311,13 +311,13 @@ func TestAvatarService_ConcurrentUploadsGetDistinctKeys(t *testing.T) {
 	}
 	wg.Wait()
 
-	c.Assert(len(keys), qt.Equals, racers,
+	c.Assert(keys, qt.HasLen, racers,
 		qt.Commentf("%d uploads produced %d distinct keys: %v", racers, len(keys), keys))
 
 	// Whichever row update landed last decides, and it has to point at an object
 	// that is actually there.
 	final := f.avatarPath(c)
-	c.Assert(final, qt.Not(qt.IsNil))
+	c.Assert(final, qt.IsNotNil)
 	c.Assert(f.exists(c, *final), qt.IsTrue)
 }
 
