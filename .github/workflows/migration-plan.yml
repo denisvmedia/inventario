@@ -24,9 +24,24 @@ name: Migration Plan
 #
 # Pull requests only. A push has no comment to post and no reviewer to read
 # it.
+#
+# On a pull request from a fork GitHub hands out a read-only token whatever the
+# `permissions:` block says, so the sticky comment cannot be posted and the
+# action degrades to a warning. The gate still works — the job still fails on a
+# destructive plan, which is the half that protects `master` — and the plan is
+# appended to the run summary, which needs no token. Publishing the comment
+# from a `workflow_run` companion would mean giving a write token to a workflow
+# that consumes output produced by pull request code, which is a worse trade
+# than a reviewer opening the run summary.
 
 on:
   pull_request:
+    # `labeled` / `unlabeled` are here because the gate reads the
+    # `allow-destructive` label from the event payload. Without them, adding
+    # the label leaves the earlier red check in place and removing it leaves
+    # the earlier green one, so the check would not describe the current
+    # decision. The `changes` job ignores every other label.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -44,6 +59,10 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
+    # Label churn is constant and almost none of it concerns this gate.
+    if: >-
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+      github.event.label.name == 'allow-destructive'
     outputs:
       schema: ${{ steps.filter.outputs.go_schema_plan }}
       ci: ${{ steps.filter.outputs.ci }}
@@ -154,6 +173,30 @@ jobs:
           # migrations and needs no database. Linting the whole directory here
           # would add 400-odd findings nobody can act on to the comment.
           lint: 'false'
+          # A known path, so the summary step below does not depend on the
+          # action's step outputs surviving its own failure — a destructive
+          # plan is when the plan text is most worth reading.
+          output-dir: ${{ runner.temp }}/ptah
           allow-destructive: >-
             ${{ contains(github.event.pull_request.labels.*.name, 'allow-destructive')
             && 'true' || 'false' }}
+
+      - name: Put the plan in the run summary
+        # The action's own summary carries the verdict but not the SQL, and the
+        # SQL is what a reviewer needs when the comment could not be posted.
+        # `always()` so a destructive plan — the case worth reading — is still
+        # shown after the gate has failed the step above.
+        if: always()
+        env:
+          PLAN_PATH: ${{ runner.temp }}/ptah/ptah-plan.txt
+        run: |
+          set -euo pipefail
+          if [ ! -s "$PLAN_PATH" ]; then
+            exit 0
+          fi
+          {
+            printf '<details><summary>Migration plan</summary>\n\n'
+            printf '```sql\n'
+            cat "$PLAN_PATH"
+            printf '\n```\n\n</details>\n'
+          } >>"$GITHUB_STEP_SUMMARY"
