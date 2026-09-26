@@ -60,7 +60,7 @@ require (
 	golang.org/x/text v0.42.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
 	google.golang.org/grpc v1.85.0-dev.0.20260924115737-1274845c21b3
-	ptah.run v0.7.0
+	ptah.run v0.8.1
 )
 
 require (
