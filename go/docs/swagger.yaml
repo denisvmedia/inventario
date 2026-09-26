@@ -9988,7 +9988,7 @@ paths:
   /groups/{groupID}/members/{memberUserID}/avatar:
     get:
       parameters:
-      - description: Group ID or slug
+      - description: Group ID
         in: path
         name: groupID
         required: true

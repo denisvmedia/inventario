@@ -309,7 +309,7 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 			// check this subtree already applies. Mounted here rather than under
 			// a bare user id so the authorization rule has somewhere to live.
 			if api.avatarService != nil {
-				avatars := &avatarsAPI{avatarService: api.avatarService}
+				avatars := &avatarsAPI{avatarService: api.avatarService, groupService: groupService}
 				r.Get("/members/{memberUserID}/avatar", avatars.handleGetMemberAvatar)
 			}
 			r.Post("/leave", api.leaveGroup)

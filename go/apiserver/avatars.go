@@ -16,13 +16,16 @@ import (
 // avatarsAPI serves the profile photo endpoints (#1382).
 //
 // Reads are mounted twice: once on /auth/me for the owner and once inside the
-// group subtree for everybody else. That is what decides who may see a photo —
-// the group routes already require membership, so the rule is "you can see the
-// avatar of someone you share a group with", which is the same rule that lets
-// you see their name at all. There is deliberately no route that takes a bare
-// user id, because it would have no such rule behind it.
+// group subtree for everybody else. The rule is "you can see the avatar of
+// someone you share a group with", and it takes two checks, not one: the
+// subtree's requireGroupMember middleware covers the CALLER, and
+// handleGetMemberAvatar checks the SUBJECT. Without the second the path
+// parameter would be an unchecked user id, and any group member could read any
+// user's photo in the deployment.
 type avatarsAPI struct {
 	avatarService *services.AvatarService
+	// groupService answers whether the path's user is in the context group.
+	groupService *services.GroupService
 }
 
 // avatarMultipartMemory is how much of a multipart body is buffered in memory
@@ -61,7 +64,17 @@ func (api *avatarsAPI) handleUploadAvatar(w http.ResponseWriter, r *http.Request
 	// read: without this the body can be any size and spills to disk. The reader
 	// is the actual bound, and it is what gosec's G120 is about.
 	r.Body = http.MaxBytesReader(w, r.Body, avatarMaxBodyBytes)
-	if err := r.ParseMultipartForm(avatarMultipartMemory); err != nil { //nolint:gosec // G120: the body is bounded by the MaxBytesReader above
+	// #nosec G120 -- the body is bounded by the MaxBytesReader above;
+	// ParseMultipartForm's argument caps memory, not the request.
+	if err := r.ParseMultipartForm(avatarMultipartMemory); err != nil {
+		// The reader above trips before the file is parsed, so an oversized
+		// upload arrives here rather than at the service's own size check. Say
+		// the same thing either way; "invalid multipart body" would send the
+		// reader looking for a malformed request.
+		if _, tooLarge := errors.AsType[*http.MaxBytesError](err); tooLarge {
+			http.Error(w, "The image is larger than 2 MB", http.StatusBadRequest)
+			return
+		}
 		http.Error(w, "Invalid multipart body", http.StatusBadRequest)
 		return
 	}
@@ -135,14 +148,33 @@ func (api *avatarsAPI) handleGetOwnAvatar(w http.ResponseWriter, r *http.Request
 // @Summary Get a group member's profile photo
 // @Tags groups
 // @Produce image/jpeg
-// @Param groupID path string true "Group ID or slug"
+// @Param groupID path string true "Group ID"
 // @Param memberUserID path string true "Member user ID"
 // @Success 200 {file} file "The avatar image"
 // @Failure 403 {string} string "Not a member of this group"
 // @Failure 404 {string} string "No avatar set, or not a member of this group"
 // @Router /groups/{groupID}/members/{memberUserID}/avatar [get].
 func (api *avatarsAPI) handleGetMemberAvatar(w http.ResponseWriter, r *http.Request) {
-	api.streamAvatar(w, r, chi.URLParam(r, "memberUserID"))
+	group := groupFromContext(r.Context())
+	if group == nil {
+		http.Error(w, "Group context required", http.StatusInternalServerError)
+		return
+	}
+
+	memberUserID := chi.URLParam(r, "memberUserID")
+	// The middleware on this subtree established that the CALLER is a member.
+	// This establishes that the SUBJECT is, which is the half that stops the
+	// path parameter being an unchecked user id.
+	//
+	// 404 rather than 403: whether a given user exists at all is not something
+	// this route should confirm to somebody they share no group with.
+	if api.groupService == nil || memberUserID == "" ||
+		!api.groupService.IsGroupMember(r.Context(), group.ID, memberUserID) {
+		http.Error(w, "No avatar", http.StatusNotFound)
+		return
+	}
+
+	api.streamAvatar(w, r, memberUserID)
 }
 
 // streamAvatar writes the stored image, or 404 when there is none.

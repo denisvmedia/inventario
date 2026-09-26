@@ -7866,7 +7866,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Group ID or slug",
+                        "description": "Group ID",
                         "name": "groupID",
                         "in": "path",
                         "required": true

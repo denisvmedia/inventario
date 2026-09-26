@@ -9018,7 +9018,7 @@ export type paths = {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Group ID or slug */
+                    /** @description Group ID */
                     groupID: string;
                     /** @description Member user ID */
                     memberUserID: string;

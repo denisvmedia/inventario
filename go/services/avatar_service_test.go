@@ -3,6 +3,8 @@ package services_test
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/gif"
@@ -10,6 +12,7 @@ import (
 	"image/png"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -102,7 +105,8 @@ func TestAvatarService_NormalisesWhatItStores(t *testing.T) {
 
 	key, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(pngBytes(c, 1200, 800)))
 	c.Assert(err, qt.IsNil)
-	c.Assert(key, qt.Equals, "avatars/"+f.userID+"/1.jpg")
+	c.Assert(strings.HasPrefix(key, "avatars/"+f.userID+"/1-"), qt.IsTrue, qt.Commentf("got %s", key))
+	c.Assert(strings.HasSuffix(key, ".jpg"), qt.IsTrue, qt.Commentf("got %s", key))
 	c.Assert(f.avatarPath(c), qt.Not(qt.IsNil))
 	c.Assert(*f.avatarPath(c), qt.Equals, key)
 
@@ -134,13 +138,13 @@ func TestAvatarService_ReplacementBumpsTheRevisionAndCleansUp(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	c.Assert(second, qt.Not(qt.Equals), first)
-	c.Assert(strings.HasSuffix(second, "/2.jpg"), qt.IsTrue, qt.Commentf("got %s", second))
+	c.Assert(strings.Contains(second, "/2-"), qt.IsTrue, qt.Commentf("got %s", second))
 	c.Assert(f.exists(c, second), qt.IsTrue)
 	c.Assert(f.exists(c, first), qt.IsFalse, qt.Commentf("the replaced image was left behind"))
 
 	third, err := f.svc.Store(ctx, f.userID, bytes.NewReader(pngBytes(c, 300, 300)))
 	c.Assert(err, qt.IsNil)
-	c.Assert(strings.HasSuffix(third, "/3.jpg"), qt.IsTrue, qt.Commentf("got %s", third))
+	c.Assert(strings.Contains(third, "/3-"), qt.IsTrue, qt.Commentf("got %s", third))
 }
 
 // Removal clears the row and the object, and removing nothing is not an error —
@@ -245,6 +249,76 @@ func TestAvatarService_SizeCapBoundary(t *testing.T) {
 		_, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(padded))
 		c.Assert(err, qt.IsNil)
 	})
+}
+
+// The byte cap does not bound the decoded image: a small file of one flat colour
+// can declare enormous dimensions, and decoding it allocates width x height x 4
+// bytes before anything is scaled down. The header has to be read first.
+func TestAvatarService_RefusesADecompressionBomb(t *testing.T) {
+	c := qt.New(t)
+	f := newAvatarFixture(c)
+
+	// A PNG whose IHDR declares 30000x30000 (900 megapixels, ~3.6 GB decoded)
+	// and which stops right after it. Go verifies the IHDR CRC, so the chunk has
+	// to be well-formed — the point is that a VALID header with absurd
+	// dimensions is refused before the pixels are allocated, which is also why
+	// the truncation after it is never reached.
+	ihdr := []byte{
+		0x00, 0x00, 0x75, 0x30, // width  = 30000
+		0x00, 0x00, 0x75, 0x30, // height = 30000
+		0x08, 0x02, 0x00, 0x00, 0x00, // 8-bit truecolour
+	}
+	chunk := append([]byte("IHDR"), ihdr...)
+	crc := crc32.ChecksumIEEE(chunk)
+
+	body := []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}
+	body = append(body, 0x00, 0x00, 0x00, 0x0D) // IHDR length
+	body = append(body, chunk...)
+	crcBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(crcBytes, crc)
+	body = append(body, crcBytes...)
+	// Pad past the sniff length so the content is recognised as a PNG.
+	body = append(body, bytes.Repeat([]byte{0}, 1024)...)
+
+	_, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(body))
+	c.Assert(err, qt.ErrorIs, services.ErrAvatarTooLarge,
+		qt.Commentf("a declared 900-megapixel image was not refused from its header"))
+	c.Assert(f.avatarPath(c), qt.IsNil)
+}
+
+// Two uploads racing for the same user must not land on the same key: both read
+// the same revision, and without a per-upload component they would compute the
+// same name and overwrite each other.
+func TestAvatarService_ConcurrentUploadsGetDistinctKeys(t *testing.T) {
+	c := qt.New(t)
+	f := newAvatarFixture(c)
+	body := pngBytes(c, 200, 200)
+
+	const racers = 6
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		keys = map[string]int{}
+	)
+	for range racers {
+		wg.Go(func() {
+			key, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(body))
+			mu.Lock()
+			defer mu.Unlock()
+			c.Check(err, qt.IsNil)
+			keys[key]++
+		})
+	}
+	wg.Wait()
+
+	c.Assert(len(keys), qt.Equals, racers,
+		qt.Commentf("%d uploads produced %d distinct keys: %v", racers, len(keys), keys))
+
+	// Whichever row update landed last decides, and it has to point at an object
+	// that is actually there.
+	final := f.avatarPath(c)
+	c.Assert(final, qt.Not(qt.IsNil))
+	c.Assert(f.exists(c, *final), qt.IsTrue)
 }
 
 // A JPEG carrying an EXIF block must not come out still carrying it: the block

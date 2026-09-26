@@ -2,6 +2,7 @@ package apiserver_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"image"
 	"image/color"
@@ -17,6 +18,7 @@ import (
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/appctx"
 	_ "go.5x5.cz/inventario/internal/fileblob" // registers the file:// driver
+	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/services"
 )
 
@@ -155,12 +157,25 @@ func TestAvatarEndpoints_BadRequests(t *testing.T) {
 		c.Assert(rr.Body.String(), qt.Contains, "not a supported image")
 	})
 
-	c.Run("an image over the size cap", func(c *qt.C) {
+	// Two different paths produce the same answer, and both have to say the
+	// same thing. A file just over the cap is refused by the service; a body big
+	// enough to trip the request reader never reaches it, and "invalid multipart
+	// body" would send the reader looking for a malformed request.
+	c.Run("a file over the size cap", func(c *qt.C) {
 		oversized := append(avatarPNG(c, 8), bytes.Repeat([]byte{0}, int(services.AvatarMaxUploadBytes)+1)...)
 		ct, body := multipartAvatar(c, "avatar", oversized)
 		rr := call(http.MethodPost, "/me/avatar", ct, body)
 		c.Assert(rr.Code, qt.Equals, http.StatusBadRequest)
 		c.Assert(rr.Body.String(), qt.Contains, "2 MB")
+	})
+
+	c.Run("a body big enough to trip the request reader", func(c *qt.C) {
+		huge := append(avatarPNG(c, 8), bytes.Repeat([]byte{0}, int(services.AvatarMaxUploadBytes)+(256<<10))...)
+		ct, body := multipartAvatar(c, "avatar", huge)
+		rr := call(http.MethodPost, "/me/avatar", ct, body)
+		c.Assert(rr.Code, qt.Equals, http.StatusBadRequest)
+		c.Assert(rr.Body.String(), qt.Contains, "2 MB",
+			qt.Commentf("an oversized body was reported as a malformed one: %s", rr.Body.String()))
 	})
 }
 
@@ -189,4 +204,62 @@ func TestAvatarEndpoints_RequireAuthentication(t *testing.T) {
 			c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
 		})
 	}
+}
+
+// The group subtree's middleware checks that the CALLER is a member. It says
+// nothing about the user id in the path, so the handler has to check that too —
+// otherwise any group member could read any user's photo in the deployment by
+// putting their id in the URL.
+func TestAvatarEndpoints_MemberReadChecksTheSubjectsMembership(t *testing.T) {
+	c := qt.New(t)
+
+	params, caller, group := newParams()
+	svc := services.NewAvatarService(params.FactorySet, "file://"+c.TempDir()+"?create_dir=1")
+	groupService := services.NewGroupService(
+		params.FactorySet.LocationGroupRegistry,
+		params.FactorySet.GroupMembershipRegistry,
+		params.FactorySet.GroupInviteRegistry,
+	)
+	api := apiserver.NewMemberAvatarsAPIForTest(svc, groupService)
+
+	// An outsider in the same tenant, with an avatar, and not in the group.
+	outsider, err := params.FactorySet.UserRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: caller.TenantID},
+		Email:               "outsider@example.com",
+		Name:                "Outsider",
+		IsActive:            true,
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = svc.Store(context.Background(), outsider.ID, bytes.NewReader(avatarPNG(c, 200)))
+	c.Assert(err, qt.IsNil)
+
+	// The caller is a member and also has one.
+	_, err = svc.Store(context.Background(), caller.ID, bytes.NewReader(avatarPNG(c, 200)))
+	c.Assert(err, qt.IsNil)
+
+	r := chi.NewRouter()
+	r.Get("/g/{groupID}/members/{memberUserID}/avatar",
+		apiserver.WithGroupForTest(group, api.GetMember))
+
+	get := func(userID string) int {
+		req := httptest.NewRequest(http.MethodGet, "/g/"+group.ID+"/members/"+userID+"/avatar", nil)
+		req = req.WithContext(appctx.WithUser(req.Context(), caller))
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		return rr.Code
+	}
+
+	c.Run("a member of the group is served", func(c *qt.C) {
+		c.Assert(get(caller.ID), qt.Equals, http.StatusOK)
+	})
+
+	// 404 rather than 403: whether that user exists is not something this route
+	// should confirm to somebody who shares no group with them.
+	c.Run("a user outside the group is not, even though they have an avatar", func(c *qt.C) {
+		c.Assert(get(outsider.ID), qt.Equals, http.StatusNotFound)
+	})
+
+	c.Run("an id that is nobody is also a 404", func(c *qt.C) {
+		c.Assert(get("does-not-exist"), qt.Equals, http.StatusNotFound)
+	})
 }

@@ -3,6 +3,8 @@ package services
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
@@ -32,6 +34,12 @@ const (
 	// 32px in member lists, 512 leaves room for a high-density display without
 	// storing originals.
 	AvatarSize = 512
+	// avatarMaxPixels bounds the DECODED image, which the byte cap does not: a
+	// 2 MB PNG of one flat colour can carry 30000x30000 pixels, and decoding it
+	// asks for gigabytes of RGBA before anything is scaled down. 64 megapixels
+	// is far past any camera a profile photo comes from and far below the size
+	// that hurts.
+	avatarMaxPixels = 64 << 20
 	// avatarPrefix is the key prefix avatars live under, kept away from the
 	// commodity file keys so a bucket listing is readable and a lifecycle rule
 	// can treat them differently.
@@ -92,7 +100,20 @@ func (s *AvatarService) Store(ctx context.Context, userID string, src io.Reader)
 		return "", err
 	}
 
-	key := avatarKey(userID, nextAvatarRevision(user.AvatarPath))
+	// The revision keeps the key readable and ordered; the random suffix keeps
+	// two concurrent uploads for the same user off the same key. Without it both
+	// read the same revision, compute the same name and overwrite each other,
+	// and whichever row update lands last decides which of the two images the
+	// other one's key now points at.
+	//
+	// The cost is a possible orphan: the upload whose row update loses leaves an
+	// object nothing references. That is storage, and the alternative is serving
+	// the wrong person's photo.
+	suffix, err := avatarKeySuffix()
+	if err != nil {
+		return "", err
+	}
+	key := avatarKey(userID, nextAvatarRevision(user.AvatarPath), suffix)
 	if err := s.write(ctx, key, encoded); err != nil {
 		return "", err
 	}
@@ -210,6 +231,22 @@ func (s *AvatarService) normalize(src io.Reader) ([]byte, error) {
 		return nil, errxtrace.Wrap(fmt.Sprintf("avatar exceeds %d bytes", AvatarMaxUploadBytes), ErrAvatarTooLarge)
 	}
 
+	// The header comes first, so the dimensions can be refused before the
+	// pixels are allocated. Decoding and then measuring would be too late: the
+	// allocation is the thing being avoided.
+	config, _, err := image.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to read the image header", ErrAvatarNotAnImage)
+	}
+	if config.Width <= 0 || config.Height <= 0 {
+		return nil, errxtrace.Wrap("image has no area", ErrAvatarNotAnImage)
+	}
+	if int64(config.Width)*int64(config.Height) > avatarMaxPixels {
+		return nil, errxtrace.Wrap(
+			fmt.Sprintf("image is %dx%d, over the %d pixel limit", config.Width, config.Height, avatarMaxPixels),
+			ErrAvatarTooLarge)
+	}
+
 	decoded, _, err := image.Decode(bytes.NewReader(raw))
 	if err != nil {
 		// Sniffed as an image but undecodable: a truncated or malformed file.
@@ -257,8 +294,17 @@ func (s *AvatarService) deleteQuietly(ctx context.Context, key string) {
 }
 
 // avatarKey builds the stored key for a revision.
-func avatarKey(userID string, revision int) string {
-	return path.Join(avatarPrefix, userID, strconv.Itoa(revision)+avatarExt)
+func avatarKey(userID string, revision int, suffix string) string {
+	return path.Join(avatarPrefix, userID, strconv.Itoa(revision)+"-"+suffix+avatarExt)
+}
+
+// avatarKeySuffix returns the per-upload component of a key.
+func avatarKeySuffix() (string, error) {
+	var b [6]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", errxtrace.Wrap("failed to generate an avatar key", err)
+	}
+	return hex.EncodeToString(b[:]), nil
 }
 
 // nextAvatarRevision reads the revision out of the current key and returns the
@@ -272,6 +318,11 @@ func nextAvatarRevision(current *string) int {
 		return 1
 	}
 	base := strings.TrimSuffix(path.Base(*current), avatarExt)
+	// The suffix is everything after the first dash; keys written before it
+	// existed have none, and Atoi then reads the whole base.
+	if dash := strings.Index(base, "-"); dash >= 0 {
+		base = base[:dash]
+	}
 	revision, err := strconv.Atoi(base)
 	if err != nil || revision < 1 {
 		return 1

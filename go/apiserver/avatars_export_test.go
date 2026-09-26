@@ -1,8 +1,10 @@
 package apiserver
 
 import (
+	"context"
 	"net/http"
 
+	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/services"
 )
 
@@ -31,4 +33,19 @@ func (a *AvatarsAPIForTest) GetOwn(w http.ResponseWriter, r *http.Request) {
 
 func (a *AvatarsAPIForTest) GetMember(w http.ResponseWriter, r *http.Request) {
 	a.api.handleGetMemberAvatar(w, r)
+}
+
+// WithGroupForTest returns a handler that runs next with the given group in the
+// request context, standing in for the groupCtx middleware the real routes use.
+// It compiles only under `go test`.
+func WithGroupForTest(group *models.LocationGroup, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		next(w, r.WithContext(context.WithValue(r.Context(), groupCtxKey, group)))
+	}
+}
+
+// NewMemberAvatarsAPIForTest builds the handler set with the group service the
+// member route needs to check the subject's membership.
+func NewMemberAvatarsAPIForTest(svc *services.AvatarService, groupService *services.GroupService) *AvatarsAPIForTest {
+	return &AvatarsAPIForTest{api: &avatarsAPI{avatarService: svc, groupService: groupService}}
 }
