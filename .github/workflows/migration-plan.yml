@@ -1,0 +1,202 @@
+name: Migration Plan
+
+# Posts the schema change a pull request makes as a comment on it, and fails
+# when that change destroys something.
+#
+# The plan compares this pull request's model annotations against a database
+# at the base commit's migration state, so it is the delta the pull request
+# introduces and a destructive verdict names something the pull request
+# removes. Comparing against the pull request's own migrations would answer a
+# different question, whether the models and the migrations agree, which
+# `go-test-postgres.yml` already checks with `migrations generate --check`.
+#
+# The migration chain cannot replay into a bare database. It references roles
+# and extensions that `inventario db bootstrap` creates, so bootstrap runs
+# first or the replay fails on a missing role. `pg_trgm` is one of those
+# extensions and is deliberately not declared to Ptah, which is why
+# `ptah.yaml` sits at the repository root: without it every plan proposes to
+# drop the extension and this gate is red on every pull request.
+#
+# A destructive plan fails the job. Some schema changes are meant to remove
+# something, so the gate has an escape hatch: label the pull request
+# `allow-destructive` and the plan is still posted but no longer fails. The
+# label is the record that somebody looked at the SQL and accepted it.
+#
+# Pull requests only. A push has no comment to post and no reviewer to read
+# it.
+#
+# On a pull request from a fork GitHub hands out a read-only token whatever the
+# `permissions:` block says, so the sticky comment cannot be posted and the
+# action degrades to a warning. The gate still works — the job still fails on a
+# destructive plan, which is the half that protects `master` — and the plan is
+# appended to the run summary, which needs no token. Publishing the comment
+# from a `workflow_run` companion would mean giving a write token to a workflow
+# that consumes output produced by pull request code, which is a worse trade
+# than a reviewer opening the run summary.
+
+on:
+  pull_request:
+    # `labeled` / `unlabeled` are here because the gate reads the
+    # `allow-destructive` label from the event payload. Without them, adding
+    # the label leaves the earlier red check in place and removing it leaves
+    # the earlier green one, so the check would not describe the current
+    # decision. The `changes` job ignores every other label.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # The sticky plan comment. `comment.js` in the action calls only
+  # issues.listComments / createComment / updateComment, matches its own
+  # marker plus `user.type === "Bot"` so it cannot overwrite a human comment,
+  # and degrades to a warning when the API refuses.
+  pull-requests: write
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    # Label churn is constant and almost none of it concerns this gate.
+    if: >-
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+      github.event.label.name == 'allow-destructive'
+    outputs:
+      schema: ${{ steps.filter.outputs.go_schema_plan }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        with:
+          filters: .github/filters.yml
+
+  plan:
+    name: Plan the schema change
+    runs-on: ubuntu-latest
+    needs: changes
+    # Standing up a database and replaying the chain twice over is too much to
+    # pay on a pull request that cannot change the schema.
+    if: >-
+      needs.changes.outputs.schema == 'true' ||
+      needs.changes.outputs.ci == 'true'
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: inventario_plan
+          POSTGRES_USER: inventario_super
+          POSTGRES_PASSWORD: plan_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      PLAN_DSN: "postgres://inventario_super:plan_password@localhost:5432/inventario_plan?sslmode=disable"
+
+    steps:
+      - name: Checkout the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Checkout the base revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The base commit, not the base branch tip: the branch can move
+          # while the run is queued, and a plan against a state the pull
+          # request was never compared to is misleading.
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .base
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go/go.mod
+          cache: true
+          cache-dependency-path: go/go.sum
+
+      - name: Build the Ptah CLI at the version go.mod pins
+        id: ptah
+        working-directory: go
+        run: |
+          set -euo pipefail
+          version="$(go list -m -f '{{.Version}}' ptah.run)"
+          echo "Building ptah $version"
+          GOBIN="$RUNNER_TEMP/bin" go install "ptah.run/cmd/ptah@$version"
+          echo "bin=$RUNNER_TEMP/bin/ptah" >> "$GITHUB_OUTPUT"
+
+      - name: Create the roles bootstrap expects to find
+        env:
+          PGPASSWORD: plan_password
+        run: |
+          set -euo pipefail
+          psql -h localhost -p 5432 -U inventario_super -d inventario_plan -v ON_ERROR_STOP=1 -c "
+            CREATE ROLE inventario LOGIN PASSWORD 'app_password';
+            CREATE ROLE inventario_migrator LOGIN PASSWORD 'migrator_password';
+            GRANT ALL ON SCHEMA public TO inventario, inventario_migrator;
+          "
+
+      - name: Bring the database to the base branch's schema
+        # Built from the base checkout: the migration files are embedded in
+        # the binary, so base's binary applies base's chain and nothing has to
+        # work out which files belong to which revision.
+        working-directory: .base/go
+        run: |
+          set -euo pipefail
+          go run ./cmd/inventario db bootstrap apply \
+            --db-dsn="$PLAN_DSN" \
+            --username=inventario \
+            --username-for-migrations=inventario_migrator
+          go run ./cmd/inventario db migrate up --db-dsn="$PLAN_DSN"
+
+      - name: Plan this pull request's schema change
+        uses: stokaro/ptah-action@20bf8522553a0dc040a5b5d92312c932c22abf16 # v1
+        with:
+          # The binary built above, so the planner is the same Ptah the
+          # application is built against. Without this the action downloads a
+          # release, and a release that drifts from go.mod plans against a
+          # different comparison than our own generator does.
+          binary-path: ${{ steps.ptah.outputs.bin }}
+          setup-go: 'false'
+          dir: go/models
+          db-url: ${{ env.PLAN_DSN }}
+          comment: 'true'
+          # `#2419` owns the lint gate: it scopes to the pull request's own
+          # migrations and needs no database. Linting the whole directory here
+          # would add 400-odd findings nobody can act on to the comment.
+          lint: 'false'
+          # A known path, so the summary step below does not depend on the
+          # action's step outputs surviving its own failure — a destructive
+          # plan is when the plan text is most worth reading.
+          output-dir: ${{ runner.temp }}/ptah
+          allow-destructive: >-
+            ${{ contains(github.event.pull_request.labels.*.name, 'allow-destructive')
+            && 'true' || 'false' }}
+
+      - name: Put the plan in the run summary
+        # The action's own summary carries the verdict but not the SQL, and the
+        # SQL is what a reviewer needs when the comment could not be posted.
+        # `always()` so a destructive plan — the case worth reading — is still
+        # shown after the gate has failed the step above.
+        if: always()
+        env:
+          PLAN_PATH: ${{ runner.temp }}/ptah/ptah-plan.txt
+        run: |
+          set -euo pipefail
+          if [ ! -s "$PLAN_PATH" ]; then
+            exit 0
+          fi
+          {
+            printf '<details><summary>Migration plan</summary>\n\n'
+            printf '```sql\n'
+            cat "$PLAN_PATH"
+            printf '\n```\n\n</details>\n'
+          } >>"$GITHUB_STEP_SUMMARY"

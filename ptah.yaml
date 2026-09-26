@@ -1,0 +1,22 @@
+# Ptah project config, read by the Ptah CLI from the repository root.
+#
+# pg_trgm is created by `inventario db bootstrap`, not declared as a
+# `//ptah:schema:` annotation on any model. Ptah reads an extension that is
+# present in the database but absent from the desired schema as a removal, so
+# without this list every plan against a correctly prepared database proposes
+# `DROP EXTENSION IF EXISTS "pg_trgm"` — classified destructive, and cascading
+# into every trigram index if it ever ran.
+#
+# `go/schema/migrations/generator/generator.go` passes the same name to
+# `config.WithAdditionalIgnoredExtensions`, which is what keeps
+# `inventool db migrations generate` honest. This file is that list for the
+# plain CLI, which builds its own options and cannot see ours.
+#
+# Declaring the extension is not an alternative: that hands Ptah management
+# of it, and management includes removal. See `go/models/extensions.go`.
+#
+# Ptah finds this file in the directory it runs from and does not walk up, so
+# a plan run from `go/` needs `--ignore-extension pg_trgm` on the command
+# line instead.
+ignore_extensions:
+  - pg_trgm

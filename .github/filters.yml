@@ -57,6 +57,17 @@ go_schema_artifact:
   - 'scripts/generate-schema-hcl.sh'
   - 'Makefile'
 
+# ---- Schema change plan --------------------------------------------------
+# What decides the schema Ptah plans, and what the plan is compared against:
+# the model annotations that declare the desired schema, the migration chain a
+# base-state database is brought up to, the pinned Ptah version, and the
+# extension ignore list the comparison reads.
+go_schema_plan:
+  - 'go/models/**'
+  - 'go/schema/**'
+  - 'go/go.mod'
+  - 'ptah.yaml'
+
 # ---- Frontend (React) ----------------------------------------------------
 # Anything under frontend/. Includes the Makefile because it carries
 # frontend targets too.
