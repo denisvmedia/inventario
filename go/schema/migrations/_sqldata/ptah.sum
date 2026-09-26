@@ -1,4 +1,4 @@
-h1:K7pNawm5bOmnJmJ6rQWFg0zLHc96RBsYgKvm22MLCAM=
+h1:WxWFunm5s2K9ZafuAXDNdvwSV/D0rSAv1Np8I39lXlw=
 1789480900_initial_schema.down.sql h1:1b5WJAVMPaNbRsvj+nzs1R6KLQEEm8xv7OkV0gANX8w=
 1789480900_initial_schema.up.sql h1:isJ61I94xBD3lTD8QEQyAyDKIg4ld2KQSYG8JLxvQJ4=
 1789504168_enable_rls_on_operation_slots.down.sql h1:fZyTow/In0YkYczSN7gM6igXsUSxyJgRjo4QOLf1pWI=
@@ -7,3 +7,5 @@ h1:K7pNawm5bOmnJmJ6rQWFg0zLHc96RBsYgKvm22MLCAM=
 1790414220_enable_rls_on_audit_logs.up.sql h1:glq9CSxMUK9xnutQkXSUTctAjwQYBH77QAnhrj80Muw=
 1790416695_add_weekly_digest_sends.down.sql h1:+5zRLZU/rsEe7l8EkAeIxBfZGRUmt0rr80G2mt2en7c=
 1790416695_add_weekly_digest_sends.up.sql h1:KSO2IsCPIKz+5kURYqdGOdZ1vZOhi2OaFYYBH6KO7gw=
+1790421780_add_user_avatar_path.down.sql h1:Qmh91TfP/lkrGfI9HBKp8ow1NS7DeagnJ0ylcNN3Sq0=
+1790421780_add_user_avatar_path.up.sql h1:APP+LRHaAUA9zDKvbE0XFOYorAVHYdO7gUHFnqN1Fs4=

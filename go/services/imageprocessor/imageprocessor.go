@@ -63,3 +63,30 @@ func (p *ImageProcessor) SaveThumbnail(src image.Image, maxSize int, filename st
 	// Always save thumbnails as JPEG for consistency and smaller file sizes
 	return jpeg.Encode(file, img, &jpeg.Options{Quality: 90})
 }
+
+// CropSquare center-crops src to its shorter side and scales the result to
+// size×size. An avatar is rendered in a square tile, and cropping server-side
+// means every consumer gets a square without each one having to agree on how to
+// fit a rectangle into one.
+//
+// A source smaller than size is cropped but not upscaled: enlarging a 64px
+// photo to 512 produces a blurrier file that is also bigger, which is the wrong
+// trade in both directions.
+func (p *ImageProcessor) CropSquare(src image.Image, size int) image.Image {
+	if size <= 0 {
+		return src
+	}
+
+	bounds := src.Bounds()
+	side := min(bounds.Dx(), bounds.Dy())
+	// Center the crop window on the source. Integer division biases a pixel
+	// towards the top-left on an odd difference, which nobody can see.
+	offsetX := bounds.Min.X + (bounds.Dx()-side)/2
+	offsetY := bounds.Min.Y + (bounds.Dy()-side)/2
+	crop := image.Rect(offsetX, offsetY, offsetX+side, offsetY+side)
+
+	out := min(side, size)
+	dst := image.NewRGBA(image.Rect(0, 0, out, out))
+	p.scaler.Scale(dst, dst.Bounds(), src, crop, draw.Src, nil)
+	return dst
+}

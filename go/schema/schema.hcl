@@ -3291,6 +3291,10 @@ table "users" {
     type = TEXT
     null = true
   }
+  column "avatar_path" {
+    type = TEXT
+    null = true
+  }
   column "created_at" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")

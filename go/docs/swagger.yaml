@@ -4444,6 +4444,20 @@ definitions:
     - TenantStatusInactive
   models.User:
     properties:
+      avatar_path:
+        description: |-
+          AvatarPath is the blob key of the user's profile photo, or nil when they
+          have none and the UI falls back to their initials (#1382).
+
+          The key ends in a revision number (`avatars/<user>/3.jpg`) which exists to
+          bust browser caches: replacing a photo writes a new key rather than
+          overwriting one, so nothing has to reason about cache headers to make the
+          new picture show up.
+
+          Not user input: it is set by the avatar endpoints, which decide the key
+          after validating and re-encoding what was uploaded. A client that could
+          choose it could point a user's avatar at any object in the bucket.
+        type: string
       created_at:
         type: string
       default_group_id:
@@ -5664,6 +5678,73 @@ paths:
           schema:
             type: string
       summary: Update current user profile
+      tags:
+      - auth
+  /auth/me/avatar:
+    delete:
+      description: 'Clears the caller''s avatar and deletes the stored image. Idempotent:
+        removing an avatar that is not there succeeds.'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Removed
+        "401":
+          description: Authentication required
+          schema:
+            type: string
+      summary: Remove the profile photo
+      tags:
+      - auth
+    get:
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: The avatar image
+          schema:
+            type: file
+        "401":
+          description: Authentication required
+          schema:
+            type: string
+        "404":
+          description: No avatar set
+          schema:
+            type: string
+      summary: Get your own profile photo
+      tags:
+      - auth
+    post:
+      consumes:
+      - multipart/form-data
+      description: |-
+        Replaces the caller's avatar. The image is center-cropped to a square, scaled to 512px and re-encoded as JPEG, which also drops any EXIF metadata the original carried.
+        Accepts JPEG or PNG up to 2 MB, detected from the content rather than from the declared type or the filename.
+      parameters:
+      - description: Image file
+        in: formData
+        name: avatar
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The stored avatar path
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Not an image, or larger than 2 MB
+          schema:
+            type: string
+        "401":
+          description: Authentication required
+          schema:
+            type: string
+      summary: Upload a profile photo
       tags:
       - auth
   /auth/mfa/disable:
@@ -9902,6 +9983,37 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update member role
+      tags:
+      - groups
+  /groups/{groupID}/members/{memberUserID}/avatar:
+    get:
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      - description: Member user ID
+        in: path
+        name: memberUserID
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: The avatar image
+          schema:
+            type: file
+        "403":
+          description: Not a member of this group
+          schema:
+            type: string
+        "404":
+          description: No avatar set, or not a member of this group
+          schema:
+            type: string
+      summary: Get a group member's profile photo
       tags:
       - groups
   /invites/{token}:

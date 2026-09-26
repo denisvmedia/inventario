@@ -588,7 +588,9 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			params.FactorySet,
 			services.NewGroupPurgeService(params.FactorySet, accountDeletionFileSvc),
 		)
+		avatarSvc := services.NewAvatarService(params.FactorySet, params.UploadLocation)
 		r.Route("/auth", Auth(AuthParams{
+			AvatarService:            avatarSvc,
 			UserRegistry:             params.FactorySet.UserRegistry,
 			RefreshTokenRegistry:     params.FactorySet.RefreshTokenRegistry,
 			GroupMembershipRegistry:  params.FactorySet.GroupMembershipRegistry,
