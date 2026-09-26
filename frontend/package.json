@@ -94,7 +94,7 @@
   "overrides": {
     "tmp": "0.2.7",
     "uuid": "14.0.2",
-    "nanoid": "3.3.19",
+    "nanoid": "6.0.1",
     "lighthouse": "13.5.0"
   },
   "engines": {
