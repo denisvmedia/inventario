@@ -3,6 +3,7 @@ package migrator_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 
@@ -62,11 +63,22 @@ func TestVerifySchemaUpToDate_DoesNotNeedCreate(t *testing.T) {
 
 	// The check itself: reads the version, creates nothing. Either answer is
 	// fine — up to date, or behind — as long as it is not a permission error.
-	err = migrator.NewWithFallback(probeDSN, "").VerifySchemaUpToDate(ctx)
-	if err != nil {
-		c.Assert(err.Error(), qt.Not(qt.Contains), "permission denied",
-			qt.Commentf("the schema check still needs CREATE"))
+	assertSchemaCheckReached(c, migrator.NewWithFallback(probeDSN, "").VerifySchemaUpToDate(ctx))
+}
+
+// assertSchemaCheckReached fails unless the check actually completed. Its two
+// legitimate answers are nil (the database is current) and ErrSchemaLagsBinary
+// (it is behind) — both mean the version was read. Anything else is the read
+// itself failing, and asserting only that the message lacks "permission
+// denied" or "owned by" would let a broken query pass: a typo'd column name
+// produces an error that satisfies both of those.
+func assertSchemaCheckReached(c *qt.C, err error) {
+	c.Helper()
+
+	if err == nil || errors.Is(err, migrator.ErrSchemaLagsBinary) {
+		return
 	}
+	c.Fatalf("schema check did not read the version: %v", err)
 }
 
 // swapCredentials rewrites the user and password of a postgres URL, keeping
@@ -79,4 +91,71 @@ func swapCredentials(c *qt.C, dsn, user, password string) string {
 	_, hostAndRest, ok := strings.Cut(rest, "@")
 	c.Assert(ok, qt.IsTrue, qt.Commentf("DSN carries no credentials: %s", dsn))
 	return scheme + "://" + user + ":" + password + "@" + hostAndRest
+}
+
+// The startup schema check also runs against a metadata table it does not own:
+// the migration role creates schema_migrations, the application reads it, and
+// keeping those two roles apart is the point of having them. Ptah 0.8 refuses
+// to touch a metadata table the connection does not own — on reads too, because
+// a foreign table can carry a policy or a default expression the planner
+// evaluates — so the check cannot go through Ptah at all (#2707).
+//
+// The sibling test above creates the probe role but no table, and an absent
+// table has no owner to conflict with. That is why every Go test passed on 0.8
+// while the compose, kind and e2e stacks went red: the table has to exist AND
+// belong to someone else before the refusal can fire.
+func TestVerifySchemaUpToDate_ReadsATableItDoesNotOwn(t *testing.T) {
+	c := qt.New(t)
+
+	dsn := pgtest.DSN(t)
+
+	ctx := context.Background()
+	admin, err := sql.Open("pgx", dsn)
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() { _ = admin.Close() })
+
+	// The table must exist for the ownership question to arise at all.
+	var existed bool
+	err = admin.QueryRowContext(ctx,
+		`SELECT to_regclass('schema_migrations') IS NOT NULL`).Scan(&existed)
+	c.Assert(err, qt.IsNil)
+	if !existed {
+		_, err = admin.ExecContext(ctx, `CREATE TABLE schema_migrations (
+			version BIGINT PRIMARY KEY,
+			description TEXT NOT NULL,
+			applied_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			state VARCHAR(32) NOT NULL DEFAULT 'applied'
+		)`)
+		c.Assert(err, qt.IsNil)
+		t.Cleanup(func() {
+			_, _ = admin.ExecContext(context.Background(), `DROP TABLE IF EXISTS schema_migrations`)
+		})
+	}
+
+	const role = "inventario_owner_check_probe"
+	const password = "probe-password"
+	_, _ = admin.ExecContext(ctx, `DROP ROLE IF EXISTS `+role)
+	_, err = admin.ExecContext(ctx, `CREATE ROLE `+role+` LOGIN PASSWORD '`+password+`'`)
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_, _ = admin.ExecContext(context.Background(), `REASSIGN OWNED BY `+role+` TO CURRENT_USER`)
+		_, _ = admin.ExecContext(context.Background(), `DROP OWNED BY `+role)
+		_, _ = admin.ExecContext(context.Background(), `DROP ROLE IF EXISTS `+role)
+	})
+	_, err = admin.ExecContext(ctx, `GRANT USAGE ON SCHEMA public TO `+role)
+	c.Assert(err, qt.IsNil)
+	_, err = admin.ExecContext(ctx, `GRANT SELECT ON ALL TABLES IN SCHEMA public TO `+role)
+	c.Assert(err, qt.IsNil)
+
+	// Without this the test proves nothing: the refusal only fires when the
+	// owner and the connected role differ.
+	var owner string
+	err = admin.QueryRowContext(ctx,
+		`SELECT tableowner FROM pg_tables WHERE tablename = 'schema_migrations'`).Scan(&owner)
+	c.Assert(err, qt.IsNil)
+	c.Assert(owner, qt.Not(qt.Equals), role,
+		qt.Commentf("the probe owns schema_migrations; the ownership refusal cannot fire"))
+
+	probeDSN := swapCredentials(c, dsn, role, password)
+	assertSchemaCheckReached(c, migrator.NewWithFallback(probeDSN, "").VerifySchemaUpToDate(ctx))
 }

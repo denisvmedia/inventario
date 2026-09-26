@@ -14,7 +14,7 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
-	_ "github.com/lib/pq" // PostgreSQL driver for database/sql
+	"github.com/lib/pq"
 	"ptah.run/dbschema"
 	"ptah.run/migration/migrator"
 
@@ -29,6 +29,11 @@ import (
 // shipped a stale binary whose embed.FS was missing migrations the app
 // container's binary later expected.
 var ErrSchemaLagsBinary = errx.NewSentinel("database schema lags the binary's embedded migrations")
+
+// undefinedTableCode is PostgreSQL's SQLSTATE for a reference to a table that
+// does not exist, which is how an uninitialized database answers a read of
+// schema_migrations.
+const undefinedTableCode = "42P01"
 
 // ErrMissingExtension is returned by MigrateUp when a PostgreSQL extension the
 // migrations depend on is not installed.
@@ -219,36 +224,85 @@ func (m *Migrator) verifyExtensions(ctx context.Context) error {
 // docker-compose migrate container can't quietly leave the app running
 // against a half-migrated schema (#1655).
 func (m *Migrator) VerifySchemaUpToDate(ctx context.Context) error {
-	conn, err := dbschema.ConnectToDatabase(ctx, m.dbURL)
+	db, err := sql.Open("postgres", m.dbURL)
 	if err != nil {
-		return errxtrace.Wrap("failed to connect to database", err)
+		return errxtrace.Wrap("failed to open database", err)
 	}
-	defer conn.Close()
+	defer db.Close()
 
-	// Read-only, and it has to be: the caller is usually the application,
-	// connecting as the role bootstrap grants USAGE on public and nothing
-	// more. Reading the revision table otherwise goes through ptah's
-	// Initialize, which issues CREATE TABLE IF NOT EXISTS — and PostgreSQL
-	// checks the schema's CREATE privilege before the IF NOT EXISTS
-	// short-circuit, so the statement fails even though the table is right
-	// there. Dry-run makes Initialize inspect instead of create; a missing
-	// table then reads as version 0, which is the same answer it would give
-	// (#2577).
-	conn.SchemaWriter().SetDryRun(true)
-
-	ptahMigrator, err := migrator.NewFSMigrator(conn, m.migFS)
+	dbVersion, err := readAppliedVersion(ctx, db)
 	if err != nil {
-		return errxtrace.Wrap("failed to create Ptah migrator", err)
+		return errxtrace.Wrap("failed to read schema_migrations.version", err)
 	}
 
-	return m.verifyAgainst(ctx, ptahMigrator)
+	return m.verifyVersion(dbVersion)
+}
+
+// readAppliedVersion returns the highest successfully applied migration
+// version, or 0 when the metadata table is absent.
+//
+// It reads the table with its own SELECT rather than asking Ptah, because the
+// caller here is the application and the application does not own
+// schema_migrations — the migration role does, and that split is the point of
+// having two roles. Ptah refuses to touch a metadata table the connection does
+// not own, and refuses it on reads too, for a good reason: a foreign table can
+// carry a policy or a default expression that the planner evaluates, so
+// reading someone else's table can run their code. Our read is of one BIGINT
+// column from a table the schema owner created, which is a judgement we can
+// make and Ptah cannot (#2707).
+//
+// This replaces the dry-run workaround from #2577, which existed because
+// Ptah's Initialize issues CREATE TABLE IF NOT EXISTS and PostgreSQL checks
+// the schema's CREATE privilege before the IF NOT EXISTS short-circuits. Not
+// entering Initialize at all settles both problems.
+//
+// The predicate mirrors Ptah's GetCurrentVersion for the native layout: the
+// maximum `version` among rows whose `state` is `applied`, so a dirty row left
+// by a failed migration does not read as progress.
+func readAppliedVersion(ctx context.Context, db *sql.DB) (int64, error) {
+	var version int64
+	err := db.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(version), 0) FROM schema_migrations WHERE state = 'applied'`,
+	).Scan(&version)
+	switch {
+	case err == nil:
+		return version, nil
+	case isUndefinedTable(err):
+		// No metadata table yet: nothing has been applied, which is the same
+		// answer Ptah gives for an uninitialized database.
+		return 0, nil
+	default:
+		return 0, err
+	}
+}
+
+// isUndefinedTable reports whether err is PostgreSQL's undefined_table
+// (42P01). Matching the SQLSTATE rather than the message keeps this working
+// across server locales.
+func isUndefinedTable(err error) bool {
+	pqErr, ok := errors.AsType[*pq.Error](err)
+	return ok && pqErr.Code == undefinedTableCode
 }
 
 // verifyAgainst compares the max embedded migration version against the DB's
 // schema_migrations.version (current_version, the highest applied) via the
-// provided ptah migrator. Shared helper for MigrateUp (post-apply check) and
-// VerifySchemaUpToDate (standalone check).
+// provided ptah migrator. Used by MigrateUp's post-apply check, where the
+// connection is the migration role and therefore owns the metadata table.
+//
+// VerifySchemaUpToDate deliberately does not come through here — see
+// readAppliedVersion for why the application reads the version itself.
 func (m *Migrator) verifyAgainst(ctx context.Context, ptahMigrator *migrator.Migrator) error {
+	dbVersion, err := ptahMigrator.GetCurrentVersion(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to read schema_migrations.version", err)
+	}
+
+	return m.verifyVersion(int64(dbVersion))
+}
+
+// verifyVersion compares a version already read from the database against the
+// highest version embedded in this binary.
+func (m *Migrator) verifyVersion(dbVersion int64) error {
 	embedMax, err := migrations.MaxVersion(m.migFS)
 	if err != nil {
 		return errxtrace.Wrap("failed to inspect embedded migrations", err)
@@ -259,12 +313,7 @@ func (m *Migrator) verifyAgainst(ctx context.Context, ptahMigrator *migrator.Mig
 		return nil
 	}
 
-	dbVersion, err := ptahMigrator.GetCurrentVersion(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to read schema_migrations.version", err)
-	}
-
-	return compareSchemaVersion(m.logger, int64(dbVersion), embedMax)
+	return compareSchemaVersion(m.logger, dbVersion, embedMax)
 }
 
 // compareSchemaVersion is the pure decision arm of verifyAgainst, split out
