@@ -17,7 +17,7 @@
     "@astrojs/starlight-tailwind": "5.0.0",
     "@tailwindcss/vite": "4.3.3",
     "astro": "7.3.5",
-    "sharp": "^0.35.0",
+    "sharp": "^0.35.5",
     "tailwindcss": "4.3.3"
   },
   "overridesComment": "Pin a single Vite so @tailwindcss/vite shares Astro's instance. Astro 7 depends on Vite 8; leaving this at a 7.x pin holds Astro on a Vite it cannot drive, and `astro build` dies with \"rollupOptions.input should not be an html file when building for SSR\".",
