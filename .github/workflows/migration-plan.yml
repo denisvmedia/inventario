@@ -158,7 +158,7 @@ jobs:
           go run ./cmd/inventario db migrate up --db-dsn="$PLAN_DSN"
 
       - name: Plan this pull request's schema change
-        uses: stokaro/ptah-action@20bf8522553a0dc040a5b5d92312c932c22abf16 # v1
+        uses: stokaro/ptah-action@50e88690af43919c3fb8f1ff5b944d4568dbb162 # v1
         with:
           # The binary built above, so the planner is the same Ptah the
           # application is built against. Without this the action downloads a
