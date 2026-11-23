@@ -187,6 +187,54 @@ jobs:
           print("setup Job: plain on install, pre-upgrade hook on upgrade")
           EOF
 
+      - name: Verify the superuser DSN stays out of the app pods
+        # The app pods load the whole runtime Secret with envFrom, so the
+        # superuser DSN must not be in it. superuserSecret points the setup Job
+        # at a Secret of its own; superuserDsn goes into the Job spec only.
+        run: |
+          set -euo pipefail
+
+          render() {
+            helm template inventario helm/inventario \
+              --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+              --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+              --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+              --set setupJob.initData.adminPassword=test \
+              "$@"
+          }
+          render --set setupJob.bootstrap.superuserSecret.name=inventario-db-setup > /tmp/inventario-su-secret.yaml
+          render --set-string setupJob.bootstrap.superuserDsn='postgres://su:pw@pg-host:5432/inventario' > /tmp/inventario-su-value.yaml
+
+          python3 - /tmp/inventario-su-secret.yaml /tmp/inventario-su-value.yaml <<'EOF'
+          import sys
+
+          def docs(path):
+              return open(path).read().split("\n---\n")
+
+          def setup_job(path):
+              jobs = [d for d in docs(path) if "\nkind: Job\n" in d and "app.kubernetes.io/component: setup" in d]
+              assert len(jobs) == 1, f"{path}: expected one setup Job, found {len(jobs)}"
+              return jobs[0]
+
+          def runtime_secret(path):
+              secrets = [d for d in docs(path) if "\nkind: Secret\n" in d and "name: inventario-inventario-secret\n" in d]
+              assert len(secrets) == 1, f"{path}: expected one runtime Secret, found {len(secrets)}"
+              return secrets[0]
+
+          job = setup_job(sys.argv[1])
+          want = ("- name: SETUP_SUPERUSER_DSN\n"
+                  "              valueFrom:\n"
+                  "                secretKeyRef:\n"
+                  "                  name: inventario-db-setup\n"
+                  "                  key: SETUP_SUPERUSER_DSN\n")
+          assert want in job, "superuserSecret: the setup Job does not read the named Secret"
+
+          for path in sys.argv[1:]:
+              assert "SETUP_SUPERUSER_DSN" not in runtime_secret(path), f"{path}: the runtime Secret carries SETUP_SUPERUSER_DSN"
+          assert 'value: "postgres://su:pw@pg-host:5432/inventario"' in setup_job(sys.argv[2]), "superuserDsn: the setup Job lost the value"
+          print("superuser DSN: only the setup Job has it")
+          EOF
+
       - name: Verify missing DSN is rejected
         run: |
           set -euo pipefail
