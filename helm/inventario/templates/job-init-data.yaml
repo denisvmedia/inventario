@@ -125,6 +125,14 @@ spec:
               value: {{ .Values.setupJob.initData.defaultTenantSlug | quote }}
             - name: INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL
               value: {{ .Values.setupJob.initData.adminEmail | quote }}
+            # Optional: an email in the Secret wins over adminEmail, so the
+            # address can stay out of the values (initDataScript).
+            - name: SETUP_ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: SETUP_ADMIN_EMAIL
+                  optional: true
             - name: INVENTARIO_MIGRATE_DATA_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:

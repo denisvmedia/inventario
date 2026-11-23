@@ -235,6 +235,36 @@ jobs:
           print("superuser DSN: only the setup Job has it")
           EOF
 
+      - name: Verify the admin email can come from the Secret
+        # A SETUP_ADMIN_EMAIL key in the Secret wins over adminEmail, in both
+        # places that run the init-data script: the setup Job, and the
+        # init-data Job when the migration runs in the pod.
+        run: |
+          set -euo pipefail
+          for mode in "" "--set setupJob.migrateInInitContainer=true"; do
+            # shellcheck disable=SC2086 # $mode is empty or two words on purpose
+            helm template inventario helm/inventario \
+              --set-string secrets.existingSecret=inventario-runtime $mode > /tmp/inventario-admin-email.yaml
+            python3 - /tmp/inventario-admin-email.yaml <<'EOF'
+          import sys
+
+          text = open(sys.argv[1]).read()
+          docs = [d for d in text.split("\n---\n") if "\nkind: Job\n" in d and "inventario db migrate data" in d]
+          assert len(docs) == 1, f"expected one Job that runs init-data, found {len(docs)}"
+          job = docs[0]
+          env = ("- name: SETUP_ADMIN_EMAIL\n"
+                 "              valueFrom:\n"
+                 "                secretKeyRef:\n"
+                 "                  name: inventario-runtime\n"
+                 "                  key: SETUP_ADMIN_EMAIL\n"
+                 "                  optional: true\n")
+          assert env in job, "the Job does not read SETUP_ADMIN_EMAIL from the Secret"
+          override = job.find('INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL="$SETUP_ADMIN_EMAIL"')
+          assert 0 <= override < job.find("inventario db migrate data"), "the script does not prefer SETUP_ADMIN_EMAIL before init-data"
+          print("admin email: the Secret's key wins")
+          EOF
+          done
+
       - name: Verify missing DSN is rejected
         run: |
           set -euo pipefail
