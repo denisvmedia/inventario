@@ -29,6 +29,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
+- A fresh `helm install` with an external database no longer hangs. The setup
+  Job was a `pre-install` hook that needs the chart's ServiceAccount, ConfigMap
+  and Secret, which Helm creates only after its hooks, so the install hung
+  until it timed out. It is now an ordinary release object on install, and
+  stays a `pre-upgrade` hook on upgrade
+  ([#2773](https://github.com/denisvmedia/inventario/pull/2773)).
 - `helm install --wait` no longer deadlocks with `demo.postgresql.enabled`: the
   setup Job is applied alongside the database rather than as a post-install
   hook that Helm cannot reach until the app pod is ready
