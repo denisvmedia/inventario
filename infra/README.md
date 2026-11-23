@@ -1055,11 +1055,11 @@ infra/
 | vcluster standalone | `v0.34.0` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `VCLUSTER_VERSION` |
 | Kubernetes (inside vcluster) | `v1.34.0` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `K8S_VERSION` |
 | Tailscale CLI | latest from the official installer | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) (idempotent re-install) |
-| Tailscale Operator chart | `1.102.4` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `TS_OPERATOR_CHART_VERSION` |
-| ArgoCD chart | `10.9.2` (appVersion v3.5.3) | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `ARGOCD_CHART_VERSION` |
-| reflector chart | `10.0.65` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `REFLECTOR_CHART_VERSION` |
-| Velero chart | `12.0.1` (appVersion 1.18.0) | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `VELERO_CHART_VERSION` |
-| Velero CLI | `v1.18.0` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `VELERO_CLI_VERSION` |
+| Tailscale Operator chart | `1.104.7` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `TS_OPERATOR_CHART_VERSION` |
+| ArgoCD chart | `10.18.2` (appVersion v3.6.2) | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `ARGOCD_CHART_VERSION` |
+| reflector chart | `10.0.81` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `REFLECTOR_CHART_VERSION` |
+| Velero chart | `12.2.5` (appVersion 1.18.2) | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `VELERO_CHART_VERSION` |
+| Velero CLI | `v1.18.2` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `VELERO_CLI_VERSION` |
 | velero-plugin-for-aws | `v1.13.1` | [`infra/vm/helm-values/velero.yaml`](./vm/helm-values/velero.yaml) `initContainers[].image` |
 
 Every chart this VM installs is pinned (#1946). An unpinned `helm upgrade
