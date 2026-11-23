@@ -235,7 +235,7 @@ func TestFeatureFlags_PublicScanSurfaced(t *testing.T) {
 
 	var flags map[string]any
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &flags), qt.IsNil)
-	c.Assert(flags["public_scan"], qt.Equals, true)
+	c.Assert(flags["public_scan"], qt.IsTrue)
 }
 
 func TestFeatureFlags_PublicScanFalseByDefault(t *testing.T) {
@@ -251,5 +251,5 @@ func TestFeatureFlags_PublicScanFalseByDefault(t *testing.T) {
 
 	var flags map[string]any
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &flags), qt.IsNil)
-	c.Assert(flags["public_scan"], qt.Equals, false)
+	c.Assert(flags["public_scan"], qt.IsFalse)
 }

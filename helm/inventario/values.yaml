@@ -1411,7 +1411,7 @@ demo:
     # never backed up, even in the longevity environment.
     enabled: false
 
-    image: axllent/mailpit:v1.31
+    image: axllent/mailpit:v1.34
 
     # Max retained messages (ring buffer); mirrors docker-compose's
     # MP_MAX_MESSAGES. Env: MP_MAX_MESSAGES on the Mailpit container.

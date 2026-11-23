@@ -182,7 +182,7 @@ func TestExportService_parseXMLMetadata_LargeFile(t *testing.T) {
 	c.Assert(stats.AreaCount, qt.Equals, 0)
 
 	// Verify that binary data size was detected
-	c.Assert(stats.BinaryDataSize > 0, qt.Equals, true, qt.Commentf("Expected binary data size to be detected, got %d", stats.BinaryDataSize))
+	c.Assert(stats.BinaryDataSize > 0, qt.IsTrue, qt.Commentf("Expected binary data size to be detected, got %d", stats.BinaryDataSize))
 }
 
 func TestExportService_parseXMLMetadata_WithoutFileData(t *testing.T) {

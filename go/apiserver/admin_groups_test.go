@@ -412,7 +412,7 @@ func TestAdminDeleteGroup_IdempotentReDelete(t *testing.T) {
 	c.Assert(entries[0].Success, qt.IsTrue)
 	var bc map[string]any
 	c.Assert(json.Unmarshal([]byte(entries[0].UserAgent), &bc), qt.IsNil)
-	c.Assert(bc["already_pending"], qt.Equals, true)
+	c.Assert(bc["already_pending"], qt.IsTrue)
 }
 
 func TestAdminDeleteGroup_404OnMissingID(t *testing.T) {
@@ -499,5 +499,5 @@ func TestAdminDeleteGroup_WritesAuditLogWithActorGroupAndTenant(t *testing.T) {
 	// no-op (see TestAdminDeleteGroup_IdempotentReDelete).
 	var bc map[string]any
 	c.Assert(json.Unmarshal([]byte(entry.UserAgent), &bc), qt.IsNil)
-	c.Assert(bc["already_pending"], qt.Equals, false)
+	c.Assert(bc["already_pending"], qt.IsFalse)
 }

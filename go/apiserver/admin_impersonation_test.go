@@ -136,8 +136,8 @@ func TestImpersonate_StartSucceedsForBackofficePlatformAdmin(t *testing.T) {
 	c.Assert(claims["user_id"], qt.Equals, target.ID)
 	c.Assert(claims["impersonator_id"], qt.Equals, operator.ID)
 	c.Assert(claims["impersonator_type"], qt.Equals, "backoffice_user")
-	c.Assert(claims["imp"], qt.Equals, true)
-	c.Assert(claims["is_system_admin"], qt.Equals, false)
+	c.Assert(claims["imp"], qt.IsTrue)
+	c.Assert(claims["is_system_admin"], qt.IsFalse)
 }
 
 // TestImpersonate_RejectsSupportAgent is the regression test for the

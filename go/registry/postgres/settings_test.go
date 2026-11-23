@@ -131,7 +131,7 @@ func TestSettingsRegistry_Save_UpdateExisting_HappyPath(t *testing.T) {
 	retrievedSettings, err := registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(*retrievedSettings.Theme, qt.Equals, "light")
-	c.Assert(*retrievedSettings.ShowDebugInfo, qt.Equals, false)
+	c.Assert(*retrievedSettings.ShowDebugInfo, qt.IsFalse)
 	c.Assert(*retrievedSettings.DefaultDateFormat, qt.Equals, "02/01/2006")
 }
 
@@ -160,7 +160,7 @@ func TestSettingsRegistry_Patch_HappyPath(t *testing.T) {
 			settingValue: true,
 			verifyFunc: func(c *qt.C, settings models.SettingsObject) {
 				c.Assert(settings.ShowDebugInfo, qt.IsNotNil)
-				c.Assert(*settings.ShowDebugInfo, qt.Equals, true)
+				c.Assert(*settings.ShowDebugInfo, qt.IsTrue)
 			},
 		},
 		{
@@ -270,7 +270,7 @@ func TestSettingsRegistry_MixedOperations_HappyPath(t *testing.T) {
 	c.Assert(settings.Theme, qt.IsNotNil)
 	c.Assert(*settings.Theme, qt.Equals, "dark")
 	c.Assert(settings.ShowDebugInfo, qt.IsNotNil)
-	c.Assert(*settings.ShowDebugInfo, qt.Equals, true)
+	c.Assert(*settings.ShowDebugInfo, qt.IsTrue)
 
 	// Save complete settings object (should update existing)
 	newSettings := models.SettingsObject{
@@ -285,7 +285,7 @@ func TestSettingsRegistry_MixedOperations_HappyPath(t *testing.T) {
 	settings, err = registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(*settings.Theme, qt.Equals, "light")
-	c.Assert(*settings.ShowDebugInfo, qt.Equals, false)
+	c.Assert(*settings.ShowDebugInfo, qt.IsFalse)
 	c.Assert(*settings.DefaultDateFormat, qt.Equals, "2006-01-02")
 
 	// Patch one setting again
@@ -296,7 +296,7 @@ func TestSettingsRegistry_MixedOperations_HappyPath(t *testing.T) {
 	settings, err = registrySet.SettingsRegistry.Get(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(*settings.Theme, qt.Equals, "light")
-	c.Assert(*settings.ShowDebugInfo, qt.Equals, true)
+	c.Assert(*settings.ShowDebugInfo, qt.IsTrue)
 	c.Assert(*settings.DefaultDateFormat, qt.Equals, "2006-01-02")
 }
 
@@ -336,7 +336,7 @@ func TestSettingsRegistry_Patch_ComplexValues_HappyPath(t *testing.T) {
 			settingValue: false,
 			verifyFunc: func(c *qt.C, settings models.SettingsObject) {
 				c.Assert(settings.ShowDebugInfo, qt.IsNotNil)
-				c.Assert(*settings.ShowDebugInfo, qt.Equals, false)
+				c.Assert(*settings.ShowDebugInfo, qt.IsFalse)
 			},
 		},
 		{
@@ -345,7 +345,7 @@ func TestSettingsRegistry_Patch_ComplexValues_HappyPath(t *testing.T) {
 			settingValue: true,
 			verifyFunc: func(c *qt.C, settings models.SettingsObject) {
 				c.Assert(settings.ShowDebugInfo, qt.IsNotNil)
-				c.Assert(*settings.ShowDebugInfo, qt.Equals, true)
+				c.Assert(*settings.ShowDebugInfo, qt.IsTrue)
 			},
 		},
 		{
