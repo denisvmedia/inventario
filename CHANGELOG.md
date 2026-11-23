@@ -10,6 +10,21 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ## [Unreleased]
 
+### Added
+
+- `setupJob.bootstrap.superuserSecret` in the Helm chart: a Secret of your own
+  with the superuser DSN for the database bootstrap, which only the setup Job
+  reads ([#2783](https://github.com/denisvmedia/inventario/pull/2783)).
+
+### Security
+
+- The chart's runtime Secret no longer carries `SETUP_SUPERUSER_DSN` when
+  `setupJob.bootstrap.superuserDsn` is set. Every app pod loads that Secret, so
+  the superuser DSN reached them all, although only the setup Job uses it. A
+  `SETUP_SUPERUSER_DSN` key in `secrets.existingSecret` still reaches the app
+  pods; move it to `superuserSecret`
+  ([#2783](https://github.com/denisvmedia/inventario/pull/2783)).
+
 ## [0.2.1] - 2026-11-23
 
 ### Changed

@@ -748,7 +748,7 @@ secrets:
   #   SETUP_ADMIN_PASSWORD                       (required by job-setup if setupJob.enabled)
   #   BACKOFFICE_USER_PASSWORD                   (required by setup/init-data Job when backofficeUser.enabled; maps to setupJob.initData.backofficeUserPassword; min 8 chars + upper + lower + digit)
   #   BACKOFFICE_USER_EMAIL                      (optional; when backofficeUser.enabled, overrides backofficeUser.email so the operator login identity comes from the Secret/sops bundle instead of the overlay; falls back to backofficeUser.email when absent)
-  #   SETUP_SUPERUSER_DSN                        (optional; used when setupJob.bootstrap.superuserDsn is managed outside the chart)
+  #   SETUP_SUPERUSER_DSN                        (optional; the app pods load this Secret too, so prefer setupJob.bootstrap.superuserSecret)
   #   AWS_ACCESS_KEY_ID                          (required for S3/MinIO upload)
   #   AWS_SECRET_ACCESS_KEY                      (required for S3/MinIO upload)
   existingSecret: ""
@@ -943,9 +943,19 @@ setupJob:
 
     # Superuser DSN used for bootstrap (needs CREATEUSER privilege).
     # When unset, bootstrap falls back to INVENTARIO_DB_DSN.
-    # Or provide via existingSecret key SETUP_SUPERUSER_DSN.
+    # Or provide it with superuserSecret below, or as the existingSecret key
+    # SETUP_SUPERUSER_DSN.
     # Env: SETUP_SUPERUSER_DSN (copied into INVENTARIO_DB_DSN for bootstrap only)
     superuserDsn: ""
+
+    # A Secret of your own that holds the superuser DSN, read by the setup Job
+    # and nothing else. Prefer it over the SETUP_SUPERUSER_DSN key in
+    # secrets.existingSecret: the app pods load their whole runtime Secret
+    # with envFrom, so a DSN there reaches every app pod. superuserDsn above
+    # wins when both are set.
+    superuserSecret:
+      name: ""
+      key: SETUP_SUPERUSER_DSN
 
     # Application DB username (already exists; bootstrap grants roles to it).
     # Must not be a service role name (inventario_app, inventario_migrator,

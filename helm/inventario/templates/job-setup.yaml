@@ -196,6 +196,11 @@ spec:
               value: {{ include "inventario.superuserDsn" . | quote }}
               {{- else if .Values.setupJob.bootstrap.superuserDsn }}
               value: {{ .Values.setupJob.bootstrap.superuserDsn | quote }}
+              {{- else if (dig "superuserSecret" "name" "" .Values.setupJob.bootstrap) }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.setupJob.bootstrap.superuserSecret.name | quote }}
+                  key: {{ .Values.setupJob.bootstrap.superuserSecret.key | default "SETUP_SUPERUSER_DSN" | quote }}
               {{- else }}
               valueFrom:
                 secretKeyRef:

@@ -28,7 +28,7 @@ Minimum required production inputs:
 - `secrets.jwtSecret` **or** `secrets.existingSecret`
 - `secrets.fileSigningKey` **or** `secrets.existingSecret`
 - `setupJob.initData.adminPassword` on first install **or** `SETUP_ADMIN_PASSWORD` in `secrets.existingSecret`
-- `setupJob.bootstrap.superuserDsn` if the setup hook must create/update DB roles for you
+- `setupJob.bootstrap.superuserSecret` (or `setupJob.bootstrap.superuserDsn`) if the setup hook must create/update DB roles for you
 
 Get the chart from a release: each one since v0.2.0 publishes it to
 `oci://ghcr.io/denisvmedia/charts/inventario`. The chart version is the
@@ -160,7 +160,7 @@ Expected secret keys when using `secrets.existingSecret`:
 - `INVENTARIO_RUN_JWT_SECRET` (required)
 - `INVENTARIO_RUN_FILE_SIGNING_KEY` (required)
 - `SETUP_ADMIN_PASSWORD` (required when `setupJob.enabled=true`)
-- `SETUP_SUPERUSER_DSN` (optional)
+- `SETUP_SUPERUSER_DSN` (optional). The app pods load this whole Secret with `envFrom`, so a superuser DSN here reaches every app pod. Keep it in a Secret of its own and name that one in `setupJob.bootstrap.superuserSecret`, which only the setup Job reads.
 - `INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL`, `INVENTARIO_RUN_AUTH_RATE_LIMIT_REDIS_URL`, `INVENTARIO_RUN_GLOBAL_RATE_LIMIT_REDIS_URL`, `INVENTARIO_RUN_CSRF_REDIS_URL`, `INVENTARIO_RUN_EMAIL_QUEUE_REDIS_URL` (optional)
 - `INVENTARIO_RUN_SMTP_PASSWORD`, `INVENTARIO_RUN_SENDGRID_API_KEY`, `INVENTARIO_RUN_MANDRILL_API_KEY` (provider-specific)
 - `INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY` (required when `aivision.provider=anthropic`), `INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY` (required when `aivision.provider=openai`)
@@ -324,7 +324,7 @@ This is approach **A** from #1884: schema upgrades are coupled to the Deployment
 
 - **Migrations must be backward-compatible.** During the rolling update there is a window where old-image pods serve traffic against the newly migrated schema. ArgoCD mode shortens that window; it does not remove it, and neither does the default path — see [Database migrations](#database-migrations) above.
 - **Idempotent per-pod cost.** Every new app pod re-runs `inventario db migrate up`. The ptah migrator returns immediately when `schema_migrations.version` already equals the embedded max, so the steady-state cost is a single round-trip to Postgres per pod start.
-- **External Postgres still requires bootstrap.** With `demo.postgresql.enabled=false`, the bootstrap Job at wave -5 connects to the external Postgres using `setupJob.bootstrap.superuserDsn` (or the `SETUP_SUPERUSER_DSN` key in `secrets.existingSecret`). If your platform creates DB roles out-of-band, set `setupJob.bootstrap.enabled=false` — the chart will skip the bootstrap container; the operator is responsible for ensuring `inventario_migrator` exists before the Deployment starts, **and that the `pg_trgm` extension is installed**. It backs the trigram indexes. Bootstrap is the step that creates it, and the migrator role cannot: it has `CREATE` on the schema, not on the database. `inventario db migrate up` checks for it up front and names it, rather than failing on `gin_trgm_ops` partway through the chain.
+- **External Postgres still requires bootstrap.** With `demo.postgresql.enabled=false`, the bootstrap Job at wave -5 connects to the external Postgres using `setupJob.bootstrap.superuserSecret` (a Secret that only this Job reads), `setupJob.bootstrap.superuserDsn`, or the `SETUP_SUPERUSER_DSN` key in `secrets.existingSecret`. If your platform creates DB roles out-of-band, set `setupJob.bootstrap.enabled=false` — the chart will skip the bootstrap container; the operator is responsible for ensuring `inventario_migrator` exists before the Deployment starts, **and that the `pg_trgm` extension is installed**. It backs the trigram indexes. Bootstrap is the step that creates it, and the migrator role cannot: it has `CREATE` on the schema, not on the database. `inventario db migrate up` checks for it up front and names it, rather than failing on `gin_trgm_ops` partway through the chain.
 
 ### Enabling
 
@@ -408,7 +408,9 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `dbRetry.attempts` / `dbRetry.intervalSeconds` | `60` / `5` | Shared retry envelope for everything that waits on the database before the app can serve: the `migrate` init container and the init-data Job. Raise on a platform whose database takes longer to accept connections (a managed instance electing a primary, a Service whose endpoints are slow to propagate). The Jobs' own `activeDeadlineSeconds` still caps the wall clock. |
 | `setupJob.argocdMode` | `false` | Enable for ArgoCD-managed installs to use the sync-wave layout that supports in-place upgrades with new migrations. See [ArgoCD-managed migrations](#argocd-managed-migrations). |
 | `setupJob.bootstrap.enabled` | `true` | Disable if DB bootstrap/role management is handled outside Helm. |
-| `setupJob.bootstrap.superuserDsn` | `""` | Provide when bootstrap needs elevated DB privileges. |
+| `setupJob.bootstrap.superuserDsn` | `""` | Provide when bootstrap needs elevated DB privileges. The DSN is part of the setup Job's spec and of the Helm release, so prefer `superuserSecret`. |
+| `setupJob.bootstrap.superuserSecret.name` | `""` | A Secret of your own with the superuser DSN, read only by the setup Job. `superuserDsn` wins when both are set. |
+| `setupJob.bootstrap.superuserSecret.key` | `SETUP_SUPERUSER_DSN` | The key in that Secret. |
 | `setupJob.initData.adminEmail` | `admin@example.com` | Set the initial admin login name. |
 | `setupJob.initData.adminPassword` | `""` | Required on first install unless provided by `secrets.existingSecret`. |
 | `setupJob.initData.seedDatabase` | `false` | Enable only for demo/sample data seeding. |
