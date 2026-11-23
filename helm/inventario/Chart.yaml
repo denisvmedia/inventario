@@ -6,7 +6,7 @@ type: application
 # ships chart 0.2.0. Bump both lines together with each release; helm-lint.yml
 # fails when they disagree. Before v0.2.0 the chart had its own numbers
 # (up to 0.6.0), which were never published.
-version: 0.2.1
+version: 0.2.2
 # Pinned to a published release, not "latest": it is the default for
 # image.tag, so a floating value makes a stock install unreproducible and,
 # before any release existed, unpullable (#2035). Bump it with the release —
@@ -14,7 +14,7 @@ version: 0.2.1
 # The "v" is part of it: docker.yml tags images vX.Y.Z, and appVersion is the
 # default for image.tag, so a bare 0.1.0 resolves to a tag that was never
 # published.
-appVersion: "v0.2.1"
+appVersion: "v0.2.2"
 keywords:
   - inventory
   - personal
