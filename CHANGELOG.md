@@ -29,7 +29,7 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
-- A fresh `helm install` with an external database finishes again. The setup
+- A fresh `helm install` with an external database no longer hangs. The setup
   Job was a `pre-install` hook that needs the chart's ServiceAccount, ConfigMap
   and Secret, which Helm creates only after its hooks, so the install hung
   until it timed out. It is now an ordinary release object on install, and
