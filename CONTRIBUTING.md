@@ -234,7 +234,15 @@ say what was wrong, not which function changed. Link the issue.
 2. Update the link definitions at the foot of the file.
 3. Bump `appVersion` in `helm/inventario/Chart.yaml` to `vX.Y.Z` — the release
    workflow refuses a tag whose chart disagrees with it.
-4. Tag `vX.Y.Z` and push. The workflow publishes the section as the release
+4. If anything under `helm/inventario/` changed since the previous release,
+   bump the chart's own `version` in the same file. The chart has its own
+   SemVer: a patch for fixes, a minor for new values or behavior, a major for
+   a change that needs the operator to act. The release workflow publishes
+   that version to `oci://ghcr.io/denisvmedia/charts/inventario` and attaches
+   the package to the GitHub Release. It never overwrites a published version:
+   it skips when the chart is unchanged since the previous tag, and fails when
+   the chart changed but the version did not.
+5. Tag `vX.Y.Z` and push. The workflow publishes the section as the release
    body.
 
 A release that wants an announcement rather than a change list — the first
