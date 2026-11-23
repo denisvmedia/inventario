@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import type { CommodityStatusValue } from "@/features/commodities/constants"
+import type { TerminalCommodityStatusValue } from "@/features/commodities/constants"
 import { applyServerFieldErrors } from "@/lib/form-errors"
 
 // CURRENCY_SYMBOLS mirrors the mock's `CURRENCIES` lookup. We only need
@@ -137,7 +137,7 @@ export interface StatusTransitionDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Target terminal status the user picked from the action row. */
-  targetStatus: CommodityStatusValue | null
+  targetStatus: TerminalCommodityStatusValue | null
   /** Item's original purchase currency — drives the sale-price symbol. */
   purchaseCurrency?: string
   onSubmit: (payload: StatusTransitionPayload) => Promise<void>

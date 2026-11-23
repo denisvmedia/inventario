@@ -108,7 +108,9 @@ export function DeleteWithItemsDialog({
                 {t(`locations:deleteWithItems.${kind}UnlinkLabel`)}
               </span>
               <span className="text-sm text-muted-foreground">
-                {t(`locations:deleteWithItems.${kind}UnlinkHelp`, { count: areaCount })}
+                {kind === "location"
+                  ? t("locations:deleteWithItems.locationUnlinkHelp", { count: areaCount })
+                  : t("locations:deleteWithItems.areaUnlinkHelp")}
               </span>
             </span>
           </Label>
