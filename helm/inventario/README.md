@@ -437,6 +437,10 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 
   The CLI `--workers-only` / `--workers-exclude` flags still accept the old family names (`exports`, `imports`, `restores`, `thumbnails`, `token-cleanup`) for one release and log a deprecation warning; Helm values surface only the group keys.
 
+### Upgrading to chart 0.2.2 (release v0.2.2)
+
+No values need to change. With `setupJob.bootstrap.superuserDsn`, the runtime Secret no longer carries `SETUP_SUPERUSER_DSN`; the setup Job still reads the value from its own spec. If you keep `SETUP_SUPERUSER_DSN` in `secrets.existingSecret`, every app pod gets it too: move it to a Secret of its own and name that one in `setupJob.bootstrap.superuserSecret`. The first admin's email can now come from a `SETUP_ADMIN_EMAIL` key in that Secret; keep it the same address as before, because the setup step finds the admin by its email.
+
 ### Upgrading to chart 0.2.0 (release v0.2.0)
 
 From this release on, the chart version is the release version. Before, the
