@@ -12,6 +12,11 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
+- `extraVolumes` and `extraVolumeMounts` in the Helm chart, for example to
+  mount the database server's CA for `sslmode=verify-full`. The volumes go into
+  every pod of the chart except the demo ones, and the mounts into every
+  container that runs Inventario or reaches the database, the `migrate` init
+  container and the backup included.
 - Privacy Policy and Terms of Service pages, linked from the registration
   consent checkbox ([#2148](https://github.com/denisvmedia/inventario/issues/2148)).
 - `setupJob.migrateInInitContainer` makes the in-pod migration ordering
@@ -29,6 +34,9 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
+- The chart's pods pass Pod Security `restricted`: `podSecurityContext` now
+  sets the `RuntimeDefault` seccomp profile, without which a `restricted`
+  namespace refused every pod but the demo ones.
 - `helm install --wait` no longer deadlocks with `demo.postgresql.enabled`: the
   setup Job is applied alongside the database rather than as a post-install
   hook that Helm cannot reach until the app pod is ready
