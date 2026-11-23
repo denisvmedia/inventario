@@ -124,6 +124,9 @@ spec:
               volumeMounts:
                 - name: backups
                   mountPath: {{ .Values.backup.path }}
+                {{- with .Values.extraVolumeMounts }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
               {{- with .Values.backup.resources }}
               resources:
                 {{- toYaml . | nindent 16 }}
@@ -138,4 +141,7 @@ spec:
               # useful when something else in the pod ships it out.
               emptyDir: {}
               {{- end }}
+            {{- with .Values.extraVolumes }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
 {{- end }}

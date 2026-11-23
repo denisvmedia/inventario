@@ -698,6 +698,29 @@ extraEnvFrom: []
 #      optional: true
 
 # ============================================================
+# Extra volumes and mounts
+# ============================================================
+# extraVolumes go into every pod of the chart except the demo ones: the app
+# Deployments, the setup and init-data Jobs and the backup CronJob.
+# extraVolumeMounts go into every container that runs Inventario or reaches
+# the database: the app, the `migrate` init container, the bootstrap and
+# init-data steps, and the backup. For example, the database server's CA, for
+# `sslmode=verify-full` (add `sslrootcert=/etc/inventario/db-ca/ca.crt` to the
+# DSNs). Mount only the certificate: an operator-made CA Secret often holds
+# the CA's private key too.
+extraVolumes: []
+#  - name: db-ca
+#    secret:
+#      secretName: inventario-db-ca
+#      items:
+#        - key: ca.crt
+#          path: ca.crt
+extraVolumeMounts: []
+#  - name: db-ca
+#    mountPath: /etc/inventario/db-ca
+#    readOnly: true
+
+# ============================================================
 # Secrets
 # ============================================================
 secrets:
@@ -1215,6 +1238,10 @@ backup:
 # ============================================================
 podSecurityContext:
   fsGroup: 1001
+  # Pod Security "restricted" requires a seccomp profile on every pod. The
+  # chart's demo pods set their own.
+  seccompProfile:
+    type: RuntimeDefault
 
 containerSecurityContext:
   runAsUser: 1001
