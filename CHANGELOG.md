@@ -12,6 +12,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
+- Each release publishes the Helm chart to
+  `oci://ghcr.io/denisvmedia/charts/inventario` and attaches the package to
+  the GitHub Release. The chart keeps its own version; a published version is
+  never overwritten.
 - Privacy Policy and Terms of Service pages, linked from the registration
   consent checkbox ([#2148](https://github.com/denisvmedia/inventario/issues/2148)).
 - `setupJob.migrateInInitContainer` makes the in-pod migration ordering

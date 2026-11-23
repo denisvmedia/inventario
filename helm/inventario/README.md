@@ -30,6 +30,16 @@ Minimum required production inputs:
 - `setupJob.initData.adminPassword` on first install **or** `SETUP_ADMIN_PASSWORD` in `secrets.existingSecret`
 - `setupJob.bootstrap.superuserDsn` if the setup hook must create/update DB roles for you
 
+Get the chart from a release: each one since v0.2.0 publishes it to
+`oci://ghcr.io/denisvmedia/charts/inventario`, with the chart's own version.
+The examples below use a git checkout (`./helm/inventario`); the OCI
+reference works in its place, with `--version`:
+
+```bash
+helm upgrade --install inventario oci://ghcr.io/denisvmedia/charts/inventario \
+  --version <chart version> --namespace inventario --create-namespace -f values.yaml
+```
+
 Example:
 
 ```bash
