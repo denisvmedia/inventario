@@ -517,6 +517,9 @@ The caller is expected to render this list item under `initContainers:`.
   volumeMounts:
     - name: tmp
       mountPath: /tmp
+    {{- with .Values.extraVolumeMounts }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 {{- end -}}
 
 {{- define "inventario.uploadLocation" -}}

@@ -120,6 +120,9 @@ spec:
               mountPath: /app/uploads
             - name: tmp
               mountPath: /tmp
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           livenessProbe:
             {{- toYaml $cfg.livenessProbe | nindent 12 }}
           readinessProbe:
@@ -140,6 +143,9 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with $cfg.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
