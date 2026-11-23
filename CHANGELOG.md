@@ -10,6 +10,8 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-23
+
 ### Changed
 
 - An item that leaves out `converted_original_price` is no longer rejected with
@@ -135,6 +137,7 @@ launch. The full announcement, including what the release does, what it needs,
 and the known gaps it ships with, is in
 [the v0.1.0 release notes](.github/release-notes/v0.1.0.md).
 
-[Unreleased]: https://github.com/denisvmedia/inventario/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/denisvmedia/inventario/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/denisvmedia/inventario/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/denisvmedia/inventario/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/denisvmedia/inventario/releases/tag/v0.1.0
