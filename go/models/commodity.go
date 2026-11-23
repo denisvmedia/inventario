@@ -411,7 +411,13 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 
 			return validation.Required.Validate(val)
 		}))),
-		validation.Field(&a.ConvertedOriginalPrice, whenNotDraft.WithRules(validation.Required, validation.By(func(any) error {
+		// No validation.Required here either, for the reason given on
+		// CurrentPrice below (#1625): the PriceRule on OriginalPrice decides
+		// which prices must be set. Required also cannot tell 0 from a
+		// missing value: since shopspring/decimal 1.5.0, decimal.Zero is the
+		// zero Decimal, so Required rejected the decimal.Zero that restore
+		// and the currency migration set for group-currency items.
+		validation.Field(&a.ConvertedOriginalPrice, whenNotDraft.WithRules(validation.By(func(any) error {
 			v, _ := a.ConvertedOriginalPrice.Float64()
 			return validation.Min(0.00).Validate(v)
 		}))),

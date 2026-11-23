@@ -10,6 +10,21 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ## [Unreleased]
 
+### Changed
+
+- An item that leaves out `converted_original_price` is no longer rejected with
+  "cannot be blank". The value counts as 0, and the price rule still decides
+  which prices an item needs: 0 for an item bought in the group currency, and a
+  converted or current price for one bought in another currency
+  ([#2781](https://github.com/denisvmedia/inventario/pull/2781)).
+
+### Security
+
+- Prices are read with `shopspring/decimal` 1.6.0. A price with a huge exponent,
+  like `1e1000000000`, is now rejected. Before, such a value in a request could
+  hang the server or use gigabytes of memory
+  ([#2781](https://github.com/denisvmedia/inventario/pull/2781)).
+
 ## [0.2.0] - 2026-11-23
 
 ### Added
