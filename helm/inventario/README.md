@@ -46,7 +46,7 @@ Production notes:
 
 - Keep `replicaCount: 1` when using `file://` uploads. For multiple replicas, switch `app.uploadLocation` to shared object storage such as S3/MinIO/Azure/GCS.
 - If your database users are managed outside the chart, set `setupJob.bootstrap.enabled=false`.
-- The setup Job runs as a Helm hook. It is `pre-install,pre-upgrade` by default, and switches to `post-install,pre-upgrade` when `demo.postgresql.enabled=true` so the demo database exists before bootstrap/migrate runs.
+- On upgrade the setup Job runs as a `pre-upgrade` Helm hook, so it finishes before the rollout starts. On a fresh install, and always with `demo.postgresql.enabled=true`, it is an ordinary release object instead, applied alongside the Deployment and covered by `--wait-for-jobs` (see [What runs when](#what-runs-when)).
 
 ## Demo install
 
@@ -186,10 +186,10 @@ Three arrangements, chosen by two values. `setupJob.argocdMode` picks the deploy
 
 | | Helm, migration in the Job (default) | Helm, `migrateInInitContainer=true` | `argocdMode=true` |
 | --- | --- | --- | --- |
-| Bootstrap | setup Job, `pre-install,pre-upgrade` hook | setup Job, same hook, bootstrap only | setup Job, sync-wave `-5` |
+| Bootstrap | setup Job: an ordinary object on a fresh install, a `pre-upgrade` hook on upgrade | setup Job, the same, bootstrap only | setup Job, sync-wave `-5` |
 | Schema migration | same setup Job, after bootstrap | `migrate` init container on every app Deployment | `migrate` init container on every app Deployment |
 | Data migration + seed | same setup Job, after migration | separate init-data Job, `post-install,post-upgrade` hook | separate init-data Job, sync-wave `+5` |
-| Ordering guarantee | the whole sequence completes before the Deployment is touched | migration is pinned to the pod image that will run it | migration is pinned to the pod image that will run it |
+| Ordering guarantee | on upgrade, the whole sequence completes before the Deployment is touched | migration is pinned to the pod image that will run it | migration is pinned to the pod image that will run it |
 
 The default is the simpler story when Helm is the deployment engine: one Job, one pod, three steps in order, and `helm upgrade --wait --wait-for-jobs` does not return until it finished.
 
@@ -199,11 +199,22 @@ Two caveats in that middle column, and together they are the reason it is not th
 
 The init-data Job becomes a `post-upgrade` hook, and **without `helm upgrade --wait` Helm runs post-phase hooks as soon as the manifests are applied** — before the new pods have finished migrating. The Job's retry loop (`dbRetry.attempts` × `dbRetry.intervalSeconds`, 5 minutes by default) is what covers that window. `--wait` removes it, and Helmfile passes `--wait` when `wait: true` is set on the release.
 
-And a **fresh install cannot combine it with `demo.postgresql.enabled`**. With the chart's own database the setup Job is applied alongside it rather than as a hook (see below), and the app pod's `migrate` init container still needs the migrator user that Job creates; the two converge on their own retries, but `helm install --wait` gives the Deployment no room to do so. Install with `migrateInInitContainer=false` and upgrade into it, or use an external database — where bootstrap is a `pre-install` hook that completes before anything else starts, which is the case this mode exists for.
+And a **fresh install cannot combine it with `demo.postgresql.enabled`**. With the chart's own database the setup Job is applied alongside it rather than as a hook (see below), and the app pod's `migrate` init container still needs the migrator user that Job creates; the two converge on their own retries, but `helm install --wait` gives the Deployment no room to do so. Install with `migrateInInitContainer=false` and upgrade into it, or use an external database, which is the case this mode exists for. There the database is already up, so bootstrap finishes within seconds of the install, and a `migrate` init container that starts before it simply fails and runs again.
 
 One thing the first column does differently, and it is worth knowing before
-reading the templates: with `demo.postgresql.enabled=true` the setup Job is
-**not** a Helm hook. It cannot be a `pre-install` one, because the database it
+reading the templates: on a fresh install, and with `demo.postgresql.enabled=true`
+on every release, the setup Job is **not** a Helm hook.
+
+On a fresh install Helm runs hooks before it creates the release's own objects,
+and the Job runs under the chart's ServiceAccount with its ConfigMap and Secret.
+As a `pre-install` hook its pod was refused (`serviceaccount ... not found`) and
+the install timed out. Applied alongside the Deployment, everything it needs
+exists. No pods of an older image are running yet, so this opens no
+old-image/new-schema window; the app pod restarts until the schema is there,
+and `--wait --wait-for-jobs` returns once both are done. Upgrades keep the
+`pre-upgrade` hook, since by then those objects exist.
+
+With the demo database the Job is not a hook on upgrades either. It cannot be a `pre-install` one, because the database it
 connects to is a main resource that does not exist yet; and as a `post-install`
 one it deadlocked `helm install --wait`, since Helm runs post-phase hooks only
 after the main resources are ready while the app pod was waiting for that very
