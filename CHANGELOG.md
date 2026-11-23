@@ -12,10 +12,6 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
-- Each release publishes the Helm chart to
-  `oci://ghcr.io/denisvmedia/charts/inventario` and attaches the package to
-  the GitHub Release. The chart keeps its own version; a published version is
-  never overwritten.
 - Privacy Policy and Terms of Service pages, linked from the registration
   consent checkbox ([#2148](https://github.com/denisvmedia/inventario/issues/2148)).
 - `setupJob.migrateInInitContainer` makes the in-pod migration ordering
@@ -30,6 +26,11 @@ the section matching the tag and publishes it as the GitHub Release body. See
 - Opt-in nightly `pg_dump` CronJob in the Helm chart (`backup.enabled`), with
   retention, a read-back check on each dump, and alerts on backup age
   ([#845](https://github.com/denisvmedia/inventario/issues/845)).
+- Each release publishes the Helm chart to
+  `oci://ghcr.io/denisvmedia/charts/inventario` and attaches the package to
+  the GitHub Release. The chart keeps its own version; a published version is
+  never overwritten
+  ([#2775](https://github.com/denisvmedia/inventario/pull/2775)).
 
 ### Fixed
 
