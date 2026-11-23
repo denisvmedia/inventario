@@ -16,7 +16,8 @@ the section matching the tag and publishes it as the GitHub Release body. See
   mount the database server's CA for `sslmode=verify-full`. The volumes go into
   every pod of the chart except the demo ones, and the mounts into every
   container that runs Inventario or reaches the database, the `migrate` init
-  container and the backup included.
+  container and the backup included
+  ([#2774](https://github.com/denisvmedia/inventario/pull/2774)).
 - Privacy Policy and Terms of Service pages, linked from the registration
   consent checkbox ([#2148](https://github.com/denisvmedia/inventario/issues/2148)).
 - `setupJob.migrateInInitContainer` makes the in-pod migration ordering
@@ -34,9 +35,16 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
+- A fresh `helm install` with an external database no longer hangs. The setup
+  Job was a `pre-install` hook that needs the chart's ServiceAccount, ConfigMap
+  and Secret, which Helm creates only after its hooks, so the install hung
+  until it timed out. It is now an ordinary release object on install, and
+  stays a `pre-upgrade` hook on upgrade
+  ([#2773](https://github.com/denisvmedia/inventario/pull/2773)).
 - The chart's pods pass Pod Security `restricted`: `podSecurityContext` now
   sets the `RuntimeDefault` seccomp profile, without which a `restricted`
-  namespace refused every pod but the demo ones.
+  namespace refused every pod but the demo ones
+  ([#2774](https://github.com/denisvmedia/inventario/pull/2774)).
 - `helm install --wait` no longer deadlocks with `demo.postgresql.enabled`: the
   setup Job is applied alongside the database rather than as a post-install
   hook that Helm cannot reach until the app pod is ready

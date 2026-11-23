@@ -11,10 +11,12 @@
   bootstrap is the hook Helm is waiting to run. Nothing breaks the circle.
 
   It only affects a fresh install. On upgrade the hook is pre-upgrade, which
-  runs first, so bootstrap completes before the rollout starts. And with an
-  external database — the case #2086 was filed about — the hook is
-  pre-install, which has the same ordering. ArgoCD is unaffected: sync waves
-  order the two explicitly.
+  runs first, so bootstrap completes before the rollout starts. With an
+  external database — the case #2086 was filed about — a fresh install applies
+  the Job alongside the Deployment too (see below), but the database is
+  already up, so bootstrap finishes within seconds; a `migrate` init
+  container that asks too early fails and is started again. ArgoCD is
+  unaffected: sync waves order the two explicitly.
 */ -}}
 {{- if and
       (eq (include "inventario.migrateInPod" .) "true")
@@ -40,10 +42,18 @@
   starting. Jobs are immutable, so the name carries the release revision —
   each upgrade creates a new one and Helm removes the previous.
 
+  A fresh install with an external database is plain too. As a pre-install
+  hook the Job ran before Helm had created the ServiceAccount, the ConfigMap
+  and the Secret it uses, so its pod was refused ("serviceaccount not found")
+  and the install timed out. No old pods exist yet, so applying it alongside
+  the Deployment opens no old-image/new-schema window. Upgrades keep the
+  pre-upgrade hook: by then those objects exist, and the hook still finishes
+  the whole sequence before the rollout starts.
+
   An operator who set hookOverride explicitly keeps their hook; they asked
   for it, and changing that silently would be worse than the deadlock.
 */ -}}
-{{- $plainSetupJob := and .Values.demo.postgresql.enabled (not .Values.setupJob.argocdMode) (not .Values.setupJob.hookOverride) -}}
+{{- $plainSetupJob := and (or .Values.demo.postgresql.enabled .Release.IsInstall) (not .Values.setupJob.argocdMode) (not .Values.setupJob.hookOverride) -}}
 {{- $setupName := ternary (printf "%s-setup-r%d" $fullName (int .Release.Revision)) (printf "%s-setup" $fullName) $plainSetupJob -}}
 {{- $usePersistentUploads := and .Values.persistence.enabled (hasPrefix "file://" (include "inventario.uploadLocation" .)) -}}
 apiVersion: batch/v1
@@ -73,8 +83,9 @@ metadata:
     "argocd.argoproj.io/sync-wave": "-5"
     "argocd.argoproj.io/sync-options": "Force=true,Replace=true"
     {{- else if $plainSetupJob }}
-    # Not a hook — see the note above. Applied with the demo database so the
-    # two can converge instead of waiting on each other.
+    # Not a hook — see the note above. Applied with the demo database, or on
+    # a fresh install, so the Job and what it needs can converge instead of
+    # waiting on each other.
     {{- else }}
     # Default: helm install / upgrade hooks. Behaves as before for non-
     # ArgoCD consumers (the operator runs `helm` directly).
