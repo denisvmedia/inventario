@@ -184,7 +184,7 @@ func TestThumbnailWorker_OptionsConfigureTheWorker(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Check(stats["poll_interval"], qt.Equals, (777 * time.Millisecond).String())
 	c.Check(stats["batch_size"], qt.Equals, 13)
-	c.Check(stats["worker_running"], qt.Equals, false)
+	c.Check(stats["worker_running"], qt.IsFalse)
 }
 
 func TestThumbnailWorker_GetStatsReportsJobCountsAndSlots(t *testing.T) {

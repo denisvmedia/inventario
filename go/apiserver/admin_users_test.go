@@ -243,7 +243,7 @@ func TestAdminBlockUser_AdminWithForceAllowedAndAudited(t *testing.T) {
 	c.Assert(force, qt.IsNotNil, qt.Commentf("expected an admin.user_block_force audit row"))
 	var bc map[string]any
 	c.Assert(json.Unmarshal([]byte(force.UserAgent), &bc), qt.IsNil)
-	c.Assert(bc["forced"], qt.Equals, true)
+	c.Assert(bc["forced"], qt.IsTrue)
 	c.Assert(bc["reason"], qt.Equals, "compromise drill")
 }
 

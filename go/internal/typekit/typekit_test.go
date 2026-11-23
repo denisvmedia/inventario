@@ -80,7 +80,7 @@ func TestSetFieldByConfigfieldTag(t *testing.T) {
 
 		err = typekit.SetFieldByConfigfieldTag(config, "active", true)
 		c.Assert(err, qt.IsNil)
-		c.Assert(config.IsActive, qt.Equals, true)
+		c.Assert(config.IsActive, qt.IsTrue)
 	})
 
 	// Test with nil pointer
@@ -189,7 +189,7 @@ func TestGetFieldByConfigfieldTag(t *testing.T) {
 		// Test bool field
 		value, err = typekit.GetFieldByConfigfieldTag(config, "active")
 		c.Assert(err, qt.IsNil)
-		c.Assert(value, qt.Equals, true)
+		c.Assert(value, qt.IsTrue)
 
 		// Test pointer field
 		value, err = typekit.GetFieldByConfigfieldTag(config, "desc")
@@ -219,7 +219,7 @@ func TestGetFieldByConfigfieldTag(t *testing.T) {
 		// Test zero bool
 		value, err = typekit.GetFieldByConfigfieldTag(config, "active")
 		c.Assert(err, qt.IsNil)
-		c.Assert(value, qt.Equals, false)
+		c.Assert(value, qt.IsFalse)
 
 		// Test nil pointer
 		value, err = typekit.GetFieldByConfigfieldTag(config, "desc")
@@ -410,7 +410,7 @@ func TestStructToMap(t *testing.T) {
 		// Check that fields with configfield tags are included
 		c.Assert(result["name"], qt.Equals, "John Doe")
 		c.Assert(result["age"], qt.Equals, 30)
-		c.Assert(result["active"], qt.Equals, true)
+		c.Assert(result["active"], qt.IsTrue)
 		c.Assert(result["desc"], qt.DeepEquals, &desc)
 		c.Assert(result["count"], qt.DeepEquals, &count)
 
@@ -433,7 +433,7 @@ func TestStructToMap(t *testing.T) {
 		// Check zero values
 		c.Assert(result["name"], qt.Equals, "")
 		c.Assert(result["age"], qt.Equals, 0)
-		c.Assert(result["active"], qt.Equals, false)
+		c.Assert(result["active"], qt.IsFalse)
 		c.Assert(result["desc"], qt.IsNil)
 		c.Assert(result["count"], qt.IsNil)
 		c.Assert(result[""], qt.Equals, "")
@@ -475,7 +475,7 @@ func TestStructToMap_NonPointerStructs(t *testing.T) {
 		// Check that fields with configfield tags are included
 		c.Assert(result["name"], qt.Equals, "John Doe")
 		c.Assert(result["age"], qt.Equals, 30)
-		c.Assert(result["active"], qt.Equals, true)
+		c.Assert(result["active"], qt.IsTrue)
 		c.Assert(result["desc"], qt.DeepEquals, &desc)
 		c.Assert(result["count"], qt.DeepEquals, &count)
 
@@ -498,7 +498,7 @@ func TestStructToMap_NonPointerStructs(t *testing.T) {
 		// Check zero values
 		c.Assert(result["name"], qt.Equals, "")
 		c.Assert(result["age"], qt.Equals, 0)
-		c.Assert(result["active"], qt.Equals, false)
+		c.Assert(result["active"], qt.IsFalse)
 		c.Assert(result["desc"], qt.IsNil)
 		c.Assert(result["count"], qt.IsNil)
 		c.Assert(result[""], qt.Equals, "")

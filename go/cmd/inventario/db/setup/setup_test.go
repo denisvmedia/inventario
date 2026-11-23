@@ -105,7 +105,7 @@ func TestDataSetupManager_SetupInitialDataset_ReconcilesExistingDefaultTenant(t 
 	c.Assert(tenant.Name, qt.Equals, opts.DefaultTenantName)
 	c.Assert(tenant.Slug, qt.Equals, opts.DefaultTenantSlug)
 	c.Assert(tenant.Status, qt.Equals, models.TenantStatusActive)
-	c.Assert(isDefault, qt.Equals, true)
+	c.Assert(isDefault, qt.IsTrue)
 	c.Assert(tenant.RegistrationMode, qt.Equals, models.RegistrationModeOpen)
 	c.Assert(buf.String(), qt.Contains, "Reconciled default tenant")
 }
@@ -296,7 +296,7 @@ func TestDefaultSetupOptions(t *testing.T) {
 	c.Assert(opts.AdminEmail, qt.Equals, "admin@example.com")
 	c.Assert(opts.AdminPassword, qt.Equals, "Admin123")
 	c.Assert(opts.AdminName, qt.Equals, "System Administrator")
-	c.Assert(opts.DryRun, qt.Equals, false)
+	c.Assert(opts.DryRun, qt.IsFalse)
 }
 
 // setupTestDatabase creates a test database for testing

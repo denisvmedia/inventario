@@ -40,7 +40,7 @@ func TestSanitizeUserInput(t *testing.T) {
 		c.Assert(export.Status, qt.Equals, models.ExportStatus(""))
 		c.Assert(export.FilePath, qt.Equals, "")
 		c.Assert(export.ErrorMessage, qt.Equals, "")
-		c.Assert(export.Imported, qt.Equals, false)
+		c.Assert(export.Imported, qt.IsFalse)
 		c.Assert(export.FileSize, qt.Equals, int64(0))
 		c.Assert(export.LocationCount, qt.Equals, 0)
 		c.Assert(export.AreaCount, qt.Equals, 0)
@@ -53,7 +53,7 @@ func TestSanitizeUserInput(t *testing.T) {
 
 		// Check that fields without userinput:"false" tag are NOT reset
 		c.Assert(export.Type, qt.Equals, models.ExportTypeFullDatabase)
-		c.Assert(export.IncludeFileData, qt.Equals, true)
+		c.Assert(export.IncludeFileData, qt.IsTrue)
 		c.Assert(export.Description, qt.Equals, "test export")
 	})
 
@@ -140,12 +140,12 @@ func TestSanitizeUserInput(t *testing.T) {
 
 		// Check that system-set values are correct
 		c.Assert(result.Status, qt.Equals, models.ExportStatusPending)
-		c.Assert(result.Imported, qt.Equals, false)
+		c.Assert(result.Imported, qt.IsFalse)
 		c.Assert(result.CreatedDate, qt.IsNotNil)
 
 		// Check that user-provided fields without userinput:"false" tag are preserved
 		c.Assert(result.Type, qt.Equals, models.ExportTypeFullDatabase)
-		c.Assert(result.IncludeFileData, qt.Equals, true)
+		c.Assert(result.IncludeFileData, qt.IsTrue)
 		c.Assert(result.Description, qt.Equals, "User provided description")
 	})
 

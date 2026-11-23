@@ -94,12 +94,12 @@ func TestBoolField_RequiredWithoutDefault(t *testing.T) {
 	result, err := field.Prompt(context.Background())
 
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.Equals, true)
+	c.Assert(result, qt.IsTrue)
 
 	// Check that error message was displayed
 	outputStr := output.String()
-	c.Assert(strings.Contains(outputStr, "Error:"), qt.Equals, true)
-	c.Assert(strings.Contains(outputStr, "required"), qt.Equals, true)
+	c.Assert(outputStr, qt.Contains, "Error:")
+	c.Assert(outputStr, qt.Contains, "required")
 }
 
 func TestBoolField_Configurations(t *testing.T) {
@@ -242,7 +242,7 @@ func TestBoolField_PromptFormatting(t *testing.T) {
 
 			// Check that the output contains the expected prompt format
 			outputStr := output.String()
-			c.Assert(strings.Contains(outputStr, tt.expectedPrompt), qt.Equals, true)
+			c.Assert(outputStr, qt.Contains, tt.expectedPrompt)
 		})
 	}
 }

@@ -201,7 +201,7 @@ func TestApplyArgs_Structure(t *testing.T) {
 	}
 
 	c.Assert(args.DSN, qt.Equals, "postgres://test:test@localhost/test")
-	c.Assert(args.DryRun, qt.Equals, true)
+	c.Assert(args.DryRun, qt.IsTrue)
 	c.Assert(args.Template.Username, qt.Equals, "testuser")
 	c.Assert(args.Template.UsernameForMigrations, qt.Equals, "testmigrator")
 }
