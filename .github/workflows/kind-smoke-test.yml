@@ -143,7 +143,14 @@ jobs:
         # Preloads the image into kind's containerd so the cluster doesn't
         # try to re-pull it (and so non-:latest tags resolve via local
         # imagePullPolicy=IfNotPresent default).
-        run: kind load docker-image "$INVENTARIO_IMAGE" --name "$KIND_CLUSTER_NAME"
+        run: |
+          set -euo pipefail
+          # One platform only: `kind load docker-image` fails on a
+          # multi-platform index under the containerd image store of the
+          # ubuntu-26.04 runner. See helm-kind-smoke-test.yml.
+          archive="$RUNNER_TEMP/inventario-image.tar"
+          docker save --platform linux/amd64 -o "$archive" "$INVENTARIO_IMAGE"
+          kind load image-archive "$archive" --name "$KIND_CLUSTER_NAME"
 
       - name: Prepare CI manifests
         run: |
