@@ -225,8 +225,8 @@ jobs:
           want = ("- name: SETUP_SUPERUSER_DSN\n"
                   "              valueFrom:\n"
                   "                secretKeyRef:\n"
-                  "                  name: inventario-db-setup\n"
-                  "                  key: SETUP_SUPERUSER_DSN\n")
+                  "                  name: \"inventario-db-setup\"\n"
+                  "                  key: \"SETUP_SUPERUSER_DSN\"\n")
           assert want in job, "superuserSecret: the setup Job does not read the named Secret"
 
           for path in sys.argv[1:]:

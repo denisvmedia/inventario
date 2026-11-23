@@ -199,8 +199,8 @@ spec:
               {{- else if (dig "superuserSecret" "name" "" .Values.setupJob.bootstrap) }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.setupJob.bootstrap.superuserSecret.name }}
-                  key: {{ .Values.setupJob.bootstrap.superuserSecret.key | default "SETUP_SUPERUSER_DSN" }}
+                  name: {{ .Values.setupJob.bootstrap.superuserSecret.name | quote }}
+                  key: {{ .Values.setupJob.bootstrap.superuserSecret.key | default "SETUP_SUPERUSER_DSN" | quote }}
               {{- else }}
               valueFrom:
                 secretKeyRef:
