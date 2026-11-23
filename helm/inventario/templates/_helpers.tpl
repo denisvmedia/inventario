@@ -609,6 +609,11 @@ Usage:
 */}}
 {{- define "inventario.initDataScript" -}}
 set -eu
+# The admin's email: the SETUP_ADMIN_EMAIL key of the Secret wins over
+# setupJob.initData.adminEmail, so a real address need not be in the values.
+if [ -n "${SETUP_ADMIN_EMAIL:-}" ]; then
+  INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL="$SETUP_ADMIN_EMAIL"
+fi
 export INVENTARIO_DB_DSN="${MIGRATOR_DB_DSN:-$APP_DB_DSN}"
 # Shared with the `migrate` init container (dbRetry.*). These two wait on
 # the same database, and when their budgets diverged a stall the init

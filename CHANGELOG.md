@@ -15,6 +15,9 @@ the section matching the tag and publishes it as the GitHub Release body. See
 - `setupJob.bootstrap.superuserSecret` in the Helm chart: a Secret of your own
   with the superuser DSN for the database bootstrap, which only the setup Job
   reads ([#2783](https://github.com/denisvmedia/inventario/pull/2783)).
+- A `SETUP_ADMIN_EMAIL` key in the chart's `secrets.existingSecret`, which wins
+  over `setupJob.initData.adminEmail`, so the first admin's real address need
+  not be in the values ([#2785](https://github.com/denisvmedia/inventario/pull/2785)).
 
 ### Security
 

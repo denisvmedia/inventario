@@ -160,6 +160,7 @@ Expected secret keys when using `secrets.existingSecret`:
 - `INVENTARIO_RUN_JWT_SECRET` (required)
 - `INVENTARIO_RUN_FILE_SIGNING_KEY` (required)
 - `SETUP_ADMIN_PASSWORD` (required when `setupJob.enabled=true`)
+- `SETUP_ADMIN_EMAIL` (optional; overrides `setupJob.initData.adminEmail`, so a real address need not be in the values)
 - `SETUP_SUPERUSER_DSN` (optional). The app pods load this whole Secret with `envFrom`, so a superuser DSN here reaches every app pod. Keep it in a Secret of its own and name that one in `setupJob.bootstrap.superuserSecret`, which only the setup Job reads.
 - `INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL`, `INVENTARIO_RUN_AUTH_RATE_LIMIT_REDIS_URL`, `INVENTARIO_RUN_GLOBAL_RATE_LIMIT_REDIS_URL`, `INVENTARIO_RUN_CSRF_REDIS_URL`, `INVENTARIO_RUN_EMAIL_QUEUE_REDIS_URL` (optional)
 - `INVENTARIO_RUN_SMTP_PASSWORD`, `INVENTARIO_RUN_SENDGRID_API_KEY`, `INVENTARIO_RUN_MANDRILL_API_KEY` (provider-specific)

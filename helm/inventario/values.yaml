@@ -746,6 +746,7 @@ secrets:
   #   INVENTARIO_RUN_METRICS_TOKEN                   (optional; bearer token for GET /metrics — strongly recommended in production, see metrics.token)
   #   SENTRY_DSN                                 (optional; BARE name — NOT INVENTARIO_RUN_ prefixed; enables Sentry error tracking when set, see sentry.dsn)
   #   SETUP_ADMIN_PASSWORD                       (required by job-setup if setupJob.enabled)
+  #   SETUP_ADMIN_EMAIL                          (optional; overrides setupJob.initData.adminEmail)
   #   BACKOFFICE_USER_PASSWORD                   (required by setup/init-data Job when backofficeUser.enabled; maps to setupJob.initData.backofficeUserPassword; min 8 chars + upper + lower + digit)
   #   BACKOFFICE_USER_EMAIL                      (optional; when backofficeUser.enabled, overrides backofficeUser.email so the operator login identity comes from the Secret/sops bundle instead of the overlay; falls back to backofficeUser.email when absent)
   #   SETUP_SUPERUSER_DSN                        (optional; the app pods load this Secret too, so prefer setupJob.bootstrap.superuserSecret)
@@ -987,7 +988,10 @@ setupJob:
     # Env: INVENTARIO_MIGRATE_DATA_DEFAULT_TENANT_SLUG
     defaultTenantSlug: "default"
 
-    # Admin user email address
+    # Admin user email address. A SETUP_ADMIN_EMAIL key in
+    # secrets.existingSecret wins over it, so a real address can stay out of
+    # the values. The setup step finds the admin by this email: a new
+    # address creates a second admin.
     # Env: INVENTARIO_MIGRATE_DATA_ADMIN_EMAIL
     adminEmail: "admin@example.com"
 
