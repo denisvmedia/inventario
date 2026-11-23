@@ -41,6 +41,12 @@ export const COMMODITY_STATUSES = ["in_use", "sold", "lost", "disposed", "writte
 
 export type CommodityStatusValue = (typeof COMMODITY_STATUSES)[number]
 
+// The statuses an item moves to from in_use. The status transition
+// dialog opens only for these; going back to in_use is a plain confirm.
+export const TERMINAL_COMMODITY_STATUSES = ["sold", "lost", "disposed", "written_off"] as const
+
+export type TerminalCommodityStatusValue = (typeof TERMINAL_COMMODITY_STATUSES)[number]
+
 // Tailwind classes for each status pill. The status-* tokens live in
 // src/index.css; the dark-mode variants are already pre-shifted there
 // so a `text-status-active` reads correctly in both themes.

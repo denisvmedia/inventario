@@ -52,6 +52,11 @@ interface StoragePieProps {
 
 export function StoragePie({ breakdown, usedBytes, quotaBytes }: StoragePieProps) {
   const { t } = useTranslation()
+  // "free" has its own key. A narrow parameter type keeps the
+  // extractor from expecting settings:storage.breakdown.free.
+  const breakdownLabel = (key: keyof StorageBreakdown) => t(`settings:storage.breakdown.${key}`)
+  const segmentLabel = (key: PieSegment["key"]) =>
+    key === "free" ? t("settings:storage.free") : breakdownLabel(key)
 
   // Build the segment list. Free space only appears when a quota is
   // set; without one the donut covers the used breakdown alone (the
@@ -124,13 +129,7 @@ export function StoragePie({ breakdown, usedBytes, quotaBytes }: StoragePieProps
           strokeDashoffset={-cumulative}
           data-testid={s.testid}
         >
-          <title>
-            {`${
-              s.key === "free"
-                ? t("settings:storage.free")
-                : t(`settings:storage.breakdown.${s.key}`)
-            } — ${formatBytes(s.bytes)}`}
-          </title>
+          <title>{`${segmentLabel(s.key)} — ${formatBytes(s.bytes)}`}</title>
         </circle>
       )
       cumulative += arcLen
@@ -151,8 +150,7 @@ export function StoragePie({ breakdown, usedBytes, quotaBytes }: StoragePieProps
       </svg>
       <ul className="flex-1 space-y-1 text-xs" data-testid="storage-pie-legend">
         {segments.map((s) => {
-          const label =
-            s.key === "free" ? t("settings:storage.free") : t(`settings:storage.breakdown.${s.key}`)
+          const label = segmentLabel(s.key)
           const pct = total > 0 ? Math.round((s.bytes / total) * 100) : 0
           return (
             <li key={s.key} className="flex items-center gap-2">

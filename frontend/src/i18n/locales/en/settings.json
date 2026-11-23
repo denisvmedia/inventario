@@ -97,9 +97,9 @@
     },
     "loading": "Loading login history…",
     "methods": {
+      "oauth_other": "OAuth",
       "oauth_github": "GitHub",
       "oauth_google": "Google",
-      "oauth_other": "OAuth",
       "password": "Password"
     },
     "outcomes": {

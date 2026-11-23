@@ -70,17 +70,19 @@ import {
 } from "@/features/commodities/hooks"
 import {
   COMMODITY_STATUS_TONES,
+  TERMINAL_COMMODITY_STATUSES,
   warrantyStatus,
   type CommodityStatusValue,
   type CommodityTypeValue,
   type CommodityWarrantyStatus,
+  type TerminalCommodityStatusValue,
 } from "@/features/commodities/constants"
 
 // CHANGE-STATUS bar: terminal status transitions surfaced as quick
 // buttons on the detail surface (mock: "Change Status" section).
 // Mirror the mock's set sans `in_use`, since `in_use` is what we're
 // transitioning *from*. Order matches the mock's row.
-const TERMINAL_STATUSES = ["sold", "lost", "disposed", "written_off"] as const
+const TERMINAL_STATUSES = TERMINAL_COMMODITY_STATUSES
 
 // Mock parity colour-only mapping for the CHANGE STATUS quick
 // buttons. Lifted from `inventario-design`'s
@@ -246,7 +248,9 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // #1611: forward-transition target gates the StatusTransitionDialog.
   // Null = dialog closed. Revert keeps the lighter useConfirm path
   // (no metadata to capture).
-  const [transitionTarget, setTransitionTarget] = useState<CommodityStatusValue | null>(null)
+  const [transitionTarget, setTransitionTarget] = useState<TerminalCommodityStatusValue | null>(
+    null
+  )
   const dropZone = useFileDropZone({
     onFiles: (files) => {
       setPendingDropFiles(files)
