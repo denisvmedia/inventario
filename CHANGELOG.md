@@ -10,6 +10,8 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-23
+
 ### Added
 
 - `extraVolumes` and `extraVolumeMounts` in the Helm chart, for example to
@@ -34,9 +36,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
   ([#845](https://github.com/denisvmedia/inventario/issues/845)).
 - Each release publishes the Helm chart to
   `oci://ghcr.io/denisvmedia/charts/inventario` and attaches the package to
-  the GitHub Release. The chart keeps its own version; a published version is
-  never overwritten
-  ([#2775](https://github.com/denisvmedia/inventario/pull/2775)).
+  the GitHub Release. The chart version is the release version without the
+  "v": this release ships chart 0.2.0. Before, the chart had its own numbers,
+  which reached 0.6.0 but were never published, so the number goes down once;
+  `helm upgrade` from 0.6.0 to 0.2.0 works as usual
+  ([#2775](https://github.com/denisvmedia/inventario/pull/2775),
+  [#2777](https://github.com/denisvmedia/inventario/pull/2777)).
 
 ### Fixed
 
@@ -115,5 +120,6 @@ launch. The full announcement, including what the release does, what it needs,
 and the known gaps it ships with, is in
 [the v0.1.0 release notes](.github/release-notes/v0.1.0.md).
 
-[Unreleased]: https://github.com/denisvmedia/inventario/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/denisvmedia/inventario/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/denisvmedia/inventario/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/denisvmedia/inventario/releases/tag/v0.1.0
