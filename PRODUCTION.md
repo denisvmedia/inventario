@@ -157,7 +157,11 @@ cert-manager.
 
 - [ ] **Point DNS** for `<DOMAIN>` (A/AAAA) at the ingress external IP
   (`kubectl get svc -A | grep -i ingress`; on k3s ServiceLB this is a node IP).
-- [ ] **Get the chart.** It is not published to a chart repo — use it from a git
+- [ ] **Get the chart.** Since v0.2.0 each release publishes it as an OCI chart,
+  `oci://ghcr.io/denisvmedia/charts/inventario`. The chart version is the
+  release version without the "v": release v0.2.0 is chart 0.2.0. Use that
+  reference wherever this guide says `./helm/inventario`, with
+  `--version <X.Y.Z>`. For v0.1.0, or to read the templates, use a git
   checkout at the release tag:
 
   ```bash

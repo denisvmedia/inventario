@@ -161,7 +161,17 @@ jobs:
           kubectl cluster-info
 
       - name: Load image into kind
-        run: kind load docker-image "$INVENTARIO_IMAGE" --name "$KIND_CLUSTER_NAME"
+        run: |
+          set -euo pipefail
+          # The image is a multi-platform index, and the runner pulled only
+          # linux/amd64. Since ubuntu-latest became ubuntu-26.04, Docker keeps
+          # images in the containerd image store, so `kind load docker-image`
+          # exports the whole index and `ctr import --all-platforms` stops at
+          # the first missing platform ("content digest ... not found"). An
+          # archive of the one platform the node runs imports cleanly.
+          archive="$RUNNER_TEMP/inventario-image.tar"
+          docker save --platform linux/amd64 -o "$archive" "$INVENTARIO_IMAGE"
+          kind load image-archive "$archive" --name "$KIND_CLUSTER_NAME"
 
       - name: Resolve image tag
         id: image-tag
@@ -384,7 +394,7 @@ jobs:
 
       - name: Upload diagnostics artifact
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: helm-kind-smoke-diagnostics-${{ matrix.mode }}
           path: artifacts/

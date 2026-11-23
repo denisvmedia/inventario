@@ -232,8 +232,14 @@ say what was wrong, not which function changed. Link the issue.
 1. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and open a fresh
    empty `## [Unreleased]` above it.
 2. Update the link definitions at the foot of the file.
-3. Bump `appVersion` in `helm/inventario/Chart.yaml` to `vX.Y.Z` — the release
-   workflow refuses a tag whose chart disagrees with it.
+3. In `helm/inventario/Chart.yaml`, set `appVersion` to `vX.Y.Z` and `version`
+   to `X.Y.Z`. The chart shares the release version, so every release ships a
+   chart, changed or not. Helm Lint fails when the two lines disagree, and the
+   release workflow refuses a tag that does not match them. The workflow
+   publishes the chart to `oci://ghcr.io/denisvmedia/charts/inventario` and
+   attaches the package to the GitHub Release. If the chart needs a change the
+   operator must act on, say so in the changelog and in the chart README's
+   upgrade notes.
 4. Tag `vX.Y.Z` and push. The workflow publishes the section as the release
    body.
 

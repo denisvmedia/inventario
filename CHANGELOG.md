@@ -10,8 +10,16 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-23
+
 ### Added
 
+- `extraVolumes` and `extraVolumeMounts` in the Helm chart, for example to
+  mount the database server's CA for `sslmode=verify-full`. The volumes go into
+  every pod of the chart except the demo ones, and the mounts into every
+  container that runs Inventario or reaches the database, the `migrate` init
+  container and the backup included
+  ([#2774](https://github.com/denisvmedia/inventario/pull/2774)).
 - Privacy Policy and Terms of Service pages, linked from the registration
   consent checkbox ([#2148](https://github.com/denisvmedia/inventario/issues/2148)).
 - `setupJob.migrateInInitContainer` makes the in-pod migration ordering
@@ -26,9 +34,27 @@ the section matching the tag and publishes it as the GitHub Release body. See
 - Opt-in nightly `pg_dump` CronJob in the Helm chart (`backup.enabled`), with
   retention, a read-back check on each dump, and alerts on backup age
   ([#845](https://github.com/denisvmedia/inventario/issues/845)).
+- Each release publishes the Helm chart to
+  `oci://ghcr.io/denisvmedia/charts/inventario` and attaches the package to
+  the GitHub Release. The chart version is the release version without the
+  "v": this release ships chart 0.2.0. Before, the chart had its own numbers,
+  which reached 0.6.0 but were never published, so the number goes down once;
+  `helm upgrade` from 0.6.0 to 0.2.0 works as usual
+  ([#2775](https://github.com/denisvmedia/inventario/pull/2775),
+  [#2777](https://github.com/denisvmedia/inventario/pull/2777)).
 
 ### Fixed
 
+- A fresh `helm install` with an external database no longer hangs. The setup
+  Job was a `pre-install` hook that needs the chart's ServiceAccount, ConfigMap
+  and Secret, which Helm creates only after its hooks, so the install hung
+  until it timed out. It is now an ordinary release object on install, and
+  stays a `pre-upgrade` hook on upgrade
+  ([#2773](https://github.com/denisvmedia/inventario/pull/2773)).
+- The chart's pods pass Pod Security `restricted`: `podSecurityContext` now
+  sets the `RuntimeDefault` seccomp profile, without which a `restricted`
+  namespace refused every pod but the demo ones
+  ([#2774](https://github.com/denisvmedia/inventario/pull/2774)).
 - `helm install --wait` no longer deadlocks with `demo.postgresql.enabled`: the
   setup Job is applied alongside the database rather than as a post-install
   hook that Helm cannot reach until the app pod is ready
@@ -80,6 +106,13 @@ the section matching the tag and publishes it as the GitHub Release body. See
   been skipped entirely since the back-office auth plane landed
   ([#2100](https://github.com/denisvmedia/inventario/issues/2100)).
 
+### Security
+
+- The image is built with Go 1.27.4, and `golang.org/x/net`,
+  `go-jose`, `klauspost/compress` and `andybalholm/brotli` are updated. The
+  shipped binary had a man-in-the-middle flaw in `crypto/x509` and
+  denial-of-service flaws in the HTML parser and in JOSE token parsing.
+
 ## [0.1.0] - 2026-09-19
 
 First tagged release: an alpha for a small private cohort, not a public
@@ -87,5 +120,6 @@ launch. The full announcement, including what the release does, what it needs,
 and the known gaps it ships with, is in
 [the v0.1.0 release notes](.github/release-notes/v0.1.0.md).
 
-[Unreleased]: https://github.com/denisvmedia/inventario/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/denisvmedia/inventario/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/denisvmedia/inventario/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/denisvmedia/inventario/releases/tag/v0.1.0

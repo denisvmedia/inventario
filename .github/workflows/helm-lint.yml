@@ -54,6 +54,20 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
 
+      - name: Check the chart version matches appVersion
+        # The chart version is the release version without the "v" (chart
+        # 0.2.0 is release v0.2.0). The release workflow checks both against
+        # the tag; this catches a mismatch in the release PR already.
+        run: |
+          set -euo pipefail
+          version="$(grep -E '^version:' helm/inventario/Chart.yaml | head -1 | tr -d '"' | awk '{print $2}')"
+          app="$(grep -E '^appVersion:' helm/inventario/Chart.yaml | head -1 | tr -d '"' | awk '{print $2}')"
+          if [ "v${version}" != "$app" ]; then
+            echo "::error::helm/inventario/Chart.yaml has version '${version}' and appVersion '${app}'. Set version to the appVersion without the 'v'."
+            exit 1
+          fi
+          echo "chart ${version} matches appVersion ${app}"
+
       - name: Lint chart with production-style values
         run: >-
           helm lint helm/inventario
@@ -134,6 +148,44 @@ jobs:
           --set run.workers.media.autoscaling.enabled=true
           --set run.workers.archive.enabled=true
           > /tmp/inventario-split-workers-subset-render.yaml
+
+      - name: Verify the setup Job with an external database
+        # A fresh install must not make the setup Job a pre-install hook: Helm
+        # runs hooks before it creates the ServiceAccount, ConfigMap and
+        # Secret the Job uses, so its pod is refused and the install times
+        # out. An upgrade keeps the pre-upgrade hook, when those exist.
+        run: |
+          set -euo pipefail
+
+          render() {
+            helm template inventario helm/inventario \
+              --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+              --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+              --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+              --set setupJob.initData.adminPassword=test \
+              "$@"
+          }
+          render > /tmp/inventario-external-install.yaml
+          render --is-upgrade > /tmp/inventario-external-upgrade.yaml
+
+          python3 - /tmp/inventario-external-install.yaml /tmp/inventario-external-upgrade.yaml <<'EOF'
+          import sys
+
+          def setup_job(path):
+              docs = open(path).read().split("\n---\n")
+              jobs = [d for d in docs if "\nkind: Job\n" in d and "app.kubernetes.io/component: setup" in d]
+              assert len(jobs) == 1, f"{path}: expected one setup Job, found {len(jobs)}"
+              return jobs[0]
+
+          install = setup_job(sys.argv[1])
+          assert "helm.sh/hook" not in install, "fresh install: the setup Job is a hook"
+          assert "name: inventario-inventario-setup-r1\n" in install, "fresh install: the Job name lacks the revision"
+
+          upgrade = setup_job(sys.argv[2])
+          assert '"helm.sh/hook": "pre-install,pre-upgrade"' in upgrade, "upgrade: the setup Job is not the pre-upgrade hook"
+          assert "name: inventario-inventario-setup\n" in upgrade, "upgrade: unexpected Job name"
+          print("setup Job: plain on install, pre-upgrade hook on upgrade")
+          EOF
 
       - name: Verify missing DSN is rejected
         run: |
@@ -526,11 +578,14 @@ jobs:
 
           # The in-pod migration ordering without ArgoCD (#2086). Same three
           # resources as argocdMode, held together by Helm hooks instead of
-          # sync waves: a bootstrap-only setup Job on pre-install/pre-upgrade,
-          # the `migrate` init container on the Deployment, and the init-data
-          # Job on post-install/post-upgrade. Each assertion below is one of
-          # the moves that makes the ordering work.
+          # sync waves: a bootstrap-only setup Job on pre-upgrade, the
+          # `migrate` init container on the Deployment, and the init-data Job
+          # on post-install/post-upgrade. Each assertion below is one of the
+          # moves that makes the ordering work. Rendered as an upgrade: on a
+          # fresh install the setup Job is an ordinary object instead, which
+          # "Verify the setup Job with an external database" checks.
           helm template inventario helm/inventario \
+            --is-upgrade \
             --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
             --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
             --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
