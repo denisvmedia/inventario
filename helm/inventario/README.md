@@ -423,6 +423,15 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 
   The CLI `--workers-only` / `--workers-exclude` flags still accept the old family names (`exports`, `imports`, `restores`, `thumbnails`, `token-cleanup`) for one release and log a deprecation warning; Helm values surface only the group keys.
 
+### Upgrading from chart 0.6.0 → 0.7.0
+
+No values need to change. What is different:
+
+- `podSecurityContext` sets the `RuntimeDefault` seccomp profile, so the pods pass Pod Security `restricted`. If you set `podSecurityContext` yourself, add `seccompProfile` to it.
+- `extraVolumes` and `extraVolumeMounts` are new, for example for the database server's CA.
+- A fresh install applies the setup Job as an ordinary release object; upgrades still run it as the `pre-upgrade` hook. See [What runs when](#what-runs-when).
+- From this release on, the chart is published to `oci://ghcr.io/denisvmedia/charts/inventario`.
+
 ### Upgrading from chart 0.2.0 → 0.3.x
 
 Chart 0.3.0 reshaped the run-topology surface from a flat set of pod-shape keys at the chart root into the `run.*` hierarchy that supports both combined (`run all`) and split (`run apiserver` + `run workers`) deployments. The following top-level keys were **removed**; if your existing `values.yaml` (or `--set` arguments) still sets them, the chart silently falls back to its new defaults and your overrides are lost. Move each one under the matching `run.*` block before upgrading.
