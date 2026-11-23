@@ -564,11 +564,14 @@ jobs:
 
           # The in-pod migration ordering without ArgoCD (#2086). Same three
           # resources as argocdMode, held together by Helm hooks instead of
-          # sync waves: a bootstrap-only setup Job on pre-install/pre-upgrade,
-          # the `migrate` init container on the Deployment, and the init-data
-          # Job on post-install/post-upgrade. Each assertion below is one of
-          # the moves that makes the ordering work.
+          # sync waves: a bootstrap-only setup Job on pre-upgrade, the
+          # `migrate` init container on the Deployment, and the init-data Job
+          # on post-install/post-upgrade. Each assertion below is one of the
+          # moves that makes the ordering work. Rendered as an upgrade: on a
+          # fresh install the setup Job is an ordinary object instead, which
+          # "Verify the setup Job with an external database" checks.
           helm template inventario helm/inventario \
+            --is-upgrade \
             --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
             --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
             --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
