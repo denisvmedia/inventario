@@ -16,23 +16,23 @@
     "clean:artifacts": "rimraf test-results"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.13.0",
-    "@playwright/test": "1.63.0",
-    "@types/node": "26.6.4",
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.65.1",
+    "@types/node": "26.6.6",
     "@types/wait-on": "5.3.4",
-    "axios": "1.20.0",
+    "axios": "1.21.1",
     "cross-env": "10.1.0",
-    "otplib": "13.5.0",
+    "otplib": "13.6.0",
     "rimraf": "6.1.4",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
-    "wait-on": "9.1.0"
+    "wait-on": "9.5.1"
   },
   "engines": {
-    "node": "24.21.0"
+    "node": "24.22.3"
   },
   "volta": {
-    "node": "24.21.0",
-    "npm": "12.1.0"
+    "node": "24.22.3",
+    "npm": "12.2.3"
   }
 }

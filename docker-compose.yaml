@@ -51,7 +51,7 @@ services:
   # version; :latest was the one that did not, and a floating third-party tag
   # is how this stack breaks without a commit touching it.
   mailpit:
-    image: axllent/mailpit:v1.31
+    image: axllent/mailpit:v1.34
     restart: unless-stopped
     environment:
       MP_MAX_MESSAGES: ${MAILPIT_MAX_MESSAGES:-500}
@@ -279,7 +279,7 @@ services:
   # stack stay lean and unaffected.
   # ---------------------------------------------------------------------------
   prometheus:
-    image: prom/prometheus:v3.15.0
+    image: prom/prometheus:v3.16.0
     profiles: ["monitoring"]
     restart: unless-stopped
     depends_on:
@@ -309,7 +309,7 @@ services:
   # the rules. A rule that fires and a page that arrives are different claims
   # (#2574). Its receivers are empty on purpose — swap in yours.
   alertmanager:
-    image: prom/alertmanager:v0.34.1
+    image: prom/alertmanager:v0.35.0
     profiles: ["monitoring"]
     restart: unless-stopped
     command:
@@ -329,7 +329,7 @@ services:
       retries: 5
 
   grafana:
-    image: grafana/grafana:13.2.2
+    image: grafana/grafana:13.3.1
     profiles: ["monitoring"]
     restart: unless-stopped
     depends_on:
