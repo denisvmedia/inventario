@@ -36,9 +36,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
   ([#845](https://github.com/denisvmedia/inventario/issues/845)).
 - Each release publishes the Helm chart to
   `oci://ghcr.io/denisvmedia/charts/inventario` and attaches the package to
-  the GitHub Release. The chart keeps its own version; a published version is
-  never overwritten
-  ([#2775](https://github.com/denisvmedia/inventario/pull/2775)).
+  the GitHub Release. The chart version is the release version without the
+  "v": this release ships chart 0.2.0. Before, the chart had its own numbers,
+  which reached 0.6.0 but were never published, so the number goes down once;
+  `helm upgrade` from 0.6.0 to 0.2.0 works as usual
+  ([#2775](https://github.com/denisvmedia/inventario/pull/2775),
+  [#2777](https://github.com/denisvmedia/inventario/pull/2777)).
 
 ### Fixed
 

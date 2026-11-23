@@ -90,19 +90,25 @@ jobs:
       - name: Check the chart pins this release
         # Chart.appVersion is the default for image.tag, so a tag whose chart
         # still names the previous release ships an install that silently
-        # deploys the wrong image (#2035).
+        # deploys the wrong image (#2035). The chart version is the tag
+        # without the "v", and the helm-chart job below publishes it. Both are
+        # checked here, before anything is published.
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          chart="$(grep -E '^appVersion:' helm/inventario/Chart.yaml | head -1 | tr -d '"' | awk '{print $2}')"
-          want="${TAG}"
-          if [ "$chart" != "$want" ]; then
-            echo "::error::helm/inventario/Chart.yaml appVersion is '${chart}', expected '${want}' for tag ${TAG}. Bump it before tagging."
+          app="$(grep -E '^appVersion:' helm/inventario/Chart.yaml | head -1 | tr -d '"' | awk '{print $2}')"
+          if [ "$app" != "$TAG" ]; then
+            echo "::error::helm/inventario/Chart.yaml appVersion is '${app}', expected '${TAG}' for tag ${TAG}. Bump it before tagging."
             exit 1
           fi
-          echo "chart appVersion ${chart} matches ${TAG}"
+          version="$(grep -E '^version:' helm/inventario/Chart.yaml | head -1 | tr -d '"' | awk '{print $2}')"
+          if [ "$version" != "${TAG#v}" ]; then
+            echo "::error::helm/inventario/Chart.yaml version is '${version}', expected '${TAG#v}' for tag ${TAG}. Bump it before tagging."
+            exit 1
+          fi
+          echo "chart ${version} with appVersion ${app} matches ${TAG}"
 
       - name: Resolve the release notes
         id: notes
@@ -148,13 +154,8 @@ jobs:
   helm-chart:
     # Publishes the chart to oci://ghcr.io/denisvmedia/charts/inventario, and
     # attaches the packaged chart to the GitHub Release goreleaser made. The
-    # chart keeps its own SemVer (`version` in Chart.yaml); `appVersion` is the
-    # release, which the goreleaser job already checked.
-    #
-    # A published version is never overwritten. If the version is already in
-    # the registry and nothing under helm/inventario changed since the previous
-    # tag, the chart is the same and this job skips. If the chart did change,
-    # the job fails until Chart.yaml gets a new version.
+    # chart version is the tag without the "v" (v0.2.0 ships chart 0.2.0);
+    # the goreleaser job already checked that Chart.yaml says so.
     if: startsWith(github.ref, 'refs/tags/v')
     needs: goreleaser
     runs-on: ubuntu-latest
@@ -167,8 +168,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
 
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
@@ -179,38 +178,13 @@ jobs:
           ACTOR: ${{ github.actor }}
         run: echo "$GH_TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
 
-      - name: Decide whether to publish
-        id: decide
-        run: |
-          set -euo pipefail
-          version="$(grep -E '^version:' helm/inventario/Chart.yaml | head -1 | tr -d '"' | awk '{print $2}')"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if ! helm show chart "$CHART_REPO/inventario" --version "$version" > /dev/null 2>&1; then
-            echo "Chart $version is not published yet."
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          prev="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
-          if [ -n "$prev" ] && git diff --quiet "$prev" "$TAG" -- helm/inventario; then
-            echo "Chart $version is already published, and helm/inventario is unchanged since $prev. Nothing to publish."
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "::error::helm/inventario changed since ${prev:-the first commit}, but chart version $version is already published. Bump version in helm/inventario/Chart.yaml."
-          exit 1
-
       - name: Package and push the chart
-        if: steps.decide.outputs.publish == 'true'
-        env:
-          VERSION: ${{ steps.decide.outputs.version }}
         run: |
           set -euo pipefail
           helm package helm/inventario --destination dist
-          helm push "dist/inventario-${VERSION}.tgz" "$CHART_REPO"
+          helm push "dist/inventario-${TAG#v}.tgz" "$CHART_REPO"
 
       - name: Attach the chart to the GitHub Release
-        if: steps.decide.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.decide.outputs.version }}
-        run: gh release upload "$TAG" "dist/inventario-${VERSION}.tgz" --clobber
+        run: gh release upload "$TAG" "dist/inventario-${TAG#v}.tgz" --clobber

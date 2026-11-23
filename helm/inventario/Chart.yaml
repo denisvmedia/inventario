@@ -2,7 +2,11 @@ apiVersion: v2
 name: inventario
 description: Personal inventory management system
 type: application
-version: 0.7.0
+# The chart version is the release version without the "v": release v0.2.0
+# ships chart 0.2.0. Bump both lines together with each release; helm-lint.yml
+# fails when they disagree. Before v0.2.0 the chart had its own numbers
+# (up to 0.6.0), which were never published.
+version: 0.2.0
 # Pinned to a published release, not "latest": it is the default for
 # image.tag, so a floating value makes a stock install unreproducible and,
 # before any release existed, unpullable (#2035). Bump it with the release —

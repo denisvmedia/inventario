@@ -31,13 +31,14 @@ Minimum required production inputs:
 - `setupJob.bootstrap.superuserDsn` if the setup hook must create/update DB roles for you
 
 Get the chart from a release: each one since v0.2.0 publishes it to
-`oci://ghcr.io/denisvmedia/charts/inventario`, with the chart's own version.
+`oci://ghcr.io/denisvmedia/charts/inventario`. The chart version is the
+release version without the "v": release v0.2.0 is chart 0.2.0.
 The examples below use a git checkout (`./helm/inventario`); the OCI
 reference works in its place, with `--version`:
 
 ```bash
 helm upgrade --install inventario oci://ghcr.io/denisvmedia/charts/inventario \
-  --version <chart version> --namespace inventario --create-namespace -f values.yaml
+  --version 0.2.0 --namespace inventario --create-namespace -f values.yaml
 ```
 
 Example:
@@ -433,7 +434,13 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 
   The CLI `--workers-only` / `--workers-exclude` flags still accept the old family names (`exports`, `imports`, `restores`, `thumbnails`, `token-cleanup`) for one release and log a deprecation warning; Helm values surface only the group keys.
 
-### Upgrading from chart 0.6.0 → 0.7.0
+### Upgrading to chart 0.2.0 (release v0.2.0)
+
+From this release on, the chart version is the release version. Before, the
+chart had its own numbers, up to 0.6.0, which were never published. So the
+number goes down once, from 0.6.0 to 0.2.0; `helm upgrade` does not compare
+chart versions and works as usual. The headings below this one use the old
+chart numbers.
 
 No values need to change. What is different:
 
