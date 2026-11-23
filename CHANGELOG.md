@@ -80,6 +80,13 @@ the section matching the tag and publishes it as the GitHub Release body. See
   been skipped entirely since the back-office auth plane landed
   ([#2100](https://github.com/denisvmedia/inventario/issues/2100)).
 
+### Security
+
+- The image is built with Go 1.27.4, and `golang.org/x/net`,
+  `go-jose`, `klauspost/compress` and `andybalholm/brotli` are updated. The
+  shipped binary had a man-in-the-middle flaw in `crypto/x509` and
+  denial-of-service flaws in the HTML parser and in JOSE token parsing.
+
 ## [0.1.0] - 2026-09-19
 
 First tagged release: an alpha for a small private cohort, not a public
