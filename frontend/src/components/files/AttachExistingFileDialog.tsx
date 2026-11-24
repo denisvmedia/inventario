@@ -39,7 +39,11 @@ function RowIcon({ file }: { file: FileEntity }) {
 // to an item, a location or an area: one receipt for three items, one manual
 // for every unit of a model. Attaching adds a link only; nothing is uploaded
 // and no storage is used.
-export function AttachExistingFileDialog({ open, onOpenChange, entity }: AttachExistingFileDialogProps) {
+export function AttachExistingFileDialog({
+  open,
+  onOpenChange,
+  entity,
+}: AttachExistingFileDialogProps) {
   const { t } = useTranslation()
   const toast = useAppToast()
   const [search, setSearch] = useState("")
@@ -127,7 +131,10 @@ export function AttachExistingFileDialog({ open, onOpenChange, entity }: AttachE
               <Skeleton className="h-8 w-full" />
             </div>
           ) : rows.length === 0 ? (
-            <p className="p-6 text-center text-sm text-muted-foreground" data-testid="attach-existing-empty">
+            <p
+              className="p-6 text-center text-sm text-muted-foreground"
+              data-testid="attach-existing-empty"
+            >
               {t("files:attachExisting.empty", { defaultValue: "No files match." })}
             </p>
           ) : (
@@ -191,7 +198,11 @@ export function AttachExistingFileDialog({ open, onOpenChange, entity }: AttachE
         ) : null}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="attach-existing-done">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            data-testid="attach-existing-done"
+          >
             {t("files:attachExisting.done", { defaultValue: "Done" })}
           </Button>
         </DialogFooter>

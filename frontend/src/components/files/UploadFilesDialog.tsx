@@ -63,11 +63,12 @@ interface FileItem {
 }
 
 // linkMeta maps the category picked in the metadata step to the bucket on
-// the entity's Files tab: photos go to "images", everything else to the
-// entity's document bucket.
-function linkMeta(entityType: FileLinkEntityType, category: FileCategory): string {
+// the entity's Files tab. "Other" names no bucket: the BE then files it in
+// the entity's default bucket and keeps the category.
+function linkMeta(entityType: FileLinkEntityType, category: FileCategory): string | undefined {
   if (category === "images") return "images"
-  return entityType === "commodity" ? "documents" : "files"
+  if (category === "documents" && entityType === "commodity") return "documents"
+  return undefined
 }
 
 // Three-step upload dialog matching #1411's spec:
@@ -280,11 +281,9 @@ export function UploadFilesDialog({
         const result = await upload.mutateAsync(item.file)
         // Apply per-file metadata overrides only if they differ from
         // the BE-derived defaults — avoids a no-op PUT for the common
-        // "user accepted defaults" path. When `linkedEntity` is set,
-        // we ALWAYS PUT to attach the file (the BE upload endpoint
-        // does not read linked_entity_* off the multipart form), so
-        // the file becomes a child of the commodity / location instead
-        // of an orphan.
+        // "user accepted defaults" path. When `linkedEntity` is set, the
+        // file is then attached through POST /files/{id}/links (the
+        // upload endpoint takes no link fields).
         const titleChanged = item.title !== defaultTitle(item.file.name)
         const categoryChanged = item.category !== result.file.category
         const tagsChanged = item.tags.length > 0
@@ -818,7 +817,10 @@ function DuplicateNotice({ item, linked, onUseExisting, onKeepBoth }: DuplicateN
   const title = item.duplicate?.title ?? ""
   if (item.duplicateState === "replaced") {
     return (
-      <p className="basis-full text-xs text-muted-foreground" data-testid="files-upload-duplicate-done">
+      <p
+        className="basis-full text-xs text-muted-foreground"
+        data-testid="files-upload-duplicate-done"
+      >
         {linked
           ? t("files:upload.duplicate.attached", { title })
           : t("files:upload.duplicate.removedCopy", { title })}
@@ -839,7 +841,9 @@ function DuplicateNotice({ item, linked, onUseExisting, onKeepBoth }: DuplicateN
         disabled={item.duplicateState === "working"}
         data-testid="files-upload-duplicate-use-existing"
       >
-        {linked ? t("files:upload.duplicate.attachExisting") : t("files:upload.duplicate.removeCopy")}
+        {linked
+          ? t("files:upload.duplicate.attachExisting")
+          : t("files:upload.duplicate.removeCopy")}
       </Button>
       <Button
         size="sm"

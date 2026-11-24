@@ -62,6 +62,31 @@ the section matching the tag and publishes it as the GitHub Release body. See
   tokens for scripts" page of the user guide lists the endpoints worth
   scripting against
   ([#2808](https://github.com/denisvmedia/inventario/issues/2808)).
+- One file can be attached to several items, locations and areas, so a receipt
+  for three items is uploaded once. "Attach an existing file" on an item's
+  Files tab (and "Attach existing" on a location or area) attaches a file the
+  group already holds, and the file panel lists every place under "Linked to",
+  each with its own Remove attachment. Removing the last attachment leaves a
+  standalone file; deleting a file stays a separate action whose confirmation
+  names every place it disappears from. Deleting an item keeps the files
+  another item still uses. Each attached file counts toward storage once.
+  Uploads compute a SHA-256, and when the group already holds the same content
+  the upload dialog offers to attach the existing file instead. Existing
+  attachments move to the new shape when the server first starts after the
+  upgrade, and existing files get their checksum in the background
+  ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
+
+### Changed
+
+- File API: a file carries a `links` list instead of `linked_entity_type`,
+  `linked_entity_id` and `linked_entity_meta`, and `PUT /files/{id}` no
+  longer accepts those fields. Attach and detach with
+  `POST /files/{id}/links` and `DELETE /files/{id}/links/{linkID}`;
+  `GET /files/{id}/duplicates` lists files with the same content. The
+  `linked_entity_type` / `linked_entity_id` list filter is unchanged. Backups
+  are written in INB format 3.0, which stores a shared file once; 2.x backups
+  still restore
+  ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
 
 ### Fixed
 

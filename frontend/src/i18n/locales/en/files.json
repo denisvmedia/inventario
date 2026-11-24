@@ -95,6 +95,8 @@
   },
   "entityPanel": {
     "attach": "Attach files",
+    "attachExisting": "Attach existing",
+    "attachExistingLabel": "Attach an existing file",
     "description_one": "{{count}} file attached",
     "description_other": "{{count}} files attached",
     "dropHint": "Release to attach",

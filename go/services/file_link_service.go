@@ -67,7 +67,8 @@ func (s *FileLinkService) Attach(ctx context.Context, fileID, entityType, entity
 		return nil, false, errxtrace.Classify(ErrExportFileNotAttachable, errx.Attrs("file_id", fileID))
 	}
 
-	if meta == "" {
+	chosenMeta := meta != ""
+	if !chosenMeta {
 		meta = models.DefaultFileLinkMeta(entityType, file.Category)
 	}
 	if !slices.Contains(models.FileLinkMetaValues(entityType), meta) {
@@ -89,10 +90,12 @@ func (s *FileLinkService) Attach(ctx context.Context, fileID, entityType, entity
 		return nil, false, errxtrace.Wrap("failed to attach file", err)
 	}
 
-	// The first attachment places the file: a JPEG scan put in an item's
-	// documents takes the Documents category, as an upload into that bucket
-	// always has. Later attachments leave the category alone.
-	if created && firstPlacement && file.File != nil {
+	// The first attachment into a bucket the caller chose places the file: a
+	// JPEG scan put in an item's documents takes the Documents category, as an
+	// upload into that bucket always has. A default bucket follows the
+	// category, so it never changes it, and later attachments leave the
+	// category alone.
+	if created && firstPlacement && chosenMeta && file.File != nil {
 		if category := models.FileCategoryFromContext(entityType, meta, file.MIMEType); category != file.Category {
 			file.Category = category
 			if _, err := fileReg.Update(ctx, *file); err != nil {

@@ -103,7 +103,9 @@
     "empty": "Zatím nejsou připojeny žádné soubory.",
     "errorDescription": "Soubory pro tuto entitu se nepodařilo načíst. Zkuste to za chvíli znovu.",
     "errorTitle": "Soubory se nepodařilo načíst",
-    "title": "Soubory"
+    "title": "Soubory",
+    "attachExisting": "Připojit existující",
+    "attachExistingLabel": "Připojit existující soubor"
   },
   "list": {
     "columnCategory": "Kategorie",

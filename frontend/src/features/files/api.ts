@@ -197,14 +197,19 @@ export async function detachFile(
     `/files/${encodeURIComponent(fileId)}/links/${encodeURIComponent(linkId)}`
   )
   if (!body?.attributes) {
-    throw new Error(`Malformed DELETE /files/${fileId}/links/${linkId} response: missing attributes`)
+    throw new Error(
+      `Malformed DELETE /files/${fileId}/links/${linkId} response: missing attributes`
+    )
   }
   return { ...body.attributes, id: body.id ?? fileId }
 }
 
 // Other files of the group with the same content (same SHA-256), newest
 // first. Empty while the file's checksum is not known yet.
-export async function listFileDuplicates(fileId: string, signal?: AbortSignal): Promise<ListedFile[]> {
+export async function listFileDuplicates(
+  fileId: string,
+  signal?: AbortSignal
+): Promise<ListedFile[]> {
   const body = await http.get<FilesListEnvelope>(
     `/files/${encodeURIComponent(fileId)}/duplicates`,
     { signal }
@@ -219,10 +224,9 @@ export function ordinaryLinks(file: Pick<FileEntity, "links">): FileLink[] {
   return (file.links ?? []).filter((l) => l.entity_type !== "export")
 }
 
-// Update file metadata. The BE re-derives `Type` and `Category` server-
-// side when MIME info is available; we still send `Category` so explicit
-// re-categorisation works regardless of MIME (a PDF that the user
-// classifies as Photos via the picker, say).
+// Update file metadata. The BE derives `Type` from the MIME type and does
+// not take `category` here: a file's category follows the bucket of its
+// first attachment (POST /files/{id}/links).
 export async function updateFile(
   id: string,
   req: UpdateFileRequest

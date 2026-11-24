@@ -372,7 +372,8 @@ func (fd *FileLinkRequestData) ValidateWithContext(ctx context.Context) error {
 
 // FileLinkRequestAttributes names the entity to attach the file to. Meta is the
 // bucket on the entity's Files tab; when empty, the server picks "images" for
-// an image and the entity's document bucket for anything else.
+// an image and the entity's document bucket for anything else. The first
+// attachment into a bucket given here sets the file's category from it.
 type FileLinkRequestAttributes struct {
 	EntityType string `json:"entity_type" example:"commodity" enums:"commodity,location,area"`
 	EntityID   string `json:"entity_id"`

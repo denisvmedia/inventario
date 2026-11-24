@@ -255,7 +255,8 @@ export async function uploadPendingFiles(
       await attachFile(result.file.id, {
         entityType: "commodity",
         entityId: commodityId,
-        meta: category === "images" ? "images" : "documents",
+        // "other" names no bucket, so the file keeps its category.
+        meta: category === "other" ? undefined : category,
       })
     } catch (err) {
       onError(entry, err)

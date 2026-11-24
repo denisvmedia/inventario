@@ -93,14 +93,16 @@ export function useLinkTypeLabel(): (entityType: string | undefined) => string {
 }
 
 // useLinkSummary is the short "attached to" text of a file card or row: the
-// kind of the first entity, plus how many more there are. Empty for a
-// standalone file.
-export function useLinkSummary(): (links: { entity_type?: string }[]) => string {
+// name of the first entity (its kind when the name is unknown), plus how
+// many more there are. Empty for a standalone file.
+export function useLinkSummary(): (
+  links: { entity_type?: string; entity_name?: string }[]
+) => string {
   const { t } = useTranslation()
   const typeLabel = useLinkTypeLabel()
   return (links) => {
     if (links.length === 0) return ""
-    const first = typeLabel(links[0]?.entity_type)
+    const first = links[0]?.entity_name || typeLabel(links[0]?.entity_type)
     if (links.length === 1) return first
     return t("files:links.summary", {
       first,

@@ -170,7 +170,10 @@ export function useInvalidateFiles() {
 // Files of the group with the same content as fileId. The upload dialog asks
 // right after an upload; the result never changes for a stored file, so it is
 // not refetched on focus.
-export function useFileDuplicates(fileId: string | undefined, { enabled = true }: QueryOptions = {}) {
+export function useFileDuplicates(
+  fileId: string | undefined,
+  { enabled = true }: QueryOptions = {}
+) {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   return useQuery<ListedFile[]>({

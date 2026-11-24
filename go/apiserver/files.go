@@ -188,6 +188,9 @@ func (api *filesAPI) listFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Cards and rows show where each file is attached.
+	fillLinkNames(r.Context(), registrySet, files...)
+
 	// Generate signed URLs for all files
 	signedUrls := api.generateSignedURLsForFiles(r, files)
 

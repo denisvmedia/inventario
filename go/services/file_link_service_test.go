@@ -212,6 +212,19 @@ func TestFileLinkService_Attach(t *testing.T) {
 		c.Assert(got.Category, qt.Equals, models.FileCategoryDocuments)
 	})
 
+	t.Run("default bucket keeps the category", func(t *testing.T) {
+		c := qt.New(t)
+		fx := newFileLinkFixture(c)
+		svc := services.NewFileLinkService(fx.factorySet)
+		com := fx.commodity(c, "Router")
+		archive := fx.storedFile(c, "firmware.zip", "application/zip", models.FileCategoryOther)
+
+		got, _, err := svc.Attach(fx.ctx, archive.ID, models.FileLinkCommodity, com.ID, "")
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.Category, qt.Equals, models.FileCategoryOther)
+		c.Assert(got.LinkTo(models.FileLinkCommodity, com.ID).Meta, qt.Equals, models.FileLinkMetaDocuments)
+	})
+
 	t.Run("rejects", func(t *testing.T) {
 		c := qt.New(t)
 		fx := newFileLinkFixture(c)
