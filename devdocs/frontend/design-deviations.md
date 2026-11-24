@@ -255,7 +255,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — File detail sheet: "Linked to" lists every attachment, each with Remove attachment
 
-- **Issue/PR**: #2806 / PR (pending)
+- **Issue/PR**: #2806 / PR #2827
 - **Mock**: [`design-mocks/src/components/FileDetail.tsx`](../../design-mocks/src/components/FileDetail.tsx) shows one "Attached to" `DetailRow` with `file.attachedTo.name`; a file in the mock belongs to exactly one entity. The delete dialog says only that the file will be removed.
 - **Reality**: `frontend/src/components/files/FileLinksList.tsx` renders the "Linked to" row of `FileDetailSheet` as a list: one line per item, location or area, with a type icon, the entity name linking to its page, and an icon-only **Remove attachment** button (`X`) that removes that link and nothing else. A file attached to nothing reads "Not attached to anything". The **Delete** confirmation names every place the file is attached to and points at Remove attachment for taking it off one place only. File cards and list rows show the first entity's name plus "+N" for the others.
 - **Why**: The issue asks for "Linked to" with several entries in the file panel and for "remove attachment" and "delete file" as separate actions, with the delete action explaining the affected associations.
@@ -264,7 +264,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — "Attach an existing file" on the item Files tab and the location/area files panel
 
-- **Issue/PR**: #2806 / PR (pending)
+- **Issue/PR**: #2806 / PR #2827
 - **Mock**: [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) `ItemFilesTab` offers only the dashed upload zone; the mock has no way to attach a file that is already stored. Not present in mock; fallback [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (Dialog, Input with a search icon, Badge, outline Button).
 - **Reality**: The commodity Files tab (`frontend/src/components/files/CommodityFilesTab.tsx`) puts an outline **Attach an existing file** button (`Link2` icon) beside the upload zone; below `sm` it stacks under the zone. `EntityFilesPanel` (location and area pages) adds an outline **Attach existing** button before **Attach files**, icon-only below `sm`. Both open `AttachExistingFileDialog`: a search box over the group's files and a scrolling list where each row shows the title, where the file is attached already, and an **Attach** button, or an "Attached" badge when the file is attached to this entity. The dialog stays open so several files can be attached in a row.
 - **Why**: not present in mock. The issue asks for "Attach an existing file" in an item's Files tab; the location and area panels get the same entry because files attach to them through the same links.
@@ -273,7 +273,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — Upload dialog offers the file the group already holds
 
-- **Issue/PR**: #2806 / PR (pending)
+- **Issue/PR**: #2806 / PR #2827
 - **Mock**: The upload flow in [`design-mocks/src/views/FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) has no duplicate check. Not present in mock; fallback [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (muted inline notice, small outline and ghost Buttons).
 - **Reality**: After each upload `UploadFilesDialog` asks the server for files with the same SHA-256 in the group. When there is one, the progress row grows a muted notice "Already in your files as …" with **Attach the existing file instead** (attaches the existing file to the dialog's item, location or area and deletes the new copy; a cover chosen on the new copy moves to the existing file) and **Keep both**. Without a linked entity the first button reads **Remove this copy** and only deletes the new upload.
 - **Why**: The issue asks that a match within the group makes the upload dialog offer "attach the existing file instead". Remove this copy (uploads from the Files page, where there is nothing to attach to) and moving the cover are agent-suggested.
