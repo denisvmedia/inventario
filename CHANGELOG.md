@@ -24,6 +24,14 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
+- Tags written in Cyrillic, Czech, Chinese or any other non-Latin script are
+  kept on save. Before, their letters were stripped from the slug, so a tag
+  like "кухня" disappeared and "USB кабель" and "USB хаб" became one tag.
+  Slugs now keep letters and digits of every script, a tag created by typing
+  it on an item or file keeps the typed text as its label, and item cards,
+  item pages and file views show tag labels instead of slugs. Existing tags
+  keep their slugs
+  ([#2791](https://github.com/denisvmedia/inventario/issues/2791)).
 - The sign-in page now shows a message for every refusal the Google and GitHub
   sign-in can end with: a disabled account, an email the provider has not
   verified, a profile Inventario cannot use, an account on another site, closed

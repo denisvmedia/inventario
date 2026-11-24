@@ -54,6 +54,21 @@ You don't have to create tags up front on the Tags page — most of the time you
 
 See [Items](../items/) and [Files & photos](../files-and-photos/) for the full add/edit flows.
 
+## Tag names in any language
+
+Write tags in whatever language you use — "Kitchen", "Kuchyně", "Кухня", and "書類" all work, and you can mix scripts in one tag, as in "USB кабель". Inventario shows a tag under the name you first typed for it, on item cards, item pages, files, and the Tags page.
+
+Each tag also has a **slug**, the identifier Inventario stores on the items or files that carry the tag. The slug is made from the name: letters are lowercased, every run of spaces, punctuation, or emoji becomes a single dash, and dashes at either end are dropped.
+
+| You type | Slug |
+| --- | --- |
+| Kitchen | `kitchen` |
+| На продажу | `на-продажу` |
+| USB кабель | `usb-кабель` |
+| Front office! | `front-office` |
+
+Two names that produce the same slug are the same tag. Typing "front office" on one item and "Front-Office" on another puts both items under one tag, shown with the name typed first. To change how a tag is shown, [edit its label](#edit-a-tag).
+
 ## Create a tag
 
 You can also create a tag directly on the Tags page — handy when you want to set its colour, or get it ready before you start tagging.
@@ -79,7 +94,7 @@ For more control — including a custom slug — use the dialog:
 1. Click **Create tag** in the top-right of the page.
 2. Fill in:
    - **Label** — the display name, for example "Kitchen". Up to 64 characters.
-   - **Slug** — the lowercase, dash-separated identifier (for example `kitchen`). It's filled in from the label automatically; edit it only if you want a different identifier. Lowercase letters, digits, and dashes only.
+   - **Slug** — the lowercase, dash-separated identifier (for example `kitchen` or `на-продажу`). It's filled in from the label automatically; edit it only if you want a different identifier. Letters and digits in any script, in lowercase, with single dashes between words. Up to 64 characters.
    - **Color** — pick one of the available colours (Amber, Blue, Green, Muted, Orange, Red). A live **Preview** shows how the tag will look.
 3. Click **Create tag**.
 
@@ -128,7 +143,7 @@ On the [Files](../files-and-photos/) page there's a row of tag-filter pills in t
 
 ### Items
 
-On the [Items](../items/) list, each item shows its tags as small badges so you can spot them at a glance. The Items list filters by **Type**, **Status**, **area**, and **warranty** rather than by tag, so to gather items by a single tag, look for that tag's badge on the cards.
+On the [Items](../items/) list, each item shows its tags by name as small badges so you can spot them at a glance. The Items list filters by **Type**, **Status**, **area**, and **warranty** rather than by tag, so to gather items by a single tag, look for that tag's badge on the cards.
 
 ## Related
 
