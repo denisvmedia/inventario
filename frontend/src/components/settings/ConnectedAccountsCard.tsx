@@ -1,7 +1,7 @@
 import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { useSearchParams } from "react-router-dom"
-import { Link2, Plus } from "lucide-react"
+import { KeyRound, Link2, Plus } from "lucide-react"
 
 import { GithubGlyph } from "@/components/auth/icons/GithubGlyph"
 import { GoogleGlyph } from "@/components/auth/icons/GoogleGlyph"
@@ -58,8 +58,9 @@ export function ConnectedAccountsCard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkedQuery])
 
-  // No deployment-level providers → the operator hasn't configured Google
-  // or GitHub, so this entire surface is non-interactive. Hiding it (rather
+  // No deployment-level providers → the operator hasn't configured Google,
+  // GitHub or an OpenID Connect provider, so this entire surface is
+  // non-interactive. Hiding it (rather
   // than rendering an empty card) keeps the settings page from sprouting
   // dead chrome.
   //
@@ -267,6 +268,11 @@ function ProviderIcon({ provider }: { provider: OAuthProviderName }) {
   }
   if (provider === "google") {
     return <GoogleGlyph className="size-4 text-muted-foreground" />
+  }
+  // The OpenID Connect provider (#2786) has no known brand; the same key
+  // icon as its sign-in button keeps the two surfaces matched.
+  if (provider === "oidc") {
+    return <KeyRound className="size-4 text-muted-foreground" aria-hidden="true" />
   }
   return <Link2 className="size-4 text-muted-foreground" aria-hidden="true" />
 }

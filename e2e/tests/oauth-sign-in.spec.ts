@@ -34,6 +34,9 @@
  * runs Google alone and is parameterised via `PROVIDER`. GitHub is covered
  * by the second #1395 linking test, which is where the two providers have to
  * coexist on one account.
+ * The OpenID Connect provider (#2786) gets its own sign-in test at the end:
+ * its endpoints come from the stub's discovery document rather than from
+ * override variables.
  *
  * Flow:
  *
@@ -1034,3 +1037,110 @@ async function ensureUnlinked(
     });
   }
 }
+
+// ============================================================================
+// #2786 — Sign-in with the operator's OpenID Connect provider
+// ----------------------------------------------------------------------------
+// The stub's /oidc leg stands in for a self-hosted Authelia or Keycloak. The
+// backend found its endpoints in the stub's discovery document; in the CI
+// lane it also reaches the stub through the back channel while the browser
+// goes to the public issuer address. A first sign-in creates the account
+// (the lane runs in `open` registration mode) and links the oidc identity.
+// ============================================================================
+
+const OIDC_PROFILE = {
+  sub: "stub-oidc-sub-2786",
+  email: "oidc-user-2786@example.test",
+  emailVerified: true,
+  name: "OIDC Test User",
+};
+
+test.describe("#2786 OpenID Connect sign-in via stub @oauth", () => {
+  test.setTimeout(TEST_TIMEOUT_MS);
+
+  test.beforeAll(() => {
+    test.skip(
+      process.env.OAUTH_STUB_ENABLED !== "true",
+      "OAuth e2e requires OAUTH_STUB_ENABLED=true and a running stub stack (see spec header).",
+    );
+  });
+
+  test.afterAll(async () => {
+    await setStubProfile(STUB_PROFILE);
+  });
+
+  test("the button carries the configured name and signs a new user in", async ({
+    browser,
+  }) => {
+    await setStubProfile(OIDC_PROFILE);
+
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto("/login");
+
+    const button = page.locator('[data-testid="oauth-oidc-button"]');
+    await expect(button).toBeVisible({ timeout: 10_000 });
+    await expect(button).toHaveText("Stub SSO");
+
+    await Promise.all([
+      page.waitForURL(
+        (url) =>
+          url.pathname === "/" ||
+          url.pathname === "/no-group" ||
+          url.pathname === "/login",
+        { timeout: 20_000 },
+      ),
+      button.click(),
+    ]);
+    // A refusal lands on /login with a banner; a sign-in does not.
+    await expect(page.getByTestId("oauth-error-banner")).toHaveCount(0);
+
+    const accessToken = await refreshAndExpectSuccess(
+      context.request,
+      "test-org",
+    );
+    const me = await fetchMe(context.request, accessToken, "test-org");
+    expect(me.email).toBe(OIDC_PROFILE.email);
+    expect(me.name).toBe(OIDC_PROFILE.name);
+    expect(me.has_password).toBe(false);
+
+    const identitiesResp = await context.request.get(
+      "/api/v1/auth/oauth/identities",
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+    expect(identitiesResp.status()).toBe(200);
+    const { identities } = (await identitiesResp.json()) as {
+      identities: Array<{ provider: string; email: string }>;
+    };
+    expect(identities).toEqual([
+      expect.objectContaining({ provider: "oidc", email: OIDC_PROFILE.email }),
+    ]);
+
+    const historyResp = await context.request.get(
+      "/api/v1/users/me/login-history",
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+    expect(historyResp.status()).toBe(200);
+    const history = (await historyResp.json()) as {
+      events: Array<{ method: string; outcome: string }>;
+    };
+    expect(
+      history.events.some(
+        (e) => e.method === "oauth_oidc" && e.outcome === "ok",
+      ),
+      `expected a method=oauth_oidc outcome=ok login event; got ${JSON.stringify(history.events)}`,
+    ).toBe(true);
+
+    await context.close();
+  });
+});

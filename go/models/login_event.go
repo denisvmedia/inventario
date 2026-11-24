@@ -71,6 +71,9 @@ const (
 	LoginMethodOAuthGoogle LoginMethod = "oauth_google"
 	// LoginMethodOAuthGitHub is the GitHub OAuth sign-in flow (#1394).
 	LoginMethodOAuthGitHub LoginMethod = "oauth_github"
+	// LoginMethodOAuthOIDC is the sign-in flow of the operator-configured
+	// OpenID Connect provider (#2786).
+	LoginMethodOAuthOIDC LoginMethod = "oauth_oidc"
 	// LoginMethodOAuthOther is a defensive sentinel for the
 	// "OAuthProvider value out of the known set" case. The OAuth callback
 	// should never hit this in correct code — every provider that round-

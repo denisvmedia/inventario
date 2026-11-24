@@ -100,6 +100,7 @@
       "oauth_other": "OAuth",
       "oauth_github": "GitHub",
       "oauth_google": "Google",
+      "oauth_oidc": "Single sign-on",
       "password": "Password"
     },
     "outcomes": {

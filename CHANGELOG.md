@@ -10,14 +10,17 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ## [Unreleased]
 
-### Security
+### Added
 
-- Signing in with Google or GitHub now follows the tenant's registration mode.
-  Before, a provider account that matched no user created an active account
-  even when the mode was `closed` or `approval`. Now `closed` refuses it,
-  `approval` creates the account inactive until an administrator activates it,
-  and `open` creates an active one as before
-  ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
+- Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
+  Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
+  `OAUTH_OIDC_CLIENT_SECRET` and, for the button, `OAUTH_OIDC_DISPLAY_NAME`;
+  the endpoints come from the issuer's discovery document.
+  `OAUTH_OIDC_BACKCHANNEL_URL` covers a server that cannot reach the issuer's
+  public address. The Helm chart gets `oauth.*` values and `secrets.oauth*`
+  keys for all three providers. Setup is described on the new "Sign-in
+  providers" page of the user guide
+  ([#2789](https://github.com/denisvmedia/inventario/pull/2789)).
 
 ### Fixed
 
@@ -29,6 +32,15 @@ the section matching the tag and publishes it as the GitHub Release body. See
 - A deactivated user whose account is linked to Google or GitHub now lands on
   the sign-in page with that message instead of a bare "User account is not
   available" page ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
+
+### Security
+
+- Signing in with Google or GitHub now follows the tenant's registration mode.
+  Before, a provider account that matched no user created an active account
+  even when the mode was `closed` or `approval`. Now `closed` refuses it,
+  `approval` creates the account inactive until an administrator activates it,
+  and `open` creates an active one as before
+  ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
 
 ## [0.2.2] - 2026-11-23
 

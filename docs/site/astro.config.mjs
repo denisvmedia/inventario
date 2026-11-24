@@ -116,7 +116,7 @@ export default defineConfig({
         {
           label: 'Install',
           translations: { cs: 'Instalace', ru: 'Установка' },
-          items: [{ slug: 'self-hosting' }],
+          items: [{ slug: 'self-hosting' }, { slug: 'sign-in-providers' }],
         },
         {
           label: 'Help',

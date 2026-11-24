@@ -1,11 +1,13 @@
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { useSearchParams } from "react-router-dom"
+import { KeyRound } from "lucide-react"
 
 import { GithubGlyph } from "@/components/auth/icons/GithubGlyph"
 import { GoogleGlyph } from "@/components/auth/icons/GoogleGlyph"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { oauthStartUrl, useOAuthProviders, type OAuthProviderName } from "@/features/auth/oauth"
+import { oauthStartUrl, useOAuthProviders, type OAuthProviderEntry } from "@/features/auth/oauth"
 import { sanitizeRedirectPath } from "@/lib/safe-redirect"
 
 // OAuthRow renders the "or continue with" surface above the password form
@@ -45,14 +47,20 @@ export function OAuthRow() {
       </div>
       <div className={providers.length === 1 ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
         {providers.map((p) => (
-          <ProviderButton key={p.name} provider={p.name} redirect={redirect} />
+          <ProviderButton key={p.name} provider={p} redirect={redirect} />
         ))}
       </div>
     </div>
   )
 }
 
-function ProviderButton({ provider, redirect }: { provider: OAuthProviderName; redirect: string }) {
+function ProviderButton({
+  provider,
+  redirect,
+}: {
+  provider: OAuthProviderEntry
+  redirect: string
+}) {
   const { t } = useTranslation()
   function handleClick() {
     // Full-page navigation: the BE returns a 302 to the provider — fetch
@@ -60,18 +68,35 @@ function ProviderButton({ provider, redirect }: { provider: OAuthProviderName; r
     // browser via location.assign. Using assign() (rather than href=)
     // keeps tests able to spy on the call without jsdom blowing up on a
     // navigation attempt.
-    window.location.assign(oauthStartUrl(provider, redirect))
+    window.location.assign(oauthStartUrl(provider.name, redirect))
   }
-  const label = provider === "google" ? t("auth:oauth.google") : t("auth:oauth.github")
+  // Google and GitHub carry translated brand labels; the OpenID Connect
+  // provider's label is whatever the operator named it (#2786), with a
+  // generic key icon since its brand is unknown.
+  let label: string
+  let glyph: ReactNode
+  switch (provider.name) {
+    case "google":
+      label = t("auth:oauth.google")
+      glyph = <GoogleGlyph />
+      break
+    case "github":
+      label = t("auth:oauth.github")
+      glyph = <GithubGlyph />
+      break
+    default:
+      label = provider.displayName
+      glyph = <KeyRound className="size-4" aria-hidden="true" />
+  }
   return (
     <Button
       variant="outline"
       className="gap-2 text-sm"
       type="button"
       onClick={handleClick}
-      data-testid={`oauth-${provider}-button`}
+      data-testid={`oauth-${provider.name}-button`}
     >
-      {provider === "google" ? <GoogleGlyph /> : <GithubGlyph />}
+      {glyph}
       {label}
     </Button>
   )

@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -103,7 +104,56 @@ func buildOAuth(cfg *Config) (oauthSetup, error) {
 		slog.Info("OAuth: GitHub provider enabled")
 	}
 
+	if err := registerOIDC(cfg, base, registry); err != nil {
+		return oauthSetup{}, err
+	}
+
 	return oauthSetup{Registry: registry, StateSigner: signer}, nil
+}
+
+// registerOIDC adds the OpenID Connect provider (#2786) when its issuer,
+// client id and client secret are all set. A partial set is logged and
+// ignored, like a Google or GitHub id without its secret. An issuer that
+// is not a valid URL fails the boot, since it can never work.
+//
+// The discovery document is fetched in the background, so an identity
+// provider that is down at boot does not delay or fail Inventario's start;
+// the provider retries on the next sign-in.
+func registerOIDC(cfg *Config, base string, registry *oauth.Registry) error {
+	issuer := strings.TrimSpace(cfg.OAuthOIDCIssuerURL)
+	id := strings.TrimSpace(cfg.OAuthOIDCClientID)
+	secret := strings.TrimSpace(cfg.OAuthOIDCClientSecret)
+	if issuer == "" && id == "" && secret == "" {
+		return nil
+	}
+	if issuer == "" || id == "" || secret == "" {
+		slog.Warn("OAuth: OpenID Connect provider disabled; the issuer URL, client id and client secret must all be set",
+			"issuer_set", issuer != "", "client_id_set", id != "", "client_secret_set", secret != "")
+		return nil
+	}
+	provider, err := oauth.NewOIDCProvider(oauth.OIDCProviderConfig{
+		IssuerURL:      issuer,
+		ClientID:       id,
+		ClientSecret:   secret,
+		RedirectURL:    base + "/api/v1/auth/oauth/oidc/callback",
+		DisplayName:    cfg.OAuthOIDCDisplayName,
+		BackchannelURL: cfg.OAuthOIDCBackchannelURL,
+	})
+	if err != nil {
+		return fmt.Errorf("oauth bootstrap: oidc: %w", err)
+	}
+	if err := registry.Register(provider); err != nil {
+		return fmt.Errorf("oauth bootstrap: register oidc: %w", err)
+	}
+	slog.Info("OAuth: OpenID Connect provider enabled",
+		"issuer", provider.Issuer(), "backchannel", provider.BackchannelURL(), "display_name", provider.DisplayName())
+	go func() {
+		if err := provider.Prepare(context.Background()); err != nil {
+			slog.Warn("OAuth: OpenID Connect discovery failed at startup; it is retried on the next sign-in",
+				"issuer", provider.Issuer(), "error", err)
+		}
+	}()
+	return nil
 }
 
 // googleOverrides holds the resolved (auth, token, userinfo) endpoint URL

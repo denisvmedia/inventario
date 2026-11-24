@@ -101,6 +101,7 @@
     "methods": {
       "oauth_github": "GitHub",
       "oauth_google": "Google",
+      "oauth_oidc": "Jednotné přihlášení",
       "oauth_other": "OAuth",
       "password": "Heslo"
     },

@@ -185,6 +185,8 @@ const METHOD_I18N_KEY: Record<string, string> = {
   password: "settings:loginHistory.methods.password",
   oauth_google: "settings:loginHistory.methods.oauth_google",
   oauth_github: "settings:loginHistory.methods.oauth_github",
+  // #2786: the operator-configured OpenID Connect provider.
+  oauth_oidc: "settings:loginHistory.methods.oauth_oidc",
   // #1394: forward-compat fallback for any future OAuth provider that
   // lands before the FE catalog catches up.
   oauth_other: "settings:loginHistory.methods.oauth_other",

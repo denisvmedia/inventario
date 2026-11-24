@@ -19,6 +19,10 @@ const (
 	OAuthProviderGoogle OAuthProvider = "google"
 	// OAuthProviderGitHub identifies the GitHub OAuth 2.0 provider.
 	OAuthProviderGitHub OAuthProvider = "github"
+	// OAuthProviderOIDC identifies the operator-configured OpenID Connect
+	// provider (#2786), for example a self-hosted Authelia, Keycloak or
+	// Authentik. There is at most one per deployment.
+	OAuthProviderOIDC OAuthProvider = "oidc"
 )
 
 // IsValid reports whether p is one of the known providers. Empty / unknown
@@ -26,7 +30,7 @@ const (
 // `{provider}` path params before looking anything up.
 func (p OAuthProvider) IsValid() bool {
 	switch p {
-	case OAuthProviderGoogle, OAuthProviderGitHub:
+	case OAuthProviderGoogle, OAuthProviderGitHub, OAuthProviderOIDC:
 		return true
 	}
 	return false
@@ -59,7 +63,7 @@ type OAuthIdentity struct {
 	//ptah:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_oauth_identity_user" on_delete="CASCADE"
 	UserID string `json:"user_id" db:"user_id"`
 
-	// Provider is the OAuthProvider enum value ("google" | "github").
+	// Provider is the OAuthProvider enum value ("google" | "github" | "oidc").
 	// Stored TEXT so the enum can grow without a CHECK migration each
 	// time we add a provider.
 	//ptah:schema:field name="provider" type="TEXT" not_null="true"

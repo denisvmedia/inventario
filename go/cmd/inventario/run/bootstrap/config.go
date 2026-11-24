@@ -262,6 +262,21 @@ type Config struct {
 	OAuthRedirectBaseURL    string `yaml:"oauth_redirect_base_url" env:"OAUTH_REDIRECT_BASE_URL" env-default:""`
 	OAuthStateKey           string `yaml:"oauth_state_key" env:"OAUTH_STATE_KEY" env-default:""`
 
+	// OAuthOIDC* configure one OpenID Connect provider (#2786), such as a
+	// self-hosted Authelia, Keycloak or Authentik. It is enabled when the
+	// issuer, the client id and the client secret are all set AND
+	// OAuthRedirectBaseURL is set. The endpoints come from the issuer's
+	// discovery document. OAuthOIDCDisplayName labels the sign-in button;
+	// empty means "Single sign-on".
+	OAuthOIDCIssuerURL    string `yaml:"oauth_oidc_issuer_url" env:"OAUTH_OIDC_ISSUER_URL" env-default:""`
+	OAuthOIDCClientID     string `yaml:"oauth_oidc_client_id" env:"OAUTH_OIDC_CLIENT_ID" env-default:""`
+	OAuthOIDCClientSecret string `yaml:"oauth_oidc_client_secret" env:"OAUTH_OIDC_CLIENT_SECRET" env-default:""`
+	OAuthOIDCDisplayName  string `yaml:"oauth_oidc_display_name" env:"OAUTH_OIDC_DISPLAY_NAME" env-default:""`
+	// OAuthOIDCBackchannelURL is optional: the issuer URL as this server
+	// reaches it, when the public issuer address works in the browser but
+	// not from the server. Discovery, token and userinfo requests go there.
+	OAuthOIDCBackchannelURL string `yaml:"oauth_oidc_backchannel_url" env:"OAUTH_OIDC_BACKCHANNEL_URL" env-default:""`
+
 	// OAuthGoogle{Auth,Token,UserInfo}URLOverride are TEST-ONLY hooks
 	// that redirect Google's three OAuth endpoints at a local stub
 	// server. NEVER set these in a production deployment — they bypass

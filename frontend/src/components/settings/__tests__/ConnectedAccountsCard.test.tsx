@@ -156,6 +156,31 @@ describe("<ConnectedAccountsCard />", () => {
     )
   })
 
+  // #2786 — the OpenID Connect row shows the operator's name for the
+  // provider and links through the oidc endpoints.
+  it("shows the OpenID Connect provider under its display name", async () => {
+    server.use(
+      msw.get(api("/auth/oauth/providers"), () =>
+        HttpResponse.json({ providers: [{ name: "oidc", display_name: "Authelia" }] })
+      ),
+      msw.get(api("/auth/oauth/identities"), () => HttpResponse.json({ identities: [] }))
+    )
+    const assignSpy = vi.fn()
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...window.location, assign: assignSpy },
+    })
+    renderCard()
+    const row = await screen.findByTestId("connected-account-row-oidc")
+    expect(row).toHaveTextContent("Authelia")
+    const linkButton = screen.getByTestId("connected-account-link-oidc")
+    expect(linkButton).toHaveTextContent("Link Authelia")
+    await userEvent.setup().click(linkButton)
+    expect(assignSpy).toHaveBeenCalledWith(
+      "/api/v1/auth/oauth/oidc/link/start?redirect=%2Fsettings"
+    )
+  })
+
   it("lists the surviving sign-in methods in the unlink confirmation (#1395)", async () => {
     // Password user with BOTH providers linked. Unlinking Google must spell
     // out what remains: "password set, GitHub linked" — so the user can see

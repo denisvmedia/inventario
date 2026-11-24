@@ -401,6 +401,10 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         env:
           OAUTH_STUB_HOST: "0.0.0.0"
+          # The issuer in the stub's OpenID Connect discovery document. It
+          # must equal INVENTARIO_RUN_OAUTH_OIDC_ISSUER_URL in
+          # docker-compose.e2e-oauth.yaml (#2786).
+          OAUTH_STUB_OIDC_ISSUER: "http://localhost:${{ env.OAUTH_STUB_PORT }}/oidc"
         run: |
           set -euo pipefail
           cd e2e
@@ -456,7 +460,7 @@ jobs:
       # exists to prevent, and a skipped test reports green on its own.
       - name: Assert nothing was skipped
         if: always() && steps.gate.outputs.run == 'true'
-        run: cd e2e && node scripts/assert-report.mjs oauth-report.json 3
+        run: cd e2e && node scripts/assert-report.mjs oauth-report.json 4
 
       - name: Dump logs on failure
         if: failure() && steps.gate.outputs.run == 'true'

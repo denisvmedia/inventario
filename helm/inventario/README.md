@@ -167,6 +167,8 @@ Expected secret keys when using `secrets.existingSecret`:
 - `INVENTARIO_RUN_AI_VISION_ANTHROPIC_API_KEY` (required when `aivision.provider=anthropic`), `INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY` (required when `aivision.provider=openai`)
 - `INVENTARIO_RUN_METRICS_TOKEN` (optional; bearer token for `GET /metrics` — strongly recommended in production. When present, the ServiceMonitor `authorization` stanza is wired automatically.)
 - `SENTRY_DSN` (optional; enables Sentry error tracking when present. ⚠️ **BARE name** — unlike every other key here it has **no `INVENTARIO_RUN_` prefix**, because the app reads it via `cleanenv.ReadEnv` with no prefix. Absent → Sentry stays disabled.)
+- `INVENTARIO_RUN_OAUTH_STATE_KEY` (optional; at least 32 characters. Set it when more than one pod serves the API: without it each pod signs sign-in state with its own key)
+- `INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_ID` / `INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_SECRET`, `INVENTARIO_RUN_OAUTH_GITHUB_CLIENT_ID` / `INVENTARIO_RUN_OAUTH_GITHUB_CLIENT_SECRET`, `INVENTARIO_RUN_OAUTH_OIDC_CLIENT_ID` / `INVENTARIO_RUN_OAUTH_OIDC_CLIENT_SECRET` (optional; each pair turns on that sign-in provider, and the OpenID Connect one also needs `oauth.oidc.issuerUrl`. See [Sign-in providers](https://denisvmedia.github.io/inventario/sign-in-providers/))
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (required for `s3://` upload targets)
 
 Example existing Secret install:
@@ -397,6 +399,12 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 | `sentry.dsn` | `""` | Sentry DSN. Empty → Sentry **disabled** (app no-ops). When set, the chart adds the `SENTRY_DSN` **Secret** key (it's a credential). ⚠️ **BARE env name** — emitted as `SENTRY_DSN`, NOT `INVENTARIO_RUN_SENTRY_DSN`. With `secrets.existingSecret`, supply `SENTRY_DSN` in that Secret instead. |
 | `sentry.environment` | `""` | Logical environment tag on Sentry events (e.g. `production`). Non-secret → ConfigMap; emitted as bare `SENTRY_ENVIRONMENT` only when set. |
 | `sentry.tracesSampleRate` | `"0.2"` | Performance-tracing sample rate (`0.0`–`1.0`; `0` disables tracing). Non-secret → ConfigMap, always emitted as bare `SENTRY_TRACES_SAMPLE_RATE`. |
+| `oauth.redirectBaseUrl` | `""` | Public address the sign-in providers' redirect URIs are built from. Empty → the same as `app.publicUrl`. |
+| `oauth.oidc.issuerUrl` | `""` | Issuer of your own OpenID Connect provider (Authelia, Keycloak, Authentik, …). With `secrets.oauthOidcClientId` and `secrets.oauthOidcClientSecret` (or the matching keys in `secrets.existingSecret`), it turns on single sign-on. |
+| `oauth.oidc.displayName` | `""` | Label of the single sign-on button, e.g. `Authelia`. Empty → "Single sign-on". |
+| `oauth.oidc.backchannelUrl` | `""` | The issuer's address as the pods reach it, when `issuerUrl` works only in the browser. Discovery, token and userinfo requests go there. |
+| `secrets.oauth*ClientId` / `secrets.oauth*ClientSecret` | `""` | Client id and secret for `Google`, `Github` or `Oidc` sign-in; each pair turns its provider on. Written to the Secret only when set. |
+| `secrets.oauthStateKey` | `""` | Key that signs sign-in state (32+ characters). Set it when more than one pod serves the API. |
 | `secrets.existingSecret` | `""` | Use an externally managed Secret instead of chart-managed secret data. |
 | `secrets.dbDsn` | `""` | Required for production-style installs unless `secrets.existingSecret` is used. |
 | `secrets.migratorDbDsn` | `""` | Set when schema migrations need a different DB user than the app runtime. |

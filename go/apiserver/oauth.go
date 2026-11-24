@@ -146,7 +146,7 @@ func OAuth(params OAuthParams, requireAuth func(http.Handler) http.Handler) func
 
 // handleListProviders surfaces the providers enabled in this deployment.
 // @Summary List OAuth providers enabled in this deployment
-// @Description Returns the providers operators have configured (Google, GitHub). Empty list when OAuth is not configured.
+// @Description Returns the providers operators have configured (Google, GitHub, and one OpenID Connect provider named "oidc" whose display_name the operator sets). Empty list when OAuth is not configured.
 // @Tags oauth
 // @Produce json
 // @Success 200 {object} providerListResponse "OK"
@@ -155,9 +155,15 @@ func (api *OAuthAPI) handleListProviders(w http.ResponseWriter, _ *http.Request)
 	resp := providerListResponse{Providers: []providerListEntry{}}
 	if api.registry != nil {
 		for _, name := range api.registry.Enabled() {
+			displayName := displayNameFor(name)
+			if p, ok := api.registry.Get(name); ok {
+				if dn, ok := p.(oauthsvc.DisplayNamer); ok {
+					displayName = dn.DisplayName()
+				}
+			}
 			resp.Providers = append(resp.Providers, providerListEntry{
 				Name:        string(name),
-				DisplayName: displayNameFor(name),
+				DisplayName: displayName,
 			})
 		}
 	}
@@ -167,12 +173,17 @@ func (api *OAuthAPI) handleListProviders(w http.ResponseWriter, _ *http.Request)
 // displayNameFor returns a human-friendly label for the provider. Kept
 // out of the model layer so the wire string ("google") never has to
 // change when marketing wants the button to say "Google Workspace".
+// The OpenID Connect provider normally supplies its own label through
+// oauthsvc.DisplayNamer; the fallback here only covers a provider that
+// does not.
 func displayNameFor(p models.OAuthProvider) string {
 	switch p {
 	case models.OAuthProviderGoogle:
 		return "Google"
 	case models.OAuthProviderGitHub:
 		return "GitHub"
+	case models.OAuthProviderOIDC:
+		return oauthsvc.DefaultOIDCDisplayName
 	}
 	return string(p)
 }
@@ -183,11 +194,12 @@ func displayNameFor(p models.OAuthProvider) string {
 // @Summary Start OAuth sign-in flow
 // @Description Begins the authorization-code flow against the named provider. The handler signs short-lived state + PKCE pair and 302s the browser to the provider's consent screen.
 // @Tags oauth
-// @Param provider path string true "Provider name (google|github)"
+// @Param provider path string true "Provider name (google|github|oidc)"
 // @Param redirect query string false "Relative FE path to land on after sign-in"
 // @Success 302 "Redirect to provider"
 // @Failure 404 {string} string "Unknown provider"
 // @Failure 500 {string} string "Internal error generating state token"
+// @Failure 502 {string} string "The OpenID Connect provider's discovery document could not be fetched (sign-in redirects to /login?oauth_error=provider instead)"
 // @Router /auth/oauth/{provider}/start [get]
 func (api *OAuthAPI) handleStart(w http.ResponseWriter, r *http.Request) {
 	api.startAuthorizationCode(w, r, "")
@@ -210,11 +222,12 @@ func (api *OAuthAPI) handleStart(w http.ResponseWriter, r *http.Request) {
 // @Description Authenticated variant of /start: the resulting callback links the new identity to the caller's user rather than creating a fresh account.
 // @Description The caller is identified from the refresh-token cookie (or an Authorization Bearer header); an absent or expired session 302s to /login.
 // @Tags oauth
-// @Param provider path string true "Provider name (google|github)"
+// @Param provider path string true "Provider name (google|github|oidc)"
 // @Param redirect query string false "Relative FE path to land on after link"
 // @Success 302 "Redirect to provider (or to /login when no live session is present)"
 // @Failure 404 {string} string "Unknown provider"
 // @Failure 500 {string} string "Internal error generating the PKCE/state token"
+// @Failure 502 {string} string "The OpenID Connect provider's discovery document could not be fetched"
 // @Router /auth/oauth/{provider}/link/start [get]
 func (api *OAuthAPI) handleLinkStart(w http.ResponseWriter, r *http.Request) {
 	user, err := api.auth.userFromBrowserSession(r)
@@ -233,6 +246,9 @@ func (api *OAuthAPI) startAuthorizationCode(w http.ResponseWriter, r *http.Reque
 	provider, ok := api.lookupProvider(providerName)
 	if !ok {
 		http.Error(w, "Unknown OAuth provider", http.StatusNotFound)
+		return
+	}
+	if !api.prepareProvider(w, r, provider, linkUserID) {
 		return
 	}
 
@@ -268,11 +284,43 @@ func (api *OAuthAPI) startAuthorizationCode(w http.ResponseWriter, r *http.Reque
 	writeOAuthStateCookie(w, r, signed)
 	authURL := provider.AuthCodeURL(signed, pkce.Challenge)
 	// #nosec G710 -- authURL is built by oauth2.Config.AuthCodeURL against
-	// the provider's hard-coded endpoint (google.Endpoint or
-	// githuboauth.Endpoint); the only user-controlled inputs are the
-	// signed state token and the PKCE S256 challenge, both server-issued.
-	// There is no untrusted host component the caller can supply.
+	// the provider's endpoint: hard-coded for Google and GitHub, and for
+	// OpenID Connect taken from the discovery document of the issuer the
+	// operator configured. The only request-derived inputs are the signed
+	// state token and the PKCE S256 challenge, both server-issued. There
+	// is no untrusted host component the caller can supply.
 	http.Redirect(w, r, authURL, http.StatusFound)
+}
+
+// prepareProvider gives a provider that needs a network round-trip before
+// it can build an authorization URL (the OpenID Connect provider fetches
+// its discovery document) the chance to do it. It returns false after
+// writing the response when the provider is not ready: the sign-in flow
+// lands on the login page with the provider error banner, and the link
+// flow, reached from Settings, gets a plain 502.
+func (api *OAuthAPI) prepareProvider(w http.ResponseWriter, r *http.Request, provider oauthsvc.Provider, linkUserID string) bool {
+	preparer, ok := provider.(oauthsvc.Preparer)
+	if !ok {
+		return true
+	}
+	err := preparer.Prepare(r.Context())
+	if err == nil {
+		return true
+	}
+	slog.Warn("OAuth start: provider is not ready", "provider", provider.Name(), "error", err)
+	if linkUserID != "" {
+		http.Error(w, "The sign-in provider is not reachable. Try again later.", http.StatusBadGateway)
+		return false
+	}
+	displayName := displayNameFor(provider.Name())
+	if dn, ok := provider.(oauthsvc.DisplayNamer); ok {
+		displayName = dn.DisplayName()
+	}
+	v := url.Values{}
+	v.Set("oauth_error", "provider")
+	v.Set("provider", displayName)
+	http.Redirect(w, r, "/login?"+v.Encode(), http.StatusFound)
+	return false
 }
 
 // handleCallback is the provider redirect target. Validates state,
@@ -288,7 +336,7 @@ func (api *OAuthAPI) startAuthorizationCode(w http.ResponseWriter, r *http.Reque
 // @Description account waiting for approval with ?oauth_error=pending_approval, an unverified email match with
 // @Description ?oauth_link_required=1, and an MFA-enrolled user with ?mfa_required=1.
 // @Tags oauth
-// @Param provider path string true "Provider name (google|github)"
+// @Param provider path string true "Provider name (google|github|oidc)"
 // @Param code query string true "Authorization code returned by the provider"
 // @Param state query string true "Signed state token issued by /start"
 // @Success 302 "Redirect to the FE redirect path the state carried"
@@ -862,7 +910,7 @@ func (api *OAuthAPI) handleListIdentities(w http.ResponseWriter, r *http.Request
 // @Summary Unlink an OAuth provider from the caller's account
 // @Description Removes the identity row mapping the caller to the named provider. Refused with 409 if it is the caller's only remaining sign-in method.
 // @Tags oauth
-// @Param provider path string true "Provider name (google|github)"
+// @Param provider path string true "Provider name (google|github|oidc)"
 // @Success 204 "No Content"
 // @Failure 401 {string} string "Unauthorized"
 // @Failure 404 {string} string "Unknown provider"
@@ -997,6 +1045,8 @@ func loginMethodFor(p models.OAuthProvider) models.LoginMethod {
 		return models.LoginMethodOAuthGoogle
 	case models.OAuthProviderGitHub:
 		return models.LoginMethodOAuthGitHub
+	case models.OAuthProviderOIDC:
+		return models.LoginMethodOAuthOIDC
 	}
 	return models.LoginMethodOAuthOther
 }
