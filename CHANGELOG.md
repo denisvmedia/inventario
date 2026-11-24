@@ -31,7 +31,8 @@ the section matching the tag and publishes it as the GitHub Release body. See
   available" page ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
 - The version badge in Settings → Help and the version a feedback report
   carries now show the release you run. Before, every release showed 0.1.0.
-  A build without a release number, such as the `edge` image, shows no badge.
+  A build without a release number, such as the `edge` image, shows no badge
+  ([#2790](https://github.com/denisvmedia/inventario/pull/2790)).
 
 ## [0.2.2] - 2026-11-23
 
