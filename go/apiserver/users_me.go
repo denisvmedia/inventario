@@ -12,6 +12,7 @@ import (
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 // usersMeDefaultLoginHistoryLimit is the cap applied when the FE asks for
@@ -29,6 +30,15 @@ const usersMeMaxLoginHistoryLimit = 500
 type UsersMeParams struct {
 	RefreshTokenRegistry registry.RefreshTokenRegistry
 	LoginEventRegistry   registry.LoginEventRegistry
+	// APITokenService backs /users/me/api-tokens (#2808). Nil leaves those
+	// routes unmounted.
+	APITokenService *services.APITokenService
+	// AuditService records token creation and revocation.
+	AuditService services.AuditLogger
+	// MFAService and MFARegistry verify the second factor token creation
+	// asks for. Nil skips that step, which only tests do.
+	MFAService  *services.MFAService
+	MFARegistry registry.UserMFASecretRegistry
 }
 
 // usersMeAPI is the handler set behind /users/me/{sessions,login-history}.
@@ -75,7 +85,9 @@ type LoginHistoryResponse struct {
 
 // UsersMe registers the /api/v1/users/me sub-routes (issue #1644). The
 // JWT + CSRF middleware is applied by the caller via `r.With(userMiddlewares...)`
-// — every handler here trusts appctx.UserFromContext to be non-nil.
+// — every handler here trusts appctx.UserFromContext to be non-nil. That chain
+// authenticates with JWTMiddleware alone, so personal API tokens are refused on
+// the whole subtree: sessions, login history and token management.
 func UsersMe(params UsersMeParams) func(r chi.Router) {
 	api := &usersMeAPI{
 		refreshTokenRegistry: params.RefreshTokenRegistry,
@@ -86,6 +98,17 @@ func UsersMe(params UsersMeParams) func(r chi.Router) {
 		r.Delete("/sessions/{id}", api.revokeSession)
 		r.Delete("/sessions", api.revokeAllOtherSessions)
 		r.Get("/login-history", api.listLoginHistory)
+		if params.APITokenService != nil {
+			tokens := &apiTokensAPI{
+				service:     params.APITokenService,
+				audit:       params.AuditService,
+				mfaService:  params.MFAService,
+				mfaRegistry: params.MFARegistry,
+			}
+			r.Get("/api-tokens", tokens.listAPITokens)
+			r.Post("/api-tokens", tokens.createAPIToken)
+			r.Delete("/api-tokens/{id}", tokens.revokeAPIToken)
+		}
 	}
 }
 

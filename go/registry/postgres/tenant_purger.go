@@ -166,6 +166,7 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// the token tables, MFA + OAuth identities, operation slots.
 	func(t store.TableNames) string { return string(t.LoginEvents()) },
 	func(t store.TableNames) string { return string(t.RefreshTokens()) },
+	func(t store.TableNames) string { return string(t.APITokens()) },
 	func(t store.TableNames) string { return string(t.EmailVerifications()) },
 	func(t store.TableNames) string { return string(t.PasswordResets()) },
 	func(t store.TableNames) string { return string(t.MagicLinkTokens()) },

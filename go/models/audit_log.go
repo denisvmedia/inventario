@@ -71,6 +71,13 @@ type AuditLog struct {
 	// requests from the same user in the same second are indistinguishable.
 	//ptah:schema:field name="request_id" type="TEXT"
 	RequestID *string `json:"request_id,omitempty" db:"request_id"`
+
+	// APITokenID is the personal API token that authenticated the request
+	// which produced this row, or nil for a browser session, a worker or the
+	// CLI. It is what tells "Alice did this" apart from "Alice's script did
+	// this". No FK: an audit row outlives the token it names.
+	//ptah:schema:field name="api_token_id" type="TEXT"
+	APITokenID *string `json:"api_token_id,omitempty" db:"api_token_id"`
 }
 
 // GetID returns the audit log entry's unique identifier.
@@ -151,5 +158,9 @@ type AuditLogIndexes struct {
 	// The correlation id exists to be looked up by, which is the only query it
 	// has: "show me everything this request did".
 	//ptah:schema:index name="audit_logs_request_id_idx" fields="request_id" table="audit_logs"
+	_ int
+
+	// "Show me everything this token did" is the query a leaked token raises.
+	//ptah:schema:index name="audit_logs_api_token_id_idx" fields="api_token_id" table="audit_logs"
 	_ int
 }

@@ -32,6 +32,7 @@ type PasswordResetAPI struct {
 	auditService          services.AuditLogger
 	rateLimiter           services.AuthRateLimiter
 	publicBaseURL         string
+	apiTokens             *services.APITokenService
 }
 
 // PasswordResetParams holds all dependencies needed by the password-reset API.
@@ -44,6 +45,9 @@ type PasswordResetParams struct {
 	AuditService          services.AuditLogger
 	RateLimiter           services.AuthRateLimiter
 	PublicBaseURL         string
+	// APITokenService revokes the user's personal API tokens on a reset
+	// (#2808). Nil skips that step.
+	APITokenService *services.APITokenService
 }
 
 // ForgotPasswordRequest is the body for POST /forgot-password.
@@ -68,6 +72,7 @@ func PasswordReset(params PasswordResetParams) func(r chi.Router) {
 		auditService:          params.AuditService,
 		rateLimiter:           params.RateLimiter,
 		publicBaseURL:         strings.TrimSpace(params.PublicBaseURL),
+		apiTokens:             params.APITokenService,
 	}
 	return func(r chi.Router) {
 		r.With(PasswordResetRateLimitMiddleware(params.RateLimiter)).Post("/forgot-password", api.handleForgotPassword)
@@ -203,6 +208,10 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 
 	// Invalidate all active refresh tokens so existing sessions are terminated.
 	api.invalidateUserSessions(r.Context(), user.ID)
+	// A reset is how a user recovers a compromised account, so the personal
+	// API tokens go too: one minted by whoever had the old password must not
+	// outlive it.
+	_ = revokeAllAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "password_reset")
 	api.sendPasswordChangedNotification(user)
 
 	api.logAuth(r, "password_reset", &user.ID, true, "")

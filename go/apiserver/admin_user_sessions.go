@@ -85,7 +85,7 @@ func (api *adminUsersAPI) revokeSessions(w http.ResponseWriter, r *http.Request)
 	}
 
 	// The same teardown block runs, without the is_active flip.
-	if errMsg := api.revokeLiveSessions(r, target.ID); errMsg != "" {
+	if errMsg := api.revokeLiveSessions(r, target); errMsg != "" {
 		api.logRevokeSessionsOutcome(r, actor.ID, target.ID, target.TenantID, req, false, errMsg)
 		// A partial teardown is a failure worth surfacing: the operator asked for
 		// the sessions to be gone and some of them may not be.

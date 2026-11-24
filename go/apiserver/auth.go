@@ -131,6 +131,8 @@ type AuthAPI struct {
 	// fileSigningService mints the signed avatar_url on /auth/me responses
 	// (#1382). Nil leaves the field empty and the UI shows initials.
 	fileSigningService *services.FileSigningService
+	// apiTokens revokes personal API tokens alongside sessions. May be nil.
+	apiTokens *services.APITokenService
 }
 
 func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
@@ -1014,6 +1016,10 @@ type AuthParams struct {
 	// FactorySet + FileService the rest of the API uses.
 	UserPurger             registry.UserPurger
 	AccountDeletionService *services.AccountDeletionService
+
+	// APITokenService revokes the user's personal API tokens on a password
+	// change and when MFA is disabled (#2808). Nil skips that step.
+	APITokenService *services.APITokenService
 }
 
 // Auth sets up the authentication API routes.
@@ -1038,6 +1044,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		userPurger:               params.UserPurger,
 		accountDeletionService:   params.AccountDeletionService,
 		fileSigningService:       params.FileSigningService,
+		apiTokens:                params.APITokenService,
 	}
 
 	requireAuth := RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)
@@ -1344,6 +1351,10 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 			slog.Error("Failed to blacklist user tokens after password change", "user_id", user.ID, "error", err)
 		}
 	}
+	// Personal API tokens end with the password, like every session does: a
+	// password change is how a user locks out whoever knew the old one, and a
+	// token that person minted would otherwise keep working.
+	_ = revokeAllAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "password_change")
 
 	slog.Info("Password changed successfully", "user_id", user.ID, "email", user.Email, "initial", initialSet)
 	api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, true, r, nil)

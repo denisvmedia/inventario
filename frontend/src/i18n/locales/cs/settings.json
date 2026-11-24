@@ -28,6 +28,98 @@
     "memberSinceUnknown": "—",
     "title": "Účet"
   },
+  "apiTokens": {
+    "card": {
+      "allGroups": "Všechny vaše skupiny",
+      "createdAt": "Vytvořen {{value}}",
+      "expired": "Vypršel",
+      "expiredOn": "Vypršel {{value}}",
+      "expiresOn": "Vyprší {{value}}",
+      "lastUsed": "Naposledy použit {{value}}",
+      "neverUsed": "Zatím nepoužit",
+      "noExpiry": "Bez vypršení",
+      "unknownGroup": "Skupina, ve které už nejste"
+    },
+    "confirmRevoke": {
+      "cta": "Zrušit",
+      "description": "Vše, co používá „{{name}}“, okamžitě přestane fungovat. Akci nelze vrátit.",
+      "title": "Zrušit tento token?"
+    },
+    "create": {
+      "allGroups": "Všechny mé skupiny",
+      "currentPassword": "Současné heslo",
+      "description": "Token jedná za vás, s vaší aktuální rolí v každé skupině, do které má přístup. Nemůže se přihlásit, změnit heslo ani nastavení zabezpečení ani vytvářet další tokeny.",
+      "expiry": "Vyprší",
+      "group": "Skupina",
+      "groupHelp": "Omezte token na jednu skupinu, nebo mu dovolte přístup do všech skupin, ve kterých jste.",
+      "name": "Název",
+      "namePlaceholder": "např. Home Assistant",
+      "reauthHint": "Potvrďte, že jste to vy.",
+      "scope": "Přístup",
+      "submit": "Vytvořit token",
+      "submitting": "Vytváření…",
+      "title": "Nový API token"
+    },
+    "createCard": {
+      "cta": "Nový token",
+      "description": "Zvolte, co token smí dělat, a případně jednu skupinu a datum vypršení.",
+      "impersonating": "Během vystupování za jiného uživatele nelze tokeny vytvářet ani rušit.",
+      "label": "Vytvořit token"
+    },
+    "empty": "Nemáte žádné API tokeny.",
+    "errors": {
+      "expiry_in_past": "Datum vypršení musí být v budoucnosti.",
+      "generic": "Token se nepodařilo vytvořit. Zkuste to znovu.",
+      "group_not_allowed": "Nejste členem této skupiny.",
+      "impersonation_forbidden": "Během vystupování za jiného uživatele nelze tokeny vytvářet ani rušit.",
+      "invalid_mfa_code": "Kód není správný nebo už byl použit.",
+      "invalid_password": "Heslo není správné.",
+      "invalid_scope": "Zvolte, co token smí dělat.",
+      "limit_reached": "Máte příliš mnoho aktivních tokenů. Zrušte některý, který už nepoužíváte.",
+      "name_required": "Pojmenujte token.",
+      "name_too_long": "Název je příliš dlouhý."
+    },
+    "expiry": {
+      "30d": "30 dní",
+      "365d": "1 rok",
+      "90d": "90 dní",
+      "never": "Bez vypršení"
+    },
+    "loadFailed": "Tokeny se nepodařilo načíst.",
+    "loading": "Načítání tokenů…",
+    "reveal": {
+      "copied": "Token zkopírován.",
+      "copy": "Kopírovat token",
+      "copyFailed": "Kopírování se nezdařilo. Označte token a zkopírujte ho ručně.",
+      "description": "Token „{{name}}“ je připraven.",
+      "done": "Hotovo",
+      "label": "Token",
+      "title": "Zkopírujte nový token",
+      "usage": "Posílejte ho v hlavičce Authorization každého požadavku:",
+      "warning": "Token se zobrazuje jen teď. Uložte ho na bezpečné místo. Pokud ho ztratíte, zrušte ho a vytvořte nový."
+    },
+    "revoke": "Zrušit",
+    "scopeDescriptions": {
+      "read_only": "Může data zobrazovat, ale ne měnit.",
+      "read_write": "Může také vytvářet, měnit a mazat to, co vaše role ve skupině dovoluje."
+    },
+    "scopes": {
+      "read_only": "Jen čtení",
+      "read_write": "Čtení a zápis"
+    },
+    "subtitle": "Osobní API token umožní skriptu nebo jiné aplikaci volat API Inventaria vaším jménem, bez vašeho hesla. Každý token se zobrazí jen jednou, při vytvoření.",
+    "title": "API tokeny",
+    "toasts": {
+      "revoked": "Token zrušen.",
+      "revokeFailed": "Token se nepodařilo zrušit. Zkuste to znovu."
+    },
+    "validation": {
+      "codeRequired": "Zadejte kód z ověřovací aplikace nebo záložní kód.",
+      "nameRequired": "Pojmenujte token.",
+      "nameTooLong": "Použijte nejvýše 100 znaků.",
+      "passwordRequired": "Zadejte současné heslo."
+    }
+  },
   "appearance": {
     "defaultViewHelp": "Nastaví výchozí rozvržení při otevření seznamu položek. Stále jej můžete přepnout pro danou relaci z panelu nástrojů.",
     "defaultViewLabel": "Výchozí zobrazení",
@@ -217,6 +309,12 @@
       "activeSessionsBadge_many": "{{count}} aktivní",
       "activeSessionsBadge_other": "{{count}} aktivních",
       "activeSessionsDescription": "Spravujte zařízení, která jsou přihlášena k vašemu účtu.",
+      "apiTokens": "API tokeny",
+      "apiTokensBadge_one": "{{count}} aktivní",
+      "apiTokensBadge_few": "{{count}} aktivní",
+      "apiTokensBadge_many": "{{count}} aktivních",
+      "apiTokensBadge_other": "{{count}} aktivních",
+      "apiTokensDescription": "Umožněte skriptům a jiným aplikacím používat API vaším jménem.",
       "loginHistory": "Historie přihlášení",
       "loginHistoryDescription": "Prohlédněte si nedávné pokusy o přihlášení."
     },

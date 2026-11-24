@@ -182,6 +182,7 @@ type FactorySet struct {
 	TenantRegistry                        TenantRegistry                // TenantRegistry doesn't need factory as it's not user-aware
 	UserRegistry                          UserRegistry                  // UserRegistry doesn't need factory as it's not user-aware
 	RefreshTokenRegistry                  RefreshTokenRegistry          // RefreshTokenRegistry doesn't need factory as it's not user-aware
+	APITokenRegistry                      APITokenRegistry              // Personal API tokens (#2808); service-mode (looked up by digest before a user context exists)
 	LoginEventRegistry                    LoginEventRegistry            // LoginEventRegistry runs under the background-worker role (write path) + app-level user_id filter (read path)
 	UserMFASecretRegistry                 UserMFASecretRegistry         // Per-user TOTP secrets (#1645); service-mode (called pre-RLS in login)
 	AuditLogRegistry                      AuditLogRegistry              // AuditLogRegistry doesn't need factory as it's not user-aware

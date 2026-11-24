@@ -86,11 +86,71 @@ func createUserAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySe
 // createGroupAwareMiddlewares creates middleware stack for group-scoped data routes.
 // GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the registry set
 // is built with group context already set.
-func createGroupAwareMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service, groupService *services.GroupService) []func(http.Handler) http.Handler {
+//
+// These routes accept a personal API token as well as a session (#2808):
+// SessionOrAPITokenMiddleware dispatches on the bearer credential, the group
+// resolver enforces a token's group restriction, and CSRFMiddleware skips the
+// token requests only.
+func createGroupAwareMiddlewares(
+	jwtSecret []byte,
+	factorySet *registry.FactorySet,
+	blacklist services.TokenBlacklister,
+	csrfService csrf.Service,
+	groupService *services.GroupService,
+	apiTokens *APITokenAuthenticator,
+) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
-		JWTMiddleware(jwtSecret, factorySet.UserRegistry, blacklist),
+		SessionOrAPITokenMiddleware(jwtSecret, factorySet.UserRegistry, blacklist, apiTokens),
 		RLSContextMiddleware(factorySet),
 		GroupSlugResolverMiddleware(groupService),
+		RegistrySetMiddleware(factorySet),
+		CSRFMiddleware(csrfService),
+	)
+}
+
+// newAPITokenComponents builds the personal API token service and the request
+// authenticator (#2808). A FactorySet without the registry (a test harness
+// assembling one by hand) leaves tokens off: both are nil, and every route then
+// refuses tokens, the same as a route that never accepted them.
+func newAPITokenComponents(
+	params Params,
+	groupService *services.GroupService,
+	audit services.AuditLogger,
+	limiter services.GlobalRateLimiter,
+) (*services.APITokenService, *APITokenAuthenticator) {
+	if params.FactorySet.APITokenRegistry == nil {
+		return nil, nil
+	}
+	svc := services.NewAPITokenService(params.FactorySet.APITokenRegistry, params.FactorySet.UserRegistry, groupService)
+	return svc, NewAPITokenAuthenticator(svc, audit, limiter, params.GlobalRateTrustedProxyNets)
+}
+
+// newUsersMeParams wires the /users/me route group: sessions, login history
+// and personal API token management.
+func newUsersMeParams(
+	params Params,
+	apiTokens *services.APITokenService,
+	audit services.AuditLogger,
+	mfa *services.MFAService,
+) UsersMeParams {
+	return UsersMeParams{
+		RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
+		LoginEventRegistry:   params.FactorySet.LoginEventRegistry,
+		APITokenService:      apiTokens,
+		AuditService:         audit,
+		MFAService:           mfa,
+		MFARegistry:          params.FactorySet.UserMFASecretRegistry,
+	}
+}
+
+// createGroupManagementMiddlewares is the /groups chain. It accepts a personal
+// API token so a script can find the groups it may reach, but only for reads:
+// creating, leaving and administering groups stays with a person.
+func createGroupManagementMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service, apiTokens *APITokenAuthenticator) []func(http.Handler) http.Handler {
+	return append(defaultAPIMiddlewares,
+		SessionOrAPITokenMiddleware(jwtSecret, factorySet.UserRegistry, blacklist, apiTokens),
+		apiTokensReadOnlyRoute,
+		RLSContextMiddleware(factorySet),
 		RegistrySetMiddleware(factorySet),
 		CSRFMiddleware(csrfService),
 	)
@@ -107,9 +167,10 @@ func createGroupAwareMiddlewaresForUploads(
 	blacklist services.TokenBlacklister,
 	csrfService csrf.Service,
 	groupService *services.GroupService,
+	apiTokens *APITokenAuthenticator,
 ) []func(http.Handler) http.Handler {
 	return []func(http.Handler) http.Handler{
-		JWTMiddleware(jwtSecret, userRegistry, blacklist),
+		SessionOrAPITokenMiddleware(jwtSecret, userRegistry, blacklist, apiTokens),
 		RLSContextMiddleware(factorySet),
 		GroupSlugResolverMiddleware(groupService),
 		RegistrySetMiddleware(factorySet),
@@ -566,6 +627,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		impersonationStore = services.NewInMemoryImpersonationStore()
 	}
 
+	apiTokenSvc, apiTokenAuth := newAPITokenComponents(params, groupService, auditSvc, globalRateLimiter)
 	r.Route("/api/v1", func(r chi.Router) {
 		// Resolve tenant from request host and place it in context for all handlers,
 		// including public ones (login, registration, password reset).
@@ -591,7 +653,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		accountDeletionPurger := services.NewGroupPurgeService(params.FactorySet, services.NewFileService(params.FactorySet, params.UploadLocation))
 		avatarSvc := services.NewAvatarService(params.FactorySet, params.UploadLocation)
 		accountDeletionSvc := services.NewAccountDeletionService(params.FactorySet, accountDeletionPurger, avatarSvc)
-		r.Route("/auth", Auth(AuthParams{
+		r.With(RejectAPITokens()).Route("/auth", Auth(AuthParams{
 			AvatarService:            avatarSvc,
 			FileSigningService:       services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 			UserRegistry:             params.FactorySet.UserRegistry,
@@ -615,6 +677,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			MagicLinkLoginEnabled:    params.MagicLinkLoginEnabled,
 			UserPurger:               params.FactorySet.UserPurger,
 			AccountDeletionService:   accountDeletionSvc,
+			APITokenService:          apiTokenSvc,
 		}))
 
 		// Back-office auth plane (issue #1785, Phase 2). Completely
@@ -626,7 +689,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// cookie path `/api/v1/backoffice` covers every back-office
 		// endpoint a future phase will add (Phase 3 will mount the
 		// admin surface under the same prefix).
-		r.Route("/backoffice/auth", BackofficeAuth(BackofficeAuthParams{
+		r.With(RejectAPITokens()).Route("/backoffice/auth", BackofficeAuth(BackofficeAuthParams{
 			BackofficeUserRegistry:          params.FactorySet.BackofficeUserRegistry,
 			BackofficeRefreshTokenRegistry:  params.FactorySet.BackofficeRefreshTokenRegistry,
 			BackofficeUserMFASecretRegistry: params.FactorySet.BackofficeUserMFASecretRegistry,
@@ -675,6 +738,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 				AuditService:          auditSvc,
 				RateLimiter:           rateLimiter,
 				PublicBaseURL:         params.PublicURL,
+				APITokenService:       apiTokenSvc,
 			}))
 			r.Route("/currencies", Currencies())
 			// Feature flags are deployment-scoped (operator kill-switches,
@@ -743,7 +807,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// /current widens the gate to also admit an active impersonation
 		// token so the FE banner can read its own state. Mounting at the
 		// same level as /system keeps the surface tenant-agnostic.
-		r.Route("/admin", Admin(AdminParams{
+		r.With(RejectAPITokens()).Route("/admin", Admin(AdminParams{
 			FactorySet:             params.FactorySet,
 			BackofficeUserRegistry: params.FactorySet.BackofficeUserRegistry,
 			Blacklist:              blacklist,
@@ -759,20 +823,18 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			// logout rather than POST /admin/impersonation/end (#1750).
 			ImpersonationStore: impersonationStore,
 			// #2113 L-4: GET /admin/debug now lives on the back-office plane.
-			DebugInfo: params.DebugInfo,
+			DebugInfo:       params.DebugInfo,
+			APITokenService: apiTokenSvc, // block and revoke-sessions end tokens too
 		}))
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives
 		// under /groups/{id}/members; a tenant-wide admin surface will be
 		// re-introduced only when group-based admin authorization is designed.
-		r.With(userMiddlewares...).Route("/groups", Groups(params, groupService, auditSvc))
+		r.With(createGroupManagementMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc, apiTokenAuth)...).Route("/groups", Groups(params, groupService, auditSvc))
 		// Per-user account surfaces (#1644): active sessions + login history.
 		// These don't fit under /auth (which is unauth-tolerant on purpose)
 		// nor under /g/{slug}/* (they're tenant-scoped, not group-scoped).
-		r.With(userMiddlewares...).Route("/users/me", UsersMe(UsersMeParams{
-			RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
-			LoginEventRegistry:   params.FactorySet.LoginEventRegistry,
-		}))
+		r.With(userMiddlewares...).Route("/users/me", UsersMe(newUsersMeParams(params, apiTokenSvc, auditSvc, mfaSvc)))
 		// In-app feedback / contact support (#1387). Auth-required and
 		// per-user rate-limited (5/hour). The handler returns a typed 503
 		// (feedback.not_configured) when SupportEmail is empty, so it stays
@@ -790,7 +852,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// Group-scoped data routes: /api/v1/g/{groupSlug}/...
 		// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the
 		// registry set is built with group context.
-		groupScopedMiddlewares := createGroupAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc, groupService)
+		groupScopedMiddlewares := createGroupAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc, groupService, apiTokenAuth)
 		// Per-resource role gates (#1533): reads stay viewer+ (membership
 		// is checked by GroupSlugResolverMiddleware). Writes split by
 		// resource — structural resources (locations, areas, exports)
@@ -834,7 +896,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// Uploads need special middleware without content type restrictions (group-scoped).
 		// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the
 		// registry set is built with group context.
-		groupUploadMiddlewares := createGroupAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet, blacklist, csrfSvc, groupService)
+		groupUploadMiddlewares := createGroupAwareMiddlewaresForUploads(params.JWTSecret, params.FactorySet.UserRegistry, params.FactorySet, blacklist, csrfSvc, groupService, apiTokenAuth)
 		r.With(groupUploadMiddlewares...).Route("/g/{groupSlug}/uploads", Uploads(params))
 
 		// AI vision photo-scan endpoint (#1720). Bypasses the default

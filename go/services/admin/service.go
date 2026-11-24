@@ -476,6 +476,18 @@ func (s *Service) UpdateUser(ctx context.Context, idOrEmail string, req UserUpda
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
 
+	// Deactivating the account, setting its password or moving it to another
+	// tenant ends its personal API tokens (#2808), the same as the matching
+	// self-service and back-office actions do. Token authentication would
+	// refuse an inactive or moved owner anyway; revoking makes it permanent,
+	// so reactivating the account later does not bring the tokens back.
+	deactivated := req.IsActive != nil && !*req.IsActive
+	if (deactivated || req.Password != nil || req.TenantID != nil) && s.factorySet.APITokenRegistry != nil {
+		if _, err := s.factorySet.APITokenRegistry.RevokeAllByUserID(ctx, updatedUser.ID); err != nil {
+			return nil, fmt.Errorf("user updated, but revoking their API tokens failed: %w", err)
+		}
+	}
+
 	return updatedUser, nil
 }
 
