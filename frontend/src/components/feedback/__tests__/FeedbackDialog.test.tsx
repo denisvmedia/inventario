@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
@@ -55,8 +55,14 @@ beforeEach(() => {
   __resetNavigationForTests()
 })
 
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
 describe("<FeedbackDialog />", () => {
   it("submits the form and closes on success", async () => {
+    // The version the build injects; the diagnostics carry it as is.
+    vi.stubGlobal("__APP_VERSION__", "v0.2.2")
     const received = capture<Record<string, unknown>>()
     server.use(
       ...baseUserHandlers,
@@ -86,7 +92,7 @@ describe("<FeedbackDialog />", () => {
     expect(received.value?.type).toBe("bug")
     expect(received.value?.message).toBe("Login bounces me back after 2FA verification.")
     expect(received.value?.reply_to_email).toBe("alex@example.com")
-    expect(received.value?.diagnostics).toMatchObject({ app_version: expect.any(String) })
+    expect(received.value?.diagnostics).toMatchObject({ app_version: "v0.2.2" })
   })
 
   it("omits the diagnostics payload when the checkbox is cleared", async () => {

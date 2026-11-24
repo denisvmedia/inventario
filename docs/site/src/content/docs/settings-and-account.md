@@ -232,7 +232,8 @@ The **Help & support** section gives you four quick links:
 - **Documentation** — opens the user guide in a new tab.
 - **Keyboard shortcuts** — opens the full list of shortcuts (you can also press
   `?` anywhere in the app).
-- **What's new** — opens the releases page in a new tab.
+- **What's new** — opens the releases page in a new tab. The badge next to it
+  shows the version you run, such as `v0.2`.
 - **Contact support / share feedback** — opens a form to ask a question, report
   a bug, or suggest a feature. The same form is your channel for reaching the
   team directly.

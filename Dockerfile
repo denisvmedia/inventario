@@ -22,8 +22,13 @@ RUN --mount=type=cache,target=/root/.npm \
 # Copy frontend source
 COPY frontend/ ./
 
+# The version the UI shows, the same VERSION build arg the backend stage puts
+# into the binary. Declared after `npm ci` so a new version does not
+# invalidate the dependency layer.
+ARG VERSION=dev
+
 # Build frontend
-RUN npm run build
+RUN INVENTARIO_VERSION="${VERSION}" npm run build
 
 # Stage 2: Base Go environment
 FROM golang:1.27.4-alpine AS go-base
