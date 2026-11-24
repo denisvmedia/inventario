@@ -81,6 +81,10 @@
       "feedbackDescription": "Ask the team for help, report a bug, or tell us what to build next.",
       "shortcuts": "Keyboard shortcuts",
       "shortcutsDescription": "View every keyboard shortcut used across the app.",
+      "tour": "Restart product tour",
+      "tourDescription": "Walk through the main parts of the app again.",
+      "tourNeedsGroup": "Create or join a group first: the tour walks through the pages of a group.",
+      "tourNeedsWideScreen": "Use a wider window: the tour points at the sidebar, which small screens hide.",
       "whatsNew": "What's new",
       "whatsNewBadge": "v{{version}}",
       "whatsNewDescription": "See the latest features and updates."

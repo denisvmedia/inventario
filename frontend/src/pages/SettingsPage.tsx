@@ -76,6 +76,7 @@ import {
 import { usePatchSetting, useUserSettings } from "@/features/settings/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useDensity, DENSITIES, type Density } from "@/hooks/useDensity"
+import { useOnboardingTourControls } from "@/hooks/useOnboardingTourControls"
 import { useTheme } from "@/components/theme-provider"
 import { i18next, SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/i18n"
 import { withGroupQuery } from "@/lib/group-aware-url"
@@ -1149,30 +1150,42 @@ function PrivacyRow({ label, description, badge, badgeVariant, to, testId }: Pri
 function HelpSection() {
   const { t } = useTranslation()
   const shortcutsDialog = useKeyboardShortcutsDialog()
+  const tourControls = useOnboardingTourControls()
   const [feedbackOpen, setFeedbackOpen] = useState(false)
 
-  // Four rows: docs (#2104 — opens the end-user "Getting started" guide in
+  // Five rows: docs (#2104 — opens the end-user "Getting started" guide in
   // a new tab; the row no longer points at the coming-soon /help stub, though
-  // the /help route still exists), shortcuts (#1385 — opens the cheat-sheet
-  // modal in-place), what's new (#1386 — opens the GitHub Releases page in a
-  // new tab instead of the coming-soon /whats-new stub, which still exists;
-  // carries a marketing v{Major.Minor} badge per design-audit #1536), and
-  // "Contact support / share feedback" (#1387 — opens the FeedbackDialog
-  // in-place). The dialog's "Question" type doubles as the contact-support
-  // channel, so the former static mailto row was folded into this single
-  // entry point.
-  type HelpRowKey = "documentation" | "shortcuts" | "whatsNew" | "feedback"
+  // the /help route still exists), the product tour (#2787 — restarts the
+  // OnboardingTour overlay, the same action as the user-menu entry; disabled
+  // with the reason while the tour cannot start), shortcuts (#1385 — opens
+  // the cheat-sheet modal in-place), what's new (#1386 — opens the GitHub
+  // Releases page in a new tab instead of the coming-soon /whats-new stub,
+  // which still exists; carries a marketing v{Major.Minor} badge per
+  // design-audit #1536), and "Contact support / share feedback" (#1387 —
+  // opens the FeedbackDialog in-place). The dialog's "Question" type doubles
+  // as the contact-support channel, so the former static mailto row was
+  // folded into this single entry point.
+  type HelpRowKey = "documentation" | "tour" | "shortcuts" | "whatsNew" | "feedback"
   // `href: "modal:shortcuts"` → renders a click-to-open <button> wired
   //   to the keyboard-shortcuts dialog. `href: "modal:feedback"` →
-  //   opens the FeedbackDialog. An `http(s)` href → external <a> opening
-  //   in a new tab. Anything else → in-app <Link>. Using a sentinel
-  //   string keeps the row map flat and the renderer easy to follow.
+  //   opens the FeedbackDialog, `href: "modal:tour"` the product tour.
+  //   An `http(s)` href → external <a> opening in a new tab. Anything
+  //   else → in-app <Link>. Using a sentinel string keeps the row map
+  //   flat and the renderer easy to follow.
   const rows: Array<{ key: HelpRowKey; href: string }> = [
     { key: "documentation", href: DOCS_URL },
+    { key: "tour", href: "modal:tour" },
     { key: "shortcuts", href: "modal:shortcuts" },
     { key: "whatsNew", href: RELEASES_URL },
     { key: "feedback", href: "modal:feedback" },
   ]
+  // Why the tour row is disabled, shown in place of its description.
+  const tourBlockedReason =
+    tourControls.blocker === "noGroup"
+      ? t("settings:help.rows.tourNeedsGroup")
+      : tourControls.blocker === "narrowScreen"
+        ? t("settings:help.rows.tourNeedsWideScreen")
+        : null
 
   const versionShort = shortAppVersion()
 
@@ -1189,10 +1202,13 @@ function HelpSection() {
           const labelKey = key
           const isModal = href.startsWith("modal:")
           const isExternal = /^https?:\/\//.test(href)
+          const blockedReason = key === "tour" ? tourBlockedReason : null
           const RowInner = (
             <>
               <div className="flex items-center gap-2">
-                <p className="text-sm font-medium">{t(`settings:help.rows.${labelKey}`)}</p>
+                <p className={cn("text-sm font-medium", blockedReason && "text-muted-foreground")}>
+                  {t(`settings:help.rows.${labelKey}`)}
+                </p>
                 {labelKey === "whatsNew" && versionShort ? (
                   <Badge variant="secondary" data-testid="help-row-whatsNew-badge">
                     {t("settings:help.rows.whatsNewBadge", { version: versionShort })}
@@ -1200,7 +1216,7 @@ function HelpSection() {
                 ) : null}
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {t(`settings:help.rows.${labelKey}Description`)}
+                {blockedReason ?? t(`settings:help.rows.${labelKey}Description`)}
               </p>
             </>
           )
@@ -1210,12 +1226,14 @@ function HelpSection() {
               <button
                 key={key}
                 type="button"
+                disabled={blockedReason !== null}
                 onClick={() => {
                   if (modalTarget === "shortcuts") shortcutsDialog.setOpen(true)
                   else if (modalTarget === "feedback") setFeedbackOpen(true)
+                  else if (modalTarget === "tour") tourControls.restart()
                 }}
                 data-testid={`help-row-${key}`}
-                className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-muted/50"
+                className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
                 <div>{RowInner}</div>
                 <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
