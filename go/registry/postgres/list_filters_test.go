@@ -217,6 +217,15 @@ func TestCommodityLoanRegistry_Postgres_ListPendingReminders(t *testing.T) {
 	c.Check(borrowers(dueSoon), qt.DeepEquals, []string{"soon"})
 }
 
+func TestCommodityLoanRegistry_Postgres_ListPendingRemindersRejectsUnknownKind(t *testing.T) {
+	c := qt.New(t)
+	fx := newLoanPGFixture(t)
+	serviceReg := fx.factorySet.CreateServiceRegistrySet().CommodityLoanRegistry
+
+	_, err := serviceReg.ListPendingReminders(context.Background(), "weekly", time.Now(), 3)
+	c.Assert(err, qt.ErrorIs, registry.ErrInvalidInput)
+}
+
 func TestMaintenanceScheduleRegistry_Postgres_ListPaginatedFilters(t *testing.T) {
 	c := qt.New(t)
 	fx := newTagPGFixture(t)
