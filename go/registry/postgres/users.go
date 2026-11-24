@@ -11,6 +11,7 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/google/uuid"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/models"
@@ -243,73 +244,18 @@ func (r *UserRegistry) ListAdminByTenant(ctx context.Context, tenantID string, o
 		return nil, 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
 	}
 
-	page := opts.Page
-	if page <= 0 {
-		page = 1
-	}
-	perPage := opts.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-
-	sortField := opts.SortField
-	if !sortField.IsValid() {
-		sortField = registry.AdminUserSortEmail
-	}
-	direction := "ASC"
-	if opts.SortDesc {
-		direction = "DESC"
-	}
-
-	usersTable := r.tableNames.Users()
-	membershipsTable := r.tableNames.GroupMemberships()
-
-	args := []any{tenantID}
-	whereClauses := []string{"u.tenant_id = $1"}
-	if q := strings.TrimSpace(opts.Query); q != "" {
-		args = append(args, "%"+q+"%")
-		// $2 reused across email + name.
-		whereClauses = append(whereClauses, fmt.Sprintf("(u.email ILIKE $%d OR u.name ILIKE $%d)", len(args), len(args)))
-	}
-	if opts.IsActive != nil {
-		args = append(args, *opts.IsActive)
-		whereClauses = append(whereClauses, fmt.Sprintf("u.is_active = $%d", len(args)))
-	}
-	where := "WHERE " + strings.Join(whereClauses, " AND ")
+	countSB, pageSB := adminUserListQueries(r.tableNames, tenantID, opts)
+	countQuery, countArgs := countSB.Build()
+	pageQuery, pageArgs := pageSB.Build()
 
 	var (
 		items []*registry.AdminUserListItem
 		total int
 	)
 	err := store.DoAsAdmin(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s AS u %s", usersTable, where)
-		if scanErr := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); scanErr != nil {
+		if scanErr := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); scanErr != nil {
 			return errxtrace.Wrap("failed to count admin users", scanErr)
 		}
-
-		limitPos := len(args) + 1
-		offsetPos := len(args) + 2
-		offset := (page - 1) * perPage
-
-		// SECURITY: sortField is constrained to AdminUserSortField via IsValid above,
-		// direction is "ASC"/"DESC" literals, and table-names come from r.tableNames —
-		// never user-supplied — so direct fmt.Sprintf interpolation is safe.
-		// The membership COUNT joins on (tenant_id, member_user_id) — the
-		// tenant predicate is belt-and-braces: today the user.id PK is
-		// globally unique, but tenant-scoping the join keeps the count
-		// honest if id-reuse-across-tenants ever becomes possible (e.g.
-		// a future tenant-import flow) and matches the
-		// (tenant_id, member_user_id) shape ListByUser uses elsewhere.
-		pageQuery := fmt.Sprintf(`
-			SELECT u.*,
-				(SELECT COUNT(*) FROM %s AS m WHERE m.member_user_id = u.id AND m.tenant_id = u.tenant_id) AS _group_membership_count
-			FROM %s AS u
-			%s
-			ORDER BY u.%s %s, u.id ASC
-			LIMIT $%d OFFSET $%d`,
-			membershipsTable, usersTable, where, string(sortField), direction, limitPos, offsetPos,
-		)
-		pageArgs := append(append([]any{}, args...), perPage, offset)
 
 		rows, err := tx.QueryxContext(ctx, pageQuery, pageArgs...)
 		if err != nil {
@@ -340,6 +286,61 @@ func (r *UserRegistry) ListAdminByTenant(ctx context.Context, tenantID string, o
 		return nil, 0, err
 	}
 	return items, total, nil
+}
+
+// adminUserListQueries builds the count and the page query of
+// ListAdminByTenant. Both carry the same WHERE clause, so the total describes
+// the filtered set the page is cut from.
+//
+// The membership COUNT joins on (tenant_id, member_user_id) — the tenant
+// predicate is belt-and-braces: today the user.id PK is globally unique, but
+// tenant-scoping the join keeps the count honest if id-reuse-across-tenants
+// ever becomes possible (e.g. a future tenant-import flow) and matches the
+// (tenant_id, member_user_id) shape ListByUser uses elsewhere.
+func adminUserListQueries(tables store.TableNames, tenantID string, opts registry.AdminUserListOptions) (countSB, pageSB *sqlb.SelectBuilder) {
+	page := opts.Page
+	if page <= 0 {
+		page = 1
+	}
+	perPage := opts.PerPage
+	if perPage <= 0 {
+		perPage = 50
+	}
+	// A validated enum value, so the ORDER BY column never comes from the
+	// request.
+	sortField := opts.SortField
+	if !sortField.IsValid() {
+		sortField = registry.AdminUserSortEmail
+	}
+
+	from := string(tables.Users()) + " AS u"
+	cond := sqlb.NewCond()
+	exprs := []string{cond.Equal("u.tenant_id", tenantID)}
+	if q := strings.TrimSpace(opts.Query); q != "" {
+		pattern := "%" + q + "%"
+		exprs = append(exprs, cond.Or(cond.ILike("u.email", pattern), cond.ILike("u.name", pattern)))
+	}
+	if opts.IsActive != nil {
+		exprs = append(exprs, cond.Equal("u.is_active", *opts.IsActive))
+	}
+	where := andWhere(cond, exprs...)
+
+	countSB = addWhere(newSelect().Select("COUNT(*)").From(from), where)
+
+	membershipCount := newSelect().
+		Select("COUNT(*)").
+		From(string(tables.GroupMemberships())+" AS m").
+		Where("m.member_user_id = u.id", "m.tenant_id = u.tenant_id")
+	pageSB = newSelect()
+	pageSB.Select("u.*", pageSB.BuilderAs(membershipCount, "_group_membership_count")).From(from)
+	addWhere(pageSB, where)
+	primary := pageSB.OrderByAsc
+	if opts.SortDesc {
+		primary = pageSB.OrderByDesc
+	}
+	primary("u." + string(sortField)).OrderByAsc("u.id")
+	paginate(pageSB, (page-1)*perPage, perPage)
+	return countSB, pageSB
 }
 
 // CountSessionsByUser returns the number of refresh_tokens rows for the
