@@ -1,10 +1,13 @@
+import { lazy, Suspense } from "react"
 import { beforeEach, describe, expect, it } from "vitest"
 import { http as msw, HttpResponse } from "msw"
-import { Route, useLocation } from "react-router-dom"
+import { Outlet, Route, useLocation } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
+import { useOptionalAuth } from "@/features/auth/AuthContext"
+import { GroupProvider, useCurrentGroup } from "@/features/group/GroupContext"
 import { CreateGroupPage } from "@/pages/groups/CreateGroupPage"
 import { capture } from "@/test/capture"
 import { renderWithProviders } from "@/test/render"
@@ -17,7 +20,21 @@ const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
 function LocationProbe() {
   const loc = useLocation()
-  return <div data-testid="loc" data-pathname={loc.pathname} />
+  return <div data-testid="loc" data-pathname={loc.pathname} data-search={loc.search} />
+}
+
+// Renders what GroupProvider and AuthProvider currently hold, so a test can
+// wait for a refetch to reach the tree before it moves on.
+function ContextProbe() {
+  const { groups } = useCurrentGroup()
+  const auth = useOptionalAuth()
+  return (
+    <div
+      data-testid="ctx"
+      data-groups={(groups ?? []).map((g) => g.slug).join(",")}
+      data-default-group={auth?.user?.default_group_id ?? ""}
+    />
+  )
 }
 
 function renderCreate() {
@@ -96,6 +113,98 @@ describe("<CreateGroupPage />", () => {
       group_currency: "EUR",
       icon: "🏠",
     })
+  })
+
+  it("lands on /g/{slug} when a user with no groups creates the first one (#2815)", async () => {
+    // Mounted the way the app mounts it: AuthProvider above the routes,
+    // GroupProvider as the layout route, and a lazy /g/:groupSlug route.
+    // The router applies navigations in a transition, so while the lazy
+    // route loads, the committed location stays /groups/new. The refetched
+    // group list re-renders GroupProvider at that location in the meantime.
+    // GroupProvider must not pin ?g= there: setSearchParams would resolve
+    // against /groups/new and replace the /g/household entry CreateGroupPage
+    // has just pushed.
+    let created = false
+    let releaseGroups!: () => void
+    const groupsReleased = new Promise<void>((resolve) => {
+      releaseGroups = resolve
+    })
+    let releaseGroupRoute!: () => void
+    const groupRouteLoaded = new Promise<void>((resolve) => {
+      releaseGroupRoute = resolve
+    })
+    const GroupHome = lazy(async () => {
+      await groupRouteLoaded
+      return { default: LocationProbe }
+    })
+    const household = {
+      id: "g1",
+      type: "groups",
+      attributes: { id: "g1", slug: "household", name: "Household", group_currency: "USD" },
+    }
+    server.use(
+      msw.get(api("/auth/me"), () =>
+        HttpResponse.json({
+          id: "u1",
+          email: "orphan@example.com",
+          name: "Orphan",
+          // The backend makes the first group the user's default.
+          default_group_id: created ? "g1" : null,
+        })
+      ),
+      msw.get(api("/groups"), async () => {
+        if (!created) return HttpResponse.json({ data: [] })
+        await groupsReleased
+        return HttpResponse.json({ data: [household] })
+      }),
+      msw.post(api("/groups"), () => {
+        created = true
+        return HttpResponse.json({ data: household }, { status: 201 })
+      })
+    )
+    setAccessToken("good-token")
+    renderWithProviders({
+      initialPath: "/groups/new",
+      withAuth: true,
+      routes: (
+        <Route
+          element={
+            <GroupProvider>
+              <ContextProbe />
+              <Suspense fallback={null}>
+                <Outlet />
+              </Suspense>
+            </GroupProvider>
+          }
+        >
+          <Route path="/groups/new" element={<CreateGroupPage />} />
+          <Route path="/g/:groupSlug" element={<GroupHome />} />
+        </Route>
+      ),
+    })
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId("group-name-input"), "Household")
+    await user.click(screen.getByTestId("create-group-submit"))
+
+    // The /auth/me refetch lands first; the /groups refetch is still held,
+    // so the create has not resolved and nothing has navigated yet.
+    await waitFor(() =>
+      expect(screen.getByTestId("ctx").getAttribute("data-default-group")).toBe("g1")
+    )
+    // Releasing /groups resolves the create: CreateGroupPage navigates to
+    // /g/household, and that navigation waits on the lazy route while the
+    // new group list renders at /groups/new.
+    releaseGroups()
+    await waitFor(() =>
+      expect(screen.getByTestId("ctx").getAttribute("data-groups")).toBe("household")
+    )
+    releaseGroupRoute()
+
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/household")
+    )
+    expect(screen.getByTestId("loc").getAttribute("data-search")).toBe("")
+    expect(screen.queryByTestId("create-group-page")).not.toBeInTheDocument()
   })
 
   it("surfaces server errors inline on 422", async () => {

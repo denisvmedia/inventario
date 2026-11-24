@@ -12,13 +12,13 @@
  * that gap so the redirect tests now exercise the actual backend response
  * path.
  *
- * The "drives group creation" test is the lone exception: it tests the UI
- * onboarding flow rather than the backend response, and creating a real
+ * The two group-creation tests are the exception: they test the UI
+ * onboarding flows rather than the backend response, and creating a real
  * group during a parallel test run would mutate orphan's membership and
  * race the redirect tests in sibling browser workers (chromium / firefox /
  * webkit run in parallel against the same backend, so they'd see orphan
- * with one group and skip the /no-group redirect). It keeps its page.route
- * mocks for that reason.
+ * with one group and skip the /no-group redirect). They keep their
+ * page.route mocks for that reason.
  */
 import { Page, expect, test } from '@playwright/test';
 import waitOn from 'wait-on';
@@ -32,6 +32,98 @@ async function loginAsOrphan(page: Page): Promise<void> {
   await login(page, undefined, ORPHAN_TEST_CREDENTIALS);
   // Post-login: RootRedirect (no default_group_id, no memberships) routes
   // through the router guard, which lands the user on /no-group.
+}
+
+function mockGroup(id: string, slug: string, name: string) {
+  return {
+    id,
+    type: 'groups',
+    attributes: {
+      slug,
+      name,
+      icon: '📦',
+      status: 'active',
+      group_currency: 'USD',
+      created_by: 'mock-user',
+      created_at: '2026-04-20T00:00:00Z',
+      updated_at: '2026-04-20T00:00:00Z',
+    },
+  };
+}
+
+// Stubs orphan's first group creation without writing to the backend:
+// POST /groups answers 201 with `group`, and GET /groups returns it once
+// the POST has succeeded.
+//
+// Under #1592 RootRedirect requires `user.default_group_id` to point at a
+// current membership before sending the user to `/g/<slug>`; the legacy
+// "first group with a slug" fallback is gone. So GET /auth/me also
+// advertises the new group as the user's default once the POST has
+// succeeded, which is what the real backend's EnsureDefaultGroup does in
+// GroupService.CreateGroup.
+//
+// The create refetches /groups and /auth/me, and the page navigates to the
+// new group once both have answered. The /groups answer is held until the
+// /auth/me one is through, so the new group list reaches the page while
+// that navigation is still pending (the lazy dashboard route is loading).
+// That is the window in which GroupProvider can pin ?g= on the page the
+// user is leaving and send them back to it (#2815).
+async function mockFirstGroupCreation(
+  page: Page,
+  group: ReturnType<typeof mockGroup>,
+): Promise<void> {
+  let createSucceeded = false;
+  let authMeRefetched!: () => void;
+  const authMeRefetchedPromise = new Promise<void>((resolve) => {
+    authMeRefetched = resolve;
+  });
+  await page.route(GROUPS_URL_GLOB, async (route) => {
+    const method = route.request().method();
+    if (method === 'POST') {
+      createSucceeded = true;
+      return route.fulfill({
+        status: 201,
+        contentType: 'application/vnd.api+json',
+        body: JSON.stringify({ data: group }),
+      });
+    }
+    if (method === 'GET') {
+      if (createSucceeded) {
+        await authMeRefetchedPromise;
+        // Let the page handle the /auth/me answer before this one lands.
+        await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)));
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/vnd.api+json',
+        body: JSON.stringify({ data: createSucceeded ? [group] : [] }),
+      });
+    }
+    return route.continue();
+  });
+  await page.route('**/api/v1/auth/me', async (route) => {
+    const upstream = await route.fetch();
+    const body = await upstream.json();
+    const refetchAfterCreate = createSucceeded;
+    if (refetchAfterCreate && body && typeof body === 'object') {
+      body.default_group_id = group.id;
+    }
+    await route.fulfill({
+      response: upstream,
+      body: JSON.stringify(body),
+      contentType: 'application/json',
+    });
+    if (refetchAfterCreate) authMeRefetched();
+  });
+  // The shell loads members for the active group. Stub it to avoid
+  // hitting the real backend with a mock group id it has never heard of.
+  await page.route(`**/api/v1/groups/${group.id}/members`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/vnd.api+json',
+      body: JSON.stringify({ data: [] }),
+    }),
+  );
 }
 
 test.describe('No-group redirects (#1261, real fixture #1277)', () => {
@@ -108,74 +200,11 @@ test.describe('No-group redirects (#1261, real fixture #1277)', () => {
     // webkit all share the same backend orphan user). The contract this
     // test guards is "form submit → router takes the user out of /no-group",
     // which is a frontend reaction that doesn't need a real backend write.
-    //
-    // Under #1592 RootRedirect requires `user.default_group_id` to point at
-    // a current membership before sending the user to `/g/<slug>`; the
-    // legacy "first group with a slug" fallback is gone. So we also stub
-    // GET /auth/me to advertise the freshly created group as the user's new
-    // default once the POST has succeeded — which is what the real backend's
-    // EnsureDefaultGroup does after a CreateGroup call.
     await page.goto('/');
     await expect(page).toHaveURL(/\/no-group$/);
-
-    const createdGroup = {
-      id: 'mock-grp-1261',
-      type: 'groups',
-      attributes: {
-        slug: 'mock-slug-1261',
-        name: 'Onboarding Test Group',
-        icon: '📦',
-        status: 'active',
-        group_currency: 'USD',
-        created_by: 'mock-user',
-        created_at: '2026-04-20T00:00:00Z',
-        updated_at: '2026-04-20T00:00:00Z',
-      },
-    };
-    let createSucceeded = false;
-    await page.route(GROUPS_URL_GLOB, (route) => {
-      const method = route.request().method();
-      if (method === 'POST') {
-        createSucceeded = true;
-        return route.fulfill({
-          status: 201,
-          contentType: 'application/vnd.api+json',
-          body: JSON.stringify({ data: createdGroup }),
-        });
-      }
-      if (method === 'GET') {
-        return route.fulfill({
-          status: 200,
-          contentType: 'application/vnd.api+json',
-          body: JSON.stringify({ data: createSucceeded ? [createdGroup] : [] }),
-        });
-      }
-      return route.continue();
-    });
-    // After the create-group POST succeeds, /auth/me returns the user with
-    // default_group_id pointing at the new group. That mirrors the
-    // EnsureDefaultGroup behaviour the real backend runs in
-    // GroupService.CreateGroup (#1592).
-    await page.route('**/api/v1/auth/me', async (route) => {
-      const upstream = await route.fetch();
-      const body = await upstream.json();
-      if (createSucceeded && body && typeof body === 'object') {
-        body.default_group_id = createdGroup.id;
-      }
-      return route.fulfill({
-        response: upstream,
-        body: JSON.stringify(body),
-        contentType: 'application/json',
-      });
-    });
-    // setCurrentGroup loads members for the active group — stub it to avoid
-    // hitting the real backend with a mock group id it's never heard of.
-    await page.route(`**/api/v1/groups/${createdGroup.id}/members`, (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/vnd.api+json',
-        body: JSON.stringify({ data: [] }),
-      }),
+    await mockFirstGroupCreation(
+      page,
+      mockGroup('mock-grp-1261', 'mock-slug-1261', 'Onboarding Test Group'),
     );
 
     await page.locator('[data-testid="no-group-create-button"]').click();
@@ -188,5 +217,29 @@ test.describe('No-group redirects (#1261, real fixture #1277)', () => {
     // is what this test guards.
     await expect(page).toHaveURL(/\/g\/mock-slug-1261|\/$/, { timeout: 10000 });
     await expect(page.locator('[data-testid="no-group-view"]')).toHaveCount(0);
+  });
+
+  test('group switcher "Create new group" lands on the new group (#2815)', async ({ page }) => {
+    // Mocked for the same reason as the test above. This path goes through
+    // the sidebar switcher to /groups/new, where CreateGroupPage creates the
+    // group and navigates to /g/<slug>. The refetched group list must not
+    // pin ?g= on /groups/new while that navigation is still pending, or the
+    // user ends up back on the form at /groups/new?g=<slug>.
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/no-group$/);
+    await mockFirstGroupCreation(
+      page,
+      mockGroup('mock-grp-2815', 'mock-slug-2815', 'Switcher Test Group'),
+    );
+
+    await page.locator('.group-selector').click();
+    await page.getByRole('menuitem', { name: 'Create new group' }).click();
+    await expect(page).toHaveURL(/\/groups\/new$/);
+
+    await page.locator('[data-testid="group-name-input"]').fill('Switcher Test Group');
+    await page.locator('[data-testid="create-group-submit"]').click();
+
+    await expect(page).toHaveURL(/\/g\/mock-slug-2815$/, { timeout: 10000 });
+    await expect(page.locator('[data-testid="create-group-page"]')).toHaveCount(0);
   });
 });
