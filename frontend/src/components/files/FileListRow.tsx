@@ -2,9 +2,9 @@ import { useTranslation } from "react-i18next"
 import { File as FileIcon, FileImage, FileText } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
-import type { FileEntity } from "@/features/files/api"
+import { ordinaryLinks, type FileEntity } from "@/features/files/api"
 import { FILE_CATEGORY_TILES, FILE_TAG_PILLS, getFileVisualMeta } from "@/features/files/constants"
-import { useCategoryLabel, useTagPillLabel } from "@/features/files/labels"
+import { useCategoryLabel, useLinkSummary, useTagPillLabel } from "@/features/files/labels"
 import { formatBytes, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
@@ -39,6 +39,8 @@ export function FileListRow({
   const { t } = useTranslation()
   const labelOf = useCategoryLabel()
   const tagLabelOf = useTagPillLabel()
+  const linkSummary = useLinkSummary()
+  const linkedLabel = linkSummary(ordinaryLinks(file))
   const title = file.title?.trim() || file.path?.trim() || file.id
   const tile = FILE_CATEGORY_TILES.find((c) => c.key === file.category)
   const categoryIconClass = cn("size-3 shrink-0", tile?.activeColor ?? "text-muted-foreground")
@@ -107,12 +109,10 @@ export function FileListRow({
             <p className="truncate text-sm font-medium" title={title}>
               {title}
             </p>
-            {(file.linked_entity_id || matchedTags.length > 0) && (
+            {(linkedLabel || matchedTags.length > 0) && (
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                {file.linked_entity_id ? (
-                  <span className="truncate text-xs text-muted-foreground">
-                    {file.linked_entity_type ?? ""}
-                  </span>
+                {linkedLabel ? (
+                  <span className="truncate text-xs text-muted-foreground">{linkedLabel}</span>
                 ) : null}
                 {matchedTags.slice(0, 4).map((tag) => (
                   <span

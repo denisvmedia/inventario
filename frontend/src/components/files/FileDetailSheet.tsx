@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import { Download, ExternalLink, Pencil, Trash2 } from "lucide-react"
 
+import { FileLinksList, useDeleteFileDescription } from "@/components/files/FileLinksList"
 import { FilePreview } from "@/components/files/FilePreview"
 import { ImageViewer, type GalleryImage } from "@/components/files/ImageViewer"
 import { PdfFullViewer } from "@/components/files/PdfFullViewer"
@@ -66,6 +67,7 @@ export function FileDetailSheet({
   const { t } = useTranslation()
   const toast = useAppToast()
   const confirm = useConfirm()
+  const deleteDescription = useDeleteFileDescription()
   const query = useFile(fileId ?? undefined, { enabled: open && !!fileId })
   const deleteMutation = useDeleteFile()
   const tagLabel = useTagLabel("file")
@@ -110,7 +112,7 @@ export function FileDetailSheet({
     if (!file) return
     const ok = await confirm({
       title: t("files:detail.deleteConfirm.title"),
-      description: t("files:detail.deleteConfirm.description", { title }),
+      description: deleteDescription(file, title),
       confirmLabel: t("files:detail.deleteConfirm.confirm"),
       destructive: true,
     })
@@ -183,15 +185,10 @@ export function FileDetailSheet({
                   <dt className="text-muted-foreground">{t("files:detail.mimeType")}</dt>
                   <dd className="break-all">{file.mime_type ?? "—"}</dd>
 
-                  {file.linked_entity_type ? (
-                    <>
-                      <dt className="text-muted-foreground">{t("files:detail.linkedEntity")}</dt>
-                      <dd className="break-all">
-                        {file.linked_entity_type}
-                        {file.linked_entity_meta ? ` / ${file.linked_entity_meta}` : ""}
-                      </dd>
-                    </>
-                  ) : null}
+                  <dt className="text-muted-foreground">{t("files:detail.linkedEntity")}</dt>
+                  <dd className="min-w-0">
+                    <FileLinksList file={file} />
+                  </dd>
 
                   {file.created_at ? (
                     <>

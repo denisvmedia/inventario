@@ -48,7 +48,11 @@
     "deleteConfirm": {
       "confirm": "Smazat soubor",
       "description": "{{title}} bude trvale odstraněn. Tuto akci nelze vrátit zpět.",
-      "title": "Smazat tento soubor?"
+      "title": "Smazat tento soubor?",
+      "descriptionLinked_one": "{{title}} bude trvale odstraněn, také z {{names}}. Tuto akci nelze vrátit zpět. Chcete-li ho odebrat jen z jednoho místa, odeberte místo toho tuto přílohu.",
+      "descriptionLinked_few": "{{title}} bude trvale odstraněn, také z {{names}}. Tuto akci nelze vrátit zpět. Chcete-li ho odebrat jen z jednoho místa, odeberte místo toho tuto přílohu.",
+      "descriptionLinked_many": "{{title}} bude trvale odstraněn, také z {{names}}. Tuto akci nelze vrátit zpět. Chcete-li ho odebrat jen z jednoho místa, odeberte místo toho tuto přílohu.",
+      "descriptionLinked_other": "{{title}} bude trvale odstraněn, také z {{names}}. Tuto akci nelze vrátit zpět. Chcete-li ho odebrat jen z jednoho místa, odeberte místo toho tuto přílohu."
     },
     "deleteSuccess": "Soubor smazán",
     "download": "Stáhnout",
@@ -176,7 +180,16 @@
     "uploadDone_other": "{{count}} z {{total}} nahráno",
     "uploadFailed": "Nezdařilo se",
     "uploading": "Nahrávání {{name}}",
-    "useAsCover": "Použít jako titulní fotku"
+    "useAsCover": "Použít jako titulní fotku",
+    "duplicate": {
+      "attached": "Místo toho připojen existující soubor „{{title}}“.",
+      "attachExisting": "Připojit místo toho existující soubor",
+      "failed": "Nepodařilo se přepnout na existující soubor. Obě kopie zůstávají.",
+      "found": "Už je ve vašich souborech jako „{{title}}“.",
+      "keepBoth": "Ponechat obě",
+      "removeCopy": "Odstranit tuto kopii",
+      "removedCopy": "Tato kopie odstraněna. „{{title}}“ zůstává."
+    }
   },
   "uploadCta": "Nahrát soubory",
   "validation": {
@@ -202,5 +215,38 @@
     "toggleThumbnails": "Přepnout náhledy stránek",
     "zoomIn": "Přiblížit",
     "zoomOut": "Oddálit"
+  },
+  "attachExisting": {
+    "alreadyAttached": "Připojeno",
+    "attach": "Připojit",
+    "attached": "Soubor {{title}} připojen",
+    "attachedTo": "Soubor {{title}} připojen k {{name}}",
+    "attachLabel": "Připojit {{title}}",
+    "description": "Soubor se jen propojí, nezkopíruje: všude, kde je připojen, zůstává jedním souborem a nezabírá další místo.",
+    "done": "Hotovo",
+    "empty": "Žádné odpovídající soubory.",
+    "more_one": "Další {{count}} soubor — upřesněte hledání.",
+    "more_few": "Další {{count}} soubory — upřesněte hledání.",
+    "more_many": "Dalších {{count}} souboru — upřesněte hledání.",
+    "more_other": "Dalších {{count}} souborů — upřesněte hledání.",
+    "searchPlaceholder": "Hledat soubory…",
+    "title": "Připojit existující soubor",
+    "titleWithName": "Připojit existující soubor k {{name}}"
+  },
+  "links": {
+    "remove": "Odebrat přílohu z {{name}}",
+    "removed": "Odebráno z {{name}}",
+    "removedLast": "Odebráno z {{name}}. Soubor zůstává na stránce Soubory.",
+    "removeShort": "Odebrat přílohu",
+    "standalone": "Není nikde připojen",
+    "summary_one": "{{first}} +{{count}}",
+    "summary_few": "{{first}} +{{count}}",
+    "summary_many": "{{first}} +{{count}}",
+    "summary_other": "{{first}} +{{count}}",
+    "type": {
+      "area": "Oblast",
+      "commodity": "Položka",
+      "location": "Lokace"
+    }
   }
 }

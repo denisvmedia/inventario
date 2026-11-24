@@ -14,7 +14,15 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { TagsInput } from "@/components/files/TagsInput"
-import { checkUploadCapacity, updateFile, type FileCategory } from "@/features/files/api"
+import {
+  attachFile,
+  checkUploadCapacity,
+  deleteFile,
+  listFileDuplicates,
+  updateFile,
+  type FileCategory,
+  type FileLinkEntityType,
+} from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
 import { useInvalidateFiles, useUploadFile } from "@/features/files/hooks"
 import { useTagLabel } from "@/features/tags/hooks"
@@ -48,6 +56,18 @@ interface FileItem {
   // — needed because the cover-set call needs the persisted file id,
   // not the temporary client-side id we use during the dialog.
   uploadedFileId?: string
+  // An existing file of the group with the same content (same SHA-256 on
+  // the BE). The progress step offers to use it instead of the new copy.
+  duplicate?: { id: string; title: string }
+  duplicateState?: "open" | "working" | "kept" | "replaced" | "failed"
+}
+
+// linkMeta maps the category picked in the metadata step to the bucket on
+// the entity's Files tab: photos go to "images", everything else to the
+// entity's document bucket.
+function linkMeta(entityType: FileLinkEntityType, category: FileCategory): string {
+  if (category === "images") return "images"
+  return entityType === "commodity" ? "documents" : "files"
 }
 
 // Three-step upload dialog matching #1411's spec:
@@ -61,11 +81,14 @@ interface FileItem {
 //
 // `linkedEntity` (#1448) preselects a commodity / location / area as
 // the parent of every uploaded file: after the multipart POST returns
-// the new file id, we PUT /files/{id} with `linked_entity_type` +
-// `linked_entity_id` so the file is attached, not orphaned. Linking
-// failure marks the item as failed (since the user's intent was
-// "attach"); a metadata-only failure when not linking stays non-fatal.
-// `"area"` linkage was added under #1531 item 1.
+// the new file id, we POST /files/{id}/links so the file is attached,
+// not orphaned. Linking failure marks the item as failed (since the
+// user's intent was "attach"); a metadata-only failure stays non-fatal.
+//
+// After each upload the dialog asks GET /files/{id}/duplicates. When the
+// group already holds a file with the same content, the progress row
+// offers to attach the existing file instead (or, without a linked
+// entity, to drop the new copy); either way the new copy is deleted.
 //
 // `initialFiles` lets the page-level drop catcher pre-queue files into
 // the dialog so the user doesn't have to drop again — the dialog opens
@@ -117,6 +140,9 @@ export function UploadFilesDialog({
   const [coverTouched, setCoverTouched] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // The upload that became the cover in this batch, so swapping it for an
+  // existing duplicate can move the cover along.
+  const coverTargetRef = useRef<string | null>(null)
 
   const reset = useCallback(() => {
     setStep("select")
@@ -247,6 +273,7 @@ export function UploadFilesDialog({
     // photo flagged `useAsCover`. Only the first one is promoted; the
     // checkbox UI already enforces that at most one is true at a time.
     let coverTarget: string | null = null
+    coverTargetRef.current = null
     for (const item of items) {
       patchItem(item.id, { status: "uploading" })
       try {
@@ -261,40 +288,53 @@ export function UploadFilesDialog({
         const titleChanged = item.title !== defaultTitle(item.file.name)
         const categoryChanged = item.category !== result.file.category
         const tagsChanged = item.tags.length > 0
-        const needsLinking = !!linkedEntity
-        if (titleChanged || categoryChanged || tagsChanged || needsLinking) {
+        if (titleChanged || categoryChanged || tagsChanged) {
           try {
             await updateFile(result.file.id, {
               title: item.title,
               category: item.category,
               ...(tagsChanged ? { tags: item.tags } : {}),
-              ...(linkedEntity
-                ? {
-                    linked_entity_type: linkedEntity.type,
-                    linked_entity_id: linkedEntity.id,
-                  }
-                : {}),
+            })
+          } catch {
+            // Metadata-only failure: the file is on disk; the user can
+            // edit it from the detail sheet later.
+          }
+        }
+        if (linkedEntity) {
+          try {
+            await attachFile(result.file.id, {
+              entityType: linkedEntity.type,
+              entityId: linkedEntity.id,
+              meta: linkMeta(linkedEntity.type, item.category),
             })
           } catch (err) {
-            if (needsLinking) {
-              // Linking is the user's stated intent ("attach files to
-              // this commodity"). If it fails the file ended up as
-              // an orphan on disk — surface that as a per-item failure
-              // so the user can retry from the global Files page
-              // instead of silently believing the attach worked.
-              failed++
-              patchItem(item.id, {
-                status: "failed",
-                error: err instanceof Error ? err.message : String(err),
-              })
-              continue
-            }
-            // Metadata-only failure (no linking requested): file is on
-            // disk; the user can edit it from the detail sheet later.
+            // Linking is the user's stated intent ("attach files to this
+            // commodity"). If it fails the file is a standalone file —
+            // surface that as a per-item failure so the user can attach
+            // it from the Files page instead of believing it worked.
+            failed++
+            patchItem(item.id, {
+              status: "failed",
+              error: err instanceof Error ? err.message : String(err),
+            })
+            continue
           }
         }
         succeeded++
-        patchItem(item.id, { status: "done", uploadedFileId: result.file.id })
+        let duplicate: FileItem["duplicate"]
+        try {
+          const matches = await listFileDuplicates(result.file.id)
+          const first = matches[0]?.file
+          if (first) duplicate = { id: first.id, title: first.title || first.path || first.id }
+        } catch {
+          // The duplicate check is advisory; the upload itself succeeded.
+        }
+        patchItem(item.id, {
+          status: "done",
+          uploadedFileId: result.file.id,
+          duplicate,
+          duplicateState: duplicate ? "open" : undefined,
+        })
         if (
           coverTarget === null &&
           coverEligible &&
@@ -302,6 +342,7 @@ export function UploadFilesDialog({
           item.category === "images"
         ) {
           coverTarget = result.file.id
+          coverTargetRef.current = coverTarget
         }
       } catch (err) {
         failed++
@@ -327,6 +368,38 @@ export function UploadFilesDialog({
     if (coverTarget) {
       onSetCover?.(coverTarget)
     }
+  }
+
+  // useExisting swaps a fresh upload for the file the group already holds:
+  // the existing file is attached to the linked entity (when there is one)
+  // and the new copy is deleted. A cover chosen on the new copy moves to the
+  // existing file.
+  async function useExisting(item: FileItem) {
+    if (!item.duplicate || !item.uploadedFileId) return
+    patchItem(item.id, { duplicateState: "working" })
+    try {
+      if (linkedEntity) {
+        await attachFile(item.duplicate.id, {
+          entityType: linkedEntity.type,
+          entityId: linkedEntity.id,
+          meta: linkMeta(linkedEntity.type, item.category),
+        })
+      }
+      await deleteFile(item.uploadedFileId)
+      if (coverTargetRef.current === item.uploadedFileId) {
+        coverTargetRef.current = item.duplicate.id
+        onSetCover?.(item.duplicate.id)
+      }
+      patchItem(item.id, { duplicateState: "replaced", uploadedFileId: item.duplicate.id })
+    } catch {
+      patchItem(item.id, { duplicateState: "failed" })
+      toast.error(t("files:upload.duplicate.failed"))
+    }
+    invalidate.all()
+  }
+
+  function keepBoth(item: FileItem) {
+    patchItem(item.id, { duplicateState: "kept" })
   }
 
   const totalDone = items.filter((it) => it.status === "done").length
@@ -372,7 +445,13 @@ export function UploadFilesDialog({
             onSetCover={setCoverFlag}
           />
         ) : (
-          <ProgressStep items={items} totalDone={totalDone} />
+          <ProgressStep
+            items={items}
+            totalDone={totalDone}
+            linked={!!linkedEntity}
+            onUseExisting={useExisting}
+            onKeepBoth={keepBoth}
+          />
         )}
 
         <DialogFooter>
@@ -649,9 +728,12 @@ function applyCoverDefaults(
 interface ProgressStepProps {
   items: FileItem[]
   totalDone: number
+  linked: boolean
+  onUseExisting: (item: FileItem) => void
+  onKeepBoth: (item: FileItem) => void
 }
 
-function ProgressStep({ items, totalDone }: ProgressStepProps) {
+function ProgressStep({ items, totalDone, linked, onUseExisting, onKeepBoth }: ProgressStepProps) {
   const { t } = useTranslation()
   return (
     <div className="flex flex-col gap-3">
@@ -681,7 +763,7 @@ function ProgressStep({ items, totalDone }: ProgressStepProps) {
         {items.map((it) => (
           <li
             key={it.id}
-            className="flex items-center gap-2 px-3 py-2 text-sm"
+            className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm"
             // Composite testid: stable per-item identifier + status
             // suffix so Playwright/RTL selectors can match a specific
             // file's progress row without ambiguity. (The earlier
@@ -707,9 +789,67 @@ function ProgressStep({ items, totalDone }: ProgressStepProps) {
                 {t("files:upload.uploadFailed")}
               </span>
             ) : null}
+            {it.duplicate ? (
+              <DuplicateNotice
+                item={it}
+                linked={linked}
+                onUseExisting={() => onUseExisting(it)}
+                onKeepBoth={() => onKeepBoth(it)}
+              />
+            ) : null}
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+interface DuplicateNoticeProps {
+  item: FileItem
+  linked: boolean
+  onUseExisting: () => void
+  onKeepBoth: () => void
+}
+
+// DuplicateNotice is the per-row offer to use the file the group already
+// holds instead of the copy just uploaded.
+function DuplicateNotice({ item, linked, onUseExisting, onKeepBoth }: DuplicateNoticeProps) {
+  const { t } = useTranslation()
+  const title = item.duplicate?.title ?? ""
+  if (item.duplicateState === "replaced") {
+    return (
+      <p className="basis-full text-xs text-muted-foreground" data-testid="files-upload-duplicate-done">
+        {linked
+          ? t("files:upload.duplicate.attached", { title })
+          : t("files:upload.duplicate.removedCopy", { title })}
+      </p>
+    )
+  }
+  if (item.duplicateState === "kept") return null
+  return (
+    <div
+      className="flex basis-full flex-wrap items-center gap-2 rounded-md bg-muted px-2 py-1.5 text-xs"
+      data-testid="files-upload-duplicate"
+    >
+      <span className="flex-1">{t("files:upload.duplicate.found", { title })}</span>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onUseExisting}
+        disabled={item.duplicateState === "working"}
+        data-testid="files-upload-duplicate-use-existing"
+      >
+        {linked ? t("files:upload.duplicate.attachExisting") : t("files:upload.duplicate.removeCopy")}
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={onKeepBoth}
+        disabled={item.duplicateState === "working"}
+        data-testid="files-upload-duplicate-keep-both"
+      >
+        {t("files:upload.duplicate.keepBoth")}
+      </Button>
     </div>
   )
 }

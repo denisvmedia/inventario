@@ -1,17 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { commodityKeys } from "@/features/commodities/keys"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { tagKeys } from "@/features/tags/keys"
 
 import {
+  attachFile,
   bulkDeleteFiles,
   bulkReclassifyFiles,
   deleteFile,
+  detachFile,
   getCategoryCounts,
   getFile,
+  listFileDuplicates,
   listFiles,
   updateFile,
   uploadFile,
+  type AttachFileRequest,
   type BulkDeleteResult,
   type FileCategory,
   type FileCategoryCounts,
@@ -160,4 +165,59 @@ export function useUploadFile() {
 // can fire a single invalidation when the batch finishes.
 export function useInvalidateFiles() {
   return useInvalidate()
+}
+
+// Files of the group with the same content as fileId. The upload dialog asks
+// right after an upload; the result never changes for a stored file, so it is
+// not refetched on focus.
+export function useFileDuplicates(fileId: string | undefined, { enabled = true }: QueryOptions = {}) {
+  const { currentGroup } = useCurrentGroup()
+  const slug = currentGroup?.slug ?? ""
+  return useQuery<ListedFile[]>({
+    queryKey: fileKeys.duplicates(slug, fileId ?? ""),
+    queryFn: ({ signal }) => {
+      if (!fileId) throw new Error("useFileDuplicates called without an id")
+      return listFileDuplicates(fileId, signal)
+    },
+    enabled: enabled && !!fileId,
+    staleTime: Infinity,
+  })
+}
+
+// Attachments change what an entity's Files tab lists and which photo an item
+// shows as its cover, so both the files and the commodities caches refresh.
+function useInvalidateAttachments() {
+  const qc = useQueryClient()
+  const { currentGroup } = useCurrentGroup()
+  const slug = currentGroup?.slug ?? ""
+  return () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: fileKeys.group(slug) }),
+      qc.invalidateQueries({ queryKey: commodityKeys.group(slug) }),
+    ])
+}
+
+interface AttachFileVars extends AttachFileRequest {
+  fileId: string
+}
+
+export function useAttachFile() {
+  const invalidate = useInvalidateAttachments()
+  return useMutation<FileEntity & { id: string }, Error, AttachFileVars>({
+    mutationFn: ({ fileId, ...req }) => attachFile(fileId, req),
+    onSuccess: () => invalidate(),
+  })
+}
+
+interface DetachFileVars {
+  fileId: string
+  linkId: string
+}
+
+export function useDetachFile() {
+  const invalidate = useInvalidateAttachments()
+  return useMutation<FileEntity & { id: string }, Error, DetachFileVars>({
+    mutationFn: ({ fileId, linkId }) => detachFile(fileId, linkId),
+    onSuccess: () => invalidate(),
+  })
 }
