@@ -200,13 +200,18 @@ data — list pagination + filters make manual cache surgery brittle.
 
 ## Pagination, sort, search
 
-The reference is the commodities list — `features/commodities/api.ts` +
-`features/commodities/keys.ts`:
+The reference is the commodities list — `features/commodities/query.ts`,
+`features/commodities/api.ts` and `features/commodities/keys.ts`:
 
-- Options object (`ListCommoditiesOptions`) → URL params via the same
-  shape on both sides.
-- The key factory's `listKeySuffix` serialises the options into a
-  stable suffix, sorting arrays so order doesn't matter.
+- Item filters follow the item query contract
+  ([`devdocs/item-query-contract.md`](../item-query-contract.md)): a
+  `CommodityQuery` is read from and written to the page URL with
+  `parseCommodityQuery` / `writeCommodityQuery`, links to a filtered list
+  come from `commodityListHref`, and `listOptionsToParams` is the one
+  place that writes the API parameters.
+- The key factory's `listKeySuffix` is `listOptionsToParams(opts)`, which
+  sorts set-like lists, so two option objects selecting the same items
+  share a cache entry.
 - `keepPreviousData: true` is **off by default** — turn it on per
   query if you want the previous page to stay rendered while the next
   page loads.

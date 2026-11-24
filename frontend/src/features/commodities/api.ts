@@ -6,6 +6,8 @@
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
+import { listOptionsToParams, type CommoditySearchMatch, type TagMatchMode } from "./query"
+
 // CommodityCover is the resolved cover image for a single commodity
 // (issue #1451 option A — first photo by `created_at`). The BE returns
 // it under `meta.covers[id]` on the list response and `meta.cover` on
@@ -45,6 +47,7 @@ interface CommoditiesListResponse {
     per_page?: number
     total_pages?: number
     covers?: Record<string, CoverPayload>
+    matches?: Record<string, CommoditySearchMatch[]>
   }
 }
 
@@ -118,6 +121,12 @@ export interface ListCommoditiesOptions {
   // with no area ("no location"). The toolbar chip toggles between
   // undefined and true; ignored by the BE when areaId is also set.
   unassigned?: boolean
+  // Tag filter, by slug; see CommodityTagFilter in ./query. noTags cannot
+  // be combined with tags or tagsExclude (the BE answers 400).
+  tags?: string[]
+  tagMode?: TagMatchMode
+  tagsExclude?: string[]
+  noTags?: boolean
   signal?: AbortSignal
 }
 
@@ -133,36 +142,16 @@ function envelope(attrs: Partial<Commodity>) {
 // already carries its own `cover` field; the standalone map is exposed so
 // the insurance report's Location mode can render each item's cover
 // thumbnail without re-deriving from the list rows.
-export async function listCommodities(
-  options: ListCommoditiesOptions = {}
-): Promise<{ commodities: Commodity[]; total: number; covers: Record<string, CommodityCover> }> {
-  const params = new URLSearchParams()
-  if (options.page !== undefined) params.set("page", String(options.page))
-  if (options.perPage !== undefined) params.set("per_page", String(options.perPage))
-  for (const t of options.types ?? []) params.append("type", t)
-  for (const s of options.statuses ?? []) params.append("status", s)
-  if (options.areaId) params.set("area_id", options.areaId)
-  if (options.search?.trim()) params.set("q", options.search.trim())
-  // Always send include_inactive — its absence means "BE default" which
-  // is true (= no filter) for legacy compat. The React list page opts
-  // IN to the active-only view by sending `false`.
-  if (options.includeInactive !== undefined) {
-    params.set("include_inactive", options.includeInactive ? "true" : "false")
-  }
-  if (options.sort) {
-    params.set("sort", options.sortDesc ? `-${options.sort}` : options.sort)
-  }
-  for (const w of options.warrantyStatuses ?? []) params.append("warranty_status", w)
-  if (options.warrantyExpiresBefore?.trim()) {
-    params.set("warranty_expires_before", options.warrantyExpiresBefore.trim())
-  }
-  if (options.lentOut !== undefined) {
-    params.set("lent_out", options.lentOut ? "true" : "false")
-  }
-  // One-way toggle: only emit when on (zero value = no filter), matching
-  // the BE's `unassigned` parser.
-  if (options.unassigned) params.set("unassigned", "true")
-  const qs = params.toString()
+//
+// `matches` carries `meta.matches`: per commodity id, the fields the search
+// text was found in. It is empty when the request has no search text.
+export async function listCommodities(options: ListCommoditiesOptions = {}): Promise<{
+  commodities: Commodity[]
+  total: number
+  covers: Record<string, CommodityCover>
+  matches: Record<string, CommoditySearchMatch[]>
+}> {
+  const qs = listOptionsToParams(options).toString()
   const path = qs ? `/commodities?${qs}` : "/commodities"
   const body = await http.get<CommoditiesListResponse>(path, { signal: options.signal })
   const coverPayloads = body.meta?.covers ?? {}
@@ -179,6 +168,7 @@ export async function listCommodities(
     })),
     total: body.meta?.commodities ?? body.data?.length ?? 0,
     covers,
+    matches: body.meta?.matches ?? {},
   }
 }
 

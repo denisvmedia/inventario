@@ -427,7 +427,9 @@
     "headerStatus": "Status",
     "headerValue": "Value",
     "heading": "Items",
-    "searchPlaceholder": "Search by name, short name, or asset ID…",
+    "invalidQueryDescription": "The link asks for a filter the item list cannot apply ({{parameter}}). Clear the filters to see your items.",
+    "invalidQueryTitle": "This filter is not supported",
+    "searchPlaceholder": "Search by name, serial or part number, tag, notes or asset ID…",
     "selectAll": "Select all visible",
     "subtitle_one": "{{count}} item in this group",
     "subtitle_other": "{{count}} items in this group",
@@ -447,6 +449,21 @@
     "sectionBasics": "Basics",
     "sectionExtras": "Extras",
     "sectionPurchase": "Purchase"
+  },
+  "searchMatch": {
+    "field": {
+      "asset_id": "Asset ID",
+      "comments": "Notes",
+      "extra_serial_numbers": "Serial number",
+      "name": "Name",
+      "part_numbers": "Part number",
+      "serial_number": "Serial number",
+      "short_name": "Short name",
+      "status_note": "Status note",
+      "tags": "Tag",
+      "warranty_notes": "Warranty notes"
+    },
+    "text": "{{field}}: {{value}}"
   },
   "sort": {
     "count": "Quantity",

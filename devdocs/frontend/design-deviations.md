@@ -183,6 +183,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — asked to make the Items selection panel match the Files one.
 - **Reversion plan**: Permanent unless the upstream mock adopts a richer mass-action pattern; reconcile both surfaces together via the shared component if it does.
 
+#### 2026-11-25 — Search match line on item cards, list rows and search results
+
+- **Issue/PR**: #2800 / PR (pending)
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) grid card header holds the title and the area line only; the table name cell holds name and short name. The search page is not in the mock (its result rows follow the [`CommandPalette`](../../design-mocks/src/components/CommandPalette.tsx) title-and-subtitle row). None of them says why an item matched a search.
+- **Reality**: With a search active, `frontend/src/components/items/SearchMatchHint.tsx` adds one muted `text-[11px]` truncated line under the area line of an items grid card, under the short name in the items table name cell, and under the short name in the area page's items grid and list (`AreaItemsPanel`). It reads `Serial number: SN-1234`, `Tag: Power tools` (the tag's label, not its slug) or a note excerpt. The search page's commodity subtitle shows the same text in place of `A-0042 · <short name>` when there is a match. Nothing is added when the name matched, since the title already shows it. The items search placeholder (items list and area items panel) reads "Search by name, serial or part number, tag, notes or asset ID…".
+- **Why**: not present in mock. The issue asks that a result say which field matched, "so a hit on a serial number is not a mystery".
+- **Approved by**: user (explicit) — pre-approved for #2800 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` shows match context on results.
+
+#### 2026-11-25 — Items list: alert for a filter the server refuses
+
+- **Issue/PR**: #2800 / PR (pending)
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) has no error state for the list; the app shows a generic destructive `Alert` ("Could not load items") for any failed load.
+- **Reality**: When `GET /commodities` answers 400 with `code: "query.invalid_parameter"` (a hand-edited or outdated link), `CommoditiesListPage` shows a destructive `Alert` titled "This filter is not supported" that names the parameter and carries an outline **Clear filters** button, instead of the generic load error. Fallback pattern: the destructive `Alert` in [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx).
+- **Why**: not present in mock. The query contract of epic #2811, which #2800 implements, requires that unsupported filters fail clearly instead of being ignored; the page has to tell the user which part of the link it cannot apply and how to get back to a working list.
+- **Approved by**: user (explicit) — pre-approved for #2800 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Permanent until the mock defines list error states.
+
 ### Dashboard / Overview
 
 #### 2026-05-10 — Stat-card grid: 6 inventory metrics in a single `lg:grid-cols-3` block

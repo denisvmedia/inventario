@@ -4,6 +4,7 @@
 // because the shape varies by `type`. toResource wraps each row into the
 // `{ id, type, attributes }` shape the consumers read, and passes rows
 // that already carry `attributes` through unchanged.
+import type { CommoditySearchMatch } from "@/features/commodities/query"
 import { http, HttpError } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -31,11 +32,19 @@ export interface SearchPage<TAttrs = Record<string, unknown>> {
   // page tell "no matches" apart from "this resource isn't searchable
   // yet" without leaking transport errors into TanStack's `error` slot.
   unavailable: boolean
+  // Per result id, the fields the query was found in (`meta.matches`).
+  // Only the commodities search fills it.
+  matches: Record<string, CommoditySearchMatch[]>
 }
 
 interface RawSearchResponse {
   data?: unknown
-  meta?: { total?: number; entity_type?: string; query?: string }
+  meta?: {
+    total?: number
+    entity_type?: string
+    query?: string
+    matches?: Record<string, CommoditySearchMatch[]>
+  }
 }
 
 export interface SearchOptions {
@@ -67,7 +76,7 @@ export async function search<TAttrs>(
   opts: SearchOptions
 ): Promise<SearchPage<TAttrs>> {
   const trimmed = query.trim()
-  if (!trimmed) return { results: [], total: 0, unavailable: false }
+  if (!trimmed) return { results: [], total: 0, unavailable: false, matches: {} }
   const params = new URLSearchParams()
   params.set("q", trimmed)
   params.set("type", opts.type)
@@ -81,10 +90,10 @@ export async function search<TAttrs>(
       ? body.data.map((row) => toResource<TAttrs>(row, opts.type))
       : []
     const total = body.meta?.total ?? list.length
-    return { results: list, total, unavailable: false }
+    return { results: list, total, unavailable: false, matches: body.meta?.matches ?? {} }
   } catch (err) {
     if (err instanceof HttpError && err.status === 501) {
-      return { results: [], total: 0, unavailable: true }
+      return { results: [], total: 0, unavailable: true, matches: {} }
     }
     throw err
   }

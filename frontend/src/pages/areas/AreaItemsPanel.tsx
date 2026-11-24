@@ -22,6 +22,7 @@ import {
   TrendingUp,
 } from "lucide-react"
 
+import { SearchMatchHint } from "@/components/items/SearchMatchHint"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -54,6 +55,8 @@ import {
   type CommodityWarrantyStatus,
 } from "@/features/commodities/constants"
 import type { Commodity } from "@/features/commodities/api"
+import { primarySearchMatch, type CommoditySearchMatch } from "@/features/commodities/query"
+import { useTagLabel } from "@/features/tags/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { formatCurrency } from "@/lib/intl"
 import { cn } from "@/lib/utils"
@@ -170,6 +173,7 @@ export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
 
   // ---- Derived ----------------------------------------------------------
   const allRows = list.data?.commodities ?? []
+  const matches = list.data?.matches ?? {}
   // Client-side warranty-bucket filter; same approach as
   // CommoditiesListPage. Switch to server-side `warranty_status=` once
   // both lists consolidate filter state.
@@ -351,9 +355,21 @@ export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
       ) : rows.length === 0 ? (
         <ItemsEmpty hasFilters={hasFilters} onClear={clearFilters} />
       ) : viewMode === "grid" ? (
-        <Grid rows={rows} onPreview={openCommodityInSheet} currency={currency} slug={slug} />
+        <Grid
+          rows={rows}
+          onPreview={openCommodityInSheet}
+          currency={currency}
+          slug={slug}
+          matches={matches}
+        />
       ) : (
-        <List_ rows={rows} onPreview={openCommodityInSheet} currency={currency} slug={slug} />
+        <List_
+          rows={rows}
+          onPreview={openCommodityInSheet}
+          currency={currency}
+          slug={slug}
+          matches={matches}
+        />
       )}
 
       {totalPages > 1 ? (
@@ -641,10 +657,13 @@ interface RowListProps {
   onPreview: (id: string) => void
   currency: string
   slug?: string
+  // Per commodity id, why it matched the search text (meta.matches).
+  matches: Record<string, CommoditySearchMatch[]>
 }
 
-function List_({ rows, onPreview, currency, slug }: RowListProps) {
+function List_({ rows, onPreview, currency, slug, matches }: RowListProps) {
   const { t } = useTranslation()
+  const tagLabel = useTagLabel("commodity")
   if (!slug) return null
   return (
     <Card className="overflow-hidden p-0" data-testid="area-detail-items-list">
@@ -705,6 +724,10 @@ function List_({ rows, onPreview, currency, slug }: RowListProps) {
                     {row.short_name ? (
                       <p className="truncate text-xs text-muted-foreground">{row.short_name}</p>
                     ) : null}
+                    <SearchMatchHint
+                      match={primarySearchMatch(matches[row.id])}
+                      tagLabel={tagLabel}
+                    />
                   </div>
                   {showStatusPill && status ? (
                     <span
@@ -730,8 +753,9 @@ function List_({ rows, onPreview, currency, slug }: RowListProps) {
   )
 }
 
-function Grid({ rows, onPreview, currency, slug }: RowListProps) {
+function Grid({ rows, onPreview, currency, slug, matches }: RowListProps) {
   const { t } = useTranslation()
+  const tagLabel = useTagLabel("commodity")
   if (!slug) return null
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="area-detail-items-grid">
@@ -809,6 +833,10 @@ function Grid({ rows, onPreview, currency, slug }: RowListProps) {
                   {row.short_name ? (
                     <p className="truncate text-xs text-muted-foreground">{row.short_name}</p>
                   ) : null}
+                  <SearchMatchHint
+                    match={primarySearchMatch(matches[row.id])}
+                    tagLabel={tagLabel}
+                  />
                 </CardHeader>
                 <CardContent>
                   <p className="text-right text-sm font-medium">
