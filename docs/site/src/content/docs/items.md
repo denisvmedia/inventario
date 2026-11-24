@@ -236,6 +236,11 @@ scroll. The arrow at the top also leaves the form. If you have unsaved changes,
 Inventario asks whether to **Save** them, **Discard** them, or **Keep editing**.
 Reloading or closing the tab asks your browser to confirm.
 
+:::caution
+The browser's own **Back** button does not ask first. Unsaved changes are lost
+if you use it.
+:::
+
 Links, extra serial numbers, part numbers, status, and the draft switch are not
 on this form. **All fields** opens the step-by-step dialog with everything you
 have typed so far.
