@@ -235,6 +235,60 @@ jobs:
           print("superuser DSN: only the setup Job has it")
           EOF
 
+      - name: Verify the OAuth settings
+        # The OAuth knobs go to the ConfigMap; the client ids, secrets and the
+        # state key go to the Secret, and only when set (#2786).
+        run: |
+          set -euo pipefail
+
+          render() {
+            helm template inventario helm/inventario \
+              --set-string secrets.dbDsn='postgres://user:pass@pg-host:5432/inventario?sslmode=require' \
+              --set-string secrets.jwtSecret='testtesttesttesttesttesttesttest' \
+              --set-string secrets.fileSigningKey='testtesttesttesttesttesttesttest' \
+              --set setupJob.initData.adminPassword=test \
+              --set-string app.publicUrl='https://inventario.example' \
+              "$@"
+          }
+          render > /tmp/inventario-oauth-off.yaml
+          render \
+            --set-string oauth.oidc.issuerUrl='https://auth.example' \
+            --set-string oauth.oidc.displayName='Authelia' \
+            --set-string secrets.oauthOidcClientId='inventario' \
+            --set-string secrets.oauthOidcClientSecret='oidc-secret' \
+            --set-string secrets.oauthStateKey='statestatestatestatestatestatestate' \
+            > /tmp/inventario-oauth-on.yaml
+
+          python3 - /tmp/inventario-oauth-off.yaml /tmp/inventario-oauth-on.yaml <<'EOF'
+          import base64
+          import sys
+
+          def doc(path, kind, name):
+              docs = [d for d in open(path).read().split("\n---\n") if f"\nkind: {kind}\n" in d and f"name: {name}\n" in d]
+              assert len(docs) == 1, f"{path}: expected one {kind} {name}, found {len(docs)}"
+              return docs[0]
+
+          off_cm = doc(sys.argv[1], "ConfigMap", "inventario-inventario-config")
+          assert 'INVENTARIO_RUN_OAUTH_REDIRECT_BASE_URL: "https://inventario.example"' in off_cm, "redirect base URL does not default to app.publicUrl"
+          assert 'INVENTARIO_RUN_OAUTH_OIDC_ISSUER_URL: ""' in off_cm, "issuer is not empty by default"
+          off_secret = doc(sys.argv[1], "Secret", "inventario-inventario-secret")
+          assert "INVENTARIO_RUN_OAUTH_" not in off_secret, "the Secret carries OAuth keys although none is set"
+
+          on_cm = doc(sys.argv[2], "ConfigMap", "inventario-inventario-config")
+          assert 'INVENTARIO_RUN_OAUTH_OIDC_ISSUER_URL: "https://auth.example"' in on_cm, "issuer missing"
+          assert 'INVENTARIO_RUN_OAUTH_OIDC_DISPLAY_NAME: "Authelia"' in on_cm, "display name missing"
+          on_secret = doc(sys.argv[2], "Secret", "inventario-inventario-secret")
+          for key, value in {
+              "INVENTARIO_RUN_OAUTH_OIDC_CLIENT_ID": "inventario",
+              "INVENTARIO_RUN_OAUTH_OIDC_CLIENT_SECRET": "oidc-secret",
+              "INVENTARIO_RUN_OAUTH_STATE_KEY": "statestatestatestatestatestatestate",
+          }.items():
+              want = f'{key}: "{base64.b64encode(value.encode()).decode()}"'
+              assert want in on_secret, f"the Secret lacks {key}"
+          assert "INVENTARIO_RUN_OAUTH_GOOGLE_" not in on_secret, "the Secret carries Google keys that were not set"
+          print("OAuth: knobs in the ConfigMap, credentials in the Secret only when set")
+          EOF
+
       - name: Verify the admin email can come from the Secret
         # A SETUP_ADMIN_EMAIL key in the Secret wins over adminEmail, in both
         # places that run the init-data script: the setup Job, and the

@@ -4072,6 +4072,7 @@ definitions:
     - magic_link
     - oauth_google
     - oauth_github
+    - oauth_oidc
     - oauth_other
     type: string
     x-enum-varnames:
@@ -4079,6 +4080,7 @@ definitions:
     - LoginMethodMagicLink
     - LoginMethodOAuthGoogle
     - LoginMethodOAuthGitHub
+    - LoginMethodOAuthOIDC
     - LoginMethodOAuthOther
   models.LoginOutcome:
     enum:
@@ -5950,7 +5952,7 @@ paths:
       description: Removes the identity row mapping the caller to the named provider.
         Refused with 409 if it is the caller's only remaining sign-in method.
       parameters:
-      - description: Provider name (google|github)
+      - description: Provider name (google|github|oidc)
         in: path
         name: provider
         required: true
@@ -5980,7 +5982,7 @@ paths:
         auto-links a verified-email match, prompts a password sign-in (unverified email), or creates a new
         account. Redirects to the FE path the state carried.
       parameters:
-      - description: Provider name (google|github)
+      - description: Provider name (google|github|oidc)
         in: path
         name: provider
         required: true
@@ -6019,7 +6021,7 @@ paths:
         Authenticated variant of /start: the resulting callback links the new identity to the caller's user rather than creating a fresh account.
         The caller is identified from the refresh-token cookie (or an Authorization Bearer header); an absent or expired session 302s to /login.
       parameters:
-      - description: Provider name (google|github)
+      - description: Provider name (google|github|oidc)
         in: path
         name: provider
         required: true
@@ -6040,6 +6042,11 @@ paths:
           description: Internal error generating the PKCE/state token
           schema:
             type: string
+        "502":
+          description: The OpenID Connect provider's discovery document could not
+            be fetched
+          schema:
+            type: string
       summary: Start link-an-additional-OAuth-provider flow
       tags:
       - oauth
@@ -6049,7 +6056,7 @@ paths:
         The handler signs short-lived state + PKCE pair and 302s the browser to the
         provider's consent screen.
       parameters:
-      - description: Provider name (google|github)
+      - description: Provider name (google|github|oidc)
         in: path
         name: provider
         required: true
@@ -6067,6 +6074,11 @@ paths:
             type: string
         "500":
           description: Internal error generating state token
+          schema:
+            type: string
+        "502":
+          description: The OpenID Connect provider's discovery document could not
+            be fetched (sign-in redirects to /login?oauth_error=provider instead)
           schema:
             type: string
       summary: Start OAuth sign-in flow
@@ -6092,8 +6104,9 @@ paths:
       - oauth
   /auth/oauth/providers:
     get:
-      description: Returns the providers operators have configured (Google, GitHub).
-        Empty list when OAuth is not configured.
+      description: Returns the providers operators have configured (Google, GitHub,
+        and one OpenID Connect provider named "oidc" whose display_name the operator
+        sets). Empty list when OAuth is not configured.
       produces:
       - application/json
       responses:

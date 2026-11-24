@@ -680,6 +680,38 @@ aivision:
   publicScanEnabled: false
 
 # ============================================================
+# Sign-in with Google, GitHub or an OpenID Connect provider (#1394, #2786).
+# A provider is on when its client id and client secret are in the Secret
+# (secrets.oauth* below, or the INVENTARIO_RUN_OAUTH_* keys in
+# secrets.existingSecret). The OpenID Connect provider also needs
+# oauth.oidc.issuerUrl. Nothing here turns a provider on by itself.
+# ============================================================
+oauth:
+  # Public base URL the provider redirect URIs are built from, e.g.
+  # https://inventario.example.com gives
+  # https://inventario.example.com/api/v1/auth/oauth/<provider>/callback.
+  # Empty → the same URL as app.publicUrl (see the inventario.publicUrl helper).
+  # Env: INVENTARIO_RUN_OAUTH_REDIRECT_BASE_URL
+  redirectBaseUrl: ""
+
+  oidc:
+    # Issuer of a self-hosted OpenID Connect provider (Authelia, Keycloak,
+    # Authentik, …), e.g. https://auth.example.com. The endpoints are read
+    # from {issuerUrl}/.well-known/openid-configuration. If the provider is
+    # down at startup, the app starts anyway and retries on the next sign-in.
+    # Env: INVENTARIO_RUN_OAUTH_OIDC_ISSUER_URL
+    issuerUrl: ""
+    # Label of the sign-in button, e.g. "Authelia". Empty → "Single sign-on".
+    # Env: INVENTARIO_RUN_OAUTH_OIDC_DISPLAY_NAME
+    displayName: ""
+    # Optional: the issuer URL as the app pods reach it, when issuerUrl works
+    # in the browser but not from inside the cluster (an in-cluster proxy, a
+    # Service address). Discovery, token and userinfo requests go there; the
+    # browser still goes to issuerUrl. Empty → the pods use issuerUrl.
+    # Env: INVENTARIO_RUN_OAUTH_OIDC_BACKCHANNEL_URL
+    backchannelUrl: ""
+
+# ============================================================
 # Extra envFrom sources appended verbatim to every app container's
 # `envFrom` (combined, apiserver, and worker Deployments). Each entry is a
 # standard EnvFromSource (secretRef / configMapRef). Use to inject env from
@@ -745,6 +777,10 @@ secrets:
   #   INVENTARIO_RUN_AI_VISION_OPENAI_API_KEY    (required when aivision.provider=openai)
   #   INVENTARIO_RUN_METRICS_TOKEN                   (optional; bearer token for GET /metrics — strongly recommended in production, see metrics.token)
   #   SENTRY_DSN                                 (optional; BARE name — NOT INVENTARIO_RUN_ prefixed; enables Sentry error tracking when set, see sentry.dsn)
+  #   INVENTARIO_RUN_OAUTH_STATE_KEY             (optional; min 32 chars; set it when more than one pod serves the API, see secrets.oauthStateKey)
+  #   INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_ID / INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_SECRET (optional; both turn on Google sign-in)
+  #   INVENTARIO_RUN_OAUTH_GITHUB_CLIENT_ID / INVENTARIO_RUN_OAUTH_GITHUB_CLIENT_SECRET (optional; both turn on GitHub sign-in)
+  #   INVENTARIO_RUN_OAUTH_OIDC_CLIENT_ID / INVENTARIO_RUN_OAUTH_OIDC_CLIENT_SECRET     (optional; with oauth.oidc.issuerUrl, turn on OpenID Connect sign-in)
   #   SETUP_ADMIN_PASSWORD                       (required by job-setup if setupJob.enabled)
   #   SETUP_ADMIN_EMAIL                          (optional; overrides setupJob.initData.adminEmail)
   #   BACKOFFICE_USER_PASSWORD                   (required by setup/init-data Job when backofficeUser.enabled; maps to setupJob.initData.backofficeUserPassword; min 8 chars + upper + lower + digit)
@@ -805,6 +841,20 @@ secrets:
   # secrets.existingSecret is set (supply INVENTARIO_RUN_METRICS_TOKEN there instead).
   # Env: INVENTARIO_RUN_METRICS_TOKEN
   metricsToken: ""
+
+  # OAuth sign-in (#1394, #2786). Each provider is on when both its client id
+  # and client secret are set; the OpenID Connect one also needs
+  # oauth.oidc.issuerUrl. Keys are written to the Secret only when set.
+  # oauthStateKey signs the short-lived sign-in state. Empty → each pod
+  # generates its own at startup, so set it (openssl rand -hex 32) when more
+  # than one pod serves the API, or a sign-in that returns to another pod fails.
+  oauthStateKey: ""              # Env: INVENTARIO_RUN_OAUTH_STATE_KEY
+  oauthGoogleClientId: ""        # Env: INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_ID
+  oauthGoogleClientSecret: ""    # Env: INVENTARIO_RUN_OAUTH_GOOGLE_CLIENT_SECRET
+  oauthGithubClientId: ""        # Env: INVENTARIO_RUN_OAUTH_GITHUB_CLIENT_ID
+  oauthGithubClientSecret: ""    # Env: INVENTARIO_RUN_OAUTH_GITHUB_CLIENT_SECRET
+  oauthOidcClientId: ""          # Env: INVENTARIO_RUN_OAUTH_OIDC_CLIENT_ID
+  oauthOidcClientSecret: ""      # Env: INVENTARIO_RUN_OAUTH_OIDC_CLIENT_SECRET
 
   # S3/MinIO credentials (required when app.uploadLocation uses s3://)
   # Automatically set from demo.minio.* when demo.minio.enabled=true.

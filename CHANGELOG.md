@@ -10,6 +10,17 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ## [Unreleased]
 
+### Added
+
+- Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
+  Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
+  `OAUTH_OIDC_CLIENT_SECRET` and, for the button, `OAUTH_OIDC_DISPLAY_NAME`;
+  the endpoints come from the issuer's discovery document.
+  `OAUTH_OIDC_BACKCHANNEL_URL` covers a server that cannot reach the issuer's
+  public address. The Helm chart gets `oauth.*` values and `secrets.oauth*`
+  keys for all three providers. Setup is described on the new "Sign-in
+  providers" page of the user guide (#2786).
+
 ## [0.2.2] - 2026-11-23
 
 ### Added

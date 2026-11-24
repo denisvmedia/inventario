@@ -98,4 +98,33 @@ describe("<LoginHistoryPage />", () => {
       expect(screen.getByTestId("login-history-failed-banner")).toBeInTheDocument()
     )
   })
+
+  // #2786 — a sign-in through the OpenID Connect provider is labeled as
+  // single sign-on, not with the generic OAuth fallback.
+  it("labels an OpenID Connect sign-in as single sign-on", async () => {
+    server.use(
+      meHandler,
+      groupsHandler,
+      msw.get(api("/users/me/login-history"), () =>
+        HttpResponse.json({
+          events: [
+            {
+              id: "ev-oidc",
+              created_at: "2026-05-14T07:55:00Z",
+              email: "alex@example.com",
+              outcome: "ok",
+              method: "oauth_oidc",
+              ip_address: "203.0.113.0/24",
+              user_agent: "Mozilla/5.0 (Macintosh) Chrome/120.0",
+            },
+          ],
+          failed_last_7d: 0,
+        })
+      )
+    )
+    renderPage()
+    const row = await screen.findByTestId("login-history-row")
+    expect(row).toHaveTextContent(/Single sign-on/)
+    expect(row).not.toHaveTextContent(/OAuth/)
+  })
 })

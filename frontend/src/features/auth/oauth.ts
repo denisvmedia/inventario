@@ -18,7 +18,9 @@ import { authKeys } from "./keys"
 
 // Provider as the BE emits it on the wire. Display name is human copy;
 // `name` is the URL token used in /api/v1/auth/oauth/{name}/start.
-export type OAuthProviderName = "google" | "github"
+// "oidc" is the operator-configured OpenID Connect provider (#2786); its
+// display name ("Authelia", "Keycloak", …) comes from the server config.
+export type OAuthProviderName = "google" | "github" | "oidc"
 
 export interface OAuthProviderEntry {
   name: OAuthProviderName
@@ -57,7 +59,7 @@ function adaptProviderList(body: OAuthProviderListResponseWire): OAuthProviderEn
   return rows
     .map((row): OAuthProviderEntry | null => {
       const name = row.name?.toLowerCase()
-      if (name !== "google" && name !== "github") return null
+      if (name !== "google" && name !== "github" && name !== "oidc") return null
       return { name, displayName: row.display_name ?? row.name ?? name }
     })
     .filter((row): row is OAuthProviderEntry => row !== null)

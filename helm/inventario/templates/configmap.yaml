@@ -85,6 +85,13 @@ data:
   # Public, unauthenticated photo-scan endpoint (#1988). Default false; spends
   # real vendor tokens with no auth wall — opt in deliberately.
   INVENTARIO_RUN_PUBLIC_AI_VISION_SCAN_ENABLED: {{ .Values.aivision.publicScanEnabled | quote }}
+  # OAuth sign-in (#1394, #2786). Non-secret knobs; the client ids, secrets
+  # and the state key live in the Secret (templates/secret.yaml). No provider
+  # is on until its client id and secret are there. See values.yaml `oauth:`.
+  INVENTARIO_RUN_OAUTH_REDIRECT_BASE_URL: {{ .Values.oauth.redirectBaseUrl | default (include "inventario.publicUrl" .) | quote }}
+  INVENTARIO_RUN_OAUTH_OIDC_ISSUER_URL: {{ .Values.oauth.oidc.issuerUrl | quote }}
+  INVENTARIO_RUN_OAUTH_OIDC_DISPLAY_NAME: {{ .Values.oauth.oidc.displayName | quote }}
+  INVENTARIO_RUN_OAUTH_OIDC_BACKCHANNEL_URL: {{ .Values.oauth.oidc.backchannelUrl | quote }}
   # Sentry error tracking (#844, PR #2183). ⚠️ BARE names — the app reads these
   # via cleanenv.ReadEnv with NO prefix, so they are NOT under INVENTARIO_RUN_
   # (the only `run`-config divergence; emitted bare like AWS_REGION/TZ). The DSN

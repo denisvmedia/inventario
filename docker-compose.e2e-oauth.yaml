@@ -57,3 +57,13 @@ services:
       INVENTARIO_RUN_OAUTH_GITHUB_TOKEN_URL_OVERRIDE: "http://host.docker.internal:${OAUTH_STUB_PORT:-4444}/gh/token"
       INVENTARIO_RUN_OAUTH_GITHUB_USER_URL_OVERRIDE: "http://host.docker.internal:${OAUTH_STUB_PORT:-4444}/gh/user"
       INVENTARIO_RUN_OAUTH_GITHUB_USER_EMAILS_URL_OVERRIDE: "http://host.docker.internal:${OAUTH_STUB_PORT:-4444}/gh/user/emails"
+      # OpenID Connect (#2786). The issuer is the browser-facing address; the
+      # backend reaches the same stub through the back channel, the way a pod
+      # reaches an identity provider through an in-cluster proxy. The CI step
+      # that starts the stub sets OAUTH_STUB_OIDC_ISSUER to the same issuer,
+      # so the discovery document matches it.
+      INVENTARIO_RUN_OAUTH_OIDC_ISSUER_URL: "http://localhost:${OAUTH_STUB_PORT:-4444}/oidc"
+      INVENTARIO_RUN_OAUTH_OIDC_BACKCHANNEL_URL: "http://host.docker.internal:${OAUTH_STUB_PORT:-4444}/oidc"
+      INVENTARIO_RUN_OAUTH_OIDC_CLIENT_ID: "stub-oidc-client-id"
+      INVENTARIO_RUN_OAUTH_OIDC_CLIENT_SECRET: "stub-oidc-client-secret"
+      INVENTARIO_RUN_OAUTH_OIDC_DISPLAY_NAME: "Stub SSO"

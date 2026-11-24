@@ -71,6 +71,19 @@ async function maybeStartOAuthStub(): Promise<Record<string, string>> {
     INVENTARIO_RUN_OAUTH_GITHUB_TOKEN_URL_OVERRIDE: `${stubURL}/gh/token`,
     INVENTARIO_RUN_OAUTH_GITHUB_USER_URL_OVERRIDE: `${stubURL}/gh/user`,
     INVENTARIO_RUN_OAUTH_GITHUB_USER_EMAILS_URL_OVERRIDE: `${stubURL}/gh/user/emails`,
+    // OpenID Connect leg (#2786). No override: the provider reads its
+    // endpoints from the stub's discovery document, as it would from a
+    // real Authelia or Keycloak. Locally the backend and the browser both
+    // reach the stub at the same address, so no back channel is needed.
+    INVENTARIO_RUN_OAUTH_OIDC_ISSUER_URL:
+      process.env.INVENTARIO_RUN_OAUTH_OIDC_ISSUER_URL ?? `${stubURL}/oidc`,
+    INVENTARIO_RUN_OAUTH_OIDC_CLIENT_ID:
+      process.env.INVENTARIO_RUN_OAUTH_OIDC_CLIENT_ID ?? "stub-oidc-client-id",
+    INVENTARIO_RUN_OAUTH_OIDC_CLIENT_SECRET:
+      process.env.INVENTARIO_RUN_OAUTH_OIDC_CLIENT_SECRET ??
+      "stub-oidc-client-secret",
+    INVENTARIO_RUN_OAUTH_OIDC_DISPLAY_NAME:
+      process.env.INVENTARIO_RUN_OAUTH_OIDC_DISPLAY_NAME ?? "Stub SSO",
     // Test-only tenant override (#1851). When the OAuth stub is up the
     // cross-tenant Playwright spec needs to drive callbacks against a
     // second tenant without provisioning per-tenant DNS or a multi-

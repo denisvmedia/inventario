@@ -111,4 +111,46 @@ describe("<OAuthRow />", () => {
     // sanitizeRedirectPath collapses `https://…` to `/`.
     expect(assignSpy).toHaveBeenCalledWith("/api/v1/auth/oauth/github/start?redirect=%2F")
   })
+
+  // #2786 — the OpenID Connect provider's button carries the name the
+  // operator configured, not a translated brand label.
+  it("labels the OpenID Connect button with the server's display name and starts its flow", async () => {
+    server.use(
+      msw.get(api("/auth/oauth/providers"), () =>
+        HttpResponse.json({
+          providers: [
+            { name: "google", display_name: "Google" },
+            { name: "oidc", display_name: "Authelia" },
+          ],
+        })
+      )
+    )
+    const assignSpy = vi.fn()
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...window.location, assign: assignSpy },
+    })
+    renderRow()
+    const btn = await screen.findByTestId("oauth-oidc-button")
+    expect(btn).toHaveTextContent("Authelia")
+    expect(btn.querySelector("svg")).not.toBeNull()
+    await userEvent.setup().click(btn)
+    expect(assignSpy).toHaveBeenCalledWith("/api/v1/auth/oauth/oidc/start?redirect=%2F")
+  })
+
+  it("ignores a provider name it does not know", async () => {
+    server.use(
+      msw.get(api("/auth/oauth/providers"), () =>
+        HttpResponse.json({
+          providers: [
+            { name: "google", display_name: "Google" },
+            { name: "twitter", display_name: "Twitter" },
+          ],
+        })
+      )
+    )
+    renderRow()
+    expect(await screen.findByTestId("oauth-google-button")).toBeInTheDocument()
+    expect(screen.queryByTestId("oauth-twitter-button")).not.toBeInTheDocument()
+  })
 })

@@ -80,6 +80,22 @@ type Provider interface {
 	Exchange(ctx context.Context, code, codeVerifier string) (Profile, error)
 }
 
+// DisplayNamer is implemented by a provider whose button label is set by
+// the operator (the OpenID Connect provider, #2786). Providers without it
+// get a fixed label in the API layer.
+type DisplayNamer interface {
+	DisplayName() string
+}
+
+// Preparer is implemented by a provider that needs a network round-trip
+// before it can build an authorization URL (the OpenID Connect provider
+// fetches its discovery document). The start handler calls Prepare before
+// AuthCodeURL and reports a failure to the user instead of redirecting to
+// an empty URL.
+type Preparer interface {
+	Prepare(ctx context.Context) error
+}
+
 // Registry is the set of OAuth providers enabled in this deployment.
 // Bootstrap registers each provider for which the operator supplied a
 // (client_id, client_secret, redirect_base_url) triple; providers without

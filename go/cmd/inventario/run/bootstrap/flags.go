@@ -159,4 +159,9 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.OAuthGitHubClientSecret, "oauth-github-client-secret", cfg.OAuthGitHubClientSecret, "OAuth client secret for GitHub sign-in (#1394)")
 	flags.StringVar(&cfg.OAuthRedirectBaseURL, "oauth-redirect-base-url", cfg.OAuthRedirectBaseURL, "Public base URL used to build provider redirect URIs (e.g., https://app.inventario.example); required for any OAuth provider")
 	flags.StringVar(&cfg.OAuthStateKey, "oauth-state-key", cfg.OAuthStateKey, "OAuth state signing key (minimum 32 characters, auto-generated if not provided)")
+	flags.StringVar(&cfg.OAuthOIDCIssuerURL, "oauth-oidc-issuer-url", cfg.OAuthOIDCIssuerURL, "Issuer URL of an OpenID Connect provider for sign-in (#2786), e.g. https://auth.example.com; empty disables it")
+	flags.StringVar(&cfg.OAuthOIDCClientID, "oauth-oidc-client-id", cfg.OAuthOIDCClientID, "OAuth client id registered at the OpenID Connect provider (#2786)")
+	flags.StringVar(&cfg.OAuthOIDCClientSecret, "oauth-oidc-client-secret", cfg.OAuthOIDCClientSecret, "OAuth client secret registered at the OpenID Connect provider (#2786)")
+	flags.StringVar(&cfg.OAuthOIDCBackchannelURL, "oauth-oidc-backchannel-url", cfg.OAuthOIDCBackchannelURL, "Issuer URL as this server reaches it, when the public issuer address works only in the browser (#2786)")
+	flags.StringVar(&cfg.OAuthOIDCDisplayName, "oauth-oidc-display-name", cfg.OAuthOIDCDisplayName, "Label of the OpenID Connect sign-in button, e.g. Authelia (#2786); empty means \"Single sign-on\"")
 }

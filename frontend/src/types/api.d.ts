@@ -2673,7 +2673,7 @@ export type paths = {
         };
         /**
          * List OAuth providers enabled in this deployment
-         * @description Returns the providers operators have configured (Google, GitHub). Empty list when OAuth is not configured.
+         * @description Returns the providers operators have configured (Google, GitHub, and one OpenID Connect provider named "oidc" whose display_name the operator sets). Empty list when OAuth is not configured.
          */
         get: {
             parameters: {
@@ -2722,7 +2722,7 @@ export type paths = {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description Provider name (google|github) */
+                    /** @description Provider name (google|github|oidc) */
                     provider: string;
                 };
                 cookie?: never;
@@ -2793,7 +2793,7 @@ export type paths = {
                 };
                 header?: never;
                 path: {
-                    /** @description Provider name (google|github) */
+                    /** @description Provider name (google|github|oidc) */
                     provider: string;
                 };
                 cookie?: never;
@@ -2864,7 +2864,7 @@ export type paths = {
                 };
                 header?: never;
                 path: {
-                    /** @description Provider name (google|github) */
+                    /** @description Provider name (google|github|oidc) */
                     provider: string;
                 };
                 cookie?: never;
@@ -2889,6 +2889,15 @@ export type paths = {
                 };
                 /** @description Internal error generating the PKCE/state token */
                 500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+                /** @description The OpenID Connect provider's discovery document could not be fetched */
+                502: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2925,7 +2934,7 @@ export type paths = {
                 };
                 header?: never;
                 path: {
-                    /** @description Provider name (google|github) */
+                    /** @description Provider name (google|github|oidc) */
                     provider: string;
                 };
                 cookie?: never;
@@ -2950,6 +2959,15 @@ export type paths = {
                 };
                 /** @description Internal error generating state token */
                 500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": string;
+                    };
+                };
+                /** @description The OpenID Connect provider's discovery document could not be fetched (sign-in redirects to /login?oauth_error=provider instead) */
+                502: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -12666,7 +12684,7 @@ export type components = {
         /** @enum {string} */
         "models.LocationGroupStatus": "active" | "pending_deletion";
         /** @enum {string} */
-        "models.LoginMethod": "password" | "magic_link" | "oauth_google" | "oauth_github" | "oauth_other";
+        "models.LoginMethod": "password" | "magic_link" | "oauth_google" | "oauth_github" | "oauth_oidc" | "oauth_other";
         /** @enum {string} */
         "models.LoginOutcome": "ok" | "bad_password" | "account_locked" | "account_disabled" | "email_not_verified" | "mfa_required" | "bad_mfa" | "mfa_admin_reset" | "identity_linked" | "tenant_mismatch";
         "models.MaintenanceSchedule": {

@@ -44,6 +44,7 @@ Once you've outgrown the quick start, pick the runbook that matches how you want
 - **Bare-metal / systemd** — running the binary directly with your own PostgreSQL, secrets, email, and Redis: [DEPLOYMENT.md](https://github.com/denisvmedia/inventario/blob/master/DEPLOYMENT.md).
 - **Kubernetes / Helm release runbook** — cutting a release and deploying to a cluster, with upgrade and rollback steps: [PRODUCTION.md](https://github.com/denisvmedia/inventario/blob/master/PRODUCTION.md).
 - **Email deliverability** — SPF, DKIM, DMARC and how to check that verification and invite mail actually reaches inboxes: [devdocs/email-deliverability.md](https://github.com/denisvmedia/inventario/blob/master/devdocs/email-deliverability.md).
+- **Sign-in providers** — sign-in with Google, GitHub, or your own OpenID Connect provider such as Authelia: [Sign-in providers](../sign-in-providers/).
 
 :::caution[Mail that goes to spam is an invisible failure]
 Inventario sends verification, password-reset and invitation mail, and a user

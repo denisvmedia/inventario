@@ -34,6 +34,15 @@
  * numeric id and display name, /gh/user/emails carries the address with
  * its primary and verified flags. Both read the same active profile.
  *
+ * The OpenID Connect provider (#2786) lives under /oidc. The backend first
+ * reads /oidc/.well-known/openid-configuration, which names the issuer and
+ * the other three endpoints; then the same three steps run under /oidc,
+ * with the token request authenticated by HTTP Basic (client_secret_basic).
+ * The issuer is OAUTH_STUB_OIDC_ISSUER when set, else the address the
+ * discovery request came to. The CI lane sets it to the browser-facing
+ * http://localhost:<port>/oidc while the backend reaches the stub through
+ * host.docker.internal, which exercises the back-channel setting.
+ *
  * The default port is 4444 (fixed so tests can hard-code overrides in
  * setup-stack.ts). Override via OAUTH_STUB_PORT.
  *
@@ -193,6 +202,32 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
       handleGitHubUserEmails(req, res);
       return;
     }
+    // OpenID Connect leg (#2786).
+    if (
+      url.pathname === "/oidc/.well-known/openid-configuration" &&
+      req.method === "GET"
+    ) {
+      handleOIDCDiscovery(req, res);
+      return;
+    }
+    if (url.pathname === "/oidc/authorize" && req.method === "GET") {
+      handleAuthorize(url, res);
+      return;
+    }
+    if (url.pathname === "/oidc/token" && req.method === "POST") {
+      if (!(req.headers.authorization || "").startsWith("Basic ")) {
+        res.statusCode = 401;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ error: "invalid_client" }));
+        return;
+      }
+      handleToken(req, res);
+      return;
+    }
+    if (url.pathname === "/oidc/userinfo" && req.method === "GET") {
+      handleUserInfo(req, res);
+      return;
+    }
     // Control plane: tests POST a JSON Profile to /__control__/profile
     // before clicking the OAuth button so the next /userinfo call
     // returns the desired fixture. Playwright workers run in separate
@@ -233,6 +268,30 @@ function handleAuthorize(url: URL, res: ServerResponse): void {
   res.statusCode = 302;
   res.setHeader("location", callback.toString());
   res.end();
+}
+
+/**
+ * /oidc/.well-known/openid-configuration publishes the issuer and the
+ * three endpoints under it. The backend checks that the issuer matches the
+ * one it was configured with.
+ */
+function handleOIDCDiscovery(req: IncomingMessage, res: ServerResponse): void {
+  const issuer =
+    process.env.OAUTH_STUB_OIDC_ISSUER ||
+    `http://${req.headers.host || "127.0.0.1"}/oidc`;
+  res.statusCode = 200;
+  res.setHeader("content-type", "application/json");
+  res.end(
+    JSON.stringify({
+      issuer,
+      authorization_endpoint: `${issuer}/authorize`,
+      token_endpoint: `${issuer}/token`,
+      userinfo_endpoint: `${issuer}/userinfo`,
+      response_types_supported: ["code"],
+      code_challenge_methods_supported: ["S256"],
+      token_endpoint_auth_methods_supported: ["client_secret_basic"],
+    }),
+  );
 }
 
 /**

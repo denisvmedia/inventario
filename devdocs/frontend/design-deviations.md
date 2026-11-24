@@ -304,7 +304,14 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Auth & Profile
 
-_None yet._
+#### 2026-11-24 — A third sign-in button for the operator's OpenID Connect provider
+
+- **Issue/PR**: #2786 / PR (pending)
+- **Mock**: [`design-mocks/src/views/AuthView.tsx`](../../design-mocks/src/views/AuthView.tsx) (the "or continue with" block) shows exactly two outline buttons, Google and GitHub, in a two-column grid. Settings has no Connected accounts mock.
+- **Reality**: `frontend/src/components/auth/OAuthRow.tsx` also renders an `oidc` button when the server lists that provider. It is the same outline `Button` with the label the operator configured (for example "Authelia") and the Lucide `KeyRound` icon, since the brand is unknown. The grid rule is unchanged (one column for one provider, two for more), so with all three providers the OpenID Connect button sits alone on a second row. `ConnectedAccountsCard` uses the same icon for the `oidc` row.
+- **Why**: not present in mock — the mock predates sign-in with a self-hosted OpenID Connect provider (#2786). Closest pattern: the existing provider button, with a Lucide icon in place of the brand glyph (`devdocs/frontend/icons.md`).
+- **Approved by**: user (explicit) — asked for the OpenID Connect provider in #2786.
+- **Reversion plan**: Reconcile if the upstream mock adds a generic single sign-on button or a three-provider layout.
 
 ### Layout & Page chrome
 

@@ -131,8 +131,9 @@ the sign-in page.
 :::
 
 :::tip
-If you signed up with Google or GitHub and never set a password, the
-**Edit profile** page shows a **Set password** form instead, so you can add one.
+If you signed up with Google, GitHub or single sign-on and never set a
+password, the **Edit profile** page shows a **Set password** form instead, so
+you can add one.
 :::
 
 ## Two-factor authentication
@@ -203,9 +204,11 @@ and revoke any sessions you don't trust.
 
 ## Connected accounts
 
-If your Inventario server has Google or GitHub sign-in enabled, a **Connected
-accounts** panel appears in **Privacy & security**. It lets you link those
-providers so you can sign in without a password.
+If your Inventario server has sign-in with Google, GitHub or a single sign-on
+provider enabled, a **Connected accounts** panel appears in **Privacy &
+security**. It lets you link those providers so you can sign in without a
+password. A single sign-on provider appears under the name your server gave it,
+for example **Authelia**.
 
 - To link a provider, click **Link Google** / **Link GitHub** and complete the
   sign-in with that provider. Once linked, the row shows the provider's email

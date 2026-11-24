@@ -1984,7 +1984,7 @@ const docTemplate = `{
         },
         "/auth/oauth/providers": {
             "get": {
-                "description": "Returns the providers operators have configured (Google, GitHub). Empty list when OAuth is not configured.",
+                "description": "Returns the providers operators have configured (Google, GitHub, and one OpenID Connect provider named \"oidc\" whose display_name the operator sets). Empty list when OAuth is not configured.",
                 "produces": [
                     "application/json"
                 ],
@@ -2012,7 +2012,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Provider name (google|github)",
+                        "description": "Provider name (google|github|oidc)",
                         "name": "provider",
                         "in": "path",
                         "required": true
@@ -2053,7 +2053,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Provider name (google|github)",
+                        "description": "Provider name (google|github|oidc)",
                         "name": "provider",
                         "in": "path",
                         "required": true
@@ -2108,7 +2108,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Provider name (google|github)",
+                        "description": "Provider name (google|github|oidc)",
                         "name": "provider",
                         "in": "path",
                         "required": true
@@ -2135,6 +2135,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "502": {
+                        "description": "The OpenID Connect provider's discovery document could not be fetched",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -2149,7 +2155,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Provider name (google|github)",
+                        "description": "Provider name (google|github|oidc)",
                         "name": "provider",
                         "in": "path",
                         "required": true
@@ -2173,6 +2179,12 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal error generating state token",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "502": {
+                        "description": "The OpenID Connect provider's discovery document could not be fetched (sign-in redirects to /login?oauth_error=provider instead)",
                         "schema": {
                             "type": "string"
                         }
@@ -13974,6 +13986,7 @@ const docTemplate = `{
                 "magic_link",
                 "oauth_google",
                 "oauth_github",
+                "oauth_oidc",
                 "oauth_other"
             ],
             "x-enum-varnames": [
@@ -13981,6 +13994,7 @@ const docTemplate = `{
                 "LoginMethodMagicLink",
                 "LoginMethodOAuthGoogle",
                 "LoginMethodOAuthGitHub",
+                "LoginMethodOAuthOIDC",
                 "LoginMethodOAuthOther"
             ]
         },
