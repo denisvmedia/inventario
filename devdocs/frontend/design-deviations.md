@@ -406,7 +406,7 @@ _None yet._
 - **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `HelpSection` always shows a version badge (`v1.2`) on the "What's new" row.
 - **Reality**: The badge shows `v<Major.Minor>` of the version the build was given (`v0.2.2` shows `v0.2`). For a build with no release number, such as `dev` (a local build), `edge` (the master image) or `pr-123` (a PR image), the row renders without the badge.
 - **Why**: The version now comes from the build (PR #2790), and those builds have no release number to show. Before, every build showed the `version` from `frontend/package.json`, which no release bumped, so every release showed `v0.1`. A made-up number or `vpr` would mislead the same way.
-- **Approved by**: agent-suggested in PR #2790, pending the user's confirmation.
+- **Approved by**: agent-suggested-then-user-confirmed — suggested in PR #2790, confirmed by the user on 2026-11-24.
 - **Reversion plan**: Permanent. If the mock gains a state for non-release builds, follow it.
 
 ### Navigation & App shell
