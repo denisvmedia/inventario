@@ -19,7 +19,8 @@ the section matching the tag and publishes it as the GitHub Release body. See
   `OAUTH_OIDC_BACKCHANNEL_URL` covers a server that cannot reach the issuer's
   public address. The Helm chart gets `oauth.*` values and `secrets.oauth*`
   keys for all three providers. Setup is described on the new "Sign-in
-  providers" page of the user guide (#2786).
+  providers" page of the user guide
+  ([#2789](https://github.com/denisvmedia/inventario/pull/2789)).
 
 ## [0.2.2] - 2026-11-23
 
