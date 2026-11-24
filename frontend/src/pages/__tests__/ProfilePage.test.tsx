@@ -199,7 +199,7 @@ describe("<ProfilePage />", () => {
         )
       )
       expect(within(avatar).queryByText("AJ")).not.toBeInTheDocument()
-      // The upload stub that stood here before the feature shipped is gone.
+      // No coming-soon stub competes with the real control.
       expect(screen.queryByTestId("coming-soon-banner-profilePhoto")).not.toBeInTheDocument()
     })
 
