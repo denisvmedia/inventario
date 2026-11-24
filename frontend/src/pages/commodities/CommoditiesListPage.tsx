@@ -191,9 +191,14 @@ export function CommoditiesListPage() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setSearchInput(search), [search])
   useEffect(() => {
+    const trimmed = searchInput.trim()
+    // Until the user types, the input holds the list's own query and there
+    // is nothing to write. Writing it anyway breaks an item opened within
+    // the 300ms: by then window.location is the item's URL, so the write
+    // navigates back to the list and closes the item's panel.
+    if (trimmed === search) return
     const handle = window.setTimeout(() => {
       const live = new URLSearchParams(window.location.search)
-      const trimmed = searchInput.trim()
       if ((live.get("q") ?? "") === trimmed) return
       if (trimmed) {
         live.set("q", trimmed)
@@ -204,7 +209,7 @@ export function CommoditiesListPage() {
       setSearchParamsRef.current(live, { replace: true })
     }, 300)
     return () => window.clearTimeout(handle)
-  }, [searchInput])
+  }, [searchInput, search])
 
   // ---- Data --------------------------------------------------------------
   const list = useCommodities(commoditiesListOptions(listParams), { enabled })

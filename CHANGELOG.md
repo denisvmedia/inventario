@@ -113,6 +113,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
 - In Safari, **Save** in the unsaved-changes prompt saves when the prompt
   opens again right after **Keep editing**. Before, the click closed the
   prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).
+- An item opened from a searched Items list, or from an area's items, stays
+  open. Before, an item clicked within a moment of the list loading closed
+  again and the list came back
+  ([#2825](https://github.com/denisvmedia/inventario/pull/2825)).
 - Tags written in Cyrillic, Czech, Chinese or any other non-Latin script are
   kept on save. Before, their letters were stripped from the slug, so a tag
   like "кухня" disappeared and "USB кабель" and "USB хаб" became one tag.
