@@ -282,7 +282,11 @@ func (api *OAuthAPI) startAuthorizationCode(w http.ResponseWriter, r *http.Reque
 // @Description Validates state + cookie, exchanges the code, and either signs the caller in (existing identity),
 // @Description auto-links a verified-email match, prompts a password sign-in (unverified email), or creates a new
 // @Description account when the tenant's registration mode allows it (open: active, approval: inactive until an
-// @Description administrator activates it, closed: refused). Redirects to the FE path the state carried.
+// @Description administrator activates it, closed: refused). Redirects to the FE path the state carried after a
+// @Description sign-in. Every other outcome redirects to /login instead, whatever path the state carried: a refusal
+// @Description with ?oauth_error=<code> (for example registration_closed, account_disabled, email_unverified), an
+// @Description account waiting for approval with ?oauth_error=pending_approval, an unverified email match with
+// @Description ?oauth_link_required=1, and an MFA-enrolled user with ?mfa_required=1.
 // @Tags oauth
 // @Param provider path string true "Provider name (google|github)"
 // @Param code query string true "Authorization code returned by the provider"
@@ -537,6 +541,14 @@ func (api *OAuthAPI) completeSignUp(
 	if _, err := api.createIdentity(r.Context(), newUser, providerName, profile); err != nil {
 		slog.Error("OAuth callback: failed to persist OAuth identity for new user",
 			"user_id", newUser.ID, "error", err)
+		// Remove the account the identity was for, so a retry is a clean
+		// sign-up. Left in place, it would be an account with no identity;
+		// in approval mode an inactive one, which the email-match branch
+		// refuses with account_disabled until an administrator steps in.
+		if delErr := api.userRegistry.Delete(r.Context(), newUser.ID); delErr != nil {
+			slog.Error("OAuth callback: failed to remove the new user after the identity write failed",
+				"user_id", newUser.ID, "error", delErr)
+		}
 		http.Error(w, "OAuth account creation failed", http.StatusInternalServerError)
 		return
 	}

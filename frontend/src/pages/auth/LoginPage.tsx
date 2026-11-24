@@ -327,7 +327,9 @@ export function LoginPage() {
         ) : null}
 
         {oauthPendingApproval ? (
-          <Alert data-testid="oauth-pending-approval-banner">
+          // role="status": a routine confirmation, announced politely; the
+          // Alert default (role="alert") would interrupt a screen reader.
+          <Alert role="status" data-testid="oauth-pending-approval-banner">
             <Clock aria-hidden="true" />
             <AlertDescription>{t("auth:oauth.pendingApproval")}</AlertDescription>
           </Alert>

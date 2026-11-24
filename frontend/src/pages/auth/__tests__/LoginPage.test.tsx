@@ -399,9 +399,9 @@ describe("<LoginPage />", () => {
 
   it("renders the neutral pending-approval banner for ?oauth_error=pending_approval", () => {
     renderLogin("/login?oauth_error=pending_approval")
-    expect(screen.getByTestId("oauth-pending-approval-banner")).toHaveTextContent(
-      /administrator approves it/i
-    )
+    const banner = screen.getByTestId("oauth-pending-approval-banner")
+    expect(banner).toHaveTextContent(/administrator approves it/i)
+    expect(banner).toHaveAttribute("role", "status")
     expect(screen.queryByTestId("oauth-error-banner")).not.toBeInTheDocument()
   })
 

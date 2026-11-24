@@ -2,6 +2,7 @@ package apiserver_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,6 +19,7 @@ import (
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 	memreg "go.5x5.cz/inventario/registry/memory"
 	"go.5x5.cz/inventario/services"
 	oauthsvc "go.5x5.cz/inventario/services/oauth"
@@ -133,6 +135,19 @@ type oauthFixtureOpts struct {
 	// leaves it empty, which resolveRegistrationMode treats as closed, so a
 	// test that expects a new account has to ask for open or approval.
 	registrationMode models.RegistrationMode
+	// failIdentityCreate makes every identity write fail, to exercise the
+	// sign-up path's cleanup.
+	failIdentityCreate bool
+}
+
+// failingIdentityStore is the identity registry with a Create that always
+// fails; everything else reaches the memory registry underneath.
+type failingIdentityStore struct {
+	*memreg.OAuthIdentityRegistry
+}
+
+func (failingIdentityStore) Create(context.Context, models.OAuthIdentity) (*models.OAuthIdentity, error) {
+	return nil, errors.New("identity store unavailable")
 }
 
 const oauthTestTenantID = "test-tenant-id"
@@ -179,6 +194,11 @@ func newOAuthFixture(t *testing.T, opts oauthFixtureOpts) *oauthFixture {
 
 	audit := &stubAuditLogger{}
 
+	var identityStore registry.OAuthIdentityRegistry = identityReg
+	if opts.failIdentityCreate {
+		identityStore = failingIdentityStore{identityReg}
+	}
+
 	authHandler := apiserver.Auth(apiserver.AuthParams{
 		UserRegistry:          userReg,
 		RefreshTokenRegistry:  refreshReg,
@@ -188,7 +208,7 @@ func newOAuthFixture(t *testing.T, opts oauthFixtureOpts) *oauthFixture {
 		JWTSecret:             jwtSecret,
 		OAuthRegistry:         reg,
 		OAuthStateSigner:      signer,
-		OAuthIdentityRegistry: identityReg,
+		OAuthIdentityRegistry: identityStore,
 	})
 
 	tenant := &models.Tenant{
@@ -1213,4 +1233,37 @@ func TestOAuthCallback_NoMatch_UnverifiedEmail_Refused(t *testing.T) {
 	c.Assert(events, qt.HasLen, 1)
 	c.Assert(events[0].Outcome, qt.Equals, models.LoginOutcomeEmailNotVerified)
 	c.Assert(events[0].UserID, qt.IsNil)
+}
+
+func TestOAuthCallback_SignUp_IdentityWriteFails_RemovesTheUser(t *testing.T) {
+	// The account and its identity are written one after the other. When
+	// the identity write fails, the account is removed again, so the next
+	// attempt is a clean sign-up rather than an unlinked (and, in approval
+	// mode, inactive) account the email-match branch would refuse.
+	for _, mode := range []models.RegistrationMode{models.RegistrationModeOpen, models.RegistrationModeApproval} {
+		t.Run(string(mode), func(t *testing.T) {
+			c := qt.New(t)
+			profile := oauthsvc.Profile{
+				ProviderUserID: "google-sub-flaky",
+				Email:          "flaky@example.com",
+				EmailVerified:  true,
+				DisplayName:    "Flaky",
+			}
+			f := newOAuthFixture(t, oauthFixtureOpts{
+				stubProfile:        &profile,
+				registrationMode:   mode,
+				failIdentityCreate: true,
+			})
+
+			state := f.signState(models.OAuthProviderGoogle, "")
+			rec := f.callCallback(models.OAuthProviderGoogle, state, "code-flaky", state)
+
+			c.Assert(rec.Code, qt.Equals, http.StatusInternalServerError)
+			_, err := f.userRegistry.GetByEmail(context.Background(), oauthTestTenantID, "flaky@example.com")
+			c.Assert(err, qt.IsNotNil)
+			for _, cookie := range rec.Result().Cookies() {
+				c.Assert(cookie.Name, qt.Not(qt.Equals), "refresh_token")
+			}
+		})
+	}
 }
