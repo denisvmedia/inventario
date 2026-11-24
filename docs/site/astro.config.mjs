@@ -126,7 +126,7 @@ export default defineConfig({
         {
           label: 'Reference',
           translations: { cs: 'Referenční příručka', ru: 'Справочник' },
-          items: [{ slug: 'api' }],
+          items: [{ slug: 'api' }, { slug: 'api-tokens' }],
         },
       ],
     }),
