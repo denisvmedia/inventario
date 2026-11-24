@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -20,6 +21,7 @@ import (
 type CommodityRegistryFactory struct {
 	baseCommodityRegistry *Registry[models.Commodity, *models.Commodity]
 	areaRegistry          *AreaRegistryFactory // required dependency for relationship tracking
+	assetNumbers          *sync.Mutex          // shared by every registry the factory creates
 }
 
 // CommodityRegistry is a context-aware registry that can only be created through the factory
@@ -28,6 +30,10 @@ type CommodityRegistry struct {
 
 	userID       string
 	areaRegistry *AreaRegistry // required dependency for relationship tracking
+	// assetNumbers serializes every write of AssetNumber, standing in for
+	// the per-group advisory lock of the postgres registry: Create holds it
+	// from computing the next number until the row is stored.
+	assetNumbers *sync.Mutex
 }
 
 var _ registry.CommodityRegistry = (*CommodityRegistry)(nil)
@@ -37,6 +43,7 @@ func NewCommodityRegistryFactory(areaRegistry *AreaRegistryFactory) *CommodityRe
 	return &CommodityRegistryFactory{
 		baseCommodityRegistry: NewRegistry[models.Commodity, *models.Commodity](),
 		areaRegistry:          areaRegistry,
+		assetNumbers:          &sync.Mutex{},
 	}
 }
 
@@ -77,6 +84,7 @@ func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (regi
 		Registry:     userRegistry,
 		userID:       user.ID,
 		areaRegistry: areaRegistry,
+		assetNumbers: f.assetNumbers,
 	}, nil
 }
 
@@ -101,6 +109,7 @@ func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityReg
 		Registry:     serviceRegistry,
 		userID:       "", // Clear userID to bypass user filtering
 		areaRegistry: areaRegistry,
+		assetNumbers: f.assetNumbers,
 	}
 }
 
@@ -122,6 +131,18 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// Normalize an explicit empty area to nil (#1986): empty and nil both
 	// mean unassigned, matching the postgres registry and the IS NULL filter.
 	commodity.NormalizeAreaID()
+
+	// The asset number is server-managed, as in the postgres registry: the
+	// caller's value is dropped and the number is picked while holding the
+	// lock that also covers storing the row.
+	r.assetNumbers.Lock()
+	defer r.assetNumbers.Unlock()
+	groupID := r.groupID
+	if groupID == "" {
+		groupID = commodity.GroupID
+	}
+	requested, _ := registry.RestoreAssetNumberFromContext(ctx)
+	commodity.AssetNumber = new(r.pickAssetNumber(groupID, requested))
 
 	// Use CreateWithUser to ensure user context is applied
 	newCommodity, err := r.Registry.CreateWithUser(ctx, commodity)
@@ -271,9 +292,14 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 // SQL tables. Commodity attachments now live in the unified `files` table.
 
 func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
+	// Held across the read and the write so a backfill cannot number the
+	// row in between and have the update store the stale empty number.
+	r.assetNumbers.Lock()
+	defer r.assetNumbers.Unlock()
+
 	// Get the existing commodity to check if AreaID changed AND to
-	// preserve the acquisition columns (server-managed; whatever the
-	// caller sent must be ignored).
+	// preserve the server-managed acquisition columns and asset number
+	// (whatever the caller sent must be ignored).
 	var oldAreaID string
 	if existingCommodity, err := r.Registry.Get(ctx, commodity.GetID()); err == nil {
 		if existingCommodity.AreaID != nil {
@@ -281,6 +307,10 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		}
 		commodity.AcquisitionPrice = clonePtrDecimal(existingCommodity.AcquisitionPrice)
 		commodity.AcquisitionCurrency = clonePtrCurrency(existingCommodity.AcquisitionCurrency)
+		commodity.AssetNumber = nil
+		if existingCommodity.AssetNumber != nil {
+			commodity.AssetNumber = new(*existingCommodity.AssetNumber)
+		}
 	}
 
 	// Normalize an explicit empty area to nil (#1986) so un-assigning via "" is
@@ -456,7 +486,11 @@ func commoditySearchMatches(c *models.Commodity, q string) bool {
 	if strings.Contains(strings.ToLower(c.Name), q) {
 		return true
 	}
-	return strings.Contains(strings.ToLower(c.ShortName), q)
+	if strings.Contains(strings.ToLower(c.ShortName), q) {
+		return true
+	}
+	n, ok := models.ParseAssetID(q)
+	return ok && c.AssetNumber != nil && *c.AssetNumber == n
 }
 
 // pdateString unwraps the PDate pointer to its underlying ISO string,

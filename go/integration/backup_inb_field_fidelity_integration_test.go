@@ -70,6 +70,7 @@ func TestINBFieldFidelityRoundTripPostgres(t *testing.T) {
 	srcReloaded := must.Must(comReg.Get(uctx, src.ID))
 	c.Assert(srcReloaded.AcquisitionPrice, qt.IsNotNil, qt.Commentf("seed must set acquisition via the restore context seam"))
 	c.Assert(srcReloaded.CoverFileID, qt.IsNotNil, qt.Commentf("seed must set the cover photo"))
+	c.Assert(srcReloaded.AssetNumber, qt.DeepEquals, new(7), qt.Commentf("seed must set the asset number via the restore context seam"))
 
 	// --- Export (full_database) the signed .inb. ---
 	signer := must.Must(backupsign.NewSigner(make([]byte, backupsign.SeedSize)))
@@ -128,6 +129,9 @@ func TestINBFieldFidelityRoundTripPostgres(t *testing.T) {
 	c.Assert(restored.AcquisitionPrice.Equal(*srcReloaded.AcquisitionPrice), qt.IsTrue)
 	c.Assert(restored.AcquisitionCurrency, qt.IsNotNil)
 	c.Assert(*restored.AcquisitionCurrency, qt.Equals, *srcReloaded.AcquisitionCurrency)
+
+	// Asset number — kept, so labels printed before the backup still match.
+	c.Assert(restored.AssetNumber, qt.DeepEquals, srcReloaded.AssetNumber, qt.Commentf("asset number must round-trip"))
 
 	// Cover photo (#1451) — restored to a NEW file DB id. The id resolves to a
 	// real image file linked to THIS restored commodity (the cross-reference was
@@ -194,6 +198,9 @@ func seedFullCommodity(c *qt.C, fs *registry.FactorySet, uctx context.Context, t
 	acqPrice := decimal.RequireFromString("499.99")
 	acqCurrency := models.Currency("USD")
 	seedCtx := registry.WithRestoreAcquisition(uctx, acqPrice, acqCurrency)
+	// A number the restore would not pick by itself (a fresh group starts at
+	// 1), so the round-trip proves the archived number is kept.
+	seedCtx = registry.WithRestoreAssetNumber(seedCtx, 7)
 	com := must.Must(comReg.Create(seedCtx, models.Commodity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: tenantID, GroupID: groupID, CreatedByUserID: userID},
 		Name:                     "Vintage Camera",

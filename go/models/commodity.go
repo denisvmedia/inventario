@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jellydator/validation"
@@ -205,6 +208,61 @@ type Commodity struct {
 	// currency — sale-side currency reporting is out of scope for #1611.
 	//ptah:schema:field name="sale_price" type="DECIMAL(15,2)"
 	SalePrice *decimal.Decimal `json:"sale_price,omitempty" db:"sale_price"`
+
+	// AssetNumber is the short sequential number of the item inside its
+	// group, displayed as an asset ID such as "A-0042" (see FormatAssetID).
+	// The registry assigns it on Create as the group's highest number plus
+	// one, under a per-group lock, so concurrent creates never share a
+	// number. It is server-managed: Create ignores a caller-supplied value
+	// (except for the trusted restore seam, registry.WithRestoreAssetNumber)
+	// and Update keeps the stored one. NULL only for rows that predate the
+	// column until the runtime backfill numbers them.
+	//ptah:schema:field name="asset_number" type="INTEGER"
+	AssetNumber *int `json:"asset_number,omitempty" db:"asset_number" userinput:"false" readonly:"true"`
+}
+
+// assetIDPrefix and assetIDDigits define the display form of an asset
+// number: "A-" followed by the number zero-padded to four digits. Numbers
+// past 9999 keep all their digits ("A-12345").
+const (
+	assetIDPrefix = "A-"
+	assetIDDigits = 4
+)
+
+// FormatAssetID renders an asset number in its display form, "A-0042".
+// Non-positive numbers render as an empty string: they are never assigned.
+func FormatAssetID(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s%0*d", assetIDPrefix, assetIDDigits, n)
+}
+
+// ParseAssetID reads an asset number back from what a user types into a
+// search box. It accepts the display form and its loose variants, all
+// case-insensitive: "A-0042", "a-42", "A42", "A 42", "#42" and a bare "42".
+// The second result is false for anything else, including zero.
+func ParseAssetID(s string) (int, bool) {
+	s = strings.TrimSpace(s)
+	switch {
+	case strings.HasPrefix(s, "#"):
+		s = s[1:]
+	case len(s) > 0 && (s[0] == 'a' || s[0] == 'A'):
+		s = strings.TrimLeft(s[1:], "- ")
+	}
+	if s == "" || len(s) > 9 {
+		return 0, false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 // WarrantyStatus is the computed warranty state of a commodity. It is
@@ -281,6 +339,12 @@ type CommodityIndexes struct {
 
 	// Index for tenant-based queries
 	//ptah:schema:index name="idx_commodities_tenant_id" fields="tenant_id" table="commodities"
+	_ int
+
+	// An asset number is unique inside its group. The index also serves the
+	// MAX(asset_number) lookup that assigns the next number and the search
+	// by asset ID. NULLs (rows not yet backfilled) do not collide.
+	//ptah:schema:index name="idx_commodities_group_asset_number" fields="group_id,asset_number" unique="true" table="commodities"
 	_ int
 
 	// Composite index for tenant + area queries

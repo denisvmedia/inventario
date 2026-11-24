@@ -12,7 +12,10 @@
       "statsActiveWarranties": "Активные гарантии",
       "statsItems": "Предметы",
       "statsValue": "Оценочная стоимость"
-    }
+    },
+    "printAreaAndItemLabels": "Этикетки для зоны и её предметов",
+    "printAreaLabel": "Этикетка для этой зоны",
+    "printLabels": "Печать этикеток"
   },
   "areaDialog": {
     "createDescription": "Добавьте зону внутри локации — например, кухня, гараж, офис.",

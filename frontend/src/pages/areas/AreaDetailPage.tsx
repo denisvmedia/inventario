@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react"
-import { useMatch, useNavigate, useParams } from "react-router-dom"
+import { Link, useMatch, useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { Package, Pencil, Trash2 } from "lucide-react"
+import { ChevronDown, Package, Pencil, QrCode, Trash2 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Page } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DropOverlay } from "@/components/files/DropOverlay"
@@ -20,6 +26,7 @@ import { useArea, useDeleteArea, useUpdateArea } from "@/features/areas/hooks"
 import { useCommodities } from "@/features/commodities/hooks"
 import { useLocation, useLocations } from "@/features/locations/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { labelsPageHref } from "@/features/labels/links"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import type { DeleteStrategy } from "@/features/areas/api"
@@ -228,7 +235,44 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
                 <span className="truncate">{area.data.name}</span>
               </h1>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {/* Print labels (#2807): the box label, or the box plus one
+                  label per item in it. Not in the mock; see
+                  design-deviations. */}
+              {slug ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-2"
+                      data-testid="area-detail-print-labels"
+                    >
+                      <QrCode className="size-4" aria-hidden="true" />
+                      {t("locations:areaDetail.printLabels")}
+                      <ChevronDown className="size-4 opacity-60" aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link
+                        to={labelsPageHref(slug, { areas: [id] })}
+                        data-testid="area-detail-print-area-label"
+                      >
+                        {t("locations:areaDetail.printAreaLabel")}
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link
+                        to={labelsPageHref(slug, { areas: [id], areaItems: id })}
+                        data-testid="area-detail-print-item-labels"
+                      >
+                        {t("locations:areaDetail.printAreaAndItemLabels")}
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"

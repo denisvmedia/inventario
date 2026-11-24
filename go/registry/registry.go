@@ -154,7 +154,9 @@ type CommodityListOptions struct {
 	// AreaID alone.
 	Unassigned bool
 	// Search runs a case-insensitive substring match against the Name
-	// and ShortName fields. Empty = no search.
+	// and ShortName fields. When it also reads as an asset ID
+	// (models.ParseAssetID: "A-0042", "42", ...), a commodity with that
+	// asset number matches too. Empty = no search.
 	Search string
 	// IncludeInactive controls whether non-`in_use` commodities AND
 	// drafts are included. The list page hides them by default; when
@@ -258,8 +260,44 @@ func RestoreAcquisitionFromContext(ctx context.Context) (price decimal.Decimal, 
 	return v.price, v.currency, true
 }
 
+// restoreAssetNumberCtxKey keys a trusted, restore-only asset number on a
+// context (see WithRestoreAssetNumber).
+type restoreAssetNumberCtxKey struct{}
+
+// WithRestoreAssetNumber marks ctx so the next CommodityRegistry.Create keeps
+// the archived asset number n instead of assigning the next free one, as long
+// as no other commodity in the target group holds n already. When n is taken
+// the registry assigns the next free number, so a restore never produces two
+// items with the same asset ID. It is the backup restore's seam, a context
+// signal rather than a registry method for the same reason as
+// WithRestoreAcquisition: the API path never sets it, so a user cannot pick
+// an asset number.
+func WithRestoreAssetNumber(ctx context.Context, n int) context.Context {
+	return context.WithValue(ctx, restoreAssetNumberCtxKey{}, n)
+}
+
+// RestoreAssetNumberFromContext returns the archived asset number set by
+// WithRestoreAssetNumber, if present and positive. Consumed only by the
+// CommodityRegistry Create implementations.
+func RestoreAssetNumberFromContext(ctx context.Context) (int, bool) {
+	n, ok := ctx.Value(restoreAssetNumberCtxKey{}).(int)
+	if !ok || n <= 0 {
+		return 0, false
+	}
+	return n, true
+}
+
 type CommodityRegistry interface {
 	Registry[models.Commodity]
+
+	// BackfillAssetNumbers gives every commodity that has no asset number
+	// one, group by group, continuing after the group's highest number in
+	// creation order (earliest history event, then registered date, then
+	// id). It takes the same per-group lock as Create, so it is safe to run
+	// while the app serves requests, and it is idempotent: once every row is
+	// numbered it changes nothing. Returns how many rows it numbered. Meant
+	// for the service registry; a user registry only sees its own group.
+	BackfillAssetNumbers(ctx context.Context) (int, error)
 
 	// ListPaginated returns a paginated list of commodities along with the total count,
 	// optionally filtered and sorted via opts. Pass a zero CommodityListOptions for the

@@ -164,6 +164,18 @@ func (r *RLSGroupRepository[T, P]) ClaimByStatus(ctx context.Context, id, from, 
 }
 
 func (r *RLSGroupRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) (T, error) {
+	var prepareFn func(context.Context, *sqlx.Tx, P) error
+	if checkerFn != nil {
+		prepareFn = func(ctx context.Context, tx *sqlx.Tx, _ P) error { return checkerFn(ctx, tx) }
+	}
+	return r.CreateWithPrepare(ctx, entity, prepareFn)
+}
+
+// CreateWithPrepare is Create with a hook that may change the entity: it runs
+// inside the insert transaction after the ids are set and before the INSERT,
+// and receives a pointer to the row about to be written. Use it for a column
+// whose value has to be computed under the same transaction as the insert.
+func (r *RLSGroupRepository[T, P]) CreateWithPrepare(ctx context.Context, entity T, prepareFn func(context.Context, *sqlx.Tx, P) error) (T, error) {
 	var zero T
 
 	// Fail fast on a misconstructed user-scoped registry: tenant / group /
@@ -202,8 +214,8 @@ func (r *RLSGroupRepository[T, P]) Create(ctx context.Context, entity T, checker
 		P(&entity).SetCreatedByUserID(r.createdByUserID)
 	}
 
-	if checkerFn != nil {
-		err = checkerFn(ctx, tx)
+	if prepareFn != nil {
+		err = prepareFn(ctx, tx, P(&entity))
 		if err != nil {
 			return zero, errxtrace.Wrap("failed to call checker function", err, errx.Attrs("entity_type", r.table))
 		}
@@ -219,6 +231,18 @@ func (r *RLSGroupRepository[T, P]) Create(ctx context.Context, entity T, checker
 }
 
 func (r *RLSGroupRepository[T, P]) Update(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx, T) error) error {
+	var prepareFn func(context.Context, *sqlx.Tx, T, P) error
+	if checkerFn != nil {
+		prepareFn = func(ctx context.Context, tx *sqlx.Tx, dbEntity T, _ P) error { return checkerFn(ctx, tx, dbEntity) }
+	}
+	return r.UpdateWithPrepare(ctx, entity, prepareFn)
+}
+
+// UpdateWithPrepare is Update with a hook that may change the entity: it runs
+// inside the update transaction before the UPDATE, receives the stored row and
+// a pointer to the row about to be written, and can carry a server-managed
+// column over from the database.
+func (r *RLSGroupRepository[T, P]) UpdateWithPrepare(ctx context.Context, entity T, prepareFn func(context.Context, *sqlx.Tx, T, P) error) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
@@ -252,8 +276,8 @@ func (r *RLSGroupRepository[T, P]) Update(ctx context.Context, entity T, checker
 	// lose provenance information).
 	P(&entity).SetCreatedByUserID(P(&dbEntity).GetCreatedByUserID())
 
-	if checkerFn != nil {
-		err = checkerFn(ctx, tx, dbEntity)
+	if prepareFn != nil {
+		err = prepareFn(ctx, tx, dbEntity, P(&entity))
 		if err != nil {
 			return errxtrace.Wrap("failed to call checker function", err, errx.Attrs("entity_type", r.table))
 		}

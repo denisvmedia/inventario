@@ -191,6 +191,8 @@ The header also has:
 
 - **Edit** — reopens the form dialog.
 - **Insurance Report** and **Print** — printable views (see [Reports](../reports/)).
+- **Print label** (the QR code button) — a label for this item (see
+  [Asset IDs and QR labels](#asset-ids-and-qr-labels)).
 - **Delete** — permanently removes the item and any attached files.
 
 ![A printable insurance report view of an item ready to print or save as PDF](../../assets/screenshots/item-print.png)
@@ -201,6 +203,56 @@ status changes, price changes, moves, and cover-photo changes.
 :::note
 Lending, service, and supplies tracking are only available on single-unit
 items, not bundles.
+:::
+
+## Asset IDs and QR labels
+
+Every item gets an **asset ID**, a short number such as `A-0042`. Numbers are
+counted per group, start at `A-0001`, and are handed out in the order items are
+added. The asset ID is shown at the top of the item page, next to the status.
+
+- The number stays with the item when you edit or move it.
+- Numbers are not reused, with one exception: if the item with the highest
+  number is deleted, the next item you add gets that number.
+- Items that existed before asset IDs were introduced get their numbers
+  automatically shortly after the server is upgraded, in the order they were
+  added.
+- To find an item by its number, type it in the search box on **All Items** or
+  on the search page. `A-0042`, `a-42`, `#42`, and `42` all find the same item.
+
+### Print labels
+
+A label carries a QR code, the asset ID, and the item name. Scanning the QR code
+with a phone camera opens the item's page. If you're not signed in on that
+phone, Inventario asks you to sign in first and then opens the item.
+
+You can print labels from three places:
+
+- **One item** — open the item and click **Print label** (the QR code button) in
+  the header.
+- **Several items** — select them on **All Items** and choose **Print labels**
+  in the bulk-action bar.
+- **A box and what's in it** — open the area and use **Print labels** there (see
+  [Print area labels](../locations-and-areas/#print-area-labels)).
+
+The label page shows a preview at real size. Pick a **layout**:
+
+- **Single label, 63.5 × 38.1 mm** — one label per page, for a label printer or
+  for cutting out by hand.
+- **A4 sheet, 3 × 7 (Avery L7160)** — 21 labels per A4 sheet.
+- **Letter sheet, 3 × 10 (Avery 5160)** — 30 labels per US Letter sheet.
+
+On a sheet, **Skip positions** leaves the first positions empty, so you can put
+a partly used sheet through the printer again. Then click **Print**.
+
+:::caution[Print at actual size]
+In the print dialog, set the scale to 100% (actual size) and the margins to
+none. With any other scale, the labels won't line up with the sheet.
+:::
+
+:::note
+Scanning labels from inside Inventario, for example to move items into an area,
+isn't available yet. Use your phone's camera app to open a label.
 :::
 
 ## The cover photo
@@ -235,7 +287,8 @@ button so you can put it back into active use at any time.
 
 The **All Items** page lists every item in your group. Across the top you have:
 
-- **Search** — type in the search box to match by name or short name.
+- **Search** — type in the search box to match by name, short name, or asset ID
+  (`A-0042`).
 - **Type** — filter by one or more item types.
 - **Status** — filter by **In Use**, **Sold**, **Lost**, **Disposed**, or
   **Written Off**.
@@ -264,6 +317,8 @@ On the **All Items** page you can act on several items at once:
 2. A bulk-action bar appears showing how many items are selected.
 3. Choose an action:
    - **Move…** — pick a **destination area** and confirm with **Move items**.
+   - **Print labels** — opens the label page with a label for each selected
+     item (see [Print labels](#print-labels)).
    - **Delete** — permanently removes the selected items. You'll be asked to
      confirm first, since this can't be undone.
 

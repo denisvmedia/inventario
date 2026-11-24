@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Page, PageHeader } from "@/components/ui/page"
+import { formatAssetId } from "@/features/commodities/asset-id"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useSearch } from "@/features/search/hooks"
 import { clearRecent, getRecent, type RecentEntry } from "@/features/search/recent"
@@ -515,7 +516,12 @@ function CommodityCard({
 }) {
   const { t } = useTranslation()
   const title = resource.attributes.name ?? resource.id
-  const subtitle = resource.attributes.short_name ?? undefined
+  // The asset ID leads, so a search by the number on a label shows which
+  // result it matched.
+  const subtitle =
+    [formatAssetId(resource.attributes.asset_number), resource.attributes.short_name]
+      .filter(Boolean)
+      .join(" · ") || undefined
   return (
     <CardShell
       href={

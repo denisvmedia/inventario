@@ -128,6 +128,33 @@ describe("<AreaDetailPage />", () => {
     expect(screen.getByTestId("area-detail-items-empty")).toBeInTheDocument()
   })
 
+  it("offers the area label and the area-plus-items label sheet (#2807)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.detail(
+        SLUG,
+        "a1",
+        areaResource("a1", { name: "Cellar", location_id: "loc1" })
+      ),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Home" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Home" })]),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { areaTotals: [] }),
+      ...fileHandlers.list(SLUG, [])
+    )
+    renderDetail(`/g/${SLUG}/areas/a1`)
+    await user.click(await screen.findByTestId("area-detail-print-labels"))
+    expect(await screen.findByTestId("area-detail-print-area-label")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/labels?area=a1`
+    )
+    expect(screen.getByTestId("area-detail-print-item-labels")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/labels?area=a1&area_items=a1`
+    )
+  })
+
   it("auto-opens the edit dialog when initialMode='edit'", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

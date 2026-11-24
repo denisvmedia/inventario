@@ -25,7 +25,7 @@ type searchAPI struct {
 // @Accept json-api
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
-// @Param q query string true "Search query"
+// @Param q query string true "Search query; for commodities, a query that reads as an asset ID (A-0042, 42) also matches that asset number"
 // @Param type query string false "Entity type to search" Enums(commodities,files,areas,locations)
 // @Param limit query int false "Maximum number of results" default(20)
 // @Param offset query int false "Number of results to skip" default(0)
@@ -110,13 +110,16 @@ func (api *searchAPI) searchWithBasicFallback(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		// Simple in-memory filtering
+		// Simple in-memory filtering. A query that reads as an asset ID
+		// ("A-0042", "42") also matches the commodity with that number.
+		assetNumber, isAssetID := models.ParseAssetID(query)
 		query = strings.ToLower(query)
 		var filtered []*models.Commodity
 		for _, commodity := range commodities {
 			if strings.Contains(strings.ToLower(commodity.Name), query) ||
 				strings.Contains(strings.ToLower(commodity.ShortName), query) ||
-				strings.Contains(strings.ToLower(commodity.Comments), query) {
+				strings.Contains(strings.ToLower(commodity.Comments), query) ||
+				(isAssetID && commodity.AssetNumber != nil && *commodity.AssetNumber == assetNumber) {
 				filtered = append(filtered, commodity)
 			}
 		}

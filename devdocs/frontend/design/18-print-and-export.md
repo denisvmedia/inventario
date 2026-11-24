@@ -5,17 +5,20 @@ to backup/restore exports.
 
 ## Print
 
-The product has two print-optimized routes in production:
+The product has three print-optimized routes in production:
 
 ```
 /g/:slug/commodities/:id/print     — single commodity
 /g/:slug/reports/insurance         — insurance report (#1370)
+/g/:slug/labels                    — QR labels for items and areas (#2807)
 ```
 
 Components:
 
 - `frontend/src/pages/commodities/CommodityPrintPage.tsx`
 - `frontend/src/pages/reports/InsuranceReportPage.tsx`
+- `frontend/src/pages/labels/LabelPrintPage.tsx` (+
+  `features/labels/{formats.ts,LabelSheets.tsx,links.ts}`)
 
 Used by:
 
@@ -26,6 +29,9 @@ Used by:
   report (item / location mode, respectively).
 - The "Reports" sidebar section → the reports landing
   (`/g/:slug/reports`), which links to the insurance report.
+- The commodity detail page's "Print label" action, the items list's
+  bulk "Print labels" action, and the area detail page's "Print labels"
+  menu → the label page.
 
 Both routes are mounted **inside the protected `<Shell>`** (same as
 every other group-scoped page), so on screen the user sees the sidebar
@@ -55,6 +61,37 @@ modes). Currency follows the same contract as the commodity print page
 `current_price`/`converted_original_price` in the group currency). See
 `devdocs/frontend/design-deviations.md` (#1370) for the adaptations from
 the mock.
+
+### Labels (#2807)
+
+`/g/:slug/labels` prints labels with a QR code that encodes the absolute
+URL of an item or area page, plus the item's asset ID and name (or the
+area name and its location). What to print comes from the query string:
+`item=<id>` (repeatable), `area=<id>` (repeatable), `area_items=<id>`
+(every active item in that area), `format=single|a4-3x7|letter-3x10`,
+and `skip=<n>` (empty positions at the start of the first sheet).
+
+Unlike the report pages, the labels must land on die-cut positions, so
+the layout is physical, not responsive:
+
+- Each format in `features/labels/formats.ts` carries the page size, the
+  label size, the grid, the offset of the first label and the gaps, in
+  millimeters (A4, Avery L7160: 3 × 7 labels of 63.5 × 38.1 mm) or
+  inches (US Letter, Avery 5160: 3 × 10 labels of 2.625 × 1 in). The
+  single format is one 63.5 × 38.1 mm label per page.
+- `LabelSheets` passes those sizes to Tailwind utilities as CSS custom
+  properties (`w-(--label-w)` and so on); they are chosen at run time, so
+  no static class can carry them.
+- The page sets `@page { size: <format>; margin: 0 }` in its scoped
+  block and drops its own padding with `print:` utilities. Together
+  with the global block in `index.css`, the first sheet starts at the
+  corner of the paper. The e2e spec (`asset-id-labels.spec.ts`)
+  measures the first label under print emulation, so padding added to
+  the Shell later shows up as a test failure, not as misprinted sheets.
+- Labels print black on white (`.label-paper`) in either theme. The
+  dashed outline of every label position is screen-only.
+- QR codes are rendered client-side with `qrcode.react` (`QRCodeSVG`),
+  already a dependency for the MFA setup dialog.
 
 ## Print layout
 
@@ -149,7 +186,7 @@ This is **not** the print path. Conceptually:
 
 | Term | What it means | Where |
 | --- | --- | --- |
-| **Print** | Browser-rendered output for paper / PDF (via the browser's "Save as PDF") | `/g/:slug/commodities/:id/print`, `/g/:slug/reports/insurance` |
+| **Print** | Browser-rendered output for paper / PDF (via the browser's "Save as PDF") | `/g/:slug/commodities/:id/print`, `/g/:slug/reports/insurance`, `/g/:slug/labels` |
 | **Export** / **Backup** | Server-generated file that can be **imported** back to recreate the data | `/g/:slug/exports` |
 | **Restore** | The inverse of import — apply an export back to a group | `/g/:slug/exports/:id/restore` |
 
@@ -170,9 +207,9 @@ of scope for this brief; the email templates live BE-side.
 
 ## Hard rules
 
-1. **Print routes are deliberate.** Two exist today
-   (`commodities/:id/print`, `reports/insurance`); adding another is an
-   issue + PR with the layout spec, registered in this doc.
+1. **Print routes are deliberate.** Three exist today
+   (`commodities/:id/print`, `reports/insurance`, `labels`); adding
+   another is an issue + PR with the layout spec, registered in this doc.
 2. **App-shell chrome hiding lives in `index.css`.** The single global
    `@media print` block in `frontend/src/index.css` hides the
    sidebar / top bar / banners and neutralizes the inset + container

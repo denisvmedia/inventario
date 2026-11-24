@@ -285,6 +285,26 @@ describe("<CommoditiesListPage />", () => {
     expect(screen.getByText(/1 item selected/i)).toBeInTheDocument()
   })
 
+  it("links the selection to a label sheet (#2807)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "First" }),
+        commodityRes("c2", { name: "Second" }),
+      ])
+    )
+    renderList()
+    const cards = await screen.findAllByTestId("commodity-card")
+    await user.click(within(cards[0]).getByTestId("commodity-select"))
+    await user.click(within(cards[1]).getByTestId("commodity-select"))
+    expect(await screen.findByTestId("commodities-bulk-print-labels")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/labels?item=c1&item=c2`
+    )
+  })
+
   it("renders an error alert when the list endpoint 5xx", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

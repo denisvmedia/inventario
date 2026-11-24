@@ -157,6 +157,13 @@ type INBCommodity struct {
 	// it to the new file's DB id and patches the commodity after its files are
 	// created (the file does not yet exist when the commodity row is created).
 	CoverFileID string `json:"coverFileId,omitempty"`
+	// AssetNumber is the item's number inside its group (asset ID "A-0042").
+	// Like the acquisition pair it is server-managed, so ConvertToCommodity
+	// leaves it unset: the processor hands it to Create through the trusted
+	// registry.WithRestoreAssetNumber seam, which keeps it when the target
+	// group has no item with that number yet. Zero (an archive written before
+	// asset numbers) means the restored item gets the next free number.
+	AssetNumber int `json:"assetNumber,omitempty"`
 
 	Images    []INBFileRef `json:"images,omitempty"`
 	Documents []INBFileRef `json:"documents,omitempty"`

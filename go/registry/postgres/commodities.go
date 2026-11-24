@@ -115,9 +115,22 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// filter and match no real area.
 	commodity.NormalizeAreaID()
 
+	// The asset number is server-managed: whatever the caller sent is
+	// dropped and the number is assigned inside the insert transaction.
+	// Only the backup restore may ask for a specific (archived) number.
+	commodity.AssetNumber = nil
+	requestedAssetNumber, _ := registry.RestoreAssetNumberFromContext(ctx)
+
 	reg := r.newSQLRegistry()
 
-	createdCommodity, err := reg.Create(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx) error {
+	createdCommodity, err := reg.CreateWithPrepare(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, row *models.Commodity) error {
+		// Taken first: every lock this transaction acquires after it
+		// (tag rows) is one that no holder of a commodity row lock waits
+		// for while holding it, so the order cannot deadlock with Update
+		// or the backfill.
+		if err := assignAssetNumberInTx(ctx, tx, r.tableNames.Commodities(), row, requestedAssetNumber); err != nil {
+			return err
+		}
 		// Area is optional (issue #1986): only verify it exists when set.
 		if commodity.AreaID != nil && *commodity.AreaID != "" {
 			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {
@@ -371,7 +384,11 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 		// the index on Postgres < 14 because the planner can't see
 		// the case-folded form.
 		pattern := cond.Args.Add("%" + strings.ToLower(q) + "%")
-		add(fmt.Sprintf("(LOWER(name) LIKE %s OR LOWER(short_name) LIKE %s)", pattern, pattern))
+		match := fmt.Sprintf("LOWER(name) LIKE %s OR LOWER(short_name) LIKE %s", pattern, pattern)
+		if n, ok := models.ParseAssetID(q); ok {
+			match += " OR " + cond.Equal("asset_number", n)
+		}
+		add("(" + match + ")")
 	}
 	add(warrantyStatusExpr(cond, opts))
 	if opts.WarrantyExpiresBefore != "" {
@@ -543,7 +560,14 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Update(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, dbCommodity models.Commodity) error {
+	err := reg.UpdateWithPrepare(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, _ models.Commodity, row *models.Commodity) error {
+		// The asset number is server-managed: carry the stored one over.
+		// Read under a row lock so a backfill numbering this row at the
+		// same moment is either seen or waits for this update to finish.
+		if err := keepAssetNumberInTx(ctx, tx, r.tableNames.Commodities(), row); err != nil {
+			return err
+		}
+		commodity.AssetNumber = row.AssetNumber
 		// Area is optional (issue #1986): only verify it exists when set.
 		if commodity.AreaID != nil && *commodity.AreaID != "" {
 			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {

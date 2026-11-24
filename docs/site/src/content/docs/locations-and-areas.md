@@ -55,6 +55,19 @@ The area shows up as a tile on its location's page. Click the tile to open the a
 
 ![An area detail page listing the items inside it with search, filters, and a grid/list toggle](../../assets/screenshots/area-detail.png)
 
+## Print area labels
+
+Open an area and click **Print labels**, then choose:
+
+- **Label for this area** — one label with the area name, its location, and a QR
+  code. Scanning it opens the area page, which lists everything stored there.
+- **Labels for this area and its items** — the area label followed by a label
+  for each active item in the area, in asset-ID order.
+
+Stick the area label on the box or shelf and the item labels on the items. For
+the layouts and printing tips, see
+[Asset IDs and QR labels](../items/#asset-ids-and-qr-labels).
+
 ## Edit a location or area
 
 **To edit a location:** open it and click **Edit**, then update the icon, name, description, or address and click **Save changes**.

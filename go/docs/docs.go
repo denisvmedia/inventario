@@ -3083,7 +3083,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Case-insensitive substring match on name + short_name",
+                        "description": "Case-insensitive substring match on name + short_name; a query that reads as an asset ID (A-0042, 42) also matches that asset number",
                         "name": "q",
                         "in": "query"
                     },
@@ -6453,7 +6453,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Search query",
+                        "description": "Search query; for commodities, a query that reads as an asset ID (A-0042, 42) also matches that asset number",
                         "name": "q",
                         "in": "query",
                         "required": true
@@ -13238,6 +13238,11 @@ const docTemplate = `{
                 "area_id": {
                     "description": "AreaID is the area the commodity is filed under. Nullable (issue\n#1986): a commodity may be created with no area and later\nun-assigned. Mirrors CoverFileID's nullable-FK pointer style. No\non_delete clause — area deletion is handled at the service layer\n(EntityService.DeleteAreaRecursive cascades to the area's\ncommodities), unchanged by this issue.",
                     "type": "string"
+                },
+                "asset_number": {
+                    "description": "AssetNumber is the short sequential number of the item inside its\ngroup, displayed as an asset ID such as \"A-0042\" (see FormatAssetID).\nThe registry assigns it on Create as the group's highest number plus\none, under a per-group lock, so concurrent creates never share a\nnumber. It is server-managed: Create ignores a caller-supplied value\n(except for the trusted restore seam, registry.WithRestoreAssetNumber)\nand Update keeps the stored one. NULL only for rows that predate the\ncolumn until the runtime backfill numbers them.",
+                    "type": "integer",
+                    "readOnly": true
                 },
                 "comments": {
                     "type": "string"
