@@ -311,11 +311,9 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 // unfiltered query from an empty clause.
 func fileWhere(query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) *sqlb.WhereClause {
 	cond := sqlb.NewCond()
-	wc := sqlb.NewWhereClause()
-	added := false
+	var exprs []string
 	add := func(expr string) {
-		wc.AddWhereExpr(cond.Args, expr)
-		added = true
+		exprs = append(exprs, expr)
 	}
 
 	if fileType != nil {
@@ -349,10 +347,7 @@ func fileWhere(query string, fileType *models.FileType, fileCategory *models.Fil
 		))
 	}
 
-	if !added {
-		return nil
-	}
-	return wc
+	return andWhere(cond, exprs...)
 }
 
 func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) ([]*models.FileEntity, error) {
@@ -364,9 +359,7 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 			Select("*").
 			From(string(r.tableNames.Files())).
 			OrderByDesc("created_at")
-		if where := fileWhere(query, fileType, fileCategory, tags, linkedEntityType, linkedEntityID); where != nil {
-			sb.AddWhereClause(where)
-		}
+		addWhere(sb, fileWhere(query, fileType, fileCategory, tags, linkedEntityType, linkedEntityID))
 		sqlQuery, args := sb.Build()
 
 		rows, err := tx.QueryxContext(ctx, sqlQuery, args...)
@@ -402,10 +395,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 		where := fileWhere("", fileType, fileCategory, nil, linkedEntityType, linkedEntityID)
 
 		countSB := newSelect().Select("COUNT(*)").From(string(r.tableNames.Files()))
-		if where != nil {
-			countSB.AddWhereClause(where)
-		}
-		countQuery, countArgs := countSB.Build()
+		countQuery, countArgs := addWhere(countSB, where).Build()
 		err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total)
 		if err != nil {
 			return errxtrace.Wrap("failed to count files", err)
@@ -414,13 +404,9 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 		dataSB := newSelect().
 			Select("*").
 			From(string(r.tableNames.Files())).
-			OrderByDesc("created_at").
-			Limit(limit).
-			Offset(offset)
-		if where != nil {
-			dataSB.AddWhereClause(where)
-		}
-		dataQuery, dataArgs := dataSB.Build()
+			OrderByDesc("created_at")
+		addWhere(dataSB, where)
+		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
@@ -472,9 +458,7 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 			Select("category", "COUNT(*)", "COALESCE(SUM(size_bytes), 0)").
 			From(string(r.tableNames.Files())).
 			GroupBy("category")
-		if where := fileWhere(query, fileType, nil, tags, linkedEntityType, linkedEntityID); where != nil {
-			sb.AddWhereClause(where)
-		}
+		addWhere(sb, fileWhere(query, fileType, nil, tags, linkedEntityType, linkedEntityID))
 		sqlQuery, args := sb.Build()
 
 		rows, err := tx.QueryxContext(ctx, sqlQuery, args...)
@@ -577,48 +561,11 @@ func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.
 		return nil, nil
 	}
 
-	// $1 = olderThan; the cursor (when set) takes $2/$3, so the LIMIT
-	// placeholder index has to follow the arg list rather than be hardcoded.
-	args := []any{olderThan}
-	keyset := ""
-	if !after.IsZero() {
-		args = append(args, after.CreatedAt, after.ID)
-		keyset = "AND (f.created_at, f.id) > ($2, $3)"
-	}
-	args = append(args, limit)
-	limitPlaceholder := fmt.Sprintf("$%d", len(args))
+	query, args := orphanCandidatesQuery(r.tableNames, olderThan, after, limit)
 
 	var files []*models.FileEntity
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf(`
-			SELECT f.* FROM %s f
-			WHERE f.linked_entity_type IN ('commodity', 'area', 'location')
-			  AND f.linked_entity_id <> ''
-			  AND f.created_at < $1
-			  AND f.updated_at < $1
-			  %s
-			  AND NOT EXISTS (
-			      SELECT 1 FROM %s c
-			      WHERE f.linked_entity_type = 'commodity' AND c.id = f.linked_entity_id
-			  )
-			  AND NOT EXISTS (
-			      SELECT 1 FROM %s a
-			      WHERE f.linked_entity_type = 'area' AND a.id = f.linked_entity_id
-			  )
-			  AND NOT EXISTS (
-			      SELECT 1 FROM %s l
-			      WHERE f.linked_entity_type = 'location' AND l.id = f.linked_entity_id
-			  )
-			ORDER BY f.created_at ASC, f.id ASC
-			LIMIT %s`,
-			r.tableNames.Files(),
-			keyset,
-			r.tableNames.Commodities(),
-			r.tableNames.Areas(),
-			r.tableNames.Locations(),
-			limitPlaceholder,
-		)
 		rows, err := tx.QueryxContext(ctx, query, args...)
 		if err != nil {
 			return errxtrace.Wrap("failed to list orphan file candidates", err)
@@ -637,6 +584,35 @@ func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.
 		return nil, errxtrace.Wrap("failed to list orphan file candidates", err)
 	}
 	return files, nil
+}
+
+// orphanCandidatesQuery builds one keyset page of ListOrphanCandidates: files
+// linked to a commodity, area or location that no longer exists, oldest first,
+// resuming after the cursor when it is set.
+func orphanCandidatesQuery(tables store.TableNames, olderThan time.Time, after registry.OrphanCandidateCursor, limit int) (string, []any) {
+	gone := func(table, alias, linkPredicate string) *sqlb.SelectBuilder {
+		return newSelect().
+			Select("1").
+			From(table+" "+alias).
+			Where(linkPredicate, alias+".id = f.linked_entity_id")
+	}
+
+	sb := newSelect().Select("f.*").From(string(tables.Files()) + " f")
+	sb.Where(
+		"f.linked_entity_type IN ('commodity', 'area', 'location')",
+		"f.linked_entity_id <> ''",
+		sb.LessThan("f.created_at", olderThan),
+		sb.LessThan("f.updated_at", olderThan),
+	)
+	if !after.IsZero() {
+		sb.Where(sb.GreaterThan(sqlb.TupleNames("f.created_at", "f.id"), sqlb.Tuple(after.CreatedAt, after.ID)))
+	}
+	sb.Where(
+		sb.NotExists(gone(string(tables.Commodities()), "c", "f.linked_entity_type = 'commodity'")),
+		sb.NotExists(gone(string(tables.Areas()), "a", "f.linked_entity_type = 'area'")),
+		sb.NotExists(gone(string(tables.Locations()), "l", "f.linked_entity_type = 'location'")),
+	)
+	return sb.OrderByAsc("f.created_at").OrderByAsc("f.id").Limit(limit).Build()
 }
 
 // ExistingIDs returns the subset of ids that still have a file row, in ONE

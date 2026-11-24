@@ -49,3 +49,9 @@ func WithGroupForTest(group *models.LocationGroup, next http.HandlerFunc) http.H
 func NewMemberAvatarsAPIForTest(svc *services.AvatarService, groupService *services.GroupService) *AvatarsAPIForTest {
 	return &AvatarsAPIForTest{api: &avatarsAPI{avatarService: svc, groupService: groupService}}
 }
+
+// NewAvatarsAPIWithSignerForTest builds the owner-side handler set with a
+// signer, so the upload response carries a signed avatar_url.
+func NewAvatarsAPIWithSignerForTest(svc *services.AvatarService, signer *services.FileSigningService) *AvatarsAPIForTest {
+	return &AvatarsAPIForTest{api: &avatarsAPI{avatarService: svc, signer: signer}}
+}

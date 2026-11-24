@@ -286,6 +286,25 @@ export async function updateProfile(req: UpdateProfileRequest): Promise<CurrentU
   return http.put<CurrentUser>("/auth/me", req)
 }
 
+// Profile photo (#1382). The server re-encodes whatever it accepts into a
+// 512px square JPEG and answers with a signed `avatar_url` for it.
+export type AvatarUploadResponse = Schema<"apiserver.AvatarUploadResponse">
+
+// What the upload endpoint accepts. The server checks the content again; these
+// let the picker refuse a wrong file before spending an upload on it.
+export const AVATAR_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"] as const
+export const AVATAR_MAX_BYTES = 2 * 1024 * 1024
+
+export function uploadAvatar(file: File): Promise<AvatarUploadResponse> {
+  const form = new FormData()
+  form.append("avatar", file)
+  return http.post<AvatarUploadResponse>("/auth/me/avatar", form)
+}
+
+export async function removeAvatar(): Promise<void> {
+  await http.del<void>("/auth/me/avatar")
+}
+
 export interface ChangePasswordRequest {
   current_password: string
   new_password: string

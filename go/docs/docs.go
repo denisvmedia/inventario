@@ -1691,7 +1691,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Replaces the caller's avatar. The image is center-cropped to a square, scaled to 512px and re-encoded as JPEG, which also drops any EXIF metadata the original carried.\nAccepts JPEG or PNG up to 2 MB, detected from the content rather than from the declared type or the filename.",
+                "description": "Replaces the caller's avatar. The image is center-cropped to a square, scaled to 512px and re-encoded as JPEG, which also drops any EXIF metadata the original carried.\nAccepts a still JPEG, PNG or WebP up to 2 MB, detected from the content rather than from the declared type or the filename. The EXIF orientation is applied to the pixels before the metadata is dropped.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1713,16 +1713,13 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "The stored avatar path",
+                        "description": "The stored avatar path and a signed URL to load it from",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/apiserver.AvatarUploadResponse"
                         }
                     },
                     "400": {
-                        "description": "Not an image, or larger than 2 MB",
+                        "description": "Not a supported image, animated, or larger than 2 MB",
                         "schema": {
                             "type": "string"
                         }
@@ -2217,6 +2214,81 @@ const docTemplate = `{
                     },
                     "501": {
                         "description": "Not Implemented - refresh tokens not supported",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/avatars/{userID}": {
+            "get": {
+                "description": "Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;\nthey are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.",
+                "produces": [
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Get a profile photo from a signed URL",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "The user whose photo it is",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Photo version",
+                        "name": "v",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "The user the URL was issued to",
+                        "name": "uid",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "The group the two users share",
+                        "name": "gid",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Expiry, Unix seconds",
+                        "name": "exp",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Signature",
+                        "name": "sig",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The avatar image",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid or expired URL",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "No such photo, or no longer visible to this user",
                         "schema": {
                             "type": "string"
                         }
@@ -7798,7 +7870,7 @@ const docTemplate = `{
         },
         "/groups/{groupID}/members": {
             "get": {
-                "description": "Returns all members of a location group with their roles and joined user data (id / name / email). Requires group membership.",
+                "description": "Returns all members of a location group with their roles and joined user data (id / name / email, and a signed avatar_url for a member with a profile photo). Requires group membership.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -8726,6 +8798,19 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tenant_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.AvatarUploadResponse": {
+            "type": "object",
+            "properties": {
+                "avatar_path": {
+                    "description": "AvatarPath is the stored key.",
+                    "type": "string"
+                },
+                "avatar_url": {
+                    "description": "AvatarURL is a signed URL the browser can load the new photo from.\nEmpty when the server has no signer configured.",
                     "type": "string"
                 }
             }
@@ -12315,6 +12400,10 @@ const docTemplate = `{
         "jsonapi.MembershipUserView": {
             "type": "object",
             "properties": {
+                "avatar_url": {
+                    "description": "AvatarURL is a signed URL of the member's profile photo, valid for the\nsession that requested the list. Absent when the member has none.",
+                    "type": "string"
+                },
                 "email": {
                     "type": "string",
                     "example": "jordan@example.com"
@@ -14463,6 +14552,10 @@ const docTemplate = `{
             "properties": {
                 "avatar_path": {
                     "description": "AvatarPath is the blob key of the user's profile photo, or nil when they\nhave none and the UI falls back to their initials (#1382).\n\nThe key ends in a revision number (` + "`" + `avatars/\u003cuser\u003e/3.jpg` + "`" + `) which exists to\nbust browser caches: replacing a photo writes a new key rather than\noverwriting one, so nothing has to reason about cache headers to make the\nnew picture show up.\n\nNot user input: it is set by the avatar endpoints, which decide the key\nafter validating and re-encoding what was uploaded. A client that could\nchoose it could point a user's avatar at any object in the bucket.",
+                    "type": "string"
+                },
+                "avatar_url": {
+                    "description": "AvatarURL is a transient wire-only field: a signed URL the browser can\nload the profile photo from without the bearer token (#1382). Empty when\nthe user has no photo. Handlers that emit a /auth/me-style payload mint\nit for the request's session; it is never stored, so it has no\nmigrator annotation and ` + "`" + `db:\"-\"` + "`" + `, like HasPassword.",
                     "type": "string"
                 },
                 "created_at": {

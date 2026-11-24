@@ -50,10 +50,6 @@
       "description": "Compare available subscription tiers and upgrade or downgrade your plan.",
       "title": "Subscription plans"
     },
-    "profilePhoto": {
-      "description": "Upload a photo to personalize your profile.",
-      "title": "Profile photo"
-    },
     "warranties": {
       "description": "Track per-item warranty terms, expiry, and renewals.",
       "title": "Warranties"

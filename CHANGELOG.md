@@ -34,6 +34,15 @@ the section matching the tag and publishes it as the GitHub Release body. See
   L7160) or a Letter sheet (Avery 5160) at real size, and is reached from the
   item page, the items bulk bar and the area page
   ([#2807](https://github.com/denisvmedia/inventario/issues/2807)).
+- Profile photos. Upload a still JPG, PNG or WebP picture of up to 2 MB from
+  the Edit profile page, or from the camera on your Profile page. It is
+  cropped to a square, scaled to at most 512 pixels, turned upright when a
+  phone stored it sideways, and saved without its metadata, so a photo's GPS
+  position is not kept. The photo replaces your initials in the sidebar, on
+  the profile pages, in Preferences and in the members list of every group you
+  are in. Only you and the members of your groups can load it, it does not
+  count toward a group's storage, and deleting your account deletes it
+  ([#1382](https://github.com/denisvmedia/inventario/issues/1382)).
 
 ### Fixed
 

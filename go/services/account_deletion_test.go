@@ -1,6 +1,7 @@
 package services_test
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -24,7 +25,7 @@ func newAccountDeletionService(c *qt.C) (context.Context, *registry.FactorySet, 
 	fs := memory.NewFactorySet()
 	fileSvc := services.NewFileService(fs, uploadLocation)
 	purger := services.NewGroupPurgeService(fs, fileSvc)
-	svc := services.NewAccountDeletionService(fs, purger)
+	svc := services.NewAccountDeletionService(fs, purger, services.NewAvatarService(fs, uploadLocation))
 	return ctx, fs, svc, uploadLocation
 }
 
@@ -302,4 +303,27 @@ func TestAccountDeletionService_DeleteAccount_AuthoredContentInRetainedGroup(t *
 	c.Assert(members, qt.HasLen, 2)
 	_, err = commodityReg.Get(ctx, commodity.GetID())
 	c.Assert(err, qt.IsNil)
+}
+
+// The profile photo is not a file row, so the group purge does not reach it.
+// Erasing the account has to remove it too, or a personal image outlives the
+// account nobody can now remove it from.
+func TestAccountDeletionService_DeleteAccount_RemovesTheProfilePhoto(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, svc, uploadLocation := newAccountDeletionService(c)
+
+	user := seedAccountUser(c, ctx, fs, "photo@example.com")
+	seedAccountGroupWithMember(c, ctx, fs, "photo-group-slug-000000000000", user.ID, models.GroupRoleOwner)
+
+	key, err := services.NewAvatarService(fs, uploadLocation).Store(ctx, user.ID, bytes.NewReader(pngBytes(c, 64, 64)))
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(svc.DeleteAccount(ctx, user.TenantID, user.ID), qt.IsNil)
+
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+	exists, err := b.Exists(ctx, key)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsFalse)
 }

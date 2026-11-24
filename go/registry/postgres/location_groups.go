@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/models"
@@ -229,89 +230,18 @@ func (r *LocationGroupRegistry) ListByTenant(ctx context.Context, tenantID strin
 //
 // Total is post-filter, pre-pagination.
 func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.AdminGroupListOptions) ([]*registry.AdminGroupListItem, int, error) {
-	page := opts.Page
-	if page <= 0 {
-		page = 1
-	}
-	perPage := opts.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-
-	sortField := opts.SortField
-	if !sortField.IsValid() {
-		sortField = registry.AdminGroupSortName
-	}
-	direction := "ASC"
-	if opts.SortDesc {
-		direction = "DESC"
-	}
-
-	groupsTable := r.tableNames.LocationGroups()
-	membershipsTable := r.tableNames.GroupMemberships()
-	tenantsTable := r.tableNames.Tenants()
-
-	args := make([]any, 0, 3)
-	whereClauses := make([]string, 0, 3)
-	if q := strings.TrimSpace(opts.Query); q != "" {
-		args = append(args, "%"+q+"%")
-		// The query arg is reused across name + slug.
-		whereClauses = append(whereClauses, fmt.Sprintf("(g.name ILIKE $%d OR g.slug ILIKE $%d)", len(args), len(args)))
-	}
-	if t := strings.TrimSpace(opts.TenantID); t != "" {
-		args = append(args, t)
-		whereClauses = append(whereClauses, fmt.Sprintf("g.tenant_id = $%d", len(args)))
-	}
-	if s := strings.TrimSpace(opts.Status); s != "" {
-		args = append(args, s)
-		whereClauses = append(whereClauses, fmt.Sprintf("g.status = $%d", len(args)))
-	}
-	where := ""
-	if len(whereClauses) > 0 {
-		where = "WHERE " + strings.Join(whereClauses, " AND ")
-	}
+	countSB, pageSB := adminGroupListQueries(r.tableNames, opts)
+	countQuery, countArgs := countSB.Build()
+	pageQuery, pageArgs := pageSB.Build()
 
 	var (
 		items []*registry.AdminGroupListItem
 		total int
 	)
 	err := store.DoAsAdmin(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s AS g %s", groupsTable, where)
-		if scanErr := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); scanErr != nil {
+		if scanErr := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); scanErr != nil {
 			return errxtrace.Wrap("failed to count admin groups", scanErr)
 		}
-
-		limitPos := len(args) + 1
-		offsetPos := len(args) + 2
-		offset := (page - 1) * perPage
-
-		// SECURITY: sortField is constrained to AdminGroupSortField via IsValid above,
-		// direction is "ASC"/"DESC" literals, and table-names come from r.tableNames —
-		// never user-supplied — so direct fmt.Sprintf interpolation is safe.
-		//
-		// tenants is JOINed (not a correlated subquery) so each row carries
-		// the owning-tenant chip — the cross-tenant admin list renders the
-		// tenant name per row without an FE N+1 lookup. Same tx, so the JOIN
-		// is read under the same inventario_admin (BYPASSRLS) role.
-		//
-		// LEFT JOIN, not INNER: AdminGroupListItem.Tenant is *models.Tenant
-		// (nullable by contract). An INNER JOIN would silently DROP a group
-		// whose tenant row is missing/corrupt — the worst behavior for a
-		// cross-tenant admin debugging surface, where an admin most needs to
-		// SEE orphaned groups. With LEFT JOIN the tenant columns scan NULL
-		// and Tenant is left nil.
-		pageQuery := fmt.Sprintf(`
-			SELECT g.*,
-				(SELECT COUNT(*) FROM %s AS m WHERE m.group_id = g.id) AS _member_count,
-				t.id AS _tenant_id, t.name AS _tenant_name, t.slug AS _tenant_slug
-			FROM %s AS g
-			LEFT JOIN %s AS t ON t.id = g.tenant_id
-			%s
-			ORDER BY g.%s %s, g.id ASC
-			LIMIT $%d OFFSET $%d`,
-			membershipsTable, groupsTable, tenantsTable, where, string(sortField), direction, limitPos, offsetPos,
-		)
-		pageArgs := append(append([]any{}, args...), perPage, offset)
 
 		rows, err := tx.QueryxContext(ctx, pageQuery, pageArgs...)
 		if err != nil {
@@ -346,6 +276,75 @@ func (r *LocationGroupRegistry) ListAdmin(ctx context.Context, opts registry.Adm
 		return nil, 0, err
 	}
 	return items, total, nil
+}
+
+// adminGroupListQueries builds the count and the page query of ListAdmin. Both
+// carry the same WHERE clause, so the total describes the filtered set the
+// page is cut from.
+//
+// tenants is JOINed (not a correlated subquery) so each row carries the
+// owning-tenant chip — the cross-tenant admin list renders the tenant name per
+// row without an FE N+1 lookup. Both queries run in the same tx, so the JOIN is
+// read under the same inventario_admin (BYPASSRLS) role.
+//
+// LEFT JOIN, not INNER: AdminGroupListItem.Tenant is *models.Tenant (nullable
+// by contract). An INNER JOIN would silently DROP a group whose tenant row is
+// missing/corrupt — the worst behavior for a cross-tenant admin debugging
+// surface, where an admin most needs to SEE orphaned groups. With LEFT JOIN
+// the tenant columns scan NULL and Tenant is left nil.
+func adminGroupListQueries(tables store.TableNames, opts registry.AdminGroupListOptions) (countSB, pageSB *sqlb.SelectBuilder) {
+	page := opts.Page
+	if page <= 0 {
+		page = 1
+	}
+	perPage := opts.PerPage
+	if perPage <= 0 {
+		perPage = 50
+	}
+	// A validated enum value, so the ORDER BY column never comes from the
+	// request.
+	sortField := opts.SortField
+	if !sortField.IsValid() {
+		sortField = registry.AdminGroupSortName
+	}
+
+	from := string(tables.LocationGroups()) + " AS g"
+	cond := sqlb.NewCond()
+	var exprs []string
+	if q := strings.TrimSpace(opts.Query); q != "" {
+		pattern := "%" + q + "%"
+		exprs = append(exprs, cond.Or(cond.ILike("g.name", pattern), cond.ILike("g.slug", pattern)))
+	}
+	if t := strings.TrimSpace(opts.TenantID); t != "" {
+		exprs = append(exprs, cond.Equal("g.tenant_id", t))
+	}
+	if s := strings.TrimSpace(opts.Status); s != "" {
+		exprs = append(exprs, cond.Equal("g.status", s))
+	}
+	where := andWhere(cond, exprs...)
+
+	countSB = addWhere(newSelect().Select("COUNT(*)").From(from), where)
+
+	memberCount := newSelect().
+		Select("COUNT(*)").
+		From(string(tables.GroupMemberships()) + " AS m").
+		Where("m.group_id = g.id")
+	pageSB = newSelect()
+	pageSB.Select(
+		"g.*",
+		pageSB.BuilderAs(memberCount, "_member_count"),
+		"t.id AS _tenant_id", "t.name AS _tenant_name", "t.slug AS _tenant_slug",
+	).
+		From(from).
+		JoinWithOption(sqlb.LeftJoin, string(tables.Tenants())+" AS t", "t.id = g.tenant_id")
+	addWhere(pageSB, where)
+	primary := pageSB.OrderByAsc
+	if opts.SortDesc {
+		primary = pageSB.OrderByDesc
+	}
+	primary("g." + string(sortField)).OrderByAsc("g.id")
+	paginate(pageSB, (page-1)*perPage, perPage)
+	return countSB, pageSB
 }
 
 // GetAdmin returns a single group detail row with the computed

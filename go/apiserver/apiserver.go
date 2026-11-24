@@ -587,15 +587,13 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// Self-service account deletion (#2147) reuses the per-group purge
 		// machinery: the AccountDeletionService classifies the user's groups,
 		// purges the private ones via GroupPurgeService, then drops the user's
-		// auth rows + the users row.
-		accountDeletionFileSvc := services.NewFileService(params.FactorySet, params.UploadLocation)
-		accountDeletionSvc := services.NewAccountDeletionService(
-			params.FactorySet,
-			services.NewGroupPurgeService(params.FactorySet, accountDeletionFileSvc),
-		)
+		// auth rows + the users row, and deletes their profile photo.
+		accountDeletionPurger := services.NewGroupPurgeService(params.FactorySet, services.NewFileService(params.FactorySet, params.UploadLocation))
 		avatarSvc := services.NewAvatarService(params.FactorySet, params.UploadLocation)
+		accountDeletionSvc := services.NewAccountDeletionService(params.FactorySet, accountDeletionPurger, avatarSvc)
 		r.Route("/auth", Auth(AuthParams{
 			AvatarService:            avatarSvc,
+			FileSigningService:       services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 			UserRegistry:             params.FactorySet.UserRegistry,
 			RefreshTokenRegistry:     params.FactorySet.RefreshTokenRegistry,
 			GroupMembershipRegistry:  params.FactorySet.GroupMembershipRegistry,
@@ -861,6 +859,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			params.FactorySet.LocationGroupRegistry,
 		)
 		r.With(signedURLMiddleware, RLSContextMiddleware(params.FactorySet), RegistrySetMiddleware(params.FactorySet)).Route("/files/download", SignedFiles(params))
+		r.Route("/avatars", SignedAvatars(params))
 	})
 
 	// use Frontend as a root directory

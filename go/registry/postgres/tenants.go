@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/models"
@@ -224,67 +225,18 @@ func (r *TenantRegistry) GetBySlug(ctx context.Context, slug string) (*models.Te
 // applying the same correlated subqueries inside the count query is
 // wasteful — `SELECT count(*)` on the filter-only predicate is enough.
 func (r *TenantRegistry) ListAdmin(ctx context.Context, opts registry.AdminTenantListOptions) ([]*registry.AdminTenantListItem, int, error) {
-	page := opts.Page
-	if page <= 0 {
-		page = 1
-	}
-	perPage := opts.PerPage
-	if perPage <= 0 {
-		perPage = 50
-	}
-
-	sortField := opts.SortField
-	if !sortField.IsValid() {
-		sortField = registry.AdminTenantSortName
-	}
-	direction := "ASC"
-	if opts.SortDesc {
-		direction = "DESC"
-	}
-
-	tenantsTable := r.tableNames.Tenants()
-	usersTable := r.tableNames.Users()
-	groupsTable := r.tableNames.LocationGroups()
-
-	// Build optional WHERE clause for the search query.
-	args := make([]any, 0, 2)
-	where := ""
-	if q := strings.TrimSpace(opts.Query); q != "" {
-		args = append(args, "%"+q+"%")
-		// $1 reused across three columns — keeps the binding simple.
-		where = "WHERE (t.name ILIKE $1 OR t.slug ILIKE $1 OR t.domain ILIKE $1)"
-	}
+	countSB, pageSB := adminTenantListQueries(r.tableNames, opts)
+	countQuery, countArgs := countSB.Build()
+	pageQuery, pageArgs := pageSB.Build()
 
 	var (
 		items []*registry.AdminTenantListItem
 		total int
 	)
 	err := store.DoAsAdmin(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s AS t %s", tenantsTable, where)
-		if err := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 			return errxtrace.Wrap("failed to count admin tenants", err)
 		}
-
-		// LIMIT/OFFSET use positional bindings that come after the
-		// optional query arg, so derive their positions dynamically.
-		limitPos := len(args) + 1
-		offsetPos := len(args) + 2
-		offset := (page - 1) * perPage
-
-		// SECURITY: sortField is constrained to AdminTenantSortField via IsValid above,
-		// direction is "ASC"/"DESC" literals, and table-names come from r.tableNames —
-		// never user-supplied — so direct fmt.Sprintf interpolation is safe.
-		pageQuery := fmt.Sprintf(`
-			SELECT t.*,
-				(SELECT COUNT(*) FROM %s AS u WHERE u.tenant_id = t.id) AS _user_count,
-				(SELECT COUNT(*) FROM %s AS g WHERE g.tenant_id = t.id) AS _group_count
-			FROM %s AS t
-			%s
-			ORDER BY t.%s %s, t.id ASC
-			LIMIT $%d OFFSET $%d`,
-			usersTable, groupsTable, tenantsTable, where, string(sortField), direction, limitPos, offsetPos,
-		)
-		pageArgs := append(append([]any{}, args...), perPage, offset)
 
 		rows, err := tx.QueryxContext(ctx, pageQuery, pageArgs...)
 		if err != nil {
@@ -320,6 +272,59 @@ func (r *TenantRegistry) ListAdmin(ctx context.Context, opts registry.AdminTenan
 		return nil, 0, err
 	}
 	return items, total, nil
+}
+
+// adminTenantListQueries builds the count and the page query of ListAdmin.
+// Both carry the same WHERE clause, so the total describes the filtered set
+// the page is cut from. The search term matches the name, the slug or the
+// domain.
+func adminTenantListQueries(tables store.TableNames, opts registry.AdminTenantListOptions) (countSB, pageSB *sqlb.SelectBuilder) {
+	page := opts.Page
+	if page <= 0 {
+		page = 1
+	}
+	perPage := opts.PerPage
+	if perPage <= 0 {
+		perPage = 50
+	}
+	// A validated enum value, so the ORDER BY column never comes from the
+	// request.
+	sortField := opts.SortField
+	if !sortField.IsValid() {
+		sortField = registry.AdminTenantSortName
+	}
+
+	from := string(tables.Tenants()) + " AS t"
+	cond := sqlb.NewCond()
+	var exprs []string
+	if q := strings.TrimSpace(opts.Query); q != "" {
+		pattern := "%" + q + "%"
+		exprs = append(exprs, cond.Or(
+			cond.ILike("t.name", pattern),
+			cond.ILike("t.slug", pattern),
+			cond.ILike("t.domain", pattern),
+		))
+	}
+	where := andWhere(cond, exprs...)
+
+	countSB = addWhere(newSelect().Select("COUNT(*)").From(from), where)
+
+	userCount := newSelect().Select("COUNT(*)").From(string(tables.Users()) + " AS u").Where("u.tenant_id = t.id")
+	groupCount := newSelect().Select("COUNT(*)").From(string(tables.LocationGroups()) + " AS g").Where("g.tenant_id = t.id")
+	pageSB = newSelect()
+	pageSB.Select(
+		"t.*",
+		pageSB.BuilderAs(userCount, "_user_count"),
+		pageSB.BuilderAs(groupCount, "_group_count"),
+	).From(from)
+	addWhere(pageSB, where)
+	primary := pageSB.OrderByAsc
+	if opts.SortDesc {
+		primary = pageSB.OrderByDesc
+	}
+	primary("t." + string(sortField)).OrderByAsc("t.id")
+	paginate(pageSB, (page-1)*perPage, perPage)
+	return countSB, pageSB
 }
 
 // GetAdmin returns a single tenant detail row with the same computed

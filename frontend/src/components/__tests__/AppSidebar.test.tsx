@@ -1,13 +1,14 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { http } from "msw"
 import { Route } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 
 import { AppSidebar } from "@/components/AppSidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { apiUrl, authHandlers, groupHandlers } from "@/test/handlers"
+import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -112,5 +113,41 @@ describe("<AppSidebar /> — group-section gating (#1886)", () => {
     renderSidebar("/no-group")
     const help = await screen.findByTestId("sidebar-help")
     expect(help.getAttribute("href")).toBe("/settings?section=help")
+  })
+})
+
+describe("<AppSidebar /> — user menu avatar (#1382)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("shows the initials when the user has no photo", async () => {
+    server.use(
+      ...authHandlers.signedIn({ user: { name: "Alex Johnson" } }),
+      ...groupHandlers.empty()
+    )
+    renderSidebar("/no-group")
+    const avatar = await screen.findByTestId("user-menu-avatar")
+    await waitFor(() =>
+      expect(within(avatar).getByTestId("user-avatar-initials")).toHaveTextContent("AJ")
+    )
+  })
+
+  it("shows the photo when the user has one", async () => {
+    stubImageLoading()
+    server.use(
+      ...authHandlers.signedIn({
+        user: { name: "Alex Johnson", avatar_url: "/api/v1/avatars/u1?sig=a" },
+      }),
+      ...groupHandlers.empty()
+    )
+    renderSidebar("/no-group")
+    const avatar = await screen.findByTestId("user-menu-avatar")
+    await waitFor(() =>
+      expect(within(avatar).getByTestId("user-avatar-image")).toHaveAttribute(
+        "src",
+        "/api/v1/avatars/u1?sig=a"
+      )
+    )
   })
 })

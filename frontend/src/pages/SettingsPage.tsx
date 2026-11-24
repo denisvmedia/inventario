@@ -21,6 +21,7 @@ import {
   User,
 } from "lucide-react"
 
+import { UserAvatar } from "@/components/UserAvatar"
 import { FeedbackDialog } from "@/components/feedback/FeedbackDialog"
 import { ConnectedAccountsCard } from "@/components/settings/ConnectedAccountsCard"
 import { MFASettingsRow } from "@/components/settings/MFASettingsRow"
@@ -285,12 +286,14 @@ function AccountSection() {
 
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-4">
-          <div
-            className="flex size-12 items-center justify-center rounded-full bg-primary text-base font-semibold text-primary-foreground"
-            aria-hidden="true"
-          >
-            {(user?.name?.[0] ?? user?.email?.[0] ?? "?").toUpperCase()}
-          </div>
+          <UserAvatar
+            name={user?.name}
+            email={user?.email}
+            src={user?.avatar_url}
+            className="size-12 rounded-full"
+            fallbackClassName="bg-primary text-base text-primary-foreground"
+            testId="settings-account-avatar"
+          />
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{user?.name ?? "—"}</p>
             <p className="truncate text-sm text-muted-foreground">{user?.email ?? "—"}</p>

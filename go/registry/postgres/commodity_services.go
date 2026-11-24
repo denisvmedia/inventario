@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/appctx"
@@ -195,40 +195,22 @@ func (r *CommodityServiceRegistry) ListPaginated(ctx context.Context, offset, li
 		now = time.Now()
 	}
 
-	var conditions []string
-	var args []any
-	switch state {
-	case registry.ServiceStateOpen:
-		conditions = append(conditions, "returned_at IS NULL")
-	case registry.ServiceStateOverdue:
-		conditions = append(conditions, "returned_at IS NULL AND expected_return_at IS NOT NULL AND expected_return_at < $1")
-		args = append(args, now.Format("2006-01-02"))
-	case registry.ServiceStateCompleted:
-		conditions = append(conditions, "returned_at IS NOT NULL")
-	case registry.ServiceStateAll:
-		// no filter
-	}
-
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = "WHERE " + strings.Join(conditions, " AND ")
-	}
+	where := serviceStateWhere(state, now)
 
 	var services []*models.CommodityService
 	var total int
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s %s`, r.tableNames.CommodityServices(), whereClause)
-		if err := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		countSB := newSelect().Select("COUNT(*)").From(string(r.tableNames.CommodityServices()))
+		countQuery, countArgs := addWhere(countSB, where).Build()
+		if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 			return errxtrace.Wrap("failed to count commodity services", err)
 		}
 
-		dataArgs := append([]any{}, args...)
-		dataArgs = append(dataArgs, limit, offset)
-		dataQuery := fmt.Sprintf(
-			`SELECT * FROM %s %s ORDER BY sent_at DESC, created_at DESC LIMIT $%d OFFSET $%d`,
-			r.tableNames.CommodityServices(), whereClause, len(args)+1, len(args)+2)
+		dataSB := newSelect().Select("*").From(string(r.tableNames.CommodityServices()))
+		addWhere(dataSB, where).OrderByDesc("sent_at").OrderByDesc("created_at")
+		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
 			return errxtrace.Wrap("failed to query commodity services", err)
@@ -248,6 +230,29 @@ func (r *CommodityServiceRegistry) ListPaginated(ctx context.Context, offset, li
 		return nil, 0, errxtrace.Wrap("failed to list paginated commodity services", err)
 	}
 	return services, total, nil
+}
+
+// serviceStateWhere is the WHERE clause the service page and its count share,
+// nil for ServiceStateAll. Overdue compares expected_return_at against now as
+// a calendar date, the format the column stores.
+func serviceStateWhere(state registry.ServiceState, now time.Time) *sqlb.WhereClause {
+	cond := sqlb.NewCond()
+	var exprs []string
+	switch state {
+	case registry.ServiceStateOpen:
+		exprs = append(exprs, "returned_at IS NULL")
+	case registry.ServiceStateOverdue:
+		exprs = append(exprs,
+			"returned_at IS NULL",
+			"expected_return_at IS NOT NULL",
+			cond.LessThan("expected_return_at", now.Format("2006-01-02")),
+		)
+	case registry.ServiceStateCompleted:
+		exprs = append(exprs, "returned_at IS NOT NULL")
+	case registry.ServiceStateAll:
+		// no filter
+	}
+	return andWhere(cond, exprs...)
 }
 
 func (r *CommodityServiceRegistry) CountOpenByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error) {

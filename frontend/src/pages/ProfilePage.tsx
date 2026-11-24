@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 import {
   Building2,
   Calendar,
+  Camera,
   Package,
   Pencil,
   ShieldCheck,
@@ -18,12 +19,13 @@ import { Page } from "@/components/ui/page"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ComingSoonBanner } from "@/components/coming-soon"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { UserAvatar } from "@/components/UserAvatar"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useGroups } from "@/features/group/hooks"
 import { useDashboardData } from "@/features/dashboard/hooks"
+import { useAvatarPicker } from "@/hooks/useAvatarPicker"
 import type { LocationGroup } from "@/features/group/api"
 import type { GroupRole } from "@/features/group/api"
 import { withGroupQuery } from "@/lib/group-aware-url"
@@ -34,17 +36,6 @@ import { formatCurrency, formatDate } from "@/lib/intl"
 // at or below 3 visual rows on a 2-column layout — beyond that we'd be
 // better off sending the user to a dedicated "all groups" surface.
 const MAX_GROUP_TILES = 6
-
-// Initials for the avatar fallback. "Alex Johnson" → "AJ", "alex" → "A".
-// We keep at most two letters and fall back to the email's local part if
-// `name` isn't available, then to "?" so the badge never reads as empty.
-function initialsFor(name?: string, email?: string): string {
-  const source = name?.trim() || (email?.split("@")[0] ?? "")
-  if (!source) return "?"
-  const parts = source.split(/\s+/).filter(Boolean)
-  const letters = (parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")
-  return (letters || source[0] || "?").toUpperCase().slice(0, 2)
-}
 
 export function ProfilePage() {
   const { t } = useTranslation()
@@ -57,6 +48,7 @@ export function ProfilePage() {
   const groups = groupsQuery.data
   const { currentGroup } = useCurrentGroup()
   const dashboard = useDashboardData()
+  const avatarPicker = useAvatarPicker()
 
   const derivedName = user?.name?.trim() || (user?.email?.split("@")[0] ?? "")
   const name = derivedName || "—"
@@ -99,8 +91,7 @@ export function ProfilePage() {
       <RouteTitle title={t("settings:profile.title")} />
       <Page width="narrow" className="gap-8" data-testid="profile-page">
         {/* Identity card. Banner + avatar + name + plan badge. The cover
-            stripe pattern is taken from the design mock; the avatar shows
-            initials because uploads are tracked under #1382. */}
+            stripe pattern is taken from the design mock. */}
         <section className="overflow-hidden rounded-2xl border border-border">
           <div className="relative h-28 overflow-hidden bg-primary">
             <div
@@ -137,18 +128,32 @@ export function ProfilePage() {
 
           <div className="px-5 pb-5">
             <div className="-mt-9 mb-3 flex items-end justify-between">
-              {/* The mock wraps the avatar in a `relative group` so the
-                  camera-upload overlay can sit inside on hover (#1382).
-                  We keep the wrapper even without the overlay so the
-                  alignment math (avatar bottom vs. plan-cluster bottom)
-                  matches the mock exactly. */}
+              {/* The camera overlay appears on hover and opens the same
+                  picker as the edit page's "Upload photo" button. */}
               <div className="relative group">
-                <div
-                  className="flex size-[72px] items-center justify-center rounded-2xl border-4 border-background bg-card text-xl font-bold text-primary shadow-md"
-                  aria-hidden="true"
+                <UserAvatar
+                  name={user?.name}
+                  email={user?.email}
+                  src={avatarPicker.previewUrl ?? user?.avatar_url}
+                  className="size-[72px] rounded-2xl border-4 border-background bg-card shadow-md"
+                  fallbackClassName="bg-card text-xl font-bold text-primary"
+                  testId="profile-avatar"
+                />
+                <button
+                  type="button"
+                  onClick={avatarPicker.open}
+                  disabled={avatarPicker.isUploading}
+                  aria-label={
+                    user?.avatar_url
+                      ? t("settings:profile.photo.change")
+                      : t("settings:profile.photo.upload")
+                  }
+                  className="absolute inset-0 flex items-center justify-center rounded-[14px] bg-black/40 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed"
+                  data-testid="profile-avatar-camera"
                 >
-                  {initialsFor(user?.name, user?.email)}
-                </div>
+                  <Camera className="size-4 text-white" aria-hidden="true" />
+                </button>
+                <input {...avatarPicker.inputProps} data-testid="profile-avatar-input" />
               </div>
               <div className="mb-1 flex items-center gap-2">
                 <Badge variant="outline" className="text-xs font-medium">
@@ -256,11 +261,6 @@ export function ProfilePage() {
             <ActivityTabBody />
           </TabsContent>
         </Tabs>
-
-        {/* Avatar upload tracker — keep the per-section stub linked to
-            #1382. Demoted below the snapshot so it doesn't compete with
-            the new identity → stats → tabs primary scan. */}
-        <ComingSoonBanner surface="profilePhoto" />
 
         <Separator />
 

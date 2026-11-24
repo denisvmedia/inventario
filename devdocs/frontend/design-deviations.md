@@ -349,6 +349,33 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — asked for the OpenID Connect provider in #2786.
 - **Reversion plan**: Reconcile if the upstream mock adds a generic single sign-on button or a three-provider layout.
 
+#### 2026-11-24 — Edit profile "Photo" section gains a "Remove photo" link and lists WebP
+
+- **Issue/PR**: #1382 / PR (pending)
+- **Mock**: [`design-mocks/src/views/EditProfileView.tsx`](../../design-mocks/src/views/EditProfileView.tsx) (the "Photo" `Section`) draws the 64px tile with a hover camera overlay, one outline "Upload photo" button and the hint "JPG or PNG, max 2 MB". There is no way to remove a photo.
+- **Reality**: `ProfilePhotoSection` in `frontend/src/pages/EditProfilePage.tsx` keeps that anatomy (tile, camera overlay, outline button, hint) and adds a small destructive text link, "Remove photo", under the hint once a photo is set; it asks for confirmation through `useConfirm`. The hint reads "JPG, PNG or WebP, max 2 MB".
+- **Why**: #1382 accepts WebP uploads and requires that removing the photo falls back to the initials, which needs a control the mock does not draw.
+- **Approved by**: user (explicit) — pre-approved for #1382 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Reconcile if the upstream mock adds a remove control or changes the hint.
+
+#### 2026-11-24 — Edit profile "Photo" section sits in a card, and its button follows the upload state
+
+- **Issue/PR**: #1382 / PR (pending)
+- **Mock**: [`design-mocks/src/views/EditProfileView.tsx`](../../design-mocks/src/views/EditProfileView.tsx) lays the sections out flat, title column on the left, separated by `<Separator />`. The button always reads "Upload photo".
+- **Reality**: The section uses the same title-column layout inside a `rounded-xl border bg-card p-5` card, like the profile and password forms already on `/profile/edit`. The button reads "Change photo" once a photo is set and "Uploading…" while an upload runs, and the tile shows the chosen file until the server answers. The camera overlay also appears on keyboard focus (`focus-visible:opacity-100`), not only on hover.
+- **Why**: Agent-suggested. The page already draws its forms as cards, and a flat section above them would look like a different page. The button labels and the preview tell the user what the button will do and that something is happening; the focus rule makes the overlay usable without a mouse.
+- **Approved by**: agent-suggested (listed in the #1382 PR for review)
+- **Reversion plan**: Drop the card if `/profile/edit` moves to the mock's flat layout.
+
+#### 2026-11-24 — Avatars show the profile photo where the mock draws initials
+
+- **Issue/PR**: #1382 / PR (pending)
+- **Mock**: Every avatar in the mock is an initials tile: the sidebar user menu ([`AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx)), the account card in [`SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx), the identity card in [`UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) and the member rows in [`MembersView.tsx`](../../design-mocks/src/views/MembersView.tsx).
+- **Reality**: All of them render `frontend/src/components/UserAvatar.tsx` (the vendored shadcn `Avatar`). It shows the user's photo, cropped to the tile's shape, and the initials tile when there is no photo or it fails to load. The admin user detail and admin group membership editor use it too, but always show initials, because the admin API does not hand out photo URLs. The initials follow one rule everywhere: the first letters of the first two words of the name, else the first letter of the email.
+- **Why**: #1382 adds profile photos and asks for them wherever a user is drawn. The mock's initials are the no-photo state.
+- **Approved by**: user (explicit) — pre-approved for #1382 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Permanent.
+
 ### Layout & Page chrome
 
 #### 2026-05-25 — Canonical page widths + PageHeader: two named tokens (narrow / wide) instead of the mock's case-by-case max-w-\*

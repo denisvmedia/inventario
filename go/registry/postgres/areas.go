@@ -7,6 +7,7 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/appctx"
@@ -110,32 +111,17 @@ func (r *AreaRegistry) Count(ctx context.Context) (int, error) {
 // count, optionally narrowed by opts — see registry.AreaListOptions for the
 // field-by-field semantics.
 func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int, opts registry.AreaListOptions) ([]*models.Area, int, error) {
-	// Normalize pagination parameters to prevent negative SQL OFFSET/LIMIT errors.
-	if offset < 0 {
-		offset = 0
-	}
-	if limit < 0 {
-		limit = 0
-	}
-
 	var areas []*models.Area
 	var total int
 
-	whereClause, whereArgs := buildAreaWhere(opts)
+	where := areaWhere(opts)
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		// LIMIT/OFFSET placeholders follow the WHERE arguments so a
-		// non-empty filter shifts them to $2/$3 rather than colliding
-		// with $1.
-		limitPlaceholder := fmt.Sprintf("$%d", len(whereArgs)+1)
-		offsetPlaceholder := fmt.Sprintf("$%d", len(whereArgs)+2)
-		dataQuery := fmt.Sprintf(`
-			SELECT *, %s FROM %s%s
-			ORDER BY name, id
-			LIMIT %s OFFSET %s`, totalCountColumn, r.tableNames.Areas(), whereClause, limitPlaceholder, offsetPlaceholder)
+		dataSB := newSelect().Select("*", totalCountColumn).From(string(r.tableNames.Areas()))
+		addWhere(dataSB, where).OrderBy("name", "id")
+		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 
-		dataArgs := append(append([]any{}, whereArgs...), limit, offset)
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
 			return errxtrace.Wrap("failed to list paginated areas", err)
@@ -156,8 +142,9 @@ func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int, opt
 		}
 
 		if total == totalUnknown {
-			countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s%s`, r.tableNames.Areas(), whereClause)
-			total, err = countRows(ctx, tx, countQuery, whereArgs...)
+			countSB := newSelect().Select("COUNT(*)").From(string(r.tableNames.Areas()))
+			countQuery, countArgs := addWhere(countSB, where).Build()
+			total, err = countRows(ctx, tx, countQuery, countArgs...)
 			if err != nil {
 				return errxtrace.Wrap("failed to count areas", err)
 			}
@@ -172,20 +159,15 @@ func (r *AreaRegistry) ListPaginated(ctx context.Context, offset, limit int, opt
 	return areas, total, nil
 }
 
-// buildAreaWhere converts opts into a WHERE clause + positional args. The
-// returned clause already starts with a leading space (or is empty) so it
-// can be concatenated directly after the table name.
-func buildAreaWhere(opts registry.AreaListOptions) (string, []any) {
-	var conditions []string
-	var args []any
+// areaWhere is the WHERE clause the area page and its count share, nil when
+// opts filters nothing.
+func areaWhere(opts registry.AreaListOptions) *sqlb.WhereClause {
+	cond := sqlb.NewCond()
+	var location string
 	if opts.LocationID != "" {
-		conditions = append(conditions, fmt.Sprintf("location_id = $%d", len(args)+1))
-		args = append(args, opts.LocationID)
+		location = cond.Equal("location_id", opts.LocationID)
 	}
-	if len(conditions) == 0 {
-		return "", nil
-	}
-	return " WHERE " + strings.Join(conditions, " AND "), args
+	return andWhere(cond, location)
 }
 
 func (r *AreaRegistry) Create(ctx context.Context, area models.Area) (*models.Area, error) {

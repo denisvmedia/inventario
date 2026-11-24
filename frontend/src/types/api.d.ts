@@ -2235,7 +2235,7 @@ export type paths = {
         /**
          * Upload a profile photo
          * @description Replaces the caller's avatar. The image is center-cropped to a square, scaled to 512px and re-encoded as JPEG, which also drops any EXIF metadata the original carried.
-         *     Accepts JPEG or PNG up to 2 MB, detected from the content rather than from the declared type or the filename.
+         *     Accepts a still JPEG, PNG or WebP up to 2 MB, detected from the content rather than from the declared type or the filename. The EXIF orientation is applied to the pixels before the metadata is dropped.
          */
         post: {
             parameters: {
@@ -2256,18 +2256,16 @@ export type paths = {
                 };
             };
             responses: {
-                /** @description The stored avatar path */
+                /** @description The stored avatar path and a signed URL to load it from */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            [key: string]: string;
-                        };
+                        "application/json": components["schemas"]["apiserver.AvatarUploadResponse"];
                     };
                 };
-                /** @description Not an image, or larger than 2 MB */
+                /** @description Not a supported image, animated, or larger than 2 MB */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -3042,6 +3040,78 @@ export type paths = {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/avatars/{userID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a profile photo from a signed URL
+         * @description Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;
+         *     they are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Photo version */
+                    v: string;
+                    /** @description The user the URL was issued to */
+                    uid: string;
+                    /** @description The group the two users share */
+                    gid?: string;
+                    /** @description Expiry, Unix seconds */
+                    exp: number;
+                    /** @description Signature */
+                    sig: string;
+                };
+                header?: never;
+                path: {
+                    /** @description The user whose photo it is */
+                    userID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The avatar image */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "image/jpeg": string;
+                    };
+                };
+                /** @description Invalid or expired URL */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "image/jpeg": string;
+                    };
+                };
+                /** @description No such photo, or no longer visible to this user */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "image/jpeg": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -8969,7 +9039,7 @@ export type paths = {
         };
         /**
          * List group members
-         * @description Returns all members of a location group with their roles and joined user data (id / name / email). Requires group membership.
+         * @description Returns all members of a location group with their roles and joined user data (id / name / email, and a signed avatar_url for a member with a profile photo). Requires group membership.
          */
         get: {
             parameters: {
@@ -10033,6 +10103,15 @@ export type components = {
             is_system_admin?: boolean;
             name?: string;
             tenant_id?: string;
+        };
+        "apiserver.AvatarUploadResponse": {
+            /** @description AvatarPath is the stored key. */
+            avatar_path?: string;
+            /**
+             * @description AvatarURL is a signed URL the browser can load the new photo from.
+             *     Empty when the server has no signer configured.
+             */
+            avatar_url?: string;
         };
         "apiserver.BackofficeLoginMFARequest": {
             backup_code?: string;
@@ -11809,6 +11888,11 @@ export type components = {
             meta?: components["schemas"]["jsonapi.MaintenanceSchedulesMeta"];
         };
         "jsonapi.MembershipUserView": {
+            /**
+             * @description AvatarURL is a signed URL of the member's profile photo, valid for the
+             *     session that requested the list. Absent when the member has none.
+             */
+            avatar_url?: string;
             /** @example jordan@example.com */
             email?: string;
             /** @example u_123 */
@@ -12956,6 +13040,14 @@ export type components = {
              *     choose it could point a user's avatar at any object in the bucket.
              */
             avatar_path?: string;
+            /**
+             * @description AvatarURL is a transient wire-only field: a signed URL the browser can
+             *     load the profile photo from without the bearer token (#1382). Empty when
+             *     the user has no photo. Handlers that emit a /auth/me-style payload mint
+             *     it for the request's session; it is never stored, so it has no
+             *     migrator annotation and `db:"-"`, like HasPassword.
+             */
+            avatar_url?: string;
             created_at?: string;
             /**
              * @description DefaultGroupID is the user's preferred landing group after login.

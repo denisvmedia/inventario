@@ -121,6 +121,17 @@ definitions:
       tenant_id:
         type: string
     type: object
+  apiserver.AvatarUploadResponse:
+    properties:
+      avatar_path:
+        description: AvatarPath is the stored key.
+        type: string
+      avatar_url:
+        description: |-
+          AvatarURL is a signed URL the browser can load the new photo from.
+          Empty when the server has no signer configured.
+        type: string
+    type: object
   apiserver.BackofficeLoginMFARequest:
     properties:
       backup_code:
@@ -2710,6 +2721,11 @@ definitions:
     type: object
   jsonapi.MembershipUserView:
     properties:
+      avatar_url:
+        description: |-
+          AvatarURL is a signed URL of the member's profile photo, valid for the
+          session that requested the list. Absent when the member has none.
+        type: string
       email:
         example: jordan@example.com
         type: string
@@ -4503,6 +4519,14 @@ definitions:
           after validating and re-encoding what was uploaded. A client that could
           choose it could point a user's avatar at any object in the bucket.
         type: string
+      avatar_url:
+        description: |-
+          AvatarURL is a transient wire-only field: a signed URL the browser can
+          load the profile photo from without the bearer token (#1382). Empty when
+          the user has no photo. Handlers that emit a /auth/me-style payload mint
+          it for the request's session; it is never stored, so it has no
+          migrator annotation and `db:"-"`, like HasPassword.
+        type: string
       created_at:
         type: string
       default_group_id:
@@ -5817,7 +5841,7 @@ paths:
       - multipart/form-data
       description: |-
         Replaces the caller's avatar. The image is center-cropped to a square, scaled to 512px and re-encoded as JPEG, which also drops any EXIF metadata the original carried.
-        Accepts JPEG or PNG up to 2 MB, detected from the content rather than from the declared type or the filename.
+        Accepts a still JPEG, PNG or WebP up to 2 MB, detected from the content rather than from the declared type or the filename. The EXIF orientation is applied to the pixels before the metadata is dropped.
       parameters:
       - description: Image file
         in: formData
@@ -5828,13 +5852,11 @@ paths:
       - application/json
       responses:
         "200":
-          description: The stored avatar path
+          description: The stored avatar path and a signed URL to load it from
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/apiserver.AvatarUploadResponse'
         "400":
-          description: Not an image, or larger than 2 MB
+          description: Not a supported image, animated, or larger than 2 MB
           schema:
             type: string
         "401":
@@ -6175,6 +6197,59 @@ paths:
           schema:
             type: string
       summary: Refresh access token
+      tags:
+      - auth
+  /avatars/{userID}:
+    get:
+      description: |-
+        Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;
+        they are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.
+      parameters:
+      - description: The user whose photo it is
+        in: path
+        name: userID
+        required: true
+        type: string
+      - description: Photo version
+        in: query
+        name: v
+        required: true
+        type: string
+      - description: The user the URL was issued to
+        in: query
+        name: uid
+        required: true
+        type: string
+      - description: The group the two users share
+        in: query
+        name: gid
+        type: string
+      - description: Expiry, Unix seconds
+        in: query
+        name: exp
+        required: true
+        type: integer
+      - description: Signature
+        in: query
+        name: sig
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: The avatar image
+          schema:
+            type: file
+        "401":
+          description: Invalid or expired URL
+          schema:
+            type: string
+        "404":
+          description: No such photo, or no longer visible to this user
+          schema:
+            type: string
+      summary: Get a profile photo from a signed URL
       tags:
       - auth
   /backoffice/auth/login:
@@ -10006,7 +10081,8 @@ paths:
       consumes:
       - application/vnd.api+json
       description: Returns all members of a location group with their roles and joined
-        user data (id / name / email). Requires group membership.
+        user data (id / name / email, and a signed avatar_url for a member with a
+        profile photo). Requires group membership.
       parameters:
       - description: Group ID
         in: path

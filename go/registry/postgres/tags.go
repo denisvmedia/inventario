@@ -14,6 +14,7 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/appctx"
@@ -198,62 +199,20 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 	var tags []*models.Tag
 	var total int
 
+	from := string(r.tableNames.Tags()) + " t"
+	where := tagWhere(opts.Search, opts.Kind)
+
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		var conditions []string
-		var args []any
-		argIdx := 1
-		if opts.Search != "" {
-			conditions = append(conditions, fmt.Sprintf("(t.label ILIKE $%d OR t.slug ILIKE $%d)", argIdx, argIdx+1))
-			pattern := "%" + opts.Search + "%"
-			args = append(args, pattern, pattern)
-			argIdx += 2
-		}
-		// Kind filter: intrinsic. A tag passes ?kind=commodity iff its
-		// stored kind is "commodity"; same for file. Zero kind adds no
-		// condition (list across all kinds — internal callers only).
-		if opts.Kind == models.TagKindCommodity || opts.Kind == models.TagKindFile {
-			conditions = append(conditions, fmt.Sprintf("t.kind = $%d", argIdx))
-			args = append(args, opts.Kind)
-			argIdx++
-		}
-		whereClause := ""
-		if len(conditions) > 0 {
-			whereClause = "WHERE " + strings.Join(conditions, " AND ")
-		}
-
-		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s t %s", r.tableNames.Tags(), whereClause)
-		if err := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		countQuery, countArgs := addWhere(newSelect().Select("COUNT(*)").From(from), where).Build()
+		if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 			return errxtrace.Wrap("failed to count tags", err)
 		}
 
-		sortField := opts.SortField
-		if !sortField.IsValid() {
-			sortField = registry.TagSortLabel
-		}
-		dir := "ASC"
-		if opts.SortDesc {
-			dir = "DESC"
-		}
-		var orderBy string
-		switch sortField {
-		case registry.TagSortCreatedAt:
-			orderBy = fmt.Sprintf("ORDER BY t.created_at %s, t.label ASC", dir)
-		case registry.TagSortUsage:
-			// Usage sort counts only the kind's own table (commodity tags →
-			// commodities, file tags → files), so "Sort by usage" reflects
-			// the tag's relevant usage.
-			orderBy = fmt.Sprintf("ORDER BY %s %s, t.label ASC", r.kindUsageExpr(opts.Kind), dir)
-		default:
-			orderBy = fmt.Sprintf("ORDER BY LOWER(t.label) %s, t.id ASC", dir)
-		}
-
-		dataArgs := append([]any{}, args...)
-		dataArgs = append(dataArgs, limit, offset)
-		dataQuery := fmt.Sprintf(
-			`SELECT t.* FROM %s t %s %s LIMIT $%d OFFSET $%d`,
-			r.tableNames.Tags(), whereClause, orderBy, argIdx, argIdx+1,
-		)
+		dataSB := newSelect().Select("t.*").From(from)
+		addWhere(dataSB, where)
+		r.applyTagOrder(dataSB, opts)
+		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
 			return errxtrace.Wrap("failed to list tags", err)
@@ -275,42 +234,69 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 	return tags, total, nil
 }
 
+// tagWhere is the WHERE clause the tag page and its count share, and the one
+// Search filters by. It is nil when neither a search term nor a concrete kind
+// narrows the list.
+//
+// The search term matches the label or the slug. The kind filter is
+// intrinsic: a tag passes ?kind=commodity when its stored kind is
+// "commodity", and the same for file. The zero kind adds no condition and
+// lists across all kinds, which only internal callers ask for.
+func tagWhere(search string, kind models.TagKind) *sqlb.WhereClause {
+	cond := sqlb.NewCond()
+	var exprs []string
+	if search != "" {
+		pattern := "%" + search + "%"
+		exprs = append(exprs, cond.Or(cond.ILike("t.label", pattern), cond.ILike("t.slug", pattern)))
+	}
+	if kind == models.TagKindCommodity || kind == models.TagKindFile {
+		exprs = append(exprs, cond.Equal("t.kind", kind))
+	}
+	return andWhere(cond, exprs...)
+}
+
+// applyTagOrder adds the ORDER BY for opts.SortField, label when it is unset
+// or unknown. The second column breaks ties so pages do not overlap.
+func (r *TagRegistry) applyTagOrder(sb *sqlb.SelectBuilder, opts registry.TagListOptions) {
+	sortField := opts.SortField
+	if !sortField.IsValid() {
+		sortField = registry.TagSortLabel
+	}
+	// Per-column direction, not sb.Desc(): that appends one keyword after the
+	// whole list, which would sort the tiebreaker instead of the first column.
+	primary := sb.OrderByAsc
+	if opts.SortDesc {
+		primary = sb.OrderByDesc
+	}
+	switch sortField {
+	case registry.TagSortCreatedAt:
+		primary("t.created_at").OrderByAsc("t.label")
+	case registry.TagSortUsage:
+		// Usage sort counts only the kind's own table (commodity tags →
+		// commodities, file tags → files), so "Sort by usage" reflects
+		// the tag's relevant usage.
+		primary(r.kindUsageExpr(opts.Kind)).OrderByAsc("t.label")
+	default:
+		primary("LOWER(t.label)").OrderByAsc("t.id")
+	}
+}
+
 func (r *TagRegistry) Search(ctx context.Context, q string, limit int, kind models.TagKind) ([]*models.Tag, error) {
 	var tags []*models.Tag
 
+	// The kind filter keeps the autocomplete dropdown on a commodity input
+	// to commodity tags, and a file input to file tags: they are separate
+	// entities. Ranked by the kind's own usage, then by recency.
+	sb := newSelect().Select("t.*").From(string(r.tableNames.Tags()) + " t")
+	addWhere(sb, tagWhere(q, kind))
+	query, args := sb.
+		OrderByDesc(r.kindUsageExpr(kind)).
+		OrderByDesc("t.created_at").
+		Limit(limit).
+		Build()
+
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		var conditions []string
-		var args []any
-		argIdx := 1
-		if q != "" {
-			conditions = append(conditions, fmt.Sprintf("(t.label ILIKE $%d OR t.slug ILIKE $%d)", argIdx, argIdx+1))
-			pattern := "%" + q + "%"
-			args = append(args, pattern, pattern)
-			argIdx += 2
-		}
-		// Kind filter (intrinsic): the autocomplete dropdown on a commodity
-		// input only ever offers commodity tags, and a file input only file
-		// tags — they are separate entities.
-		if kind == models.TagKindCommodity || kind == models.TagKindFile {
-			conditions = append(conditions, fmt.Sprintf("t.kind = $%d", argIdx))
-			args = append(args, kind)
-			argIdx++
-		}
-		whereClause := ""
-		if len(conditions) > 0 {
-			whereClause = "WHERE " + strings.Join(conditions, " AND ")
-		}
-
-		// Rank by the kind's own usage desc, then created_at desc
-		// (recency tiebreaker).
-		kindUsageExpr := r.kindUsageExpr(kind)
-		args = append(args, limit)
-		query := fmt.Sprintf(
-			`SELECT t.* FROM %s t %s ORDER BY %s DESC, t.created_at DESC LIMIT $%d`,
-			r.tableNames.Tags(), whereClause, kindUsageExpr, argIdx,
-		)
-
 		rows, err := tx.QueryxContext(ctx, query, args...)
 		if err != nil {
 			return errxtrace.Wrap("failed to search tags", err)

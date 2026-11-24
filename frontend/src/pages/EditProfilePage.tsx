@@ -3,14 +3,14 @@ import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowLeft, ArrowRight, CheckCircle2, Lock, Mail, User } from "lucide-react"
+import { ArrowLeft, ArrowRight, Camera, CheckCircle2, Lock, Mail, User } from "lucide-react"
 
-import { ComingSoonBanner } from "@/components/coming-soon"
 import { PasswordInput } from "@/components/auth/PasswordInput"
 import { PasswordStrengthMeter } from "@/components/auth/PasswordStrengthMeter"
 import { SetPasswordForm } from "@/components/auth/SetPasswordForm"
 import { FieldError } from "@/components/FieldError"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
+import { UserAvatar } from "@/components/UserAvatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,6 +28,7 @@ import {
   useChangePassword,
   useHasPassword,
   useLogout,
+  useRemoveAvatar,
   useUpdateProfile,
 } from "@/features/auth/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -40,14 +41,120 @@ import {
   type ProfileEditInput,
 } from "@/features/auth/schemas"
 import { useAppToast } from "@/hooks/useAppToast"
+import { useAvatarPicker } from "@/hooks/useAvatarPicker"
+import { useConfirm } from "@/hooks/useConfirm"
 import { HttpError } from "@/lib/http"
 import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { withId } from "@/lib/with-id"
 
-// /profile/edit — two side-by-side forms in one page: profile fields
-// (name + default group) + password change. Email is intentionally
+// ProfilePhotoSection is the mock's "Photo" section (EditProfileView): the tile
+// with a camera overlay, an upload button and the format hint. A "Remove
+// photo" link, which the mock does not draw, appears once there is a photo.
+function ProfilePhotoSection() {
+  const { t } = useTranslation()
+  const { user } = useAuth()
+  const toast = useAppToast()
+  const confirm = useConfirm()
+  const picker = useAvatarPicker()
+  const removeMutation = useRemoveAvatar()
+
+  const hasPhoto = !!user?.avatar_url
+  const busy = picker.isUploading || removeMutation.isPending
+
+  async function handleRemove() {
+    const ok = await confirm({
+      title: t("settings:profile.photo.removeConfirm.title"),
+      description: t("settings:profile.photo.removeConfirm.description"),
+      confirmLabel: t("settings:profile.photo.removeConfirm.confirm"),
+      cancelLabel: t("settings:profile.photo.removeConfirm.cancel"),
+      destructive: true,
+    })
+    if (!ok) return
+    try {
+      await removeMutation.mutateAsync()
+      toast.success(t("settings:profile.photo.removed"))
+    } catch {
+      toast.error(t("settings:profile.photo.errors.remove"))
+    }
+  }
+
+  return (
+    <section
+      className="rounded-xl border border-border bg-card p-5"
+      aria-labelledby="profile-photo-title"
+      data-testid="profile-photo-section"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:gap-8">
+        <div className="sm:w-56 shrink-0">
+          <h2 id="profile-photo-title" className="text-sm font-semibold">
+            {t("settings:profile.photo.title")}
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+            {t("settings:profile.photo.description")}
+          </p>
+        </div>
+        <div className="flex flex-1 items-center gap-4">
+          <div className="relative group">
+            <UserAvatar
+              name={user?.name}
+              email={user?.email}
+              src={picker.previewUrl ?? user?.avatar_url}
+              className="size-16 rounded-xl border border-border bg-muted"
+              fallbackClassName="bg-muted text-xl font-bold text-primary"
+              testId="profile-photo-avatar"
+            />
+            <button
+              type="button"
+              onClick={picker.open}
+              disabled={busy}
+              aria-label={
+                hasPhoto ? t("settings:profile.photo.change") : t("settings:profile.photo.upload")
+              }
+              className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed"
+              data-testid="profile-photo-camera"
+            >
+              <Camera className="size-4 text-white" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="flex flex-col items-start gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={picker.open}
+              disabled={busy}
+              data-testid="profile-photo-upload"
+            >
+              {picker.isUploading
+                ? t("settings:profile.photo.uploading")
+                : hasPhoto
+                  ? t("settings:profile.photo.change")
+                  : t("settings:profile.photo.upload")}
+            </Button>
+            <p className="text-xs text-muted-foreground">{t("settings:profile.photo.hint")}</p>
+            {hasPhoto ? (
+              <button
+                type="button"
+                onClick={() => void handleRemove()}
+                disabled={busy}
+                className="text-xs font-medium text-destructive hover:underline disabled:opacity-50"
+                data-testid="profile-photo-remove"
+              >
+                {t("settings:profile.photo.remove")}
+              </button>
+            ) : null}
+          </div>
+          <input {...picker.inputProps} data-testid="profile-photo-input" />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// /profile/edit — the profile photo, then two forms in one page: profile
+// fields (name + default group) + password change. Email is intentionally
 // read-only because the backend ignores it on PUT /auth/me.
 export function EditProfilePage() {
   const { t } = useTranslation()
@@ -227,7 +334,7 @@ export function EditProfilePage() {
           }
         />
 
-        <ComingSoonBanner surface="profilePhoto" />
+        <ProfilePhotoSection />
 
         <form
           className="space-y-4 rounded-xl border border-border bg-card p-5"

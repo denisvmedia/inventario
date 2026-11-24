@@ -3,10 +3,10 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/appctx"
@@ -152,48 +152,22 @@ func (r *CommodityEventRegistry) Delete(ctx context.Context, id string) error {
 // the right macro order). Pagination is offset/limit; total is the
 // filtered post-Kinds count so the FE can render an accurate paginator.
 func (r *CommodityEventRegistry) ListByCommodity(ctx context.Context, commodityID string, offset, limit int, opts registry.CommodityEventListOptions) ([]*models.CommodityEvent, int, error) {
-	if offset < 0 {
-		offset = 0
-	}
-	if limit < 0 {
-		limit = 0
-	}
-
 	var events []*models.CommodityEvent
 	var total int
 
+	where := commodityEventWhere(commodityID, opts)
+
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		conds := []string{"commodity_id = $1"}
-		args := []any{commodityID}
-		idx := 2
-		if len(opts.Kinds) > 0 {
-			placeholders := make([]string, len(opts.Kinds))
-			for i, k := range opts.Kinds {
-				placeholders[i] = fmt.Sprintf("$%d", idx)
-				args = append(args, string(k))
-				idx++
-			}
-			conds = append(conds, fmt.Sprintf("kind IN (%s)", strings.Join(placeholders, ", ")))
-		}
-		whereClause := "WHERE " + strings.Join(conds, " AND ")
-
-		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s %s`, r.tableNames.CommodityEvents(), whereClause)
-		if err := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		countSB := newSelect().Select("COUNT(*)").From(string(r.tableNames.CommodityEvents()))
+		countQuery, countArgs := addWhere(countSB, where).Build()
+		if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 			return errxtrace.Wrap("failed to count commodity events", err)
 		}
 
-		dataArgs := append([]any{}, args...)
-		dataArgs = append(dataArgs, limit, offset)
-		dataQuery := fmt.Sprintf(`
-			SELECT * FROM %s
-			%s
-			ORDER BY occurred_at DESC, id DESC
-			LIMIT $%d OFFSET $%d`,
-			r.tableNames.CommodityEvents(),
-			whereClause,
-			len(args)+1, len(args)+2,
-		)
+		dataSB := newSelect().Select("*").From(string(r.tableNames.CommodityEvents()))
+		addWhere(dataSB, where).OrderByDesc("occurred_at").OrderByDesc("id")
+		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
@@ -214,4 +188,15 @@ func (r *CommodityEventRegistry) ListByCommodity(ctx context.Context, commodityI
 	}
 
 	return events, total, nil
+}
+
+// commodityEventWhere is the WHERE clause the event page and its count share:
+// one commodity's events, narrowed to opts.Kinds when it is set.
+func commodityEventWhere(commodityID string, opts registry.CommodityEventListOptions) *sqlb.WhereClause {
+	cond := sqlb.NewCond()
+	exprs := []string{cond.Equal("commodity_id", commodityID)}
+	if len(opts.Kinds) > 0 {
+		exprs = append(exprs, cond.In("kind", anyStrings(opts.Kinds)...))
+	}
+	return andWhere(cond, exprs...)
 }

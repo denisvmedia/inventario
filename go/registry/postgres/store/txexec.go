@@ -7,9 +7,11 @@ import (
 	"strings"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/internal/typekit"
+	"go.5x5.cz/inventario/registry"
 )
 
 type TxExecutor[T any] struct {
@@ -257,18 +259,20 @@ func (r *TxExecutor[T]) ScanOneByField(ctx context.Context, field FieldValue, en
 	return nil
 }
 
+// ScanOneByFields scans the first row whose columns equal every field, or
+// returns ErrNotFound. The field names are written into the SQL text and must
+// come from code; only the values are passed as arguments.
 func (r *TxExecutor[T]) ScanOneByFields(ctx context.Context, field []FieldValue, entity *T) error {
-	var whereClause strings.Builder
-	args := make([]any, len(field))
-	for i, f := range field {
-		if i > 0 {
-			whereClause.WriteString(" AND ")
-		}
-		fmt.Fprintf(&whereClause, "%s = $%d", f.Field, i+1)
-		args[i] = f.Value
+	if len(field) == 0 {
+		// An empty WHERE would match any row of the table.
+		return errxtrace.Wrap("ScanOneByFields needs at least one field", registry.ErrInvalidInput)
 	}
 
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s LIMIT 1", r.table, whereClause.String())
+	sb := sqlb.PostgreSQL.NewSelectBuilder().Select("*").From(string(r.table))
+	for _, f := range field {
+		sb.Where(sb.Equal(f.Field, f.Value))
+	}
+	query, args := sb.Limit(1).Build()
 
 	rows, err := r.tx.QueryxContext(ctx, query, args...)
 	if err != nil {
