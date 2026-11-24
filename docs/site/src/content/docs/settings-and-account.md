@@ -227,9 +227,13 @@ If your server hasn't enabled any sign-in providers, this panel doesn't appear.
 
 ## Help & support and feedback
 
-The **Help & support** section gives you four quick links:
+The **Help & support** section gives you five quick links:
 
 - **Documentation** — opens the user guide in a new tab.
+- **Restart product tour** — walks you through the sidebar again, the same as
+  **Restart product tour** in the user menu. The tour needs a group and a window
+  wide enough to show the sidebar; without them the row is greyed out and says
+  what is missing.
 - **Keyboard shortcuts** — opens the full list of shortcuts (you can also press
   `?` anywhere in the app).
 - **What's new** — opens the releases page in a new tab. The badge next to it

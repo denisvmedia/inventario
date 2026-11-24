@@ -81,6 +81,10 @@
       "feedbackDescription": "Požádejte tým o pomoc, nahlaste chybu nebo nám řekněte, co máme vytvořit příště.",
       "shortcuts": "Klávesové zkratky",
       "shortcutsDescription": "Zobrazit všechny klávesové zkratky používané v aplikaci.",
+      "tour": "Znovu spustit prohlídku produktu",
+      "tourDescription": "Znovu si projděte hlavní části aplikace.",
+      "tourNeedsGroup": "Nejprve vytvořte skupinu nebo se k nějaké připojte: prohlídka vás provede stránkami skupiny.",
+      "tourNeedsWideScreen": "Použijte širší okno: prohlídka ukazuje na postranní panel, který je na malých obrazovkách skrytý.",
       "whatsNew": "Co je nového",
       "whatsNewBadge": "v{{version}}",
       "whatsNewDescription": "Podívejte se na nejnovější funkce a aktualizace."

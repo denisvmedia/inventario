@@ -13,6 +13,10 @@ import { KeyboardShortcutsProvider } from "@/features/shortcuts"
 import { ThemeProvider } from "@/components/theme-provider"
 import { DensityProvider } from "@/hooks/useDensity"
 import { ConfirmProvider } from "@/hooks/useConfirm"
+import {
+  OnboardingTourControlsProvider,
+  type OnboardingTourControls,
+} from "@/hooks/useOnboardingTourControls"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -26,7 +30,14 @@ function LocationProbe({ testId = "loc" }: { testId?: string }) {
   return <div data-testid={testId} data-pathname={loc.pathname} data-search={loc.search} />
 }
 
-function renderSettings(initialPath: string = "/settings") {
+// Shell provides the product-tour controls in the app; tests pass their own
+// to exercise the Help section's "Restart product tour" row (#2787).
+const defaultTourControls: OnboardingTourControls = { restart: () => {}, blocker: null }
+
+function renderSettings(
+  initialPath: string = "/settings",
+  tourControls: OnboardingTourControls = defaultTourControls
+) {
   setAccessToken("good-token")
   return renderWithProviders({
     initialPath,
@@ -41,7 +52,9 @@ function renderSettings(initialPath: string = "/settings") {
                   <GroupProvider>
                     <ConfirmProvider>
                       <KeyboardShortcutsProvider>
-                        <SettingsPage />
+                        <OnboardingTourControlsProvider value={tourControls}>
+                          <SettingsPage />
+                        </OnboardingTourControlsProvider>
                         {/* The catch-all probe below only renders when no
                             other route matches, so /settings needs its own to
                             read the query back. Under a different id, because
@@ -586,6 +599,41 @@ describe("<SettingsPage />", () => {
     expect(screen.queryByTestId("keyboard-shortcuts-dialog")).not.toBeInTheDocument()
     await user.click(row)
     expect(await screen.findByTestId("keyboard-shortcuts-dialog")).toBeVisible()
+  })
+
+  // #2787 — the product tour can be restarted from Help, next to the
+  // user-menu entry, through the same restart Shell wires to both.
+  it("Restart product tour row restarts the tour", async () => {
+    server.use(...baseHandlers)
+    const user = userEvent.setup()
+    const restart = vi.fn()
+    renderSettings("/settings?section=help", { restart, blocker: null })
+    const row = await screen.findByTestId("help-row-tour")
+    expect(row.tagName).toBe("BUTTON")
+    expect(row).toHaveTextContent("Restart product tour")
+    expect(row).toBeEnabled()
+    await user.click(row)
+    expect(restart).toHaveBeenCalledOnce()
+  })
+
+  it("Restart product tour row is disabled and says why without a group", async () => {
+    server.use(...baseHandlers)
+    const user = userEvent.setup()
+    const restart = vi.fn()
+    renderSettings("/settings?section=help", { restart, blocker: "noGroup" })
+    const row = await screen.findByTestId("help-row-tour")
+    expect(row).toBeDisabled()
+    expect(row).toHaveTextContent("Create or join a group first")
+    await user.click(row)
+    expect(restart).not.toHaveBeenCalled()
+  })
+
+  it("Restart product tour row is disabled and says why on a narrow screen", async () => {
+    server.use(...baseHandlers)
+    renderSettings("/settings?section=help", { restart: vi.fn(), blocker: "narrowScreen" })
+    const row = await screen.findByTestId("help-row-tour")
+    expect(row).toBeDisabled()
+    expect(row).toHaveTextContent("Use a wider window")
   })
 })
 

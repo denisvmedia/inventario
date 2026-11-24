@@ -5,6 +5,7 @@ import { TOUR_STEPS } from "@/components/OnboardingTour"
 import { useOnboardingTour, __resetTourSeenForTests } from "@/hooks/useOnboardingTour"
 
 const USER = "user-abc"
+const SEEN_KEY = `inventario-tour-seen-v1:${USER}`
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -15,41 +16,77 @@ afterEach(() => {
 })
 
 describe("useOnboardingTour", () => {
-  it("auto-launches on first authenticated render for a brand-new user", () => {
-    const { result } = renderHook(() => useOnboardingTour(USER))
+  it("auto-launches for a brand-new user with an active group", () => {
+    const { result } = renderHook(() => useOnboardingTour(USER, { hasGroup: true }))
     expect(result.current.isOpen).toBe(true)
     expect(result.current.step).toBe(0)
     expect(result.current.totalSteps).toBe(TOUR_STEPS.length)
   })
 
+  it("does not auto-launch without a group and leaves the seen flag alone (#2787)", () => {
+    const { result } = renderHook(() => useOnboardingTour(USER, { hasGroup: false }))
+    expect(result.current.isOpen).toBe(false)
+    expect(window.localStorage.getItem(SEEN_KEY)).toBeNull()
+  })
+
+  it("launches the first time a group becomes active (#2787)", () => {
+    const { result, rerender } = renderHook(
+      ({ hasGroup }) => useOnboardingTour(USER, { hasGroup }),
+      { initialProps: { hasGroup: false } }
+    )
+    expect(result.current.isOpen).toBe(false)
+    rerender({ hasGroup: true })
+    expect(result.current.isOpen).toBe(true)
+    expect(result.current.step).toBe(0)
+  })
+
+  it("does not launch once a group is active if the user has already seen the tour", () => {
+    window.localStorage.setItem(SEEN_KEY, "1")
+    const { result, rerender } = renderHook(
+      ({ hasGroup }) => useOnboardingTour(USER, { hasGroup }),
+      { initialProps: { hasGroup: false } }
+    )
+    rerender({ hasGroup: true })
+    expect(result.current.isOpen).toBe(false)
+  })
+
   it("does not auto-launch when the user has already seen the tour", () => {
-    window.localStorage.setItem(`inventario-tour-seen-v1:${USER}`, "1")
-    const { result } = renderHook(() => useOnboardingTour(USER))
+    window.localStorage.setItem(SEEN_KEY, "1")
+    const { result } = renderHook(() => useOnboardingTour(USER, { hasGroup: true }))
     expect(result.current.isOpen).toBe(false)
   })
 
   it("does not auto-launch when userId is null (no authenticated user)", () => {
-    const { result } = renderHook(() => useOnboardingTour(null))
+    const { result } = renderHook(() => useOnboardingTour(null, { hasGroup: true }))
     expect(result.current.isOpen).toBe(false)
   })
 
   it("skip() persists the seen flag and closes the tour", () => {
-    const { result } = renderHook(() => useOnboardingTour(USER))
+    const { result } = renderHook(() => useOnboardingTour(USER, { hasGroup: true }))
     expect(result.current.isOpen).toBe(true)
     act(() => result.current.skip())
     expect(result.current.isOpen).toBe(false)
-    expect(window.localStorage.getItem(`inventario-tour-seen-v1:${USER}`)).toBe("1")
+    expect(window.localStorage.getItem(SEEN_KEY)).toBe("1")
   })
 
   it("finish() persists the seen flag and closes the tour", () => {
-    const { result } = renderHook(() => useOnboardingTour(USER))
+    const { result } = renderHook(() => useOnboardingTour(USER, { hasGroup: true }))
     act(() => result.current.finish())
     expect(result.current.isOpen).toBe(false)
-    expect(window.localStorage.getItem(`inventario-tour-seen-v1:${USER}`)).toBe("1")
+    expect(window.localStorage.getItem(SEEN_KEY)).toBe("1")
+  })
+
+  it("close() closes the tour without marking it as seen", () => {
+    // OnboardingTour calls close() when no step has a target on the page;
+    // the user must still get the tour once it can show something.
+    const { result } = renderHook(() => useOnboardingTour(USER, { hasGroup: true }))
+    act(() => result.current.close())
+    expect(result.current.isOpen).toBe(false)
+    expect(window.localStorage.getItem(SEEN_KEY)).toBeNull()
   })
 
   it("next/prev clamps within [0, totalSteps - 1]", () => {
-    const { result } = renderHook(() => useOnboardingTour(USER))
+    const { result } = renderHook(() => useOnboardingTour(USER, { hasGroup: true }))
     expect(result.current.step).toBe(0)
     act(() => result.current.prev())
     expect(result.current.step).toBe(0)
@@ -60,17 +97,21 @@ describe("useOnboardingTour", () => {
   })
 
   it("restart() clears the seen flag and re-opens at step 0", () => {
-    const { result } = renderHook(() => useOnboardingTour(USER))
+    const { result } = renderHook(() => useOnboardingTour(USER, { hasGroup: true }))
+    act(() => result.current.next())
     act(() => result.current.skip())
     expect(result.current.isOpen).toBe(false)
+    expect(window.localStorage.getItem(SEEN_KEY)).toBe("1")
     act(() => result.current.restart())
     expect(result.current.isOpen).toBe(true)
     expect(result.current.step).toBe(0)
-    expect(window.localStorage.getItem(`inventario-tour-seen-v1:${USER}`)).toBeNull()
+    expect(window.localStorage.getItem(SEEN_KEY)).toBeNull()
   })
 
   it("autoLaunch=false suppresses the auto-launch even for a fresh user", () => {
-    const { result } = renderHook(() => useOnboardingTour(USER, { autoLaunch: false }))
+    const { result } = renderHook(() =>
+      useOnboardingTour(USER, { hasGroup: true, autoLaunch: false })
+    )
     expect(result.current.isOpen).toBe(false)
     act(() => result.current.open())
     expect(result.current.isOpen).toBe(true)
@@ -86,7 +127,7 @@ describe("useOnboardingTour", () => {
       value: true,
     })
     try {
-      const { result } = renderHook(() => useOnboardingTour(USER))
+      const { result } = renderHook(() => useOnboardingTour(USER, { hasGroup: true }))
       expect(result.current.isOpen).toBe(false)
       // restart() still works regardless of webdriver state.
       act(() => result.current.restart())

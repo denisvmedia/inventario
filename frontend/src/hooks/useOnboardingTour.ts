@@ -41,12 +41,25 @@ function writeSeen(userId: string | null | undefined, seen: boolean): void {
   }
 }
 
+export interface UseOnboardingTourOptions {
+  // Whether the user has an active group. The tour's steps point at the
+  // group's sidebar entries (Add item, Dashboard, Locations, …), which only
+  // render with a group, so the tour does not auto-launch without one. It
+  // launches the first time a group becomes active instead (#2787).
+  hasGroup: boolean
+  // Defaults to true. Pass false for callers that want imperative control
+  // only, or while nothing the tour points at is on screen (Shell passes
+  // false below the mobile breakpoint, where the sidebar is a closed sheet).
+  autoLaunch?: boolean
+}
+
 export interface UseOnboardingTour {
   // Is the tour currently visible.
   isOpen: boolean
-  // 0-based step index, only meaningful when isOpen is true.
+  // 0-based position among the steps OnboardingTour shows (steps whose
+  // target is missing are skipped), only meaningful when isOpen is true.
   step: number
-  // Total steps in TOUR_STEPS — convenient for component consumers.
+  // Number of steps defined in TOUR_STEPS. OnboardingTour may show fewer.
   totalSteps: number
   // Imperative open / close handlers passed to the component.
   open: () => void
@@ -54,35 +67,40 @@ export interface UseOnboardingTour {
   prev: () => void
   finish: () => void
   skip: () => void
-  // Manual restart from a "Tour" button. Clears the "seen" flag and
-  // opens at step 0 — same as a fresh user's first visit.
+  // Closes the tour without marking it as seen. OnboardingTour calls it
+  // when no step has a target on the page, so the user still gets the
+  // tour the next time it can show something.
+  close: () => void
+  // Manual restart from a "Restart product tour" entry. Clears the "seen"
+  // flag and opens at step 0 — same as a fresh user's first visit.
   restart: () => void
 }
 
 /**
- * Drives the OnboardingTour overlay. Auto-launches once per user on first
- * authenticated render (when `userId` flips from null to a real value),
- * unless the user has already finished or skipped the tour. The user-id
- * key isolates per-account state on shared browsers.
+ * Drives the OnboardingTour overlay. Auto-launches once per user, on the
+ * first render where the user is known (`userId` set) AND has an active
+ * group (`hasGroup`), unless the user has already finished or skipped the
+ * tour. The user-id key isolates per-account state on shared browsers.
  *
- * Pass `autoLaunch={false}` for callers that just want imperative control
- * (e.g. a Storybook demo or the dev-only `/_dev/ui-showcase` route).
+ * Without a group the tour stays closed and the "seen" flag is left
+ * alone, so the tour starts once the user creates or joins a group.
  */
 export function useOnboardingTour(
   userId: string | null | undefined,
-  options: { autoLaunch?: boolean } = {}
+  options: UseOnboardingTourOptions
 ): UseOnboardingTour {
+  const { hasGroup } = options
   const autoLaunch = options.autoLaunch ?? true
   const totalSteps = TOUR_STEPS.length
 
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState(0)
 
-  // Auto-launch on first authenticated render. Skipped when the user has
-  // already finished or skipped. Re-runs only when userId changes — a
-  // user logging out and a different user logging in will trigger the
-  // probe again for the new user. setState-in-effect is intentional
-  // here: the launch is a side-effect of an external value (userId)
+  // Auto-launch once the user and an active group are known. Skipped when
+  // the user has already finished or skipped. Re-runs when userId or
+  // hasGroup changes — a different user logging in, or a user creating
+  // their first group, triggers the probe again. setState-in-effect is
+  // intentional here: the launch is a side-effect of external values
   // becoming known, which is exactly when this rule's escape hatch
   // applies. Same pattern as SearchPage / GroupSettingsPage.
   //
@@ -96,6 +114,7 @@ export function useOnboardingTour(
   useEffect(() => {
     if (!autoLaunch) return
     if (!userId) return
+    if (!hasGroup) return
     if (typeof navigator !== "undefined" && navigator.webdriver) return
     const seen = readSeen(userId)
     if (!seen) {
@@ -103,7 +122,7 @@ export function useOnboardingTour(
       setStep(0)
       setIsOpen(true)
     }
-  }, [autoLaunch, userId])
+  }, [autoLaunch, userId, hasGroup])
 
   const open = useCallback(() => {
     setStep(0)
@@ -118,7 +137,7 @@ export function useOnboardingTour(
     setStep((s) => Math.max(s - 1, 0))
   }, [])
 
-  const close = useCallback(
+  const closeTour = useCallback(
     (markSeen: boolean) => {
       setIsOpen(false)
       setStep(0)
@@ -127,8 +146,9 @@ export function useOnboardingTour(
     [userId]
   )
 
-  const finish = useCallback(() => close(true), [close])
-  const skip = useCallback(() => close(true), [close])
+  const finish = useCallback(() => closeTour(true), [closeTour])
+  const skip = useCallback(() => closeTour(true), [closeTour])
+  const close = useCallback(() => closeTour(false), [closeTour])
 
   const restart = useCallback(() => {
     writeSeen(userId, false)
@@ -137,8 +157,8 @@ export function useOnboardingTour(
   }, [userId])
 
   return useMemo(
-    () => ({ isOpen, step, totalSteps, open, next, prev, finish, skip, restart }),
-    [isOpen, step, totalSteps, open, next, prev, finish, skip, restart]
+    () => ({ isOpen, step, totalSteps, open, next, prev, finish, skip, close, restart }),
+    [isOpen, step, totalSteps, open, next, prev, finish, skip, close, restart]
   )
 }
 

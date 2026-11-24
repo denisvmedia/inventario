@@ -8,7 +8,9 @@ Welcome! Inventario helps you keep track of everything you own — what it is, w
 ![The Inventario dashboard with the Add item button](../../assets/screenshots/dashboard.png)
 
 :::tip[Take the built-in tour]
-The app includes a short product tour. To see it again at any time, open the user menu and choose **Restart product tour**.
+The app includes a short product tour of the sidebar: **Add item**, the Dashboard, Locations, All Items, Warranties, and Files. It starts by itself the first time you open a group. If you have no group yet, the tour waits until you create or join one.
+
+To see the tour again, open the user menu (click your name at the bottom of the sidebar) and choose **Restart product tour**, or open **Preferences → Help & support** and choose **Restart product tour**. The tour points at the sidebar, so it is not offered in a window too narrow to show the sidebar.
 :::
 
 ## Add your first item

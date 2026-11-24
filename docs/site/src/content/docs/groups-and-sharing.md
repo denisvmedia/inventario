@@ -11,7 +11,7 @@ Inventario organises everything you track into **groups**. A group is a complete
 
 Think of each group as a separate inventory that doesn't mix with your others. Items, locations, files, and tags all live inside one group — switching groups swaps the whole view in the app. The people you invite into a group only ever see that group's data, never your other groups.
 
-Everyone who is signed in starts with at least one group, and the sidebar always shows which one you're currently working in.
+The sidebar always shows which group you're currently working in. If you don't belong to any group yet, for example as the first administrator of a new server, the app opens a welcome page that asks you to create one.
 
 ## Create a group
 
@@ -23,7 +23,7 @@ You can create as many groups as you need.
    - **Group name** — for example "Main residence".
    - **Icon** — optional; pick something to make the group easier to recognise in the sidebar.
    - **Group currency** — the currency this inventory's prices are tracked in (see [The group currency](#the-group-currency)).
-4. Click **Create group**. The new group opens straight away and becomes your active group.
+4. Click **Create group**. The new group opens straight away and becomes your active group. If it is your first group, the [product tour](../getting-started/) starts and shows you around the sidebar.
 
 ## The group currency
 

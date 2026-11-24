@@ -8,7 +8,9 @@ Inventario vám pomůže mít přehled o všem, co vlastníte: co to je, kde to 
 ![Přehled Inventaria s tlačítkem Přidat položku](../../../assets/screenshots/dashboard.png)
 
 :::tip[Vestavěná prohlídka]
-Aplikace obsahuje krátkou prohlídku produktu. Kdykoli si ji můžete pustit znovu — otevřete uživatelskou nabídku a zvolte **Spustit prohlídku produktu znovu**.
+Aplikace obsahuje krátkou prohlídku postranního panelu: **Přidat položku**, Přehled, Umístění, Všechny položky, Záruky a Soubory. Spustí se sama, když poprvé otevřete skupinu. Pokud ještě žádnou skupinu nemáte, prohlídka počká, až nějakou vytvoříte nebo se k ní připojíte.
+
+Chcete-li prohlídku vidět znovu, otevřete uživatelskou nabídku (klikněte na své jméno dole v postranním panelu) a zvolte **Znovu spustit prohlídku produktu**, nebo otevřete **Předvolby → Nápověda a podpora** a zvolte **Znovu spustit prohlídku produktu**. Prohlídka ukazuje na postranní panel, takže v okně příliš úzkém na jeho zobrazení není k dispozici.
 :::
 
 ## Přidejte první položku

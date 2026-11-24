@@ -23,14 +23,16 @@ import { cn } from "@/lib/utils"
 // fallback chain still resolves to en when a locale leaves them blank.
 //
 // Step targets are `[data-tour='<key>']` selectors. The Welcome step uses
-// `placement: "center"`, so the target lookup is allowed to miss without
-// breaking the geometry — the overlay falls back to a full-screen dim.
-// Every other step needs the matching attribute on a visible element in
-// `AppSidebar` (or wherever else).
+// `placement: "center"` and highlights nothing, so it needs no target.
+// Every other step points at an element in `AppSidebar` and is skipped
+// when that element is not in the DOM: without a group the sidebar has no
+// Add item button and no group sections, and a card describing an element
+// the user cannot see is worse than no card (#2787). See
+// `resolveShownSteps`.
 //
 // State (open/skipped/current step / per-user persistence) lives in
-// `useOnboardingTour` — this component is a pure renderer driven by the
-// step index + callbacks.
+// `useOnboardingTour` — this component renders the steps it can show,
+// driven by the step position + callbacks.
 // #1543 / design-audit #1527.
 
 type StepKey =
@@ -97,6 +99,20 @@ export const TOUR_STEPS: ReadonlyArray<TourStep> = [
     highlightPadding: 4,
   },
 ]
+
+// resolveShownSteps returns the steps the tour can show right now, in
+// order. A centered step highlights nothing, so it needs no target; any
+// other step is shown only when its target is in the DOM. When no step
+// with a target is left, the result is empty: a welcome card followed by
+// "Done" would announce a tour that is not there.
+export function resolveShownSteps(steps: ReadonlyArray<TourStep> = TOUR_STEPS): TourStep[] {
+  if (typeof document === "undefined") return []
+  const anchored = steps.filter(
+    (s) => s.placement !== "center" && document.querySelector(s.target) !== null
+  )
+  if (anchored.length === 0) return []
+  return steps.filter((s) => s.placement === "center" || anchored.includes(s))
+}
 
 interface SpotRect {
   top: number
@@ -235,24 +251,33 @@ function Overlay({ spot, isCenter, onSkip }: OverlayProps) {
 }
 
 interface OnboardingTourProps {
+  // 0-based position among the shown steps (not an index into TOUR_STEPS).
   step: number
-  totalSteps: number
   onNext: () => void
   onPrev: () => void
   onFinish: () => void
   onSkip: () => void
+  // Called when no step has a target on the page. The tour renders
+  // nothing; the parent should close it without marking it as seen.
+  onClose: () => void
 }
 
 export function OnboardingTour({
   step,
-  totalSteps,
   onNext,
   onPrev,
   onFinish,
   onSkip,
+  onClose,
 }: OnboardingTourProps) {
   const { t } = useTranslation()
-  const currentStep = TOUR_STEPS[step]
+  // Resolved once per opening. The overlay blocks the page while the tour
+  // is open, so the sidebar cannot change under it, and Shell unmounts
+  // this component on close, so the next opening resolves afresh.
+  const [shownSteps] = useState(() => resolveShownSteps())
+  const totalSteps = shownSteps.length
+  const index = Math.min(step, totalSteps - 1)
+  const currentStep = totalSteps > 0 ? shownSteps[index] : undefined
   const [spot, setSpot] = useState<SpotRect | null>(null)
   const [mounted, setMounted] = useState(false)
   const measureRef = useRef<() => void>(() => {})
@@ -276,6 +301,11 @@ export function OnboardingTour({
     return () => window.clearTimeout(t)
   }, [])
 
+  const nothingToShow = totalSteps === 0
+  useEffect(() => {
+    if (nothingToShow) onClose()
+  }, [nothingToShow, onClose])
+
   useEffect(() => {
     if (!currentStep) return
     const el = document.querySelector(currentStep.target)
@@ -298,28 +328,29 @@ export function OnboardingTour({
   // finishes. Bound at the document level so users don't need to click
   // the card first.
   useEffect(() => {
+    if (nothingToShow) return
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault()
         onSkip()
       } else if (e.key === "ArrowRight" || e.key === "Enter") {
         e.preventDefault()
-        if (step === totalSteps - 1) onFinish()
+        if (index === totalSteps - 1) onFinish()
         else onNext()
       } else if (e.key === "ArrowLeft") {
         e.preventDefault()
-        if (step > 0) onPrev()
+        if (index > 0) onPrev()
       }
     }
     document.addEventListener("keydown", handleKey)
     return () => document.removeEventListener("keydown", handleKey)
-  }, [step, totalSteps, onNext, onPrev, onSkip, onFinish])
+  }, [nothingToShow, index, totalSteps, onNext, onPrev, onSkip, onFinish])
 
   if (!currentStep || typeof document === "undefined") return null
 
   const isCenter = currentStep.placement === "center"
-  const isLast = step === totalSteps - 1
-  const isFirst = step === 0
+  const isLast = index === totalSteps - 1
+  const isFirst = index === 0
   const Icon = currentStep.icon
 
   const cardStyle = tooltipPosition(spot, currentStep.placement)
@@ -369,6 +400,7 @@ export function OnboardingTour({
       <div
         className="pointer-events-auto w-[320px] rounded-2xl border border-border bg-card shadow-2xl"
         data-testid="onboarding-card"
+        data-step={currentStep.key}
         role="presentation"
         style={{
           ...cardStyle,
@@ -381,7 +413,7 @@ export function OnboardingTour({
           <div
             className="h-full bg-primary transition-all duration-500 ease-out"
             data-testid="onboarding-progress"
-            style={{ width: `${((step + 1) / totalSteps) * 100}%` }}
+            style={{ width: `${((index + 1) / totalSteps) * 100}%` }}
           />
         </div>
 
@@ -415,15 +447,19 @@ export function OnboardingTour({
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1" aria-hidden="true">
+            <div
+              className="flex items-center gap-1"
+              aria-hidden="true"
+              data-testid="onboarding-dots"
+            >
               {Array.from({ length: totalSteps }, (_, i) => (
                 <div
                   key={i}
                   className={cn(
                     "rounded-full transition-all duration-300",
-                    i === step
+                    i === index
                       ? "h-1.5 w-4 bg-primary"
-                      : i < step
+                      : i < index
                         ? "h-1.5 w-1.5 bg-primary/40"
                         : "h-1.5 w-1.5 bg-border"
                   )}

@@ -21,6 +21,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
   keys for all three providers. Setup is described on the new "Sign-in
   providers" page of the user guide
   ([#2789](https://github.com/denisvmedia/inventario/pull/2789)).
+- A "Restart product tour" row in Preferences → Help & support, next to the
+  entry in the user menu. It is greyed out, with the reason, while the tour
+  cannot run: without a group, or in a window too narrow to show the sidebar
+  ([#2787](https://github.com/denisvmedia/inventario/issues/2787)).
 
 ### Fixed
 
@@ -40,6 +44,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
   now opens the new group. Before, the page stayed on the filled-in form, so
   it looked as if nothing had happened and a second click created another
   group ([#2815](https://github.com/denisvmedia/inventario/issues/2815)).
+- The onboarding tour opened by itself for a user without a group, such as the
+  first administrator of a new install. None of the sidebar entries it points
+  at exist then, so every step was an empty centered card, and finishing it
+  hid the tour for good. The tour now starts the first time a group is active,
+  and it skips a step whose element is not on the page
+  ([#2787](https://github.com/denisvmedia/inventario/issues/2787)).
 
 ### Security
 

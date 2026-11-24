@@ -416,6 +416,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: agent-suggested-then-user-confirmed — suggested in PR #2790, confirmed by the user on 2026-11-24.
 - **Reversion plan**: Permanent. If the mock gains a state for non-release builds, follow it.
 
+#### 2026-11-24 — Help & Support gains a "Restart product tour" row
+
+- **Issue/PR**: #2787 / PR (pending)
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `HelpSection` lists Documentation, Keyboard shortcuts, What's new, Send feedback and Contact support. It has no tour entry; the mock's only restart control is the `RestartTourButton` in the top bar of [`design-mocks/src/App.tsx`](../../design-mocks/src/App.tsx).
+- **Reality**: `HelpSection` in `frontend/src/pages/SettingsPage.tsx` has a "Restart product tour" row after Documentation, with the chrome of the other rows (label, description, arrow). It calls the same restart as the user-menu entry, through `useOnboardingTourControls()`. While the tour cannot start, the row is a disabled button and its description says why: no active group, or a window below the mobile breakpoint.
+- **Why**: Not present in mock. Before #2787 the only way back into the tour was the user menu, and nothing pointed to it. The row reuses the existing Help row pattern instead of a new primitive.
+- **Approved by**: user (explicit) — the Help entry is one of the decisions for #2787.
+- **Reversion plan**: Permanent unless the mock adds its own tour entry; follow the mock then.
+
 ### Navigation & App shell
 
 #### 2026-05-08 — Persistent "currency migration in progress" banner in Shell
@@ -453,6 +462,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: Issue #1752 specifies "a new 'ADMIN' section … Top-level link → `/admin/tenants`" — one sidebar entry, with the AdminLayout owning sub-navigation. The conditional render is required because the mock has no permission gating; non-admins must not see the section.
 - **Approved by**: agent-suggested-then-user-confirmed — issue #1752 spec dictates both the single-link shape and the conditional render.
 - **Reversion plan**: Permanent — the single-link + secondary-nav split is the intended IA for the React app.
+
+#### 2026-11-24 — Onboarding tour skips steps without a target and waits for a group
+
+- **Issue/PR**: #2787 / PR (pending)
+- **Mock**: [`design-mocks/src/components/OnboardingTour.tsx`](../../design-mocks/src/components/OnboardingTour.tsx) always walks all seven steps. A step whose `data-tour` target is missing falls back to a centered card over a full-screen dim. The mock has no notion of a user without a group or of a breakpoint.
+- **Reality**: `frontend/src/components/OnboardingTour.tsx` shows only the steps whose target is in the DOM (the centered welcome card needs none) and counts only those in its dots and progress bar. When no step with a target is left, it renders nothing and closes without marking the tour as seen. `frontend/src/app/Shell.tsx` does not auto-launch the tour without an active group or below the mobile breakpoint, and leaves "Restart product tour" out of the user menu in both cases.
+- **Why**: Without a group the sidebar has no Add item button and no group sections, so every step fell back to a centered card about an element the user could not see, and finishing that tour marked it as seen before the user had a group (#2787). Below the breakpoint the sidebar is a closed sheet, which is the same situation.
+- **Approved by**: user (explicit) for skipping steps and for launching once a group is active (#2787 decisions); the narrow-screen gate and leaving the user-menu entry out are agent-suggested, open for review on the PR.
+- **Reversion plan**: Permanent for the no-group behavior. If the tour gains a mobile variant (for example one that opens the sidebar sheet first), drop the narrow-screen gate.
 
 ### i18n & Formatting
 
