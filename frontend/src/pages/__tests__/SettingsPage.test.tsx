@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
@@ -531,17 +531,34 @@ describe("<SettingsPage />", () => {
   })
 
   it("help section shows the merged support/feedback row and a version badge on What's new", async () => {
+    // The release version the build injects; the badge shows its Major.Minor.
+    vi.stubGlobal("__APP_VERSION__", "v0.2.2")
+    try {
+      server.use(...baseHandlers)
+      const user = userEvent.setup()
+      renderSettings()
+      await user.click(await screen.findByTestId("settings-nav-help"))
+      // #1387 folded the static "Contact support" mailto row into the
+      // feedback entry point — the dialog's "Question" type doubles as
+      // the support channel, so there's a single row now.
+      expect(screen.queryByTestId("help-row-contactSupport")).not.toBeInTheDocument()
+      const feedbackRow = screen.getByTestId("help-row-feedback")
+      expect(feedbackRow).toHaveTextContent("Contact support / share feedback")
+      expect(screen.getByTestId("help-row-whatsNew-badge")).toHaveTextContent("v0.2")
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it("help section shows no version badge for a build without a release number", async () => {
+    // Unit tests get no injected version, so this is the "dev" build; an
+    // image built for a PR or from master ("pr-123", "edge") looks the same.
     server.use(...baseHandlers)
     const user = userEvent.setup()
     renderSettings()
     await user.click(await screen.findByTestId("settings-nav-help"))
-    // #1387 folded the static "Contact support" mailto row into the
-    // feedback entry point — the dialog's "Question" type doubles as
-    // the support channel, so there's a single row now.
-    expect(screen.queryByTestId("help-row-contactSupport")).not.toBeInTheDocument()
-    const feedbackRow = screen.getByTestId("help-row-feedback")
-    expect(feedbackRow).toHaveTextContent("Contact support / share feedback")
-    expect(screen.getByTestId("help-row-whatsNew-badge")).toBeInTheDocument()
+    expect(screen.getByTestId("help-row-whatsNew")).toBeInTheDocument()
+    expect(screen.queryByTestId("help-row-whatsNew-badge")).not.toBeInTheDocument()
   })
 
   it("merged support/feedback row opens the FeedbackDialog in place (#1387)", async () => {

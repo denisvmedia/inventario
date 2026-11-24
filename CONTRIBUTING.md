@@ -243,6 +243,10 @@ say what was wrong, not which function changed. Link the issue.
 4. Tag `vX.Y.Z` and push. The workflow publishes the section as the release
    body.
 
+Nothing else carries the version. The binary and the UI both get it from the
+tag at build time, so the `version` in `frontend/package.json` is not used and
+needs no bump.
+
 A release that wants an announcement rather than a change list — the first
 one did — can commit `.github/release-notes/vX.Y.Z.md` instead, which takes
 precedence. Keep the changelog section too, pointing at it.

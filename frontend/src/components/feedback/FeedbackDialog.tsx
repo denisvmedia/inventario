@@ -39,7 +39,7 @@ import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { FEEDBACK_TYPES, type FeedbackType } from "@/features/feedback/api"
 import { useSubmitFeedback } from "@/features/feedback/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
-import { APP_VERSION } from "@/lib/app-version"
+import { appVersion } from "@/lib/app-version"
 import { HttpError } from "@/lib/http"
 import { parseServerError } from "@/lib/server-error"
 
@@ -89,7 +89,7 @@ function collectDiagnostics(args: {
   groupSlug?: string
 }): Record<string, string> {
   const out: Record<string, string> = {}
-  out.app_version = APP_VERSION
+  out.app_version = appVersion()
   if (typeof window !== "undefined") {
     out.url = window.location.href
     if (window.innerWidth && window.innerHeight) {

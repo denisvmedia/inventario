@@ -84,7 +84,7 @@ import { NUMBER_FORMAT_LOCALE_OPTIONS } from "@/lib/numberFormatLocale"
 import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
-import { APP_VERSION, shortAppVersion } from "@/lib/app-version"
+import { shortAppVersion } from "@/lib/app-version"
 import { withId } from "@/lib/with-id"
 
 type SectionId = "account" | "appearance" | "notifications" | "privacy" | "help"
@@ -1174,7 +1174,7 @@ function HelpSection() {
     { key: "feedback", href: "modal:feedback" },
   ]
 
-  const versionShort = shortAppVersion(APP_VERSION)
+  const versionShort = shortAppVersion()
 
   return (
     <div className="space-y-4" data-testid="section-help">
@@ -1184,7 +1184,8 @@ function HelpSection() {
           // Three-arm union: modal trigger (in-app dialog), external link
           // (opens in a new tab), or in-app route. All use the same chrome
           // — chevron-right + label + description. The version Badge only
-          // renders on the "whatsNew" row.
+          // renders on the "whatsNew" row, and only for a release build:
+          // "dev", "edge" or "pr-123" have no version to show.
           const labelKey = key
           const isModal = href.startsWith("modal:")
           const isExternal = /^https?:\/\//.test(href)
@@ -1192,7 +1193,7 @@ function HelpSection() {
             <>
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium">{t(`settings:help.rows.${labelKey}`)}</p>
-                {labelKey === "whatsNew" ? (
+                {labelKey === "whatsNew" && versionShort ? (
                   <Badge variant="secondary" data-testid="help-row-whatsNew-badge">
                     {t("settings:help.rows.whatsNewBadge", { version: versionShort })}
                   </Badge>

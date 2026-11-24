@@ -64,10 +64,12 @@ build-inventool:
 	cd $(BACKEND_DIR)/cmd/inventool && $(GO_CMD) build -ldflags "$(LDFLAGS)" -o ../../../$(INVENTOOL_PATH) .
 
 
-# Build the React frontend (produces frontend/dist for Go's //go:embed)
+# Build the React frontend (produces frontend/dist for Go's //go:embed).
+# INVENTARIO_VERSION is the version the UI shows, the same one the binary
+# gets through LDFLAGS.
 .PHONY: build-frontend
 build-frontend:
-	cd $(FRONTEND_DIR) && npm install && npm run build
+	cd $(FRONTEND_DIR) && npm install && INVENTARIO_VERSION='$(VERSION)' npm run build
 
 # Show version information that will be injected into the binary
 .PHONY: version

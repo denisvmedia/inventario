@@ -4,8 +4,9 @@ project_name: inventario
 
 before:
   hooks:
-    # Build the frontend bundle so the Go binary embeds it.
-    - make build-frontend
+    # Build the frontend bundle so the Go binary embeds it. VERSION is the
+    # one the ldflags below give the binary, so the UI shows it too.
+    - make build-frontend VERSION={{ .Version }}
 
 builds:
   - binary: inventario

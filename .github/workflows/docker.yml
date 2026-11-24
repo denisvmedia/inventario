@@ -203,9 +203,12 @@ jobs:
 
       - name: Build frontend
         # Embedded by go build -tags=with_frontend (frontend/frontend.go uses
-        # go:embed all:dist).
+        # go:embed all:dist). INVENTARIO_VERSION is the version the UI
+        # shows, the same one the binary gets below.
         run: npm run build
         working-directory: frontend
+        env:
+          INVENTARIO_VERSION: ${{ env.VERSION }}
 
       - name: Build darwin/arm64 binary
         # macOS e2e lane (macos-latest == Apple Silicon) consumes this
