@@ -129,7 +129,6 @@
     "next": "Další soubor",
     "notInList": "Tento soubor není mezi aktuálními výsledky seznamu.",
     "pagerLabel": "Soubory v tomto seznamu",
-    "position": "{{position}} z {{total}}",
     "previous": "Předchozí soubor",
     "saveAndNext": "Uložit a další",
     "saved": "Soubor uložen",

@@ -75,6 +75,16 @@ the section matching the tag and publishes it as the GitHub Release body. See
   attachments move to the new shape when the server first starts after the
   upgrade, and existing files get their checksum in the background
   ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
+- Editing an item in place. Edit on the item page and in its side panel opens
+  a form with the item's main fields where the details were, with a tag
+  palette that adds or removes a tag in one click; "All fields" opens the
+  step-by-step dialog, which in edit mode lets every step be opened at once
+  and saves from any of them. The Details tab edits the location, the tags
+  or the notes on their own. Opened from the Items list, an item shows its
+  place in that list with previous and next arrows, Back returns to the list
+  as it was left, and "Save and next" on the edit form saves and opens the
+  next item's form
+  ([#2795](https://github.com/denisvmedia/inventario/issues/2795)).
 
 ### Changed
 

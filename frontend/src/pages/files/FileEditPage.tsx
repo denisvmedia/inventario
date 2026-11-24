@@ -1,11 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useMemo, useState, type ReactNode } from "react"
+import { useMemo, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { useTranslation } from "react-i18next"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react"
+import { ArrowLeft, ChevronRight, Download, ExternalLink } from "lucide-react"
 
 import { FilePreview } from "@/components/files/FilePreview"
+import { ListPager } from "@/components/ListPager"
 import { ImageViewer } from "@/components/files/ImageViewer"
 import { PdfFullViewer } from "@/components/files/PdfFullViewer"
 import { TagsInput } from "@/components/files/TagsInput"
@@ -275,7 +276,20 @@ function FileReview({
             {filesList ? t("files:review.backToList") : t("common:actions.back")}
           </Link>
         }
-        actions={nav.active ? <ListPager nav={nav} hrefFor={recordHref} /> : null}
+        actions={
+          nav.active ? (
+            <ListPager
+              nav={nav}
+              hrefFor={recordHref}
+              labels={{
+                pager: t("files:review.pagerLabel"),
+                previous: t("files:review.previous"),
+                next: t("files:review.next"),
+              }}
+              testIdPrefix="file-review"
+            />
+          ) : null
+        }
       />
 
       {nav.active && !nav.loading && !nav.inList ? (
@@ -507,81 +521,5 @@ function FileReview({
         </Dialog>
       ) : null}
     </>
-  )
-}
-
-// Previous / position / Next within the originating list. The buttons are
-// links, so they can open in a new tab; with unsaved edits the guard holds the
-// click and asks first.
-function ListPager({
-  nav,
-  hrefFor,
-}: {
-  nav: ListNavigation
-  hrefFor: (target: ListNeighbor) => string
-}) {
-  const { t } = useTranslation()
-  return (
-    <nav
-      className="flex items-center gap-2"
-      aria-label={t("files:review.pagerLabel")}
-      data-testid="file-review-pager"
-    >
-      <PagerButton
-        target={nav.previous}
-        hrefFor={hrefFor}
-        label={t("files:review.previous")}
-        testId="file-review-previous"
-      >
-        <ChevronLeft className="size-4" aria-hidden="true" />
-      </PagerButton>
-      <span
-        className="min-w-16 text-center text-sm tabular-nums text-muted-foreground"
-        data-testid="file-review-position"
-      >
-        {nav.position !== null && nav.total !== null
-          ? t("files:review.position", { position: nav.position, total: nav.total })
-          : nav.loading
-            ? "…"
-            : "—"}
-      </span>
-      <PagerButton
-        target={nav.next}
-        hrefFor={hrefFor}
-        label={t("files:review.next")}
-        testId="file-review-next"
-      >
-        <ChevronRight className="size-4" aria-hidden="true" />
-      </PagerButton>
-    </nav>
-  )
-}
-
-function PagerButton({
-  target,
-  hrefFor,
-  label,
-  testId,
-  children,
-}: {
-  target: ListNeighbor | null
-  hrefFor: (target: ListNeighbor) => string
-  label: string
-  testId: string
-  children: ReactNode
-}) {
-  if (!target) {
-    return (
-      <Button variant="outline" size="icon-sm" disabled aria-label={label} data-testid={testId}>
-        {children}
-      </Button>
-    )
-  }
-  return (
-    <Button asChild variant="outline" size="icon-sm">
-      <Link to={hrefFor(target)} aria-label={label} data-testid={testId}>
-        {children}
-      </Link>
-    </Button>
   )
 }

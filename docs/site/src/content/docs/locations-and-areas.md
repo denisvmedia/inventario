@@ -93,7 +93,7 @@ If you pick a different **Location**, the **Area** selection clears so you can c
 An item that hasn't been filed into an area is shown as **No location**. This is a perfectly valid state — items don't need a location to exist, and you can leave them un-located indefinitely.
 
 - **Spotting un-located items:** on the Items list you can filter by **No location** to find everything that still needs a home.
-- **The placement nudge:** right after you create an item (and any time it has no area but your group has at least one location), its detail page shows a **Place this item in a location?** banner. Click **Place in location** to jump straight to the edit form's pickers, or **Dismiss** it for the session.
+- **The placement nudge:** right after you create an item (and any time it has no area but your group has at least one location), its detail page shows a **Place this item in a location?** banner. Click **Place in location** to pick the location and area right on the **Details** tab, or **Dismiss** it for the session.
 - **Un-assigning an item:** open the item, click **Edit**, and use **Clear location** to remove its area. The item stays in your inventory but goes back to **No location**.
 
 Deleting a location or area (below) can also leave items un-located in bulk.

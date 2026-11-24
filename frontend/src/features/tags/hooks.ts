@@ -148,6 +148,20 @@ export function useTagAutocomplete(q: string, limit = 10, opts: AutocompleteOpti
   })
 }
 
+// useTagCatalog lists every tag of a kind in the active group: the tag
+// palette offers them, useTagLabel reads their labels. Both share one cached
+// query. Outside a group the query stays off and `data` is undefined.
+export function useTagCatalog(kind: TagKind) {
+  const ctx = useOptionalCurrentGroup()
+  const groupSlug = ctx?.currentGroup?.slug ?? ""
+  return useQuery({
+    queryKey: tagKeys.labels(groupSlug, kind),
+    queryFn: ({ signal }) => listAllTags(kind, signal),
+    enabled: groupSlug.length > 0,
+    placeholderData: (prev) => prev,
+  })
+}
+
 // useTagLabel resolves the slugs stored on items and files to the labels
 // the user typed or gave the tag on the Tags page. It falls back to the
 // slug while the catalogue loads, outside a group, and for a slug with no
@@ -157,14 +171,7 @@ export function useTagAutocomplete(q: string, limit = 10, opts: AutocompleteOpti
 // The key sits under the group's tag namespace, so tag mutations and the
 // commodity / file writes that auto-create tags refresh it.
 export function useTagLabel(kind: TagKind): (slug: string) => string {
-  const ctx = useOptionalCurrentGroup()
-  const groupSlug = ctx?.currentGroup?.slug ?? ""
-  const { data } = useQuery({
-    queryKey: tagKeys.labels(groupSlug, kind),
-    queryFn: ({ signal }) => listAllTags(kind, signal),
-    enabled: groupSlug.length > 0,
-    placeholderData: (prev) => prev,
-  })
+  const { data } = useTagCatalog(kind)
   // A Map, not an object literal: a slug such as "constructor" must not
   // resolve to an Object.prototype member.
   const labels = useMemo(() => {

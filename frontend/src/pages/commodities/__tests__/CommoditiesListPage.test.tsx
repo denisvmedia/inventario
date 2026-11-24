@@ -789,12 +789,13 @@ describe("<CommoditiesListPage />", () => {
       return (
         <div>
           <span data-testid="nav-sentinel-path">{location.pathname}</span>
+          <span data-testid="nav-sentinel-search">{location.search}</span>
           <span data-testid="nav-sentinel-background">{background?.pathname ?? ""}</span>
         </div>
       )
     }
     renderWithProviders({
-      initialPath: `/g/${SLUG}/commodities`,
+      initialPath: `/g/${SLUG}/commodities?q=mac`,
       routes: (
         <>
           <Route
@@ -821,6 +822,11 @@ describe("<CommoditiesListPage />", () => {
     // behind the sheet.
     expect(screen.getByTestId("nav-sentinel-background")).toHaveTextContent(
       `/g/${SLUG}/commodities`
+    )
+    // The item carries the list it came from, so it can walk it and lead
+    // back to it (#2795).
+    expect(screen.getByTestId("nav-sentinel-search")).toHaveTextContent(
+      `?from=${encodeURIComponent(`/g/${SLUG}/commodities?q=mac`)}`
     )
   })
 

@@ -252,6 +252,99 @@ describe("<CommodityFormDialog />", () => {
     expect(screen.getByLabelText(/^Status$/i)).toHaveTextContent(/Sold/i)
   })
 
+  describe("edit mode (#2795)", () => {
+    const existing = {
+      id: "c1",
+      name: "Lamp",
+      short_name: "Lamp",
+      type: "other" as const,
+      area_id: "a1",
+      status: "in_use" as const,
+      count: 1,
+      draft: false,
+      // A non-draft item needs its purchase details to save.
+      purchase_date: "2024-03-01",
+      original_price: 40,
+      original_price_currency: "USD",
+    }
+
+    function renderEdit(onSubmit = vi.fn().mockResolvedValue(undefined)) {
+      renderWithProviders({
+        children: (
+          <CommodityFormDialog
+            open
+            onOpenChange={() => {}}
+            mode="edit"
+            initialValues={existing}
+            areas={areas}
+            locations={locations}
+            defaultCurrency="USD"
+            onSubmit={onSubmit}
+          />
+        ),
+      })
+      return onSubmit
+    }
+
+    it("lets every step be opened straight from the stepper", async () => {
+      const user = userEvent.setup()
+      renderEdit()
+      await screen.findByLabelText(/^Name$/i)
+      const stepper = screen.getByRole("list", { name: /form steps/i })
+      expect(within(stepper).getByRole("button", { name: "Basics" })).toHaveAttribute(
+        "aria-current",
+        "step"
+      )
+      for (const title of ["Purchase", "Warranty", "Extras", "Files"]) {
+        expect(within(stepper).getByRole("button", { name: title })).toBeEnabled()
+      }
+      await user.click(within(stepper).getByRole("button", { name: "Extras" }))
+      expect(await screen.findByTestId("commodity-tags-input")).toBeInTheDocument()
+      expect(within(stepper).getByRole("button", { name: "Extras" })).toHaveAttribute(
+        "aria-current",
+        "step"
+      )
+    })
+
+    it("offers Save on every step and saves from the first one", async () => {
+      const user = userEvent.setup()
+      const onSubmit = renderEdit()
+      await screen.findByLabelText(/^Name$/i)
+      // Continue still walks forward, next to Save.
+      expect(screen.getByTestId("commodity-form-next")).toBeInTheDocument()
+      expect(screen.getByTestId("commodity-form-submit")).toBeInTheDocument()
+      await user.click(screen.getByTestId("commodity-form-next"))
+      await screen.findByLabelText(/Purchase date/i)
+      expect(screen.getByTestId("commodity-form-submit")).toBeInTheDocument()
+      await user.click(
+        within(screen.getByRole("list", { name: /form steps/i })).getByRole("button", {
+          name: "Basics",
+        })
+      )
+      await user.clear(await screen.findByLabelText(/^Name$/i))
+      await user.type(screen.getByLabelText(/^Name$/i), "Desk lamp")
+      await user.click(screen.getByTestId("commodity-form-submit"))
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0]).toMatchObject({ name: "Desk lamp", area_id: "a1" })
+    })
+
+    it("opens the step with the invalid field when Save fails validation", async () => {
+      const user = userEvent.setup()
+      const onSubmit = renderEdit()
+      await user.clear(await screen.findByLabelText(/^Name$/i))
+      await user.click(
+        within(screen.getByRole("list", { name: /form steps/i })).getByRole("button", {
+          name: "Warranty",
+        })
+      )
+      await screen.findByTestId("commodity-form-warranty-step")
+      await user.click(screen.getByTestId("commodity-form-submit"))
+      // Back on Basics, where the empty name is.
+      expect(await screen.findByLabelText(/^Name$/i)).toHaveAttribute("aria-invalid", "true")
+      expect(onSubmit).not.toHaveBeenCalled()
+    })
+  })
+
   it("does not render the Location/Area picker in create mode (#1987)", async () => {
     const user = userEvent.setup()
     renderWithProviders({

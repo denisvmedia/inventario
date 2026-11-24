@@ -118,5 +118,11 @@
     "commodity": "Štítky položek",
     "file": "Štítky souborů",
     "label": "Typ štítku"
+  },
+  "palette": {
+    "add": "Přidat",
+    "newTagLabel": "Nový štítek",
+    "newTagPlaceholder": "Nový štítek…",
+    "remove": "Odebrat štítek {{label}}"
   }
 }
