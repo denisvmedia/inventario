@@ -188,6 +188,15 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+	// A reset is how a user recovers a compromised account, so the personal
+	// API tokens go too: one minted by whoever had the old password must not
+	// outlive it. They go first and the reset token stays unused if that
+	// fails, so the user can retry.
+	if err := revokeAllAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "password_reset"); err != nil {
+		api.logAuth(r, "password_reset", &user.ID, false, "failed to revoke API tokens")
+		http.Error(w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
 	if err := user.SetPassword(req.NewPassword); err != nil {
 		slog.Error("Failed to hash new password", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
@@ -208,10 +217,6 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 
 	// Invalidate all active refresh tokens so existing sessions are terminated.
 	api.invalidateUserSessions(r.Context(), user.ID)
-	// A reset is how a user recovers a compromised account, so the personal
-	// API tokens go too: one minted by whoever had the old password must not
-	// outlive it.
-	_ = revokeAllAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "password_reset")
 	api.sendPasswordChangedNotification(user)
 
 	api.logAuth(r, "password_reset", &user.ID, true, "")

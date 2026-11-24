@@ -329,11 +329,13 @@ func (api *apiTokensAPI) logTokenEvent(r *http.Request, action string, user *mod
 	api.audit.LogAuth(r.Context(), ev)
 }
 
-// revokeAllAPITokens revokes every token of the user and records it. It is the
-// shared tail of the account-security events that end every session — password
-// change and reset, disabling MFA, an admin block — so a credential minted
-// before the event does not survive it. Failures are logged; the event that
-// triggered the revocation has already happened and must not be rolled back.
+// revokeAllAPITokens revokes every token of the user and records it. The
+// account-security events that end every session call it — password change
+// and reset, disabling MFA, an admin block — so a credential minted before the
+// event does not survive it. The self-service events call it before they
+// change anything and fail when it fails: tokens revoked without the change
+// is the safe outcome, a change reported as done with the tokens still alive
+// is not.
 func revokeAllAPITokens(r *http.Request, svc *services.APITokenService, audit services.AuditLogger, userID, tenantID, reason string) error {
 	if svc == nil {
 		return nil

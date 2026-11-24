@@ -400,6 +400,16 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Personal API tokens go before the second factor does: one minted with a
+	// stolen session must not survive the recovery step, and a failure here
+	// leaves MFA on rather than reporting it off with the tokens still live.
+	if err := revokeAllAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "mfa_disable"); err != nil {
+		errMsg := "failed to revoke API tokens"
+		api.logAuth(r.Context(), "mfa_disable", &user.ID, &user.TenantID, false, r, &errMsg)
+		http.Error(w, "Failed to disable MFA", http.StatusInternalServerError)
+		return
+	}
+
 	if err := api.mfaRegistry.DeleteByUser(r.Context(), user.TenantID, user.ID); err != nil {
 		slog.Error("MFA disable: delete row failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to disable MFA", http.StatusInternalServerError)
@@ -426,10 +436,6 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 			slog.Error("MFA disable: failed to blacklist user tokens", "user_id", user.ID, "error", blErr)
 		}
 	}
-	// Same threat model for personal API tokens: one minted with a stolen
-	// session must not survive the recovery step.
-	_ = revokeAllAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "mfa_disable")
-
 	api.logAuth(r.Context(), "mfa_disable", &user.ID, &user.TenantID, true, r, nil)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "MFA disabled"})
 }

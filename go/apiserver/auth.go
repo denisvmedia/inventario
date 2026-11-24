@@ -1319,6 +1319,18 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Personal API tokens end with the password, like every session does: a
+	// password change is how a user locks out whoever knew the old one, and a
+	// token that person minted would otherwise keep working. They go first,
+	// so a failure leaves the old password in place instead of a changed
+	// password with live tokens.
+	if err := revokeAllAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "password_change"); err != nil {
+		errMsg := "failed to revoke API tokens"
+		api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, false, r, &errMsg)
+		http.Error(w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
+
 	// Apply the new password hash.
 	if err := user.SetPassword(req.NewPassword); err != nil {
 		slog.Error("Failed to hash new password", "user_id", user.ID, "error", err)
@@ -1351,11 +1363,6 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 			slog.Error("Failed to blacklist user tokens after password change", "user_id", user.ID, "error", err)
 		}
 	}
-	// Personal API tokens end with the password, like every session does: a
-	// password change is how a user locks out whoever knew the old one, and a
-	// token that person minted would otherwise keep working.
-	_ = revokeAllAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "password_change")
-
 	slog.Info("Password changed successfully", "user_id", user.ID, "email", user.Email, "initial", initialSet)
 	api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, true, r, nil)
 	api.sendPasswordChangedNotification(user)

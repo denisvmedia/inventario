@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ import (
 	csrfinmemory "go.5x5.cz/inventario/csrf/inmemory"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
 )
 
@@ -217,6 +219,49 @@ func errorCode(c *qt.C, rr *httptest.ResponseRecorder) string {
 	return body.Errors[0].Code
 }
 
+// enableMFA turns on two-factor authentication for the user through the
+// setup and verify endpoints and returns the backup codes.
+func (e *apiTokenEnv) enableMFA() []string {
+	e.c.Helper()
+	setup := e.session(http.MethodPost, "/api/v1/auth/mfa/setup", nil)
+	e.c.Assert(setup.Code, qt.Equals, http.StatusOK, qt.Commentf(setup.Body.String()))
+	var setupResp apiserver.MFASetupResponse
+	e.c.Assert(json.Unmarshal(setup.Body.Bytes(), &setupResp), qt.IsNil)
+	code := must.Must(totp.GenerateCodeCustom(setupResp.Secret, time.Now(), totp.ValidateOpts{
+		Period: 30, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
+	}))
+	verify := e.session(http.MethodPost, "/api/v1/auth/mfa/verify", apiserver.MFAVerifyRequest{Code: code})
+	e.c.Assert(verify.Code, qt.Equals, http.StatusOK, qt.Commentf(verify.Body.String()))
+	var verifyResp apiserver.MFAVerifyResponse
+	e.c.Assert(json.Unmarshal(verify.Body.Bytes(), &verifyResp), qt.IsNil)
+	return verifyResp.BackupCodes
+}
+
+// mfaState reads the user's MFA state through the status endpoint.
+func (e *apiTokenEnv) mfaState() apiserver.MFAState {
+	e.c.Helper()
+	rr := e.sessionWithoutCSRF(http.MethodGet, "/api/v1/auth/mfa/status", nil)
+	e.c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf(rr.Body.String()))
+	var resp apiserver.MFAStatusResponse
+	e.c.Assert(json.Unmarshal(rr.Body.Bytes(), &resp), qt.IsNil)
+	return resp.State
+}
+
+// addPasswordReset stores a password-reset request for the user, as the
+// forgot-password email would, and returns its token.
+func (e *apiTokenEnv) addPasswordReset() string {
+	e.c.Helper()
+	token := must.Must(models.GeneratePasswordResetToken())
+	must.Must(e.params.FactorySet.PasswordResetRegistry.Create(context.Background(), models.PasswordReset{
+		UserID:    e.user.ID,
+		TenantID:  e.user.TenantID,
+		Email:     e.user.Email,
+		Token:     token,
+		ExpiresAt: time.Now().Add(time.Hour),
+	}))
+	return token
+}
+
 func TestAPITokens_CreateRevealsTheSecretOnce(t *testing.T) {
 	c := qt.New(t)
 	env := newAPITokenEnv(c)
@@ -317,18 +362,7 @@ func TestAPITokens_CreateRequiresTheSecondFactorWhenEnabled(t *testing.T) {
 	c := qt.New(t)
 	env := newAPITokenEnv(c)
 
-	setup := env.session(http.MethodPost, "/api/v1/auth/mfa/setup", nil)
-	c.Assert(setup.Code, qt.Equals, http.StatusOK, qt.Commentf(setup.Body.String()))
-	var setupResp apiserver.MFASetupResponse
-	c.Assert(json.Unmarshal(setup.Body.Bytes(), &setupResp), qt.IsNil)
-	code := must.Must(totp.GenerateCodeCustom(setupResp.Secret, time.Now(), totp.ValidateOpts{
-		Period: 30, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
-	}))
-	verify := env.session(http.MethodPost, "/api/v1/auth/mfa/verify", apiserver.MFAVerifyRequest{Code: code})
-	c.Assert(verify.Code, qt.Equals, http.StatusOK, qt.Commentf(verify.Body.String()))
-	var verifyResp apiserver.MFAVerifyResponse
-	c.Assert(json.Unmarshal(verify.Body.Bytes(), &verifyResp), qt.IsNil)
-	backup := verifyResp.BackupCodes[0]
+	backup := env.enableMFA()[0]
 
 	base := map[string]any{"name": "script", "scope": "read_only", "current_password": apiTokenTestPassword}
 
@@ -749,6 +783,33 @@ func TestAPITokens_RevokedByAccountSecurityEvents(t *testing.T) {
 		c.Assert(env.auditRows("api_token_revoke_all"), qt.HasLen, 1)
 	})
 
+	c.Run("password reset", func(c *qt.C) {
+		env := newAPITokenEnv(c)
+		tok := env.mint(nil)
+		rr := env.do(apiTokenRequest{method: http.MethodPost, path: "/api/v1/reset-password", body: apiserver.ResetPasswordRequest{
+			Token:       env.addPasswordReset(),
+			NewPassword: "AnotherPassword456",
+		}})
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf(rr.Body.String()))
+
+		rr = env.withToken(tok.Secret, http.MethodGet, env.groupPath(env.group, "/locations"), nil)
+		c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
+	})
+
+	c.Run("MFA disable", func(c *qt.C) {
+		env := newAPITokenEnv(c)
+		backups := env.enableMFA()
+		tok := env.mint(map[string]any{"backup_code": backups[0]})
+		rr := env.session(http.MethodPost, "/api/v1/auth/mfa/disable", apiserver.MFADisableRequest{
+			Password:   apiTokenTestPassword,
+			BackupCode: backups[1],
+		})
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf(rr.Body.String()))
+
+		rr = env.withToken(tok.Secret, http.MethodGet, env.groupPath(env.group, "/locations"), nil)
+		c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
+	})
+
 	c.Run("admin block", func(c *qt.C) {
 		env := newAPITokenEnv(c)
 		tok := env.mint(nil)
@@ -767,6 +828,68 @@ func TestAPITokens_RevokedByAccountSecurityEvents(t *testing.T) {
 		must.Must(env.params.FactorySet.UserRegistry.Update(context.Background(), *u))
 		rr = env.withToken(tok.Secret, http.MethodGet, env.groupPath(env.group, "/locations"), nil)
 		c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized)
+	})
+}
+
+// failingBulkRevoke is the token registry with RevokeAllByUserID broken, to
+// drive the path where the account-security events cannot revoke tokens.
+type failingBulkRevoke struct {
+	registry.APITokenRegistry
+}
+
+func (failingBulkRevoke) RevokeAllByUserID(context.Context, string) (int, error) {
+	return 0, errors.New("token registry unavailable")
+}
+
+// When the tokens cannot be revoked, the security event fails and changes
+// nothing: the change is not reported as done while the tokens still work.
+func TestAPITokens_SecurityEventsFailWhenRevocationFails(t *testing.T) {
+	c := qt.New(t)
+	breakBulkRevoke := func(p *apiserver.Params) {
+		p.FactorySet.APITokenRegistry = failingBulkRevoke{APITokenRegistry: p.FactorySet.APITokenRegistry}
+	}
+	passwordUnchanged := func(env *apiTokenEnv) {
+		env.c.Helper()
+		u := must.Must(env.params.FactorySet.UserRegistry.Get(context.Background(), env.user.ID))
+		env.c.Assert(u.CheckPassword(apiTokenTestPassword), qt.IsTrue)
+	}
+
+	c.Run("password change", func(c *qt.C) {
+		env := newAPITokenEnv(c, breakBulkRevoke)
+		env.mint(nil)
+		rr := env.session(http.MethodPost, "/api/v1/auth/change-password", apiserver.ChangePasswordRequest{
+			CurrentPassword: apiTokenTestPassword,
+			NewPassword:     "AnotherPassword456",
+		})
+		c.Assert(rr.Code, qt.Equals, http.StatusInternalServerError, qt.Commentf(rr.Body.String()))
+		passwordUnchanged(env)
+	})
+
+	c.Run("password reset", func(c *qt.C) {
+		env := newAPITokenEnv(c, breakBulkRevoke)
+		env.mint(nil)
+		resetToken := env.addPasswordReset()
+		rr := env.do(apiTokenRequest{method: http.MethodPost, path: "/api/v1/reset-password", body: apiserver.ResetPasswordRequest{
+			Token:       resetToken,
+			NewPassword: "AnotherPassword456",
+		}})
+		c.Assert(rr.Code, qt.Equals, http.StatusInternalServerError, qt.Commentf(rr.Body.String()))
+		passwordUnchanged(env)
+		// The reset link is not used up, so the user can try again.
+		_, err := env.params.FactorySet.PasswordResetRegistry.GetByToken(context.Background(), resetToken)
+		c.Assert(err, qt.IsNil)
+	})
+
+	c.Run("MFA disable", func(c *qt.C) {
+		env := newAPITokenEnv(c, breakBulkRevoke)
+		backups := env.enableMFA()
+		env.mint(map[string]any{"backup_code": backups[0]})
+		rr := env.session(http.MethodPost, "/api/v1/auth/mfa/disable", apiserver.MFADisableRequest{
+			Password:   apiTokenTestPassword,
+			BackupCode: backups[1],
+		})
+		c.Assert(rr.Code, qt.Equals, http.StatusInternalServerError, qt.Commentf(rr.Body.String()))
+		c.Assert(env.mfaState(), qt.Equals, apiserver.MFAStateActive)
 	})
 }
 
