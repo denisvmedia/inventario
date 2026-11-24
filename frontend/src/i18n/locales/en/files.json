@@ -104,6 +104,18 @@
     "showingRange": "Showing {{from}}–{{to}} of {{total}}",
     "uploadDate": "Uploaded {{date}}"
   },
+  "review": {
+    "backToList": "Back to files",
+    "next": "Next file",
+    "notInList": "This file is not in the list's current results.",
+    "pagerLabel": "Files in this list",
+    "position": "{{position}} of {{total}}",
+    "previous": "Previous file",
+    "saveAndNext": "Save and next",
+    "saved": "File saved",
+    "tabDetails": "Details",
+    "tabPreview": "Preview"
+  },
   "searchPlaceholder": "Search by title, description, or filename",
   "subtitle": "Photos, invoices, documents, and other files attached to your inventory.",
   "tagBackup": "Backup",

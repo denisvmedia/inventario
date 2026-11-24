@@ -8,11 +8,15 @@ import { defineConfig } from "vitest/config"
 // password meter programs the shared zxcvbn spies and resets the component's
 // module-level loader cache per test; both of those are module state that
 // outlives a file once the registry is shared, and it showed up as an
-// occasional failure under `--sequence.shuffle`.
+// occasional failure under `--sequence.shuffle`. The commit badge test mocks
+// `@/features/system/hooks`, but the Shell test renders the real CommitBadge;
+// when the Shell test runs first in a worker, CommitBadge is already bound to
+// the real hook and the mock never reaches it.
 const OWN_REGISTRY = [
   "src/components/files/__tests__/PdfViewer.test.tsx",
   "src/components/files/__tests__/PdfFullViewer.test.tsx",
   "src/components/auth/__tests__/PasswordStrengthMeter.test.tsx",
+  "src/components/__tests__/CommitBadge.test.tsx",
 ]
 
 export default defineConfig({

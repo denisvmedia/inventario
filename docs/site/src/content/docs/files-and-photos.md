@@ -69,9 +69,11 @@ place. From here you can:
 - **Upload** with the **Upload files** button — this opens the same upload
   dialog described above.
 
-Selecting a file opens its **details** panel on the right. Tick the checkboxes
-on the cards (or the list rows) to select several at once — a bar appears
-letting you **Move to…** a different category or **Delete selected**.
+Selecting a file opens its **details** panel on the right. The list keeps its
+search, filters, and page behind the panel, so closing the panel puts you back
+where you were. Tick the checkboxes on the cards (or the list rows) to select
+several at once — a bar appears letting you **Move to…** a different category
+or **Delete selected**.
 
 ## Categories and filters
 
@@ -164,12 +166,46 @@ to the Files page filtered to that tag. The action row gives you:
 
 - **Open in new tab** — opens the file in your browser.
 - **Download** — saves a copy.
-- **Edit metadata** — change the title, category, description, or tags. (This
-  only edits the metadata; the file itself isn't changed.)
+- **Edit metadata** — opens the file's edit page, described below.
 - **Delete file** — removes the file permanently after a confirmation.
 
 :::caution
 **Delete file** is permanent. The file is removed for good once you confirm.
+:::
+
+### Edit a file's details
+
+**Edit metadata** opens an edit page with the file's preview on the left and
+its details on the right: **Title**, **Filename**, **Category**, **Description**,
+and **Tags**. Only the details change; the file itself stays as it is. On a
+narrow screen the preview and the details are two tabs, **Preview** and
+**Details**, and switching between them keeps what you have typed.
+
+**Save changes** saves and takes you back to where you opened the file from.
+**Cancel** goes back without saving.
+
+When you open the edit page from the Files page, it keeps the list you came
+from, with its search, category, tag filter, and page. This makes it quick to
+go through a batch of uploads one after another:
+
+- The header shows the file's place in that list (for example, "3 of 12") and
+  arrows to the previous and next file.
+- **Save and next** saves the file and opens the next one in the list. It moves
+  on to the list's next page when needed.
+- **Back to files**, **Save changes**, and **Cancel** take you back to that list,
+  on the page you reached, with the file's details panel open.
+
+If an edit takes a file out of the list, for example because you removed the
+tag the list is filtered by, the page says so. **Save and next** still opens the
+file that came after it.
+
+If you try to leave the page with unsaved changes, Inventario asks whether to
+**Save** them, **Discard** them, or **Keep editing**. Reloading or closing the
+tab asks your browser to confirm.
+
+:::caution
+The browser's own **Back** button does not ask first. Unsaved changes are lost
+if you use it.
 :::
 
 ## Scan an item from a photo or PDF with AI

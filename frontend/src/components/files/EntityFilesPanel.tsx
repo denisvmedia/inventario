@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { Upload } from "lucide-react"
 
 import type { FileCardCoverState } from "@/components/files/FileCard"
@@ -14,8 +14,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton"
 import { isImageMime } from "@/features/files/constants"
 import { useFiles } from "@/features/files/hooks"
+import { fileReviewHref } from "@/features/files/listContext"
 import { useFilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { listContextFromLocation } from "@/lib/list-context"
 import { Pagination, pageWithin } from "@/components/common/Pagination"
 
 // Files panel for entity-detail pages (commodity / location / area).
@@ -70,6 +72,7 @@ export function EntityFilesPanel({
 }: EntityFilesPanelProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   // Grid/list toggle, shared with the commodity Files tab via the same
@@ -185,9 +188,8 @@ export function EntityFilesPanel({
         onOpenChange={(next) => {
           if (!next) setSelectedId(null)
         }}
-        onEdit={(id) =>
-          navigate(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(id)}/edit`)
-        }
+        // The review page returns here when the user is done.
+        onEdit={(id) => navigate(fileReviewHref(slug, id, listContextFromLocation(location)))}
         imageSiblings={imageSiblings}
         onSelectSibling={(id) => setSelectedId(id)}
       />

@@ -153,5 +153,12 @@
     "then": "then",
     "title": "Keyboard shortcuts"
   },
-  "trackedBy": "Tracked by {{ref}}."
+  "trackedBy": "Tracked by {{ref}}.",
+  "unsavedChanges": {
+    "description": "You have unsaved changes. Save them before you leave, or discard them.",
+    "discard": "Discard",
+    "keepEditing": "Keep editing",
+    "save": "Save",
+    "title": "Save your changes?"
+  }
 }
