@@ -132,6 +132,7 @@ func newUsersMeParams(
 	apiTokens *services.APITokenService,
 	audit services.AuditLogger,
 	mfa *services.MFAService,
+	blacklist services.TokenBlacklister,
 ) UsersMeParams {
 	return UsersMeParams{
 		RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
@@ -140,6 +141,8 @@ func newUsersMeParams(
 		AuditService:         audit,
 		MFAService:           mfa,
 		MFARegistry:          params.FactorySet.UserMFASecretRegistry,
+		UserRegistry:         params.FactorySet.UserRegistry,
+		TokenBlacklister:     blacklist,
 	}
 }
 
@@ -834,7 +837,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// Per-user account surfaces (#1644): active sessions + login history.
 		// These don't fit under /auth (which is unauth-tolerant on purpose)
 		// nor under /g/{slug}/* (they're tenant-scoped, not group-scoped).
-		r.With(userMiddlewares...).Route("/users/me", UsersMe(newUsersMeParams(params, apiTokenSvc, auditSvc, mfaSvc)))
+		r.With(userMiddlewares...).Route("/users/me", UsersMe(newUsersMeParams(params, apiTokenSvc, auditSvc, mfaSvc, blacklist)))
 		// In-app feedback / contact support (#1387). Auth-required and
 		// per-user rate-limited (5/hour). The handler returns a typed 503
 		// (feedback.not_configured) when SupportEmail is empty, so it stays

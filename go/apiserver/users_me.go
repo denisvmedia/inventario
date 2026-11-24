@@ -39,6 +39,12 @@ type UsersMeParams struct {
 	// asks for. Nil skips that step, which only tests do.
 	MFAService  *services.MFAService
 	MFARegistry registry.UserMFASecretRegistry
+	// UserRegistry and TokenBlacklister let token creation look at the
+	// account again after the insert, to discard a token minted while a
+	// password change, an MFA disable, a block or a session revoke landed.
+	// Nil skips that part of the check, which only tests do.
+	UserRegistry     registry.UserRegistry
+	TokenBlacklister services.TokenBlacklister
 }
 
 // usersMeAPI is the handler set behind /users/me/{sessions,login-history}.
@@ -104,6 +110,8 @@ func UsersMe(params UsersMeParams) func(r chi.Router) {
 				audit:       params.AuditService,
 				mfaService:  params.MFAService,
 				mfaRegistry: params.MFARegistry,
+				users:       params.UserRegistry,
+				blacklist:   params.TokenBlacklister,
 			}
 			r.Get("/api-tokens", tokens.listAPITokens)
 			r.Post("/api-tokens", tokens.createAPIToken)

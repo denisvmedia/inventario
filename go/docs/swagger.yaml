@@ -10590,6 +10590,7 @@ paths:
         `scope` is `read_only` (GET, HEAD and OPTIONS only) or `read_write`. `group_id` restricts the token to one group the caller belongs to. `expires_at` is optional.
         Validation failures answer 422 with codes api_token.name_required, api_token.name_too_long, api_token.invalid_scope,
         api_token.expiry_in_past, api_token.group_not_allowed, api_token.limit_reached, api_token.invalid_password or api_token.invalid_mfa_code.
+        A password change or reset, disabling two-factor authentication, an account block or a session revoke that lands while the request runs answers 401 api_token.credentials_changed, and no token is created.
       parameters:
       - description: Token settings and re-authentication
         in: body

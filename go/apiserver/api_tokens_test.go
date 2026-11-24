@@ -893,6 +893,150 @@ func TestAPITokens_SecurityEventsFailWhenRevocationFails(t *testing.T) {
 	})
 }
 
+// mintRace is the token registry with hooks that run a security event at a
+// chosen point of a create request. Each hook runs once.
+type mintRace struct {
+	registry.APITokenRegistry
+	// beforeInsert runs inside the next Create, before the row is stored:
+	// after the create request checked the password and second factor.
+	beforeInsert func()
+	// afterRevokeAll runs after the next RevokeAllByUserID: after an event's
+	// first revocation and before it stores its change.
+	afterRevokeAll func()
+}
+
+func (m *mintRace) Create(ctx context.Context, t models.APIToken) (*models.APIToken, error) {
+	if f := m.beforeInsert; f != nil {
+		m.beforeInsert = nil
+		f()
+	}
+	return m.APITokenRegistry.Create(ctx, t)
+}
+
+func (m *mintRace) RevokeAllByUserID(ctx context.Context, userID string) (int, error) {
+	n, err := m.APITokenRegistry.RevokeAllByUserID(ctx, userID)
+	if f := m.afterRevokeAll; f != nil {
+		m.afterRevokeAll = nil
+		f()
+	}
+	return n, err
+}
+
+// mintRaceEvent is a security event that ends every token, run by the test
+// in the middle of a create request.
+type mintRaceEvent struct {
+	name string
+	// sessionCheckOnly marks the event that changes nothing on the account
+	// but the session revocation stamp.
+	sessionCheckOnly bool
+	run              func(t *testing.T, env *apiTokenEnv, backups []string, operatorToken string) *httptest.ResponseRecorder
+}
+
+func mintRaceEvents() []mintRaceEvent {
+	return []mintRaceEvent{
+		{name: "password change", run: func(_ *testing.T, env *apiTokenEnv, _ []string, _ string) *httptest.ResponseRecorder {
+			return env.session(http.MethodPost, "/api/v1/auth/change-password", apiserver.ChangePasswordRequest{
+				CurrentPassword: apiTokenTestPassword,
+				NewPassword:     "AnotherPassword456",
+			})
+		}},
+		{name: "password reset", run: func(_ *testing.T, env *apiTokenEnv, _ []string, _ string) *httptest.ResponseRecorder {
+			return env.do(apiTokenRequest{method: http.MethodPost, path: "/api/v1/reset-password", body: apiserver.ResetPasswordRequest{
+				Token:       env.addPasswordReset(),
+				NewPassword: "AnotherPassword456",
+			}})
+		}},
+		{name: "MFA disable", run: func(_ *testing.T, env *apiTokenEnv, backups []string, _ string) *httptest.ResponseRecorder {
+			return env.session(http.MethodPost, "/api/v1/auth/mfa/disable", apiserver.MFADisableRequest{
+				Password:   apiTokenTestPassword,
+				BackupCode: backups[1],
+			})
+		}},
+		{name: "admin block", run: func(t *testing.T, env *apiTokenEnv, _ []string, operatorToken string) *httptest.ResponseRecorder {
+			return doAdminJSONRequest(t, env.handler, http.MethodPost,
+				"/api/v1/admin/users/"+env.user.ID+"/block", operatorToken, blockBody("compromised account", true))
+		}},
+		{name: "admin session revoke", sessionCheckOnly: true, run: func(t *testing.T, env *apiTokenEnv, _ []string, operatorToken string) *httptest.ResponseRecorder {
+			return doAdminJSONRequest(t, env.handler, http.MethodPost,
+				"/api/v1/admin/users/"+env.user.ID+"/sessions/revoke", operatorToken, revokeSessionsBody("stolen laptop"))
+		}},
+	}
+}
+
+// A create request checks the password and second factor, then inserts. An
+// event that revokes every token and lands between the two finds nothing to
+// revoke, so the request itself has to notice it: it answers 401 and the
+// token does not survive.
+func TestAPITokens_SecurityEventDuringCreateDiscardsTheToken(t *testing.T) {
+	c := qt.New(t)
+	for _, event := range mintRaceEvents() {
+		c.Run(event.name, func(c *qt.C) {
+			t := c.TB.(*testing.T)
+			var race *mintRace
+			env := newAPITokenEnv(c, func(p *apiserver.Params) {
+				race = &mintRace{APITokenRegistry: p.FactorySet.APITokenRegistry}
+				p.FactorySet.APITokenRegistry = race
+				if !event.sessionCheckOnly {
+					// Session revocation is never reported, so what catches
+					// the change is the check of the account itself.
+					p.TokenBlacklister = services.NoOpTokenBlacklister{}
+				}
+			})
+			backups := env.enableMFA()
+			_, operatorToken := WithBackofficeAdmin(t, env.params)
+
+			race.beforeInsert = func() {
+				rr := event.run(t, env, backups, operatorToken)
+				c.Check(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("%s: %s", event.name, rr.Body.String()))
+			}
+			rr := env.session(http.MethodPost, "/api/v1/users/me/api-tokens", map[string]any{
+				"name":             "script",
+				"scope":            "read_write",
+				"current_password": apiTokenTestPassword,
+				"backup_code":      backups[0],
+			})
+			c.Assert(race.beforeInsert, qt.IsNil, qt.Commentf("the event did not run"))
+			c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized, qt.Commentf(rr.Body.String()))
+			c.Assert(errorCode(c, rr), qt.Equals, "api_token.credentials_changed")
+			c.Assert(rr.Body.String(), qt.Not(qt.Contains), models.APITokenPrefix)
+
+			live := must.Must(env.params.FactorySet.APITokenRegistry.ListByUserID(context.Background(), env.user.ID))
+			c.Assert(live, qt.HasLen, 0)
+		})
+	}
+}
+
+// The other order: the create request inserts and looks at the account before
+// the event stores its change, so the request sees nothing wrong and returns
+// the token. The event revokes the tokens again once its change is stored.
+func TestAPITokens_TokenMintedWhileASecurityEventRunsIsRevoked(t *testing.T) {
+	c := qt.New(t)
+	// The account events store their change after revoking; the admin
+	// events revoke last, after the change and the session stamp.
+	for _, event := range mintRaceEvents()[:3] {
+		c.Run(event.name, func(c *qt.C) {
+			t := c.TB.(*testing.T)
+			var race *mintRace
+			env := newAPITokenEnv(c, func(p *apiserver.Params) {
+				race = &mintRace{APITokenRegistry: p.FactorySet.APITokenRegistry}
+				p.FactorySet.APITokenRegistry = race
+			})
+			backups := env.enableMFA()
+
+			var tok apiserver.CreateAPITokenResponse
+			race.afterRevokeAll = func() {
+				tok = env.mint(map[string]any{"scope": "read_write", "backup_code": backups[2]})
+			}
+			rr := event.run(t, env, backups, "")
+			c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf(rr.Body.String()))
+			c.Assert(tok.Secret, qt.Not(qt.Equals), "", qt.Commentf("the create request did not run"))
+
+			rr = env.withToken(tok.Secret, http.MethodGet, env.groupPath(env.group, "/locations"), nil)
+			c.Assert(rr.Code, qt.Equals, http.StatusUnauthorized, qt.Commentf(rr.Body.String()))
+		})
+	}
+}
+
 // last_used_at is written once per interval, not on every request, and each
 // write leaves one api_token_use audit row. Rows written during a token
 // request carry the token's id.

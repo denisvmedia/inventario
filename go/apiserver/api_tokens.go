@@ -28,7 +28,14 @@ var (
 	errAPITokenImpersonation   = errx.NewSentinel("API tokens cannot be created or revoked while impersonating a user")
 	errAPITokenInvalidPassword = errx.NewSentinel("current password is incorrect")
 	errAPITokenInvalidMFACode  = errx.NewSentinel("authenticator or backup code is invalid")
+	// errAPITokenCredentialsChanged answers a create request that the account
+	// changed under: the password, two-factor authentication, the account's
+	// status or its sessions.
+	errAPITokenCredentialsChanged = errx.NewSentinel("the account's credentials changed while the token was being created")
 )
+
+// apiTokenCredentialsChangedCode is the code of errAPITokenCredentialsChanged.
+const apiTokenCredentialsChangedCode = "api_token.credentials_changed" // #nosec G101 -- an error code, not a credential
 
 // APITokenView is a personal API token as the token list shows it. The token
 // itself is never part of it; only CreateAPITokenResponse carries that, once.
@@ -87,6 +94,8 @@ type apiTokensAPI struct {
 	audit       services.AuditLogger
 	mfaService  *services.MFAService
 	mfaRegistry registry.UserMFASecretRegistry
+	users       registry.UserRegistry
+	blacklist   services.TokenBlacklister
 }
 
 func newAPITokenView(t *models.APIToken, now time.Time) APITokenView {
@@ -139,6 +148,7 @@ func (api *apiTokensAPI) listAPITokens(w http.ResponseWriter, r *http.Request) {
 // @Description `scope` is `read_only` (GET, HEAD and OPTIONS only) or `read_write`. `group_id` restricts the token to one group the caller belongs to. `expires_at` is optional.
 // @Description Validation failures answer 422 with codes api_token.name_required, api_token.name_too_long, api_token.invalid_scope,
 // @Description api_token.expiry_in_past, api_token.group_not_allowed, api_token.limit_reached, api_token.invalid_password or api_token.invalid_mfa_code.
+// @Description A password change or reset, disabling two-factor authentication, an account block or a session revoke that lands while the request runs answers 401 api_token.credentials_changed, and no token is created.
 // @Tags users-me
 // @Accept json
 // @Produce json
@@ -178,13 +188,19 @@ func (api *apiTokensAPI) createAPIToken(w http.ResponseWriter, r *http.Request) 
 		api.renderCreateError(w, r, err)
 		return
 	}
-	if !api.reauthenticate(w, r, user, req) {
+	mfaID, ok := api.reauthenticate(w, r, user, req)
+	if !ok {
 		return
 	}
 
 	token, secret, err := api.service.Create(r.Context(), user, in)
 	if err != nil {
 		api.renderCreateError(w, r, err)
+		return
+	}
+	changed, err := api.credentialsChanged(r, user, mfaID)
+	if err != nil || changed {
+		api.discardMintedToken(w, r, user, token.ID, err)
 		return
 	}
 
@@ -261,32 +277,101 @@ func (api *apiTokensAPI) requireOwnSession(w http.ResponseWriter, r *http.Reques
 // minting one needs the password (when the account has one) and a fresh TOTP
 // or backup code (when two-factor authentication is on). An account with
 // neither — OAuth sign-in only, no MFA — has nothing more to prove, the same
-// rule account deletion applies.
-func (api *apiTokensAPI) reauthenticate(w http.ResponseWriter, r *http.Request, user *models.User, req CreateAPITokenRequest) bool {
+// rule account deletion applies. It returns the id of the two-factor
+// enrollment the code was checked against, empty when two-factor
+// authentication is off.
+func (api *apiTokensAPI) reauthenticate(w http.ResponseWriter, r *http.Request, user *models.User, req CreateAPITokenRequest) (mfaID string, ok bool) {
 	if user.PasswordHash != "" && !services.VerifyPassword(user, req.CurrentPassword) {
 		api.logTokenEvent(r, "api_token_create", user, "", false, new("incorrect password"))
 		_ = codedUnprocessableEntityError(w, r, errAPITokenInvalidPassword, "api_token.invalid_password")
-		return false
+		return "", false
 	}
 
 	if api.mfaRegistry == nil || api.mfaService == nil {
-		return true
+		return "", true
 	}
 	row, err := api.mfaRegistry.GetByUser(r.Context(), user.TenantID, user.ID)
 	if errors.Is(err, registry.ErrNotFound) || (err == nil && !row.IsEnabled()) {
-		return true
+		return "", true
 	}
 	if err != nil {
 		slog.Error("API token create: MFA lookup failed", "user_id", user.ID, "error", err)
 		_ = internalServerError(w, r, err)
-		return false
+		return "", false
 	}
 	if !consumeMFACode(r.Context(), api.mfaService, api.mfaRegistry, user, row, req.TOTPCode, req.BackupCode) {
 		api.logTokenEvent(r, "api_token_create", user, "", false, new("invalid mfa code"))
 		_ = codedUnprocessableEntityError(w, r, errAPITokenInvalidMFACode, "api_token.invalid_mfa_code")
-		return false
+		return "", false
 	}
-	return true
+	return row.ID, true
+}
+
+// credentialsChanged reports whether the account changed under a create
+// request after reauthenticate checked it: a new password, two-factor
+// authentication turned off or enrolled again, the account blocked or
+// deleted, or its sessions revoked. Each of those revokes every token, but a
+// revocation that runs between this request's checks and its insert finds
+// nothing to revoke, so the request looks again once its row exists. The
+// events revoke the tokens once more after they store their change, so
+// whichever of the two runs second sees the other.
+func (api *apiTokensAPI) credentialsChanged(r *http.Request, user *models.User, mfaID string) (bool, error) {
+	ctx := r.Context()
+	if api.users != nil {
+		current, err := api.users.Get(ctx, user.ID)
+		if errors.Is(err, registry.ErrNotFound) {
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if current.PasswordHash != user.PasswordHash || !current.IsActive {
+			return true, nil
+		}
+	}
+	if mfaID != "" && api.mfaRegistry != nil {
+		row, err := api.mfaRegistry.GetByUser(ctx, user.TenantID, user.ID)
+		if errors.Is(err, registry.ErrNotFound) {
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if !row.IsEnabled() || row.ID != mfaID {
+			return true, nil
+		}
+	}
+	if api.blacklist != nil {
+		claims := appctx.JWTClaimsFromContext(ctx)
+		since, revoked, err := api.blacklist.UserBlacklistedSince(ctx, user.ID)
+		switch {
+		case err != nil:
+			// JWTMiddleware lets a request through when this lookup fails;
+			// do the same. The password and MFA checks above do not depend
+			// on it.
+			slog.Error("API token create: session revocation lookup failed", "user_id", user.ID, "error", err)
+		case revoked && claims != nil && checkUserBlacklistIat(claims, since) != nil:
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// discardMintedToken revokes a token whose create request failed after the
+// insert and answers the request. The secret has not left the server, so
+// nobody can use the row; revoking it keeps it off the list and out of the
+// cap.
+func (api *apiTokensAPI) discardMintedToken(w http.ResponseWriter, r *http.Request, user *models.User, tokenID string, checkErr error) {
+	if _, err := api.service.Revoke(r.Context(), user.ID, tokenID); err != nil {
+		slog.Error("API token create: failed to revoke a discarded token", "user_id", user.ID, "token_id", tokenID, "error", err)
+	}
+	if checkErr != nil {
+		slog.Error("API token create: credential re-check failed", "user_id", user.ID, "error", checkErr)
+		_ = internalServerError(w, r, checkErr)
+		return
+	}
+	api.logTokenEvent(r, "api_token_create", user, tokenID, false, new("account credentials changed during creation"))
+	_ = codedUnauthorizedError(w, r, errAPITokenCredentialsChanged, apiTokenCredentialsChangedCode)
 }
 
 func (api *apiTokensAPI) renderCreateError(w http.ResponseWriter, r *http.Request, err error) {
@@ -335,7 +420,7 @@ func (api *apiTokensAPI) logTokenEvent(r *http.Request, action string, user *mod
 // event does not survive it. The self-service events call it before they
 // change anything and fail when it fails: tokens revoked without the change
 // is the safe outcome, a change reported as done with the tokens still alive
-// is not.
+// is not. After the change is stored they call sweepAPITokens.
 func revokeAllAPITokens(r *http.Request, svc *services.APITokenService, audit services.AuditLogger, userID, tenantID, reason string) error {
 	if svc == nil {
 		return nil
@@ -357,4 +442,14 @@ func revokeAllAPITokens(r *http.Request, svc *services.APITokenService, audit se
 		})
 	}
 	return nil
+}
+
+// sweepAPITokens revokes the user's tokens a second time, after an event has
+// stored its change. A token minted between revokeAllAPITokens and the change
+// was checked against the old credentials; createAPIToken re-reads the
+// account after its insert and this reads the tokens after the change, so one
+// of the two catches it. The change already took effect, so a failure is
+// logged (revokeAllAPITokens does) and not reported as a failed change.
+func sweepAPITokens(r *http.Request, svc *services.APITokenService, audit services.AuditLogger, userID, tenantID, reason string) {
+	_ = revokeAllAPITokens(r, svc, audit, userID, tenantID, reason)
 }

@@ -415,6 +415,7 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to disable MFA", http.StatusInternalServerError)
 		return
 	}
+	sweepAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "mfa_disable")
 
 	// Invalidate every existing session for the user — same shape as
 	// change-password (auth.go::handleChangePassword). The threat

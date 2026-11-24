@@ -1346,6 +1346,7 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
 		return
 	}
+	sweepAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "password_change")
 
 	// Revoke all refresh tokens for the user so existing sessions are invalidated.
 	if api.refreshTokenRegistry != nil {

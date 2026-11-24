@@ -291,6 +291,7 @@ Besides expiring, all your tokens are revoked when:
 - an administrator blocks your account, deactivates it, or signs you out of
   every session.
 
+A token you are creating at the moment one of these happens is not created.
 Unblocking an account does not bring its tokens back; create new ones. Tokens
 are deleted with your account, and a token limited to one group is deleted when
 that group is deleted.

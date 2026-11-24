@@ -650,11 +650,6 @@ func decoderAtEOF(dec *json.Decoder) bool {
 func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, target *models.User) string {
 	userID := target.ID
 	var msgs []string
-	// Personal API tokens (#2808) are live sessions too, and the longest-lived
-	// ones: a blocked user's script must stop with the user.
-	if err := revokeAllAPITokens(r, api.apiTokens, api.auditService, userID, target.TenantID, "admin_revoke_sessions"); err != nil {
-		msgs = append(msgs, "revoke_api_tokens: "+err.Error())
-	}
 	if api.factorySet != nil && api.factorySet.RefreshTokenRegistry != nil {
 		if err := api.factorySet.RefreshTokenRegistry.RevokeByUserID(r.Context(), userID); err != nil {
 			slog.Warn("admin block: failed to revoke refresh tokens", "user_id", userID, "error", err)
@@ -682,6 +677,13 @@ func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, target *models.Use
 			slog.Warn("admin block: failed to blacklist user tokens", "user_id", userID, "error", err)
 			msgs = append(msgs, "blacklist_user_tokens: "+err.Error())
 		}
+	}
+	// Personal API tokens (#2808) are live sessions too, and the longest-lived
+	// ones: a blocked user's script must stop with the user. They go after the
+	// blacklist stamp: a token being minted reads that stamp after its insert
+	// (createAPIToken), so a mint this revocation misses sees the stamp.
+	if err := revokeAllAPITokens(r, api.apiTokens, api.auditService, userID, target.TenantID, "admin_revoke_sessions"); err != nil {
+		msgs = append(msgs, "revoke_api_tokens: "+err.Error())
 	}
 	return strings.Join(msgs, "; ")
 }

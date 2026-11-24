@@ -207,6 +207,7 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
 		return
 	}
+	sweepAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "password_reset")
 
 	// Consume the token by deleting all reset tokens for this user.
 	// The token is considered used-on-delete: once gone, GetByToken returns ErrNotFound.
