@@ -71,6 +71,24 @@ func List(ctx context.Context, set *registry.Set, q Query, offset, limit int) (P
 	}, nil
 }
 
+// TagCounts counts, per tag, the items q selects once its tag filter is set
+// aside, plus the items without tags among them. Setting the tag filter
+// aside keeps the counts of a tag picker stable while tags are picked, and
+// makes each count the number of items the list shows when that tag alone
+// is selected with the rest of q unchanged.
+func TagCounts(ctx context.Context, set *registry.Set, q Query) (registry.CommodityTagCounts, error) {
+	q.Tags = registry.CommodityTagFilter{}
+	opts, err := Resolve(ctx, set, q)
+	if err != nil {
+		return registry.CommodityTagCounts{}, err
+	}
+	counts, err := set.CommodityRegistry.CountTags(ctx, opts)
+	if err != nil {
+		return registry.CommodityTagCounts{}, errxtrace.Wrap("failed to count commodity tags", err)
+	}
+	return counts, nil
+}
+
 // Explain reports, per commodity, the fields the search text of opts was
 // found in. It returns nil when opts has no search text. Every commodity a
 // registry returns for opts matches, so each gets at least one entry.

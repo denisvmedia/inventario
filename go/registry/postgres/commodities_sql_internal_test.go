@@ -237,3 +237,17 @@ func TestCommodityCountSQLSharesThePredicate(t *testing.T) {
 		"SELECT COUNT(*) FROM commodities WHERE draft = $1 AND status IN ($2) AND (search_text ILIKE $3)")
 	c.Check(countArgs, qt.DeepEquals, []any{false, "in_use", "%drill%"})
 }
+
+func TestCommodityTagCountsSQL(t *testing.T) {
+	c := qt.New(t)
+
+	opts := registry.CommodityListOptions{Search: "drill"}
+	sb := commodityTagCountsSelect("commodities")
+	query, args := addWhere(sb, commodityWhere(opts, "commodities", "commodity_loans")).Build()
+
+	c.Check(query, qt.Equals,
+		"SELECT t.slug, COUNT(DISTINCT commodities.id) FROM commodities "+
+			"LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(commodities.tags, '[]'::jsonb)) AS t(slug) ON true "+
+			"WHERE draft = $1 AND status = $2 AND (search_text ILIKE $3) GROUP BY t.slug")
+	c.Check(args, qt.DeepEquals, []any{false, "in_use", "%drill%"})
+}

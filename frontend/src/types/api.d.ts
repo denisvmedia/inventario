@@ -4386,6 +4386,77 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/tag-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count commodity tags
+         * @description Per item tag slug, the number of items the query selects when its own tag filter (tags, tag_mode, tags_exclude, no_tags) is set aside, plus the number without tags.
+         *     Takes the filter parameters of GET /commodities (item query contract); sort is accepted and ignored. An unknown parameter or an unreadable value is a 400.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Search text, as for GET /commodities */
+                    q?: string;
+                    /** @description Filter by commodity type, as for GET /commodities */
+                    type?: string[];
+                    /** @description Filter by status, as for GET /commodities */
+                    status?: string[];
+                    /** @description Filter by exact area ID */
+                    area_id?: string;
+                    /** @description Only commodities with no area */
+                    unassigned?: boolean;
+                    /** @description Include drafts and non-in_use commodities (default true) */
+                    include_inactive?: boolean;
+                    /** @description Filter by computed warranty status */
+                    warranty_status?: string[];
+                    /** @description Warranty expires strictly before YYYY-MM-DD */
+                    warranty_expires_before?: string;
+                    /** @description Filter by current loan state */
+                    lent_out?: boolean;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityTagCountsResponse"];
+                    };
+                };
+                /** @description Unsupported parameter or invalid value */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/commodities/values": {
         parameters: {
             query?: never;
@@ -11242,6 +11313,9 @@ export type components = {
             data?: components["schemas"]["models.CommodityService"][];
             meta?: components["schemas"]["jsonapi.CommodityServicesMeta"];
         };
+        "jsonapi.CommodityTagCountsResponse": {
+            data?: components["schemas"]["registry.CommodityTagCounts"];
+        };
         "jsonapi.CurrencyMigrationPreviewAttributes": {
             exchange_rate?: number;
             from_currency?: string;
@@ -13143,6 +13217,20 @@ export type components = {
         "registry.CommoditySearchMatch": {
             field?: components["schemas"]["registry.CommoditySearchField"];
             value?: string;
+        };
+        "registry.CommodityTagCounts": {
+            /**
+             * @description Tags maps a tag slug to the number of commodities carrying it. A slug
+             *     no commodity in the set carries is absent.
+             */
+            tags?: {
+                [key: string]: number;
+            };
+            /**
+             * @description Untagged counts the commodities without tags (a NULL tags column
+             *     included).
+             */
+            untagged?: number;
         };
         "registry.StorageBreakdown": {
             documents?: number;

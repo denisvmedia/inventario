@@ -317,3 +317,38 @@ func allOf(values []string, pred func(string) bool) bool {
 	}
 	return true
 }
+
+// CommodityTagCounts is how many of a set of commodities carry each tag.
+type CommodityTagCounts struct {
+	// Tags maps a tag slug to the number of commodities carrying it. A slug
+	// no commodity in the set carries is absent.
+	Tags map[string]int `json:"tags"`
+	// Untagged counts the commodities without tags (a NULL tags column
+	// included).
+	Untagged int `json:"untagged"`
+}
+
+// CountCommodityTags counts the tags of commodities, the way
+// CommodityRegistry.CountTags does over the commodities a query selects.
+// A slug repeated on one commodity counts once.
+func CountCommodityTags(commodities []*models.Commodity) CommodityTagCounts {
+	counts := CommodityTagCounts{Tags: map[string]int{}}
+	for _, c := range commodities {
+		if c == nil {
+			continue
+		}
+		if len(c.Tags) == 0 {
+			counts.Untagged++
+			continue
+		}
+		seen := make(map[string]struct{}, len(c.Tags))
+		for _, slug := range c.Tags {
+			if _, dup := seen[slug]; dup {
+				continue
+			}
+			seen[slug] = struct{}{}
+			counts.Tags[slug]++
+		}
+	}
+	return counts
+}

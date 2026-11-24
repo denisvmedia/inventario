@@ -92,6 +92,50 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+// countCommodityTags counts, per tag, the items a query selects with its tag
+// filter set aside (commodityquery.TagCounts), for a tag picker that shows
+// how many items each tag would list.
+// @Summary Count commodity tags
+// @Description Per item tag slug, the number of items the query selects when its own tag filter (tags, tag_mode, tags_exclude, no_tags) is set aside, plus the number without tags.
+// @Description Takes the filter parameters of GET /commodities (item query contract); sort is accepted and ignored. An unknown parameter or an unreadable value is a 400.
+// @Tags commodities
+// @Accept json-api
+// @Produce json-api
+// @Param groupSlug path string true "Group slug"
+// @Param q query string false "Search text, as for GET /commodities"
+// @Param type query []string false "Filter by commodity type, as for GET /commodities" collectionFormat(multi)
+// @Param status query []string false "Filter by status, as for GET /commodities" collectionFormat(multi)
+// @Param area_id query string false "Filter by exact area ID"
+// @Param unassigned query bool false "Only commodities with no area"
+// @Param include_inactive query bool false "Include drafts and non-in_use commodities (default true)"
+// @Param warranty_status query []string false "Filter by computed warranty status" collectionFormat(multi)
+// @Param warranty_expires_before query string false "Warranty expires strictly before YYYY-MM-DD"
+// @Param lent_out query bool false "Filter by current loan state"
+// @Success 200 {object} jsonapi.CommodityTagCountsResponse "OK"
+// @Failure 400 {object} jsonapi.Errors "Unsupported parameter or invalid value"
+// @Router /g/{groupSlug}/commodities/tag-counts [get].
+func (*commoditiesAPI) countCommodityTags(w http.ResponseWriter, r *http.Request) {
+	regSet := RegistrySetFromContext(r.Context())
+	if regSet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	query, err := commodityquery.Parse(r.URL.Query())
+	if err != nil {
+		queryParamError(w, r, err)
+		return
+	}
+	counts, err := commodityquery.TagCounts(r.Context(), regSet, query)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	if err := render.Render(w, r, jsonapi.NewCommodityTagCountsResponse(counts)); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
 // resolveCoversForList wraps coverService.ResolveMany with the page of
 // commodities and the per-request user, returning the JSON:API-shaped
 // map that NewCommoditiesResponseWithCovers expects. Returns nil (not an
@@ -746,6 +790,7 @@ func Commodities(params Params) func(r chi.Router) {
 		// commodity id.
 		r.Post("/bulk-delete", api.bulkDeleteCommodities) // POST /commodities/bulk-delete
 		r.Post("/bulk-move", api.bulkMoveCommodities)     // POST /commodities/bulk-move
+		r.Get("/tag-counts", api.countCommodityTags)      // GET /commodities/tag-counts
 		r.Route("/{commodityID}", func(r chi.Router) {
 			r.Use(commodityCtx())
 			r.Get("/", api.getCommodity)                          // GET /commodities/123

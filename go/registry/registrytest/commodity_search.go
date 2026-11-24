@@ -106,6 +106,68 @@ func RunCommoditySearchContract(t *testing.T, newEnv func(t *testing.T) Commodit
 		}
 	})
 
+	t.Run("tag counts", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		seedSearchGroup(c, env)
+
+		for _, tc := range []struct {
+			name string
+			opts registry.CommodityListOptions
+			want registry.CommodityTagCounts
+		}{
+			{
+				name: "every item",
+				opts: registry.CommodityListOptions{IncludeInactive: true},
+				want: registry.CommodityTagCounts{
+					Tags:     map[string]int{"power-tools": 1, "red": 2, "kitchen": 1},
+					Untagged: 2,
+				},
+			},
+			{
+				// The sold phone drops out of "red".
+				name: "default view",
+				opts: registry.CommodityListOptions{},
+				want: registry.CommodityTagCounts{
+					Tags:     map[string]int{"power-tools": 1, "red": 1, "kitchen": 1},
+					Untagged: 2,
+				},
+			},
+			{
+				name: "with a search",
+				opts: registry.CommodityListOptions{IncludeInactive: true, Search: "red"},
+				want: registry.CommodityTagCounts{
+					Tags:     map[string]int{"power-tools": 1, "red": 2},
+					Untagged: 1,
+				},
+			},
+			{
+				name: "with a tag filter",
+				opts: registry.CommodityListOptions{
+					IncludeInactive: true,
+					Tags:            registry.CommodityTagFilter{Exclude: []string{"red"}},
+				},
+				want: registry.CommodityTagCounts{Tags: map[string]int{"kitchen": 1}, Untagged: 2},
+			},
+			{
+				name: "nothing selected",
+				opts: registry.CommodityListOptions{Search: "nonexistent"},
+				want: registry.CommodityTagCounts{Tags: map[string]int{}},
+			},
+		} {
+			c.Run(tc.name, func(c *qt.C) {
+				got, err := env.Commodities.CountTags(env.Ctx, tc.opts)
+				c.Assert(err, qt.IsNil)
+				c.Check(got, qt.DeepEquals, tc.want)
+
+				// The counts describe the items the list returns.
+				items, _, err := env.Commodities.ListPaginated(env.Ctx, 0, 50, tc.opts)
+				c.Assert(err, qt.IsNil)
+				c.Check(registry.CountCommodityTags(items), qt.DeepEquals, got)
+			})
+		}
+	})
+
 	t.Run("tag labels stay within their kind", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)

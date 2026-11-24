@@ -1788,6 +1788,11 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.CommodityServicesMeta'
     type: object
+  jsonapi.CommodityTagCountsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/registry.CommodityTagCounts'
+    type: object
   jsonapi.CurrencyMigrationPreviewAttributes:
     properties:
       exchange_rate:
@@ -4631,6 +4636,21 @@ definitions:
         $ref: '#/definitions/registry.CommoditySearchField'
       value:
         type: string
+    type: object
+  registry.CommodityTagCounts:
+    properties:
+      tags:
+        additionalProperties:
+          type: integer
+        description: |-
+          Tags maps a tag slug to the number of commodities carrying it. A slug
+          no commodity in the set carries is absent.
+        type: object
+      untagged:
+        description: |-
+          Untagged counts the commodities without tags (a NULL tags column
+          included).
+        type: integer
     type: object
   registry.StorageBreakdown:
     properties:
@@ -7876,6 +7896,78 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Run an AI vision scan on uploaded photos or documents
+      tags:
+      - commodities
+  /g/{groupSlug}/commodities/tag-counts:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Per item tag slug, the number of items the query selects when its own tag filter (tags, tag_mode, tags_exclude, no_tags) is set aside, plus the number without tags.
+        Takes the filter parameters of GET /commodities (item query contract); sort is accepted and ignored. An unknown parameter or an unreadable value is a 400.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Search text, as for GET /commodities
+        in: query
+        name: q
+        type: string
+      - collectionFormat: multi
+        description: Filter by commodity type, as for GET /commodities
+        in: query
+        items:
+          type: string
+        name: type
+        type: array
+      - collectionFormat: multi
+        description: Filter by status, as for GET /commodities
+        in: query
+        items:
+          type: string
+        name: status
+        type: array
+      - description: Filter by exact area ID
+        in: query
+        name: area_id
+        type: string
+      - description: Only commodities with no area
+        in: query
+        name: unassigned
+        type: boolean
+      - description: Include drafts and non-in_use commodities (default true)
+        in: query
+        name: include_inactive
+        type: boolean
+      - collectionFormat: multi
+        description: Filter by computed warranty status
+        in: query
+        items:
+          type: string
+        name: warranty_status
+        type: array
+      - description: Warranty expires strictly before YYYY-MM-DD
+        in: query
+        name: warranty_expires_before
+        type: string
+      - description: Filter by current loan state
+        in: query
+        name: lent_out
+        type: boolean
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityTagCountsResponse'
+        "400":
+          description: Unsupported parameter or invalid value
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Count commodity tags
       tags:
       - commodities
   /g/{groupSlug}/commodities/values:

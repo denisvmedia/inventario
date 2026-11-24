@@ -90,6 +90,17 @@ func TestCommoditySearch_SharedContract(t *testing.T) {
 		c.Check(body, checkers.JSONPathMatches("$.data[*].id", qt.Not(qt.Contains)), target.ID)
 	})
 
+	c.Run("tag counts follow the query and set its tag filter aside", func(c *qt.C) {
+		code, body := get(c, "/commodities/tag-counts?q=ht-7788&tags_exclude=shed")
+		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+		c.Check(body, checkers.JSONPathEquals("$.data.tags.shed"), float64(1))
+		c.Check(body, checkers.JSONPathEquals("$.data.untagged"), float64(0))
+
+		code, body = get(c, "/commodities/tag-counts?q=nothing-matches-this")
+		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+		c.Check(body, checkers.JSONPathMatches("$.data.tags", qt.HasLen), 0)
+	})
+
 	c.Run("a list without q carries no matches", func(c *qt.C) {
 		code, body := get(c, "/commodities")
 		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
@@ -101,6 +112,7 @@ func TestCommoditySearch_SharedContract(t *testing.T) {
 	}{
 		{"list refuses an unknown parameter", "/commodities?colour=red", "colour"},
 		{"list refuses no_tags with tags", "/commodities?no_tags=true&tags=shed", "no_tags"},
+		{"tag counts refuse pagination", "/commodities/tag-counts?page=2", "page"},
 		{"search refuses the old tag operator", "/search?type=commodities&q=x&operator=AND", "operator"},
 		{"search refuses an unknown warranty status", "/search?type=commodities&q=x&warranty_status=soon", "warranty_status"},
 	} {
