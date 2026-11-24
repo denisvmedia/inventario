@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/go-extras/errx"
 
@@ -222,22 +223,39 @@ func RejectAPITokens() func(http.Handler) http.Handler {
 	}
 }
 
-// apiTokensReadOnlyRoute lets a token request through only with a safe method,
-// whatever the token's scope. It is for routes where tokens may look but not
-// act — the /groups management subtree: a script may list the groups it can
-// reach, but creating, leaving or administering a group stays with a person.
-func apiTokensReadOnlyRoute(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if appctx.APITokenFromContext(r.Context()) != nil {
-			switch r.Method {
-			case http.MethodGet, http.MethodHead, http.MethodOptions:
-			default:
+// apiTokenAllowlist refuses a personal API token on every route of the router
+// it is installed on, except the GET routes that allowed matches. A route added
+// to that router later is closed to tokens until someone adds it to the
+// allowlist, so a new admin read cannot leak through by default.
+//
+// It must be installed with Use inside a mounted router: chi's RoutePath then
+// holds the path within that router, which is what allowed is matched against.
+// A request it cannot place is refused.
+func apiTokenAllowlist(allowed chi.Routes) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if appctx.APITokenFromContext(r.Context()) != nil && !apiTokenRouteAllowed(allowed, r) {
 				_ = codedForbiddenError(w, r, errAPITokenEndpointNotAllowed, apiTokenEndpointNotAllowedCode)
 				return
 			}
-		}
-		next.ServeHTTP(w, r)
-	})
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func apiTokenRouteAllowed(allowed chi.Routes, r *http.Request) bool {
+	method := r.Method
+	if method == http.MethodHead {
+		method = http.MethodGet
+	}
+	if method != http.MethodGet {
+		return false
+	}
+	rctx := chi.RouteContext(r.Context())
+	if rctx == nil || rctx.RoutePath == "" {
+		return false
+	}
+	return allowed.Match(chi.NewRouteContext(), method, rctx.RoutePath)
 }
 
 // apiTokenAllowsGroup reports whether the request may act on groupID: true

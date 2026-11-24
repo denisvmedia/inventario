@@ -263,12 +263,13 @@ A token acts as you, with your current role in each group it can reach: if you
 are a viewer in a group, a **Read and write** token cannot change anything there
 either, and if you leave a group, the token loses it too. It works only on the
 data inside groups (items, locations, areas, files, tags, loans, services,
-maintenance, exports and the like) and on the list of your groups.
+maintenance, exports and the like), and it can read the list of your groups,
+each group's details, and its members and their photos.
 
 A token cannot sign in, change your profile, password or two-factor settings,
-see or end sessions, create or revoke tokens, accept invitations, manage
-groups or members, or reach anything in the admin area. Those stay with you in
-the browser.
+see or end sessions, create or revoke tokens, see or accept invitations,
+create, leave or manage groups or members, or reach anything in the admin
+area. Those stay with you in the browser.
 
 ### The token list
 

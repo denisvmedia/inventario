@@ -143,13 +143,13 @@ func newUsersMeParams(
 	}
 }
 
-// createGroupManagementMiddlewares is the /groups chain. It accepts a personal
-// API token so a script can find the groups it may reach, but only for reads:
-// creating, leaving and administering groups stays with a person.
+// createGroupManagementMiddlewares is the /groups chain. It authenticates a
+// personal API token so a script can find the groups it may reach; Groups
+// then admits the token on an allowlist of reads and refuses it everywhere
+// else, since creating, leaving and administering groups stays with a person.
 func createGroupManagementMiddlewares(jwtSecret []byte, factorySet *registry.FactorySet, blacklist services.TokenBlacklister, csrfService csrf.Service, apiTokens *APITokenAuthenticator) []func(http.Handler) http.Handler {
 	return append(defaultAPIMiddlewares,
 		SessionOrAPITokenMiddleware(jwtSecret, factorySet.UserRegistry, blacklist, apiTokens),
-		apiTokensReadOnlyRoute,
 		RLSContextMiddleware(factorySet),
 		RegistrySetMiddleware(factorySet),
 		CSRFMiddleware(csrfService),

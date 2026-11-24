@@ -38,7 +38,11 @@ against and read the
 before upgrading. The [API reference](../api/) lists every endpoint. These are
 the parts a token is meant for, and the ones least likely to move:
 
-- `GET /api/v1/groups`, to find the slug of each group the token can reach.
+- `GET /api/v1/groups`, to find the slug of each group the token can reach,
+  and `GET /api/v1/groups/{groupID}`, `…/members` and
+  `…/members/{userID}/avatar` for one group's details, members and their
+  photos. Nothing else under `/api/v1/groups` accepts a token, reads
+  included.
 - The group data under `/api/v1/g/{groupSlug}/`: `locations`, `areas`,
   `commodities` (items), `files`, `tags`, `loans`, `services`, `maintenance`,
   `search` and `exports`, plus `uploads` for adding files.
@@ -56,8 +60,9 @@ Everything about the account itself refuses a token with 403
 `api_token.endpoint_not_allowed`, even a valid one: sign-in, sign-out and
 `/auth/me`, two-factor settings, `/users/me` (profile, sessions, and the
 token endpoints, so a token cannot create another), creating, leaving or
-administering groups, invitations, the admin area and the back office. Do
-those in the browser.
+administering groups, a group's invitations (listing them included, since an
+invite link lets its holder join), accepting invitations, the admin area and
+the back office. Do those in the browser.
 
 ## Errors
 

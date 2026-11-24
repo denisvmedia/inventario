@@ -53,13 +53,14 @@ the section matching the tag and publishes it as the GitHub Release body. See
   & security → API tokens. A token has a name, read-only or read-write access,
   an optional expiry and optionally a single group, and is shown once. Scripts
   send it as `Authorization: Bearer inv_pat_…` with no CSRF token. A token
-  carries the owner's current role in each group, works on group data and the
-  group list only, and is refused on account, security, session, token and
-  admin endpoints. Changing or resetting the password, turning off two-factor
-  authentication, and an administrator blocking or signing out the account
-  revoke all of its tokens. Creation, revocation and use are written to the
-  audit log. The new "API tokens for scripts" page of the user guide lists the
-  endpoints worth scripting against
+  carries the owner's current role in each group, works on group data and can
+  read groups and their members, and is refused on account, security, session,
+  token, invitation, group-management and admin endpoints. Changing or
+  resetting the password, turning off two-factor authentication, and an
+  administrator blocking or signing out the account revoke all of its tokens.
+  Creation, revocation and use are written to the audit log. The new "API
+  tokens for scripts" page of the user guide lists the endpoints worth
+  scripting against
   ([#2808](https://github.com/denisvmedia/inventario/issues/2808)).
 
 ### Fixed

@@ -538,20 +538,38 @@ func TestAPITokens_RefusedOnAccountSecurityAndAdminEndpoints(t *testing.T) {
 		}
 	}
 
-	// Group management accepts tokens, but only to read, whatever the scope.
-	// The token is authenticated first there, so only a valid one gets this
-	// far.
+	// Under /groups a token may read the group list, one group, its members
+	// and their photos, whatever its scope. Everything else there is refused,
+	// reads included: the admin routes hand out invite links. The token is
+	// authenticated first there, so only a valid one gets this far.
+	groupPath := "/api/v1/groups/" + env.group.ID
 	for _, route := range []struct{ method, path string }{
 		{http.MethodPost, "/api/v1/groups"},
-		{http.MethodPatch, "/api/v1/groups/" + env.group.ID},
-		{http.MethodDelete, "/api/v1/groups/" + env.group.ID},
-		{http.MethodPost, "/api/v1/groups/" + env.group.ID + "/invites"},
-		{http.MethodPost, "/api/v1/groups/" + env.group.ID + "/leave"},
+		{http.MethodPatch, groupPath},
+		{http.MethodDelete, groupPath},
+		{http.MethodGet, groupPath + "/invites"},
+		{http.MethodHead, groupPath + "/invites"},
+		{http.MethodPost, groupPath + "/invites"},
+		{http.MethodDelete, groupPath + "/invites/some-invite"},
+		{http.MethodPost, groupPath + "/invites/some-invite/resend"},
+		{http.MethodPatch, groupPath + "/members/" + env.user.ID},
+		{http.MethodDelete, groupPath + "/members/" + env.user.ID},
+		{http.MethodPost, groupPath + "/leave"},
+		{http.MethodGet, groupPath + "/no-such-route"},
 	} {
 		rr := env.withToken(valid, route.method, route.path, map[string]any{"name": "x"})
 		c.Assert(rr.Code, qt.Equals, http.StatusForbidden, qt.Commentf("%s %s: %s", route.method, route.path, rr.Body.String()))
 		c.Assert(errorCode(c, rr), qt.Equals, "api_token.endpoint_not_allowed")
 	}
+
+	// The allowlisted reads are open to the token.
+	for _, path := range []string{"/api/v1/groups", groupPath, groupPath + "/members"} {
+		rr := env.withToken(valid, http.MethodGet, path, nil)
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("GET %s: %s", path, rr.Body.String()))
+	}
+	// The user has no photo, so the avatar route answers 404, not a refusal.
+	rr := env.withToken(valid, http.MethodGet, groupPath+"/members/"+env.user.ID+"/avatar", nil)
+	c.Assert(rr.Code, qt.Not(qt.Equals), http.StatusForbidden, qt.Commentf(rr.Body.String()))
 
 	// Nothing was minted with the token.
 	list := env.sessionWithoutCSRF(http.MethodGet, "/api/v1/users/me/api-tokens", nil)
@@ -662,6 +680,56 @@ func TestAPITokens_CannotBeManagedWhileImpersonating(t *testing.T) {
 	list := env.do(apiTokenRequest{method: http.MethodGet, path: "/api/v1/users/me/api-tokens", headers: headers})
 	c.Assert(list.Code, qt.Equals, http.StatusOK)
 	c.Assert(list.Body.String(), qt.Not(qt.Contains), existing.Secret)
+}
+
+// A token must not reach a group's invite links. An unused link-only invite
+// can be accepted by any account in the tenant, so reading one would turn a
+// leaked read-only token into a membership, up to admin, that outlives the
+// token.
+func TestAPITokens_CannotHarvestInviteLinks(t *testing.T) {
+	c := qt.New(t)
+	env := newAPITokenEnv(c)
+
+	// The group's admin creates a link-only admin invite in the browser.
+	created := env.session(http.MethodPost, "/api/v1/groups/"+env.group.ID+"/invites", jsonapi.GroupInviteCreateRequest{
+		Data: &jsonapi.GroupInviteCreateData{Attributes: &jsonapi.GroupInviteCreateAttrs{Role: models.GroupRoleAdmin}},
+	})
+	c.Assert(created.Code, qt.Equals, http.StatusCreated, qt.Commentf(created.Body.String()))
+	var invite struct {
+		Data struct {
+			Attributes struct {
+				Token string `json:"token"`
+			} `json:"attributes"`
+		} `json:"data"`
+	}
+	c.Assert(json.Unmarshal(created.Body.Bytes(), &invite), qt.IsNil)
+	inviteToken := invite.Data.Attributes.Token
+	c.Assert(inviteToken, qt.Not(qt.Equals), "")
+
+	for _, scope := range []string{"read_only", "read_write"} {
+		tok := env.mint(map[string]any{"scope": scope, "group_id": env.group.ID})
+
+		rr := env.withToken(tok.Secret, http.MethodGet, "/api/v1/groups/"+env.group.ID+"/invites", nil)
+		c.Assert(rr.Code, qt.Equals, http.StatusForbidden, qt.Commentf("%s: %s", scope, rr.Body.String()))
+		c.Assert(errorCode(c, rr), qt.Equals, "api_token.endpoint_not_allowed")
+		c.Assert(rr.Body.String(), qt.Not(qt.Contains), inviteToken)
+
+		// The routes a token may read do not carry the link either.
+		for _, path := range []string{
+			"/api/v1/groups",
+			"/api/v1/groups/" + env.group.ID,
+			"/api/v1/groups/" + env.group.ID + "/members",
+		} {
+			rr := env.withToken(tok.Secret, http.MethodGet, path, nil)
+			c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("%s %s: %s", scope, path, rr.Body.String()))
+			c.Assert(rr.Body.String(), qt.Not(qt.Contains), inviteToken, qt.Commentf("%s %s", scope, path))
+		}
+	}
+
+	// The browser session of the group's admin still lists the invite.
+	rr := env.sessionWithoutCSRF(http.MethodGet, "/api/v1/groups/"+env.group.ID+"/invites", nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf(rr.Body.String()))
+	c.Assert(rr.Body.String(), qt.Contains, inviteToken)
 }
 
 func TestAPITokens_RevokedByAccountSecurityEvents(t *testing.T) {
