@@ -3,11 +3,11 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/appctx"
@@ -161,47 +161,22 @@ func (r *MaintenanceScheduleRegistry) ListByCommodity(ctx context.Context, commo
 }
 
 func (r *MaintenanceScheduleRegistry) ListPaginated(ctx context.Context, offset, limit int, opts registry.MaintenanceListOptions) ([]*models.MaintenanceSchedule, int, error) {
-	// Clamp negative pagination inputs — passing a negative OFFSET
-	// to Postgres raises 22023 (invalid_parameter_value), and the
-	// memory backend already normalises to zero. Matches that
-	// behaviour so callers can treat both backends identically.
-	if offset < 0 {
-		offset = 0
-	}
-	if limit < 0 {
-		limit = 0
-	}
-
-	var conditions []string
-	var args []any
-	if opts.EnabledOnly {
-		conditions = append(conditions, "enabled = true")
-	}
-	if opts.DueBefore != "" {
-		conditions = append(conditions, fmt.Sprintf("next_due_at <= $%d", len(args)+1))
-		args = append(args, opts.DueBefore)
-	}
-
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = "WHERE " + strings.Join(conditions, " AND ")
-	}
+	where := maintenanceWhere(opts)
 
 	var schedules []*models.MaintenanceSchedule
 	var total int
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s %s`, r.tableNames.MaintenanceSchedules(), whereClause)
-		if err := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		countSB := newSelect().Select("COUNT(*)").From(string(r.tableNames.MaintenanceSchedules()))
+		countQuery, countArgs := addWhere(countSB, where).Build()
+		if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 			return errxtrace.Wrap("failed to count maintenance schedules", err)
 		}
 
-		dataArgs := append([]any{}, args...)
-		dataArgs = append(dataArgs, limit, offset)
-		dataQuery := fmt.Sprintf(
-			`SELECT * FROM %s %s ORDER BY next_due_at ASC, title ASC LIMIT $%d OFFSET $%d`,
-			r.tableNames.MaintenanceSchedules(), whereClause, len(args)+1, len(args)+2)
+		dataSB := newSelect().Select("*").From(string(r.tableNames.MaintenanceSchedules()))
+		addWhere(dataSB, where).OrderByAsc("next_due_at").OrderByAsc("title")
+		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
 			return errxtrace.Wrap("failed to query maintenance schedules", err)
@@ -221,6 +196,20 @@ func (r *MaintenanceScheduleRegistry) ListPaginated(ctx context.Context, offset,
 		return nil, 0, errxtrace.Wrap("failed to list paginated maintenance schedules", err)
 	}
 	return schedules, total, nil
+}
+
+// maintenanceWhere is the WHERE clause the schedule page and its count share,
+// nil when opts filters nothing. DueBefore is inclusive.
+func maintenanceWhere(opts registry.MaintenanceListOptions) *sqlb.WhereClause {
+	cond := sqlb.NewCond()
+	var exprs []string
+	if opts.EnabledOnly {
+		exprs = append(exprs, "enabled = true")
+	}
+	if opts.DueBefore != "" {
+		exprs = append(exprs, cond.LessEqualThan("next_due_at", opts.DueBefore))
+	}
+	return andWhere(cond, exprs...)
 }
 
 func (r *MaintenanceScheduleRegistry) CountByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error) {

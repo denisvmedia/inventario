@@ -12,3 +12,10 @@ func UserPurgeTableNames() []string {
 	}
 	return names
 }
+
+// SQLInjectionPayloads exposes the payload corpus of the white-box injection
+// property to the black-box test that runs the same payloads against
+// PostgreSQL. It compiles only under `go test`.
+func SQLInjectionPayloads() []string {
+	return append([]string(nil), sqlInjectionPayloads...)
+}

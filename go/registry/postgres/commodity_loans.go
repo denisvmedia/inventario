@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
+	sqlb "github.com/huandu/go-sqlbuilder"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/appctx"
@@ -196,40 +197,22 @@ func (r *CommodityLoanRegistry) ListPaginated(ctx context.Context, offset, limit
 		now = time.Now()
 	}
 
-	var conditions []string
-	var args []any
-	switch state {
-	case registry.LoanStateOpen:
-		conditions = append(conditions, "returned_at IS NULL")
-	case registry.LoanStateOverdue:
-		conditions = append(conditions, "returned_at IS NULL AND due_back_at IS NOT NULL AND due_back_at < $1")
-		args = append(args, now.Format("2006-01-02"))
-	case registry.LoanStateReturned:
-		conditions = append(conditions, "returned_at IS NOT NULL")
-	case registry.LoanStateAll:
-		// no filter
-	}
-
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = "WHERE " + strings.Join(conditions, " AND ")
-	}
+	where := loanStateWhere(state, now)
 
 	var loans []*models.CommodityLoan
 	var total int
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s %s`, r.tableNames.CommodityLoans(), whereClause)
-		if err := tx.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		countSB := newSelect().Select("COUNT(*)").From(string(r.tableNames.CommodityLoans()))
+		countQuery, countArgs := addWhere(countSB, where).Build()
+		if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 			return errxtrace.Wrap("failed to count commodity loans", err)
 		}
 
-		dataArgs := append([]any{}, args...)
-		dataArgs = append(dataArgs, limit, offset)
-		dataQuery := fmt.Sprintf(
-			`SELECT * FROM %s %s ORDER BY lent_at DESC, created_at DESC LIMIT $%d OFFSET $%d`,
-			r.tableNames.CommodityLoans(), whereClause, len(args)+1, len(args)+2)
+		dataSB := newSelect().Select("*").From(string(r.tableNames.CommodityLoans()))
+		addWhere(dataSB, where).OrderByDesc("lent_at").OrderByDesc("created_at")
+		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
 			return errxtrace.Wrap("failed to query commodity loans", err)
@@ -251,6 +234,29 @@ func (r *CommodityLoanRegistry) ListPaginated(ctx context.Context, offset, limit
 	return loans, total, nil
 }
 
+// loanStateWhere is the WHERE clause the loan page and its count share, nil
+// for LoanStateAll. Overdue compares due_back_at against now as a calendar
+// date, the format the column stores.
+func loanStateWhere(state registry.LoanState, now time.Time) *sqlb.WhereClause {
+	cond := sqlb.NewCond()
+	var exprs []string
+	switch state {
+	case registry.LoanStateOpen:
+		exprs = append(exprs, "returned_at IS NULL")
+	case registry.LoanStateOverdue:
+		exprs = append(exprs,
+			"returned_at IS NULL",
+			"due_back_at IS NOT NULL",
+			cond.LessThan("due_back_at", now.Format("2006-01-02")),
+		)
+	case registry.LoanStateReturned:
+		exprs = append(exprs, "returned_at IS NOT NULL")
+	case registry.LoanStateAll:
+		// no filter
+	}
+	return andWhere(cond, exprs...)
+}
+
 // ListPendingReminders mirrors the partial index `idx_commodity_loans_due`
 // (open + due_back_at NOT NULL) for the worker sweep across every group.
 // Runs as the inventario_background_worker role so the SELECT bypasses
@@ -269,26 +275,14 @@ func (r *CommodityLoanRegistry) ListPendingReminders(ctx context.Context, kind r
 		// a single group via RLS.
 		return nil, errxtrace.Wrap("ListPendingReminders requires service-mode registry", registry.ErrInvalidInput)
 	}
-	today := now.UTC().Format("2006-01-02")
-	var (
-		whereClause string
-		args        []any
-	)
-	switch kind {
-	case registry.LoanReminderKindOverdue:
-		whereClause = "returned_at IS NULL AND due_back_at IS NOT NULL AND due_back_at < $1 AND reminder_sent_overdue = false"
-		args = []any{today}
-	case registry.LoanReminderKindDueSoon:
-		limit := now.UTC().AddDate(0, 0, dueSoonDays).Format("2006-01-02")
-		whereClause = "returned_at IS NULL AND due_back_at IS NOT NULL AND due_back_at >= $1 AND due_back_at <= $2 AND reminder_sent_due_soon = false"
-		args = []any{today, limit}
+	query, args, err := pendingLoanRemindersQuery(string(r.tableNames.CommodityLoans()), kind, now, dueSoonDays)
+	if err != nil {
+		return nil, err
 	}
+
 	var loans []*models.CommodityLoan
 	reg := r.newSQLRegistry()
-	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf(
-			`SELECT * FROM %s WHERE %s ORDER BY due_back_at ASC, id ASC`,
-			r.tableNames.CommodityLoans(), whereClause)
+	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		rows, err := tx.QueryxContext(ctx, query, args...)
 		if err != nil {
 			return errxtrace.Wrap("failed to query pending loan reminders", err)
@@ -308,6 +302,31 @@ func (r *CommodityLoanRegistry) ListPendingReminders(ctx context.Context, kind r
 		return nil, errxtrace.Wrap("failed to list pending loan reminders", err)
 	}
 	return loans, nil
+}
+
+// pendingLoanRemindersQuery selects the open loans with a due date that still
+// owe the given reminder, earliest due date first.
+func pendingLoanRemindersQuery(table string, kind registry.LoanReminderKind, now time.Time, dueSoonDays int) (string, []any, error) {
+	today := now.UTC().Format("2006-01-02")
+	sb := newSelect().Select("*").From(table)
+	sb.Where("returned_at IS NULL", "due_back_at IS NOT NULL")
+	switch kind {
+	case registry.LoanReminderKindOverdue:
+		sb.Where(sb.LessThan("due_back_at", today), "reminder_sent_overdue = false")
+	case registry.LoanReminderKindDueSoon:
+		until := now.UTC().AddDate(0, 0, dueSoonDays).Format("2006-01-02")
+		sb.Where(
+			sb.GreaterEqualThan("due_back_at", today),
+			sb.LessEqualThan("due_back_at", until),
+			"reminder_sent_due_soon = false",
+		)
+	default:
+		// Without this, a kind the switch does not know would select every
+		// open loan with a due date.
+		return "", nil, errxtrace.Wrap("unhandled loan reminder kind", registry.ErrInvalidInput, errx.Attrs("kind", kind))
+	}
+	query, args := sb.OrderByAsc("due_back_at").OrderByAsc("id").Build()
+	return query, args, nil
 }
 
 // MarkReminderSent atomically flips the matching reminder_sent_* flag
