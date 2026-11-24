@@ -534,7 +534,7 @@ func defaultTagLabelFromSlug(slug string) string {
 			continue
 		}
 		runes := []rune(p)
-		runes[0] = unicode.ToUpper(runes[0])
+		runes[0] = unicode.ToTitle(runes[0])
 		parts[i] = string(runes)
 	}
 	return strings.Join(parts, " ")

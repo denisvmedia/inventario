@@ -25,7 +25,7 @@
     "previewFallback": "Tag",
     "save": "Save changes",
     "slug": "Slug",
-    "slugHint": "Lowercase letters, digits and dashes. Used as the identifier in JSONB references.",
+    "slugHint": "Lowercase letters and digits in any language, separated by dashes. Filled in from the label; it identifies the tag on items and files.",
     "slugPlaceholder": "kitchen",
     "updateError": "Could not update tag: {{error}}",
     "updateSuccess": "Tag updated."
@@ -98,7 +98,7 @@
     "duplicateSlug": "A tag with that slug already exists.",
     "labelRequired": "Label is required.",
     "labelTooLong": "Label must be 64 characters or fewer.",
-    "slugInvalid": "Slug must be lowercase, kebab-cased.",
+    "slugInvalid": "Slug must be lowercase letters and digits separated by single dashes.",
     "slugRequired": "Slug is required.",
     "slugTooLong": "Slug must be 64 characters or fewer."
   },

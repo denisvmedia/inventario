@@ -2,9 +2,11 @@ package services_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
@@ -42,9 +44,10 @@ func TestTagService_EnsureTagsExist_AutoCreates(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(tags, qt.HasLen, 2) // duplicate Kitchen / kitchen folds in
 	c.Assert(tags["kitchen"].Color, qt.Equals, models.DefaultTagColor)
+	// The first spelling names the tag; the label is the text as typed.
 	c.Assert(tags["kitchen"].Label, qt.Equals, "Kitchen")
 	c.Assert(tags["front-office"].Slug, qt.Equals, "front-office")
-	c.Assert(tags["front-office"].Label, qt.Equals, "Front Office")
+	c.Assert(tags["front-office"].Label, qt.Equals, "front office")
 
 	// Idempotent — second call returns the same rows.
 	tags2, err := svc.EnsureTagsExist(ctx, models.TagKindCommodity, []string{"kitchen", "front-office"})
@@ -73,6 +76,99 @@ func TestTagService_NormalizeAndEnsureSlugs(t *testing.T) {
 	c.Assert(slugs, qt.HasLen, 2)
 	c.Assert(slugs, qt.Contains, "kitchen")
 	c.Assert(slugs, qt.Contains, "front-office")
+}
+
+// Every tag below must survive a save: the slug keeps the letters of any
+// script, two tags that differ only in non-Latin letters stay apart, and the
+// label is the text the user typed.
+func TestTagService_NormalizeAndEnsureSlugs_KeepsEveryScript(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs := newTagServiceFixture(c)
+	svc := services.NewTagService(fs)
+
+	typed := []string{"кухня", "на продажу", "書類", "Kuchyně", "Čaj", "électronique", "USB кабель", "USB хаб", "fragile"}
+	slugs, err := svc.NormalizeAndEnsureSlugs(ctx, models.TagKindCommodity, typed)
+	c.Assert(err, qt.IsNil)
+	c.Assert(slugs, qt.DeepEquals, []string{
+		"кухня", "на-продажу", "書類", "kuchyně", "čaj", "électronique", "usb-кабель", "usb-хаб", "fragile",
+	})
+
+	tagReg := must.Must(fs.TagRegistryFactory.CreateUserRegistry(ctx))
+	for i, slug := range slugs {
+		tag, err := tagReg.GetBySlug(ctx, models.TagKindCommodity, slug)
+		c.Assert(err, qt.IsNil, qt.Commentf("slug %q", slug))
+		c.Assert(tag.Label, qt.Equals, typed[i], qt.Commentf("slug %q", slug))
+	}
+
+	// Saving the stored slugs again, as the item form does when it is
+	// reopened and saved unchanged, finds the same rows.
+	again, err := svc.NormalizeAndEnsureSlugs(ctx, models.TagKindCommodity, slugs)
+	c.Assert(err, qt.IsNil)
+	c.Assert(again, qt.DeepEquals, slugs)
+	all := must.Must(tagReg.List(ctx))
+	c.Assert(all, qt.HasLen, len(typed))
+}
+
+// Precomposed and decomposed spellings of the same word are one tag, and the
+// label is stored in NFC.
+func TestTagService_NormalizeAndEnsureSlugs_FoldsUnicodeSpellings(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs := newTagServiceFixture(c)
+	svc := services.NewTagService(fs)
+
+	slugs, err := svc.NormalizeAndEnsureSlugs(ctx, models.TagKindCommodity, []string{"Kuchyne\u030c", "Kuchyn\u011b", "KUCHYNĚ"})
+	c.Assert(err, qt.IsNil)
+	c.Assert(slugs, qt.DeepEquals, []string{"kuchyn\u011b"})
+
+	tags, err := svc.EnsureTagsExist(ctx, models.TagKindCommodity, slugs)
+	c.Assert(err, qt.IsNil)
+	c.Assert(tags["kuchyn\u011b"].Label, qt.Equals, "Kuchyn\u011b")
+}
+
+// Typed text can be longer than the label limit while its slug fits, because
+// the slug drops spaces and punctuation. The label is cut to the limit rather
+// than failing the save.
+func TestTagService_NormalizeAndEnsureSlugs_CapsLongTypedLabel(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs := newTagServiceFixture(c)
+	svc := services.NewTagService(fs)
+
+	typed := strings.TrimSpace(strings.Repeat("ж, ", 22))     // 65 runes
+	slug := strings.TrimSuffix(strings.Repeat("ж-", 22), "-") // 43 runes
+	slugs, err := svc.NormalizeAndEnsureSlugs(ctx, models.TagKindCommodity, []string{typed})
+	c.Assert(err, qt.IsNil)
+	c.Assert(slugs, qt.DeepEquals, []string{slug})
+
+	tagReg := must.Must(fs.TagRegistryFactory.CreateUserRegistry(ctx))
+	tag, err := tagReg.GetBySlug(ctx, models.TagKindCommodity, slug)
+	c.Assert(err, qt.IsNil)
+	c.Assert(tag.Label, qt.Equals, string([]rune(typed)[:models.MaxTagLabelRunes]))
+}
+
+// Tag references read back from a backup are slugs; a tag created for one
+// gets a label title-cased from the slug in any script.
+func TestTagService_NormalizeAndEnsureRestoredSlugs_LabelsFromSlug(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs := newTagServiceFixture(c)
+	svc := services.NewTagService(fs)
+
+	slugs, err := svc.NormalizeAndEnsureRestoredSlugs(ctx, models.TagKindCommodity,
+		[]string{"new-tag-a", "на-продажу", "書類", "Legacy Free Text"})
+	c.Assert(err, qt.IsNil)
+	c.Assert(slugs, qt.DeepEquals, []string{"new-tag-a", "на-продажу", "書類", "legacy-free-text"})
+
+	tagReg := must.Must(fs.TagRegistryFactory.CreateUserRegistry(ctx))
+	want := map[string]string{
+		"new-tag-a":        "New Tag A",
+		"на-продажу":       "На Продажу",
+		"書類":               "書類",
+		"legacy-free-text": "Legacy Free Text",
+	}
+	for slug, label := range want {
+		tag, err := tagReg.GetBySlug(ctx, models.TagKindCommodity, slug)
+		c.Assert(err, qt.IsNil, qt.Commentf("slug %q", slug))
+		c.Assert(tag.Label, qt.Equals, label, qt.Commentf("slug %q", slug))
+	}
 }
 
 func TestTagService_RenameTag_RewritesReferences(t *testing.T) {

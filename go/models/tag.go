@@ -5,20 +5,47 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jellydator/validation"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	"golang.org/x/text/unicode/norm"
 
 	"go.5x5.cz/inventario/models/rules"
 )
 
-// tagSlugPattern matches the canonical slug shape: lowercase alphanumerics
-// optionally separated by single hyphens. Mirror of input.IsValidSlug,
-// inlined here because models/ cannot import the internal cmd package.
-var tagSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+// MaxTagSlugRunes and MaxTagLabelRunes cap a tag's slug and label. They count
+// runes, not bytes, so a Cyrillic or CJK label gets the same 64 characters as
+// a Latin one. The frontend counts code points against the same limits.
+const (
+	MaxTagSlugRunes  = 64
+	MaxTagLabelRunes = 64
+)
 
-// IsValidTagSlug reports whether s is a canonical tag slug.
+// tagSlugPattern matches the shape of a slug: runs of Unicode letters,
+// numbers and combining marks separated by single hyphens, each run starting
+// with a letter or a number. The frontend's slugPattern is the same
+// expression.
+var tagSlugPattern = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N}\p{M}]*(?:-[\p{L}\p{N}][\p{L}\p{N}\p{M}]*)*$`)
+
+// IsValidTagSlug reports whether s is a canonical tag slug: it has the shape
+// tagSlugPattern describes and NormalizeTagSlug leaves it unchanged, which
+// also requires it to be lowercase and in Unicode NFC. Defining validity
+// through the normalizer keeps the two rules from drifting apart.
 func IsValidTagSlug(s string) bool {
-	return tagSlugPattern.MatchString(s)
+	return tagSlugPattern.MatchString(s) && NormalizeTagSlug(s) == s
+}
+
+// TagSlugRule is the validation.By rule for a tag slug field. The model and
+// the JSON:API request types share it so they reject the same slugs with the
+// same message.
+func TagSlugRule(value any) error {
+	s, _ := value.(string)
+	if !IsValidTagSlug(s) {
+		return validation.NewError("invalid_slug", "slug must be lowercase letters and digits separated by single hyphens")
+	}
+	return nil
 }
 
 // TagColor is the curated set of colors a tag can be displayed in. The set is
@@ -129,42 +156,53 @@ func (k TagKind) Validate() error {
 }
 
 // NormalizeTagSlug coerces a free-form user-typed string into the canonical
-// slug shape accepted by IsValidTagSlug:
+// slug shape accepted by IsValidTagSlug. Letters and digits of every script
+// are kept:
 //
-//   - lowercased ASCII letters + digits only
-//   - any non-[a-z0-9] run collapses to a single '-'
-//   - leading and trailing '-' trimmed
+//   - the input is put into Unicode NFC, so precomposed and decomposed
+//     spellings of the same text ("ě" as one code point or as "e" plus a
+//     combining caron) give the same slug;
+//   - it is lowercased with the full Unicode mapping (Greek final sigma
+//     included), which is what JavaScript's String.prototype.toLowerCase
+//     does;
+//   - letters (\p{L}) and numbers (\p{N}) are kept, and so are combining
+//     marks (\p{M}) that follow one of them, so scripts such as Devanagari
+//     keep their vowel signs;
+//   - every other run of characters (spaces, punctuation, symbols, emoji)
+//     becomes a single '-', and leading and trailing '-' are dropped.
 //
-// Non-ASCII letters (e.g. "ü", "é") are stripped — the validator regex is
-// `^[a-z0-9]+(?:-[a-z0-9]+)*$`, so allowing unicode letters here would let
-// the normalizer produce slugs the API validator would reject. The two
-// rules must agree.
+// frontend/src/features/tags/schemas.ts normaliseSlug implements the same
+// steps and is tested against the same table of cases; change both together.
 //
 // The result is empty when the input contains no usable characters
 // (e.g. "   ", "###"). Callers should treat empty as a validation error.
 func NormalizeTagSlug(s string) string {
+	// A Caser keeps state between calls and must not be shared across
+	// goroutines, so each call builds its own.
+	lowered := norm.NFC.String(cases.Lower(language.Und).String(norm.NFC.String(s)))
+
 	var b strings.Builder
-	b.Grow(len(s))
-	prevDash := true // start as if previous was dash to swallow leading separators
-	for _, r := range s {
+	b.Grow(len(lowered))
+	inRun := false       // the last rune written belongs to a letter/number run
+	pendingDash := false // a separator was seen after at least one written run
+	for _, r := range lowered {
 		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r)
-			prevDash = false
-		case r >= 'A' && r <= 'Z':
-			b.WriteRune(r + ('a' - 'A'))
-			prevDash = false
-		case r >= '0' && r <= '9':
-			b.WriteRune(r)
-			prevDash = false
-		default:
-			if !prevDash {
-				b.WriteRune('-')
-				prevDash = true
+		case unicode.IsLetter(r) || unicode.IsNumber(r):
+			if pendingDash {
+				b.WriteByte('-')
+				pendingDash = false
 			}
+			b.WriteRune(r)
+			inRun = true
+		case inRun && unicode.IsMark(r):
+			b.WriteRune(r)
+		default:
+			// A mark with nothing to attach to counts as a separator too.
+			inRun = false
+			pendingDash = b.Len() > 0
 		}
 	}
-	return strings.TrimRight(b.String(), "-")
+	return b.String()
 }
 
 var (
@@ -199,8 +237,9 @@ type Tag struct {
 	//ptah:schema:field name="kind" type="TEXT" not_null="true" default="commodity"
 	Kind TagKind `json:"kind" db:"kind"`
 
-	// Slug is the kebab-cased identifier referenced from
-	// commodities.tags / files.tags JSONB arrays. Unique per (group, kind).
+	// Slug is the identifier referenced from commodities.tags / files.tags
+	// JSONB arrays: lowercase letters and digits of any script separated by
+	// single hyphens, in Unicode NFC. Unique per (group, kind).
 	//ptah:schema:field name="slug" type="TEXT" not_null="true"
 	Slug string `json:"slug" db:"slug"`
 
@@ -252,14 +291,8 @@ func (*Tag) Validate() error {
 func (t *Tag) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, t,
 		validation.Field(&t.Kind, validation.Required),
-		validation.Field(&t.Slug, rules.NotEmpty, validation.By(func(value any) error {
-			s, _ := value.(string)
-			if !IsValidTagSlug(s) {
-				return validation.NewError("invalid_slug", "slug must be lowercase, kebab-cased")
-			}
-			return nil
-		})),
-		validation.Field(&t.Label, rules.NotEmpty, validation.Length(1, 64)),
+		validation.Field(&t.Slug, rules.NotEmpty, validation.RuneLength(1, MaxTagSlugRunes), validation.By(TagSlugRule)),
+		validation.Field(&t.Label, rules.NotEmpty, validation.RuneLength(1, MaxTagLabelRunes)),
 		validation.Field(&t.Color, validation.Required),
 	)
 }

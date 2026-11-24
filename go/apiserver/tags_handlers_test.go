@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/internal/checkers"
@@ -237,6 +239,33 @@ func TestTagCreate(t *testing.T) {
 	c.Assert(stored.Label, qt.Equals, "Garage")
 }
 
+// Slugs and labels take letters of any script, and their 64-character limit
+// counts characters: 64 Cyrillic letters are 128 bytes and still fit.
+func TestTagCreate_AcceptsAnyScript(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup, _, handler := tagFixture(c, models.TagKindCommodity, "kitchen", "Kitchen")
+
+	label := strings.Repeat("ж", 64)
+	rr := tagsRequest(c, handler, "POST", "/api/v1/g/"+testGroup.Slug+"/tags", testUser.ID,
+		&jsonapi.TagRequest{Data: &jsonapi.TagRequestDataWrapper{
+			Type: "tags",
+			Attributes: jsonapi.TagRequestData{
+				Kind:  models.TagKindCommodity,
+				Slug:  "на-продажу",
+				Label: label,
+				Color: models.TagColorGreen,
+			},
+		}})
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("Body: %s", rr.Body.String()))
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.attributes.slug"), "на-продажу")
+
+	ctx := createTestUserContextWithGroup(testUser.ID, testUser.TenantID, testGroup.ID)
+	registrySet := must.Must(params.FactorySet.CreateUserRegistrySet(ctx))
+	stored := must.Must(registrySet.TagRegistry.GetBySlug(ctx, models.TagKindCommodity, "на-продажу"))
+	c.Assert(stored.Label, qt.Equals, label)
+}
+
 func TestTagCreate_Rejected(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -262,6 +291,30 @@ func TestTagCreate_Rejected(t *testing.T) {
 			name: "color off the curated set",
 			attributes: jsonapi.TagRequestData{
 				Kind: models.TagKindCommodity, Slug: "garage", Label: "Garage", Color: models.TagColor("chartreuse"),
+			},
+		},
+		{
+			name: "cyrillic slug not lowercase",
+			attributes: jsonapi.TagRequestData{
+				Kind: models.TagKindCommodity, Slug: "Кухня", Label: "Кухня", Color: models.TagColorGreen,
+			},
+		},
+		{
+			name: "slug not in NFC",
+			attributes: jsonapi.TagRequestData{
+				Kind: models.TagKindCommodity, Slug: "kuchyne\u030c", Label: "Kuchyně", Color: models.TagColorGreen,
+			},
+		},
+		{
+			name: "slug longer than 64 characters",
+			attributes: jsonapi.TagRequestData{
+				Kind: models.TagKindCommodity, Slug: strings.Repeat("ж", 65), Label: "Кухня", Color: models.TagColorGreen,
+			},
+		},
+		{
+			name: "label longer than 64 characters",
+			attributes: jsonapi.TagRequestData{
+				Kind: models.TagKindCommodity, Slug: "кухня", Label: strings.Repeat("ж", 65), Color: models.TagColorGreen,
 			},
 		},
 	}
@@ -417,6 +470,79 @@ func TestTagAutocomplete(t *testing.T) {
 		"/api/v1/g/"+testGroup.Slug+"/tags/autocomplete?kind=commodity&q=nothing-matches", testUser.ID, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 0)
+}
+
+// The autocomplete query arrives percent-encoded; a Cyrillic prefix has to
+// reach the registry decoded.
+func TestTagAutocomplete_NonASCIIQuery(t *testing.T) {
+	c := qt.New(t)
+
+	_, testUser, testGroup, _, handler := tagFixture(c, models.TagKindCommodity, "кухня", "Кухня")
+
+	// "кух", percent-encoded as a browser sends it.
+	rr := tagsRequest(c, handler, "GET",
+		"/api/v1/g/"+testGroup.Slug+"/tags/autocomplete?kind=commodity&q=%D0%BA%D1%83%D1%85", testUser.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 1)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].slug"), "кухня")
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].label"), "Кухня")
+}
+
+// Tags typed on an item in any script survive the save: the item stores
+// their slugs and the Tags page lists them under the text the user typed.
+func TestCommodityCreate_KeepsTagsInEveryScript(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	areas := must.Must(registrySet.AreaRegistry.List(c.Context()))
+
+	obj := &jsonapi.CommodityRequest{
+		Data: &jsonapi.CommodityData{
+			Type: "commodities",
+			Attributes: &models.Commodity{
+				Name:                   "Kettle",
+				ShortName:              "Kettle",
+				AreaID:                 new(areas[0].ID),
+				Type:                   models.CommodityTypeEquipment,
+				OriginalPrice:          must.Must(decimal.NewFromString("10")),
+				OriginalPriceCurrency:  models.Currency("USD"),
+				ConvertedOriginalPrice: must.Must(decimal.NewFromString("0")),
+				CurrentPrice:           must.Must(decimal.NewFromString("10")),
+				Tags:                   []string{"кухня", "USB кабель", "USB хаб", "書類", "Čaj"},
+				Count:                  1,
+				Status:                 models.CommodityStatusInUse,
+				PurchaseDate:           models.ToPDate("2026-01-01"),
+			},
+		},
+	}
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	rr := tagsRequest(c, handler, "POST", "/api/v1/g/"+testGroup.Slug+"/commodities", testUser.ID, obj)
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("Body: %s", rr.Body.String()))
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.tags"),
+		[]any{"кухня", "usb-кабель", "usb-хаб", "書類", "čaj"})
+
+	rr = tagsRequest(c, handler, "GET", "/api/v1/g/"+testGroup.Slug+"/tags?kind=commodity&sort=label", testUser.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+
+	var body struct {
+		Data []struct {
+			Slug  string `json:"slug"`
+			Label string `json:"label"`
+		} `json:"data"`
+	}
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &body), qt.IsNil)
+	labels := make(map[string]string, len(body.Data))
+	for _, tag := range body.Data {
+		labels[tag.Slug] = tag.Label
+	}
+	c.Assert(labels, qt.DeepEquals, map[string]string{
+		"кухня":      "кухня",
+		"usb-кабель": "USB кабель",
+		"usb-хаб":    "USB хаб",
+		"書類":         "書類",
+		"čaj":        "Čaj",
+	})
 }
 
 // Every route under /tags needs an authenticated caller. A missing token
