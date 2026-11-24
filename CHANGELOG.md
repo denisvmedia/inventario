@@ -24,7 +24,7 @@ the section matching the tag and publishes it as the GitHub Release body. See
 - A "Restart product tour" row in Preferences → Help & support, next to the
   entry in the user menu. It is greyed out, with the reason, while the tour
   cannot run: without a group, or in a window too narrow to show the sidebar
-  ([#2787](https://github.com/denisvmedia/inventario/issues/2787)).
+  ([#2816](https://github.com/denisvmedia/inventario/pull/2816)).
 
 ### Fixed
 
@@ -49,7 +49,7 @@ the section matching the tag and publishes it as the GitHub Release body. See
   at exist then, so every step was an empty centered card, and finishing it
   hid the tour for good. The tour now starts the first time a group is active,
   and it skips a step whose element is not on the page
-  ([#2787](https://github.com/denisvmedia/inventario/issues/2787)).
+  ([#2816](https://github.com/denisvmedia/inventario/pull/2816)).
 
 ### Security
 
