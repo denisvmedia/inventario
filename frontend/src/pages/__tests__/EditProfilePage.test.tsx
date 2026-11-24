@@ -1,14 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route, useLocation } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { toast } from "sonner"
 
 import { EditProfilePage } from "@/pages/EditProfilePage"
 import { pickRadixSelect } from "@/test/radix"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
+import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -227,5 +229,206 @@ describe("<EditProfilePage />", () => {
     expect(await screen.findByTestId("password-server-error")).toHaveTextContent(
       /current password is incorrect/i
     )
+  })
+})
+
+describe("<EditProfilePage /> — profile photo (#1382)", () => {
+  const photoUrl = "/api/v1/avatars/u1?v=2-abc&uid=u1&exp=1&sig=new"
+
+  beforeEach(() => {
+    stubImageLoading()
+    // jsdom has no object URLs; the preview only needs a string to show.
+    vi.stubGlobal(
+      "URL",
+      Object.assign(URL, { createObjectURL: () => "blob:preview", revokeObjectURL: () => {} })
+    )
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const photoImage = () =>
+    within(screen.getByTestId("profile-photo-avatar")).queryByTestId("user-avatar-image")
+
+  it("uploads a picked photo and shows the stored one", async () => {
+    // The body is read as text: jsdom's File is not the one undici's
+    // multipart parser accepts, so request.formData() throws here, and the
+    // part arrives without its filename or bytes. The field and type do.
+    let sentBody = ""
+    server.use(
+      ...baseUserHandlers,
+      msw.post(api("/auth/me/avatar"), async ({ request }) => {
+        sentBody = await request.text()
+        return HttpResponse.json({ avatar_path: "avatars/u1/2-abc.jpg", avatar_url: photoUrl })
+      })
+    )
+    const user = userEvent.setup()
+    renderEdit()
+    expect(await screen.findByTestId("profile-photo-upload")).toHaveTextContent("Upload photo")
+    expect(screen.queryByTestId("profile-photo-remove")).not.toBeInTheDocument()
+
+    await user.upload(
+      screen.getByTestId("profile-photo-input"),
+      new File(["jpeg"], "me.jpg", { type: "image/jpeg" })
+    )
+
+    await waitFor(() => expect(photoImage()).toHaveAttribute("src", photoUrl))
+    expect(sentBody).toContain('name="avatar"')
+    expect(sentBody).toContain("Content-Type: image/jpeg")
+    expect(toast.success).toHaveBeenCalledWith("Photo updated.", undefined)
+    expect(screen.getByTestId("profile-photo-upload")).toHaveTextContent("Change photo")
+    expect(screen.getByTestId("profile-photo-remove")).toBeInTheDocument()
+  })
+
+  it("shows the picked file while the upload runs", async () => {
+    let finish: () => void = () => {}
+    server.use(
+      ...baseUserHandlers,
+      msw.post(
+        api("/auth/me/avatar"),
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = () =>
+              resolve(
+                HttpResponse.json({ avatar_path: "avatars/u1/2-abc.jpg", avatar_url: photoUrl })
+              )
+          })
+      )
+    )
+    const user = userEvent.setup()
+    renderEdit()
+    await user.upload(
+      await screen.findByTestId("profile-photo-input"),
+      new File(["jpeg"], "me.jpg", { type: "image/jpeg" })
+    )
+
+    await waitFor(() => expect(photoImage()).toHaveAttribute("src", "blob:preview"))
+    expect(screen.getByTestId("profile-photo-upload")).toHaveTextContent("Uploading…")
+    expect(screen.getByTestId("profile-photo-upload")).toBeDisabled()
+
+    finish()
+    await waitFor(() => expect(photoImage()).toHaveAttribute("src", photoUrl))
+    expect(screen.getByTestId("profile-photo-upload")).toBeEnabled()
+  })
+
+  it.each([
+    [
+      "a GIF",
+      new File(["gif"], "me.gif", { type: "image/gif" }),
+      "Choose a JPG, PNG or WebP picture.",
+    ],
+    [
+      "a file over 2 MB",
+      new File([new Uint8Array(2 * 1024 * 1024 + 1)], "big.png", { type: "image/png" }),
+      "That file is larger than 2 MB. Choose a smaller picture.",
+    ],
+  ])("refuses %s without uploading it", async (_, file, message) => {
+    const upload = vi.fn()
+    server.use(
+      ...baseUserHandlers,
+      msw.post(api("/auth/me/avatar"), () => {
+        upload()
+        return HttpResponse.json({})
+      })
+    )
+    // applyAccept off: the picker's accept list would otherwise hide the GIF,
+    // and the check under test is the one behind it.
+    const user = userEvent.setup({ applyAccept: false })
+    renderEdit()
+    await user.upload(await screen.findByTestId("profile-photo-input"), file)
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message, undefined))
+    expect(upload).not.toHaveBeenCalled()
+    expect(photoImage()).not.toBeInTheDocument()
+  })
+
+  it("says so when the server refuses the image, and keeps the initials", async () => {
+    server.use(
+      ...baseUserHandlers,
+      msw.post(api("/auth/me/avatar"), () =>
+        HttpResponse.json(
+          { errors: [{ detail: "Animated images are not supported" }] },
+          { status: 400 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderEdit()
+    await user.upload(
+      await screen.findByTestId("profile-photo-input"),
+      new File(["webp"], "moving.webp", { type: "image/webp" })
+    )
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "That image can't be used. Choose a still JPG, PNG or WebP picture.",
+        undefined
+      )
+    )
+    await waitFor(() => expect(photoImage()).not.toBeInTheDocument())
+    expect(
+      within(screen.getByTestId("profile-photo-avatar")).getByTestId("user-avatar-initials")
+    ).toHaveTextContent("A")
+  })
+
+  it("removes the photo after confirming, back to the initials", async () => {
+    const removed = vi.fn()
+    server.use(
+      msw.get(api("/auth/me"), () =>
+        HttpResponse.json({
+          id: "u1",
+          email: "alex@example.com",
+          name: "Alex",
+          avatar_path: "avatars/u1/2-abc.jpg",
+          avatar_url: photoUrl,
+        })
+      ),
+      msw.get(api("/groups"), () => HttpResponse.json({ data: [] })),
+      msw.delete(api("/auth/me/avatar"), () => {
+        removed()
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+    const user = userEvent.setup()
+    renderEdit()
+    await waitFor(() => expect(photoImage()).toHaveAttribute("src", photoUrl))
+
+    await user.click(screen.getByTestId("profile-photo-remove"))
+    const dialog = await screen.findByTestId("confirm-dialog")
+    expect(dialog).toHaveTextContent("Remove your profile photo?")
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }))
+
+    await waitFor(() => expect(photoImage()).not.toBeInTheDocument())
+    expect(removed).toHaveBeenCalledTimes(1)
+    expect(toast.success).toHaveBeenCalledWith("Photo removed.", undefined)
+    expect(screen.queryByTestId("profile-photo-remove")).not.toBeInTheDocument()
+  })
+
+  it("leaves the photo alone when the removal is canceled", async () => {
+    const removed = vi.fn()
+    server.use(
+      msw.get(api("/auth/me"), () =>
+        HttpResponse.json({
+          id: "u1",
+          email: "alex@example.com",
+          name: "Alex",
+          avatar_url: photoUrl,
+        })
+      ),
+      msw.get(api("/groups"), () => HttpResponse.json({ data: [] })),
+      msw.delete(api("/auth/me/avatar"), () => {
+        removed()
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+    const user = userEvent.setup()
+    renderEdit()
+    await user.click(await screen.findByTestId("profile-photo-remove"))
+    const dialog = await screen.findByTestId("confirm-dialog")
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+
+    await waitFor(() => expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument())
+    expect(removed).not.toHaveBeenCalled()
+    expect(photoImage()).toHaveAttribute("src", photoUrl)
   })
 })

@@ -11,6 +11,8 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -353,4 +355,186 @@ func TestAvatarService_DropsExifMetadata(t *testing.T) {
 	c.Assert(bytes.Contains(stored, []byte("GPSDATA")), qt.IsFalse,
 		qt.Commentf("the EXIF payload survived into the stored avatar"))
 	c.Assert(bytes.Contains(stored, []byte("Exif")), qt.IsFalse)
+}
+
+// readFixture loads one of the images under testdata. They were written by real
+// tools, not by this package, so a test against them checks the parsing against
+// what a camera or an encoder produces:
+//
+//   - phone-photo.jpg: 256x256, red/green/blue/white quadrants (top-left,
+//     top-right, bottom-left, bottom-right as stored), with an EXIF block
+//     written by exiftool: Make=ExamplePhone, Orientation=6 and a GPS position.
+//   - static.webp: a 96x64 lossy WebP from cwebp.
+//   - animated.webp: two frames, from img2webp.
+//   - animated.png: a two-frame APNG, from ImageMagick.
+func readFixture(c *qt.C, name string) []byte {
+	c.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	c.Assert(err, qt.IsNil)
+	return raw
+}
+
+// storedAvatar uploads raw and returns the bytes that were stored.
+func (f *avatarFixture) storedAvatar(c *qt.C, raw []byte) []byte {
+	c.Helper()
+	_, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(raw))
+	c.Assert(err, qt.IsNil)
+	reader, _, err := f.svc.Open(context.Background(), f.userID)
+	c.Assert(err, qt.IsNil)
+	defer reader.Close()
+	stored, err := io.ReadAll(reader)
+	c.Assert(err, qt.IsNil)
+	return stored
+}
+
+// jpegAppSegments returns the marker of every APPn segment before the image
+// data. EXIF is APP1; a JPEG with none of them carries no metadata block.
+func jpegAppSegments(c *qt.C, raw []byte) []byte {
+	c.Helper()
+	c.Assert(len(raw) > 4 && raw[0] == 0xFF && raw[1] == 0xD8, qt.IsTrue, qt.Commentf("not a JPEG"))
+	var markers []byte
+	for i := 2; i+4 <= len(raw); {
+		c.Assert(raw[i], qt.Equals, byte(0xFF), qt.Commentf("lost sync at %d", i))
+		marker := raw[i+1]
+		if marker == 0xDA {
+			break
+		}
+		if marker >= 0xE1 && marker <= 0xEF {
+			markers = append(markers, marker)
+		}
+		i += 2 + int(binary.BigEndian.Uint16(raw[i+2:]))
+	}
+	return markers
+}
+
+// A photo straight off a phone carries where it was taken. Group members can
+// fetch the avatar, so the position must not survive the upload, and neither
+// may anything else in the EXIF block.
+func TestAvatarService_DropsTheGPSPositionOfAPhonePhoto(t *testing.T) {
+	c := qt.New(t)
+	f := newAvatarFixture(c)
+	original := readFixture(c, "phone-photo.jpg")
+
+	// The fixture really has what the test claims it removes: an APP1 EXIF
+	// segment, the camera make, and a GPS IFD pointer (tag 0x8825).
+	c.Assert(jpegAppSegments(c, original), qt.Contains, byte(0xE1))
+	c.Assert(bytes.Contains(original, []byte("Exif\x00\x00")), qt.IsTrue)
+	c.Assert(bytes.Contains(original, []byte("ExamplePhone")), qt.IsTrue)
+	c.Assert(bytes.Contains(original, []byte{0x88, 0x25}) || bytes.Contains(original, []byte{0x25, 0x88}), qt.IsTrue)
+
+	stored := f.storedAvatar(c, original)
+
+	c.Assert(jpegAppSegments(c, stored), qt.HasLen, 0, qt.Commentf("an APPn metadata segment survived"))
+	c.Assert(bytes.Contains(stored, []byte("Exif")), qt.IsFalse)
+	c.Assert(bytes.Contains(stored, []byte("ExamplePhone")), qt.IsFalse)
+}
+
+// The same photo is stored sideways with Orientation=6, which a browser turns
+// a quarter clockwise when it shows the original. The stored avatar has no tag
+// left to turn by, so the pixels have to be turned already.
+func TestAvatarService_AppliesTheExifOrientation(t *testing.T) {
+	c := qt.New(t)
+	f := newAvatarFixture(c)
+
+	stored := f.storedAvatar(c, readFixture(c, "phone-photo.jpg"))
+	img, _, err := image.Decode(bytes.NewReader(stored))
+	c.Assert(err, qt.IsNil)
+	c.Assert(img.Bounds().Dx(), qt.Equals, 256)
+
+	// Turned a quarter clockwise, the stored bottom-left (blue) is now the
+	// top-left, and so on round the picture.
+	dominant := func(x, y int) string {
+		r, g, b, _ := img.At(x, y).RGBA()
+		switch {
+		case r > 0xC000 && g > 0xC000 && b > 0xC000:
+			return "white"
+		case r > g && r > b:
+			return "red"
+		case g > r && g > b:
+			return "green"
+		default:
+			return "blue"
+		}
+	}
+	c.Assert(dominant(64, 64), qt.Equals, "blue")
+	c.Assert(dominant(192, 64), qt.Equals, "red")
+	c.Assert(dominant(64, 192), qt.Equals, "white")
+	c.Assert(dominant(192, 192), qt.Equals, "green")
+}
+
+func TestAvatarService_AcceptsAStillWebP(t *testing.T) {
+	c := qt.New(t)
+	f := newAvatarFixture(c)
+
+	stored := f.storedAvatar(c, readFixture(c, "static.webp"))
+	img, format, err := image.Decode(bytes.NewReader(stored))
+	c.Assert(err, qt.IsNil)
+	c.Assert(format, qt.Equals, "jpeg")
+	// 96x64 is cropped to its shorter side and not enlarged.
+	c.Assert(img.Bounds().Dx(), qt.Equals, 64)
+	c.Assert(img.Bounds().Dy(), qt.Equals, 64)
+}
+
+// Animated pictures are refused rather than flattened to their first frame:
+// whoever uploads one expects it to move, and should hear that it will not.
+func TestAvatarService_RefusesAnimation(t *testing.T) {
+	c := qt.New(t)
+	f := newAvatarFixture(c)
+
+	c.Run("animated WebP", func(c *qt.C) {
+		_, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(readFixture(c, "animated.webp")))
+		c.Assert(err, qt.ErrorIs, services.ErrAvatarAnimated)
+	})
+
+	// An APNG sniffs as its own media type, so it is refused at the allowlist.
+	c.Run("animated PNG", func(c *qt.C) {
+		_, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(readFixture(c, "animated.png")))
+		c.Assert(err, qt.ErrorIs, services.ErrAvatarNotAnImage)
+	})
+
+	c.Assert(f.avatarPath(c), qt.IsNil, qt.Commentf("a refused upload must not set an avatar"))
+}
+
+// A profile photo belongs to the user, not to a group, so it must not count
+// toward any group's storage total. It is never written as a file row, which
+// is what the storage total sums.
+func TestAvatarService_WritesNoFileRow(t *testing.T) {
+	c := qt.New(t)
+	f := newAvatarFixture(c)
+
+	_, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(pngBytes(c, 300, 300)))
+	c.Assert(err, qt.IsNil)
+
+	files := f.factorySet.FileRegistryFactory.CreateServiceRegistry()
+	rows, err := files.List(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(rows, qt.HasLen, 0)
+
+	usage, err := services.NewStorageUsageService(files).GetUsage(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(usage.UsedBytes, qt.Equals, int64(0))
+}
+
+func TestAvatarService_DeleteStored(t *testing.T) {
+	c := qt.New(t)
+	f := newAvatarFixture(c)
+
+	key, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(pngBytes(c, 100, 100)))
+	c.Assert(err, qt.IsNil)
+
+	// An object outside the avatar prefix is left alone.
+	b, err := blob.OpenBucket(context.Background(), f.location)
+	c.Assert(err, qt.IsNil)
+	c.Assert(b.WriteAll(context.Background(), "files/other.txt", []byte("x"), nil), qt.IsNil)
+	c.Assert(b.Close(), qt.IsNil)
+	f.svc.DeleteStored(context.Background(), "files/other.txt")
+	c.Assert(f.exists(c, "files/other.txt"), qt.IsTrue)
+
+	f.svc.DeleteStored(context.Background(), key)
+	c.Assert(f.exists(c, key), qt.IsFalse)
+}
+
+func TestAvatarVersion(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(services.AvatarVersion("avatars/u1/3-a1b2c3d4e5f6.jpg"), qt.Equals, "3-a1b2c3d4e5f6")
 }

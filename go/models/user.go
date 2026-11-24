@@ -151,6 +151,13 @@ type User struct {
 	// `db:"-"` so sqlx skips it. Populated by handlers that emit a
 	// /auth/me-style payload before encoding.
 	HasPassword bool `json:"has_password" db:"-" userinput:"false"`
+
+	// AvatarURL is a transient wire-only field: a signed URL the browser can
+	// load the profile photo from without the bearer token (#1382). Empty when
+	// the user has no photo. Handlers that emit a /auth/me-style payload mint
+	// it for the request's session; it is never stored, so it has no
+	// migrator annotation and `db:"-"`, like HasPassword.
+	AvatarURL string `json:"avatar_url,omitempty" db:"-" userinput:"false"`
 }
 
 // HasPasswordSet reports whether the user has a non-empty password hash.

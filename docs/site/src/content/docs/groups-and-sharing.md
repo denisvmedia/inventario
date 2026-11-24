@@ -62,7 +62,7 @@ If you'd rather hand someone a link yourself instead of emailing it, choose **Or
 
 ## Members and roles
 
-Each member of a group has one **role** that controls what they can do. The **Members** page shows everyone in the group with their role, and a **Role permissions** card explains each role.
+Each member of a group has one **role** that controls what they can do. The **Members** page shows everyone in the group with their role, and a **Role permissions** card explains each role. Members who have set a [profile photo](../settings-and-account/#profile-photo) appear with it; everyone else appears with their initials.
 
 | Role | What they can do |
 | --- | --- |

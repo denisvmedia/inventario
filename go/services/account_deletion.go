@@ -65,6 +65,8 @@ var (
 //  4. UserRegistry.Delete. A foreign-key violation here (SQLSTATE 23503) means a
 //     concurrent request re-created user-owned content after the pre-check (a
 //     TOCTOU race) -> ErrAccountStillOwnsContent. Any other error -> 500.
+//  5. Delete the stored profile photo, which is not a file row and so is not
+//     covered by the group purge.
 //
 // The classify-first / pre-check-first / abort-before-mutating ordering is the
 // safety contract: both the sole-owner-of-shared and the still-owns-content
@@ -72,12 +74,14 @@ var (
 type AccountDeletionService struct {
 	factorySet *registry.FactorySet
 	purger     *GroupPurgeService
+	avatars    *AvatarService
 }
 
 // NewAccountDeletionService constructs the orchestrator. The GroupPurgeService
-// is reused for the per-group purge sequence; both dependencies are required.
-func NewAccountDeletionService(factorySet *registry.FactorySet, purger *GroupPurgeService) *AccountDeletionService {
-	return &AccountDeletionService{factorySet: factorySet, purger: purger}
+// is reused for the per-group purge sequence; both it and the factory set are
+// required. avatars removes the profile photo; nil leaves it in storage.
+func NewAccountDeletionService(factorySet *registry.FactorySet, purger *GroupPurgeService, avatars *AvatarService) *AccountDeletionService {
+	return &AccountDeletionService{factorySet: factorySet, purger: purger, avatars: avatars}
 }
 
 // DeleteAccount hard-deletes the user identified by (tenantID, userID) per the
@@ -120,6 +124,13 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 		return errxtrace.Classify(ErrAccountStillOwnsContent)
 	}
 
+	// The photo's key lives on the users row, so it is read now, before
+	// anything is mutated, and deleted after step 4 drops the row.
+	user, err := s.factorySet.UserRegistry.Get(ctx, userID)
+	if err != nil {
+		return errxtrace.Wrap("failed to load the user", err)
+	}
+
 	// 2) Purge each PRIVATE group via the existing per-group sequence.
 	for _, gid := range privateGroupIDs {
 		group, err := s.factorySet.LocationGroupRegistry.Get(ctx, gid)
@@ -156,6 +167,12 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 			return errxtrace.Classify(ErrAccountStillOwnsContent)
 		}
 		return errxtrace.Wrap("failed to delete user row", err)
+	}
+
+	// 5) The account is gone, so a photo left behind would be a personal image
+	// nobody can see or remove. Best effort: the erasure itself has succeeded.
+	if s.avatars != nil && user.AvatarPath != nil {
+		s.avatars.DeleteStored(ctx, *user.AvatarPath)
 	}
 
 	return nil

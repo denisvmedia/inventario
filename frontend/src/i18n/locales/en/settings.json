@@ -231,7 +231,7 @@
       "save": "Save changes",
       "savedBanner": "Profile updated.",
       "saving": "Saving…",
-      "subtitle": "Update your display name and default group.",
+      "subtitle": "Update your photo, display name and default group.",
       "successToast": "Profile saved.",
       "title": "Edit profile"
     },
@@ -272,6 +272,30 @@
       "successBody": "You'll be signed out so the new password takes effect on every device.",
       "successTitle": "Password changed",
       "title": "Change password"
+    },
+    "photo": {
+      "change": "Change photo",
+      "description": "Your profile picture, visible to members of your groups.",
+      "errors": {
+        "rejected": "That image can't be used. Choose a still JPG, PNG or WebP picture.",
+        "remove": "Couldn't remove your photo. Please try again.",
+        "size": "That file is larger than 2 MB. Choose a smaller picture.",
+        "type": "Choose a JPG, PNG or WebP picture.",
+        "upload": "Couldn't upload your photo. Please try again."
+      },
+      "hint": "JPG, PNG or WebP, max 2 MB",
+      "remove": "Remove photo",
+      "removeConfirm": {
+        "cancel": "Cancel",
+        "confirm": "Remove",
+        "description": "Your initials will show in place of the photo.",
+        "title": "Remove your profile photo?"
+      },
+      "removed": "Photo removed.",
+      "title": "Photo",
+      "upload": "Upload photo",
+      "uploaded": "Photo updated.",
+      "uploading": "Uploading…"
     },
     "planFree": "Free plan",
     "stats": {

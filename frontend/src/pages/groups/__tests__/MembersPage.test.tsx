@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
@@ -10,6 +10,7 @@ import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { capture } from "@/test/capture"
+import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -46,6 +47,7 @@ function memberRow(opts: {
   role: "viewer" | "user" | "admin" | "owner"
   name?: string
   email?: string
+  avatarUrl?: string
   joinedAt?: string
 }) {
   return {
@@ -62,6 +64,7 @@ function memberRow(opts: {
               id: opts.userId,
               name: opts.name ?? "",
               email: opts.email ?? "",
+              avatar_url: opts.avatarUrl,
             }
           : undefined,
     },
@@ -142,6 +145,54 @@ describe("<MembersPage />", () => {
     // — assert the badge testid format used by both.
     expect(screen.getAllByTestId("role-badge-owner").length).toBeGreaterThan(0)
     expect(screen.getAllByTestId("role-badge-user").length).toBeGreaterThan(0)
+  })
+
+  describe("profile photos (#1382)", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it("draws a member's photo, and the initials for a member without one", async () => {
+      stubImageLoading()
+      server.use(
+        groupsHandler,
+        userMe(),
+        msw.get(api("/groups/g1/members"), () =>
+          HttpResponse.json({
+            data: [
+              memberRow({
+                id: "m1",
+                userId: "u1",
+                role: "owner",
+                name: "Alex Doe",
+                email: "alex@example.com",
+              }),
+              memberRow({
+                id: "m2",
+                userId: "u2-other-user",
+                role: "user",
+                name: "Bea Smith",
+                email: "bea@example.com",
+                avatarUrl: "/api/v1/avatars/u2-other-user?gid=g1&sig=b",
+              }),
+            ],
+          })
+        ),
+        msw.get(api("/groups/g1/invites"), () => HttpResponse.json({ data: [] }))
+      )
+      renderMembers()
+
+      const bea = await screen.findByTestId("member-avatar-u2-other")
+      await waitFor(() =>
+        expect(within(bea).getByTestId("user-avatar-image")).toHaveAttribute(
+          "src",
+          "/api/v1/avatars/u2-other-user?gid=g1&sig=b"
+        )
+      )
+      const alex = screen.getByTestId("member-avatar-u1")
+      expect(within(alex).queryByTestId("user-avatar-image")).not.toBeInTheDocument()
+      expect(within(alex).getByTestId("user-avatar-initials")).toHaveTextContent("AD")
+    })
   })
 
   it("hides admin-only sections when the viewer is a non-managing role", async () => {

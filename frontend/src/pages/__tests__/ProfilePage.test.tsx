@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
@@ -8,6 +8,7 @@ import { axe } from "jest-axe"
 import { ProfilePage } from "@/pages/ProfilePage"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
+import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -168,6 +169,56 @@ describe("<ProfilePage />", () => {
     await waitFor(() => {
       const card = screen.getByTestId("profile-page")
       expect(within(card).getByText("AJ")).toBeInTheDocument()
+    })
+  })
+
+  describe("profile photo (#1382)", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it("shows the photo in place of the initials", async () => {
+      stubImageLoading()
+      server.use(
+        msw.get(api("/auth/me"), () =>
+          HttpResponse.json({
+            id: "u1",
+            email: "alex@example.com",
+            name: "Alex Johnson",
+            avatar_url: "/api/v1/avatars/u1?sig=a",
+          })
+        ),
+        msw.get(api("/groups"), () => HttpResponse.json({ data: [] }))
+      )
+      renderProfile()
+      const avatar = await screen.findByTestId("profile-avatar")
+      await waitFor(() =>
+        expect(within(avatar).getByTestId("user-avatar-image")).toHaveAttribute(
+          "src",
+          "/api/v1/avatars/u1?sig=a"
+        )
+      )
+      expect(within(avatar).queryByText("AJ")).not.toBeInTheDocument()
+      // No coming-soon stub competes with the real control.
+      expect(screen.queryByTestId("coming-soon-banner-profilePhoto")).not.toBeInTheDocument()
+    })
+
+    it("opens the file picker from the camera overlay", async () => {
+      server.use(
+        msw.get(api("/auth/me"), () =>
+          HttpResponse.json({ id: "u1", email: "alex@example.com", name: "Alex Johnson" })
+        ),
+        msw.get(api("/groups"), () => HttpResponse.json({ data: [] }))
+      )
+      const user = userEvent.setup()
+      renderProfile()
+      const input = (await screen.findByTestId("profile-avatar-input")) as HTMLInputElement
+      expect(input).toHaveAttribute("type", "file")
+      expect(input).toHaveAttribute("accept", "image/jpeg,image/png,image/webp")
+      const click = vi.spyOn(input, "click")
+
+      await user.click(screen.getByRole("button", { name: "Upload photo" }))
+      expect(click).toHaveBeenCalledTimes(1)
     })
   })
 

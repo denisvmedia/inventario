@@ -50,6 +50,9 @@ type groupsAPI struct {
 	// avatarService backs the member profile photo route (#1382). Nil leaves it
 	// unmounted, so a test that does not care about avatars needs no wiring.
 	avatarService *services.AvatarService
+	// fileSigningService signs the avatar_url each member carries in the
+	// members list. Nil leaves it out and the UI shows initials.
+	fileSigningService *services.FileSigningService
 }
 
 func groupFromContext(ctx context.Context) *models.LocationGroup {
@@ -289,11 +292,12 @@ func forbiddenMessageForRole(minRole models.GroupRole) string {
 // Groups returns the route handler for group management endpoints.
 func Groups(params Params, groupService *services.GroupService, auditService services.AuditLogger) func(r chi.Router) {
 	api := &groupsAPI{
-		groupService:  groupService,
-		auditService:  auditService,
-		emailService:  params.EmailService,
-		publicBaseURL: strings.TrimSpace(params.PublicURL),
-		avatarService: services.NewAvatarService(params.FactorySet, params.UploadLocation),
+		groupService:       groupService,
+		auditService:       auditService,
+		emailService:       params.EmailService,
+		publicBaseURL:      strings.TrimSpace(params.PublicURL),
+		avatarService:      services.NewAvatarService(params.FactorySet, params.UploadLocation),
+		fileSigningService: services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 	}
 	return func(r chi.Router) {
 		r.Get("/", api.listGroups)
@@ -624,7 +628,7 @@ func (api *groupsAPI) logGroupDeletion(r *http.Request, user *models.User, group
 
 // listMembers lists all members of a group with their resolved user data.
 // @Summary List group members
-// @Description Returns all members of a location group with their roles and joined user data (id / name / email). Requires group membership.
+// @Description Returns all members of a location group with their roles and joined user data (id / name / email, and a signed avatar_url for a member with a profile photo). Requires group membership.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
@@ -645,7 +649,21 @@ func (api *groupsAPI) listMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := jsonapi.NewMembershipsWithUsersResponse(rows)
+	// The caller is a member (this subtree's middleware) and so is every row,
+	// which is the rule for seeing a member's photo: sign each one for this
+	// group.
+	var viewerID string
+	if viewer := appctx.UserFromContext(r.Context()); viewer != nil {
+		viewerID = viewer.ID
+	}
+	avatarURL := func(member *models.User) string {
+		if viewerID == "" {
+			return ""
+		}
+		return signedAvatarURL(r, api.fileSigningService, member, viewerID, group.ID)
+	}
+
+	resp := jsonapi.NewMembershipsWithUsersResponse(rows, avatarURL)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return

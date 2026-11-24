@@ -128,6 +128,9 @@ type AuthAPI struct {
 	// user's dependent rows, then drop the users row. May be nil in tests that
 	// don't exercise DELETE /auth/me.
 	accountDeletionService *services.AccountDeletionService
+	// fileSigningService mints the signed avatar_url on /auth/me responses
+	// (#1382). Nil leaves the field empty and the UI shows initials.
+	fileSigningService *services.FileSigningService
 }
 
 func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
@@ -900,6 +903,8 @@ func (api *AuthAPI) handleGetCurrentUser(w http.ResponseWriter, r *http.Request)
 	// whether to render the "Set a password" form for OAuth-only users
 	// or the regular "Change password" flow.
 	user.HasPassword = user.HasPasswordSet()
+	// The signed URL the browser loads the profile photo from (#1382).
+	stampOwnAvatarURL(r, api.fileSigningService, user)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(user); err != nil {
@@ -964,6 +969,9 @@ type AuthParams struct {
 	// AvatarService backs the profile photo routes (#1382). Nil leaves them
 	// unmounted, which is what a test that does not care about avatars gets.
 	AvatarService *services.AvatarService
+	// FileSigningService signs the avatar_url /auth/me returns. Nil leaves it
+	// out.
+	FileSigningService *services.FileSigningService
 
 	UserRegistry            registry.UserRegistry
 	RefreshTokenRegistry    registry.RefreshTokenRegistry
@@ -1029,6 +1037,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		magicLinkLoginEnabled:    params.MagicLinkLoginEnabled,
 		userPurger:               params.UserPurger,
 		accountDeletionService:   params.AccountDeletionService,
+		fileSigningService:       params.FileSigningService,
 	}
 
 	requireAuth := RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)
@@ -1054,7 +1063,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		// subtree: a user can always fetch their own, and fellow members reach
 		// it through the group route, which is where the membership check is.
 		if params.AvatarService != nil {
-			avatars := &avatarsAPI{avatarService: params.AvatarService}
+			avatars := &avatarsAPI{avatarService: params.AvatarService, signer: params.FileSigningService}
 			r.With(requireAuth).Post("/me/avatar", avatars.handleUploadAvatar)
 			r.With(requireAuth).Delete("/me/avatar", avatars.handleDeleteAvatar)
 			r.With(requireAuth).Get("/me/avatar", avatars.handleGetOwnAvatar)
@@ -1140,6 +1149,9 @@ func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Reque
 	// otherwise the cached user object would briefly read the zero-value
 	// false until the next /auth/me poll.
 	populateUserSystemAdminFlag(r.Context(), api.systemAdminGrantRegistry, updated)
+	// Same reason: the FE puts this response in its user cache, and without
+	// the URL the photo would drop back to initials until the next poll.
+	stampOwnAvatarURL(r, api.fileSigningService, updated)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(updated); err != nil {

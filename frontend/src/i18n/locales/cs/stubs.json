@@ -50,10 +50,6 @@
       "description": "Porovnejte dostupné úrovně předplatného a přejděte na vyšší či nižší tarif.",
       "title": "Tarify předplatného"
     },
-    "profilePhoto": {
-      "description": "Nahrajte fotku a přizpůsobte si svůj profil.",
-      "title": "Profilová fotka"
-    },
     "warranties": {
       "description": "Sledujte záruční podmínky, expiraci a prodloužení u jednotlivých položek.",
       "title": "Záruky"

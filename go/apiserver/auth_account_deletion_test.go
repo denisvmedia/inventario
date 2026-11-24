@@ -43,7 +43,7 @@ func newAccountDeletionRig(c *qt.C) *accountDeletionTestRig {
 	fs := memreg.NewFactorySet()
 	fileSvc := services.NewFileService(fs, accountDeletionUploadLocation)
 	purger := services.NewGroupPurgeService(fs, fileSvc)
-	deletionSvc := services.NewAccountDeletionService(fs, purger)
+	deletionSvc := services.NewAccountDeletionService(fs, purger, nil)
 
 	refreshMock := &mockRefreshTokenRegistryForAuth{tokensByHash: map[string]*models.RefreshToken{}}
 	blacklist := &mockTokenBlacklisterForAuth{}

@@ -19,8 +19,10 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
+	_ "golang.org/x/image/webp" // registers the WebP decoder for image.Decode
 
 	"go.5x5.cz/inventario/internal/mimekit"
+	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services/imageprocessor"
 )
@@ -52,10 +54,11 @@ const (
 
 // avatarUploadContentTypes is what an upload may be. It is narrower than
 // mimekit.ImageContentTypes() on purpose, and narrower than what image.Decode
-// would accept: the profile page promises "JPG or PNG", so a GIF or a WebP is
+// would accept: the profile page promises "JPG, PNG or WebP", so a GIF is
 // refused with that reason rather than failing later in the decoder with a
-// message about an unknown format.
-var avatarUploadContentTypes = []string{"image/jpeg", "image/png"}
+// message about an unknown format. An animated PNG sniffs as its own type
+// (image/vnd.mozilla.apng) and is refused here too.
+var avatarUploadContentTypes = []string{"image/jpeg", "image/png", "image/webp"}
 
 // AvatarService stores and removes user profile photos (#1382).
 //
@@ -162,7 +165,18 @@ func (s *AvatarService) Open(ctx context.Context, userID string) (io.ReadCloser,
 	if err != nil {
 		return nil, "", errxtrace.Wrap("failed to load the user", err)
 	}
-	if user.AvatarPath == nil || *user.AvatarPath == "" {
+	return s.OpenUserAvatar(ctx, user)
+}
+
+// OpenUserAvatar returns the avatar of a user the caller has already loaded,
+// along with its content type. The key comes from the user row, never from the
+// caller, so this cannot be pointed at another object in the bucket.
+func (s *AvatarService) OpenUserAvatar(ctx context.Context, user *models.User) (io.ReadCloser, string, error) {
+	if user == nil || user.AvatarPath == nil || *user.AvatarPath == "" {
+		userID := ""
+		if user != nil {
+			userID = user.ID
+		}
 		return nil, "", errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Avatar", "user_id", userID))
 	}
 
@@ -199,6 +213,9 @@ var (
 	ErrAvatarNotAnImage = errors.New("avatar: not a supported image")
 	// ErrAvatarTooLarge is returned when the upload exceeds AvatarMaxUploadBytes.
 	ErrAvatarTooLarge = errors.New("avatar: image is too large")
+	// ErrAvatarAnimated is returned for an animated WebP. A profile photo is a
+	// still picture: moving ones are a constant distraction in a member list.
+	ErrAvatarAnimated = errors.New("avatar: animated images are not supported")
 )
 
 // normalize reads at most AvatarMaxUploadBytes, checks that the bytes really are
@@ -230,6 +247,11 @@ func (s *AvatarService) normalize(src io.Reader) ([]byte, error) {
 	if int64(len(raw)) > AvatarMaxUploadBytes {
 		return nil, errxtrace.Wrap(fmt.Sprintf("avatar exceeds %d bytes", AvatarMaxUploadBytes), ErrAvatarTooLarge)
 	}
+	if isAnimatedWebP(raw) {
+		// The WebP decoder would refuse it too, but with a message about an
+		// invalid format; this says why.
+		return nil, ErrAvatarAnimated
+	}
 
 	// The header comes first, so the dimensions can be refused before the
 	// pixels are allocated. Decoding and then measuring would be too late: the
@@ -253,11 +275,37 @@ func (s *AvatarService) normalize(src io.Reader) ([]byte, error) {
 		return nil, errxtrace.Wrap("failed to decode the image", ErrAvatarNotAnImage)
 	}
 
+	// The EXIF orientation is applied to the pixels because the re-encode
+	// below drops the tag with the rest of the metadata: without this a photo
+	// taken with the phone held upright comes out on its side. It is applied
+	// after the crop and scale, on 512px instead of the full photo, which gives
+	// the same picture: all eight orientations map a centered square onto
+	// itself.
+	square := s.processor.CropSquare(decoded, AvatarSize)
+	square = imageprocessor.Orient(square, imageprocessor.JPEGOrientation(raw))
+
 	var out bytes.Buffer
-	if err := jpeg.Encode(&out, s.processor.CropSquare(decoded, AvatarSize), &jpeg.Options{Quality: 90}); err != nil {
+	if err := jpeg.Encode(&out, square, &jpeg.Options{Quality: 90}); err != nil {
 		return nil, errxtrace.Wrap("failed to encode the avatar", err)
 	}
 	return out.Bytes(), nil
+}
+
+// isAnimatedWebP reports whether raw is a WebP whose extended header (VP8X)
+// sets the animation flag.
+func isAnimatedWebP(raw []byte) bool {
+	const animationFlag = 1 << 1
+	return len(raw) >= 21 &&
+		string(raw[0:4]) == "RIFF" && string(raw[8:12]) == "WEBP" && string(raw[12:16]) == "VP8X" &&
+		raw[20]&animationFlag != 0
+}
+
+// AvatarVersion returns the part of a stored key that changes with every
+// upload ("3-a1b2c3d4e5f6" for "avatars/<user>/3-a1b2c3d4e5f6.jpg"). Signed
+// avatar URLs carry it, so a replaced photo gets a new URL and a URL's bytes
+// never change.
+func AvatarVersion(key string) string {
+	return strings.TrimSuffix(path.Base(key), avatarExt)
 }
 
 func (s *AvatarService) write(ctx context.Context, key string, data []byte) error {
@@ -279,6 +327,17 @@ func (s *AvatarService) write(ctx context.Context, key string, data []byte) erro
 		return errxtrace.Wrap("failed to finish writing the avatar", err)
 	}
 	return nil
+}
+
+// DeleteStored removes a stored avatar object without touching any user row.
+// Account deletion calls it after the row is gone, with the key the row held.
+// A key outside the avatar prefix is ignored, so a caller cannot use this to
+// delete other objects in the bucket.
+func (s *AvatarService) DeleteStored(ctx context.Context, key string) {
+	if !strings.HasPrefix(key, avatarPrefix+"/") {
+		return
+	}
+	s.deleteQuietly(ctx, key)
 }
 
 // deleteQuietly removes an object and logs nothing on failure beyond the error

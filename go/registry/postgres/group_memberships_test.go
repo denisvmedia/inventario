@@ -274,6 +274,49 @@ func TestGroupMembershipRegistry_ListByGroup_ByUser_CountAdmins(t *testing.T) {
 	c.Assert(admins, qt.Equals, 1)
 }
 
+// The members list hands out a signed URL for each member's profile photo
+// (#1382), which it can only do when the join carries the stored path.
+func TestGroupMembershipRegistry_ListByGroupWithUsers_CarriesAvatarPath(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := context.Background()
+	user := getTestUser(c, registrySet)
+
+	group, err := registrySet.LocationGroupRegistry.Create(ctx, newTestGroup(c, user.TenantID, user.ID, "With photos"))
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.GroupMembershipRegistry.Create(ctx, membershipFor(user.TenantID, group.ID, user.ID, models.GroupRoleOwner))
+	c.Assert(err, qt.IsNil)
+
+	withPhoto, err := registrySet.UserRegistry.Create(ctx, models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+		Email:               "photo@test-org.com",
+		Name:                "Has Photo",
+		IsActive:            true,
+	})
+	c.Assert(err, qt.IsNil)
+	photoPath := "avatars/" + withPhoto.ID + "/1-abcdef012345.jpg"
+	withPhoto.AvatarPath = &photoPath
+	_, err = registrySet.UserRegistry.Update(ctx, *withPhoto)
+	c.Assert(err, qt.IsNil)
+	_, err = registrySet.GroupMembershipRegistry.Create(ctx, membershipFor(user.TenantID, group.ID, withPhoto.ID, models.GroupRoleUser))
+	c.Assert(err, qt.IsNil)
+
+	rows, err := registrySet.GroupMembershipRegistry.ListByGroupWithUsers(ctx, group.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(rows, qt.HasLen, 2)
+
+	paths := map[string]*string{}
+	for _, row := range rows {
+		c.Assert(row.User, qt.IsNotNil)
+		paths[row.User.ID] = row.User.AvatarPath
+	}
+	c.Assert(paths[withPhoto.ID], qt.IsNotNil)
+	c.Assert(*paths[withPhoto.ID], qt.Equals, photoPath)
+	c.Assert(paths[user.ID], qt.IsNil)
+}
+
 // CountByGroup / CountByGroups feed the members_count field surfaced on
 // the LocationGroup JSON:API resource (#1650). Single-group and batch
 // shapes are exercised side-by-side so a regression in either method
