@@ -21,21 +21,23 @@ export const GROUP_QUERY_PARAM = "g"
 // redirect-source URL would leak into the redirected URL since
 // UngroupedRedirect deliberately preserves search/hash on rewrite.
 //
-// `/no-group` is intentionally NOT on this list: it's the zero-group
-// onboarding state, so by definition there's no active group to pin.
-// The transient case (a fresh group just created via the inline form,
-// where a refetch surfaces groups while the page is still on /no-group
-// before NoGroupPage's `navigate("/")` fires) ALSO doesn't want ?g=:
-// the auto-set's setSearchParams replace can race the post-create
-// navigation in subtle browser-scheduler-dependent ways and leave the
-// user stuck on /no-group?g=<slug> instead of bouncing to /g/<slug>
-// (firefox + webkit reproduce, chromium doesn't — see e2e
-// no-group-redirect.spec.ts > NoGroupView drives group creation).
+// A page that creates a group and then navigates away must stay off this
+// list: `/no-group` (the inline onboarding form), `/groups/new` and
+// `/welcome`. The router applies a navigation in a transition, so while it
+// is pending (for example while the lazy /g/:groupSlug route loads) the
+// committed location is still the page the user is leaving. The create
+// refetches the group list and the current user, and each refetch
+// re-renders this provider right away, at that old location. On a listed
+// path the effect below would then see a group, find no ?g=, and call
+// setSearchParams, which resolves "?g=<slug>" against the old location and
+// replaces the history entry the page has just pushed: the user lands back
+// on the form at <page>?g=<slug> (#2815). A user with no group has nothing
+// to pin on these pages anyway, and GroupSelector's "Create new group"
+// item passes the active group to /groups/new itself.
 const PATHS_WITH_GROUP_QUERY = new Set([
   "/profile",
   "/profile/edit",
   "/settings",
-  "/groups/new",
   "/plans",
   "/help",
   "/whats-new",
@@ -79,7 +81,8 @@ interface GroupProviderProps {
 //      /groups/new, …). The path is left untouched; group context is
 //      pinned via `?g=<slug>` so the sidebar (and anything else reading
 //      currentGroup) keeps a coherent view when the user steps off
-//      /g/:slug/*. Auto-filled from the user's default group when missing.
+//      /g/:slug/*. Auto-filled from the user's default group when missing,
+//      on the routes in PATHS_WITH_GROUP_QUERY only.
 //
 // The URL stays the single source of truth: the provider only ever writes
 // to the URL via setSearchParams (the replaced-history `?g=` reconciliation
@@ -148,14 +151,15 @@ export function GroupProvider({ children }: GroupProviderProps) {
   //      alone. The host page (GroupSettingsPage) renders its own 404/error
   //      from the `useGroup(id)` query; we don't second-guess.
   //
-  //   3. Path-shape-clean routes (/profile, /settings, /no-group, …) for
-  //      a user with ≥1 groups: ensure the active-group context is in the
-  //      URL via ?g=<slug>. Without this, the sidebar (which reads
-  //      currentGroup) loses its inventory/manage rows the moment the user
-  //      navigates off /g/:slug/*. Pick the user's default_group_id when
-  //      it resolves; fall back to the first slug-bearing group otherwise.
-  //      Replaces the history entry rather than pushing — back-button
-  //      shouldn't bounce through a "no-context" version of the page.
+  //   3. Path-shape-clean routes in PATHS_WITH_GROUP_QUERY (/profile,
+  //      /settings, …) for a user with ≥1 groups: ensure the active-group
+  //      context is in the URL via ?g=<slug>. Without this, the sidebar
+  //      (which reads currentGroup) loses its inventory/manage rows the
+  //      moment the user navigates off /g/:slug/*. Pick the user's
+  //      default_group_id when it resolves; fall back to the first
+  //      slug-bearing group otherwise. Replaces the history entry rather
+  //      than pushing — back-button shouldn't bounce through a
+  //      "no-context" version of the page.
   useEffect(() => {
     if (slugFromPath) {
       if (!groups) return

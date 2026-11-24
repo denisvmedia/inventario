@@ -36,6 +36,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
   carries now show the release you run. Before, every release showed 0.1.0.
   A build without a release number, such as the `edge` image, shows no badge
   ([#2790](https://github.com/denisvmedia/inventario/pull/2790)).
+- Creating your first group through **Create new group** in the group switcher
+  now opens the new group. Before, the page stayed on the filled-in form, so
+  it looked as if nothing had happened and a second click created another
+  group ([#2815](https://github.com/denisvmedia/inventario/issues/2815)).
 
 ### Security
 
