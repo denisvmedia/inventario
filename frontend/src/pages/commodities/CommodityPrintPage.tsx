@@ -15,6 +15,7 @@ import {
   type CommodityTypeValue,
 } from "@/features/commodities/constants"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useTagLabel } from "@/features/tags/hooks"
 import { formatCurrency, formatDate } from "@/lib/intl"
 
 // /commodities/:id/print — print-optimized layout for a single
@@ -31,6 +32,7 @@ export function CommodityPrintPage() {
   const enabled = !!currentGroup
   const detail = useCommodity(id, { enabled })
   const areas = useAreas({ enabled })
+  const tagLabel = useTagLabel("commodity")
   const commodity = detail.data?.commodity
 
   useEffect(() => {
@@ -195,7 +197,7 @@ export function CommodityPrintPage() {
                 {commodity.tags && commodity.tags.length > 0 ? (
                   <PrintRow
                     label={t("commodities:detail.fields.tags")}
-                    value={commodity.tags.join(", ")}
+                    value={commodity.tags.map(tagLabel).join(", ")}
                   />
                 ) : null}
                 {commodity.extra_serial_numbers && commodity.extra_serial_numbers.length > 0 ? (

@@ -17,6 +17,7 @@ import { TagsInput } from "@/components/files/TagsInput"
 import { checkUploadCapacity, updateFile, type FileCategory } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
 import { useInvalidateFiles, useUploadFile } from "@/features/files/hooks"
+import { useTagLabel } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 
 type Step = "select" | "metadata" | "progress"
@@ -533,6 +534,7 @@ function MetadataStep({
   onSetCover,
 }: MetadataStepProps) {
   const { t } = useTranslation()
+  const tagLabel = useTagLabel("file")
   return (
     <div className="flex flex-col gap-3">
       <ul
@@ -606,6 +608,7 @@ function MetadataStep({
               autocomplete
               kind="file"
               compact
+              labelOf={tagLabel}
             />
           </li>
         ))}

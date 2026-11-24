@@ -3003,8 +3003,9 @@ definitions:
         $ref: '#/definitions/jsonapi.TagMeta'
       slug:
         description: |-
-          Slug is the kebab-cased identifier referenced from
-          commodities.tags / files.tags JSONB arrays. Unique per (group, kind).
+          Slug is the identifier referenced from commodities.tags / files.tags
+          JSONB arrays: lowercase letters and digits of any script separated by
+          single hyphens, in Unicode NFC. Unique per (group, kind).
         type: string
       updated_at:
         type: string
@@ -3042,8 +3043,17 @@ definitions:
         - file
         example: commodity
       label:
+        description: Label is the display name, at most 64 characters.
+        example: Kitchen
+        maxLength: 64
         type: string
       slug:
+        description: |-
+          Slug identifies the tag within its group and kind: lowercase letters
+          and digits of any script, separated by single hyphens, in Unicode NFC,
+          at most 64 characters.
+        example: kitchen
+        maxLength: 64
         type: string
     type: object
   jsonapi.TagRequestDataWrapper:
@@ -3093,8 +3103,17 @@ definitions:
         - muted
         example: muted
       label:
+        description: Label, when set, replaces the display name. At most 64 characters.
+        example: Kitchen
+        maxLength: 64
         type: string
       slug:
+        description: |-
+          Slug, when set, renames the tag and rewrites every reference to it.
+          Same rules as on create: lowercase letters and digits of any script,
+          separated by single hyphens, in Unicode NFC, at most 64 characters.
+        example: kitchen
+        maxLength: 64
         type: string
     type: object
   jsonapi.TagUpdateRequestDataWrapper:
@@ -4413,8 +4432,9 @@ definitions:
         type: string
       slug:
         description: |-
-          Slug is the kebab-cased identifier referenced from
-          commodities.tags / files.tags JSONB arrays. Unique per (group, kind).
+          Slug is the identifier referenced from commodities.tags / files.tags
+          JSONB arrays: lowercase letters and digits of any script separated by
+          single hyphens, in Unicode NFC. Unique per (group, kind).
         type: string
       updated_at:
         type: string

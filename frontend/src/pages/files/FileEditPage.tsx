@@ -17,6 +17,7 @@ import { useFile, useUpdateFile } from "@/features/files/hooks"
 import { fileMetadataSchema, type FileMetadataFormInput } from "@/features/files/schemas"
 import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useTagLabel } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 
 // Standalone metadata edit page deep-linked from the detail sheet.
@@ -32,6 +33,7 @@ export function FileEditPage() {
 
   const query = useFile(id, { enabled: !!id })
   const update = useUpdateFile(id ?? "")
+  const tagLabel = useTagLabel("file")
   // Touch the validation key once at the source so i18next-cli's
   // static extractor sees it — the schema returns the key as a string
   // literal which the parser can't follow into JSX.
@@ -186,6 +188,7 @@ export function FileEditPage() {
                     testId="file-edit-tags"
                     autocomplete
                     kind="file"
+                    labelOf={tagLabel}
                   />
                 )}
               />

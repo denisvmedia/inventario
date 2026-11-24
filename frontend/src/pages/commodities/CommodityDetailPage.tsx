@@ -102,6 +102,7 @@ import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity } from "@/features/commodities/api"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useTagLabel } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -1121,6 +1122,7 @@ function DetailsTab({
   variant = "page",
 }: DetailsTabProps) {
   const { t } = useTranslation()
+  const tagLabel = useTagLabel("commodity")
   const noValue = t("commodities:detail.noValue")
   // Sheet mode shows the breadcrumb-style "Location · Area"
   // value with a "Location" label (mock parity); page mode keeps
@@ -1250,7 +1252,7 @@ function DetailsTab({
                 <div className="flex flex-wrap gap-1.5 mt-0.5">
                   {commodity.tags.map((tag) => (
                     <Badge key={tag} variant="secondary">
-                      {tag}
+                      {tagLabel(tag)}
                     </Badge>
                   ))}
                 </div>
@@ -1264,7 +1266,7 @@ function DetailsTab({
               <div className="flex flex-wrap gap-1.5">
                 {commodity.tags.map((tag) => (
                   <Badge key={tag} variant="secondary">
-                    {tag}
+                    {tagLabel(tag)}
                   </Badge>
                 ))}
               </div>

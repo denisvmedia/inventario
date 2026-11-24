@@ -28,6 +28,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { FadeInImage } from "@/components/ui/fade-in-image"
 import { useDeleteFile, useFile } from "@/features/files/hooks"
+import { useTagLabel } from "@/features/tags/hooks"
 import { isImageMime, isPdfMime } from "@/features/files/constants"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
@@ -68,6 +69,7 @@ export function FileDetailSheet({
   const confirm = useConfirm()
   const query = useFile(fileId ?? undefined, { enabled: open && !!fileId })
   const deleteMutation = useDeleteFile()
+  const tagLabel = useTagLabel("file")
   // Group slug for tag-chip filter links — clicking a tag in the
   // detail sheet routes to `/g/<slug>/files?tags=<tag>`, mirroring
   // the toolbar tag pills on FilesListPage. Falls back to a relative
@@ -219,7 +221,7 @@ export function FileDetailSheet({
                               data-testid={`file-detail-tag-chip-${tag.toLowerCase()}`}
                               className="px-2 py-0.5"
                             >
-                              {tag}
+                              {tagLabel(tag)}
                             </Link>
                           </Badge>
                         ))}

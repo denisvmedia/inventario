@@ -178,9 +178,13 @@ type TagRequestDataWrapper struct {
 // required and immutable — item-tags and file-tags are separate entities,
 // so a tag's kind is fixed at creation (PATCH cannot change it).
 type TagRequestData struct {
-	Kind  models.TagKind  `json:"kind" example:"commodity" enums:"commodity,file"`
-	Slug  string          `json:"slug"`
-	Label string          `json:"label"`
+	Kind models.TagKind `json:"kind" example:"commodity" enums:"commodity,file"`
+	// Slug identifies the tag within its group and kind: lowercase letters
+	// and digits of any script, separated by single hyphens, in Unicode NFC,
+	// at most 64 characters.
+	Slug string `json:"slug" example:"kitchen" maxLength:"64"`
+	// Label is the display name, at most 64 characters.
+	Label string          `json:"label" example:"Kitchen" maxLength:"64"`
 	Color models.TagColor `json:"color" example:"muted" enums:"amber,green,blue,orange,red,muted"`
 }
 
@@ -198,14 +202,8 @@ func (trd TagRequestData) ValidateWithContext(ctx context.Context) error {
 			}
 			return nil
 		})),
-		validation.Field(&trd.Slug, validation.Required, validation.By(func(value any) error {
-			s, _ := value.(string)
-			if !models.IsValidTagSlug(s) {
-				return validation.NewError("invalid_slug", "slug must be lowercase, kebab-cased")
-			}
-			return nil
-		})),
-		validation.Field(&trd.Label, validation.Required, validation.Length(1, 64)),
+		validation.Field(&trd.Slug, validation.Required, validation.RuneLength(1, models.MaxTagSlugRunes), validation.By(models.TagSlugRule)),
+		validation.Field(&trd.Label, validation.Required, validation.RuneLength(1, models.MaxTagLabelRunes)),
 		validation.Field(&trd.Color, validation.Required, validation.By(tagColorMembershipRule)),
 	)
 	return validation.ValidateStructWithContext(ctx, &trd, fields...)
@@ -271,8 +269,12 @@ type TagUpdateRequestDataWrapper struct {
 }
 
 type TagUpdateRequestData struct {
-	Slug  string          `json:"slug,omitempty"`
-	Label string          `json:"label,omitempty"`
+	// Slug, when set, renames the tag and rewrites every reference to it.
+	// Same rules as on create: lowercase letters and digits of any script,
+	// separated by single hyphens, in Unicode NFC, at most 64 characters.
+	Slug string `json:"slug,omitempty" example:"kitchen" maxLength:"64"`
+	// Label, when set, replaces the display name. At most 64 characters.
+	Label string          `json:"label,omitempty" example:"Kitchen" maxLength:"64"`
 	Color models.TagColor `json:"color,omitempty" example:"muted" enums:"amber,green,blue,orange,red,muted"`
 }
 
@@ -284,17 +286,11 @@ func (turd TagUpdateRequestData) ValidateWithContext(ctx context.Context) error 
 	fields := make([]*validation.FieldRules, 0)
 	if turd.Slug != "" {
 		fields = append(fields,
-			validation.Field(&turd.Slug, validation.By(func(value any) error {
-				s, _ := value.(string)
-				if !models.IsValidTagSlug(s) {
-					return validation.NewError("invalid_slug", "slug must be lowercase, kebab-cased")
-				}
-				return nil
-			})),
+			validation.Field(&turd.Slug, validation.RuneLength(1, models.MaxTagSlugRunes), validation.By(models.TagSlugRule)),
 		)
 	}
 	if turd.Label != "" {
-		fields = append(fields, validation.Field(&turd.Label, validation.Length(1, 64)))
+		fields = append(fields, validation.Field(&turd.Label, validation.RuneLength(1, models.MaxTagLabelRunes)))
 	}
 	// Color zero value is "" — only validate when set, but enforce
 	// closed-set membership so an unknown color can't slip through.

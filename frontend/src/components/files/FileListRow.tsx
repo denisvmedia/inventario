@@ -25,9 +25,17 @@ export interface FileListRowProps {
   selected?: boolean
   onToggleSelect?: (id: string) => void
   onOpen: (id: string) => void
+  // Resolves a stored tag slug to the tag's label (see FileCard).
+  tagLabel?: (slug: string) => string
 }
 
-export function FileListRow({ file, selected = false, onToggleSelect, onOpen }: FileListRowProps) {
+export function FileListRow({
+  file,
+  selected = false,
+  onToggleSelect,
+  onOpen,
+  tagLabel,
+}: FileListRowProps) {
   const { t } = useTranslation()
   const labelOf = useCategoryLabel()
   const tagLabelOf = useTagPillLabel()
@@ -37,13 +45,13 @@ export function FileListRow({ file, selected = false, onToggleSelect, onOpen }: 
   const categoryLabel = labelOf((tile?.key ?? "other") as Parameters<typeof labelOf>[0])
   const tags = file.tags ?? []
   // The curated tag pills carry colour metadata; for any tag the user
-  // tagged with (lowercase match) we fall back to the standard text
-  // colour so unknown tags still surface on the row.
+  // tagged with (lowercase match) we fall back to the tag's label and the
+  // standard text colour so unknown tags still surface on the row.
   const matchedTags = tags.map((tag) => {
     const pill = FILE_TAG_PILLS.find((p) => p.id === tag.toLowerCase())
     return {
       id: tag,
-      label: pill ? tagLabelOf(pill.id) : tag,
+      label: pill ? tagLabelOf(pill.id) : (tagLabel?.(tag) ?? tag),
       colorClass: pill?.colorClass ?? "text-muted-foreground",
     }
   })

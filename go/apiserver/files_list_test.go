@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sort"
 	"testing"
 
@@ -45,6 +46,7 @@ func newFilesListEnv(c *qt.C) *filesListEnv {
 		{"invoice-2026", models.FileCategoryDocuments, models.FileTypeDocument, []string{"invoice", "tax"}, ".pdf", "application/pdf"},
 		{"manual-drill", models.FileCategoryDocuments, models.FileTypeDocument, []string{"manual"}, ".pdf", "application/pdf"},
 		{"photo-shelf", models.FileCategoryImages, models.FileTypeImage, []string{"workshop"}, ".jpg", "image/jpeg"},
+		{"receipt-kettle", models.FileCategoryDocuments, models.FileTypeDocument, []string{"чек", "на-продажу"}, ".pdf", "application/pdf"},
 	}
 
 	byTitle := make(map[string]string, len(seed))
@@ -178,6 +180,30 @@ func TestFilesList_TagFilterAcceptsBothShapes(t *testing.T) {
 		{"whitespace around a tag", "?tags=%20invoice%20", []string{"invoice-2026"}},
 		{"empty entries are ignored", "?tags=,,invoice,,", []string{"invoice-2026"}},
 		{"a tag nothing carries", "?tags=nonexistent", []string{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			env := newFilesListEnv(c)
+
+			c.Assert(env.titles(c, tt.query+"&limit=100"), qt.DeepEquals, tt.want)
+		})
+	}
+}
+
+// Tag slugs carry letters of any script, so the filter has to match one that
+// arrives percent-encoded in either query shape.
+func TestFilesList_TagFilterMatchesNonASCIISlugs(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		want  []string
+	}{
+		{"comma-separated", "?tags=" + url.QueryEscape("чек"), []string{"receipt-kettle"}},
+		{"singular alias", "?tag=" + url.QueryEscape("чек"), []string{"receipt-kettle"}},
+		{"two tags of one file", "?tags=" + url.QueryEscape("чек,на-продажу"), []string{"receipt-kettle"}},
+		{"a different word", "?tags=" + url.QueryEscape("чеки"), []string{}},
 	}
 
 	for _, tt := range tests {

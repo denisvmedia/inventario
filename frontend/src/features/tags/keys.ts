@@ -28,4 +28,7 @@ export const tagKeys = {
   // limit happen to be identical.
   autocomplete: (slug: string, q: string, limit: number, kind: TagKind | undefined) =>
     [...tagKeys.group(slug), "autocomplete", q, limit, kind ?? "none"] as const,
+  // Every tag of one kind, for resolving the slugs stored on items and
+  // files to the labels the user sees.
+  labels: (slug: string, kind: TagKind) => [...tagKeys.group(slug), "labels", kind] as const,
 }

@@ -36,6 +36,21 @@ describe("<TagFormDialog />", () => {
     })
   })
 
+  it("accepts a Cyrillic label without a hand-typed slug", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<TagFormDialog open mode="create" onSubmit={onSubmit} onOpenChange={vi.fn()} />)
+    await user.type(screen.getByTestId("tag-form-label"), "На продажу")
+    expect((screen.getByTestId("tag-form-slug") as HTMLInputElement).value).toBe("на-продажу")
+    await user.click(screen.getByTestId("tag-form-color-green"))
+    await user.click(screen.getByTestId("tag-form-submit"))
+    expect(onSubmit).toHaveBeenCalledWith({
+      label: "На продажу",
+      slug: "на-продажу",
+      color: "green",
+    })
+  })
+
   it("shows the labelRequired error when label is empty", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)

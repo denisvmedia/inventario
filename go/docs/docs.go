@@ -12757,7 +12757,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/jsonapi.TagMeta"
                 },
                 "slug": {
-                    "description": "Slug is the kebab-cased identifier referenced from\ncommodities.tags / files.tags JSONB arrays. Unique per (group, kind).",
+                    "description": "Slug is the identifier referenced from commodities.tags / files.tags\nJSONB arrays: lowercase letters and digits of any script separated by\nsingle hyphens, in Unicode NFC. Unique per (group, kind).",
                     "type": "string"
                 },
                 "updated_at": {
@@ -12816,10 +12816,16 @@ const docTemplate = `{
                     "example": "commodity"
                 },
                 "label": {
-                    "type": "string"
+                    "description": "Label is the display name, at most 64 characters.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "Kitchen"
                 },
                 "slug": {
-                    "type": "string"
+                    "description": "Slug identifies the tag within its group and kind: lowercase letters\nand digits of any script, separated by single hyphens, in Unicode NFC,\nat most 64 characters.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "kitchen"
                 }
             }
         },
@@ -12894,10 +12900,16 @@ const docTemplate = `{
                     "example": "muted"
                 },
                 "label": {
-                    "type": "string"
+                    "description": "Label, when set, replaces the display name. At most 64 characters.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "Kitchen"
                 },
                 "slug": {
-                    "type": "string"
+                    "description": "Slug, when set, renames the tag and rewrites every reference to it.\nSame rules as on create: lowercase letters and digits of any script,\nseparated by single hyphens, in Unicode NFC, at most 64 characters.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "kitchen"
                 }
             }
         },
@@ -14387,7 +14399,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "slug": {
-                    "description": "Slug is the kebab-cased identifier referenced from\ncommodities.tags / files.tags JSONB arrays. Unique per (group, kind).",
+                    "description": "Slug is the identifier referenced from commodities.tags / files.tags\nJSONB arrays: lowercase letters and digits of any script separated by\nsingle hyphens, in Unicode NFC. Unique per (group, kind).",
                     "type": "string"
                 },
                 "updated_at": {

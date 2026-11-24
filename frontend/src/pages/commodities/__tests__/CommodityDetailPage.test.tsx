@@ -10,7 +10,13 @@ import { ConfirmProvider } from "@/hooks/useConfirm"
 import { capture } from "@/test/capture"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { areaHandlers, commodityHandlers, fileHandlers, groupHandlers } from "@/test/handlers"
+import {
+  areaHandlers,
+  commodityHandlers,
+  fileHandlers,
+  groupHandlers,
+  tagHandlers,
+} from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -90,6 +96,20 @@ describe("<CommodityDetailPage />", () => {
     // No acquisition-frozen line on a fresh commodity (the live
     // OriginalPrice already represents the purchase amount).
     expect(screen.queryByTestId("commodity-detail-acquisition")).toBeNull()
+  })
+
+  it("shows tag labels instead of slugs", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...tagHandlers.list(SLUG, [{ id: "t1", slug: "work", label: "Работа", color: "blue" }]),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderDetail()
+    expect(await screen.findByText("Работа")).toBeInTheDocument()
+    // "tech" has no tag row, so the slug is the best name available.
+    expect(screen.getByText("tech")).toBeInTheDocument()
+    expect(screen.queryByText("work")).toBeNull()
   })
 
   it("renders the acquisition-frozen line after a currency migration", async () => {

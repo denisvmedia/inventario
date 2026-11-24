@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { tagKeys } from "@/features/tags/keys"
 
 import {
   bulkDeleteFiles,
@@ -77,13 +78,19 @@ export function useFile(id: string | undefined, { enabled = true }: QueryOptions
 // invalidateAll wipes the entire files namespace for the active group.
 // Used after any mutation since list queries can be sliced by category +
 // search + tags + type combinations and a focused invalidation would
-// miss the cached permutations the user can switch back to.
+// miss the cached permutations the user can switch back to. File writes
+// can auto-create file tags and change their usage counts, so the group's
+// tag queries are refreshed with them.
 function useInvalidate() {
   const qc = useQueryClient()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   return {
-    all: () => qc.invalidateQueries({ queryKey: fileKeys.group(slug) }),
+    all: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: fileKeys.group(slug) }),
+        qc.invalidateQueries({ queryKey: tagKeys.group(slug) }),
+      ]),
     detail: (id: string) => qc.invalidateQueries({ queryKey: fileKeys.detail(slug, id) }),
   }
 }
@@ -104,6 +111,7 @@ export function useUpdateFile(id: string) {
         signedUrl: cached?.signedUrl,
       })
       qc.invalidateQueries({ queryKey: fileKeys.group(slug) })
+      qc.invalidateQueries({ queryKey: tagKeys.group(slug) })
     },
   })
 }

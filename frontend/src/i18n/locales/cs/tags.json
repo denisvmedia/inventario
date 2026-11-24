@@ -25,15 +25,15 @@
     "previewFallback": "Štítek",
     "save": "Uložit změny",
     "slug": "Slug",
-    "slugHint": "Malá písmena, číslice a pomlčky. Používá se jako identifikátor v odkazech JSONB.",
-    "slugPlaceholder": "kuchyne",
+    "slugHint": "Malá písmena a číslice v libovolném jazyce oddělené pomlčkami. Vyplní se podle názvu; identifikuje štítek u položek a souborů.",
+    "slugPlaceholder": "kuchyně",
     "updateError": "Štítek se nepodařilo aktualizovat: {{error}}",
     "updateSuccess": "Štítek byl aktualizován."
   },
   "inlineCreate": {
     "cancel": "Zrušit nový štítek",
     "label": "Název štítku",
-    "placeholder": "nazev-stitku",
+    "placeholder": "název-štítku",
     "save": "Uložit nový štítek",
     "toggle": "Nový štítek"
   },
@@ -110,7 +110,7 @@
     "duplicateSlug": "Štítek s tímto slugem již existuje.",
     "labelRequired": "Popisek je povinný.",
     "labelTooLong": "Popisek může mít nejvýše 64 znaků.",
-    "slugInvalid": "Slug musí být malými písmeny ve formátu kebab-case.",
+    "slugInvalid": "Slug smí obsahovat jen malá písmena a číslice oddělené jednou pomlčkou.",
     "slugRequired": "Slug je povinný.",
     "slugTooLong": "Slug může mít nejvýše 64 znaků."
   },

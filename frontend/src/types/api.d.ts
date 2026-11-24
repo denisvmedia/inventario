@@ -11997,8 +11997,9 @@ export type components = {
             label?: string;
             meta?: components["schemas"]["jsonapi.TagMeta"];
             /**
-             * @description Slug is the kebab-cased identifier referenced from
-             *     commodities.tags / files.tags JSONB arrays. Unique per (group, kind).
+             * @description Slug is the identifier referenced from commodities.tags / files.tags
+             *     JSONB arrays: lowercase letters and digits of any script separated by
+             *     single hyphens, in Unicode NFC. Unique per (group, kind).
              */
             slug?: string;
             updated_at?: string;
@@ -12021,7 +12022,17 @@ export type components = {
              * @enum {unknown}
              */
             kind?: "commodity" | "file";
+            /**
+             * @description Label is the display name, at most 64 characters.
+             * @example Kitchen
+             */
             label?: string;
+            /**
+             * @description Slug identifies the tag within its group and kind: lowercase letters
+             *     and digits of any script, separated by single hyphens, in Unicode NFC,
+             *     at most 64 characters.
+             * @example kitchen
+             */
             slug?: string;
         };
         "jsonapi.TagRequestDataWrapper": {
@@ -12051,7 +12062,17 @@ export type components = {
              * @enum {unknown}
              */
             color?: "amber" | "green" | "blue" | "orange" | "red" | "muted";
+            /**
+             * @description Label, when set, replaces the display name. At most 64 characters.
+             * @example Kitchen
+             */
             label?: string;
+            /**
+             * @description Slug, when set, renames the tag and rewrites every reference to it.
+             *     Same rules as on create: lowercase letters and digits of any script,
+             *     separated by single hyphens, in Unicode NFC, at most 64 characters.
+             * @example kitchen
+             */
             slug?: string;
         };
         "jsonapi.TagUpdateRequestDataWrapper": {
@@ -12895,8 +12916,9 @@ export type components = {
             /** @description Label is the human-readable display name. */
             label?: string;
             /**
-             * @description Slug is the kebab-cased identifier referenced from
-             *     commodities.tags / files.tags JSONB arrays. Unique per (group, kind).
+             * @description Slug is the identifier referenced from commodities.tags / files.tags
+             *     JSONB arrays: lowercase letters and digits of any script separated by
+             *     single hyphens, in Unicode NFC. Unique per (group, kind).
              */
             slug?: string;
             updated_at?: string;

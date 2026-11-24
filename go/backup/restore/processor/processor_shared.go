@@ -821,12 +821,13 @@ func (l *RestoreOperationProcessor) updateCommodity(
 }
 
 // ensureCommodityTags auto-creates tag rows for any slug carried on the restored
-// commodity that doesn't already exist in the target group.
+// commodity that doesn't already exist in the target group. A backup carries
+// slugs, not labels, so a created tag is labelled from its slug.
 func (l *RestoreOperationProcessor) ensureCommodityTags(ctx context.Context, commodity *models.Commodity, originalID string) error {
 	if len(commodity.Tags) == 0 {
 		return nil
 	}
-	slugs, err := l.tagService.NormalizeAndEnsureSlugs(ctx, models.TagKindCommodity, []string(commodity.Tags))
+	slugs, err := l.tagService.NormalizeAndEnsureRestoredSlugs(ctx, models.TagKindCommodity, []string(commodity.Tags))
 	if err != nil {
 		return errxtrace.Wrap("failed to ensure tags for restored commodity", err, errx.Attrs("original_commodity_id", originalID))
 	}

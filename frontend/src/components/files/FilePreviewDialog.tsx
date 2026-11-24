@@ -43,9 +43,12 @@ export interface FilePreviewDialogProps {
   // responsible for the confirm + mutation; the dialog closes itself
   // straight after `onDelete` is invoked.
   onDelete?: (fileId: string) => void
+  // Resolves a stored tag slug to the tag's label (useTagLabel in the
+  // caller); without it the slug is shown.
+  tagLabel?: (slug: string) => string
 }
 
-export function FilePreviewDialog({ file, onClose, onDelete }: FilePreviewDialogProps) {
+export function FilePreviewDialog({ file, onClose, onDelete, tagLabel }: FilePreviewDialogProps) {
   const { t } = useTranslation()
   if (!file) return null
 
@@ -173,7 +176,7 @@ export function FilePreviewDialog({ file, onClose, onDelete }: FilePreviewDialog
             {sizeLabel && tags.length > 0 ? <span aria-hidden="true">·</span> : null}
             {tags.slice(0, 4).map((tag) => (
               <Badge key={tag} variant="secondary" className="h-4 px-1.5 text-[10px]">
-                {tag}
+                {tagLabel?.(tag) ?? tag}
               </Badge>
             ))}
           </DialogDescription>

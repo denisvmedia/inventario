@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import type { TagKind } from "@/features/tags/api"
+import type { TagAutocompleteEntry, TagKind } from "@/features/tags/api"
 import { useTagAutocomplete } from "@/features/tags/hooks"
 
 // Lightweight tag chip input — type, hit Enter / comma to commit;
@@ -38,6 +38,10 @@ export interface TagsInputProps {
   // pass "file". Required when `autocomplete` is set — without it the
   // suggestion query stays disabled.
   kind?: TagKind
+  // Resolves a value (a stored tag slug) to the text a chip shows,
+  // usually the tag's label via useTagLabel. A value the resolver does
+  // not know, such as text the user just typed, is shown as is.
+  labelOf?: (value: string) => string
 }
 
 export function TagsInput({
@@ -50,6 +54,7 @@ export function TagsInput({
   autocomplete,
   compact,
   kind,
+  labelOf,
 }: TagsInputProps) {
   const [draft, setDraft] = useState("")
   // Remote suggestions live in local state and are populated via the
@@ -58,7 +63,13 @@ export function TagsInput({
   // existing FileEditPage path, the standalone TagsInput tests) never
   // pull in the `useTagAutocomplete` hook and don't need a
   // QueryClientProvider in their wrapper.
-  const [remoteSuggestions, setRemoteSuggestions] = useState<string[]>([])
+  const [remoteEntries, setRemoteEntries] = useState<TagAutocompleteEntry[]>([])
+  const remoteSuggestions = remoteEntries.map((e) => e.slug)
+  // Values are slugs; chips and dropdown rows show the tag's label. The
+  // autocomplete response carries labels for the suggestions it returns,
+  // `labelOf` covers values that are already on the entity.
+  const remoteLabels = new Map(remoteEntries.map((e) => [e.slug, e.label]))
+  const displayOf = (value: string) => remoteLabels.get(value) || labelOf?.(value) || value
   // Open-state for the autocomplete dropdown. Radix Popover handles
   // outside-click + Escape close on its own; we drive `open` from
   // input focus / click events.
@@ -96,10 +107,16 @@ export function TagsInput({
   // visible-while-typing set is a strict subset of what the next
   // server response will deliver — no jitter where local and server
   // disagree about whether a tag matches.
+  // Matches the label as well as the slug: "USB к" finds the tag
+  // labelled "USB кабель" whose slug is "usb-кабель".
+  const needle = draft.trim().toLowerCase()
   const visibleSuggestions =
     autocomplete && filteredSuggestions
       ? filteredSuggestions.filter(
-          (s) => draft.trim() === "" || s.toLowerCase().includes(draft.trim().toLowerCase())
+          (s) =>
+            needle === "" ||
+            s.toLowerCase().includes(needle) ||
+            displayOf(s).toLowerCase().includes(needle)
         )
       : []
   const dropdownOpen = !!autocomplete && open && visibleSuggestions.length > 0
@@ -155,11 +172,11 @@ export function TagsInput({
           className={cn("gap-1", compact ? "h-4 px-1 text-[11px]" : "h-5 px-1.5 text-xs")}
           data-testid={testId ? `${testId}-chip` : undefined}
         >
-          {v}
+          {displayOf(v)}
           <button
             type="button"
             className="ml-0.5 inline-flex items-center"
-            aria-label={`remove ${v}`}
+            aria-label={`remove ${displayOf(v)}`}
             onClick={() => onChange(values.filter((x) => x !== v))}
           >
             <X className="size-3" aria-hidden="true" />
@@ -337,7 +354,7 @@ export function TagsInput({
                 aria-selected={i === activeClamped}
                 data-active={i === activeClamped ? "true" : undefined}
               >
-                {s}
+                {displayOf(s)}
               </button>
             ))}
           </PopoverContent>
@@ -346,7 +363,7 @@ export function TagsInput({
         inputAndChips
       )}
       {autocomplete ? (
-        <AutocompleteSink draft={draft} kind={kind} onChange={setRemoteSuggestions} />
+        <AutocompleteSink draft={draft} kind={kind} onChange={setRemoteEntries} />
       ) : null}
     </div>
   )
@@ -357,7 +374,7 @@ export function TagsInput({
 // gating it here avoids forcing every TagsInput consumer to wrap their
 // test harness in a QueryClientProvider just because the prop exists.
 // The component returns `null` — its only job is to push fetched tag
-// slugs back to the parent via `onChange`.
+// entries (slug + label) back to the parent via `onChange`.
 //
 // `enabled: true` (no draft-length gate) so the dropdown can show top
 // tags on focus before the user types anything — the BE returns its
@@ -369,12 +386,12 @@ function AutocompleteSink({
 }: {
   draft: string
   kind?: TagKind
-  onChange: (slugs: string[]) => void
+  onChange: (entries: TagAutocompleteEntry[]) => void
 }) {
   const remote = useTagAutocomplete(draft, 8, { enabled: true, kind })
   const data = remote.data
   useEffect(() => {
-    onChange(data ? data.map((t) => t.slug) : [])
+    onChange(data ?? [])
   }, [data, onChange])
   return null
 }

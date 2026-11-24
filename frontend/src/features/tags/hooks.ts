@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useCallback, useMemo } from "react"
 
 import { useCurrentGroup, useOptionalCurrentGroup } from "@/features/group/GroupContext"
 
@@ -8,6 +9,7 @@ import {
   deleteTag,
   getTag,
   getTagStats,
+  listAllTags,
   listTags,
   updateTag,
   type CreateTagRequest,
@@ -144,4 +146,33 @@ export function useTagAutocomplete(q: string, limit = 10, opts: AutocompleteOpti
     // dropdown empties, and the popover flicker-closes-then-reopens.
     placeholderData: (prev) => prev,
   })
+}
+
+// useTagLabel resolves the slugs stored on items and files to the labels
+// the user typed or gave the tag on the Tags page. It falls back to the
+// slug while the catalogue loads, outside a group, and for a slug with no
+// tag row. Uses the optional group hook so a component rendered outside
+// <GroupProvider> (a dialog test harness) just gets the slug back.
+//
+// The key sits under the group's tag namespace, so tag mutations and the
+// commodity / file writes that auto-create tags refresh it.
+export function useTagLabel(kind: TagKind): (slug: string) => string {
+  const ctx = useOptionalCurrentGroup()
+  const groupSlug = ctx?.currentGroup?.slug ?? ""
+  const { data } = useQuery({
+    queryKey: tagKeys.labels(groupSlug, kind),
+    queryFn: ({ signal }) => listAllTags(kind, signal),
+    enabled: groupSlug.length > 0,
+    placeholderData: (prev) => prev,
+  })
+  // A Map, not an object literal: a slug such as "constructor" must not
+  // resolve to an Object.prototype member.
+  const labels = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const tag of data ?? []) {
+      if (tag.slug && tag.label) map.set(tag.slug, tag.label)
+    }
+    return map
+  }, [data])
+  return useCallback((slug: string) => labels.get(slug) ?? slug, [labels])
 }
