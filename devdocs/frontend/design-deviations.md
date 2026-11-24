@@ -271,6 +271,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Files & Attachments
 
+#### 2026-11-24 — File edit page: preview beside the form, list walk with "Save and next"
+
+- **Issue/PR**: #2814 / PR #2821
+- **Mock**: [`design-mocks/src/components/FileDetail.tsx`](../../design-mocks/src/components/FileDetail.tsx) `EditMetadataDialog` edits a file in a small modal over the detail sheet: name, category and a tag palette, with Cancel and Save. It shows no preview, and the mock has no way to move from one file to the next while editing.
+- **Reality**: `/g/<slug>/files/<id>/edit` (`frontend/src/pages/files/FileEditPage.tsx`) is a wide page. On `lg` and up it is a five-column grid: the preview (`FilePreview` with `variant="pane"`, the same image, PDF and no-preview rendering as the sheet, plus Open and Download links) takes three columns, and the form (title, filename, category, description, tags) with the action bar takes two. Below `lg` the two halves are `Tabs` (Preview, Details) whose panels stay mounted, so typed values, PDF page and zoom survive a tab switch; the action bar sticks to the bottom of the screen. When the page is opened from the Files list it carries that list in a `from` URL parameter (`frontend/src/lib/list-context.ts`). The header then shows the position ("3 of 12") with previous and next icon buttons, and the action bar gets "Save and next" as the primary button (Save becomes outline). Back, Save and Cancel return to the same list query, on the page the walk reached, with the file's sheet open. Leaving with unsaved edits opens a Save / Discard / Keep editing dialog (`frontend/src/hooks/useUnsavedChangesGuard.tsx`). The walk itself is `frontend/src/hooks/useListNavigation.ts`, written to be reused by the item page (#2795) and the inbox (#2794).
+- **Why**: The issue asks for exactly this. Correcting a batch of uploads means reading each file while editing it, and a modal over the sheet hides the preview and returns the user to the list after every save.
+- **Approved by**: user (explicit) — pre-approved for #2814 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Permanent unless the upstream mock adds its own edit surface with a preview; the list walk then keeps working on whatever surface replaces this page.
+
 #### 2026-05-31 — File detail panel keeps the real-frontend composition (title-first + metadata `<dl>`), not the mock's banner-first order
 
 - **Issue/PR**: #1962 / PR (this branch)

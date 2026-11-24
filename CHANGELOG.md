@@ -52,6 +52,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
   are in. Only you and the members of your groups can load it, it does not
   count toward a group's storage, and deleting your account deletes it
   ([#1382](https://github.com/denisvmedia/inventario/issues/1382)).
+- A file edit page with the preview beside the details form. Opened from the
+  Files page, it keeps the list you came from: the header shows the file's
+  place in it with previous and next arrows, "Save and next" saves and opens
+  the next file, and Back returns to the same filtered page with the file's
+  panel open. Unsaved changes ask to be saved or discarded before you leave
+  ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
 
 ### Changed
 
@@ -70,6 +76,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
   JSON:API `attributes`, which the search endpoint does not send, and failed to
   render as soon as a search matched an item
   ([#2807](https://github.com/denisvmedia/inventario/issues/2807)).
+- Opening or closing a file's panel on the Files page keeps the search, tag
+  filter, page and layout of the list
+  ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
+- Files uploaded in the same instant keep one fixed order in the Files list,
+  so paging through the list no longer shows a file twice or skips one
+  ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
 - Tags written in Cyrillic, Czech, Chinese or any other non-Latin script are
   kept on save. Before, their letters were stripped from the slug, so a tag
   like "кухня" disappeared and "USB кабель" and "USB хаб" became one tag.

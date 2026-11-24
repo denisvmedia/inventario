@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { Route } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { Route, useLocation } from "react-router-dom"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
@@ -39,6 +39,16 @@ function fileRow(id: string, attrs: Partial<Schema<"models.FileEntity">> = {}) {
   }
 }
 
+function Where() {
+  const location = useLocation()
+  return (
+    <p data-testid="where">
+      {location.pathname}
+      {location.search}
+    </p>
+  )
+}
+
 function renderPage(initialPath = `/g/${SLUG}/files`) {
   setAccessToken("good-token")
   return renderWithProviders({
@@ -61,10 +71,12 @@ function renderPage(initialPath = `/g/${SLUG}/files`) {
             <GroupProvider>
               <ConfirmProvider>
                 <FilesListPage />
+                <Where />
               </ConfirmProvider>
             </GroupProvider>
           }
         />
+        <Route path="/g/:groupSlug/files/:id/edit" element={<Where />} />
       </>
     ),
   })
@@ -361,5 +373,45 @@ describe("<FilesListPage />", () => {
     // The toolbar pendingSearch state was committed to URL params; the
     // input retains the typed value through the rerender.
     await waitFor(() => expect(input.value).toBe("invoice"))
+  })
+
+  it("keeps the list's filters, page and layout behind the detail panel", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [fileRow("f1", { tags: ["invoice"] })]),
+      ...fileHandlers.counts(SLUG, { all: 1 }),
+      ...fileHandlers.detail(SLUG, "f1", { id: "f1", title: "Invoice", path: "invoice" })
+    )
+    renderPage(`/g/${SLUG}/files?tags=invoice&view=list`)
+    await screen.findByTestId("file-row-f1")
+
+    await user.click(within(screen.getByTestId("file-row-f1")).getByRole("button"))
+    await screen.findByTestId("file-detail-sheet")
+    expect(screen.getByTestId("where")).toHaveTextContent(
+      `/g/${SLUG}/files/f1?tags=invoice&view=list`
+    )
+
+    await user.keyboard("{Escape}")
+    await waitFor(() => expect(screen.queryByTestId("file-detail-sheet")).not.toBeInTheDocument())
+    expect(screen.getByTestId("files-tag-pill-invoice")).toHaveAttribute("aria-pressed", "true")
+  })
+
+  it("opens the review page with this list as its context", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [fileRow("f1", { category: "documents" })]),
+      ...fileHandlers.counts(SLUG, { all: 1 }),
+      ...fileHandlers.detail(SLUG, "f1", { id: "f1", title: "Manual", path: "manual" })
+    )
+    renderPage(`/g/${SLUG}/files/f1?category=documents&page=1&view=grid`)
+
+    await user.click(await screen.findByTestId("file-detail-edit"))
+    const where = new URL(screen.getByTestId("where").textContent ?? "", "http://app.test")
+    expect(where.pathname).toBe(`/g/${SLUG}/files/f1/edit`)
+    expect(where.searchParams.get("from")).toBe(
+      `/g/${SLUG}/files?category=documents&page=1&view=grid`
+    )
   })
 })

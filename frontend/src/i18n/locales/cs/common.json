@@ -159,5 +159,12 @@
     "then": "poté",
     "title": "Klávesové zkratky"
   },
-  "trackedBy": "Sledováno pomocí {{ref}}."
+  "trackedBy": "Sledováno pomocí {{ref}}.",
+  "unsavedChanges": {
+    "description": "Máte neuložené změny. Uložte je, než odejdete, nebo je zahoďte.",
+    "discard": "Zahodit",
+    "keepEditing": "Pokračovat v úpravách",
+    "save": "Uložit",
+    "title": "Uložit změny?"
+  }
 }

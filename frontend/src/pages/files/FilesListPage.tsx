@@ -23,7 +23,14 @@ import {
   type FileCategoryTile,
 } from "@/features/files/constants"
 import { useCategoryDescription, useTagPillLabel } from "@/features/files/labels"
-import type { FileCategory, FileCategoryCounts, ListFilesOptions } from "@/features/files/api"
+import {
+  FILES_PAGE_SIZE,
+  fileReviewHref,
+  filesListOptions,
+  filesListPath,
+  parseFilesListParams,
+} from "@/features/files/listContext"
+import type { FileCategory, FileCategoryCounts } from "@/features/files/api"
 import {
   useBulkDeleteFiles,
   useBulkReclassifyFiles,
@@ -35,9 +42,10 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatBytes } from "@/lib/intl"
+import { listContextFromLocation } from "@/lib/list-context"
 import { cn } from "@/lib/utils"
 
-const PAGE_SIZE = 24
+const PAGE_SIZE = FILES_PAGE_SIZE
 const VIEW_MODE_KEY = "files:viewMode"
 
 // Files list page — the centrepiece of #1411, polished under #1538.
@@ -58,10 +66,10 @@ export function FilesListPage() {
   const tagPillLabelOf = useTagPillLabel()
 
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeTile = parseTileParam(searchParams.get("category"))
-  const search = searchParams.get("q") ?? ""
-  const tags = useMemo(() => splitTags(searchParams.get("tags")), [searchParams])
-  const page = parsePageParam(searchParams.get("page"))
+  // Parsed by the same helper the file review page reads its `?from=` list
+  // with, so both send the same query and share the cached pages.
+  const listParams = useMemo(() => parseFilesListParams(searchParams), [searchParams])
+  const { tile: activeTile, search, tags, page } = listParams
   // View mode: URL `?view=` overrides; otherwise the localStorage-backed
   // pick (shared hook) survives across refreshes; default = list (per the
   // #1538 mock).
@@ -77,20 +85,12 @@ export function FilesListPage() {
   const [uploadOpen, setUploadOpen] = useState(false)
   // /files/:id deep-links open the same sheet as clicking a card; the
   // route param is the source of truth so back-button + browser refresh
-  // both work. Closing the sheet navigates back to /files.
+  // both work. Closing the sheet navigates back to /files with the same
+  // query.
   const { id: routeFileId } = useParams<{ id?: string }>()
   const detailId = routeFileId ?? null
 
-  // activeTile is already validated against the closed tile-key set
-  // (parseTileParam below), so the cast to FileCategory is sound for
-  // every non-"all" branch.
-  const listOpts: ListFilesOptions = {
-    page,
-    perPage: PAGE_SIZE,
-    category: activeTile === "all" ? undefined : (activeTile as FileCategory),
-    search: search || undefined,
-    tags: tags.length ? tags : undefined,
-  }
+  const listOpts = filesListOptions(listParams)
   const filesQuery = useFiles(listOpts, { enabled: !!groupSlug })
   const countsQuery = useFileCategoryCounts(
     { search: search || undefined, tags: tags.length ? tags : undefined },
@@ -133,6 +133,13 @@ export function FilesListPage() {
   const counts = countsQuery.data
   const cumulativeBytes = counts ? bytesForKey(activeTile, counts) : undefined
   const cumulativeCount = counts ? countForKey(activeTile, counts) : total
+
+  // Opening, switching and closing the detail panel keep the list's query, so
+  // the filters, page and layout behind the panel stay as the user set them.
+  function inList(path: string): string {
+    const query = searchParams.toString()
+    return query ? `${path}?${query}` : path
+  }
 
   function patchParams(next: Record<string, string | null>) {
     setSearchParams((prev) => {
@@ -462,7 +469,7 @@ export function FilesListPage() {
         <FileCollection
           items={items}
           viewMode={viewMode}
-          onOpen={(id) => navigate(filesUrl(groupSlug, id))}
+          onOpen={(id) => navigate(inList(filesUrl(groupSlug, id)))}
           selectedIds={selected}
           onToggleSelect={toggleOne}
           allSelectedOnPage={allSelectedOnPage}
@@ -529,12 +536,25 @@ export function FilesListPage() {
         open={!!detailId}
         onOpenChange={(open) => {
           if (!open) {
-            navigate(filesUrl(groupSlug))
+            navigate(inList(filesUrl(groupSlug)))
           }
         }}
-        onEdit={(id) => navigate(filesUrl(groupSlug, id, "edit"))}
+        // The review page walks this list and returns to it, so it gets
+        // the list's own URL (without the open file) as its context.
+        onEdit={(id) =>
+          navigate(
+            fileReviewHref(
+              groupSlug,
+              id,
+              listContextFromLocation({
+                pathname: filesListPath(groupSlug),
+                search: searchParams.toString(),
+              })
+            )
+          )
+        }
         imageSiblings={imageSiblings}
-        onSelectSibling={(id) => navigate(filesUrl(groupSlug, id))}
+        onSelectSibling={(id) => navigate(inList(filesUrl(groupSlug, id)))}
       />
 
       <UploadFilesDialog open={uploadOpen} onOpenChange={setUploadOpen} />
@@ -542,39 +562,9 @@ export function FilesListPage() {
   )
 }
 
-function splitTags(raw: string | null): string[] {
-  if (!raw) return []
-  return raw
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean)
-}
-
-// URL params are untrusted: a typo or a hand-crafted link with a junk
-// `category=warranty` would otherwise reach the BE as an invalid filter
-// (400) and leave every tile unselected. Fall back to `"all"` for any
-// value that isn't part of the closed enum.
-function parseTileParam(raw: string | null): FileCategoryTile {
-  if (!raw) return "all"
-  const allowed: FileCategoryTile[] = ["all", "images", "documents", "other"]
-  return (allowed as string[]).includes(raw) ? (raw as FileCategoryTile) : "all"
-}
-
-// Same defensiveness for `?page=`. `Number("abc")` is NaN, which would
-// poison the list query key and the pagination UI; `parseInt` + a
-// finite-and-positive guard collapses any garbage to page 1.
-function parsePageParam(raw: string | null): number {
-  if (!raw) return 1
-  const parsed = Number.parseInt(raw, 10)
-  if (!Number.isFinite(parsed) || parsed < 1) return 1
-  return parsed
-}
-
-function filesUrl(slug: string, id?: string, suffix?: "edit"): string {
+function filesUrl(slug: string, id?: string): string {
   const base = slug ? `/g/${encodeURIComponent(slug)}/files` : "/files"
-  if (!id) return base
-  const url = `${base}/${encodeURIComponent(id)}`
-  return suffix ? `${url}/${suffix}` : url
+  return id ? `${base}/${encodeURIComponent(id)}` : base
 }
 
 function countForKey(key: FileCategoryTile, counts: FileCategoryCounts): number {

@@ -152,6 +152,19 @@ func fileMatchesEnumFilters(file *models.FileEntity, fileType *models.FileType, 
 	return true
 }
 
+// sortFilesNewestFirst puts files in the order the postgres registry returns
+// them: newest first, then by id. The base Registry.List returns insertion
+// order, and the Files page and its record-to-record walk expect the same
+// order from both backends.
+func sortFilesNewestFirst(files []*models.FileEntity) {
+	slices.SortStableFunc(files, func(a, b *models.FileEntity) int {
+		if c := b.CreatedAt.Compare(a.CreatedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(b.ID, a.ID)
+	})
+}
+
 //nolint:gocognit // TODO: refactor
 func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) ([]*models.FileEntity, error) {
 	allFiles, err := r.List(ctx)
@@ -207,6 +220,7 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 		filtered = append(filtered, file)
 	}
 
+	sortFilesNewestFirst(filtered)
 	return filtered, nil
 }
 
@@ -227,16 +241,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 		allFiles = filtered
 	}
 
-	// Match the postgres ListPaginated sort: newest first by
-	// created_at. The base in-memory Registry.List returns insertion
-	// order, which used to be fine when the seed produced ≤1 file
-	// in dev mode — but post-#1658 the seed grows ~50 files, and
-	// the e2e Files-page assertions depend on freshly-uploaded
-	// rows landing at the top of page 1 like they do against
-	// postgres.
-	sort.SliceStable(allFiles, func(i, j int) bool {
-		return allFiles[i].CreatedAt.After(allFiles[j].CreatedAt)
-	})
+	sortFilesNewestFirst(allFiles)
 
 	total := len(allFiles)
 
