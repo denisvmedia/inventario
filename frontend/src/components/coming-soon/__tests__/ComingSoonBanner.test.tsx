@@ -6,11 +6,11 @@ import { ComingSoonBanner } from "@/components/coming-soon"
 
 describe("<ComingSoonBanner />", () => {
   it("renders the surface title, description, and tracker link", () => {
-    render(<ComingSoonBanner surface="profilePhoto" />)
-    expect(screen.getByText(/profile photo/i)).toBeInTheDocument()
-    expect(screen.getByText(/personalize/i)).toBeInTheDocument()
+    render(<ComingSoonBanner surface="multiStepDraft" />)
+    expect(screen.getByText(/multi-step item draft/i)).toBeInTheDocument()
+    expect(screen.getByText(/resume later/i)).toBeInTheDocument()
     const link = screen.getByRole("link")
-    expect(link).toHaveAttribute("href", "https://github.com/denisvmedia/inventario/issues/1382")
+    expect(link).toHaveAttribute("href", "https://github.com/denisvmedia/inventario/issues/1383")
     expect(link).toHaveAttribute("target", "_blank")
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"))
   })
@@ -21,7 +21,7 @@ describe("<ComingSoonBanner />", () => {
   })
 
   it("accepts a testId override", () => {
-    render(<ComingSoonBanner surface="profilePhoto" testId="custom-stub" />)
+    render(<ComingSoonBanner surface="multiStepDraft" testId="custom-stub" />)
     expect(screen.getByTestId("custom-stub")).toBeInTheDocument()
   })
 

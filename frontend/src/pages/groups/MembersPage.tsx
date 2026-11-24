@@ -15,6 +15,7 @@ import {
   Users,
 } from "lucide-react"
 
+import { UserAvatar } from "@/components/UserAvatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -104,13 +105,6 @@ const REMOVE_ERROR_CODE: Record<string, string> = {
 function inviteUrl(token: string | undefined): string {
   if (!token) return ""
   return `${window.location.origin}/invite/${encodeURIComponent(token)}`
-}
-
-function initialsFor(name: string | undefined, fallback: string): string {
-  const trimmed = (name ?? "").trim()
-  if (!trimmed) return fallback.slice(0, 2).toUpperCase()
-  const parts = trimmed.split(/\s+/).slice(0, 2)
-  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || fallback.slice(0, 2).toUpperCase()
 }
 
 export function MembersPage() {
@@ -483,15 +477,17 @@ function MemberRowView({
 
   return (
     <div className="flex items-center gap-3 px-4 py-3" data-testid={`member-row-${shortId}`}>
-      <div
-        className={cn(
-          "flex size-8 items-center justify-center rounded-full text-xs font-semibold shrink-0",
+      <UserAvatar
+        name={member.user?.name}
+        email={member.user?.email}
+        src={member.user?.avatar_url}
+        className="size-8 rounded-full"
+        fallbackClassName={cn(
+          "text-xs",
           isMe ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
         )}
-        aria-hidden="true"
-      >
-        {initialsFor(displayName, memberUserId)}
-      </div>
+        testId={`member-avatar-${shortId}`}
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <p className="text-sm font-medium truncate" data-testid={`member-name-${shortId}`}>

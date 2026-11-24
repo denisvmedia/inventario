@@ -266,6 +266,9 @@ type MembershipUserView struct {
 	ID    string `json:"id" example:"u_123"`
 	Name  string `json:"name" example:"Jordan Doe"`
 	Email string `json:"email" example:"jordan@example.com"`
+	// AvatarURL is a signed URL of the member's profile photo, valid for the
+	// session that requested the list. Absent when the member has none.
+	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
 type MembershipWithUserAttr struct {
@@ -286,7 +289,10 @@ type MembershipsWithUsersResponse struct {
 	Data []MembershipWithUserData `json:"data"`
 }
 
-func NewMembershipsWithUsersResponse(rows []*models.MembershipWithUser) *MembershipsWithUsersResponse {
+// NewMembershipsWithUsersResponse builds the members list. avatarURL returns the
+// signed photo URL for a member, or "" for none; a nil avatarURL leaves every
+// member without one.
+func NewMembershipsWithUsersResponse(rows []*models.MembershipWithUser, avatarURL func(*models.User) string) *MembershipsWithUsersResponse {
 	data := make([]MembershipWithUserData, 0, len(rows))
 	for _, row := range rows {
 		if row == nil || row.Membership == nil {
@@ -303,6 +309,9 @@ func NewMembershipsWithUsersResponse(rows []*models.MembershipWithUser) *Members
 				ID:    row.User.ID,
 				Name:  row.User.Name,
 				Email: row.User.Email,
+			}
+			if avatarURL != nil {
+				attr.User.AvatarURL = avatarURL(row.User)
 			}
 		}
 		data = append(data, MembershipWithUserData{

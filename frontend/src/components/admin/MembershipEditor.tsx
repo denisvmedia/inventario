@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Ellipsis, Trash2, Users, UserPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import { UserAvatar } from "@/components/UserAvatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -290,9 +291,12 @@ function MemberRow({
     <TableRow className="hover:bg-transparent" data-testid="admin-group-member-row">
       <TableCell className="pl-4 py-3.5">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground shrink-0">
-            {initialsOf(member.user?.name, member.user?.email)}
-          </div>
+          <UserAvatar
+            name={member.user?.name}
+            email={member.user?.email}
+            className="size-8 rounded-full"
+            fallbackClassName="bg-muted text-xs text-muted-foreground"
+          />
           <div className="min-w-0">
             <p className="text-sm font-medium truncate">{name}</p>
             {email ? <p className="text-xs text-muted-foreground truncate">{email}</p> : null}
@@ -535,19 +539,4 @@ function AddMemberDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-// Builds avatar initials from a member's display name (first letters of
-// the first two words, uppercased), falling back to the first letter of
-// the email and finally "?". Mirrors AdminUserDetailPage's `initialsOf`.
-function initialsOf(name: string | undefined, email: string | undefined): string {
-  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean)
-  if (parts.length > 0) {
-    return parts
-      .slice(0, 2)
-      .map((p) => p[0]!.toUpperCase())
-      .join("")
-  }
-  const e = (email ?? "").trim()
-  return e ? e[0]!.toUpperCase() : "?"
 }

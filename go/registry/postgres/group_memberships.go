@@ -736,13 +736,14 @@ func (r *GroupMembershipRegistry) loadMembersWithUsersTx(ctx context.Context, tx
 		MRole         string    `db:"m_role"`
 		MJoinedAt     time.Time `db:"m_joined_at"`
 		// user fields
-		UID        string    `db:"u_id"`
-		UUUID      string    `db:"u_uuid"`
-		UTenantID  string    `db:"u_tenant_id"`
-		UEmail     string    `db:"u_email"`
-		UName      string    `db:"u_name"`
-		UIsActive  bool      `db:"u_is_active"`
-		UCreatedAt time.Time `db:"u_created_at"`
+		UID         string    `db:"u_id"`
+		UUUID       string    `db:"u_uuid"`
+		UTenantID   string    `db:"u_tenant_id"`
+		UEmail      string    `db:"u_email"`
+		UName       string    `db:"u_name"`
+		UIsActive   bool      `db:"u_is_active"`
+		UCreatedAt  time.Time `db:"u_created_at"`
+		UAvatarPath *string   `db:"u_avatar_path"`
 	}
 
 	query := fmt.Sprintf(`
@@ -752,7 +753,7 @@ func (r *GroupMembershipRegistry) loadMembersWithUsersTx(ctx context.Context, tx
 			m.role AS m_role, m.joined_at AS m_joined_at,
 			u.id AS u_id, u.uuid AS u_uuid, u.tenant_id AS u_tenant_id,
 			u.email AS u_email, u.name AS u_name, u.is_active AS u_is_active,
-			u.created_at AS u_created_at
+			u.created_at AS u_created_at, u.avatar_path AS u_avatar_path
 		FROM %s m
 		JOIN %s u ON u.id = m.member_user_id AND u.tenant_id = m.tenant_id
 		WHERE m.group_id = $1
@@ -787,10 +788,11 @@ func (r *GroupMembershipRegistry) loadMembersWithUsersTx(ctx context.Context, tx
 				EntityID: models.EntityID{ID: r.UID},
 				TenantID: r.UTenantID,
 			},
-			Email:     r.UEmail,
-			Name:      r.UName,
-			IsActive:  r.UIsActive,
-			CreatedAt: r.UCreatedAt,
+			Email:      r.UEmail,
+			Name:       r.UName,
+			IsActive:   r.UIsActive,
+			CreatedAt:  r.UCreatedAt,
+			AvatarPath: r.UAvatarPath,
 		}
 		u.UUID = r.UUUID
 		out = append(out, &models.MembershipWithUser{

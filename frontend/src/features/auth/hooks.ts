@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { groupKeys } from "@/features/group/keys"
 import { getAccessToken } from "@/lib/auth-storage"
 
 import {
@@ -14,14 +15,17 @@ import {
   logout,
   regenerateMFABackupCodes,
   register,
+  removeAvatar,
   requestMagicLink,
   resendVerification,
   resetPassword,
   startMFASetup,
   updateProfile,
+  uploadAvatar,
   verifyEmail,
   verifyMagicLink,
   verifyMFASetup,
+  type AvatarUploadResponse,
   type ChangePasswordRequest,
   type CompleteLoginMFARequest,
   type CurrentUser,
@@ -217,6 +221,35 @@ export function useUpdateProfile() {
     onSuccess: (user) => {
       queryClient.setQueryData(authKeys.currentUser(), user)
       queryClient.invalidateQueries({ queryKey: authKeys.all })
+    },
+  })
+}
+
+// Profile photo mutations (#1382). Both write the new avatar_url straight into
+// the cached user, so the sidebar and the profile pages switch at once, and
+// refetch the member lists, whose rows carry their own signed URLs.
+export function useUploadAvatar() {
+  const queryClient = useQueryClient()
+  return useMutation<AvatarUploadResponse, Error, File>({
+    mutationFn: (file) => uploadAvatar(file),
+    onSuccess: (result) => {
+      queryClient.setQueryData<CurrentUser>(authKeys.currentUser(), (user) =>
+        user ? { ...user, avatar_path: result.avatar_path, avatar_url: result.avatar_url } : user
+      )
+      queryClient.invalidateQueries({ queryKey: [...groupKeys.all, "members"] })
+    },
+  })
+}
+
+export function useRemoveAvatar() {
+  const queryClient = useQueryClient()
+  return useMutation<void, Error, void>({
+    mutationFn: () => removeAvatar(),
+    onSuccess: () => {
+      queryClient.setQueryData<CurrentUser>(authKeys.currentUser(), (user) =>
+        user ? { ...user, avatar_path: undefined, avatar_url: undefined } : user
+      )
+      queryClient.invalidateQueries({ queryKey: [...groupKeys.all, "members"] })
     },
   })
 }

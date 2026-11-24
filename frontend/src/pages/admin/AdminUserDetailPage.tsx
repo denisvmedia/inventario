@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { UserAvatar } from "@/components/UserAvatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -59,17 +60,6 @@ const ACTION_ERROR_KEY: Record<string, string> = {
   "admin.impersonate.target_blocked": "targetBlocked",
   "admin.impersonate.nested": "nested",
   "admin.impersonate.rate_limited": "rateLimited",
-}
-
-// Builds an avatar initials string from a display name — first letters of
-// the first two words, uppercased. Falls back to "?" when the name is empty.
-function initialsOf(name: string | undefined): string {
-  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return "?"
-  return parts
-    .slice(0, 2)
-    .map((p) => p[0]!.toUpperCase())
-    .join("")
 }
 
 // AdminUserDetailPage is /admin/users/:userId — a per-user admin surface
@@ -281,9 +271,12 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
         data-testid="admin-user-identity"
       >
         <div className="flex items-start gap-4">
-          <div className="flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground text-lg font-semibold shrink-0">
-            {initialsOf(user.name)}
-          </div>
+          <UserAvatar
+            name={user.name}
+            email={user.email}
+            className="size-14 rounded-full"
+            fallbackClassName="bg-primary text-lg text-primary-foreground"
+          />
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">

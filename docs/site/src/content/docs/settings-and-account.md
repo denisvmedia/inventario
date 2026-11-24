@@ -33,6 +33,27 @@ can:
    can switch groups any time from the group selector.
 3. Click **Save changes**.
 
+### Profile photo
+
+The **Photo** section at the top of the **Edit profile** page sets the picture
+shown next to your name. Click **Upload photo** (or the camera that appears when
+you point at the picture) and choose a file. You can also click the picture on
+your Profile page to pick one.
+
+- The file must be a still **JPG, PNG or WebP** picture of at most **2 MB**.
+  Animated pictures are refused.
+- The photo is cropped to a square around its center and scaled down to at most
+  512 × 512 pixels. A photo taken sideways on a phone is turned upright first.
+- Everything stored in the file besides the picture itself, such as the camera
+  model and the location where the photo was taken, is removed.
+- The photo is visible to you and to the members of the groups you belong to.
+  Nobody else can see it.
+- A profile photo does not count toward any group's storage use.
+
+To go back to your initials, click **Remove photo** under the picture and
+confirm. Uploading a new photo replaces the old one. Deleting your account also
+deletes your photo.
+
 A couple of things to know:
 
 - Your **email address** is shown but can't be edited here. To change the email

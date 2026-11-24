@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { AppLogo } from "@/components/AppLogo"
 import { GroupSelector } from "@/components/GroupSelector"
+import { UserAvatar } from "@/components/UserAvatar"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { withGroupQuery } from "@/lib/group-aware-url"
@@ -287,15 +288,9 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
     : null
   const addItemLabel = t("commodities:list.addItem")
 
-  // The bottom-of-sidebar user button. Initials fall back to the email's
-  // first two characters when the user's display name isn't set yet.
+  // The bottom-of-sidebar user button. The label falls back to the email's
+  // local part when the user's display name isn't set yet.
   const displayName = user?.name?.trim() || user?.email?.split("@")[0] || ""
-  const initials = displayName
-    .split(/\s+/)
-    .map((s) => s.charAt(0))
-    .join("")
-    .slice(0, 2)
-    .toUpperCase()
 
   return (
     <Sidebar collapsible="icon">
@@ -458,9 +453,14 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
                   tooltip={displayName || t("common:shell.account")}
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
-                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground text-xs font-semibold">
-                    {initials || "?"}
-                  </div>
+                  <UserAvatar
+                    name={user?.name}
+                    email={user?.email}
+                    src={user?.avatar_url}
+                    className="size-8 rounded-full"
+                    fallbackClassName="bg-sidebar-primary text-sidebar-primary-foreground text-xs"
+                    testId="user-menu-avatar"
+                  />
                   <div className="flex flex-col gap-0.5 leading-none min-w-0">
                     <span className="text-sm font-semibold truncate">
                       {displayName || t("common:shell.account")}

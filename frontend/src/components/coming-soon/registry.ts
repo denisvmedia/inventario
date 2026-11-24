@@ -20,7 +20,6 @@ import {
   ScrollText,
   ShieldCheck,
   Sparkles,
-  User,
   Wrench,
 } from "lucide-react"
 
@@ -51,7 +50,6 @@ export const SURFACES = {
   notificationPreferences: { icon: Bell, tracker: 1373, kind: "inline" },
   maintenanceReminders: { icon: Wrench, tracker: 1368, kind: "inline" },
   connectedAccounts: { icon: Link2, tracker: 1395, kind: "inline" },
-  profilePhoto: { icon: User, tracker: 1382, kind: "inline" },
   multiStepDraft: { icon: FileEdit, tracker: 1383, kind: "inline" },
   authStatsTeaser: { icon: BarChart3, tracker: 1390, kind: "inline" },
   // Warranties ship as inline panels on items / commodities detail per the

@@ -237,7 +237,7 @@
       "save": "Uložit změny",
       "savedBanner": "Profil aktualizován.",
       "saving": "Ukládání…",
-      "subtitle": "Aktualizujte své zobrazované jméno a výchozí skupinu.",
+      "subtitle": "Aktualizujte svou fotku, zobrazované jméno a výchozí skupinu.",
       "successToast": "Profil uložen.",
       "title": "Upravit profil"
     },
@@ -264,8 +264,8 @@
     "heading": "Můj profil",
     "memberSince": "Členem od {{date}}",
     "noEmail": "Žádný e-mail v záznamech",
-    "noGroupsCta": "Vytvořte svou první skupinu",
     "noGroupSet": "Není nastavena výchozí skupina",
+    "noGroupsCta": "Vytvořte svou první skupinu",
     "noGroupsHelp": "Jakmile nějakou vytvoříte nebo se k ní připojíte, ocitnete se zde po přihlášení automaticky.",
     "noGroupsTitle": "Zatím nejste v žádné skupině",
     "password": {
@@ -282,6 +282,30 @@
       "successBody": "Budete odhlášeni, aby se nové heslo projevilo na všech zařízeních.",
       "successTitle": "Heslo změněno",
       "title": "Změnit heslo"
+    },
+    "photo": {
+      "change": "Změnit fotku",
+      "description": "Váš profilový obrázek, který vidí členové vašich skupin.",
+      "errors": {
+        "remove": "Fotku se nepodařilo odebrat. Zkuste to prosím znovu.",
+        "rejected": "Tento obrázek nelze použít. Vyberte statický obrázek JPG, PNG nebo WebP.",
+        "size": "Soubor je větší než 2 MB. Vyberte menší obrázek.",
+        "type": "Vyberte obrázek JPG, PNG nebo WebP.",
+        "upload": "Fotku se nepodařilo nahrát. Zkuste to prosím znovu."
+      },
+      "hint": "JPG, PNG nebo WebP, max. 2 MB",
+      "remove": "Odebrat fotku",
+      "removeConfirm": {
+        "cancel": "Zrušit",
+        "confirm": "Odebrat",
+        "description": "Místo fotky se zobrazí vaše iniciály.",
+        "title": "Odebrat profilovou fotku?"
+      },
+      "removed": "Fotka odebrána.",
+      "title": "Fotka",
+      "upload": "Nahrát fotku",
+      "uploaded": "Fotka aktualizována.",
+      "uploading": "Nahrávání…"
     },
     "planFree": "Bezplatný plán",
     "stats": {

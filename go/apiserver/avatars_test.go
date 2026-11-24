@@ -10,6 +10,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -155,6 +157,15 @@ func TestAvatarEndpoints_BadRequests(t *testing.T) {
 		rr := call(http.MethodPost, "/me/avatar", ct, body)
 		c.Assert(rr.Code, qt.Equals, http.StatusBadRequest)
 		c.Assert(rr.Body.String(), qt.Contains, "not a supported image")
+	})
+
+	c.Run("an animated image", func(c *qt.C) {
+		animated, err := os.ReadFile(filepath.Join("..", "services", "testdata", "animated.webp"))
+		c.Assert(err, qt.IsNil)
+		ct, body := multipartAvatar(c, "avatar", animated)
+		rr := call(http.MethodPost, "/me/avatar", ct, body)
+		c.Assert(rr.Code, qt.Equals, http.StatusBadRequest)
+		c.Assert(rr.Body.String(), qt.Contains, "Animated")
 	})
 
 	// Two different paths produce the same answer, and both have to say the
