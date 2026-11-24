@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
-import { Download, ExternalLink, File as FileIcon, Maximize2, Pencil, Trash2 } from "lucide-react"
+import { Download, ExternalLink, Pencil, Trash2 } from "lucide-react"
 
+import { FilePreview } from "@/components/files/FilePreview"
 import { ImageViewer, type GalleryImage } from "@/components/files/ImageViewer"
 import { PdfFullViewer } from "@/components/files/PdfFullViewer"
-import { PdfViewer } from "@/components/files/PdfViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -26,7 +26,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
-import { FadeInImage } from "@/components/ui/fade-in-image"
 import { useDeleteFile, useFile } from "@/features/files/hooks"
 import { useTagLabel } from "@/features/tags/hooks"
 import { isImageMime, isPdfMime } from "@/features/files/constants"
@@ -368,63 +367,5 @@ function renderViewer({
       url={signedUrl}
       alt={title}
     />
-  )
-}
-
-interface PreviewProps {
-  mime?: string
-  url?: string
-  alt: string
-  onExpandImage?: () => void
-  onExpandPdf?: () => void
-}
-
-function FilePreview({ mime, url, alt, onExpandImage, onExpandPdf }: PreviewProps) {
-  const { t } = useTranslation()
-
-  if (isImageMime(mime) && url) {
-    return (
-      <button
-        type="button"
-        onClick={onExpandImage}
-        // Full-bleed banner: breaks out of the body's px-5 inset (#1962)
-        // so the image spans the panel edge-to-edge while the metadata
-        // below stays inset. `min-h` reserves a box for the fade-in
-        // shimmer (#1961) and centers a short `object-contain` image so
-        // the panel doesn't grow from a zero-height placeholder.
-        className="group relative -mx-5 flex min-h-[12rem] w-[calc(100%+2.5rem)] items-center justify-center overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        data-testid="file-preview-image-trigger"
-      >
-        <FadeInImage
-          src={url}
-          alt={alt}
-          className="max-h-[60vh] w-full object-contain"
-          data-testid="file-preview-image"
-        />
-        <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-end gap-1 bg-gradient-to-t from-black/60 to-transparent p-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-          <Maximize2 className="size-3.5" aria-hidden="true" />
-        </span>
-      </button>
-    )
-  }
-
-  if (isPdfMime(mime) && url) {
-    return <PdfViewer url={url} onRequestFullscreen={onExpandPdf} />
-  }
-
-  // Non-previewable MIME (or a previewable one whose signed URL is
-  // missing): the "cannot preview, download to view" card, folded in
-  // from the retired FilePreviewOtherDialog (#1962). The footer's Open /
-  // Download row provides the actual fetch affordance.
-  return (
-    <div
-      className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-muted/40 px-6 py-10 text-center"
-      data-testid="file-detail-no-preview"
-    >
-      <div className="flex size-14 items-center justify-center rounded-xl border border-border bg-background">
-        <FileIcon className="size-7 text-muted-foreground" aria-hidden="true" />
-      </div>
-      <p className="max-w-xs text-xs text-muted-foreground">{t("files:detail.noPreview")}</p>
-    </div>
   )
 }

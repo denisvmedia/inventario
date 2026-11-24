@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import {
   File as FileIcon,
   FileText,
@@ -18,8 +18,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isImageMime } from "@/features/files/constants"
 import { useFileCategoryCounts, useFiles } from "@/features/files/hooks"
+import { fileReviewHref } from "@/features/files/listContext"
 import { useFilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { listContextFromLocation } from "@/lib/list-context"
 import { cn } from "@/lib/utils"
 import { Pagination, pageWithin } from "@/components/common/Pagination"
 
@@ -132,6 +134,7 @@ export function CommodityFilesTab({
 }: CommodityFilesTabProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
 
@@ -351,9 +354,8 @@ export function CommodityFilesTab({
         onOpenChange={(next) => {
           if (!next) setSelectedId(null)
         }}
-        onEdit={(id) =>
-          navigate(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(id)}/edit`)
-        }
+        // The review page returns here when the user is done.
+        onEdit={(id) => navigate(fileReviewHref(slug, id, listContextFromLocation(location)))}
         imageSiblings={imageSiblings}
         onSelectSibling={(id) => setSelectedId(id)}
       />

@@ -129,6 +129,7 @@ export function TagsInput({
   // id and aria-controls points at whichever the browser finds first.
   const instanceId = useId()
   const listboxId = `${instanceId}-listbox`
+  const inputId = `${instanceId}-input`
   const optionId = (i: number) => `${listboxId}-option-${i}`
   // The list is re-filtered on every keystroke, so an index held across a
   // filter change would point at a different tag — or past the end.
@@ -184,6 +185,7 @@ export function TagsInput({
         </Badge>
       ))}
       <input
+        id={inputId}
         value={draft}
         // Hide CTA placeholder once any chip exists — the placeholder
         // is the "first tag" prompt; it should reappear automatically
@@ -282,7 +284,7 @@ export function TagsInput({
 
   return (
     <div className="flex flex-col gap-1.5" data-testid={testId}>
-      {label ? <Label>{label}</Label> : null}
+      {label ? <Label htmlFor={inputId}>{label}</Label> : null}
       {autocomplete ? (
         <Popover
           open={dropdownOpen}

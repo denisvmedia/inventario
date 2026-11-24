@@ -350,15 +350,23 @@ func fileWhere(query string, fileType *models.FileType, fileCategory *models.Fil
 	return andWhere(cond, exprs...)
 }
 
+// orderFilesNewestFirst is the one order of every file list: newest first,
+// then by id. Rows created in the same instant (a bulk upload, a restore)
+// share created_at; without the id tiebreaker postgres may return them in a
+// different order on each query, and a file can repeat on two pages or be
+// skipped when the client walks the list page by page.
+func orderFilesNewestFirst(sb *sqlb.SelectBuilder) *sqlb.SelectBuilder {
+	return sb.OrderByDesc("created_at").OrderByDesc("id")
+}
+
 func (r *FileRegistry) Search(ctx context.Context, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) ([]*models.FileEntity, error) {
 	var files []*models.FileEntity
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		sb := newSelect().
+		sb := orderFilesNewestFirst(newSelect().
 			Select("*").
-			From(string(r.tableNames.Files())).
-			OrderByDesc("created_at")
+			From(string(r.tableNames.Files())))
 		addWhere(sb, fileWhere(query, fileType, fileCategory, tags, linkedEntityType, linkedEntityID))
 		sqlQuery, args := sb.Build()
 
@@ -401,10 +409,9 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 			return errxtrace.Wrap("failed to count files", err)
 		}
 
-		dataSB := newSelect().
+		dataSB := orderFilesNewestFirst(newSelect().
 			Select("*").
-			From(string(r.tableNames.Files())).
-			OrderByDesc("created_at")
+			From(string(r.tableNames.Files())))
 		addWhere(dataSB, where)
 		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 

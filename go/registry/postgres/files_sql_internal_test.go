@@ -118,11 +118,11 @@ func TestFileListPaginatedSQLSharesThePredicate(t *testing.T) {
 		"SELECT COUNT(*) FROM files WHERE linked_entity_type = $1 AND linked_entity_id = $2")
 	c.Check(countArgs, qt.DeepEquals, []any{linkedType, linkedID})
 
-	dataSB := newSelect().Select("*").From("files").OrderByDesc("created_at").Limit(24).Offset(48)
+	dataSB := orderFilesNewestFirst(newSelect().Select("*").From("files")).Limit(24).Offset(48)
 	dataSB.AddWhereClause(where)
 	dataSQL, dataArgs := dataSB.Build()
 	c.Check(dataSQL, qt.Equals,
 		"SELECT * FROM files WHERE linked_entity_type = $1 AND linked_entity_id = $2 "+
-			"ORDER BY created_at DESC LIMIT $3 OFFSET $4")
+			"ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4")
 	c.Check(dataArgs, qt.DeepEquals, []any{linkedType, linkedID, 24, 48})
 }
