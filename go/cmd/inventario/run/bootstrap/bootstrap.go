@@ -252,6 +252,12 @@ func resolveFactorySet(dsn string) (*registry.FactorySet, error) {
 // INVENTARIO_RUN_MEMORY_TENANT_NAME so the e2e harness can run against the
 // canonical `test-org` tenant (which the seed code requires before it
 // provisions the orphan user used by the no-group-redirect tests).
+//
+// INVENTARIO_RUN_MEMORY_TENANT_REGISTRATION_MODE sets the tenant's
+// registration mode (open, approval, closed; default closed). The local
+// OAuth e2e run needs open, because a first sign-in through a provider
+// creates the account only when the mode allows it. An invalid value is
+// logged and falls back to closed.
 func seedMemoryDBDefaultTenant(dsn string, factorySet *registry.FactorySet) {
 	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(dsn)), "memory://") {
 		return
@@ -264,12 +270,19 @@ func seedMemoryDBDefaultTenant(dsn string, factorySet *registry.FactorySet) {
 	if name == "" {
 		name = "Default Tenant"
 	}
+	mode := models.RegistrationMode(os.Getenv("INVENTARIO_RUN_MEMORY_TENANT_REGISTRATION_MODE"))
+	if mode == "" {
+		mode = models.RegistrationModeClosed
+	} else if err := mode.Validate(); err != nil {
+		slog.Warn("Ignoring invalid INVENTARIO_RUN_MEMORY_TENANT_REGISTRATION_MODE; using closed", "value", mode, "error", err)
+		mode = models.RegistrationModeClosed
+	}
 	defaultTenant := models.Tenant{
 		Name:             name,
 		Slug:             slug,
 		Status:           models.TenantStatusActive,
 		IsDefault:        true,
-		RegistrationMode: models.RegistrationModeClosed,
+		RegistrationMode: mode,
 	}
 	if _, err := factorySet.TenantRegistry.Create(context.Background(), defaultTenant); err != nil {
 		slog.Warn("Failed to seed default tenant in memory-db mode", "error", err)

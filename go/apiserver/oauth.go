@@ -281,7 +281,12 @@ func (api *OAuthAPI) startAuthorizationCode(w http.ResponseWriter, r *http.Reque
 // @Summary OAuth callback (provider redirect target)
 // @Description Validates state + cookie, exchanges the code, and either signs the caller in (existing identity),
 // @Description auto-links a verified-email match, prompts a password sign-in (unverified email), or creates a new
-// @Description account. Redirects to the FE path the state carried.
+// @Description account when the tenant's registration mode allows it (open: active, approval: inactive until an
+// @Description administrator activates it, closed: refused). Redirects to the FE path the state carried after a
+// @Description sign-in. Every other outcome redirects to /login instead, whatever path the state carried: a refusal
+// @Description with ?oauth_error=<code> (for example registration_closed, account_disabled, email_unverified), an
+// @Description account waiting for approval with ?oauth_error=pending_approval, an unverified email match with
+// @Description ?oauth_link_required=1, and an MFA-enrolled user with ?mfa_required=1.
 // @Tags oauth
 // @Param provider path string true "Provider name (google|github)"
 // @Param code query string true "Authorization code returned by the provider"
@@ -363,7 +368,8 @@ func (api *OAuthAPI) handleCallback(w http.ResponseWriter, r *http.Request) {
 //  2. otherwise lookup users.email = profile.Email:
 //     - profile.EmailVerified=true → auto-link, log in.
 //     - profile.EmailVerified=false → 302 to /login?oauth_link_required=1.
-//  3. otherwise → register a new user.
+//  3. otherwise → register a new user, if the tenant's registration mode
+//     allows it.
 func (api *OAuthAPI) completeSignInFlow(
 	w http.ResponseWriter, r *http.Request,
 	providerName models.OAuthProvider, profile oauthsvc.Profile,
@@ -384,8 +390,8 @@ func (api *OAuthAPI) completeSignInFlow(
 	}
 	if existingIdentity != nil {
 		user, err := api.userRegistry.Get(r.Context(), existingIdentity.UserID)
-		if err != nil || user == nil || !user.IsActive {
-			slog.Warn("OAuth callback: linked user missing or inactive", "user_id", existingIdentity.UserID, "error", err)
+		if err != nil || user == nil {
+			slog.Warn("OAuth callback: linked user missing", "user_id", existingIdentity.UserID, "error", err)
 			http.Error(w, "User account is not available", http.StatusForbidden)
 			return
 		}
@@ -402,6 +408,17 @@ func (api *OAuthAPI) completeSignInFlow(
 				"user_id", user.ID, "user_tenant", user.TenantID, "callback_tenant", tenantID, "provider", providerName)
 			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeTenantMismatch, method, r)
 			http.Redirect(w, r, oauthErrorURL("tenant_mismatch", st.RedirectAfter), http.StatusFound)
+			return
+		}
+		// An inactive user is either deactivated or still waiting for an
+		// administrator's approval (an OAuth sign-up in approval mode links
+		// the identity before the account is approved). Both land on the
+		// login page with a banner, the same way the email-match branch
+		// below treats them.
+		if !user.IsActive {
+			slog.Warn("OAuth callback: linked user is inactive", "user_id", user.ID, "provider", providerName)
+			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeAccountDisabled, method, r)
+			http.Redirect(w, r, oauthErrorURL("account_disabled", st.RedirectAfter), http.StatusFound)
 			return
 		}
 		api.completeOAuthLogin(w, r, user, providerName, tenantID, method, st.RedirectAfter)
@@ -475,8 +492,40 @@ func (api *OAuthAPI) completeSignInFlow(
 		return
 	}
 
-	// Brand-new user. Provision and link in one logical operation.
-	newUser, err := api.provisionUserFromProfile(r.Context(), tenantID, profile)
+	api.completeSignUp(w, r, providerName, profile, st, tenantID, method)
+}
+
+// completeSignUp creates the account for a verified provider profile that
+// matched no user. The tenant's registration mode decides whether OAuth may
+// create one, exactly as it does for the sign-up form (see
+// RegistrationAPI.handleRegister): closed refuses, approval creates an
+// inactive account that an administrator has to activate, open creates an
+// active one. The provider has already verified the email (the caller checks
+// it), so open mode skips the in-app verification round-trip.
+func (api *OAuthAPI) completeSignUp(
+	w http.ResponseWriter, r *http.Request,
+	providerName models.OAuthProvider, profile oauthsvc.Profile,
+	st oauthsvc.State, tenantID string, method models.LoginMethod,
+) {
+	mode := resolveRegistrationMode(r.Context())
+	var activate bool
+	switch mode {
+	case models.RegistrationModeOpen:
+		activate = true
+	case models.RegistrationModeApproval:
+		activate = false
+	case models.RegistrationModeClosed:
+		api.refuseOAuthSignUp(w, r, tenantID, providerName, st, "registrations closed")
+		return
+	default:
+		// Fail closed on unknown modes, as handleRegister does.
+		slog.Error("OAuth callback: unknown registration mode, refusing sign-up", "mode", mode)
+		api.refuseOAuthSignUp(w, r, tenantID, providerName, st, "unknown registration mode")
+		return
+	}
+
+	// Provision and link in one logical operation.
+	newUser, err := api.provisionUserFromProfile(r.Context(), tenantID, profile, activate)
 	if err != nil {
 		slog.Error("OAuth callback: user provisioning failed", "email", profile.Email, "error", err)
 		// REV-6: if the provider sent us a profile that fails our own
@@ -492,10 +541,40 @@ func (api *OAuthAPI) completeSignInFlow(
 	if _, err := api.createIdentity(r.Context(), newUser, providerName, profile); err != nil {
 		slog.Error("OAuth callback: failed to persist OAuth identity for new user",
 			"user_id", newUser.ID, "error", err)
+		// Remove the account the identity was for, so a retry is a clean
+		// sign-up. Left in place, it would be an account with no identity;
+		// in approval mode an inactive one, which the email-match branch
+		// refuses with account_disabled until an administrator steps in.
+		if delErr := api.userRegistry.Delete(r.Context(), newUser.ID); delErr != nil {
+			slog.Error("OAuth callback: failed to remove the new user after the identity write failed",
+				"user_id", newUser.ID, "error", delErr)
+		}
 		http.Error(w, "OAuth account creation failed", http.StatusInternalServerError)
 		return
 	}
+	api.auth.logAuth(r.Context(), "oauth_register", &newUser.ID, &newUser.TenantID, true, r, nil)
+	slog.Info("User registered via OAuth", "user_id", newUser.ID, "provider", providerName, "mode", mode)
+	if !activate {
+		// Approval mode: no session until an administrator activates the
+		// account. The identity is already linked, so the first sign-in
+		// after approval goes through the existing-identity branch.
+		http.Redirect(w, r, oauthErrorURL("pending_approval", st.RedirectAfter), http.StatusFound)
+		return
+	}
 	api.completeOAuthLogin(w, r, newUser, providerName, tenantID, method, st.RedirectAfter)
+}
+
+// refuseOAuthSignUp ends a callback that would have created a new user in a
+// tenant that does not accept sign-ups. It writes an audit row (there is no
+// user to attach a login event to) and sends the browser to the login page
+// with the registration_closed banner.
+func (api *OAuthAPI) refuseOAuthSignUp(
+	w http.ResponseWriter, r *http.Request,
+	tenantID string, providerName models.OAuthProvider, st oauthsvc.State, reason string,
+) {
+	slog.Info("OAuth callback: sign-up refused", "provider", providerName, "reason", reason)
+	api.auth.logAuth(r.Context(), "oauth_register", nil, &tenantID, false, r, &reason)
+	http.Redirect(w, r, oauthErrorURL("registration_closed", st.RedirectAfter), http.StatusFound)
 }
 
 // completeLinkFlow attaches the provider identity to the user who initiated
@@ -691,11 +770,14 @@ var errProvisionUserInvalidProfile = errors.New("oauth: provider profile failed 
 // set one later via /auth/change-password (which has a branch for the
 // password_hash="" case).
 //
+// active comes from the tenant's registration mode: true in open mode,
+// false in approval mode (an administrator activates the account later).
+//
 // REV-6: the user struct runs ValidateWithContext BEFORE the create call so
 // a malformed provider profile (e.g. a Google email that somehow contained
 // invalid characters) gets caught here and surfaced as
 // errProvisionUserInvalidProfile, not as a generic 500 from the registry.
-func (api *OAuthAPI) provisionUserFromProfile(ctx context.Context, tenantID string, profile oauthsvc.Profile) (*models.User, error) {
+func (api *OAuthAPI) provisionUserFromProfile(ctx context.Context, tenantID string, profile oauthsvc.Profile, active bool) (*models.User, error) {
 	displayName := strings.TrimSpace(profile.DisplayName)
 	if displayName == "" {
 		displayName = strings.SplitN(profile.Email, "@", 2)[0]
@@ -705,11 +787,9 @@ func (api *OAuthAPI) provisionUserFromProfile(ctx context.Context, tenantID stri
 			EntityID: models.EntityID{ID: uuid.New().String()},
 			TenantID: tenantID,
 		},
-		Email: strings.ToLower(strings.TrimSpace(profile.Email)),
-		Name:  displayName,
-		// IsActive=true because the provider already verified the email;
-		// we skip the in-app verification round-trip on OAuth sign-up.
-		IsActive: true,
+		Email:    strings.ToLower(strings.TrimSpace(profile.Email)),
+		Name:     displayName,
+		IsActive: active,
 	}
 
 	if err := user.ValidateWithContext(ctx); err != nil {
@@ -993,9 +1073,11 @@ func oauthLinkRequiredURL(_ /*redirectAfter*/ string, email string, provider mod
 }
 
 // oauthErrorURL builds the FE-facing redirect for the non-fatal error
-// branches: SEC-2 ("account_disabled") and REV-6 ("invalid_profile"). The
-// FE's LoginPage reads ?oauth_error=<code> and renders the destructive
-// Alert variant. We deliberately ignore the original redirectAfter target
+// branches: "account_disabled" (SEC-2), "invalid_profile" (REV-6),
+// "email_unverified", "tenant_mismatch", "registration_closed" and
+// "pending_approval". The FE's LoginPage reads ?oauth_error=<code> and
+// renders a banner for it (the informational variant for
+// pending_approval, the destructive one for the rest). We deliberately ignore the original redirectAfter target
 // for error redirects — the user lands on the login form, not the page
 // they were trying to reach. (Arg kept for callsite symmetry / future use.)
 func oauthErrorURL(code string, _ /*redirectAfter*/ string) string {

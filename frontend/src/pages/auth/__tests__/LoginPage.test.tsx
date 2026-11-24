@@ -381,6 +381,36 @@ describe("<LoginPage />", () => {
     expect(screen.queryByTestId("oauth-link-required-banner")).not.toBeInTheDocument()
   })
 
+  // The OAuth callback redirects here with `?oauth_error=<code>` when it
+  // refuses a sign-in (oauthErrorURL in go/apiserver/oauth.go). Each code
+  // the backend sends has its own message.
+  it.each([
+    ["account_disabled", /disabled or still waiting/i],
+    ["email_unverified", /hasn't verified this email/i],
+    ["invalid_profile", /profile Inventario can't use/i],
+    ["tenant_mismatch", /different Inventario site/i],
+    ["registration_closed", /isn't accepting new accounts/i],
+    ["state", /state mismatch/i],
+  ])("renders the OAuth error banner for ?oauth_error=%s", (code, text) => {
+    renderLogin(`/login?oauth_error=${code}`)
+    expect(screen.getByTestId("oauth-error-banner")).toHaveTextContent(text)
+    expect(screen.queryByTestId("oauth-pending-approval-banner")).not.toBeInTheDocument()
+  })
+
+  it("renders the neutral pending-approval banner for ?oauth_error=pending_approval", () => {
+    renderLogin("/login?oauth_error=pending_approval")
+    const banner = screen.getByTestId("oauth-pending-approval-banner")
+    expect(banner).toHaveTextContent(/administrator approves it/i)
+    expect(banner).toHaveAttribute("role", "status")
+    expect(screen.queryByTestId("oauth-error-banner")).not.toBeInTheDocument()
+  })
+
+  it("renders no OAuth banner for an unknown ?oauth_error code", () => {
+    renderLogin("/login?oauth_error=something_else")
+    expect(screen.queryByTestId("oauth-error-banner")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("oauth-pending-approval-banner")).not.toBeInTheDocument()
+  })
+
   // #magic-link — the passwordless "email me a sign-in link" entry point is
   // gated on the `magic_link_login` feature flag read at mount. The beforeEach
   // above defaults the flag OFF; these cases assert both gate states and the

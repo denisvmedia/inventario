@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom"
-import { ArrowRight, Link2, Mail, Sparkles } from "lucide-react"
+import { ArrowRight, Clock, Link2, Mail, Sparkles } from "lucide-react"
 
 import { AuthLayout } from "@/components/auth/AuthLayout"
 import { MFAChallenge } from "@/components/auth/MFAChallenge"
@@ -88,19 +88,38 @@ export function LoginPage() {
   const oauthLinkRequired = params.get("oauth_link_required") === "1"
   const oauthLinkEmail = params.get("email") ?? ""
   const oauthLinkProvider = params.get("provider") ?? ""
-  // OAuth error banner (#1394). The BE can append `?oauth_error=state` for a
-  // signed-state mismatch (CSRF / replay) or `?oauth_error=provider` for an
-  // exchange / network failure. Both surfaces stay separate from
+  // OAuth error banner (#1394). The BE callback 302s here with
+  // `?oauth_error=<code>` when it refuses a sign-in; see oauthErrorURL in
+  // go/apiserver/oauth.go for the codes. They stay separate from
   // `oauth_link_required` because they need a destructive Alert variant.
+  // An unknown code renders nothing.
   const oauthErrorCode = params.get("oauth_error")
   const oauthErrorMessage = (() => {
-    if (oauthErrorCode === "state") return t("auth:oauth.errorState")
-    if (oauthErrorCode === "provider")
-      return t("auth:oauth.errorProvider", {
-        provider: oauthLinkProvider || t("auth:oauth.providerFallback"),
-      })
-    return null
+    switch (oauthErrorCode) {
+      case "state":
+        return t("auth:oauth.errorState")
+      case "provider":
+        return t("auth:oauth.errorProvider", {
+          provider: oauthLinkProvider || t("auth:oauth.providerFallback"),
+        })
+      case "account_disabled":
+        return t("auth:oauth.errorAccountDisabled")
+      case "email_unverified":
+        return t("auth:oauth.errorEmailUnverified")
+      case "invalid_profile":
+        return t("auth:oauth.errorInvalidProfile")
+      case "tenant_mismatch":
+        return t("auth:oauth.errorTenantMismatch")
+      case "registration_closed":
+        return t("auth:oauth.errorRegistrationClosed")
+      default:
+        return null
+    }
   })()
+  // `pending_approval` travels in the same parameter but is not a failure:
+  // the account exists and waits for an administrator, so it gets the
+  // neutral Alert variant.
+  const oauthPendingApproval = oauthErrorCode === "pending_approval"
 
   // Reset the server error whenever the user edits a field, so a stale
   // notice doesn't sit on top of valid input.
@@ -304,6 +323,15 @@ export function LoginPage() {
         {oauthErrorMessage ? (
           <Alert variant="destructive" data-testid="oauth-error-banner">
             <AlertDescription>{oauthErrorMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {oauthPendingApproval ? (
+          // role="status": a routine confirmation, announced politely; the
+          // Alert default (role="alert") would interrupt a screen reader.
+          <Alert role="status" data-testid="oauth-pending-approval-banner">
+            <Clock aria-hidden="true" />
+            <AlertDescription>{t("auth:oauth.pendingApproval")}</AlertDescription>
           </Alert>
         ) : null}
 

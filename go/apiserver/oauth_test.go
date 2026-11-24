@@ -2,6 +2,7 @@ package apiserver_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,6 +19,7 @@ import (
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 	memreg "go.5x5.cz/inventario/registry/memory"
 	"go.5x5.cz/inventario/services"
 	oauthsvc "go.5x5.cz/inventario/services/oauth"
@@ -129,6 +131,23 @@ type oauthFixtureOpts struct {
 	stubProfile *oauthsvc.Profile
 	// stubExchErr forces Exchange to fail.
 	stubExchErr error
+	// registrationMode is the fixture tenant's registration mode. Zero
+	// leaves it empty, which resolveRegistrationMode treats as closed, so a
+	// test that expects a new account has to ask for open or approval.
+	registrationMode models.RegistrationMode
+	// failIdentityCreate makes every identity write fail, to exercise the
+	// sign-up path's cleanup.
+	failIdentityCreate bool
+}
+
+// failingIdentityStore is the identity registry with a Create that always
+// fails; everything else reaches the memory registry underneath.
+type failingIdentityStore struct {
+	*memreg.OAuthIdentityRegistry
+}
+
+func (failingIdentityStore) Create(context.Context, models.OAuthIdentity) (*models.OAuthIdentity, error) {
+	return nil, errors.New("identity store unavailable")
 }
 
 const oauthTestTenantID = "test-tenant-id"
@@ -175,6 +194,11 @@ func newOAuthFixture(t *testing.T, opts oauthFixtureOpts) *oauthFixture {
 
 	audit := &stubAuditLogger{}
 
+	var identityStore registry.OAuthIdentityRegistry = identityReg
+	if opts.failIdentityCreate {
+		identityStore = failingIdentityStore{identityReg}
+	}
+
 	authHandler := apiserver.Auth(apiserver.AuthParams{
 		UserRegistry:          userReg,
 		RefreshTokenRegistry:  refreshReg,
@@ -184,12 +208,13 @@ func newOAuthFixture(t *testing.T, opts oauthFixtureOpts) *oauthFixture {
 		JWTSecret:             jwtSecret,
 		OAuthRegistry:         reg,
 		OAuthStateSigner:      signer,
-		OAuthIdentityRegistry: identityReg,
+		OAuthIdentityRegistry: identityStore,
 	})
 
 	tenant := &models.Tenant{
-		EntityID: models.EntityID{ID: oauthTestTenantID},
-		Status:   models.TenantStatusActive,
+		EntityID:         models.EntityID{ID: oauthTestTenantID},
+		Status:           models.TenantStatusActive,
+		RegistrationMode: opts.registrationMode,
 	}
 
 	router := chi.NewRouter()
@@ -610,7 +635,7 @@ func TestOAuthCallback_NoMatch_ProvisionsNewUser(t *testing.T) {
 		EmailVerified:  true,
 		DisplayName:    "New User",
 	}
-	f := newOAuthFixture(t, oauthFixtureOpts{stubProfile: &profile})
+	f := newOAuthFixture(t, oauthFixtureOpts{stubProfile: &profile, registrationMode: models.RegistrationModeOpen})
 
 	state := f.signState(models.OAuthProviderGoogle, "")
 	rec := f.callCallback(models.OAuthProviderGoogle, state, "code-new", state)
@@ -628,6 +653,166 @@ func TestOAuthCallback_NoMatch_ProvisionsNewUser(t *testing.T) {
 	rows := f.listIdentities(created)
 	c.Assert(rows, qt.HasLen, 1)
 	c.Assert(rows[0].Provider, qt.Equals, models.OAuthProviderGoogle)
+
+	c.Assert(f.auditLogger.actions(), qt.Contains, "oauth_register")
+}
+
+// =============================================================================
+// Registration mode on OAuth sign-up
+// =============================================================================
+
+func TestOAuthCallback_NoMatch_RegistrationNotAccepted_Refused(t *testing.T) {
+	// A tenant that does not accept sign-ups must not get a new account
+	// through OAuth either. An empty or unknown mode fails closed, as it
+	// does on POST /register.
+	modes := []struct {
+		name string
+		mode models.RegistrationMode
+	}{
+		{name: "closed", mode: models.RegistrationModeClosed},
+		{name: "empty mode", mode: ""},
+		{name: "unknown mode", mode: models.RegistrationMode("bogus")},
+	}
+	for _, tc := range modes {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			profile := oauthsvc.Profile{
+				ProviderUserID: "google-sub-stranger",
+				Email:          "stranger@example.com",
+				EmailVerified:  true,
+				DisplayName:    "Stranger",
+			}
+			f := newOAuthFixture(t, oauthFixtureOpts{stubProfile: &profile, registrationMode: tc.mode})
+
+			state := f.signState(models.OAuthProviderGoogle, "")
+			rec := f.callCallback(models.OAuthProviderGoogle, state, "code-stranger", state)
+
+			c.Assert(rec.Code, qt.Equals, http.StatusFound)
+			loc, err := url.Parse(rec.Header().Get("Location"))
+			c.Assert(err, qt.IsNil)
+			c.Assert(loc.Path, qt.Equals, "/login")
+			c.Assert(loc.Query().Get("oauth_error"), qt.Equals, "registration_closed")
+
+			// No session, no user, no identity.
+			for _, cookie := range rec.Result().Cookies() {
+				c.Assert(cookie.Name, qt.Not(qt.Equals), "refresh_token")
+			}
+			_, err = f.userRegistry.GetByEmail(context.Background(), oauthTestTenantID, "stranger@example.com")
+			c.Assert(err, qt.IsNotNil)
+			all, err := f.identityRegistry.List(context.Background())
+			c.Assert(err, qt.IsNil)
+			c.Assert(all, qt.HasLen, 0)
+
+			// The refusal is audited as a failed oauth_register.
+			events := f.auditLogger.snapshotEvents()
+			c.Assert(events, qt.HasLen, 1)
+			c.Assert(events[0].Action, qt.Equals, "oauth_register")
+			c.Assert(events[0].Success, qt.IsFalse)
+			c.Assert(events[0].UserID, qt.IsNil)
+		})
+	}
+}
+
+func TestOAuthCallback_ClosedMode_ExistingUsersStillSignIn(t *testing.T) {
+	// The mode only gates new accounts. An existing identity signs in and a
+	// verified email match auto-links, both in a closed tenant.
+	c := qt.New(t)
+	f := newOAuthFixture(t, oauthFixtureOpts{registrationMode: models.RegistrationModeClosed})
+
+	user := f.seedUser("alice@example.com", true)
+
+	state := f.signState(models.OAuthProviderGoogle, "")
+	rec := f.callCallback(models.OAuthProviderGoogle, state, "code-closed-1", state)
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	c.Assert(rec.Header().Get("Location"), qt.Equals, "/")
+	c.Assert(f.listIdentities(user), qt.HasLen, 1)
+
+	state = f.signState(models.OAuthProviderGoogle, "")
+	rec = f.callCallback(models.OAuthProviderGoogle, state, "code-closed-2", state)
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	c.Assert(rec.Header().Get("Location"), qt.Equals, "/")
+}
+
+func TestOAuthCallback_NoMatch_ApprovalMode_CreatesInactiveUser(t *testing.T) {
+	// Approval mode: the account is created inactive with the identity
+	// linked, no session is issued, and the browser lands on the login page
+	// with the pending_approval banner.
+	c := qt.New(t)
+	profile := oauthsvc.Profile{
+		ProviderUserID: "google-sub-pending",
+		Email:          "pending@example.com",
+		EmailVerified:  true,
+		DisplayName:    "Pending",
+	}
+	f := newOAuthFixture(t, oauthFixtureOpts{stubProfile: &profile, registrationMode: models.RegistrationModeApproval})
+
+	state := f.signState(models.OAuthProviderGoogle, "")
+	rec := f.callCallback(models.OAuthProviderGoogle, state, "code-pending", state)
+
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(loc.Path, qt.Equals, "/login")
+	c.Assert(loc.Query().Get("oauth_error"), qt.Equals, "pending_approval")
+
+	for _, cookie := range rec.Result().Cookies() {
+		c.Assert(cookie.Name, qt.Not(qt.Equals), "refresh_token")
+	}
+
+	created, err := f.userRegistry.GetByEmail(context.Background(), oauthTestTenantID, "pending@example.com")
+	c.Assert(err, qt.IsNil)
+	c.Assert(created.IsActive, qt.IsFalse)
+	rows := f.listIdentities(created)
+	c.Assert(rows, qt.HasLen, 1)
+	c.Assert(rows[0].ProviderUserID, qt.Equals, "google-sub-pending")
+
+	c.Assert(f.auditLogger.actions(), qt.Contains, "oauth_register")
+
+	// Signing in again before approval goes through the existing-identity
+	// branch and is refused with the account_disabled banner.
+	state = f.signState(models.OAuthProviderGoogle, "")
+	rec = f.callCallback(models.OAuthProviderGoogle, state, "code-pending-again", state)
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	loc, err = url.Parse(rec.Header().Get("Location"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(loc.Query().Get("oauth_error"), qt.Equals, "account_disabled")
+
+	// Once an administrator activates the account, the same identity signs in.
+	created.IsActive = true
+	_, err = f.userRegistry.Update(context.Background(), *created)
+	c.Assert(err, qt.IsNil)
+	state = f.signState(models.OAuthProviderGoogle, "")
+	rec = f.callCallback(models.OAuthProviderGoogle, state, "code-approved", state)
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	c.Assert(rec.Header().Get("Location"), qt.Equals, "/")
+}
+
+func TestOAuthCallback_ExistingIdentity_InactiveUser_Refused(t *testing.T) {
+	// A deactivated user with a linked identity gets the account_disabled
+	// banner and a login event, not a bare 403 page.
+	c := qt.New(t)
+	f := newOAuthFixture(t, oauthFixtureOpts{})
+
+	user := f.seedUser("alice@example.com", false)
+	f.seedIdentity(user, models.OAuthProviderGoogle, "google-sub-1", "alice@example.com")
+
+	state := f.signState(models.OAuthProviderGoogle, "")
+	rec := f.callCallback(models.OAuthProviderGoogle, state, "code-inactive", state)
+
+	c.Assert(rec.Code, qt.Equals, http.StatusFound)
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(loc.Path, qt.Equals, "/login")
+	c.Assert(loc.Query().Get("oauth_error"), qt.Equals, "account_disabled")
+
+	for _, cookie := range rec.Result().Cookies() {
+		c.Assert(cookie.Name, qt.Not(qt.Equals), "refresh_token")
+	}
+
+	events := f.loginEvents()
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].Outcome, qt.Equals, models.LoginOutcomeAccountDisabled)
+	c.Assert(*events[0].UserID, qt.Equals, user.ID)
 }
 
 func TestOAuthCallback_MixedCaseEmail_MatchesExistingUser(t *testing.T) {
@@ -1048,4 +1233,37 @@ func TestOAuthCallback_NoMatch_UnverifiedEmail_Refused(t *testing.T) {
 	c.Assert(events, qt.HasLen, 1)
 	c.Assert(events[0].Outcome, qt.Equals, models.LoginOutcomeEmailNotVerified)
 	c.Assert(events[0].UserID, qt.IsNil)
+}
+
+func TestOAuthCallback_SignUp_IdentityWriteFails_RemovesTheUser(t *testing.T) {
+	// The account and its identity are written one after the other. When
+	// the identity write fails, the account is removed again, so the next
+	// attempt is a clean sign-up rather than an unlinked (and, in approval
+	// mode, inactive) account the email-match branch would refuse.
+	for _, mode := range []models.RegistrationMode{models.RegistrationModeOpen, models.RegistrationModeApproval} {
+		t.Run(string(mode), func(t *testing.T) {
+			c := qt.New(t)
+			profile := oauthsvc.Profile{
+				ProviderUserID: "google-sub-flaky",
+				Email:          "flaky@example.com",
+				EmailVerified:  true,
+				DisplayName:    "Flaky",
+			}
+			f := newOAuthFixture(t, oauthFixtureOpts{
+				stubProfile:        &profile,
+				registrationMode:   mode,
+				failIdentityCreate: true,
+			})
+
+			state := f.signState(models.OAuthProviderGoogle, "")
+			rec := f.callCallback(models.OAuthProviderGoogle, state, "code-flaky", state)
+
+			c.Assert(rec.Code, qt.Equals, http.StatusInternalServerError)
+			_, err := f.userRegistry.GetByEmail(context.Background(), oauthTestTenantID, "flaky@example.com")
+			c.Assert(err, qt.IsNotNil)
+			for _, cookie := range rec.Result().Cookies() {
+				c.Assert(cookie.Name, qt.Not(qt.Equals), "refresh_token")
+			}
+		})
+	}
 }
