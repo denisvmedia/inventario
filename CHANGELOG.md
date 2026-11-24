@@ -22,6 +22,26 @@ the section matching the tag and publishes it as the GitHub Release body. See
   providers" page of the user guide
   ([#2789](https://github.com/denisvmedia/inventario/pull/2789)).
 
+### Fixed
+
+- The sign-in page now shows a message for every refusal the Google and GitHub
+  sign-in can end with: a disabled account, an email the provider has not
+  verified, a profile Inventario cannot use, an account on another site, closed
+  registration, and an account waiting for approval. Before, it showed nothing
+  for them ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
+- A deactivated user whose account is linked to Google or GitHub now lands on
+  the sign-in page with that message instead of a bare "User account is not
+  available" page ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
+
+### Security
+
+- Signing in with Google or GitHub now follows the tenant's registration mode.
+  Before, a provider account that matched no user created an active account
+  even when the mode was `closed` or `approval`. Now `closed` refuses it,
+  `approval` creates the account inactive until an administrator activates it,
+  and `open` creates an active one as before
+  ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
+
 ## [0.2.2] - 2026-11-23
 
 ### Added

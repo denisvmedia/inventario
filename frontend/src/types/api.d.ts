@@ -2781,7 +2781,12 @@ export type paths = {
          * OAuth callback (provider redirect target)
          * @description Validates state + cookie, exchanges the code, and either signs the caller in (existing identity),
          *     auto-links a verified-email match, prompts a password sign-in (unverified email), or creates a new
-         *     account. Redirects to the FE path the state carried.
+         *     account when the tenant's registration mode allows it (open: active, approval: inactive until an
+         *     administrator activates it, closed: refused). Redirects to the FE path the state carried after a
+         *     sign-in. Every other outcome redirects to /login instead, whatever path the state carried: a refusal
+         *     with ?oauth_error=<code> (for example registration_closed, account_disabled, email_unverified), an
+         *     account waiting for approval with ?oauth_error=pending_approval, an unverified email match with
+         *     ?oauth_link_required=1, and an MFA-enrolled user with ?mfa_required=1.
          */
         get: {
             parameters: {

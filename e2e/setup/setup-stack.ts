@@ -84,6 +84,11 @@ async function maybeStartOAuthStub(): Promise<Record<string, string>> {
       "stub-oidc-client-secret",
     INVENTARIO_RUN_OAUTH_OIDC_DISPLAY_NAME:
       process.env.INVENTARIO_RUN_OAUTH_OIDC_DISPLAY_NAME ?? "Stub SSO",
+    // A first sign-in through a provider creates the account only when the
+    // tenant's registration mode allows it (#2788). The memory tenant is
+    // closed by default; the CI lane runs Postgres in open mode, so match it.
+    INVENTARIO_RUN_MEMORY_TENANT_REGISTRATION_MODE:
+      process.env.INVENTARIO_RUN_MEMORY_TENANT_REGISTRATION_MODE ?? "open",
     // Test-only tenant override (#1851). When the OAuth stub is up the
     // cross-tenant Playwright spec needs to drive callbacks against a
     // second tenant without provisioning per-tenant DNS or a multi-

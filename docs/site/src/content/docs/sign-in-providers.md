@@ -26,8 +26,9 @@ in this order:
 3. **No account matches.** A new account is created, if the server's
    registration mode allows it: in `open` mode it is active at once, in
    `approval` mode it waits for an administrator, and in `closed` mode the
-   sign-in is refused. [Troubleshooting](../troubleshooting/) lists the
-   messages people see.
+   sign-in is refused.
+   [Troubleshooting](../troubleshooting/#signing-in-with-google-github-or-single-sign-on-brings-me-back-to-the-sign-in-page)
+   lists the messages people see.
 
 Someone who has [two-factor authentication](../settings-and-account/#two-factor-authentication)
 turned on cannot sign in with a provider alone. They sign in with their password
