@@ -279,14 +279,6 @@ func (r *CommodityRegistry) Count(ctx context.Context) (int, error) {
 // see registry.CommodityListOptions for the field-by-field semantics. The
 // total reflects the filtered count (post-WHERE, pre-LIMIT).
 func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int, opts registry.CommodityListOptions) ([]*models.Commodity, int, error) {
-	// Normalize pagination parameters to prevent negative SQL OFFSET/LIMIT errors.
-	if offset < 0 {
-		offset = 0
-	}
-	if limit < 0 {
-		limit = 0
-	}
-
 	where := commodityWhere(opts, string(r.tableNames.Commodities()), string(r.tableNames.CommodityLoans()))
 
 	var commodities []*models.Commodity
@@ -296,13 +288,10 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		dataSB := newSelect().
 			Select("*", totalCountColumn).
-			From(string(r.tableNames.Commodities())).
-			Limit(limit).
-			Offset(offset)
-		if where != nil {
-			dataSB.AddWhereClause(where)
-		}
+			From(string(r.tableNames.Commodities()))
+		addWhere(dataSB, where)
 		applyCommodityOrder(dataSB, opts)
+		paginate(dataSB, offset, limit)
 		dataQuery, dataArgs := dataSB.Build()
 
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
@@ -328,10 +317,7 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 			countSB := newSelect().
 				Select("COUNT(*)").
 				From(string(r.tableNames.Commodities()))
-			if where != nil {
-				countSB.AddWhereClause(where)
-			}
-			countQuery, countArgs := countSB.Build()
+			countQuery, countArgs := addWhere(countSB, where).Build()
 			total, err = countRows(ctx, tx, countQuery, countArgs...)
 			if err != nil {
 				return errxtrace.Wrap("failed to count commodities", err)
@@ -356,11 +342,9 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 // the page.
 func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansTable string) *sqlb.WhereClause {
 	cond := sqlb.NewCond()
-	wc := sqlb.NewWhereClause()
-	added := false
+	var exprs []string
 	add := func(expr string) {
-		wc.AddWhereExpr(cond.Args, expr)
-		added = true
+		exprs = append(exprs, expr)
 	}
 
 	// Default view: hide drafts unless caller asked to see them.
@@ -380,9 +364,7 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 	if len(opts.Statuses) > 0 {
 		add(cond.In("status", anyStrings(opts.Statuses)...))
 	}
-	if expr := commodityAreaExpr(cond, opts); expr != "" {
-		add(expr)
-	}
+	add(commodityAreaExpr(cond, opts))
 	if q := strings.TrimSpace(opts.Search); q != "" {
 		// LOWER() + LIKE rather than ILIKE so the existing functional
 		// index (commodities_name_lower_idx) is hit. ILIKE bypasses
@@ -391,9 +373,7 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 		pattern := cond.Args.Add("%" + strings.ToLower(q) + "%")
 		add(fmt.Sprintf("(LOWER(name) LIKE %s OR LOWER(short_name) LIKE %s)", pattern, pattern))
 	}
-	if expr := warrantyStatusExpr(cond, opts); expr != "" {
-		add(expr)
-	}
+	add(warrantyStatusExpr(cond, opts))
 	if opts.WarrantyExpiresBefore != "" {
 		// Same empty-string defense as the warranty-status branches —
 		// '' would lexicographically match `< cutoff` and pollute the
@@ -404,16 +384,9 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 			cond.LessThan("warranty_expires_at", opts.WarrantyExpiresBefore),
 		))
 	}
-	if expr := lentOutExpr(opts.LentOut, commoditiesTable, loansTable); expr != "" {
-		add(expr)
-	}
+	add(lentOutExpr(opts.LentOut, commoditiesTable, loansTable))
 
-	// nil rather than an empty clause: AddWhereClause on an empty one leaves a
-	// stray double space where WHERE would have been.
-	if !added {
-		return nil
-	}
-	return wc
+	return andWhere(cond, exprs...)
 }
 
 // commodityAreaExpr builds the AreaID / Unassigned predicate (issue #1986).
