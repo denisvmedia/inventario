@@ -2781,7 +2781,8 @@ export type paths = {
          * OAuth callback (provider redirect target)
          * @description Validates state + cookie, exchanges the code, and either signs the caller in (existing identity),
          *     auto-links a verified-email match, prompts a password sign-in (unverified email), or creates a new
-         *     account. Redirects to the FE path the state carried.
+         *     account when the tenant's registration mode allows it (open: active, approval: inactive until an
+         *     administrator activates it, closed: refused). Redirects to the FE path the state carried.
          */
         get: {
             parameters: {

@@ -54,6 +54,33 @@ declines to store them over what looks like plain HTTP, and the next request
 arrives unauthenticated. Operators: enable the header on your ingress
 controller or reverse proxy.
 
+### Signing in with Google or GitHub brings me back to the sign-in page
+
+The sign-in page then shows a message that says why:
+
+- **"This server isn't accepting new accounts."** No Inventario account uses
+  that provider account or its email address yet, so the sign-in would have
+  created one, and this server does not accept new sign-ups. Provider
+  sign-in works for accounts that already exist. If you were invited, open the
+  invite link and sign up with your email and a password; you can link Google
+  or GitHub afterwards in
+  [Settings → Privacy & security](../settings-and-account/#connected-accounts).
+- **"Your account has been created. You can sign in once an administrator
+  approves it."** This server approves new accounts by hand. Your account and
+  the provider link already exist. Once an administrator activates the
+  account, the same button signs you in.
+- **"This account is disabled or still waiting for an administrator's
+  approval."** Ask the server's administrator.
+- **"Your sign-in provider hasn't verified this email address."** Verify the
+  address in your Google or GitHub account settings and try again.
+
+Operators: sign-ups through Google or GitHub follow the same registration mode
+as the sign-up form. In `closed` mode they are refused, in `approval` mode the
+new account stays inactive until an administrator activates it, and in `open`
+mode it is active at once (the provider has already verified the email
+address). Set the mode with `inventario tenants update <tenant>
+--registration-mode=open|approval|closed`.
+
 ## Adding and editing items
 
 ### "Fill with AI" is not offered, or says it is not enabled

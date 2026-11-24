@@ -2045,7 +2045,7 @@ const docTemplate = `{
         },
         "/auth/oauth/{provider}/callback": {
             "get": {
-                "description": "Validates state + cookie, exchanges the code, and either signs the caller in (existing identity),\nauto-links a verified-email match, prompts a password sign-in (unverified email), or creates a new\naccount. Redirects to the FE path the state carried.",
+                "description": "Validates state + cookie, exchanges the code, and either signs the caller in (existing identity),\nauto-links a verified-email match, prompts a password sign-in (unverified email), or creates a new\naccount when the tenant's registration mode allows it (open: active, approval: inactive until an\nadministrator activates it, closed: refused). Redirects to the FE path the state carried.",
                 "tags": [
                     "oauth"
                 ],
