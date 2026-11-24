@@ -71,6 +71,11 @@ async function maybeStartOAuthStub(): Promise<Record<string, string>> {
     INVENTARIO_RUN_OAUTH_GITHUB_TOKEN_URL_OVERRIDE: `${stubURL}/gh/token`,
     INVENTARIO_RUN_OAUTH_GITHUB_USER_URL_OVERRIDE: `${stubURL}/gh/user`,
     INVENTARIO_RUN_OAUTH_GITHUB_USER_EMAILS_URL_OVERRIDE: `${stubURL}/gh/user/emails`,
+    // A first sign-in through a provider creates the account only when the
+    // tenant's registration mode allows it (#2788). The memory tenant is
+    // closed by default; the CI lane runs Postgres in open mode, so match it.
+    INVENTARIO_RUN_MEMORY_TENANT_REGISTRATION_MODE:
+      process.env.INVENTARIO_RUN_MEMORY_TENANT_REGISTRATION_MODE ?? "open",
     // Test-only tenant override (#1851). When the OAuth stub is up the
     // cross-tenant Playwright spec needs to drive callbacks against a
     // second tenant without provisioning per-tenant DNS or a multi-
