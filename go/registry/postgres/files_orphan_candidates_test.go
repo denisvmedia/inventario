@@ -22,7 +22,7 @@ import (
 // This worker DELETES USER DATA, so the assertions that matter are the ones
 // about what must NOT come back:
 //
-//   - a STANDALONE file (linked_entity_type = "") — first-class since #2235;
+//   - a STANDALONE file (no links) — first-class since #2235;
 //     "no link" must never mean "orphan";
 //   - an 'export'-linked file — the backup subsystem owns its lifecycle, and
 //     because the exports table is never probed, the `deleted_at IS NULL`
@@ -70,17 +70,22 @@ func TestFileRegistry_Postgres_ListOrphanCandidates(t *testing.T) {
 
 	seed := func(tenantID, groupID, userID, linkType, linkID string, createdAt, updatedAt time.Time) string {
 		c.Helper()
+		// The link is as old as the file row: a younger link would be a fresh
+		// attachment, which keeps a file out of the candidate set on its own.
+		var links []models.FileLink
+		if linkType != "" {
+			links = []models.FileLink{{EntityType: linkType, EntityID: linkID, CreatedAt: createdAt}}
+		}
 		row, err := fs.FileRegistryFactory.CreateServiceRegistry().Create(ctx, models.FileEntity{
 			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 				TenantID: tenantID, GroupID: groupID, CreatedByUserID: userID,
 			},
-			Title:            "seeded",
-			Type:             models.FileTypeImage,
-			Category:         models.FileCategoryImages,
-			LinkedEntityType: linkType,
-			LinkedEntityID:   linkID,
-			CreatedAt:        createdAt,
-			UpdatedAt:        updatedAt,
+			Title:     "seeded",
+			Type:      models.FileTypeImage,
+			Category:  models.FileCategoryImages,
+			Links:     links,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
 			File: &models.File{
 				Path: "seeded", OriginalPath: "seeded.jpg", Ext: ".jpg", MIMEType: "image/jpeg",
 			},

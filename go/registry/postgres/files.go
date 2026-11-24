@@ -95,7 +95,7 @@ func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 		files = append(files, &file)
 	}
 
-	return files, nil
+	return r.withLinks(ctx, files)
 }
 
 func (r *FileRegistry) Count(ctx context.Context) (int, error) {
@@ -109,34 +109,59 @@ func (r *FileRegistry) Count(ctx context.Context) (int, error) {
 	return cnt, nil
 }
 
+// Create inserts the file and the links it carries in one transaction. The
+// registry sets the ids, tenant, group and creator of the file and of every
+// link.
 func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
-	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
-
-	reg := r.newSQLRegistry()
-
-	createdFile, err := reg.Create(ctx, file, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Same orphan-prevention as in CommodityRegistry.Create — see
-		// ensureTagRowsInTx in tags.go for the cross-tx invariant.
-		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindFile, []string(file.Tags))
-	})
+	createdFile, err := r.createFile(ctx, file)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create file", err)
 	}
-
-	return &createdFile, nil
+	return createdFile, nil
 }
 
+// Update writes the file's own columns. It leaves the links alone, keeps the
+// stored checksum when file carries none, and never writes the legacy link
+// columns: those belong to MoveLegacyLinks, and the row is locked before they
+// are read so a concurrent move cannot be undone.
 func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
 	reg := r.newSQLRegistry()
 
-	err := reg.Update(ctx, file, func(ctx context.Context, tx *sqlx.Tx, dbFile models.FileEntity) error {
-		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindFile, []string(file.Tags))
+	err := reg.UpdateWithPrepare(ctx, file, func(ctx context.Context, tx *sqlx.Tx, _ models.FileEntity, next *models.FileEntity) error {
+		var current struct {
+			LegacyType string `db:"linked_entity_type"`
+			LegacyID   string `db:"linked_entity_id"`
+			LegacyMeta string `db:"linked_entity_meta"`
+			SHA256     string `db:"sha256"`
+		}
+		lock := fmt.Sprintf(`
+			SELECT COALESCE(linked_entity_type, '') AS linked_entity_type,
+				COALESCE(linked_entity_id, '') AS linked_entity_id,
+				COALESCE(linked_entity_meta, '') AS linked_entity_meta,
+				sha256
+			FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.Files())
+		if err := tx.QueryRowxContext(ctx, lock, next.ID).StructScan(&current); err != nil {
+			return errxtrace.Wrap("failed to lock file", err)
+		}
+		next.LegacyFileLink = models.LegacyFileLink{
+			LegacyLinkedEntityType: current.LegacyType,
+			LegacyLinkedEntityID:   current.LegacyID,
+			LegacyLinkedEntityMeta: current.LegacyMeta,
+		}
+		if next.File != nil && next.SHA256 == "" {
+			next.SHA256 = current.SHA256
+		}
+		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindFile, []string(next.Tags))
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to update file", err)
 	}
 
-	return &file, nil
+	updated, err := r.get(ctx, file.ID)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to read updated file", err)
+	}
+	return updated, nil
 }
 
 // Delete removes ONLY the file row. It does NOT touch the physical blob or its
@@ -173,7 +198,11 @@ func (r *FileRegistry) get(ctx context.Context, id string) (*models.FileEntity, 
 		return nil, errxtrace.Wrap("failed to get file", err)
 	}
 
-	return &file, nil
+	files, err := r.withLinks(ctx, []*models.FileEntity{&file})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to get file links", err)
+	}
+	return files[0], nil
 }
 
 func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error) {
@@ -187,7 +216,7 @@ func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType)
 		files = append(files, &file)
 	}
 
-	return files, nil
+	return r.withLinks(ctx, files)
 }
 
 func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error) {
@@ -196,26 +225,15 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(`
-			SELECT * FROM %s
-			WHERE linked_entity_type = $1 AND linked_entity_id = $2
-			ORDER BY created_at DESC`, r.tableNames.Files())
-
-		rows, err := tx.QueryxContext(ctx, query, entityType, entityID)
-		if err != nil {
-			return errxtrace.Wrap("failed to list files by linked entity", err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var file models.FileEntity
-			err := rows.StructScan(&file)
-			if err != nil {
-				return errxtrace.Wrap("failed to scan file", err)
-			}
-			files = append(files, &file)
-		}
-
-		return rows.Err()
+			SELECT f.* FROM %s f
+			WHERE EXISTS (
+				SELECT 1 FROM %s l
+				WHERE l.file_id = f.id AND l.entity_type = $1 AND l.entity_id = $2
+			)
+			ORDER BY f.created_at DESC, f.id DESC`, r.tableNames.Files(), r.tableNames.FileLinks())
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, entityType, entityID)
+		return err
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list files by linked entity", err)
@@ -250,21 +268,9 @@ func (r *FileRegistry) ListByGroup(ctx context.Context, tenantID, groupID string
 			WHERE tenant_id = $1 AND group_id = $2
 			ORDER BY created_at DESC`, r.tableNames.Files())
 
-		rows, err := tx.QueryxContext(ctx, query, tenantID, groupID)
-		if err != nil {
-			return errxtrace.Wrap("failed to list files by group", err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var file models.FileEntity
-			if scanErr := rows.StructScan(&file); scanErr != nil {
-				return errxtrace.Wrap("failed to scan file", scanErr)
-			}
-			files = append(files, &file)
-		}
-
-		return rows.Err()
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, tenantID, groupID)
+		return err
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list files by group", err)
@@ -278,26 +284,15 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(`
-			SELECT * FROM %s
-			WHERE linked_entity_type = $1 AND linked_entity_id = $2 AND linked_entity_meta = $3
-			ORDER BY created_at DESC`, r.tableNames.Files())
-
-		rows, err := tx.QueryxContext(ctx, query, entityType, entityID, meta)
-		if err != nil {
-			return errxtrace.Wrap("failed to list files by linked entity and meta", err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var file models.FileEntity
-			err := rows.StructScan(&file)
-			if err != nil {
-				return errxtrace.Wrap("failed to scan file", err)
-			}
-			files = append(files, &file)
-		}
-
-		return rows.Err()
+			SELECT f.* FROM %s f
+			WHERE EXISTS (
+				SELECT 1 FROM %s l
+				WHERE l.file_id = f.id AND l.entity_type = $1 AND l.entity_id = $2 AND l.meta = $3
+			)
+			ORDER BY f.created_at DESC, f.id DESC`, r.tableNames.Files(), r.tableNames.FileLinks())
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, entityType, entityID, meta)
+		return err
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list files by linked entity and meta", err)
@@ -308,8 +303,9 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 
 // fileWhere assembles the WHERE clause shared by Search, ListPaginated, and
 // CountByCategory. Returns nil when no filter applies, so a caller can tell an
-// unfiltered query from an empty clause.
-func fileWhere(query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) *sqlb.WhereClause {
+// unfiltered query from an empty clause. The outer query selects from the
+// files table without an alias; the linked-entity filter refers to it by name.
+func fileWhere(tables store.TableNames, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) *sqlb.WhereClause {
 	cond := sqlb.NewCond()
 	var exprs []string
 	add := func(expr string) {
@@ -327,8 +323,8 @@ func fileWhere(query string, fileType *models.FileType, fileCategory *models.Fil
 	// nil. Mismatched callers (one nil, one not) get no filter — the
 	// interface contract documents this; mirroring the memory path.
 	if linkedEntityType != nil && linkedEntityID != nil {
-		add(cond.Equal("linked_entity_type", *linkedEntityType))
-		add(cond.Equal("linked_entity_id", *linkedEntityID))
+		add(fmt.Sprintf("EXISTS (SELECT 1 FROM %s fl WHERE fl.file_id = %s.id AND fl.entity_type = %s AND fl.entity_id = %s)",
+			tables.FileLinks(), tables.Files(), cond.Args.Add(*linkedEntityType), cond.Args.Add(*linkedEntityID)))
 	}
 
 	if len(tags) > 0 {
@@ -367,25 +363,15 @@ func (r *FileRegistry) Search(ctx context.Context, query string, fileType *model
 		sb := orderFilesNewestFirst(newSelect().
 			Select("*").
 			From(string(r.tableNames.Files())))
-		addWhere(sb, fileWhere(query, fileType, fileCategory, tags, linkedEntityType, linkedEntityID))
+		addWhere(sb, fileWhere(r.tableNames, query, fileType, fileCategory, tags, linkedEntityType, linkedEntityID))
 		sqlQuery, args := sb.Build()
 
-		rows, err := tx.QueryxContext(ctx, sqlQuery, args...)
+		var err error
+		files, err = r.queryFiles(ctx, tx, sqlQuery, args...)
 		if err != nil {
 			return errxtrace.Wrap("failed to search files", err)
 		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var file models.FileEntity
-			err := rows.StructScan(&file)
-			if err != nil {
-				return errxtrace.Wrap("failed to scan file", err)
-			}
-			files = append(files, &file)
-		}
-
-		return rows.Err()
+		return nil
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to search files", err)
@@ -400,7 +386,7 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		where := fileWhere("", fileType, fileCategory, nil, linkedEntityType, linkedEntityID)
+		where := fileWhere(r.tableNames, "", fileType, fileCategory, nil, linkedEntityType, linkedEntityID)
 
 		countSB := newSelect().Select("COUNT(*)").From(string(r.tableNames.Files()))
 		countQuery, countArgs := addWhere(countSB, where).Build()
@@ -415,22 +401,11 @@ func (r *FileRegistry) ListPaginated(ctx context.Context, offset, limit int, fil
 		addWhere(dataSB, where)
 		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 
-		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
+		files, err = r.queryFiles(ctx, tx, dataQuery, dataArgs...)
 		if err != nil {
 			return errxtrace.Wrap("failed to list paginated files", err)
 		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var file models.FileEntity
-			err := rows.StructScan(&file)
-			if err != nil {
-				return errxtrace.Wrap("failed to scan file", err)
-			}
-			files = append(files, &file)
-		}
-
-		return rows.Err()
+		return nil
 	})
 	if err != nil {
 		return nil, 0, errxtrace.Wrap("failed to list paginated files", err)
@@ -465,7 +440,7 @@ func (r *FileRegistry) CountByCategory(ctx context.Context, query string, fileTy
 			Select("category", "COUNT(*)", "COALESCE(SUM(size_bytes), 0)").
 			From(string(r.tableNames.Files())).
 			GroupBy("category")
-		addWhere(sb, fileWhere(query, fileType, nil, tags, linkedEntityType, linkedEntityID))
+		addWhere(sb, fileWhere(r.tableNames, query, fileType, nil, tags, linkedEntityType, linkedEntityID))
 		sqlQuery, args := sb.Build()
 
 		rows, err := tx.QueryxContext(ctx, sqlQuery, args...)
@@ -531,29 +506,28 @@ func (r *FileRegistry) ListPendingSizeBackfill(ctx context.Context, limit int) (
 	return files, nil
 }
 
-// ListOrphanCandidates returns up to limit file rows whose linked entity no
-// longer exists (#2237). Discovery half of the orphan-file GC; see the
-// interface doc in registry.FileRegistry for the full contract.
+// ListOrphanCandidates returns up to limit file rows whose every link points
+// at an entity that no longer exists (#2237). Discovery half of the orphan-file
+// GC; see the interface doc in registry.FileRegistry for the full contract.
 //
-// The candidate predicate is a positive ALLOWLIST on linked_entity_type, never
-// a negation:
+// The candidate predicate is a positive ALLOWLIST on the link types, never a
+// negation:
 //
-//   - ""       → a STANDALONE file. First-class since #2235 (exported in
+//   - no link   → a STANDALONE file. First-class since #2235 (exported in
 //     backups, swept as inventory by a full_replace restore). NOT an orphan,
 //     never a candidate.
-//   - 'export'  → owned by the backup subsystem's own lifecycle
+//   - an 'export' link → owned by the backup subsystem's own lifecycle
 //     (DeleteExportWithFile / group purge). Never a candidate — and because
 //     the exports table is never probed at all, the `deleted_at IS NULL`
 //     filter on ExportRegistry.Get can never be mistaken for "gone".
-//   - anything else (including a future link type the model validator does
+//   - any other type (including a future link type the model validator does
 //     not yet know about — the registries do NOT run ValidateWithContext, so
 //     the DB is a superset of the validator's enumeration) → kept, fails
 //     closed.
 //
-// The three NOT EXISTS anti-joins run under whatever role reg.Do selects. This
-// method is SERVICE-MODE ONLY on purpose: PUT /files/{id} does not validate the
-// link target's group, so a cross-group link is reachable in production and a
-// group-scoped probe would read a LIVE entity as missing.
+// The existence probes run under whatever role reg.Do selects. This method is
+// SERVICE-MODE ONLY on purpose: a link can point at an entity in another group,
+// and a group-scoped probe would read a LIVE entity as missing.
 //
 // The scan is KEYSET-PAGINATED on (created_at, id): most re-verified candidates
 // are KEPT rather than deleted, and several keep-reasons never clear (a tenant
@@ -561,8 +535,7 @@ func (r *FileRegistry) ListPendingSizeBackfill(ctx context.Context, limit int) (
 // non-resumable oldest-first window would be squatted on by exactly those rows
 // forever and no other orphan in the installation would ever be enumerated.
 //
-// Backed by the existing files_linked_entity_idx / idx_files_tenant_linked_entity
-// — no new index, no migration.
+// The per-file link probes use idx_file_links_file_entity.
 func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.Time, after registry.OrphanCandidateCursor, limit int) ([]*models.FileEntity, error) {
 	if limit <= 0 {
 		return nil, nil
@@ -573,19 +546,9 @@ func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.
 	var files []*models.FileEntity
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		rows, err := tx.QueryxContext(ctx, query, args...)
-		if err != nil {
-			return errxtrace.Wrap("failed to list orphan file candidates", err)
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var file models.FileEntity
-			if scanErr := rows.StructScan(&file); scanErr != nil {
-				return errxtrace.Wrap("failed to scan file", scanErr)
-			}
-			files = append(files, &file)
-		}
-		return rows.Err()
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, args...)
+		return err
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list orphan file candidates", err)
@@ -594,31 +557,40 @@ func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.
 }
 
 // orphanCandidatesQuery builds one keyset page of ListOrphanCandidates: files
-// linked to a commodity, area or location that no longer exists, oldest first,
-// resuming after the cursor when it is set.
+// that have links, all of them to a commodity, area or location that no longer
+// exists, oldest first, resuming after the cursor when it is set.
+//
+// The second NOT EXISTS reads "no link of this file keeps it": a link keeps
+// the file when its type is outside the allowlist, its entity id is empty, it
+// is younger than the cutoff, or its entity still exists.
 func orphanCandidatesQuery(tables store.TableNames, olderThan time.Time, after registry.OrphanCandidateCursor, limit int) (string, []any) {
-	gone := func(table, alias, linkPredicate string) *sqlb.SelectBuilder {
-		return newSelect().
-			Select("1").
-			From(table+" "+alias).
-			Where(linkPredicate, alias+".id = f.linked_entity_id")
+	alive := func(table, alias, linkType string) string {
+		return fmt.Sprintf("(l.entity_type = '%s' AND EXISTS (SELECT 1 FROM %s %s WHERE %s.id = l.entity_id))", linkType, table, alias, alias)
 	}
 
 	sb := newSelect().Select("f.*").From(string(tables.Files()) + " f")
 	sb.Where(
-		"f.linked_entity_type IN ('commodity', 'area', 'location')",
-		"f.linked_entity_id <> ''",
 		sb.LessThan("f.created_at", olderThan),
 		sb.LessThan("f.updated_at", olderThan),
 	)
 	if !after.IsZero() {
 		sb.Where(sb.GreaterThan(sqlb.TupleNames("f.created_at", "f.id"), sqlb.Tuple(after.CreatedAt, after.ID)))
 	}
-	sb.Where(
-		sb.NotExists(gone(string(tables.Commodities()), "c", "f.linked_entity_type = 'commodity'")),
-		sb.NotExists(gone(string(tables.Areas()), "a", "f.linked_entity_type = 'area'")),
-		sb.NotExists(gone(string(tables.Locations()), "l", "f.linked_entity_type = 'location'")),
+
+	anyLink := newSelect().Select("1").From(string(tables.FileLinks()) + " l").Where("l.file_id = f.id")
+	keeper := newSelect().Select("1").From(string(tables.FileLinks()) + " l")
+	keeper.Where(
+		"l.file_id = f.id",
+		keeper.Or(
+			"l.entity_type NOT IN ('commodity', 'area', 'location')",
+			"l.entity_id = ''",
+			keeper.GreaterEqualThan("l.created_at", olderThan),
+			alive(string(tables.Commodities()), "c", "commodity"),
+			alive(string(tables.Areas()), "a", "area"),
+			alive(string(tables.Locations()), "lo", "location"),
+		),
 	)
+	sb.Where(sb.Exists(anyLink), sb.NotExists(keeper))
 	return sb.OrderByAsc("f.created_at").OrderByAsc("f.id").Limit(limit).Build()
 }
 
@@ -710,12 +682,16 @@ func (r *FileRegistry) SumSizeBreakdownByGroup(ctx context.Context, tenantID, gr
 	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		sqlQuery := fmt.Sprintf(`
 			SELECT
-				COALESCE(SUM(CASE WHEN linked_entity_type = 'export' THEN size_bytes ELSE 0 END), 0) AS exports,
-				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
-				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
-				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other
-			FROM %s
-			WHERE tenant_id = $1 AND group_id = $2`, r.tableNames.Files())
+				COALESCE(SUM(CASE WHEN is_export THEN size_bytes ELSE 0 END), 0) AS exports,
+				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
+				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
+				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other
+			FROM (
+				SELECT f.size_bytes, f.category, f.tenant_id, f.group_id,
+					EXISTS (SELECT 1 FROM %s l WHERE l.file_id = f.id AND l.entity_type = 'export') AS is_export
+				FROM %s f
+			) sized
+			WHERE tenant_id = $1 AND group_id = $2`, r.tableNames.FileLinks(), r.tableNames.Files())
 
 		row := tx.QueryRowxContext(ctx, sqlQuery, tenantID, groupID)
 		if err := row.Scan(&breakdown.Exports, &breakdown.Images, &breakdown.Documents, &breakdown.Other); err != nil {
@@ -731,9 +707,10 @@ func (r *FileRegistry) SumSizeBreakdownByGroup(ctx context.Context, tenantID, gr
 
 // SumSizeBreakdown returns per-bucket byte totals for the current
 // (tenant, group) scope (#1388). RLS handles the tenant+group filter;
-// the SQL splits export bundles (linked_entity_type='export') out of
+// the SQL splits export bundles (files with an export link) out of
 // FileCategoryOther so the FE can render a distinct "exports" row in
-// the storage card without double-counting.
+// the storage card without double-counting. A file attached to several
+// entities is one stored blob and counts once.
 func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBreakdown, error) {
 	var breakdown registry.StorageBreakdown
 
@@ -746,11 +723,15 @@ func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBr
 		// migration, so we only count three category buckets here.
 		sqlQuery := fmt.Sprintf(`
 			SELECT
-				COALESCE(SUM(CASE WHEN linked_entity_type = 'export' THEN size_bytes ELSE 0 END), 0) AS exports,
-				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
-				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
-				COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other
-			FROM %s`, r.tableNames.Files())
+				COALESCE(SUM(CASE WHEN is_export THEN size_bytes ELSE 0 END), 0) AS exports,
+				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
+				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
+				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other
+			FROM (
+				SELECT f.size_bytes, f.category, f.tenant_id, f.group_id,
+					EXISTS (SELECT 1 FROM %s l WHERE l.file_id = f.id AND l.entity_type = 'export') AS is_export
+				FROM %s f
+			) sized`, r.tableNames.FileLinks(), r.tableNames.Files())
 
 		row := tx.QueryRowxContext(ctx, sqlQuery)
 		if err := row.Scan(&breakdown.Exports, &breakdown.Images, &breakdown.Documents, &breakdown.Other); err != nil {

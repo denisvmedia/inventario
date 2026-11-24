@@ -37,9 +37,7 @@ func (f *inbFixture) attachEntityFile(c *qt.C, linkedType, entityID, meta, name,
 		Type:                     models.FileTypeFromMIME(mime),
 		Category:                 models.FileCategoryFromContext(linkedType, meta, mime),
 		Tags:                     models.StringSlice{},
-		LinkedEntityType:         linkedType,
-		LinkedEntityID:           entityID,
-		LinkedEntityMeta:         meta,
+		Links:                    []models.FileLink{{EntityType: linkedType, EntityID: entityID, Meta: meta}},
 		File: &models.File{
 			Path:      name,
 			Ext:       ext,
@@ -208,9 +206,14 @@ func TestINBRoundTrip_NonCommodityFiles(t *testing.T) {
 	for _, tc := range entityCases {
 		c.Run(tc.path, func(c *qt.C) {
 			restored := f.fileByUUID(c, tc.uuid)
-			c.Assert(restored.LinkedEntityType, qt.Equals, tc.linked)
-			c.Assert(restored.LinkedEntityID, qt.Equals, tc.entityID)
-			c.Assert(restored.LinkedEntityMeta, qt.Equals, tc.meta)
+			if tc.linked == "" {
+				c.Assert(restored.Links, qt.HasLen, 0)
+			} else {
+				c.Assert(restored.Links, qt.HasLen, 1)
+				c.Assert(restored.Links[0].EntityType, qt.Equals, tc.linked)
+				c.Assert(restored.Links[0].EntityID, qt.Equals, tc.entityID)
+				c.Assert(restored.Links[0].Meta, qt.Equals, tc.meta)
+			}
 			c.Assert(restored.Category, qt.Equals, tc.category)
 			c.Assert(restored.Type, qt.Equals, tc.fileType)
 			c.Assert(restored.File, qt.IsNotNil)
@@ -228,7 +231,8 @@ func TestINBRoundTrip_NonCommodityFiles(t *testing.T) {
 
 	// The commodity attachment still round-trips through its nested ref — the new
 	// member does not duplicate or displace it.
-	c.Assert(f.fileByUUID(c, commodityImage).LinkedEntityType, qt.Equals, "commodity")
+	c.Assert(f.fileByUUID(c, commodityImage).Links, qt.HasLen, 1)
+	c.Assert(f.fileByUUID(c, commodityImage).Links[0].EntityType, qt.Equals, "commodity")
 }
 
 // memberIndex returns the position of an exact member name in the archive.
@@ -295,9 +299,7 @@ func TestINBExport_DropsEntityFileWithMissingBlob(t *testing.T) {
 		Type:                     models.FileTypeImage,
 		Category:                 models.FileCategoryImages,
 		Tags:                     models.StringSlice{},
-		LinkedEntityType:         "location",
-		LinkedEntityID:           f.locID,
-		LinkedEntityMeta:         "images",
+		Links:                    []models.FileLink{{EntityType: "location", EntityID: f.locID, Meta: "images"}},
 		File:                     &models.File{Path: "ghost", Ext: ".jpg", MIMEType: "image/jpeg", SizeBytes: 512},
 	}))
 	orphan.OriginalPath = "t/tenant-a/files/" + orphan.UUID + ".jpg"
@@ -464,7 +466,7 @@ func TestINBRestore_EntityFileMissingMemberFails(t *testing.T) {
 
 // TestINBRestore_EntityFileUnmappedLinkIsCounted proves a files-document ref whose
 // linked location never landed is DROPPED with a counted error rather than
-// persisted with a dangling linked_entity_id. The restore itself still completes.
+// persisted with a dangling link. The restore itself still completes.
 func TestINBRestore_EntityFileUnmappedLinkIsCounted(t *testing.T) {
 	c := qt.New(t)
 	signer := testSigner(c)
@@ -530,9 +532,10 @@ func versionGateArchive(c *qt.C, f *inbFixture, signer *backupsign.Signer, manif
 
 // TestINBRestore_SupportedFormatVersions is the compatibility half of the version
 // contract (#2235): a reader accepts every archive whose MAJOR version it knows —
-// including a 2.0 archive (no files member, no filesFile field) and an archive
-// with no version at all. MINOR bumps are additive-only, so a future 2.x also
-// restores here rather than being rejected.
+// including a 2.0 archive (no files member, no filesFile field), a 2.1 archive
+// (one link per file reference) and an archive with no version at all. MINOR
+// bumps are additive-only, so a future 3.x also restores here rather than being
+// rejected.
 func TestINBRestore_SupportedFormatVersions(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -540,8 +543,9 @@ func TestINBRestore_SupportedFormatVersions(t *testing.T) {
 	}{
 		{name: "absent version", manifest: `{}`},
 		{name: "2.0 archive without files member", manifest: `{"version":"2.0"}`},
-		{name: "current 2.1 archive", manifest: `{"version":"2.1"}`},
-		{name: "future minor of a known major", manifest: `{"version":"2.9"}`},
+		{name: "2.1 archive", manifest: `{"version":"2.1"}`},
+		{name: "current 3.0 archive", manifest: `{"version":"3.0"}`},
+		{name: "future minor of a known major", manifest: `{"version":"3.9"}`},
 	}
 
 	for _, tt := range tests {
@@ -568,7 +572,7 @@ func TestINBRestore_RejectsUnsupportedFormatMajor(t *testing.T) {
 	signer := testSigner(c)
 	f := newInbFixture(c)
 
-	key := versionGateArchive(c, f, signer, `{"version":"3.0"}`)
+	key := versionGateArchive(c, f, signer, `{"version":"4.0"}`)
 
 	final, err := restoreInb(c, f, signer, key)
 	c.Assert(err, qt.ErrorIs, processor.ErrUnsupportedFormatVersion)
@@ -634,7 +638,7 @@ func TestINBRestore_RejectsOversizedManifest(t *testing.T) {
 	f := newInbFixture(c)
 
 	// A syntactically valid manifest padded past the 4 MiB pre-scan cap.
-	manifest := `{"version":"3.0","pad":"` + strings.Repeat("A", 5<<20) + `"}`
+	manifest := `{"version":"4.0","pad":"` + strings.Repeat("A", 5<<20) + `"}`
 	key := versionGateArchive(c, f, signer, manifest)
 
 	final, err := restoreInb(c, f, signer, key)
@@ -647,8 +651,8 @@ func TestINBRestore_RejectsOversizedManifest(t *testing.T) {
 
 // TestINBRestore_OldArchiveWithCommodityFileStillRestores is the backward-compat
 // contract in full: a 2.0 archive (no files member, no filesFile manifest field)
-// restores its commodity attachment on the 2.1 reader exactly as before, with no
-// counted errors.
+// restores its commodity attachment on the current reader exactly as before,
+// with no counted errors.
 func TestINBRestore_OldArchiveWithCommodityFileStillRestores(t *testing.T) {
 	c := qt.New(t)
 	signer := testSigner(c)
@@ -701,8 +705,9 @@ func TestINBRestore_OldArchiveWithCommodityFileStillRestores(t *testing.T) {
 	c.Assert(final.ErrorCount, qt.Equals, 0)
 
 	restored := f.fileByUUID(c, "legacy-file-uuid")
-	c.Assert(restored.LinkedEntityType, qt.Equals, "commodity")
-	c.Assert(restored.LinkedEntityMeta, qt.Equals, "images")
+	c.Assert(restored.Links, qt.HasLen, 1)
+	c.Assert(restored.Links[0].EntityType, qt.Equals, "commodity")
+	c.Assert(restored.Links[0].Meta, qt.Equals, "images")
 	c.Assert(restored.Category, qt.Equals, models.FileCategoryImages)
 
 	bucket := must.Must(blob.OpenBucket(f.ctx, inbUploadLocation))
@@ -774,8 +779,9 @@ func TestINBRestore_EntityFilesUnderMergeStrategies(t *testing.T) {
 			c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
 			c.Assert(final.ErrorCount, qt.Equals, 0)
 
-			c.Assert(f.fileByUUID(c, locFile).LinkedEntityType, qt.Equals, "location")
-			c.Assert(f.fileByUUID(c, standalone).LinkedEntityType, qt.Equals, "")
+			c.Assert(f.fileByUUID(c, locFile).Links, qt.HasLen, 1)
+			c.Assert(f.fileByUUID(c, locFile).Links[0].EntityType, qt.Equals, "location")
+			c.Assert(f.fileByUUID(c, standalone).Links, qt.HasLen, 0)
 			c.Assert(f.countFilesWithUUID(c, locFile), qt.Equals, 1)
 			c.Assert(f.countFilesWithUUID(c, standalone), qt.Equals, 1)
 		})

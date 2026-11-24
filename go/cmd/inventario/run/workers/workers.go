@@ -136,6 +136,11 @@ func (c *Command) run() error {
 	// first entry pushed onto the LIFO stack below, so it shuts down last.
 	stopPause := bootstrap.StartPauseController(ctx, rs)
 
+	// File associations still in the legacy files.linked_entity_* columns
+	// move to file_links before any worker group reads attachments (#2806).
+	// Like the pause controller it belongs to no group and always runs.
+	stopFileLinkMove := bootstrap.StartFileLinkMove(ctx, rs, c.cfg)
+
 	// Group and starter order matches the historical `run all` / `run workers`
 	// sequence so LIFO shutdown is unchanged for the default (all-groups) case.
 	groups := []group{
@@ -165,6 +170,7 @@ func (c *Command) run() error {
 			bootstrap.StartWeeklyDigestWorker,
 			bootstrap.StartBusinessMetricsWorker,
 			bootstrap.StartAssetNumberBackfill,
+			bootstrap.StartFileChecksumBackfill,
 		}},
 	}
 
@@ -172,6 +178,7 @@ func (c *Command) run() error {
 	// Pushed first so the LIFO unwind below stops it last — after every
 	// worker group — mirroring the defer ordering in `run all`.
 	stops = append(stops, stopPause)
+	stops = append(stops, stopFileLinkMove)
 	defer func() {
 		// LIFO shutdown to mirror the deferred-stop ordering of `run all`.
 		for _, stop := range slices.Backward(stops) {

@@ -79,13 +79,13 @@ var orphanGCThumbnailSizes = map[string]bool{
 	"medium": true,
 }
 
-// orphanGCLinkAllowlist is the positive allowlist of linked_entity_type values
-// the GC understands, re-asserted in Go on every candidate even though the
-// registry query already applied it. It excludes, structurally:
+// orphanGCLinkAllowlist is the positive allowlist of link entity types the GC
+// understands, re-asserted in Go on every link of every candidate even though
+// the registry query already applied it. It excludes, structurally:
 //
-//   - ""       — a STANDALONE file (#2235). First-class, exported in backups.
-//     "No link" is NOT "orphan"; an orphan is a file whose link points at a
-//     NONEXISTENT entity.
+//   - no link  — a STANDALONE file (#2235). First-class, exported in backups.
+//     "No link" is NOT "orphan"; an orphan is a file whose every link points at
+//     a NONEXISTENT entity.
 //   - "export" — owned by the backup subsystem (#2121 and friends). Never
 //     probed, so the `deleted_at IS NULL` filter on the exports registry can
 //     never be misread as "the export is gone".
@@ -303,7 +303,7 @@ type OrphanFileGCDeps struct {
 
 // OrphanFileGCWorker periodically reclaims the residues the delete paths cannot
 // close by construction (#2237): file ROWS whose linked entity no longer
-// exists (crash between an entity-row delete and its DeleteLinkedFiles), and
+// exists (crash between an entity-row delete and its DetachEntityFiles), and
 // THUMBNAIL blobs whose owning file row is gone (the thumbnail worker's
 // Get→write race).
 //
@@ -926,26 +926,11 @@ func (w *OrphanFileGCWorker) verifyRowCandidate(ctx context.Context, file *model
 		return orphanRowVerdict{reason: reason}, nil
 	}
 
-	// R3 — EXISTENCE. Service-mode, by ID only. "Gone" means EXACTLY
-	// registry.ErrNotFound; anything else aborts the tick.
-	probe := w.deps.Probes.forLinkType(file.LinkedEntityType)
-	if probe == nil {
-		// NOT disallowed_link_type: screenRowCandidate already rejected every
-		// non-allowlisted type above, so reaching here means the type IS
-		// allowlisted and the worker was handed a nil probe for it — a MISWIRING,
-		// not a policy decision. Both outcomes keep the file (fail closed), which
-		// is exactly why they must not share a label: a miswired worker reports
-		// zero candidates forever, and "disallowed_link_type" makes that look like
-		// the intended handling of an unknown type instead of the bug it is.
-		return orphanRowVerdict{reason: orphanGCSkipMissingProbe}, nil
-	}
-	switch err := probe(ctx, file.LinkedEntityID); {
-	case err == nil:
-		return orphanRowVerdict{reason: orphanGCSkipTargetExists}, nil
-	case errors.Is(err, registry.ErrNotFound):
-		// The one and only path to a delete.
-	default:
-		return orphanRowVerdict{}, err
+	// R3 — EXISTENCE of every link's entity. Service-mode, by ID only. "Gone"
+	// means EXACTLY registry.ErrNotFound; one live entity keeps the file, and
+	// any other error aborts the tick.
+	if verdict, err := w.probeLinks(ctx, file); err != nil || verdict.reason != "" {
+		return verdict, err
 	}
 
 	// R7 — executability. Deletion runs through FileService.DeleteFileWithPhysical
@@ -1001,31 +986,74 @@ func (w *OrphanFileGCWorker) verifyRowCandidate(ctx context.Context, file *model
 	return orphanRowVerdict{proceed: true, user: user, group: group}, nil
 }
 
+// probeLinks is R3: it asks, for every link of the file, whether the linked
+// entity still exists. Returns a skip reason when one does (or when a probe is
+// missing), an error for a transient probe failure, and a zero verdict when
+// every entity is gone.
+func (w *OrphanFileGCWorker) probeLinks(ctx context.Context, file *models.FileEntity) (orphanRowVerdict, error) {
+	for _, link := range file.Links {
+		probe := w.deps.Probes.forLinkType(link.EntityType)
+		if probe == nil {
+			// NOT disallowed_link_type: screenRowCandidate already rejected
+			// every non-allowlisted type, so reaching here means the type IS
+			// allowlisted and the worker was handed a nil probe for it — a
+			// MISWIRING, not a policy decision. Both outcomes keep the file
+			// (fail closed), which is exactly why they must not share a label:
+			// a miswired worker reports zero candidates forever, and
+			// "disallowed_link_type" makes that look like the intended handling
+			// of an unknown type instead of the bug it is.
+			return orphanRowVerdict{reason: orphanGCSkipMissingProbe}, nil
+		}
+		switch err := probe(ctx, link.EntityID); {
+		case err == nil:
+			return orphanRowVerdict{reason: orphanGCSkipTargetExists}, nil
+		case errors.Is(err, registry.ErrNotFound):
+			// This link dangles; the file is a candidate only if they all do.
+		default:
+			return orphanRowVerdict{}, err
+		}
+	}
+	return orphanRowVerdict{}, nil
+}
+
 // screenRowCandidate applies the gates that need no I/O: R1 (positive
-// allowlist), R2 (malformed link), R4 (age, BOTH timestamps) and R5 (in-flight
-// tenant). Returns the skip reason, or "" when the candidate survives them all.
+// allowlist), R2 (malformed link), R4 (age) and R5 (in-flight tenant). Returns
+// the skip reason, or "" when the candidate survives them all.
 //
 // R1 is re-asserted here even though the candidate query already applied it, so
-// a future registry bug cannot widen the blast radius: "" (standalone, #2235),
-// 'export', and any unknown/future link type are KEPT.
+// a future registry bug cannot widen the blast radius: a file with no link
+// (standalone, #2235), an 'export' link, and any unknown/future link type are
+// KEPT.
 func screenRowCandidate(file *models.FileEntity, gate orphanGCGate, cutoff time.Time) string {
-	if !orphanGCLinkAllowlist[file.LinkedEntityType] {
+	if len(file.Links) == 0 {
 		return orphanGCSkipDisallowedLink
 	}
-	// A set link type with an empty id is malformed DATA, not garbage: no probe
+	for _, link := range file.Links {
+		if !orphanGCLinkAllowlist[link.EntityType] {
+			return orphanGCSkipDisallowedLink
+		}
+	}
+	// A link with an empty entity id is malformed DATA, not garbage: no probe
 	// can prove an empty id absent. The registry predicate already excludes such
-	// rows, so this branch is unreachable today and malformed_link never fires —
+	// files, so this branch is unreachable today and malformed_link never fires —
 	// deliberately. The candidate query is a FILTER, never an authorization, and
 	// this worker must remain correct against any predicate it is handed,
 	// including a future relaxed one.
-	if file.LinkedEntityID == "" {
-		return orphanGCSkipMalformedLink
+	for _, link := range file.Links {
+		if link.EntityID == "" {
+			return orphanGCSkipMalformedLink
+		}
 	}
-	// BOTH timestamps. updated_at is the load-bearing one: PUT /files/{id}
-	// stamps it with the app wall clock, so a file attached concurrently with
-	// an entity delete is immune for the whole window.
+	// The file's timestamps and every link's. A link created inside the window
+	// (a file attached concurrently with an entity delete) keeps the file for
+	// the whole window.
 	if !file.CreatedAt.Before(cutoff) || !file.UpdatedAt.Before(cutoff) {
 		return orphanGCSkipAge
+	}
+	for _, link := range file.Links {
+		if !link.CreatedAt.Before(cutoff) {
+			return orphanGCSkipAge
+		}
 	}
 	// Re-checked per candidate rather than only once per tick.
 	if gate.isBlocked(file.TenantID) {
@@ -1085,6 +1113,16 @@ func (w *OrphanFileGCWorker) deleteRow(ctx context.Context, file *models.FileEnt
 	}
 }
 
+// formatOrphanLinks renders a file's links as "type:id:meta" entries joined by
+// commas, the shape the forensic record carries them in.
+func formatOrphanLinks(links []models.FileLink) string {
+	parts := make([]string, 0, len(links))
+	for _, l := range links {
+		parts = append(parts, l.EntityType+":"+l.EntityID+":"+l.Meta)
+	}
+	return strings.Join(parts, ",")
+}
+
 // logOrphanRow writes the forensic record. Because deletion is irreversible and
 // `files` has no soft-delete column, THIS LINE IS THE RECOVERY ARTIFACT: an
 // operator must be able to reconstruct what was destroyed, and hand-verify a
@@ -1110,9 +1148,7 @@ func logOrphanRow(level slog.Level, mode OrphanFileGCMode, action, reason string
 		"tenant_id", file.TenantID,
 		"group_id", file.GroupID,
 		"created_by_user_id", file.CreatedByUserID,
-		"linked_entity_type", file.LinkedEntityType,
-		"linked_entity_id", file.LinkedEntityID,
-		"linked_entity_meta", file.LinkedEntityMeta,
+		"links", formatOrphanLinks(file.Links),
 		"title", file.Title,
 		"tags", strings.Join(file.Tags, ","),
 		"created_at", file.CreatedAt,

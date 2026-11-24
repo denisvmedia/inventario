@@ -70,8 +70,8 @@ func commodityRefs(ids ...string) []*models.Commodity {
 	return out
 }
 
-// makeImage builds a `linked_entity_type=commodity` / `meta=images` file
-// entity with the supplied id, commodity and creation time. Tests use
+// makeImage builds an image file entity linked to the commodity with
+// `meta=images`, with the supplied id and creation time. Tests use
 // distinct timestamps to disambiguate the "earliest by created_at" pick.
 func makeImage(id, commodityID string, createdAt time.Time) models.FileEntity {
 	return models.FileEntity{
@@ -80,12 +80,10 @@ func makeImage(id, commodityID string, createdAt time.Time) models.FileEntity {
 			TenantID: "tenant-1",
 			GroupID:  "group-1",
 		},
-		Type:             models.FileTypeImage,
-		Category:         models.FileCategoryImages,
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   commodityID,
-		LinkedEntityMeta: "images",
-		CreatedAt:        createdAt,
+		Type:      models.FileTypeImage,
+		Category:  models.FileCategoryImages,
+		Links:     []models.FileLink{{EntityType: "commodity", EntityID: commodityID, Meta: "images"}},
+		CreatedAt: createdAt,
 		File: &models.File{
 			Path:         id,
 			OriginalPath: id + ".jpg",

@@ -423,18 +423,25 @@ func (xf *XMLFile) ConvertToFileEntity(linkedEntityID string) *models.FileEntity
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{UUID: xf.ID},
 		},
-		Title:            xf.Title,
-		Description:      xf.Description,
-		Type:             fileType,
-		Category:         category,
-		Tags:             models.StringSlice(tags),
-		LinkedEntityType: xf.LinkedEntityType,
-		LinkedEntityID:   linkedEntityID,
-		LinkedEntityMeta: xf.LinkedEntityMeta,
-		CreatedAt:        createdAt,
-		UpdatedAt:        updatedAt,
-		File:             xf.ConvertToFile(),
+		Title:       xf.Title,
+		Description: xf.Description,
+		Type:        fileType,
+		Category:    category,
+		Tags:        models.StringSlice(tags),
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
+		File:        xf.ConvertToFile(),
+		Links:       legacyXMLFileLinks(xf.LinkedEntityType, linkedEntityID, xf.LinkedEntityMeta),
 	}
+}
+
+// legacyXMLFileLinks turns the single link of a legacy XML file element into
+// the file's links: none for a standalone file, one otherwise.
+func legacyXMLFileLinks(entityType, entityID, meta string) []models.FileLink {
+	if entityType == "" {
+		return nil
+	}
+	return []models.FileLink{{EntityType: entityType, EntityID: entityID, Meta: meta}}
 }
 
 func parseTimestampOrNow(s string) time.Time {

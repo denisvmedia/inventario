@@ -30,8 +30,8 @@ func clearDataUploadLocation(tempDir string) string {
 // restore full_replace path: clearExistingData must remove files attached to
 // areas and locations — rows AND physical blobs — via DeleteLocationRecursive
 // plus the second all-files sweep, while export-linked files are preserved
-// (the sweep explicitly skips linked_entity_type='export'). A regression that
-// re-introduces a LinkedEntityType skip in either pass would leave restore
+// (the sweep explicitly skips export-owned files). A regression that
+// re-introduces a link-type skip in either pass would leave restore
 // full_replace orphaning area/location attachments again.
 func TestClearExistingData_SweepsAreaAndLocationLinkedFiles(t *testing.T) {
 	c := qt.New(t)
@@ -63,9 +63,7 @@ func TestClearExistingData_SweepsAreaAndLocationLinkedFiles(t *testing.T) {
 	locationBlobKey := "loc-doc.pdf"
 	c.Assert(b.WriteAll(ctx, locationBlobKey, []byte("loc pdf"), nil), qt.IsNil)
 	locationFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "location",
-		LinkedEntityID:   location.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "location", EntityID: location.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "loc-doc",
 			OriginalPath: locationBlobKey,
@@ -77,9 +75,7 @@ func TestClearExistingData_SweepsAreaAndLocationLinkedFiles(t *testing.T) {
 	areaBlobKey := "area-doc.pdf"
 	c.Assert(b.WriteAll(ctx, areaBlobKey, []byte("area pdf"), nil), qt.IsNil)
 	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "area",
-		LinkedEntityID:   area.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "area", EntityID: area.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "area-doc",
 			OriginalPath: areaBlobKey,
@@ -104,9 +100,7 @@ func TestClearExistingData_SweepsAreaAndLocationLinkedFiles(t *testing.T) {
 	exportBlobKey := "export.xml"
 	c.Assert(b.WriteAll(ctx, exportBlobKey, []byte("<export/>"), nil), qt.IsNil)
 	exportFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "export",
-		LinkedEntityID:   "test-export-id",
-		LinkedEntityMeta: "xml-1.0",
+		Links: []models.FileLink{{EntityType: "export", EntityID: "test-export-id", Meta: "xml-1.0"}},
 		File: &models.File{
 			Path:         "export",
 			OriginalPath: exportBlobKey,
@@ -200,11 +194,9 @@ func TestClearExistingData_SweepsAreaLessCommodities(t *testing.T) {
 	looseBlobKey := "loose-photo.jpg"
 	c.Assert(b.WriteAll(ctx, looseBlobKey, []byte("loose jpeg"), nil), qt.IsNil)
 	looseFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		Type:             models.FileTypeImage,
-		Category:         models.FileCategoryImages,
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   looseCommodity.ID,
-		LinkedEntityMeta: "images",
+		Type:     models.FileTypeImage,
+		Category: models.FileCategoryImages,
+		Links:    []models.FileLink{{EntityType: "commodity", EntityID: looseCommodity.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "loose-photo",
 			OriginalPath: looseBlobKey,

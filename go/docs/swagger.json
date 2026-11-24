@@ -5684,6 +5684,175 @@
                 }
             }
         },
+        "/g/{groupSlug}/files/{fileID}/duplicates": {
+            "get": {
+                "description": "Returns the other files of the group whose SHA-256 checksum\nequals this file's, newest first. Empty while the file's\nchecksum is not known yet. Backup export files are left out.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "List files with the same content",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "fileID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FilesResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/files/{fileID}/links": {
+            "post": {
+                "description": "Creates a link from the file to the entity and nothing else: no\nnew file, no upload, no storage charge. Attaching a file to an\nentity it is already attached to is a no-op and answers 200.\nThe entity must be in the same group as the file. A backup\nexport file cannot be attached.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Attach a file to an entity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "fileID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Entity to attach the file to",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileLinkRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Already attached",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "Attached",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid entity, entity not found, or export file",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/files/{fileID}/links/{linkID}": {
+            "delete": {
+                "description": "Removes the link and nothing else. A file whose last attachment\nis removed stays as a standalone file; deleting it is a separate\ncall. Removing the attachment of an item's cover photo clears\nthat item's cover choice. The link of a backup export file\ncannot be removed.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Remove a file attachment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "fileID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Link ID",
+                        "name": "linkID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The file with its remaining attachments",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "File or link not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Export link",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/files/{fileID}/signed-url": {
             "post": {
                 "description": "Generate a secure signed URL for downloading a file",
@@ -7287,7 +7456,7 @@
         },
         "/g/{groupSlug}/uploads/file": {
             "post": {
-                "description": "Upload a single file of any type. The file is stored and a file entity is created without a linked entity.",
+                "description": "Upload a single file of any type. The file is stored and a file entity is created without a linked entity.\nThe response carries the SHA-256 of the content; GET /files/{id}/duplicates lists the files of the group with the same content.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -11707,6 +11876,55 @@
                 }
             }
         },
+        "jsonapi.FileLinkRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.FileLinkRequestData"
+                }
+            }
+        },
+        "jsonapi.FileLinkRequestAttributes": {
+            "type": "object",
+            "properties": {
+                "entity_id": {
+                    "type": "string"
+                },
+                "entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity",
+                        "location",
+                        "area"
+                    ],
+                    "example": "commodity"
+                },
+                "meta": {
+                    "type": "string",
+                    "enum": [
+                        "images",
+                        "documents",
+                        "files"
+                    ],
+                    "example": "documents"
+                }
+            }
+        },
+        "jsonapi.FileLinkRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.FileLinkRequestAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "file-links"
+                    ],
+                    "example": "file-links"
+                }
+            }
+        },
         "jsonapi.FileMeta": {
             "type": "object",
             "properties": {
@@ -11731,18 +11949,6 @@
             "type": "object",
             "properties": {
                 "description": {
-                    "type": "string"
-                },
-                "linked_entity_id": {
-                    "description": "ID of linked entity",
-                    "type": "string"
-                },
-                "linked_entity_meta": {
-                    "description": "metadata about the link",
-                    "type": "string"
-                },
-                "linked_entity_type": {
-                    "description": "commodity, export, or empty",
                     "type": "string"
                 },
                 "tags": {
@@ -11826,18 +12032,6 @@
             "type": "object",
             "properties": {
                 "description": {
-                    "type": "string"
-                },
-                "linked_entity_id": {
-                    "description": "ID of linked entity",
-                    "type": "string"
-                },
-                "linked_entity_meta": {
-                    "description": "metadata about the link",
-                    "type": "string"
-                },
-                "linked_entity_type": {
-                    "description": "commodity, export, or empty",
                     "type": "string"
                 },
                 "path": {
@@ -14040,17 +14234,12 @@
                 "id": {
                     "type": "string"
                 },
-                "linked_entity_id": {
-                    "description": "LinkedEntityID is the ID of the linked entity (commodity or export)",
-                    "type": "string"
-                },
-                "linked_entity_meta": {
-                    "description": "LinkedEntityMeta contains metadata about the link type\nFor commodities: \"images\", \"documents\"\nFor exports: \"xml-1.0\" (version of the export file format)",
-                    "type": "string"
-                },
-                "linked_entity_type": {
-                    "description": "LinkedEntityType indicates what type of entity this file is linked to (commodity, export, or empty for standalone files)",
-                    "type": "string"
+                "links": {
+                    "description": "Links are the entities the file is attached to (see FileLink). The file\nregistries fill them on every read; Create inserts them with the file,\nUpdate never touches them — use FileRegistry.AddLink / RemoveLink.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.FileLink"
+                    }
                 },
                 "mime_type": {
                     "description": "MIMEType is the MIME type of the file.\nExample: \"application/pdf\"",
@@ -14062,6 +14251,10 @@
                 },
                 "path": {
                     "description": "Path is the filename without extension. This is the only field that can be modified by the user.\nExample: \"invoice-2023\"",
+                    "type": "string"
+                },
+                "sha256": {
+                    "description": "SHA256 is the lowercase hex SHA-256 of the stored blob, computed while\nthe upload streams in. Two files of one group with the same checksum are\nthe same document; the upload dialog offers to attach the existing one\ninstead. Empty until known: files stored before the column existed get it\nfrom a background pass at startup.",
                     "type": "string"
                 },
                 "size_bytes": {
@@ -14089,6 +14282,41 @@
                 },
                 "updated_at": {
                     "description": "UpdatedAt is when the file was last updated",
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.FileLink": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "entity_id": {
+                    "description": "EntityID is the database id of the attached entity. The reference is\npolymorphic, so there is no foreign key: the entity-deletion paths remove\nthe links of the entity they delete.",
+                    "type": "string"
+                },
+                "entity_name": {
+                    "description": "EntityName is the display name of the attached entity, filled by the API\nhandlers for the \"Linked to\" list. Empty when the entity is not visible\nto the caller.",
+                    "type": "string",
+                    "readOnly": true
+                },
+                "entity_type": {
+                    "description": "EntityType is one of the FileLink* constants.",
+                    "type": "string"
+                },
+                "file_id": {
+                    "description": "FileID is the attached file. Deleting the file deletes its links.",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "meta": {
+                    "description": "Meta is the bucket on the entity's Files tab (see FileLinkMetaValues).",
                     "type": "string"
                 },
                 "uuid": {

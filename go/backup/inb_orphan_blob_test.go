@@ -39,9 +39,7 @@ func (f *inbFixture) attachCommodityFileAtKey(c *qt.C, bucketMeta, customKey, ex
 		Type:                     models.FileTypeFromMIME(mime),
 		Category:                 models.FileCategoryFromContext("commodity", bucketMeta, mime),
 		Tags:                     models.StringSlice{},
-		LinkedEntityType:         "commodity",
-		LinkedEntityID:           com.ID,
-		LinkedEntityMeta:         bucketMeta,
+		Links:                    []models.FileLink{{EntityType: "commodity", EntityID: com.ID, Meta: bucketMeta}},
 		File: &models.File{
 			Path:      "photo",
 			Ext:       ext,

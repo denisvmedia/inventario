@@ -165,19 +165,23 @@ func (f *gcFixture) seedFile(o seedFileOpts) *models.FileEntity {
 	}
 
 	now := time.Now()
+	// The link is as old as the file: a younger link would be a fresh
+	// attachment, which keeps a file out of the candidate set on its own.
+	var links []models.FileLink
+	if o.linkType != "" {
+		links = []models.FileLink{{EntityType: o.linkType, EntityID: o.linkID, Meta: o.linkMeta, CreatedAt: now.Add(-o.createdAgo)}}
+	}
 	file := models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        o.tenantID,
 			GroupID:         o.groupID,
 			CreatedByUserID: o.userID,
 		},
-		Title:            "seeded",
-		Type:             models.FileTypeImage,
-		LinkedEntityType: o.linkType,
-		LinkedEntityID:   o.linkID,
-		LinkedEntityMeta: o.linkMeta,
-		CreatedAt:        now.Add(-o.createdAgo),
-		UpdatedAt:        now.Add(-o.updatedAgo),
+		Title:     "seeded",
+		Type:      models.FileTypeImage,
+		Links:     links,
+		CreatedAt: now.Add(-o.createdAgo),
+		UpdatedAt: now.Add(-o.updatedAgo),
 		File: &models.File{
 			Path:         "seeded",
 			OriginalPath: o.blobKey,
@@ -427,11 +431,12 @@ func (f *gcFixture) thumbnailJobCount(fileID string) int {
 // NEGATIVE — things that MUST survive a delete-mode sweep
 // ---------------------------------------------------------------------------
 
-// A STANDALONE file (linked_entity_type = "") is LEGITIMATE, not an orphan.
-// Since #2235 standalone files are first-class and are exported in backups.
-// "No link" must NEVER mean "orphan": an orphan is a file whose link points at
-// a NONEXISTENT entity. A predicate shaped `linked_entity_id IS NULL OR NOT
-// EXISTS(...)` would silently eat every standalone file in the installation —
+// A STANDALONE file (no links) is LEGITIMATE, not an orphan. Since #2235
+// standalone files are first-class and are exported in backups, and removing
+// the last attachment of a file leaves it standalone on purpose. "No link" must
+// NEVER mean "orphan": an orphan is a file whose links all point at
+// NONEXISTENT entities. A predicate shaped "NOT EXISTS (a link to a live
+// entity)" would silently eat every standalone file in the installation —
 // this test is the guard against exactly that.
 func TestOrphanFileGC_StandaloneFileIsNeverSwept(t *testing.T) {
 	tests := []struct {
@@ -440,7 +445,6 @@ func TestOrphanFileGC_StandaloneFileIsNeverSwept(t *testing.T) {
 		linkID   string
 	}{
 		{"standalone: no link at all", "", ""},
-		{"standalone: empty type with a stray id (malformed, still not an orphan)", "", "some-dangling-id"},
 	}
 
 	for _, tt := range tests {
@@ -457,7 +461,7 @@ func TestOrphanFileGC_StandaloneFileIsNeverSwept(t *testing.T) {
 	}
 }
 
-// linked_entity_type='export' belongs to the backup subsystem's own lifecycle.
+// A file with an export link belongs to the backup subsystem's own lifecycle.
 // The GC must not sweep it AND must never probe the exports table for
 // existence: ExportRegistry.Get filters `deleted_at IS NULL`, so a Get-based
 // probe would read a soft-deleted (recoverable) export as nonexistent and
@@ -494,12 +498,12 @@ func TestOrphanFileGC_UnknownLinkTypeIsNeverSwept(t *testing.T) {
 	c.Assert(f.fileExists(file.ID), qt.IsTrue, qt.Commentf("unknown link type must fail closed, not be swept"))
 }
 
-// THE catastrophic-bug guard. PUT /files/{id} copies linked_entity_type /
-// linked_entity_id straight from client input with NO existence, tenant, or
-// group check, so a file in group A legitimately linked to a commodity in
-// group B is reachable in production. If the existence probe were ever swapped
-// for a group-scoped (user) registry it would 404 on that LIVE commodity and
-// delete a LIVE file. This test fails loudly if anyone does that.
+// THE catastrophic-bug guard. Links moved from the legacy linked_entity_*
+// columns carry whatever target the client sent, with NO existence, tenant, or
+// group check, so a file in group A linked to a commodity in group B is
+// reachable in production. If the existence probe were ever swapped for a
+// group-scoped (user) registry it would 404 on that LIVE commodity and delete a
+// LIVE file. This test fails loudly if anyone does that.
 func TestOrphanFileGC_CrossGroupLinkIsNeverSwept(t *testing.T) {
 	c := qt.New(t)
 	f := newGCFixture(c)
@@ -1225,7 +1229,7 @@ func TestOrphanFileGC_UnresolvableOwnerIsNeverSwept(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // The crash window: a process dies between an entity-row delete and its
-// DeleteLinkedFiles, leaving file rows pointing at an id that will never exist
+// DetachEntityFiles, leaving file links pointing at an id that will never exist
 // again (entity ids are server-minted and never reused, so "entity X does not
 // exist" is monotone and irreversible). Nothing else in the tree sweeps these
 // for a live group.

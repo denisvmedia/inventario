@@ -396,11 +396,10 @@ func TestFilesCategoryCounts_ScopesToTheLinkedEntity(t *testing.T) {
 	}
 	for _, s := range seed {
 		must.Must(set.FileRegistry.Create(ownerCtx, models.FileEntity{
-			Title:            s.title,
-			Type:             s.fileType,
-			Category:         s.category,
-			LinkedEntityType: "commodity",
-			LinkedEntityID:   s.commodityID,
+			Title:    s.title,
+			Type:     s.fileType,
+			Category: s.category,
+			Links:    []models.FileLink{{EntityType: "commodity", EntityID: s.commodityID}},
 			File: &models.File{
 				Path:         s.title,
 				OriginalPath: s.title + s.ext,

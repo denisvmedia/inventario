@@ -609,14 +609,15 @@ func clonePtrCurrency(c *models.Currency) *models.Currency {
 // Delete removes ONLY the commodity row. Its DB children (loans, services,
 // supply-links) CASCADE and cover_file_id is ON DELETE SET NULL, so the row
 // delete itself is FK-safe — but the files LINKED to the commodity
-// (linked_entity_type='commodity') are NOT cascaded, and their physical blobs
-// are not touched here.
+// (file_links with entity_type 'commodity') are NOT cascaded, and their
+// physical blobs are not touched here.
 //
 // INVARIANT (#2121): user-initiated commodity deletes MUST go through
-// services.EntityService.DeleteCommodityRecursive, which collects the linked
-// file IDs, drops this row, and then removes each linked file (row + best-effort
-// blob) via FileService.DeleteFileWithPhysical. Calling this bare row delete
-// directly leaves every linked file's blob orphaned in the bucket. The only
+// services.EntityService.DeleteCommodityRecursive, which drops this row and then
+// runs FileService.DetachEntityFiles: a file attached only to this commodity is
+// deleted (row + best-effort blob), a file other entities still use loses just
+// this commodity's link. Calling this bare row delete directly leaves the links
+// dangling and every file attached only here orphaned in the bucket. The only
 // legitimate direct callers are tests and the group/tenant purgers, which sweep
 // all of the (tenant, group)'s blobs separately before dropping rows.
 func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
@@ -666,7 +667,7 @@ func (r *CommodityRegistry) getArea(ctx context.Context, tx *sqlx.Tx, areaID str
 
 // Legacy file-related methods (GetImages/GetManuals/GetInvoices) were removed
 // under #1421 alongside the `images`/`invoices`/`manuals` SQL tables they
-// queried. Use the unified FileRegistry filtered by linked_entity_meta.
+// queried. Use the unified FileRegistry filtered by link meta.
 
 // commodityPage carries the window function's total alongside the row (#1032).
 type commodityPage struct {

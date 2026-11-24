@@ -20,6 +20,7 @@ import (
 // FileRegistryFactory creates FileRegistry instances with proper context
 type FileRegistryFactory struct {
 	baseFileRegistry *Registry[models.FileEntity, *models.FileEntity]
+	links            *fileLinkStore
 
 	// Sibling factories used ONLY by ListOrphanCandidates (#2237) to answer
 	// "does the entity this file is linked to still exist?". Postgres asks
@@ -39,6 +40,7 @@ type FileRegistry struct {
 	*Registry[models.FileEntity, *models.FileEntity]
 
 	userID string
+	links  *fileLinkStore
 
 	// Carried from the factory; see FileRegistryFactory. Only read by
 	// ListOrphanCandidates.
@@ -53,6 +55,7 @@ var _ registry.FileRegistryFactory = (*FileRegistryFactory)(nil)
 func NewFileRegistryFactory() *FileRegistryFactory {
 	return &FileRegistryFactory{
 		baseFileRegistry: NewRegistry[models.FileEntity, *models.FileEntity](),
+		links:            newFileLinkStore(),
 	}
 }
 
@@ -94,6 +97,7 @@ func (f *FileRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.
 	return &FileRegistry{
 		Registry:         userRegistry,
 		userID:           user.ID,
+		links:            f.links,
 		commodityFactory: f.commodityFactory,
 		areaFactory:      f.areaFactory,
 		locationFactory:  f.locationFactory,
@@ -111,6 +115,7 @@ func (f *FileRegistryFactory) CreateServiceRegistry() registry.FileRegistry {
 	return &FileRegistry{
 		Registry:         serviceRegistry,
 		userID:           "", // Clear userID to bypass user filtering
+		links:            f.links,
 		commodityFactory: f.commodityFactory,
 		areaFactory:      f.areaFactory,
 		locationFactory:  f.locationFactory,
@@ -145,7 +150,7 @@ func fileMatchesEnumFilters(file *models.FileEntity, fileType *models.FileType, 
 		return false
 	}
 	if linkedEntityType != nil && linkedEntityID != nil {
-		if file.LinkedEntityType != *linkedEntityType || file.LinkedEntityID != *linkedEntityID {
+		if file.LinkTo(*linkedEntityType, *linkedEntityID) == nil {
 			return false
 		}
 	}
@@ -309,12 +314,12 @@ func (r *FileRegistry) ListPendingSizeBackfill(_ context.Context, limit int) ([]
 	return pending, nil
 }
 
-// orphanCandidateLinkTypes is the positive ALLOWLIST of linked_entity_type
-// values the orphan-file GC (#2237) understands. It mirrors the IN (...) list
-// in the postgres ListOrphanCandidates query verbatim, and it is an allowlist
-// on purpose:
+// orphanCandidateLinkTypes is the positive ALLOWLIST of link entity types the
+// orphan-file GC (#2237) understands. It mirrors the IN (...) list in the
+// postgres ListOrphanCandidates query verbatim, and it is an allowlist on
+// purpose:
 //
-//   - ""       → a STANDALONE file. First-class since #2235 — it has no link,
+//   - no link  → a STANDALONE file. First-class since #2235 — it has no link,
 //     so it can never have a DANGLING one. Excluded structurally.
 //   - "export" → the backup subsystem's own artifact, with its own lifecycle.
 //     Excluded structurally, so the `deleted_at IS NULL` filter on the exports
@@ -328,11 +333,11 @@ var orphanCandidateLinkTypes = map[string]bool{
 	"location":  true,
 }
 
-// ListOrphanCandidates mirrors the postgres method — file rows in the
-// linked-entity allowlist whose target no longer exists and whose BOTH
-// timestamps are older than olderThan (#2237). The memory backend has no SQL
-// planner, so the anti-join is three Get probes against the sibling service
-// registries.
+// ListOrphanCandidates mirrors the postgres method — files with at least one
+// link, every link in the allowlist, older than olderThan and pointing at an
+// entity that no longer exists, with BOTH file timestamps older than olderThan
+// (#2237). The memory backend has no SQL planner, so the anti-join is Get
+// probes against the sibling service registries.
 //
 // Runs in service mode (the GC is RLS-blind by necessity: a file may be
 // legitimately linked to an entity in another group, and a group-scoped probe
@@ -358,11 +363,9 @@ func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.
 		if file == nil {
 			continue
 		}
-		if !orphanCandidateLinkTypes[file.LinkedEntityType] {
-			continue // allowlist: standalone (#2235), export, and unknown types are never candidates
-		}
-		if file.LinkedEntityID == "" {
-			continue // malformed link, not garbage: EXCLUDED here, so it is kept and never surfaced
+		links := r.links.byFile[file.ID]
+		if !orphanShapeEligible(links, olderThan) {
+			continue // standalone (#2235), export, unknown type, malformed or young link: never a candidate
 		}
 		if !file.CreatedAt.Before(olderThan) || !file.UpdatedAt.Before(olderThan) {
 			continue // BOTH timestamps must clear the age gate
@@ -371,6 +374,7 @@ func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.
 			continue // already covered by an earlier page of this scan
 		}
 		v := *file
+		v.Links = slices.Clone(links)
 		shortlist = append(shortlist, &v)
 	}
 	r.lock.RUnlock()
@@ -386,33 +390,66 @@ func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.
 	areaReg := r.areaFactory.CreateServiceRegistry()
 	locReg := r.locationFactory.CreateServiceRegistry()
 
+	probe := func(link models.FileLink) error {
+		var err error
+		switch link.EntityType {
+		case models.FileLinkCommodity:
+			_, err = comReg.Get(ctx, link.EntityID)
+		case models.FileLinkArea:
+			_, err = areaReg.Get(ctx, link.EntityID)
+		case models.FileLinkLocation:
+			_, err = locReg.Get(ctx, link.EntityID)
+		}
+		return err
+	}
+
 	var orphans []*models.FileEntity
 	for _, file := range shortlist {
-		var err error
-		switch file.LinkedEntityType {
-		case "commodity":
-			_, err = comReg.Get(ctx, file.LinkedEntityID)
-		case "area":
-			_, err = areaReg.Get(ctx, file.LinkedEntityID)
-		case "location":
-			_, err = locReg.Get(ctx, file.LinkedEntityID)
-		default:
-			continue // unreachable: the allowlist above already filtered
+		gone, err := allLinkTargetsGone(file.Links, probe)
+		if err != nil {
+			return nil, err
 		}
-		switch {
-		case err == nil:
-			continue // the entity is alive — not an orphan
-		case errors.Is(err, registry.ErrNotFound):
-			orphans = append(orphans, file)
-		default:
-			// A transient probe failure must never read as "gone".
-			return nil, errxtrace.Wrap("failed to probe linked entity existence", err)
+		if !gone {
+			continue
 		}
+		orphans = append(orphans, file)
 		if len(orphans) >= limit {
 			break
 		}
 	}
 	return orphans, nil
+}
+
+// allLinkTargetsGone reports whether every link points at an entity the probe
+// cannot find. A probe error other than ErrNotFound is returned: a transient
+// failure must never read as "gone".
+func allLinkTargetsGone(links []models.FileLink, probe func(models.FileLink) error) (bool, error) {
+	for _, link := range links {
+		err := probe(link)
+		switch {
+		case err == nil:
+			return false, nil // the entity is alive — the file is not an orphan
+		case errors.Is(err, registry.ErrNotFound):
+		default:
+			return false, errxtrace.Wrap("failed to probe linked entity existence", err)
+		}
+	}
+	return true, nil
+}
+
+// orphanShapeEligible reports whether a file's links make it a candidate at
+// all: at least one link, every link of an allowlisted type, with an entity
+// id, and older than the cutoff.
+func orphanShapeEligible(links []models.FileLink, olderThan time.Time) bool {
+	if len(links) == 0 {
+		return false
+	}
+	for _, l := range links {
+		if !orphanCandidateLinkTypes[l.EntityType] || l.EntityID == "" || !l.CreatedAt.Before(olderThan) {
+			return false
+		}
+	}
+	return true
 }
 
 // lessOrphanKeyset orders two candidates by the (created_at, id) keyset the
@@ -485,7 +522,8 @@ func (r *FileRegistry) ExistingIDs(_ context.Context, ids []string) ([]string, e
 }
 
 // SumSizeBreakdown mirrors the postgres aggregator: per-category byte
-// totals with export bundles split out of "other". The shared file map
+// totals with export bundles split out of "other". Every file counts once,
+// however many links it has. The shared file map
 // is already group-scoped via the user registry's groupID, so this
 // iterates the group's files only.
 func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBreakdown, error) {
@@ -500,7 +538,7 @@ func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBr
 			continue
 		}
 		size := file.SizeBytes
-		if file.LinkedEntityType == "export" {
+		if file.IsExportOwned() {
 			breakdown.Exports += size
 			continue
 		}
@@ -532,7 +570,7 @@ func (r *FileRegistry) SumSizeBreakdownByGroup(ctx context.Context, tenantID, gr
 			continue
 		}
 		size := file.SizeBytes
-		if file.LinkedEntityType == "export" {
+		if file.IsExportOwned() {
 			breakdown.Exports += size
 			continue
 		}
@@ -557,10 +595,11 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 
 	var filtered []*models.FileEntity
 	for _, file := range allFiles {
-		if file.LinkedEntityType == entityType && file.LinkedEntityID == entityID {
+		if file.LinkTo(entityType, entityID) != nil {
 			filtered = append(filtered, file)
 		}
 	}
+	sortFilesNewestFirst(filtered)
 
 	return filtered, nil
 }
@@ -570,8 +609,6 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 // counterpart used by GroupPurgeService to avoid a full file-table scan.
 func (r *FileRegistry) ListByGroup(_ context.Context, tenantID, groupID string) ([]*models.FileEntity, error) {
 	r.lock.RLock()
-	defer r.lock.RUnlock()
-
 	var filtered []*models.FileEntity
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		file := pair.Value
@@ -580,7 +617,8 @@ func (r *FileRegistry) ListByGroup(_ context.Context, tenantID, groupID string) 
 			filtered = append(filtered, &v)
 		}
 	}
-	return filtered, nil
+	r.lock.RUnlock()
+	return r.attachLinks(filtered), nil
 }
 
 // ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
@@ -592,10 +630,11 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 
 	var filtered []*models.FileEntity
 	for _, file := range allFiles {
-		if file.LinkedEntityType == entityType && file.LinkedEntityID == entityID && file.LinkedEntityMeta == entityMeta {
+		if l := file.LinkTo(entityType, entityID); l != nil && l.Meta == entityMeta {
 			filtered = append(filtered, file)
 		}
 	}
+	sortFilesNewestFirst(filtered)
 
 	return filtered, nil
 }

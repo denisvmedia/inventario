@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -35,6 +36,7 @@ type filesAPI struct {
 	fileService        *services.FileService
 	fileSigningService *services.FileSigningService
 	tagService         *services.TagService
+	linkService        *services.FileLinkService
 	factorySet         *registry.FactorySet
 	thumbnailConfig    services.ThumbnailGenerationConfig
 }
@@ -307,14 +309,11 @@ func (api *filesAPI) createFile(w http.ResponseWriter, r *http.Request) {
 		Description: input.Data.Attributes.Description,
 		// Type and Category are placeholder defaults; both are re-derived
 		// in updateFile once the upload sets the MIME type.
-		Type:             models.FileTypeOther,
-		Category:         models.FileCategoryOther,
-		Tags:             models.StringSlice(tagSlugs),
-		LinkedEntityType: input.Data.Attributes.LinkedEntityType,
-		LinkedEntityID:   input.Data.Attributes.LinkedEntityID,
-		LinkedEntityMeta: input.Data.Attributes.LinkedEntityMeta,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Type:      models.FileTypeOther,
+		Category:  models.FileCategoryOther,
+		Tags:      models.StringSlice(tagSlugs),
+		CreatedAt: now,
+		UpdatedAt: now,
 		// The blob Path/OriginalPath are intentionally left empty here.
 		// This is a metadata-only create endpoint; the physical blob key
 		// is populated server-side by the upload flow (/uploads/file)
@@ -371,6 +370,8 @@ func (api *filesAPI) apiGetFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fillLinkNames(r.Context(), registrySet, file)
+
 	// Generate signed URLs for the file
 	signedUrls := api.generateSignedURLsForFiles(r, []*models.FileEntity{file})
 
@@ -423,19 +424,6 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if this is an export file and prevent changing entity linking
-	if file.LinkedEntityType == "export" {
-		// For export files, only allow updating title, description, tags, and path
-		// Entity linking fields cannot be changed
-		if input.Data.Attributes.LinkedEntityType != file.LinkedEntityType ||
-			input.Data.Attributes.LinkedEntityID != file.LinkedEntityID ||
-			input.Data.Attributes.LinkedEntityMeta != file.LinkedEntityMeta {
-			err := errors.New("export file entity linking cannot be changed")
-			unprocessableEntityError(w, r, err)
-			return
-		}
-	}
-
 	// Update the editable fields (file type is auto-detected from MIME type and cannot be changed manually)
 	file.Title = input.Data.Attributes.Title
 	file.Description = input.Data.Attributes.Description
@@ -445,20 +433,12 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	file.Tags = models.StringSlice(tagSlugs)
-	// Preserve the persisted path when the client omits it. Link-only PUTs
-	// (the commodity-attach flow, #1983 Part A / PR #2032) send no `path`;
-	// blanking it here would orphan the file's display name and break the
-	// download filename (file.Path+file.Ext). Only overwrite when the client
-	// actually supplied a new filename. (#2033)
+	// Preserve the persisted path when the client omits it: blanking it would
+	// orphan the file's display name and break the download filename
+	// (file.Path+file.Ext). Only overwrite when the client actually supplied a
+	// new filename. (#2033)
 	if cleaned := textutils.CleanFilename(input.Data.Attributes.Path); cleaned != "" {
 		file.Path = cleaned
-	}
-
-	// Only update entity linking for non-export files or if values haven't changed
-	if file.LinkedEntityType != "export" {
-		file.LinkedEntityType = input.Data.Attributes.LinkedEntityType
-		file.LinkedEntityID = input.Data.Attributes.LinkedEntityID
-		file.LinkedEntityMeta = input.Data.Attributes.LinkedEntityMeta
 	}
 
 	file.UpdatedAt = time.Now() // Set updated timestamp
@@ -466,7 +446,6 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 	// Auto-detect file type from MIME type if available
 	if file.File != nil && file.MIMEType != "" {
 		file.Type = models.FileTypeFromMIME(file.MIMEType)
-		file.Category = models.FileCategoryFromContext(file.LinkedEntityType, file.LinkedEntityMeta, file.MIMEType)
 	}
 
 	updatedFile, err := fileReg.Update(r.Context(), *file)
@@ -474,11 +453,184 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 		renderEntityError(w, r, err)
 		return
 	}
+	fillLinkNames(r.Context(), registrySet, updatedFile)
 
 	response := jsonapi.NewFileResponse(updatedFile)
 	if err := render.Render(w, r, response); err != nil {
 		internalServerError(w, r, err)
 		return
+	}
+}
+
+// attachFile attaches a file to an item, a location or an area.
+// @Summary Attach a file to an entity
+// @Description Creates a link from the file to the entity and nothing else: no
+// @Description new file, no upload, no storage charge. Attaching a file to an
+// @Description entity it is already attached to is a no-op and answers 200.
+// @Description The entity must be in the same group as the file. A backup
+// @Description export file cannot be attached.
+// @Tags files
+// @Accept json-api
+// @Produce json-api
+// @Param groupSlug path string true "Group slug"
+// @Param fileID path string true "File ID"
+// @Param body body jsonapi.FileLinkRequest true "Entity to attach the file to"
+// @Success 200 {object} jsonapi.FileResponse "Already attached"
+// @Success 201 {object} jsonapi.FileResponse "Attached"
+// @Failure 404 {object} jsonapi.Errors "File not found"
+// @Failure 422 {object} jsonapi.Errors "Invalid entity, entity not found, or export file"
+// @Router /g/{groupSlug}/files/{fileID}/links [post].
+func (api *filesAPI) attachFile(w http.ResponseWriter, r *http.Request) {
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	var input jsonapi.FileLinkRequest
+	if err := render.Bind(r, &input); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+	attrs := input.Data.Attributes
+
+	file, created, err := api.linkService.Attach(r.Context(), chi.URLParam(r, "fileID"), attrs.EntityType, attrs.EntityID, attrs.Meta)
+	if err != nil {
+		renderFileLinkError(w, r, err)
+		return
+	}
+	fillLinkNames(r.Context(), registrySet, file)
+
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	if err := render.Render(w, r, jsonapi.NewFileResponse(file).WithStatusCode(status)); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
+// detachFile removes one attachment of a file.
+// @Summary Remove a file attachment
+// @Description Removes the link and nothing else. A file whose last attachment
+// @Description is removed stays as a standalone file; deleting it is a separate
+// @Description call. Removing the attachment of an item's cover photo clears
+// @Description that item's cover choice. The link of a backup export file
+// @Description cannot be removed.
+// @Tags files
+// @Accept json-api
+// @Produce json-api
+// @Param groupSlug path string true "Group slug"
+// @Param fileID path string true "File ID"
+// @Param linkID path string true "Link ID"
+// @Success 200 {object} jsonapi.FileResponse "The file with its remaining attachments"
+// @Failure 404 {object} jsonapi.Errors "File or link not found"
+// @Failure 422 {object} jsonapi.Errors "Export link"
+// @Router /g/{groupSlug}/files/{fileID}/links/{linkID} [delete].
+func (api *filesAPI) detachFile(w http.ResponseWriter, r *http.Request) {
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	file, err := api.linkService.Detach(r.Context(), chi.URLParam(r, "fileID"), chi.URLParam(r, "linkID"))
+	if err != nil {
+		renderFileLinkError(w, r, err)
+		return
+	}
+	fillLinkNames(r.Context(), registrySet, file)
+
+	if err := render.Render(w, r, jsonapi.NewFileResponse(file)); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
+// listFileDuplicates lists the files of the group with the same content.
+// @Summary List files with the same content
+// @Description Returns the other files of the group whose SHA-256 checksum
+// @Description equals this file's, newest first. Empty while the file's
+// @Description checksum is not known yet. Backup export files are left out.
+// @Tags files
+// @Accept json-api
+// @Produce json-api
+// @Param groupSlug path string true "Group slug"
+// @Param fileID path string true "File ID"
+// @Success 200 {object} jsonapi.FilesResponse "OK"
+// @Failure 404 {object} jsonapi.Errors "File not found"
+// @Router /g/{groupSlug}/files/{fileID}/duplicates [get].
+func (api *filesAPI) listFileDuplicates(w http.ResponseWriter, r *http.Request) {
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	files, err := api.linkService.Duplicates(r.Context(), chi.URLParam(r, "fileID"))
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+	fillLinkNames(r.Context(), registrySet, files...)
+
+	signedUrls := api.generateSignedURLsForFiles(r, files)
+	if err := render.Render(w, r, jsonapi.NewFilesResponseWithSignedUrls(files, len(files), signedUrls)); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
+// renderFileLinkError maps the attachment errors to 422 and everything else
+// through renderEntityError.
+func renderFileLinkError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, services.ErrFileLinkInvalid),
+		errors.Is(err, services.ErrFileLinkTargetNotFound),
+		errors.Is(err, services.ErrExportFileNotAttachable),
+		errors.Is(err, services.ErrExportLinkNotRemovable):
+		unprocessableEntityError(w, r, err)
+	default:
+		renderEntityError(w, r, err)
+	}
+}
+
+// fillLinkNames sets the display name of every link's entity, for the "Linked
+// to" list. Each entity is read once through the caller's group-scoped
+// registries; an entity that cannot be read keeps an empty name.
+func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*models.FileEntity) {
+	if registrySet == nil {
+		return
+	}
+	names := map[string]string{}
+	lookup := func(entityType, entityID string) string {
+		key := entityType + "/" + entityID
+		if name, ok := names[key]; ok {
+			return name
+		}
+		var name string
+		switch entityType {
+		case models.FileLinkCommodity:
+			if c, err := registrySet.CommodityRegistry.Get(ctx, entityID); err == nil {
+				name = c.Name
+			}
+		case models.FileLinkLocation:
+			if l, err := registrySet.LocationRegistry.Get(ctx, entityID); err == nil {
+				name = l.Name
+			}
+		case models.FileLinkArea:
+			if a, err := registrySet.AreaRegistry.Get(ctx, entityID); err == nil {
+				name = a.Name
+			}
+		}
+		names[key] = name
+		return name
+	}
+	for _, f := range files {
+		if f == nil {
+			continue
+		}
+		for i := range f.Links {
+			f.Links[i].EntityName = lookup(f.Links[i].EntityType, f.Links[i].EntityID)
+		}
 	}
 }
 
@@ -676,6 +828,7 @@ func Files(params Params) func(r chi.Router) {
 		fileService:        services.NewFileService(params.FactorySet, params.UploadLocation),
 		fileSigningService: fileSigningService,
 		tagService:         services.NewTagService(params.FactorySet),
+		linkService:        services.NewFileLinkService(params.FactorySet),
 		factorySet:         params.FactorySet,
 		thumbnailConfig:    params.ThumbnailConfig,
 	}
@@ -695,6 +848,9 @@ func Files(params Params) func(r chi.Router) {
 			r.Put("/", api.updateFile)                   // PUT /files/123
 			r.Delete("/", api.deleteFile)                // DELETE /files/123
 			r.Post("/signed-url", api.generateSignedURL) // POST /files/123/signed-url
+			r.Post("/links", api.attachFile)             // POST /files/123/links
+			r.Delete("/links/{linkID}", api.detachFile)  // DELETE /files/123/links/456
+			r.Get("/duplicates", api.listFileDuplicates) // GET /files/123/duplicates
 		})
 		// File downloads moved to signed URL routes for security
 	}

@@ -136,9 +136,7 @@ func (f *inbFixture) attachCommodityFileFull(c *qt.C, bucketMeta, filePath, titl
 		Type:                     models.FileTypeFromMIME(mime),
 		Category:                 models.FileCategoryFromContext("commodity", bucketMeta, mime),
 		Tags:                     models.StringSlice{},
-		LinkedEntityType:         "commodity",
-		LinkedEntityID:           com.ID,
-		LinkedEntityMeta:         bucketMeta,
+		Links:                    []models.FileLink{{EntityType: "commodity", EntityID: com.ID, Meta: bucketMeta}},
 		File: &models.File{
 			Path:      filePath,
 			Ext:       ext,
@@ -181,9 +179,7 @@ func (f *inbFixture) attachCommodityFileMissingBlob(c *qt.C, bucketMeta string, 
 		Type:                     models.FileTypeFromMIME("image/jpeg"),
 		Category:                 models.FileCategoryFromContext("commodity", bucketMeta, "image/jpeg"),
 		Tags:                     models.StringSlice{},
-		LinkedEntityType:         "commodity",
-		LinkedEntityID:           com.ID,
-		LinkedEntityMeta:         bucketMeta,
+		Links:                    []models.FileLink{{EntityType: "commodity", EntityID: com.ID, Meta: bucketMeta}},
 		File: &models.File{
 			Path:      "orphan",
 			Ext:       ".jpg",
@@ -324,7 +320,7 @@ func TestINBExport_ContainerStructure(t *testing.T) {
 	// Manifest records the format, signature info, and stats.
 	var manifest map[string]any
 	c.Assert(json.Unmarshal(manifestData, &manifest), qt.IsNil)
-	c.Assert(manifest["version"], qt.Equals, "2.1")
+	c.Assert(manifest["version"], qt.Equals, "3.0")
 	c.Assert(manifest["format"], qt.Equals, "json")
 	sigBlock := manifest["signature"].(map[string]any)
 	c.Assert(sigBlock["algorithm"], qt.Equals, backupsign.Algorithm)

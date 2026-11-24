@@ -10,6 +10,7 @@ type TableNames struct {
 	Settings                 func() TableName
 	Exports                  func() TableName
 	Files                    func() TableName
+	FileLinks                func() TableName
 	RestoreSteps             func() TableName
 	RestoreOperations        func() TableName
 	Tenants                  func() TableName
@@ -58,6 +59,7 @@ var DefaultTableNames = TableNames{
 	Settings:                 func() TableName { return "settings" },
 	Exports:                  func() TableName { return "exports" },
 	Files:                    func() TableName { return "files" },
+	FileLinks:                func() TableName { return "file_links" },
 	RestoreSteps:             func() TableName { return "restore_steps" },
 	RestoreOperations:        func() TableName { return "restore_operations" },
 	Tenants:                  func() TableName { return "tenants" },

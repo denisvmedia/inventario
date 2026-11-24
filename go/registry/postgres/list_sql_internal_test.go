@@ -408,14 +408,19 @@ func TestOrphanCandidatesSQL(t *testing.T) {
 	olderThan := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 	cursorAt := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
 
-	const (
-		head = "SELECT f.* FROM files f WHERE f.linked_entity_type IN ('commodity', 'area', 'location') " +
-			"AND f.linked_entity_id <> '' AND f.created_at < $1 AND f.updated_at < $2 AND "
-		gone = "NOT EXISTS (SELECT 1 FROM commodities c WHERE f.linked_entity_type = 'commodity' AND c.id = f.linked_entity_id) " +
-			"AND NOT EXISTS (SELECT 1 FROM areas a WHERE f.linked_entity_type = 'area' AND a.id = f.linked_entity_id) " +
-			"AND NOT EXISTS (SELECT 1 FROM locations l WHERE f.linked_entity_type = 'location' AND l.id = f.linked_entity_id) " +
+	// A candidate has at least one link and no link that keeps it: one of a
+	// type outside the allowlist, one with an empty entity id, one younger than
+	// the cutoff, or one whose entity still exists.
+	head := "SELECT f.* FROM files f WHERE f.created_at < $1 AND f.updated_at < $2 AND "
+	links := func(cutoff string) string {
+		return "EXISTS (SELECT 1 FROM file_links l WHERE l.file_id = f.id) " +
+			"AND NOT EXISTS (SELECT 1 FROM file_links l WHERE l.file_id = f.id AND (" +
+			"l.entity_type NOT IN ('commodity', 'area', 'location') OR l.entity_id = '' OR l.created_at >= " + cutoff + " " +
+			"OR (l.entity_type = 'commodity' AND EXISTS (SELECT 1 FROM commodities c WHERE c.id = l.entity_id)) " +
+			"OR (l.entity_type = 'area' AND EXISTS (SELECT 1 FROM areas a WHERE a.id = l.entity_id)) " +
+			"OR (l.entity_type = 'location' AND EXISTS (SELECT 1 FROM locations lo WHERE lo.id = l.entity_id)))) " +
 			"ORDER BY f.created_at ASC, f.id ASC "
-	)
+	}
 
 	for _, tc := range []struct {
 		after registry.OrphanCandidateCursor
@@ -424,16 +429,16 @@ func TestOrphanCandidatesSQL(t *testing.T) {
 		{
 			want: sqlCase{
 				name: "first page",
-				sql:  head + gone + "LIMIT $3",
-				args: []any{olderThan, olderThan, 25},
+				sql:  head + links("$3") + "LIMIT $4",
+				args: []any{olderThan, olderThan, olderThan, 25},
 			},
 		},
 		{
 			after: registry.OrphanCandidateCursor{CreatedAt: cursorAt, ID: "file-9"},
 			want: sqlCase{
 				name: "resumes after the cursor",
-				sql:  head + "(f.created_at, f.id) > ($3, $4) AND " + gone + "LIMIT $5",
-				args: []any{olderThan, olderThan, cursorAt, "file-9", 25},
+				sql:  head + "(f.created_at, f.id) > ($3, $4) AND " + links("$5") + "LIMIT $6",
+				args: []any{olderThan, olderThan, cursorAt, "file-9", olderThan, 25},
 			},
 		},
 	} {

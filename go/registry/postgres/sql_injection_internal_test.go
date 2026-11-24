@@ -63,7 +63,7 @@ func listQueries() []listQuery {
 		{"files", func(v string) (string, []any) {
 			fileType := models.FileType(v)
 			category := models.FileCategory(v)
-			return where("files", fileWhere(v, &fileType, &category, []string{v}, &v, &v))
+			return where("files", fileWhere(tables, v, &fileType, &category, []string{v}, &v, &v))
 		}},
 		{"areas", func(v string) (string, []any) {
 			return where("areas", areaWhere(registry.AreaListOptions{LocationID: v}))

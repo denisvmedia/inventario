@@ -563,9 +563,8 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // for a commodity (issue #1451 option B). The body's `attributes.file_id`
 // is either:
 //
-//   - a non-empty string — must reference a file that already belongs to
-//     this commodity (`linked_entity_type=commodity` /
-//     `linked_entity_id=<this>`) and is an image. The handler validates
+//   - a non-empty string — must reference a file that is linked to this
+//     commodity and is an image. The handler validates
 //     and persists `commodities.cover_file_id`.
 //   - `null` or empty — clears the override. The first-photo path takes
 //     over on the next read.
@@ -688,7 +687,7 @@ func (api *commoditiesAPI) validateCoverFile(ctx context.Context, fileReg regist
 	if file == nil || file.File == nil {
 		return registry.ErrNotFound
 	}
-	if file.LinkedEntityType != "commodity" || file.LinkedEntityID != commodityID {
+	if file.LinkTo(models.FileLinkCommodity, commodityID) == nil {
 		return validationError("file_id", "file is not attached to this commodity")
 	}
 	// Cover photos live in the `images` bucket only — both `Type=image`
@@ -717,9 +716,8 @@ func validationError(field, msg string) error {
 // every read via `?linked_entity_type=commodity&linked_entity_id={id}`
 // and detail / update / delete via `/files/{id}`. New uploads go through
 // `POST /uploads/file` (multipart, creates an unlinked FileEntity) and
-// then `PUT /files/{id}` to set `linked_entity_type` / `linked_entity_id`
-// on the resulting row — `/uploads/file` itself does not parse those
-// query params. The FE was migrated in #1476. The legacy
+// then `POST /files/{id}/links` to attach the resulting file to the item —
+// `/uploads/file` itself does not parse link query params. The FE was migrated in #1476. The legacy
 // `images` / `invoices` / `manuals` SQL tables stay until ops run the
 // #1399 backfill in production; that drop is a separate follow-up.
 

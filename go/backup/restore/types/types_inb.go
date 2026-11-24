@@ -363,22 +363,20 @@ func (c *INBCommodity) RestoredAcquisition() (*decimal.Decimal, *models.Currency
 	return price, &currency, nil
 }
 
-// ConvertToFileEntity builds a models.FileEntity from an INBFileRef. link carries
-// the resolved destination link — a commodity attachment, a location/area
-// attachment, or a standalone file (issue #2235; before it, this always assumed
-// "commodity"). blobKey is the re-minted destination blob key (under the importing
-// tenant). The file's immutable UUID is preserved.
-//
-// A standalone file (link.Type == "") is persisted with linked_entity_type/id/meta
-// ALL empty — model validation requires that triple to be empty together.
+// ConvertToFileEntity builds a models.FileEntity from an INBFileRef. links are
+// the resolved destination links of the file — commodity, location and area
+// attachments, one per archived reference that landed. An empty slice is a
+// standalone file. blobKey is the re-minted destination blob key (under the
+// importing tenant). The file's immutable UUID is preserved.
 //
 // Type/Category come from the archive when it carried them and fall back to the
-// MIME/linked-context derivation for older archives that did not.
+// MIME/linked-context derivation (of the first link) for older archives that
+// did not.
 //
 // A malformed createdAt/updatedAt timestamp surfaces an error (tagged with the
 // field name and the file UUID) rather than being coerced to time.Now(), so a
 // corrupt archive fails the restore instead of restoring wrong metadata.
-func (r *INBFileRef) ConvertToFileEntity(link INBFileLink, blobKey string) (*models.FileEntity, error) {
+func (r *INBFileRef) ConvertToFileEntity(links []INBFileLink, blobKey string) (*models.FileEntity, error) {
 	createdAt, err := parseInbTimestamp(r.CreatedAt)
 	if err != nil {
 		return nil, errxtrace.Wrap("invalid createdAt", err, errx.Attrs("file_id", r.ID))
@@ -388,34 +386,47 @@ func (r *INBFileRef) ConvertToFileEntity(link INBFileLink, blobKey string) (*mod
 		return nil, errxtrace.Wrap("invalid updatedAt", err, errx.Attrs("file_id", r.ID))
 	}
 
-	fileType := models.FileType(link.FileType)
+	var first INBFileLink
+	if len(links) > 0 {
+		first = links[0]
+	}
+	var fileType models.FileType
+	var category models.FileCategory
+	for _, l := range links {
+		if fileType == "" && l.FileType != "" {
+			fileType = models.FileType(l.FileType)
+		}
+		if category == "" && l.Category != "" {
+			category = models.FileCategory(l.Category)
+		}
+	}
 	if fileType == "" {
 		fileType = models.FileTypeFromMIME(r.MimeType)
 	}
-	category := models.FileCategory(link.Category)
 	if category == "" {
-		category = models.FileCategoryFromContext(link.Type, link.Meta, r.MimeType)
+		category = models.FileCategoryFromContext(first.Type, first.Meta, r.MimeType)
 	}
 
-	linkedDBID, linkedMeta := link.DBID, link.Meta
-	if link.Type == "" {
-		linkedDBID, linkedMeta = "", ""
+	fileLinks := make([]models.FileLink, 0, len(links))
+	for _, l := range links {
+		if l.Type == "" {
+			continue
+		}
+		fileLinks = append(fileLinks, models.FileLink{EntityType: l.Type, EntityID: l.DBID, Meta: l.Meta})
 	}
 
 	return &models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{UUID: r.ID},
 		},
-		Title:            r.Title,
-		Description:      r.Description,
-		Type:             fileType,
-		Category:         category,
-		Tags:             models.StringSlice(r.Tags),
-		LinkedEntityType: link.Type,
-		LinkedEntityID:   linkedDBID,
-		LinkedEntityMeta: linkedMeta,
-		CreatedAt:        createdAt,
-		UpdatedAt:        updatedAt,
+		Title:       r.Title,
+		Description: r.Description,
+		Type:        fileType,
+		Category:    category,
+		Tags:        models.StringSlice(r.Tags),
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
+		Links:       fileLinks,
 		File: &models.File{
 			Path:         fileBaseName(r),
 			OriginalPath: blobKey,

@@ -1502,6 +1502,80 @@ table "exports" {
   }
 }
 
+table "file_links" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant file link isolation"
+  }
+  column "file_id" {
+    type = TEXT
+  }
+  column "entity_type" {
+    type = TEXT
+  }
+  column "entity_id" {
+    type = TEXT
+  }
+  column "meta" {
+    type = TEXT
+    default = ""
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_file_link_file" {
+    columns = [column.file_id]
+    ref_columns = [table.files.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_file_links_entity" {
+    columns = [column.entity_type, column.entity_id]
+  }
+  index "idx_file_links_file_entity" {
+    unique = true
+    columns = [column.file_id, column.entity_type, column.entity_id]
+  }
+  index "idx_file_links_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_file_links_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
 table "files" {
   row_security {
     enabled = true
@@ -1524,18 +1598,6 @@ table "files" {
   }
   column "tags" {
     type = JSONB
-    null = true
-  }
-  column "linked_entity_type" {
-    type = TEXT
-    null = true
-  }
-  column "linked_entity_id" {
-    type = TEXT
-    null = true
-  }
-  column "linked_entity_meta" {
-    type = TEXT
     null = true
   }
   column "created_at" {
@@ -1562,6 +1624,18 @@ table "files" {
     type = TEXT
     default = sql("(gen_random_uuid())::text")
   }
+  column "linked_entity_type" {
+    type = TEXT
+    null = true
+  }
+  column "linked_entity_id" {
+    type = TEXT
+    null = true
+  }
+  column "linked_entity_meta" {
+    type = TEXT
+    null = true
+  }
   column "path" {
     type = TEXT
   }
@@ -1577,6 +1651,10 @@ table "files" {
   column "size_bytes" {
     type = BIGINT
     default = "0"
+  }
+  column "sha256" {
+    type = TEXT
+    default = ""
   }
   primary_key {
     columns = [column.id]
@@ -1624,6 +1702,9 @@ table "files" {
   }
   index "idx_files_tenant_group_category" {
     columns = [column.tenant_id, column.group_id, column.category]
+  }
+  index "idx_files_tenant_group_sha256" {
+    columns = [column.tenant_id, column.group_id, column.sha256]
   }
   index "idx_files_tenant_id" {
     columns = [column.tenant_id]
@@ -3871,6 +3952,24 @@ policy "export_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   comment = "Ensures exports can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "file_link_background_worker_access" {
+  on = table.file_links
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to access all file links for processing"
+}
+
+policy "file_link_isolation" {
+  on = table.file_links
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures file links can only be accessed and modified by their tenant and group with required contexts"
 }
 
 policy "file_background_worker_access" {

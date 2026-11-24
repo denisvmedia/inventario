@@ -773,7 +773,7 @@ func attachCommodityFile(ctx context.Context, set *registry.Set, uploader blobUp
 }
 
 // attachLocationFile is the same as attachCommodityFile but for
-// location-scoped files (LinkedEntityType="location").
+// location-scoped files (a "location" link).
 func attachLocationFile(ctx context.Context, set *registry.Set, uploader blobUploader, user *models.User, group *models.LocationGroup, loc *models.Location, fixture fixtureKind, meta, title string, tags []string) (string, error) {
 	return attachFile(ctx, attachArgs{Set: set, Uploader: uploader, User: user, Group: group, Fixture: fixture, Meta: meta, Title: title, Tags: tags}, "location", loc.ID)
 }
@@ -800,16 +800,14 @@ func attachFile(ctx context.Context, args attachArgs, linkedEntityType, linkedEn
 			GroupID:         args.Group.ID,
 			CreatedByUserID: args.User.ID,
 		},
-		Title:            args.Title,
-		Description:      "",
-		Type:             models.FileTypeFromMIME(mime),
-		Category:         models.FileCategoryFromContext(linkedEntityType, args.Meta, mime),
-		Tags:             args.Tags,
-		LinkedEntityType: linkedEntityType,
-		LinkedEntityID:   linkedEntityID,
-		LinkedEntityMeta: args.Meta,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       args.Title,
+		Description: "",
+		Type:        models.FileTypeFromMIME(mime),
+		Category:    models.FileCategoryFromContext(linkedEntityType, args.Meta, mime),
+		Tags:        args.Tags,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		Links:       []models.FileLink{{EntityType: linkedEntityType, EntityID: linkedEntityID, Meta: args.Meta}},
 		File: &models.File{
 			Path:         pathTitle,
 			OriginalPath: storagePath,

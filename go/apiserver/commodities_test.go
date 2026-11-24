@@ -532,11 +532,9 @@ func TestCommodityCoverPatch_RejectsForeignFile(t *testing.T) {
 		// commodities[1] in the fixture has no attached photos. Seed one
 		// so we have a valid id that belongs to a *different* commodity.
 		seeded := must.Must(registrySet.FileRegistry.Create(context.Background(), models.FileEntity{
-			Type:             models.FileTypeImage,
-			Category:         models.FileCategoryImages,
-			LinkedEntityType: "commodity",
-			LinkedEntityID:   other.ID,
-			LinkedEntityMeta: "images",
+			Type:     models.FileTypeImage,
+			Category: models.FileCategoryImages,
+			Links:    []models.FileLink{{EntityType: "commodity", EntityID: other.ID, Meta: "images"}},
 			File: &models.File{
 				Path:         "isolation",
 				OriginalPath: "isolation.jpg",
@@ -594,12 +592,10 @@ func TestCommodityCoverPatch_RejectsImageInWrongCategory(t *testing.T) {
 	commodity := commodities[0]
 
 	jpegInvoice := must.Must(registrySet.FileRegistry.Create(context.Background(), models.FileEntity{
-		Type:             models.FileTypeImage,
-		Category:         models.FileCategoryDocuments,
-		Tags:             models.StringSlice{models.FileTagInvoice},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   commodity.ID,
-		LinkedEntityMeta: "invoices",
+		Type:     models.FileTypeImage,
+		Category: models.FileCategoryDocuments,
+		Tags:     models.StringSlice{models.FileTagInvoice},
+		Links:    []models.FileLink{{EntityType: "commodity", EntityID: commodity.ID, Meta: "invoices"}},
 		File: &models.File{
 			Path:         "scanned-receipt",
 			OriginalPath: "scanned-receipt.jpg",

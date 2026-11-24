@@ -474,7 +474,7 @@ func TestFileService_DeletePhysicalFile_NonExistent(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 }
 
-func TestFileService_DeleteLinkedFiles(t *testing.T) {
+func TestFileService_DetachEntityFiles(t *testing.T) {
 	c := qt.New(t)
 	ctx := newTestContext()
 
@@ -513,13 +513,11 @@ func TestFileService_DeleteLinkedFiles(t *testing.T) {
 
 	for _, filePath := range testFiles {
 		fileEntity := models.FileEntity{
-			Title:            "Test File",
-			Description:      "Test description",
-			Type:             models.FileTypeDocument,
-			Tags:             []string{"test"},
-			LinkedEntityType: entityType,
-			LinkedEntityID:   entityID,
-			LinkedEntityMeta: "images",
+			Title:       "Test File",
+			Description: "Test description",
+			Type:        models.FileTypeDocument,
+			Tags:        []string{"test"},
+			Links:       []models.FileLink{{EntityType: entityType, EntityID: entityID, Meta: "images"}},
 			File: &models.File{
 				Path:         filepath.Base(filePath),
 				OriginalPath: filePath,
@@ -534,7 +532,7 @@ func TestFileService_DeleteLinkedFiles(t *testing.T) {
 	}
 
 	// Test deletion of linked files
-	err = service.DeleteLinkedFiles(ctx, entityType, entityID)
+	err = service.DetachEntityFiles(ctx, entityType, entityID)
 	c.Assert(err, qt.IsNil)
 
 	// Verify all file entities are deleted
@@ -551,12 +549,13 @@ func TestFileService_DeleteLinkedFiles(t *testing.T) {
 	}
 }
 
-// TestFileService_DeleteLinkedFiles_AreaAndLocation pins #2119 at the
-// primitive level: DeleteLinkedFiles handles the 'area' and 'location' link
-// types exactly like 'commodity' — file rows AND physical blobs are removed.
+// TestFileService_DetachEntityFiles_AreaAndLocation pins #2119 at the
+// primitive level: DetachEntityFiles handles the 'area' and 'location' link
+// types exactly like 'commodity' — a file attached only to the entity loses
+// its row AND physical blob.
 // The area case uses an image MIME so the canonical thumbnail-key cleanup is
 // exercised for these link types too.
-func TestFileService_DeleteLinkedFiles_AreaAndLocation(t *testing.T) {
+func TestFileService_DetachEntityFiles_AreaAndLocation(t *testing.T) {
 	tests := []struct {
 		name       string
 		entityType string
@@ -605,11 +604,9 @@ func TestFileService_DeleteLinkedFiles_AreaAndLocation(t *testing.T) {
 
 			entityID := "test-" + tt.entityType + "-id"
 			createdFile, err := registrySet.FileRegistry.Create(ctx, models.FileEntity{
-				Title:            "Linked File",
-				Type:             models.FileTypeFromMIME(tt.mimeType),
-				LinkedEntityType: tt.entityType,
-				LinkedEntityID:   entityID,
-				LinkedEntityMeta: "images",
+				Title: "Linked File",
+				Type:  models.FileTypeFromMIME(tt.mimeType),
+				Links: []models.FileLink{{EntityType: tt.entityType, EntityID: entityID, Meta: "images"}},
 				File: &models.File{
 					Path:         "linked-" + tt.entityType,
 					OriginalPath: blobKey,
@@ -628,7 +625,7 @@ func TestFileService_DeleteLinkedFiles_AreaAndLocation(t *testing.T) {
 				}
 			}
 
-			err = service.DeleteLinkedFiles(ctx, tt.entityType, entityID)
+			err = service.DetachEntityFiles(ctx, tt.entityType, entityID)
 			c.Assert(err, qt.IsNil)
 
 			// File row is gone.
@@ -652,7 +649,7 @@ func TestFileService_DeleteLinkedFiles_AreaAndLocation(t *testing.T) {
 	}
 }
 
-func TestFileService_DeleteLinkedFiles_NoFiles(t *testing.T) {
+func TestFileService_DetachEntityFiles_NoFiles(t *testing.T) {
 	c := qt.New(t)
 	ctx := newTestContext()
 
@@ -671,8 +668,8 @@ func TestFileService_DeleteLinkedFiles_NoFiles(t *testing.T) {
 	// Create file service
 	service := NewFileService(factorySet, uploadLocation)
 
-	// Test deletion of linked files when no files exist (should not error)
-	err := service.DeleteLinkedFiles(ctx, "commodity", "non-existent-id")
+	// Detaching an entity with no files is a no-op, not an error
+	err := service.DetachEntityFiles(ctx, "commodity", "non-existent-id")
 	c.Assert(err, qt.IsNil)
 }
 
@@ -715,13 +712,11 @@ func TestFileService_ExportFileDeletion_Integration(t *testing.T) {
 
 	// Create file entity linked to an export
 	fileEntity := models.FileEntity{
-		Title:            "Test Export File",
-		Description:      "Test export file description",
-		Type:             models.FileTypeDocument,
-		Tags:             []string{"export"},
-		LinkedEntityType: "export",
-		LinkedEntityID:   "test-export-id",
-		LinkedEntityMeta: "xml-1.0",
+		Title:       "Test Export File",
+		Description: "Test export file description",
+		Type:        models.FileTypeDocument,
+		Tags:        []string{"export"},
+		Links:       []models.FileLink{{EntityType: "export", EntityID: "test-export-id", Meta: "xml-1.0"}},
 		File: &models.File{
 			Path:         "export-test-file",
 			OriginalPath: testFilePath,
