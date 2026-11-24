@@ -27,6 +27,7 @@ function headers(auth: ApiAuth): Record<string, string> {
   return {
     Accept: "application/vnd.api+json",
     Authorization: `Bearer ${auth.accessToken}`,
+    "X-CSRF-Token": auth.csrfToken,
   };
 }
 
