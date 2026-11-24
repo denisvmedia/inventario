@@ -96,6 +96,25 @@ export async function listTags(
   }
 }
 
+// The BE caps per_page at 100 (parsePagination). listAllTags walks the
+// pages so a group with more tags than that still resolves every label;
+// the page cap only bounds a runaway loop.
+const ALL_TAGS_PAGE_SIZE = 100
+const ALL_TAGS_MAX_PAGES = 50
+
+export async function listAllTags(
+  kind: TagKind,
+  signal?: AbortSignal
+): Promise<Array<TagEntity & { id: string }>> {
+  const out: Array<TagEntity & { id: string }> = []
+  for (let page = 1; page <= ALL_TAGS_MAX_PAGES; page++) {
+    const { tags, total } = await listTags({ kind, page, perPage: ALL_TAGS_PAGE_SIZE, signal })
+    out.push(...tags.map(({ tag }) => tag))
+    if (tags.length < ALL_TAGS_PAGE_SIZE || out.length >= total) break
+  }
+  return out
+}
+
 export async function getTagStats(signal?: AbortSignal): Promise<TagStats> {
   const body = await http.get<TagStatsEnvelope>("/tags/stats", { signal })
   return body.data

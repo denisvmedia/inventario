@@ -51,6 +51,25 @@ describe("<TagsInput />", () => {
     expect(onChange).toHaveBeenCalledWith(["alpha"])
   })
 
+  it("shows each chip's label from labelOf and keeps the slug as the value", async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const labels = new Map([["usb-кабель", "USB кабель"]])
+    render(
+      <TagsInput
+        values={["usb-кабель", "orphan"]}
+        onChange={onChange}
+        testId="t"
+        labelOf={(v) => labels.get(v) ?? v}
+      />
+    )
+    const chips = screen.getAllByTestId("t-chip")
+    expect(chips[0]).toHaveTextContent("USB кабель")
+    expect(chips[1]).toHaveTextContent("orphan")
+    await user.click(screen.getByLabelText("remove USB кабель"))
+    expect(onChange).toHaveBeenCalledWith(["orphan"])
+  })
+
   it("renders the supplied label when present", () => {
     render(<TagsInput label="My tags" values={[]} onChange={vi.fn()} testId="t" />)
     expect(screen.getByText("My tags")).toBeInTheDocument()
@@ -74,6 +93,37 @@ describe("<TagsInput />", () => {
   it("omits the datalist entirely when no suggestions are provided", () => {
     const { container } = render(<TagsInput values={[]} onChange={vi.fn()} testId="t" />)
     expect(container.querySelector("datalist")).toBeNull()
+  })
+})
+
+describe("<TagsInput /> autocomplete labels", () => {
+  it("lists suggestions by label, matches typed label text, and commits the slug", async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const labels = new Map([
+      ["usb-кабель", "USB кабель"],
+      ["usb-хаб", "USB хаб"],
+    ])
+    renderWithProviders({
+      children: (
+        <TagsInput
+          values={[]}
+          onChange={onChange}
+          testId="t"
+          autocomplete
+          kind="commodity"
+          suggestions={["usb-кабель", "usb-хаб", "кухня"]}
+          labelOf={(v) => labels.get(v) ?? v}
+        />
+      ),
+    })
+    const input = screen.getByTestId("t-input")
+    await user.click(input)
+    await user.type(input, "USB к")
+    const options = screen.getAllByRole("option")
+    expect(options.map((o) => o.textContent)).toEqual(["USB кабель"])
+    await user.keyboard("{ArrowDown}{Enter}")
+    expect(onChange).toHaveBeenCalledWith(["usb-кабель"])
   })
 })
 

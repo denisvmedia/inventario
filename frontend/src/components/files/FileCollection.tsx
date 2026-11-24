@@ -5,6 +5,7 @@ import { FileListRow } from "@/components/files/FileListRow"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { ListedFile } from "@/features/files/api"
 import type { FilesViewMode } from "@/features/files/useFilesViewMode"
+import { useTagLabel } from "@/features/tags/hooks"
 import { cn } from "@/lib/utils"
 
 // Single source of truth for rendering a set of files as EITHER a
@@ -55,6 +56,7 @@ export function FileCollection({
   gridClassName,
 }: FileCollectionProps) {
   const { t } = useTranslation()
+  const tagLabel = useTagLabel("file")
 
   if (viewMode === "grid") {
     return (
@@ -70,6 +72,7 @@ export function FileCollection({
             coverState={coverState}
             onSetCover={onSetCover}
             coverBusy={coverBusy}
+            tagLabel={tagLabel}
           />
         ))}
       </div>
@@ -111,6 +114,7 @@ export function FileCollection({
             selected={selectedIds?.has(file.id)}
             onToggleSelect={onToggleSelect}
             onOpen={onOpen}
+            tagLabel={tagLabel}
           />
         ))}
       </ul>

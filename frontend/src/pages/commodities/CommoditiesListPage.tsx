@@ -75,6 +75,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useUserSettings } from "@/features/settings/hooks"
 import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
+import { useTagLabel } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -476,6 +477,7 @@ export function CommoditiesListPage() {
     }
     return (id?: string) => (id ? (map.get(id) ?? "") : "")
   }, [areas.data])
+  const tagLabel = useTagLabel("commodity")
 
   // ---- Handlers ----------------------------------------------------------
   // After a successful create, drop the user on the new commodity's
@@ -674,6 +676,7 @@ export function CommoditiesListPage() {
             onToggleSelected={toggleSelected}
             onPreview={openCommodityInSheet}
             areaName={areaName}
+            tagLabel={tagLabel}
             currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
             serviceCounts={serviceCounts}
@@ -687,6 +690,7 @@ export function CommoditiesListPage() {
             onToggleSelectAll={() => toggleSelectAll(rows)}
             onPreview={openCommodityInSheet}
             areaName={areaName}
+            tagLabel={tagLabel}
             currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
             serviceCounts={serviceCounts}
@@ -1151,6 +1155,8 @@ interface CommoditiesGridProps {
   onToggleSelected: (id: string) => void
   onPreview: (id: string) => void
   areaName: (id?: string) => string
+  // Resolves a stored tag slug to the tag's label (slug while unknown).
+  tagLabel: (slug: string) => string
   currency: string
   // Map of commodity_id → open-loan count (#1452). Rows with count > 0
   // render a "Lent out" pill. Empty / missing keys mean "not lent" so
@@ -1171,6 +1177,7 @@ function CommoditiesGrid({
   onToggleSelected,
   onPreview,
   areaName,
+  tagLabel,
   currency,
   loanCounts,
   serviceCounts,
@@ -1186,6 +1193,7 @@ function CommoditiesGrid({
           onToggleSelected={onToggleSelected}
           onPreview={onPreview}
           areaName={areaName}
+          tagLabel={tagLabel}
           currency={currency}
           lent={(loanCounts?.[row.id ?? ""] ?? 0) > 0}
           inService={(serviceCounts?.[row.id ?? ""] ?? 0) > 0}
@@ -1202,6 +1210,7 @@ interface CommodityCardProps {
   onToggleSelected: (id: string) => void
   onPreview: (id: string) => void
   areaName: (id?: string) => string
+  tagLabel: (slug: string) => string
   currency: string
   lent?: boolean
   inService?: boolean
@@ -1214,6 +1223,7 @@ function CommodityGridCard({
   onToggleSelected,
   onPreview,
   areaName,
+  tagLabel,
   currency,
   lent,
   inService,
@@ -1357,7 +1367,7 @@ function CommodityGridCard({
           <div className="mt-2 flex flex-wrap gap-1">
             {row.tags.slice(0, 3).map((tag) => (
               <Badge key={tag} variant="secondary" className="h-4 px-1.5 text-[10px]">
-                {tag}
+                {tagLabel(tag)}
               </Badge>
             ))}
           </div>

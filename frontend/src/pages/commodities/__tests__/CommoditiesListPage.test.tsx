@@ -16,6 +16,7 @@ import {
   commodityHandlers,
   groupHandlers,
   locationHandlers,
+  tagHandlers,
 } from "@/test/handlers"
 import { pickRadixSelect } from "@/test/radix"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
@@ -113,6 +114,24 @@ describe("<CommoditiesListPage />", () => {
     await waitFor(() => expect(screen.getAllByTestId("commodity-card").length).toBe(2))
     expect(screen.getByText("MacBook Pro")).toBeInTheDocument()
     expect(screen.getByText("Coffee grinder")).toBeInTheDocument()
+  })
+
+  it("shows the tag label on grid cards and the slug for a tag it does not know", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...tagHandlers.list(SLUG, [
+        { id: "t1", slug: "usb-кабель", label: "USB кабель", color: "blue" },
+      ]),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "Charger", tags: ["usb-кабель", "orphan"] }),
+      ])
+    )
+    renderList()
+    const card = await screen.findByTestId("commodity-card")
+    expect(await within(card).findByText("USB кабель")).toBeInTheDocument()
+    expect(within(card).getByText("orphan")).toBeInTheDocument()
+    expect(within(card).queryByText("usb-кабель")).toBeNull()
   })
 
   it("shows the purchase date chip on grid cards and omits it when missing", async () => {

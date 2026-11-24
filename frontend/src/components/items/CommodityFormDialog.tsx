@@ -60,7 +60,7 @@ import {
   type PendingFile,
 } from "@/features/commodities/draft"
 import { fileKeys } from "@/features/files/keys"
-import { useTagAutocomplete } from "@/features/tags/hooks"
+import { useTagAutocomplete, useTagLabel } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { currencyMeta } from "@/lib/currency-meta"
@@ -1756,6 +1756,7 @@ function warrantyStatusFromDate(d: string | undefined) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see BasicsStep
 function ExtrasStep(props: any) {
   const { t } = useTranslation()
+  const tagLabel = useTagLabel("commodity")
   const { register, errors, watch, setValue } = props
   const extraSerials: string[] = watch("extra_serial_numbers") ?? []
   const partNumbers: string[] = watch("part_numbers") ?? []
@@ -1804,6 +1805,7 @@ function ExtrasStep(props: any) {
           testId="commodity-tags"
           autocomplete
           kind="commodity"
+          labelOf={tagLabel}
         />
         <p className="text-xs text-muted-foreground">{t("commodities:fields.tagsHelp")}</p>
         <TagsSuggestionChips
@@ -1965,6 +1967,7 @@ interface PendingFileRowProps {
 
 function PendingFileRow({ entry, onRemove, onTagsChange }: PendingFileRowProps) {
   const { t } = useTranslation()
+  const tagLabel = useTagLabel("file")
   const category = categoryFromMime(entry.file.type)
   // Pick a small visual cue per derived category. Stays consistent
   // with other surfaces' chart-* tinting (Photos = green status,
@@ -2036,6 +2039,7 @@ function PendingFileRow({ entry, onRemove, onTagsChange }: PendingFileRowProps) 
         autocomplete
         compact
         kind="file"
+        labelOf={tagLabel}
       />
     </li>
   )
@@ -2075,25 +2079,23 @@ function TagsSuggestionChips({
   // Hide once the user has selected any tag — the chips' job was the
   // first-tag nudge.
   if (selected.length > 0) return null
-  const candidates = (remote.data ?? [])
-    .map((tag) => tag.slug)
-    .filter((slug) => !selected.includes(slug))
-    .slice(0, 5)
+  // Picking a chip stores the slug; the chip itself shows the label.
+  const candidates = (remote.data ?? []).filter((tag) => !selected.includes(tag.slug)).slice(0, 5)
   if (candidates.length === 0) return null
   return (
     <div
       className="flex flex-wrap gap-1.5 animate-in fade-in duration-200"
       data-testid={testId ?? "commodity-tags-suggestions"}
     >
-      {candidates.map((slug) => (
+      {candidates.map((tag) => (
         <button
-          key={slug}
+          key={tag.slug}
           type="button"
-          onClick={() => onPick(slug)}
+          onClick={() => onPick(tag.slug)}
           className="inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-background px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
         >
           <Plus aria-hidden="true" className="size-3" />
-          {slug}
+          {tag.label || tag.slug}
         </button>
       ))}
     </div>

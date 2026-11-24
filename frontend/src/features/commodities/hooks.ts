@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { tagKeys } from "@/features/tags/keys"
 
 import {
   bulkDeleteCommodities,
@@ -211,12 +212,24 @@ function useInvalidate() {
   }
 }
 
+// A commodity write can auto-create tags from the text typed in its tag
+// field and changes tag usage counts, so it refreshes the group's tag
+// queries too (labels on cards, the Tags page).
+function useInvalidateTags() {
+  const qc = useQueryClient()
+  const { currentGroup } = useCurrentGroup()
+  const slug = currentGroup?.slug ?? ""
+  return () => qc.invalidateQueries({ queryKey: tagKeys.group(slug) })
+}
+
 export function useCreateCommodity() {
   const invalidate = useInvalidate()
+  const invalidateTags = useInvalidateTags()
   return useMutation<Commodity, Error, CreateCommodityRequest>({
     mutationFn: (req) => createCommodity(req),
     onSuccess: () => {
       invalidate.all()
+      invalidateTags()
     },
   })
 }
@@ -225,6 +238,7 @@ export function useUpdateCommodity(id: string) {
   const qc = useQueryClient()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
+  const invalidateTags = useInvalidateTags()
   const detailKey = commodityKeys.detail(slug, id)
   return useMutation<Commodity, Error, UpdateCommodityRequest>({
     mutationFn: (req) => updateCommodity(id, req),
@@ -240,6 +254,7 @@ export function useUpdateCommodity(id: string) {
         meta: cached?.meta ?? {},
       })
       qc.invalidateQueries({ queryKey: commodityKeys.group(slug) })
+      invalidateTags()
     },
   })
 }

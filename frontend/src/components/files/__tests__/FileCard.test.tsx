@@ -85,6 +85,21 @@ describe("<FileCard />", () => {
     expect(screen.getByText("+2")).toBeInTheDocument()
   })
 
+  it("shows a user tag's label from the tagLabel resolver", () => {
+    const labels = new Map([["usb-кабель", "USB кабель"]])
+    render(
+      <FileCard
+        file={file({ tags: ["usb-кабель", "orphan"] })}
+        selected={false}
+        onToggleSelect={vi.fn()}
+        onOpen={vi.fn()}
+        tagLabel={(slug) => labels.get(slug) ?? slug}
+      />
+    )
+    expect(screen.getByText("#USB кабель")).toBeInTheDocument()
+    expect(screen.getByText("#orphan")).toBeInTheDocument()
+  })
+
   // #1659 item 1: the per-MIME / per-category fallback icon palette
   // mirrors design-mocks/src/views/FileBrowserView.tsx mimeIconAndColor
   // — image/*  → status-active (green), application/pdf → status-expired

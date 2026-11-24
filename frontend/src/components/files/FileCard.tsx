@@ -57,6 +57,10 @@ export interface FileCardProps {
   // True while a cover mutation is inflight — disables the star to
   // prevent double-clicks from racing the optimistic cache update.
   coverBusy?: boolean
+  // Resolves a stored tag slug to the tag's label. Passed in by
+  // FileCollection (useTagLabel) so the card itself stays free of
+  // queries; without it the slug is shown.
+  tagLabel?: (slug: string) => string
 }
 
 export function FileCard({
@@ -68,6 +72,7 @@ export function FileCard({
   coverState,
   onSetCover,
   coverBusy = false,
+  tagLabel,
 }: FileCardProps) {
   const { t } = useTranslation()
   const categoryLabelOf = useCategoryLabel()
@@ -89,12 +94,13 @@ export function FileCard({
   const CategoryBadgeIcon = tile.icon
   const categoryLabel = categoryLabelOf(tile.key)
   // Mirror FileListRow: known curated tags pick up their accent colour
-  // class; user-supplied tags fall back to muted-foreground.
+  // class and translated name; user-supplied tags show their label and
+  // fall back to muted-foreground.
   const matchedTags = tags.map((tag) => {
     const pill = FILE_TAG_PILLS.find((p) => p.id === tag.toLowerCase())
     return {
       id: tag,
-      label: pill ? tagLabelOf(pill.id) : tag,
+      label: pill ? tagLabelOf(pill.id) : (tagLabel?.(tag) ?? tag),
       colorClass: pill?.colorClass ?? "text-muted-foreground",
     }
   })
