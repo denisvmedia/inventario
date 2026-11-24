@@ -12,6 +12,7 @@ import {
   ListFilter,
   MapPinOff,
   Plus,
+  QrCode,
   Search,
   Trash2,
 } from "lucide-react"
@@ -72,6 +73,7 @@ import {
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { labelsPageHref } from "@/features/labels/links"
 import { useUserSettings } from "@/features/settings/hooks"
 import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
@@ -628,6 +630,18 @@ export function CommoditiesListPage() {
             >
               {t("commodities:bulk.moveButton")}
             </Button>
+            {/* Print labels (#2807): a label sheet for the selection. */}
+            {slug ? (
+              <Button asChild variant="outline" size="sm" className="gap-1.5">
+                <Link
+                  to={labelsPageHref(slug, { items: [...selected] })}
+                  data-testid="commodities-bulk-print-labels"
+                >
+                  <QrCode className="size-4" aria-hidden="true" />
+                  {t("commodities:bulk.printLabels")}
+                </Link>
+              </Button>
+            ) : null}
             <Button
               variant="destructive"
               size="sm"

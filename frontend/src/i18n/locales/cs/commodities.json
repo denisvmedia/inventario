@@ -18,6 +18,7 @@
     "moveTitle_few": "Přesunout {{count}} položky",
     "moveTitle_many": "Přesunout {{count}} položky",
     "moveTitle_other": "Přesunout {{count}} položek",
+    "printLabels": "Vytisknout štítky",
     "regionLabel": "Lišta hromadných akcí",
     "selected_one": "{{count}} položka vybrána",
     "selected_few": "{{count}} položky vybrány",
@@ -38,6 +39,7 @@
   },
   "detail": {
     "acquisitionPrice": "Původně zakoupeno za {{price}}",
+    "assetId": "Inventární číslo",
     "backToList": "Zpět na položky",
     "delete": "Smazat",
     "documentTitle": "Položka",
@@ -134,6 +136,7 @@
     "notFoundTitle": "Položka nenalezena",
     "noValue": "—",
     "print": "Tisk",
+    "printLabel": "Vytisknout štítek",
     "sheetDescriptionFallback": "Prohlédněte si, upravte nebo spravujte soubory vybrané položky.",
     "sheetTitleFallback": "Podrobnosti položky",
     "statusTransition": {
@@ -403,6 +406,38 @@
     "submitEdit": "Uložit změny",
     "submitting": "Ukládání…"
   },
+  "labels": {
+    "areaQrTitle": "QR kód pro oblast {{name}}",
+    "back": "Zpět",
+    "empty": {
+      "description": "Otevřete položku a zvolte Vytisknout štítek, nebo otevřete oblast a zvolte Vytisknout štítky.",
+      "title": "Není co tisknout"
+    },
+    "error": {
+      "description": "Položka nebo oblast mohla být smazána. Níže jsou štítky, které se načetly.",
+      "title": "Některé štítky se nepodařilo načíst"
+    },
+    "format": "Rozvržení",
+    "formats": {
+      "a4Sheet": "Arch A4, 3 × 7 (Avery L7160)",
+      "letterSheet": "Arch Letter, 3 × 10 (Avery 5160)",
+      "single": "Jeden štítek, 63,5 × 38,1 mm"
+    },
+    "itemQrTitle": "QR kód pro {{name}}",
+    "pages_few": "{{count}} stránky",
+    "pages_many": "{{count}} stránky",
+    "pages_one": "{{count}} stránka",
+    "pages_other": "{{count}} stránek",
+    "print": "Tisk",
+    "printHint": "V dialogu tisku nastavte měřítko 100 % (skutečná velikost) a okraje na žádné.",
+    "skip": "Přeskočit pozice",
+    "skipHint": "Ponechá první pozice archu prázdné, aby šlo použít načatý arch.",
+    "summary_few": "{{count}} štítky",
+    "summary_many": "{{count}} štítku",
+    "summary_one": "{{count}} štítek",
+    "summary_other": "{{count}} štítků",
+    "title": "Tisk štítků"
+  },
   "list": {
     "addItem": "Přidat položku",
     "documentTitle": "Položky",
@@ -418,7 +453,7 @@
     "headerStatus": "Stav",
     "headerValue": "Hodnota",
     "heading": "Položky",
-    "searchPlaceholder": "Hledat podle názvu nebo krátkého názvu…",
+    "searchPlaceholder": "Hledat podle názvu, krátkého názvu nebo inventárního čísla…",
     "selectAll": "Vybrat vše viditelné",
     "subtitle_one": "{{count}} položka v této skupině",
     "subtitle_few": "{{count}} položky v této skupině",

@@ -18,6 +18,7 @@
     "moveTitle_few": "Переместить {{count}} предмета",
     "moveTitle_many": "Переместить {{count}} предметов",
     "moveTitle_other": "Переместить {{count}} предметов",
+    "printLabels": "Печать этикеток",
     "regionLabel": "Панель массовых действий",
     "selected_one": "Выбран {{count}} предмет",
     "selected_few": "Выбрано {{count}} предмета",
@@ -38,6 +39,7 @@
   },
   "detail": {
     "acquisitionPrice": "Изначально куплено за {{price}}",
+    "assetId": "Инвентарный номер",
     "backToList": "К списку предметов",
     "delete": "Удалить",
     "documentTitle": "Предмет",
@@ -134,6 +136,7 @@
     "notFoundTitle": "Предмет не найден",
     "noValue": "—",
     "print": "Печать",
+    "printLabel": "Печать этикетки",
     "sheetDescriptionFallback": "Просмотр, изменение или управление файлами выбранного предмета.",
     "sheetTitleFallback": "Сведения о предмете",
     "statusTransition": {
@@ -403,6 +406,38 @@
     "submitEdit": "Сохранить изменения",
     "submitting": "Сохранение…"
   },
+  "labels": {
+    "areaQrTitle": "QR-код зоны «{{name}}»",
+    "back": "Назад",
+    "empty": {
+      "description": "Откройте предмет и выберите «Печать этикетки» или откройте зону и выберите «Печать этикеток».",
+      "title": "Нечего печатать"
+    },
+    "error": {
+      "description": "Возможно, предмет или зона были удалены. Ниже показаны этикетки, которые удалось загрузить.",
+      "title": "Не удалось загрузить часть этикеток"
+    },
+    "format": "Макет",
+    "formats": {
+      "a4Sheet": "Лист A4, 3 × 7 (Avery L7160)",
+      "letterSheet": "Лист Letter, 3 × 10 (Avery 5160)",
+      "single": "Одна этикетка, 63,5 × 38,1 мм"
+    },
+    "itemQrTitle": "QR-код для «{{name}}»",
+    "pages_few": "{{count}} страницы",
+    "pages_many": "{{count}} страниц",
+    "pages_one": "{{count}} страница",
+    "pages_other": "{{count}} страниц",
+    "print": "Печать",
+    "printHint": "В диалоге печати выберите масштаб 100 % (фактический размер) и без полей.",
+    "skip": "Пропустить позиции",
+    "skipHint": "Оставляет первые позиции листа пустыми, чтобы допечатать начатый лист.",
+    "summary_few": "{{count}} этикетки",
+    "summary_many": "{{count}} этикеток",
+    "summary_one": "{{count}} этикетка",
+    "summary_other": "{{count}} этикеток",
+    "title": "Печать этикеток"
+  },
   "list": {
     "addItem": "Добавить предмет",
     "documentTitle": "Предметы",
@@ -418,7 +453,7 @@
     "headerStatus": "Статус",
     "headerValue": "Стоимость",
     "heading": "Предметы",
-    "searchPlaceholder": "Поиск по названию или краткому названию…",
+    "searchPlaceholder": "Поиск по названию, краткому названию или инвентарному номеру…",
     "selectAll": "Выбрать все видимые",
     "subtitle_one": "{{count}} предмет в этой группе",
     "subtitle_few": "{{count}} предмета в этой группе",

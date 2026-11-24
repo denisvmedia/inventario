@@ -436,6 +436,10 @@ table "commodities" {
     type = DECIMAL(15,2)
     null = true
   }
+  column "asset_number" {
+    type = INTEGER
+    null = true
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -513,6 +517,10 @@ table "commodities" {
   index "commodities_warranty_expires_at_idx" {
     where = "warranty_expires_at IS NOT NULL"
     columns = [column.warranty_expires_at]
+  }
+  index "idx_commodities_group_asset_number" {
+    unique = true
+    columns = [column.group_id, column.asset_number]
   }
   index "idx_commodities_tenant_area" {
     columns = [column.tenant_id, column.area_id]

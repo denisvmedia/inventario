@@ -41,7 +41,7 @@ type commoditiesAPI struct {
 // @Param status query []string false "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Filter by exact area ID"
 // @Param unassigned query bool false "Only commodities with no area (ignored when area_id is set)"
-// @Param q query string false "Case-insensitive substring match on name + short_name"
+// @Param q query string false "Case-insensitive substring match on name + short_name; a query that reads as an asset ID (A-0042, 42) also matches that asset number"
 // @Param include_inactive query bool false "Include drafts and non-in_use commodities (default false hides them)"
 // @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
 // @Param warranty_status query []string false "Filter by computed warranty status (active, expiring, expired, none); repeat to OR" collectionFormat(multi)

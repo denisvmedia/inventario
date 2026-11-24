@@ -1,8 +1,9 @@
 // Single-resource search against GET /search?q=…&type=…. The BE returns
-// `{ data: [{ id, type, attributes }], meta: { entity_type, query, total } }`
-// — `data` is untyped in the OpenAPI spec because the shape varies by
-// `type`. We surface a typed `SearchResult` per resource and keep the
-// raw attributes loose at the boundary so consumers can narrow safely.
+// `{ data: [model, …], meta: { entity_type, total } }` with each model
+// flat (jsonapi.SearchResponse) — `data` is untyped in the OpenAPI spec
+// because the shape varies by `type`. toResource wraps each row into the
+// `{ id, type, attributes }` shape the consumers read, and passes rows
+// that already carry `attributes` through unchanged.
 import { http, HttpError } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -53,6 +54,14 @@ export interface SearchOptions {
 // renders that as a "coming soon" stub rather than a transport error.
 // Other failures (5xx, network blip, abort) propagate so TanStack's
 // `error` slot can carry them to the consumer.
+function toResource<TAttrs>(row: unknown, type: SearchableType): SearchResource<TAttrs> {
+  const record = (row ?? {}) as Record<string, unknown>
+  if (record.attributes && typeof record.attributes === "object") {
+    return record as unknown as SearchResource<TAttrs>
+  }
+  return { id: String(record.id ?? ""), type, attributes: record as TAttrs }
+}
+
 export async function search<TAttrs>(
   query: string,
   opts: SearchOptions
@@ -68,7 +77,9 @@ export async function search<TAttrs>(
     const body = await http.get<RawSearchResponse>(`/search?${params.toString()}`, {
       signal: opts.signal,
     })
-    const list = Array.isArray(body.data) ? (body.data as Array<SearchResource<TAttrs>>) : []
+    const list = Array.isArray(body.data)
+      ? body.data.map((row) => toResource<TAttrs>(row, opts.type))
+      : []
     const total = body.meta?.total ?? list.length
     return { results: list, total, unavailable: false }
   } catch (err) {

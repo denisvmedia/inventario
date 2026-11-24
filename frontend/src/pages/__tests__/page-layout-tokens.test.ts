@@ -83,6 +83,9 @@ const SPECIAL_PURPOSE_PAGES = new Set<string>([
   // same precedent as CommodityPrintPage (toolbar + .print-sheet, no
   // <Page> wrapper). The report sheet provides its own max-width frame.
   "reports/InsuranceReportPage.tsx",
+  // Label print page (#2807) — real-size label sheets laid out in
+  // millimeters or inches, same print precedent as the two above.
+  "labels/LabelPrintPage.tsx",
   "areas/AreaItemsPanel.tsx",
   "admin/AdminLayout.tsx",
   "admin/AdminPagination.tsx",

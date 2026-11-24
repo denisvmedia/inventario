@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
+	"time"
 
 	"go.5x5.cz/inventario/backup/export"
 	importpkg "go.5x5.cz/inventario/backup/import"
@@ -588,4 +590,24 @@ func buildStorageQuotaURLBuilders(publicURL string) (filesURLBuilder, settingsUR
 		return publicURL + "/g/" + groupSlug + "/settings"
 	}
 	return filesURLBuilder, settingsURLBuilder
+}
+
+// assetNumberBackfillRetryInterval spaces the retries of a failed asset
+// number backfill pass.
+const assetNumberBackfillRetryInterval = time.Minute
+
+// StartAssetNumberBackfill numbers, in the background, the commodities that
+// have no asset number yet (see services.BackfillAssetNumbers) and returns a
+// stop function that cancels the pass and waits for it to return. It runs in
+// a goroutine so a large catalogue cannot delay readiness.
+func StartAssetNumberBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		services.BackfillAssetNumbers(ctx, rs.FactorySet, assetNumberBackfillRetryInterval)
+	})
+	return func() {
+		cancel()
+		wg.Wait()
+	}
 }

@@ -82,6 +82,11 @@ Restoring brings the contents of an export into your **current group**. Open an 
 | **Merge update** | Moderate | Inserts new rows and updates existing ones in place. |
 | **Full replace** | Destructive | Wipes existing data in the destination scope before importing. |
 
+Restored items keep their [asset IDs](../items/#asset-ids-and-qr-labels), so
+labels printed before the backup still match. If an item's number is already
+taken in your group, for example by a different item during a merge, the restored
+item gets a new number after the highest one in the group.
+
 **Full replace** removes your current data before importing, so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth. It really does mean *everything*: items with no area assigned, files attached to a location or area, and standalone files are all wiped and then restored from the backup.
 
 ### Other options

@@ -213,6 +213,11 @@ type INBCommodity struct {
 	// so it round-trips stably; the restore side re-resolves it to the new
 	// file's DB id after the commodity's files are recreated.
 	CoverFileID string `json:"coverFileId,omitempty"`
+	// AssetNumber is the item's number inside its group (asset ID "A-0042"),
+	// so the labels already printed keep matching after a restore. The restore
+	// side passes it through registry.WithRestoreAssetNumber; omitted for an
+	// item that has no number yet.
+	AssetNumber int `json:"assetNumber,omitempty"`
 
 	Images    []INBFileRef `json:"images,omitempty"`
 	Documents []INBFileRef `json:"documents,omitempty"`

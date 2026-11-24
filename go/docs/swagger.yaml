@@ -3303,6 +3303,18 @@ definitions:
           (EntityService.DeleteAreaRecursive cascades to the area's
           commodities), unchanged by this issue.
         type: string
+      asset_number:
+        description: |-
+          AssetNumber is the short sequential number of the item inside its
+          group, displayed as an asset ID such as "A-0042" (see FormatAssetID).
+          The registry assigns it on Create as the group's highest number plus
+          one, under a per-group lock, so concurrent creates never share a
+          number. It is server-managed: Create ignores a caller-supplied value
+          (except for the trusted restore seam, registry.WithRestoreAssetNumber)
+          and Update keeps the stored one. NULL only for rows that predate the
+          column until the runtime backfill numbers them.
+        readOnly: true
+        type: integer
       comments:
         type: string
       converted_original_price:
@@ -6702,7 +6714,8 @@ paths:
         in: query
         name: unassigned
         type: boolean
-      - description: Case-insensitive substring match on name + short_name
+      - description: Case-insensitive substring match on name + short_name; a query
+          that reads as an asset ID (A-0042, 42) also matches that asset number
         in: query
         name: q
         type: string
@@ -9010,7 +9023,8 @@ paths:
         name: groupSlug
         required: true
         type: string
-      - description: Search query
+      - description: Search query; for commodities, a query that reads as an asset
+          ID (A-0042, 42) also matches that asset number
         in: query
         name: q
         required: true

@@ -137,6 +137,12 @@ const CommodityPrintPage = lazy(() =>
     default: m.CommodityPrintPage,
   }))
 )
+// Label print page (#2807): QR labels for items and areas, laid out at
+// real size for a single label or a sheet. Inside the Shell like
+// CommodityPrintPage; it portals its printed copy out of it.
+const LabelPrintPage = lazy(() =>
+  import("@/pages/labels/LabelPrintPage").then((m) => ({ default: m.LabelPrintPage }))
+)
 const FilesListPage = lazy(() =>
   import("@/pages/files/FilesListPage").then((m) => ({ default: m.FilesListPage }))
 )
@@ -386,6 +392,7 @@ export function AppRoutes() {
               <Route path="commodities/:id" element={<CommodityDetailPage />} />
               <Route path="commodities/:id/edit" element={<CommodityDetailPage />} />
               <Route path="commodities/:id/print" element={<CommodityPrintPage />} />
+              <Route path="labels" element={<LabelPrintPage />} />
               <Route path="files" element={<FilesListPage />} />
               <Route path="files/:id" element={<FilesListPage />} />
               <Route path="files/:id/edit" element={<FileEditPage />} />

@@ -826,6 +826,9 @@ func (b *inbBuilder) planCommodity(locSlug, areaUUID string, com *models.Commodi
 	if com.AcquisitionCurrency != nil {
 		inbCom.AcquisitionCurrency = string(*com.AcquisitionCurrency)
 	}
+	if com.AssetNumber != nil {
+		inbCom.AssetNumber = *com.AssetNumber
+	}
 	// Resolve the cover photo's volatile DB id to its immutable UUID so the
 	// reference round-trips stably. A cover pointing at a file outside the
 	// preloaded commodity-file index (already deleted, or never an attachment)

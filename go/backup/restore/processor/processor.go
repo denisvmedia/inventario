@@ -630,6 +630,13 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	} else if price != nil && currency != nil {
 		createCtx = registry.WithRestoreAcquisition(createCtx, *price, *currency)
 	}
+	// The asset number travels the same way: Create keeps the archived number
+	// when the target group has no item with it, otherwise it assigns the next
+	// free one, so labels printed before the backup still match and a merge
+	// never yields two items with one asset ID.
+	if c.AssetNumber > 0 {
+		createCtx = registry.WithRestoreAssetNumber(createCtx, c.AssetNumber)
+	}
 
 	existingCommodity := w.existing.Commodities[c.ID]
 	if err := l.applyStrategyForCommodityModel(createCtx, commodity, existingCommodity, c.ID, w.stats, w.existing, w.idMapping, w.options); err != nil {

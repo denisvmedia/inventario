@@ -115,6 +115,29 @@ describe("<SearchPage />", () => {
     await waitFor(() => expect(screen.getByTestId("group-locations-empty")).toBeInTheDocument())
   })
 
+  it("finds an item by its asset ID from the flat search response (#2807)", async () => {
+    server.use(
+      groupsHandler,
+      userHandler,
+      msw.get(api("/g/household/search"), ({ request }) => {
+        const url = new URL(request.url)
+        const type = url.searchParams.get("type")
+        if (type === "commodities" && url.searchParams.get("q") === "A-0042") {
+          // The backend sends the models flat, without JSON:API attributes.
+          return HttpResponse.json({
+            data: [{ id: "c1", name: "Drill", short_name: "drill", asset_number: 42 }],
+            meta: { total: 1, entity_type: "commodities" },
+          })
+        }
+        return HttpResponse.json({ data: [], meta: { total: 0, entity_type: type } })
+      })
+    )
+    renderSearch("/g/household/search?q=A-0042")
+    const card = await screen.findByTestId("result-commodity-c1")
+    expect(card).toHaveTextContent("Drill")
+    expect(card).toHaveTextContent("A-0042 · drill")
+  })
+
   it("renders the no-results card when every section is empty", async () => {
     server.use(
       groupsHandler,

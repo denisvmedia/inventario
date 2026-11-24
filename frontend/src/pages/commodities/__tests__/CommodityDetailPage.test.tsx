@@ -98,6 +98,34 @@ describe("<CommodityDetailPage />", () => {
     expect(screen.queryByTestId("commodity-detail-acquisition")).toBeNull()
   })
 
+  it("shows the asset ID and links to its label (#2807)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: { ...commodityFixture.attributes, asset_number: 42 },
+      })
+    )
+    renderDetail()
+    expect(await screen.findByTestId("commodity-detail-asset-id")).toHaveTextContent("A-0042")
+    expect(screen.getByTestId("commodity-detail-print-label")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/labels?item=${ID}`
+    )
+  })
+
+  it("hides the asset ID until the item has one", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderDetail()
+    await screen.findByTestId("commodity-detail-name")
+    expect(screen.queryByTestId("commodity-detail-asset-id")).toBeNull()
+  })
+
   it("shows tag labels instead of slugs", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

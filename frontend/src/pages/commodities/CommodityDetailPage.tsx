@@ -23,6 +23,7 @@ import {
   Paperclip,
   Pencil,
   Printer,
+  QrCode,
   Tag,
   Trash2,
   TriangleAlert,
@@ -60,6 +61,7 @@ import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
 import { useFiles } from "@/features/files/hooks"
 import { useLocations } from "@/features/locations/hooks"
+import { formatAssetId } from "@/features/commodities/asset-id"
 import { CommodityHistoryTimeline } from "@/features/commodities/CommodityHistoryTimeline"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import {
@@ -101,6 +103,7 @@ import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity } from "@/features/commodities/api"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
+import { labelsPageHref } from "@/features/labels/links"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useTagLabel } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -398,6 +401,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     slug && commodity.id
       ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodity.id)}/print`
       : "#"
+  const labelHref = slug && commodity.id ? labelsPageHref(slug, { items: [commodity.id] }) : "#"
+  const assetId = formatAssetId(commodity.asset_number)
 
   async function handleSave(values: Parameters<typeof update.mutateAsync>[0]) {
     await update.mutateAsync(values)
@@ -578,6 +583,19 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             className="flex flex-wrap items-center gap-2 pt-1"
             data-testid="commodity-detail-pills"
           >
+            {/* Asset ID (#2807): the number printed on the item's label.
+                Not in the mock; see design-deviations. */}
+            {assetId ? (
+              <Badge
+                variant="outline"
+                className="font-mono text-xs"
+                title={t("commodities:detail.assetId")}
+                data-testid="commodity-detail-asset-id"
+              >
+                <span className="sr-only">{t("commodities:detail.assetId")} </span>
+                {assetId}
+              </Badge>
+            ) : null}
             {status ? (
               <span
                 className={cn(
@@ -666,6 +684,21 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             >
               <Link to={printHref} data-testid="commodity-detail-print">
                 <Printer className="size-3.5" aria-hidden="true" />
+              </Link>
+            </Button>
+          )}
+          {/* Print label (#2807) — page-only like Print above. */}
+          {isSheet ? null : (
+            <Button
+              asChild
+              type="button"
+              variant="outline"
+              size="sm"
+              title={t("commodities:detail.printLabel")}
+              aria-label={t("commodities:detail.printLabel")}
+            >
+              <Link to={labelHref} data-testid="commodity-detail-print-label">
+                <QrCode className="size-3.5" aria-hidden="true" />
               </Link>
             </Button>
           )}

@@ -12,6 +12,7 @@
     "moveTargetPlaceholder": "Select an area…",
     "moveTitle_one": "Move {{count}} item",
     "moveTitle_other": "Move {{count}} items",
+    "printLabels": "Print labels",
     "regionLabel": "Bulk action bar",
     "selected_one": "{{count}} item selected",
     "selected_other": "{{count}} items selected"
@@ -30,6 +31,7 @@
   },
   "detail": {
     "acquisitionPrice": "Originally purchased for {{price}}",
+    "assetId": "Asset ID",
     "backToList": "Back to items",
     "delete": "Delete",
     "documentTitle": "Item",
@@ -124,6 +126,7 @@
     "notFoundTitle": "Item not found",
     "noValue": "—",
     "print": "Print",
+    "printLabel": "Print label",
     "sheetDescriptionFallback": "Inspect, edit, or manage files for the selected item.",
     "sheetTitleFallback": "Item details",
     "statusTransition": {
@@ -381,6 +384,34 @@
     "submitEdit": "Save changes",
     "submitting": "Saving…"
   },
+  "labels": {
+    "areaQrTitle": "QR code for area {{name}}",
+    "back": "Back",
+    "empty": {
+      "description": "Open an item and choose Print label, or open an area and choose Print labels.",
+      "title": "Nothing to print"
+    },
+    "error": {
+      "description": "The item or area may have been deleted. The labels that did load are shown below.",
+      "title": "Some labels could not be loaded"
+    },
+    "format": "Layout",
+    "formats": {
+      "a4Sheet": "A4 sheet, 3 × 7 (Avery L7160)",
+      "letterSheet": "Letter sheet, 3 × 10 (Avery 5160)",
+      "single": "Single label, 63.5 × 38.1 mm"
+    },
+    "itemQrTitle": "QR code for {{name}}",
+    "pages_one": "{{count}} page",
+    "pages_other": "{{count}} pages",
+    "print": "Print",
+    "printHint": "In the print dialog, set the scale to 100% (actual size) and the margins to none.",
+    "skip": "Skip positions",
+    "skipHint": "Leave the first positions of the sheet empty to reuse a partly used sheet.",
+    "summary_one": "{{count}} label",
+    "summary_other": "{{count}} labels",
+    "title": "Print labels"
+  },
   "list": {
     "addItem": "Add item",
     "documentTitle": "Items",
@@ -396,7 +427,7 @@
     "headerStatus": "Status",
     "headerValue": "Value",
     "heading": "Items",
-    "searchPlaceholder": "Search by name or short name…",
+    "searchPlaceholder": "Search by name, short name, or asset ID…",
     "selectAll": "Select all visible",
     "subtitle_one": "{{count}} item in this group",
     "subtitle_other": "{{count}} items in this group",

@@ -4002,7 +4002,7 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area (ignored when area_id is set) */
                     unassigned?: boolean;
-                    /** @description Case-insensitive substring match on name + short_name */
+                    /** @description Case-insensitive substring match on name + short_name; a query that reads as an asset ID (A-0042, 42) also matches that asset number */
                     q?: string;
                     /** @description Include drafts and non-in_use commodities (default false hides them) */
                     include_inactive?: boolean;
@@ -7410,7 +7410,7 @@ export type paths = {
         get: {
             parameters: {
                 query: {
-                    /** @description Search query */
+                    /** @description Search query; for commodities, a query that reads as an asset ID (A-0042, 42) also matches that asset number */
                     q: string;
                     /** @description Entity type to search */
                     type?: "commodities" | "files" | "areas" | "locations";
@@ -12205,6 +12205,17 @@ export type components = {
              *     commodities), unchanged by this issue.
              */
             area_id?: string;
+            /**
+             * @description AssetNumber is the short sequential number of the item inside its
+             *     group, displayed as an asset ID such as "A-0042" (see FormatAssetID).
+             *     The registry assigns it on Create as the group's highest number plus
+             *     one, under a per-group lock, so concurrent creates never share a
+             *     number. It is server-managed: Create ignores a caller-supplied value
+             *     (except for the trusted restore seam, registry.WithRestoreAssetNumber)
+             *     and Update keeps the stored one. NULL only for rows that predate the
+             *     column until the runtime backfill numbers them.
+             */
+            readonly asset_number?: number;
             comments?: string;
             converted_original_price?: number;
             count?: number;

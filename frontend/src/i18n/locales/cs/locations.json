@@ -12,7 +12,10 @@
       "statsActiveWarranties": "Aktivní záruky",
       "statsItems": "Položky",
       "statsValue": "Odhad. hodnota"
-    }
+    },
+    "printAreaAndItemLabels": "Štítky pro oblast a její položky",
+    "printAreaLabel": "Štítek pro tuto oblast",
+    "printLabels": "Vytisknout štítky"
   },
   "areaDialog": {
     "createDescription": "Přidejte oblast uvnitř umístění – např. kuchyni, garáž, kancelář.",

@@ -35,6 +35,33 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-24 — Label print page for items and areas (`/g/:slug/labels`)
+
+- **Issue/PR**: #2807 / PR (pending)
+- **Mock**: Not present in mock. `design-mocks/` has no label or QR surface; the issue notes that it needs a mock in `inventario-design` or a recorded deviation. Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (Select, Button, Input, Alert, Skeleton) and the toolbar pattern of the insurance report ([`design-mocks/src/views/InsuranceReportView.tsx`](../../design-mocks/src/views/InsuranceReportView.tsx)).
+- **Reality**: `frontend/src/pages/labels/LabelPrintPage.tsx` mounts inside the Shell like the other print pages. Toolbar: Back, a layout `Select` (single 63.5 × 38.1 mm label, A4 3 × 7 Avery L7160, Letter 3 × 10 Avery 5160), a **Skip positions** number input on sheet layouts, a "N labels · N pages" summary and Print. Below it, a real-size preview of every sheet (`features/labels/LabelSheets.tsx`): white paper with black ink in both themes, a dashed outline on each label position on screen only, and per label a QR code (`qrcode.react`), the asset ID in bold mono and the item name, or the area name and its location for an area label. Physical sizes reach Tailwind as CSS custom properties (`w-(--label-w)`) because they come from the chosen format at run time, and the paper colors are the CSS keywords `white` / `black` in the page's scoped style block, following the `index.css` print block, since no theme token is meant to stay white in dark mode. The page is registered in [`design/18-print-and-export.md`](design/18-print-and-export.md).
+- **Why**: not present in mock. The label must print at real size on die-cut sheets, which no existing surface does. **Skip positions** (reusing a partly used sheet) goes beyond the issue text and is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2807 by the 2026-11-24 goal to implement the open enhancements; Skip positions agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Reconcile when `inventario-design` adds a label view; the formats and `LabelSheets` stay, the toolbar follows the mock.
+
+#### 2026-11-24 — Asset ID badge and Print label button on the item page; asset ID in search results
+
+- **Issue/PR**: #2807 / PR (pending)
+- **Mock**: [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) has no asset ID and no label action; its pill row holds only status and warranty, and its action row has Edit, Insurance Report and Delete.
+- **Reality**: `frontend/src/pages/commodities/CommodityDetailPage.tsx` shows the asset ID (`A-0042`) as the first pill, an outline `Badge` in mono, in page and sheet mode. Page mode adds an icon-only **Print label** button (`QrCode` icon) next to the existing Print button, linking to the label page. The search page's commodity card subtitle reads `A-0042 · <short name>`, and the items search placeholder (list page and area items panel) reads "Search by name, short name, or asset ID…".
+- **Why**: not present in mock. The issue asks for the asset ID on the item page and for search by it, and the label action belongs next to the existing Print action.
+- **Approved by**: user (explicit) — pre-approved for #2807 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` places the asset ID and the label action.
+
+#### 2026-11-24 — Items bulk bar: Print labels
+
+- **Issue/PR**: #2807 / PR (pending)
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) has no bulk label action.
+- **Reality**: `frontend/src/pages/commodities/CommoditiesListPage.tsx` adds an outline **Print labels** button (`QrCode` icon) between Move and Delete in the bulk-action bar. It links to the label page with the selected item ids.
+- **Why**: not present in mock, and beyond the issue text, which names one label and a sheet but no entry point for an arbitrary set of items. Agent-suggested: selecting items is how the list already acts on several at once.
+- **Approved by**: agent-suggested, listed in the PR for the owner to confirm.
+- **Reversion plan**: Drop the button if the owner prefers the item and area entry points only.
+
 #### 2026-06-04 — Commodity detail SHEET drops the in-sheet tab strip; full detail behind a "View full details" CTA
 
 - **Issue/PR**: #1965 / PR #2011
@@ -168,6 +195,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: When #1367 / #1529 land the warranty rollups, swap to the mock's 4-card layout (Active / Expiring / Expired / Total Value) by replacing the six `<StatCard>` calls with the four warranty-rooted ones and switching `lg:grid-cols-3` → `lg:grid-cols-4`. The Locations / Areas / Files counts then either move to a secondary surface (sidebar metric strip, or a "More stats" expander) or get folded into the relevant feature pages.
 
 ### Locations & Areas
+
+#### 2026-11-24 — Area header: Print labels menu
+
+- **Issue/PR**: #2807 / PR (pending)
+- **Mock**: The area view in [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) has no label action in its header.
+- **Reality**: `frontend/src/pages/areas/AreaDetailPage.tsx` adds an outline **Print labels** `DropdownMenu` trigger (`QrCode` icon, chevron) before Edit and Delete, with two items: "Label for this area" and "Labels for this area and its items". The header's button row now wraps on narrow screens.
+- **Why**: not present in mock. The issue asks for an area QR code that opens the area with its contents; the area page is where a box gets its label.
+- **Approved by**: user (explicit) — pre-approved for #2807 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` places the action.
 
 #### 2026-05-11 — Location & area cards use neutral icon tiles (no per-row emoji) — _resolved 2026-05-12_
 

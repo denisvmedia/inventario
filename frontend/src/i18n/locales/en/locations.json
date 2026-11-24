@@ -12,7 +12,10 @@
       "statsActiveWarranties": "Active warranties",
       "statsItems": "Items",
       "statsValue": "Est. value"
-    }
+    },
+    "printAreaAndItemLabels": "Labels for this area and its items",
+    "printAreaLabel": "Label for this area",
+    "printLabels": "Print labels"
   },
   "areaDialog": {
     "createDescription": "Add an area inside a location — e.g. Kitchen, Garage, Office.",

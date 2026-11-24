@@ -25,9 +25,22 @@ the section matching the tag and publishes it as the GitHub Release body. See
   entry in the user menu. It is greyed out, with the reason, while the tour
   cannot run: without a group, or in a window too narrow to show the sidebar
   ([#2816](https://github.com/denisvmedia/inventario/pull/2816)).
+- Asset IDs and QR labels. Every item gets a running number per group, shown
+  as `A-0042` on the item page and found by the items search and the search
+  page. Existing items get their numbers when the server first starts after
+  the upgrade, in the order they were added, and a restore keeps the numbers. A new label page
+  prints the asset ID, the name and a QR code that opens the item, or the area
+  with its contents, after sign-in. It prints one label, an A4 sheet (Avery
+  L7160) or a Letter sheet (Avery 5160) at real size, and is reached from the
+  item page, the items bulk bar and the area page
+  ([#2807](https://github.com/denisvmedia/inventario/issues/2807)).
 
 ### Fixed
 
+- The search page renders item results. It expected each result wrapped in
+  JSON:API `attributes`, which the search endpoint does not send, and failed to
+  render as soon as a search matched an item
+  ([#2807](https://github.com/denisvmedia/inventario/issues/2807)).
 - Tags written in Cyrillic, Czech, Chinese or any other non-Latin script are
   kept on save. Before, their letters were stripped from the slug, so a tag
   like "кухня" disappeared and "USB кабель" and "USB хаб" became one tag.
