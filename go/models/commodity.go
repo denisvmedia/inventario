@@ -219,6 +219,39 @@ type Commodity struct {
 	// column until the runtime backfill numbers them.
 	//ptah:schema:field name="asset_number" type="INTEGER"
 	AssetNumber *int `json:"asset_number,omitempty" db:"asset_number" userinput:"false" readonly:"true"`
+
+	// SearchText is a database-generated column holding every text field
+	// the item search reads (registry.CommoditySearchFields), in that
+	// order, joined by the unit separator U+001F. The free-text search
+	// matches each term against it with ILIKE, which the trigram index
+	// commodities_search_text_trgm_idx serves. A search term never contains
+	// a control character, so a match cannot span two fields. PostgreSQL
+	// computes the value on every write; the application never sets it,
+	// which `dbwrite:"false"` tells the INSERT/UPDATE builder.
+	//ptah:schema:field name="search_text" type="TEXT" generated="commodity_search_text(name, short_name, serial_number, extra_serial_numbers, part_numbers, tags, comments, warranty_notes, status_note)" stored="true"
+	SearchText string `json:"-" db:"search_text" dbwrite:"false" userinput:"false" readonly:"true"`
+}
+
+// CommoditySearchFunctions declares the function behind the generated
+// commodities.search_text column. It joins the text columns and the strings
+// of the three JSONB arrays (extra serial numbers, part numbers, tag slugs)
+// with U+001F, in the order of registry.CommoditySearchFields. It is
+// IMMUTABLE, which PostgreSQL requires of a generated column, and it
+// qualifies every catalog name with pg_catalog so the result does not depend
+// on the search_path of the role that writes the row. A JSONB value that is
+// not an array contributes an empty string, so a NULL cannot fail an INSERT.
+//
+// The concatenation lives in a function rather than in the column's
+// expression because PostgreSQL stores an expression in a normalized form
+// (every || parenthesized), and the schema drift check compares that form
+// with the annotation; a plain call reads back unchanged.
+//
+// The annotation sits on the type's doc comment: Ptah collects
+// `ptah:schema:function` from the declaration a comment is attached to.
+//
+//ptah:schema:function name="commodity_search_text" params="name TEXT, short_name TEXT, serial_number TEXT, extra_serial_numbers JSONB, part_numbers JSONB, tags JSONB, comments TEXT, warranty_notes TEXT, status_note TEXT" returns="TEXT" language="sql" volatility="IMMUTABLE" body="SELECT COALESCE(name, '') || pg_catalog.chr(31) || COALESCE(short_name, '') || pg_catalog.chr(31) || COALESCE(serial_number, '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(extra_serial_numbers) = 'array' THEN extra_serial_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(part_numbers) = 'array' THEN part_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(tags) = 'array' THEN tags END) AS e), '') || pg_catalog.chr(31) || COALESCE(comments, '') || pg_catalog.chr(31) || COALESCE(warranty_notes, '') || pg_catalog.chr(31) || COALESCE(status_note, '')" comment="Builds commodities.search_text, the text the item search matches"
+type CommoditySearchFunctions struct {
+	_ int
 }
 
 // assetIDPrefix and assetIDDigits define the display form of an asset
@@ -389,6 +422,11 @@ type CommodityIndexes struct {
 
 	// Trigram similarity index for short name search
 	//ptah:schema:index name="commodities_short_name_trgm_idx" fields="short_name" type="GIN" ops="gin_trgm_ops" table="commodities"
+	_ int
+
+	// Trigram index for the item search: every term is an ILIKE substring
+	// match against the generated search_text column.
+	//ptah:schema:index name="commodities_search_text_trgm_idx" fields="search_text" type="GIN" ops="gin_trgm_ops" table="commodities"
 	_ int
 
 	// Partial index for warranty filtering — only commodities that have a

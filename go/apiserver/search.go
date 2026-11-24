@@ -9,8 +9,8 @@ import (
 	"github.com/go-chi/render"
 
 	"go.5x5.cz/inventario/jsonapi"
-	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services/commodityquery"
 )
 
 // searchAPI handles search-related endpoints
@@ -20,47 +20,86 @@ type searchAPI struct {
 
 // Search provides advanced search capabilities across different entities
 // @Summary Advanced search
-// @Description Perform advanced search across commodities, files, and other entities
+// @Description Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).
+// @Description Every filter parameter of that endpoint except `type` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.
+// @Description Drafts and inactive items are included unless include_inactive=false.
 // @Tags search
 // @Accept json-api
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
-// @Param q query string true "Search query; for commodities, a query that reads as an asset ID (A-0042, 42) also matches that asset number"
+// @Param q query string true "Search text; for commodities, white-space separated terms that must all match (see GET /commodities)"
 // @Param type query string false "Entity type to search" Enums(commodities,files,areas,locations)
 // @Param limit query int false "Maximum number of results" default(20)
 // @Param offset query int false "Number of results to skip" default(0)
-// @Param tags query string false "Filter by tags (comma-separated)"
-// @Param operator query string false "Tag operator" Enums(AND,OR) default(OR)
+// @Param tags query string false "Filter by tags (comma-separated); for commodities see tag_mode"
+// @Param tag_mode query string false "Commodities only: how tags combine, all (default) or any" Enums(all,any)
 // @Success 200 {object} jsonapi.SearchResponse "Search results"
+// @Failure 400 {object} jsonapi.Errors "Missing q, unsupported parameter or invalid value"
 // @Router /g/{groupSlug}/search [get]
 func (api *searchAPI) search(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("q")
-	if query == "" {
+	values := r.URL.Query()
+	query := values.Get("q")
+	if strings.TrimSpace(query) == "" {
 		http.Error(w, "query parameter 'q' is required", http.StatusBadRequest)
 		return
 	}
 
-	entityType := r.URL.Query().Get("type")
+	entityType := values.Get("type")
 	if entityType == "" {
 		entityType = "commodities" // Default to commodities
 	}
 
-	// Parse pagination parameters
 	limit := 20
-	if limitParam := r.URL.Query().Get("limit"); limitParam != "" {
+	if limitParam := values.Get("limit"); limitParam != "" {
 		if l, err := strconv.Atoi(limitParam); err == nil && l > 0 && l <= 100 {
 			limit = l
 		}
 	}
 
 	offset := 0
-	if offsetParam := r.URL.Query().Get("offset"); offsetParam != "" {
+	if offsetParam := values.Get("offset"); offsetParam != "" {
 		if o, err := strconv.Atoi(offsetParam); err == nil && o >= 0 {
 			offset = o
 		}
 	}
 
-	// Parse tags
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	switch entityType {
+	case "commodities":
+		api.searchCommodities(w, r, registrySet, limit, offset)
+	case "files":
+		api.searchFiles(w, r, registrySet, query, limit, offset)
+	default:
+		http.Error(w, "unsupported entity type for basic search", http.StatusBadRequest)
+	}
+}
+
+// searchCommodities answers /search?type=commodities through the item query
+// contract, so the search page and the items list select the same items for
+// the same query string.
+func (*searchAPI) searchCommodities(w http.ResponseWriter, r *http.Request, registrySet *registry.Set, limit, offset int) {
+	query, err := commodityquery.Parse(r.URL.Query(), "type", "limit", "offset")
+	if err != nil {
+		queryParamError(w, r, err)
+		return
+	}
+	result, err := commodityquery.List(r.Context(), registrySet, query, offset, limit)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+	response := jsonapi.NewSearchResponse("commodities", result.Commodities, result.Total).WithMatches(result.Matches)
+	if err := render.Render(w, r, response); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
+func (*searchAPI) searchFiles(w http.ResponseWriter, r *http.Request, registrySet *registry.Set, query string, limit, offset int) {
 	var tags []string
 	if tagsParam := r.URL.Query().Get("tags"); tagsParam != "" {
 		tags = strings.Split(tagsParam, ",")
@@ -69,94 +108,22 @@ func (api *searchAPI) search(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Parse tag operator
-	tagOperator := registry.TagOperatorOR
-	if operatorParam := r.URL.Query().Get("operator"); operatorParam == "AND" {
-		tagOperator = registry.TagOperatorAND
-	}
-
-	// Pull the user-aware registry from the request context (the same
-	// pattern every other group-scoped handler uses). The previous
-	// type-asserting `api.registrySet.(*registry.Set)` returned 500
-	// because the constructor receives `params.EntityService`, not a
-	// `*registry.Set`. The context-based lookup hits the right object
-	// regardless of how the route is wired.
-	registrySet := RegistrySetFromContext(r.Context())
-	if registrySet == nil {
-		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+	files, err := registrySet.FileRegistry.Search(r.Context(), query, nil, nil, tags, nil, nil)
+	if err != nil {
+		renderEntityError(w, r, err)
 		return
 	}
-	api.searchWithRegistry(w, r, registrySet, query, entityType, limit, offset, tags, tagOperator)
-}
 
-func (api *searchAPI) searchWithRegistry(w http.ResponseWriter, r *http.Request, registrySet *registry.Set, query, entityType string, limit, offset int, tags []string, _tagOperator registry.TagOperator) {
-	// Route every supported entity type through the same in-memory
-	// fallback. The optimised registry full-text / tag-search variants
-	// were stubbed out previously; the basic List+filter path is enough
-	// for the Cmd+K command palette (#1330 PR 5.4) which only exercises
-	// commodities + files. Areas / locations fall through to the
-	// fallback's default branch and return a 400 — the frontend keeps
-	// querying just commodities + files.
-	api.searchWithBasicFallback(w, r, registrySet, query, entityType, limit, offset, tags)
-}
+	// Count before slicing: the total is the match count, not the page
+	// size, or nothing past the first page is reachable (#2129).
+	total := len(files)
+	start := min(offset, total)
+	end := min(start+limit, total)
+	files = files[start:end]
 
-func (api *searchAPI) searchWithBasicFallback(w http.ResponseWriter, r *http.Request, registrySet *registry.Set, query, entityType string, limit, offset int, tags []string) {
-	switch entityType {
-	case "commodities":
-		// Fallback to basic commodity search
-		commodities, err := registrySet.CommodityRegistry.List(r.Context())
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-
-		// Simple in-memory filtering. A query that reads as an asset ID
-		// ("A-0042", "42") also matches the commodity with that number.
-		assetNumber, isAssetID := models.ParseAssetID(query)
-		query = strings.ToLower(query)
-		var filtered []*models.Commodity
-		for _, commodity := range commodities {
-			if strings.Contains(strings.ToLower(commodity.Name), query) ||
-				strings.Contains(strings.ToLower(commodity.ShortName), query) ||
-				strings.Contains(strings.ToLower(commodity.Comments), query) ||
-				(isAssetID && commodity.AssetNumber != nil && *commodity.AssetNumber == assetNumber) {
-				filtered = append(filtered, commodity)
-			}
-		}
-
-		// Count before slicing: the total is the match count, not the page
-		// size. Reporting the page made every result set look like one page,
-		// so nothing past the first was reachable (#2129).
-		total := len(filtered)
-		start := min(offset, total)
-		end := min(start+limit, total)
-		filtered = filtered[start:end]
-
-		response := jsonapi.NewSearchResponse("commodities", filtered, total)
-		if err := render.Render(w, r, response); err != nil {
-			internalServerError(w, r, err)
-		}
-
-	case "files":
-		files, err := registrySet.FileRegistry.Search(r.Context(), query, nil, nil, tags, nil, nil)
-		if err != nil {
-			renderEntityError(w, r, err)
-			return
-		}
-
-		// Count before slicing — see the commodities branch above (#2129).
-		total := len(files)
-		start := min(offset, total)
-		end := min(start+limit, total)
-		files = files[start:end]
-
-		response := jsonapi.NewSearchResponse("files", files, total)
-		if err := render.Render(w, r, response); err != nil {
-			internalServerError(w, r, err)
-		}
-
-	default:
-		http.Error(w, "unsupported entity type for basic search", http.StatusBadRequest)
+	response := jsonapi.NewSearchResponse("files", files, total)
+	if err := render.Render(w, r, response); err != nil {
+		internalServerError(w, r, err)
 	}
 }
 

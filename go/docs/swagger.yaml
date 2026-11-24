@@ -1137,6 +1137,16 @@ definitions:
           `created_at` ASC; option (B) `cover_file_id` override is filed as a
           follow-up sub-issue.
         type: object
+      matches:
+        additionalProperties:
+          items:
+            $ref: '#/definitions/registry.CommoditySearchMatch'
+          type: array
+        description: |-
+          Matches maps commodity id → the fields the search text (`q`) was
+          found in, so the list can say why an item matched. Omitted when the
+          request has no `q`.
+        type: object
       page:
         example: 1
         format: int64
@@ -2820,6 +2830,15 @@ definitions:
     properties:
       entity_type:
         type: string
+      matches:
+        additionalProperties:
+          items:
+            $ref: '#/definitions/registry.CommoditySearchMatch'
+          type: array
+        description: |-
+          Matches maps result id → the fields the query was found in. Only
+          the commodities search fills it.
+        type: object
       query:
         type: string
       total:
@@ -4580,6 +4599,37 @@ definitions:
       updated_at:
         type: string
       uuid:
+        type: string
+    type: object
+  registry.CommoditySearchField:
+    enum:
+    - asset_id
+    - name
+    - short_name
+    - serial_number
+    - extra_serial_numbers
+    - part_numbers
+    - tags
+    - comments
+    - warranty_notes
+    - status_note
+    type: string
+    x-enum-varnames:
+    - CommoditySearchFieldAssetID
+    - CommoditySearchFieldName
+    - CommoditySearchFieldShortName
+    - CommoditySearchFieldSerialNumber
+    - CommoditySearchFieldExtraSerialNumbers
+    - CommoditySearchFieldPartNumbers
+    - CommoditySearchFieldTags
+    - CommoditySearchFieldComments
+    - CommoditySearchFieldWarrantyNotes
+    - CommoditySearchFieldStatusNote
+  registry.CommoditySearchMatch:
+    properties:
+      field:
+        $ref: '#/definitions/registry.CommoditySearchField'
+      value:
         type: string
     type: object
   registry.StorageBreakdown:
@@ -6789,13 +6839,40 @@ paths:
         in: query
         name: unassigned
         type: boolean
-      - description: Case-insensitive substring match on name + short_name; a query
-          that reads as an asset ID (A-0042, 42) also matches that asset number
+      - description: 'Search text: space-separated terms, quotes keep a phrase; every
+          term must match the name, short name, a serial or part number, a tag, a
+          note or the asset ID. At most 200 characters and 10 terms'
         in: query
         name: q
         type: string
-      - description: Include drafts and non-in_use commodities (default false hides
-          them)
+      - collectionFormat: multi
+        description: Only items with these tag slugs (comma-separated or repeated);
+          see tag_mode
+        in: query
+        items:
+          type: string
+        name: tags
+        type: array
+      - description: 'How tags combine: all (default) or any'
+        enum:
+        - all
+        - any
+        in: query
+        name: tag_mode
+        type: string
+      - collectionFormat: multi
+        description: Only items with none of these tag slugs (comma-separated or repeated)
+        in: query
+        items:
+          type: string
+        name: tags_exclude
+        type: array
+      - description: Only items with no tags; cannot be combined with tags or tags_exclude
+        in: query
+        name: no_tags
+        type: boolean
+      - description: Include drafts and non-in_use commodities (default true; false
+          hides them)
         in: query
         name: include_inactive
         type: boolean
@@ -6829,6 +6906,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/jsonapi.CommoditiesResponse'
+        "400":
+          description: Unsupported parameter or invalid value
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
       summary: List commodities
       tags:
       - commodities
@@ -9091,15 +9172,18 @@ paths:
     get:
       consumes:
       - application/vnd.api+json
-      description: Perform advanced search across commodities, files, and other entities
+      description: |-
+        Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).
+        Every filter parameter of that endpoint except `type` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.
+        Drafts and inactive items are included unless include_inactive=false.
       parameters:
       - description: Group slug
         in: path
         name: groupSlug
         required: true
         type: string
-      - description: Search query; for commodities, a query that reads as an asset
-          ID (A-0042, 42) also matches that asset number
+      - description: Search text; for commodities, white-space separated terms that
+          must all match (see GET /commodities)
         in: query
         name: q
         required: true
@@ -9123,17 +9207,16 @@ paths:
         in: query
         name: offset
         type: integer
-      - description: Filter by tags (comma-separated)
+      - description: Filter by tags (comma-separated); for commodities see tag_mode
         in: query
         name: tags
         type: string
-      - default: OR
-        description: Tag operator
+      - description: 'Commodities only: how tags combine, all (default) or any'
         enum:
-        - AND
-        - OR
+        - all
+        - any
         in: query
-        name: operator
+        name: tag_mode
         type: string
       produces:
       - application/vnd.api+json
@@ -9142,6 +9225,10 @@ paths:
           description: Search results
           schema:
             $ref: '#/definitions/jsonapi.SearchResponse'
+        "400":
+          description: Missing q, unsupported parameter or invalid value
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
       summary: Advanced search
       tags:
       - search

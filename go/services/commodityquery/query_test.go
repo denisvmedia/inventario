@@ -1,0 +1,200 @@
+package commodityquery_test
+
+import (
+	"net/url"
+	"strings"
+	"testing"
+
+	qt "github.com/frankban/quicktest"
+
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services/commodityquery"
+)
+
+func TestParse_Defaults(t *testing.T) {
+	c := qt.New(t)
+	q, err := commodityquery.Parse(url.Values{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(q, qt.DeepEquals, commodityquery.Default())
+	c.Assert(q.IncludeInactive, qt.IsTrue)
+}
+
+func TestParse_EveryParameter(t *testing.T) {
+	c := qt.New(t)
+	values, err := url.ParseQuery(strings.Join([]string{
+		"q=+drill++red+",
+		"type=equipment", "type=tools", "type=equipment",
+		"status=in_use", "status=sold",
+		"area_id=area-1", "unassigned=1",
+		"include_inactive=false",
+		"warranty_status=active", "warranty_status=expired",
+		"warranty_expires_before=2026-12-31",
+		"lent_out=TRUE",
+		"tags=Fragile,power+tools", "tags=red",
+		"tag_mode=any",
+		"tags_exclude=garage",
+		"sort=-purchase_date",
+	}, "&"))
+	c.Assert(err, qt.IsNil)
+
+	q, err := commodityquery.Parse(values)
+	c.Assert(err, qt.IsNil)
+	c.Assert(q, qt.DeepEquals, commodityquery.Query{
+		Text:                  "drill  red",
+		Types:                 []models.CommodityType{"equipment", "tools"},
+		Statuses:              []models.CommodityStatus{"in_use", "sold"},
+		AreaID:                "area-1",
+		Unassigned:            true,
+		IncludeInactive:       false,
+		WarrantyStatuses:      []registry.WarrantyStatusFilter{"active", "expired"},
+		WarrantyExpiresBefore: "2026-12-31",
+		LentOut:               new(true),
+		Tags: registry.CommodityTagFilter{
+			Include: []string{"fragile", "power-tools", "red"},
+			Mode:    registry.TagMatchAny,
+			Exclude: []string{"garage"},
+		},
+		SortField: registry.CommoditySortPurchaseDate,
+		SortDesc:  true,
+	})
+}
+
+func TestParse_Refuses(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		query string
+		param string
+	}{
+		{name: "an unknown parameter", query: "colour=red", param: "colour"},
+		{name: "the old tag operator", query: "tags=a&operator=AND", param: "operator"},
+		{name: "an unknown status", query: "status=broken", param: "status"},
+		{name: "an unknown warranty status", query: "warranty_status=soon", param: "warranty_status"},
+		{name: "a malformed date", query: "warranty_expires_before=31.12.2026", param: "warranty_expires_before"},
+		{name: "a boolean that is neither", query: "include_inactive=maybe", param: "include_inactive"},
+		{name: "lent_out that is neither", query: "lent_out=yes", param: "lent_out"},
+		{name: "a repeated single-value parameter", query: "q=a&q=b", param: "q"},
+		{name: "an unknown tag mode", query: "tags=a&tag_mode=some", param: "tag_mode"},
+		{name: "a tag with no usable characters", query: "tags=%23%23%23", param: "tags"},
+		{name: "a tag both required and excluded", query: "tags=red&tags_exclude=Red", param: "tags_exclude"},
+		{name: "no_tags with tags", query: "no_tags=true&tags=red", param: "no_tags"},
+		{name: "no_tags with an exclusion", query: "no_tags=1&tags_exclude=red", param: "no_tags"},
+		{name: "a search text over the length limit", query: "q=" + strings.Repeat("a", commodityquery.MaxTextRunes+1), param: "q"},
+		{name: "a search text over the term limit", query: "q=a+b+c+d+e+f+g+h+i+j+k", param: "q"},
+		{name: "too many tags", query: "tags=" + manyTags(commodityquery.MaxTags+1), param: "tags"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			values, err := url.ParseQuery(tc.query)
+			c.Assert(err, qt.IsNil)
+
+			_, err = commodityquery.Parse(values)
+			var qErr *commodityquery.Error
+			c.Assert(err, qt.ErrorAs, &qErr)
+			c.Check(qErr.Param, qt.Equals, tc.param)
+			c.Check(qErr.Error(), qt.Contains, tc.param)
+		})
+	}
+}
+
+func manyTags(n int) string {
+	tags := make([]string, n)
+	for i := range tags {
+		tags[i] = "t" + strings.Repeat("x", i)
+	}
+	return strings.Join(tags, ",")
+}
+
+func TestParse_Lenient(t *testing.T) {
+	c := qt.New(t)
+
+	// An item type nobody uses is applied, not refused: it matches nothing.
+	q, err := commodityquery.Parse(url.Values{"type": {"spaceship"}})
+	c.Assert(err, qt.IsNil)
+	c.Check(q.Types, qt.DeepEquals, []models.CommodityType{"spaceship"})
+
+	// Sorting is not filtering: an unknown field is passed on and the
+	// registry falls back to name.
+	q, err = commodityquery.Parse(url.Values{"sort": {"-colour"}})
+	c.Assert(err, qt.IsNil)
+	c.Check(q.SortField, qt.Equals, registry.CommoditySortField("colour"))
+	c.Check(q.SortDesc, qt.IsTrue)
+
+	// tag_mode without tags has nothing to combine and is dropped from
+	// the query, so it does not survive a round trip either.
+	q, err = commodityquery.Parse(url.Values{"tag_mode": {"any"}})
+	c.Assert(err, qt.IsNil)
+	c.Check(q.Tags.IsZero(), qt.IsTrue)
+	c.Check(q.Values().Has("tag_mode"), qt.IsFalse)
+}
+
+func TestParse_Reserved(t *testing.T) {
+	c := qt.New(t)
+	// On /search, `type` names the entity type and page parameters are the
+	// endpoint's own: Parse leaves them alone.
+	values := url.Values{"type": {"commodities"}, "limit": {"5"}, "offset": {"10"}, "q": {"drill"}}
+	q, err := commodityquery.Parse(values, "type", "limit", "offset")
+	c.Assert(err, qt.IsNil)
+	c.Check(q.Types, qt.HasLen, 0)
+	c.Check(q.Text, qt.Equals, "drill")
+
+	_, err = commodityquery.Parse(values)
+	c.Assert(err, qt.IsNotNil)
+}
+
+func TestQuery_ValuesRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		q    commodityquery.Query
+	}{
+		{name: "default", q: commodityquery.Default()},
+		{name: "everything", q: commodityquery.Query{
+			Text:                  `"power tools" red`,
+			Types:                 []models.CommodityType{"tools", "equipment"},
+			Statuses:              []models.CommodityStatus{"sold"},
+			AreaID:                "area-1",
+			Unassigned:            true,
+			IncludeInactive:       false,
+			WarrantyStatuses:      []registry.WarrantyStatusFilter{"expiring"},
+			WarrantyExpiresBefore: "2027-01-01",
+			LentOut:               new(false),
+			Tags: registry.CommodityTagFilter{
+				Include: []string{"b", "a"}, Mode: registry.TagMatchAny, Exclude: []string{"c"},
+			},
+			SortField: registry.CommoditySortCurrentPrice,
+		}},
+		{name: "untagged", q: commodityquery.Query{IncludeInactive: true, Tags: registry.CommodityTagFilter{Untagged: true}}},
+		{name: "all is the default mode", q: commodityquery.Query{
+			IncludeInactive: true, Tags: registry.CommodityTagFilter{Include: []string{"a"}},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			encoded := tc.q.Values().Encode()
+			values, err := url.ParseQuery(encoded)
+			c.Assert(err, qt.IsNil)
+			got, err := commodityquery.Parse(values)
+			c.Assert(err, qt.IsNil)
+			c.Check(got, qt.DeepEquals, tc.q, qt.Commentf("encoded as %s", encoded))
+		})
+	}
+}
+
+func TestQuery_ListOptions(t *testing.T) {
+	c := qt.New(t)
+	q := commodityquery.Query{
+		Text:            "drill",
+		AreaID:          "a",
+		IncludeInactive: true,
+		Tags:            registry.CommodityTagFilter{Exclude: []string{"x"}},
+		SortField:       registry.CommoditySortName,
+		SortDesc:        true,
+	}
+	opts := q.ListOptions()
+	c.Check(opts.Search, qt.Equals, "drill")
+	c.Check(opts.AreaID, qt.Equals, "a")
+	c.Check(opts.IncludeInactive, qt.IsTrue)
+	c.Check(opts.Tags, qt.DeepEquals, q.Tags)
+	c.Check(opts.SortDesc, qt.IsTrue)
+	c.Check(opts.SearchTagLabels, qt.IsNil)
+}

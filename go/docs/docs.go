@@ -3083,13 +3083,49 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Case-insensitive substring match on name + short_name; a query that reads as an asset ID (A-0042, 42) also matches that asset number",
+                        "description": "Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms",
                         "name": "q",
                         "in": "query"
                     },
                     {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Only items with these tag slugs (comma-separated or repeated); see tag_mode",
+                        "name": "tags",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "all",
+                            "any"
+                        ],
+                        "type": "string",
+                        "description": "How tags combine: all (default) or any",
+                        "name": "tag_mode",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Only items with none of these tag slugs (comma-separated or repeated)",
+                        "name": "tags_exclude",
+                        "in": "query"
+                    },
+                    {
                         "type": "boolean",
-                        "description": "Include drafts and non-in_use commodities (default false hides them)",
+                        "description": "Only items with no tags; cannot be combined with tags or tags_exclude",
+                        "name": "no_tags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include drafts and non-in_use commodities (default true; false hides them)",
                         "name": "include_inactive",
                         "in": "query"
                     },
@@ -3127,6 +3163,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.CommoditiesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Unsupported parameter or invalid value",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     }
                 }
@@ -6432,7 +6474,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/search": {
             "get": {
-                "description": "Perform advanced search across commodities, files, and other entities",
+                "description": "Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).\nEvery filter parameter of that endpoint except ` + "`" + `type` + "`" + ` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.\nDrafts and inactive items are included unless include_inactive=false.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6453,7 +6495,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Search query; for commodities, a query that reads as an asset ID (A-0042, 42) also matches that asset number",
+                        "description": "Search text; for commodities, white-space separated terms that must all match (see GET /commodities)",
                         "name": "q",
                         "in": "query",
                         "required": true
@@ -6486,19 +6528,18 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Filter by tags (comma-separated)",
+                        "description": "Filter by tags (comma-separated); for commodities see tag_mode",
                         "name": "tags",
                         "in": "query"
                     },
                     {
                         "enum": [
-                            "AND",
-                            "OR"
+                            "all",
+                            "any"
                         ],
                         "type": "string",
-                        "default": "OR",
-                        "description": "Tag operator",
-                        "name": "operator",
+                        "description": "Commodities only: how tags combine, all (default) or any",
+                        "name": "tag_mode",
                         "in": "query"
                     }
                 ],
@@ -6507,6 +6548,12 @@ const docTemplate = `{
                         "description": "Search results",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.SearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Missing q, unsupported parameter or invalid value",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     }
                 }
@@ -10225,6 +10272,16 @@ const docTemplate = `{
                         "$ref": "#/definitions/jsonapi.CommodityCover"
                     }
                 },
+                "matches": {
+                    "description": "Matches maps commodity id → the fields the search text (` + "`" + `q` + "`" + `) was\nfound in, so the list can say why an item matched. Omitted when the\nrequest has no ` + "`" + `q` + "`" + `.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/registry.CommoditySearchMatch"
+                        }
+                    }
+                },
                 "page": {
                     "type": "integer",
                     "format": "int64",
@@ -12547,6 +12604,16 @@ const docTemplate = `{
                 "entity_type": {
                     "type": "string"
                 },
+                "matches": {
+                    "description": "Matches maps result id → the fields the query was found in. Only\nthe commodities search fills it.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/registry.CommoditySearchMatch"
+                        }
+                    }
+                },
                 "query": {
                     "type": "string"
                 },
@@ -14592,6 +14659,44 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "registry.CommoditySearchField": {
+            "type": "string",
+            "enum": [
+                "asset_id",
+                "name",
+                "short_name",
+                "serial_number",
+                "extra_serial_numbers",
+                "part_numbers",
+                "tags",
+                "comments",
+                "warranty_notes",
+                "status_note"
+            ],
+            "x-enum-varnames": [
+                "CommoditySearchFieldAssetID",
+                "CommoditySearchFieldName",
+                "CommoditySearchFieldShortName",
+                "CommoditySearchFieldSerialNumber",
+                "CommoditySearchFieldExtraSerialNumbers",
+                "CommoditySearchFieldPartNumbers",
+                "CommoditySearchFieldTags",
+                "CommoditySearchFieldComments",
+                "CommoditySearchFieldWarrantyNotes",
+                "CommoditySearchFieldStatusNote"
+            ]
+        },
+        "registry.CommoditySearchMatch": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "$ref": "#/definitions/registry.CommoditySearchField"
+                },
+                "value": {
                     "type": "string"
                 }
             }

@@ -1,4 +1,4 @@
-h1:KJxQy/SDm1HzRDKT6GjrLOENZNrHw7eiitTEDKxXO2s=
+h1:LcFwwKGVwQ5L4JHbFmv/CDxvR1aPs8V/xeQHlJOTgXM=
 1789480900_initial_schema.down.sql h1:1b5WJAVMPaNbRsvj+nzs1R6KLQEEm8xv7OkV0gANX8w=
 1789480900_initial_schema.up.sql h1:isJ61I94xBD3lTD8QEQyAyDKIg4ld2KQSYG8JLxvQJ4=
 1789504168_enable_rls_on_operation_slots.down.sql h1:fZyTow/In0YkYczSN7gM6igXsUSxyJgRjo4QOLf1pWI=
@@ -13,3 +13,5 @@ h1:KJxQy/SDm1HzRDKT6GjrLOENZNrHw7eiitTEDKxXO2s=
 1790430718_add_audit_log_request_id.up.sql h1:T9/TMGN/IzKCNoMYGDf7oUIOXB7/o4RzC6ubn7iypXQ=
 1795556061_add_commodity_asset_numbers.down.sql h1:Ul2WEazo2CI6bJUU24NNLdTYnlKQVCsjbAribWA+nJo=
 1795556061_add_commodity_asset_numbers.up.sql h1:TWvxcl1pKIzEK0z3weidhcMTjCaErjwypVuo2b0PD/I=
+1795560009_add_commodity_search_text.down.sql h1:doucXtOUSnQfZGpGzLoip5P1cK+ajCClNQryA039KM8=
+1795560009_add_commodity_search_text.up.sql h1:QHe0wccth5dbqHJ4MRi/X0lquYIoUPTBV414SJHkmzs=

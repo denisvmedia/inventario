@@ -33,9 +33,10 @@ PTAH_VERSION="$(cd "${GO_DIR}" && go list -m -f '{{.Version}}' ptah.run)"
 
 echo "Exporting the schema with ptah ${PTAH_VERSION}..."
 
-# The six warnings about opaque SQL function bodies are expected: the plpgsql
-# bodies of the RLS helpers are carried as raw strings by the annotations too,
-# so the export is as structured as the source is.
+# One warning per declared SQL function (the RLS helpers and
+# commodity_search_text) about its opaque body is expected: the annotations
+# carry those bodies as raw strings too, so the export is as structured as the
+# source is.
 (cd "${GO_DIR}" && go run "ptah.run/cmd/ptah@${PTAH_VERSION}" \
   schema export --to hcl --root-dir "${MODELS_DIR}" --out "${OUT_FILE}")
 

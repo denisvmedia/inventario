@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -18,6 +17,7 @@ import (
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
+	"go.5x5.cz/inventario/services/commodityquery"
 )
 
 type commoditiesAPI struct {
@@ -28,7 +28,10 @@ type commoditiesAPI struct {
 	factorySet    *registry.FactorySet
 }
 
-// listCommodities lists all commodities with pagination, filters, and sort.
+// listCommodities lists the commodities a query selects, one page at a time.
+// The filter parameters are the item query contract (services/commodityquery,
+// devdocs/item-query-contract.md); an unknown parameter or an unreadable
+// value is a 400, never a silently dropped condition.
 // @Summary List commodities
 // @Description get commodities
 // @Tags commodities
@@ -41,59 +44,49 @@ type commoditiesAPI struct {
 // @Param status query []string false "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Filter by exact area ID"
 // @Param unassigned query bool false "Only commodities with no area (ignored when area_id is set)"
-// @Param q query string false "Case-insensitive substring match on name + short_name; a query that reads as an asset ID (A-0042, 42) also matches that asset number"
-// @Param include_inactive query bool false "Include drafts and non-in_use commodities (default false hides them)"
+// @Param q query string false "Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms"
+// @Param tags query []string false "Only items with these tag slugs (comma-separated or repeated); see tag_mode" collectionFormat(multi)
+// @Param tag_mode query string false "How tags combine: all (default) or any" Enums(all,any)
+// @Param tags_exclude query []string false "Only items with none of these tag slugs (comma-separated or repeated)" collectionFormat(multi)
+// @Param no_tags query bool false "Only items with no tags; cannot be combined with tags or tags_exclude"
+// @Param include_inactive query bool false "Include drafts and non-in_use commodities (default true; false hides them)"
 // @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
 // @Param warranty_status query []string false "Filter by computed warranty status (active, expiring, expired, none); repeat to OR" collectionFormat(multi)
 // @Param warranty_expires_before query string false "Restrict to commodities whose warranty expires strictly before YYYY-MM-DD"
 // @Param lent_out query bool false "Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent"
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
+// @Failure 400 {object} jsonapi.Errors "Unsupported parameter or invalid value"
 // @Router /g/{groupSlug}/commodities [get].
 func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Request) {
-	// Get user-aware settings registry from context
 	regSet := RegistrySetFromContext(r.Context())
 	if regSet == nil {
 		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
-	commodityReg := regSet.CommodityRegistry
 
-	q := r.URL.Query()
-	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
+	values := r.URL.Query()
+	page, perPage := parsePagination(values.Get("page"), values.Get("per_page"))
 	offset := (page - 1) * perPage
 
-	opts := parseCommodityListOptions(q)
-
-	// Pre-resolve the open-loan commodity ID set for the lent_out filter
-	// — but ONLY for backends that don't already resolve LentOut natively
-	// (postgres joins commodity_loans inline via an EXISTS subquery and
-	// implements registry.NativeLentOutFilterer). Skipping the pre-fetch
-	// on postgres saves the extra count+list queries on every filtered
-	// commodities request; the memory backend (without the marker) still
-	// needs the pre-resolved set to evaluate membership without reaching
-	// back into CommodityLoanRegistry.
-	if opts.LentOut != nil && regSet.CommodityLoanRegistry != nil {
-		if _, native := commodityReg.(registry.NativeLentOutFilterer); !native {
-			ids, err := listOpenLoanCommodityIDs(r.Context(), regSet.CommodityLoanRegistry)
-			if err != nil {
-				internalServerError(w, r, err)
-				return
-			}
-			opts.OpenLoanCommodityIDs = ids
-		}
+	query, err := commodityquery.Parse(values, "page", "per_page")
+	if err != nil {
+		queryParamError(w, r, err)
+		return
 	}
 
-	commodities, total, err := commodityReg.ListPaginated(r.Context(), offset, perPage, opts)
+	result, err := commodityquery.List(r.Context(), regSet, query, offset, perPage)
 	if err != nil {
 		internalServerError(w, r, err)
 		return
 	}
 
-	setPaginationHeaders(w, page, perPage, total)
+	setPaginationHeaders(w, page, perPage, result.Total)
 
-	covers := api.resolveCoversForList(r, regSet.FileRegistry, commodities)
+	covers := api.resolveCoversForList(r, regSet.FileRegistry, result.Commodities)
 
-	if err := render.Render(w, r, jsonapi.NewCommoditiesResponseWithCovers(commodities, total, page, perPage, covers)); err != nil {
+	resp := jsonapi.NewCommoditiesResponseWithCovers(result.Commodities, result.Total, page, perPage, covers).
+		WithMatches(result.Matches)
+	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
@@ -125,112 +118,6 @@ func (api *commoditiesAPI) resolveCoversForList(r *http.Request, fileReg registr
 		}
 	}
 	return out
-}
-
-// parseCommodityListOptions extracts filter/sort args from the query
-// string. Unknown sort fields fall back silently to name-ascending —
-// see registry.CommoditySortField.IsValid for why we don't 4xx.
-//
-// `IncludeInactive` defaults to true (= no implicit filter) so legacy
-// FE clients keep seeing all commodities. The new React list page opts
-// IN to the active-only view by sending `include_inactive=false`.
-func parseCommodityListOptions(q url.Values) registry.CommodityListOptions {
-	opts := registry.CommodityListOptions{
-		AreaID:          strings.TrimSpace(q.Get("area_id")),
-		Search:          strings.TrimSpace(q.Get("q")),
-		IncludeInactive: true,
-	}
-	if v := strings.TrimSpace(q.Get("include_inactive")); v != "" {
-		opts.IncludeInactive = v == "1" || strings.EqualFold(v, "true")
-	}
-	for _, t := range q["type"] {
-		t = strings.TrimSpace(t)
-		if t == "" {
-			continue
-		}
-		opts.Types = append(opts.Types, models.CommodityType(t))
-	}
-	for _, s := range q["status"] {
-		s = strings.TrimSpace(s)
-		if s == "" {
-			continue
-		}
-		opts.Statuses = append(opts.Statuses, models.CommodityStatus(s))
-	}
-	if sort := strings.TrimSpace(q.Get("sort")); sort != "" {
-		desc := strings.HasPrefix(sort, "-")
-		field := strings.TrimPrefix(sort, "-")
-		opts.SortField = registry.CommoditySortField(field)
-		opts.SortDesc = desc
-	}
-	for _, s := range q["warranty_status"] {
-		s = strings.TrimSpace(s)
-		if s == "" {
-			continue
-		}
-		filter := registry.WarrantyStatusFilter(s)
-		if !filter.IsValid() {
-			// Unknown values silently dropped — stay consistent with the
-			// CommoditySortField precedent (FE multi-version rollout).
-			continue
-		}
-		opts.WarrantyStatuses = append(opts.WarrantyStatuses, filter)
-	}
-	if v := strings.TrimSpace(q.Get("warranty_expires_before")); v != "" {
-		opts.WarrantyExpiresBefore = v
-	}
-	if v := strings.TrimSpace(q.Get("lent_out")); v != "" {
-		// Mirror include_inactive's parser ("1" or case-insensitive "true"
-		// is true; everything else is false). Presence alone activates the
-		// filter — empty/missing leaves opts.LentOut nil (no filter).
-		b := v == "1" || strings.EqualFold(v, "true")
-		opts.LentOut = &b
-	}
-	if v := strings.TrimSpace(q.Get("unassigned")); v != "" {
-		// Restrict to area-less commodities (issue #1986). Ignored when
-		// area_id is set — see CommodityListOptions.Unassigned.
-		opts.Unassigned = v == "1" || strings.EqualFold(v, "true")
-	}
-	return opts
-}
-
-// listOpenLoanCommodityIDs collects every commodity ID in the current
-// group that has at least one open loan (a commodity_loans row with
-// `returned_at IS NULL`). Pages through CommodityLoanRegistry until the
-// total is exhausted so the filter stays correct even when a group
-// crosses a single page worth of open loans. The partial index
-// `idx_commodity_loans_active` keeps each page cheap.
-func listOpenLoanCommodityIDs(ctx context.Context, loanReg registry.CommodityLoanRegistry) ([]string, error) {
-	const pageSize = 1000
-	seen := make(map[string]struct{})
-	var ids []string
-	offset := 0
-	for {
-		loans, total, err := loanReg.ListPaginated(ctx, offset, pageSize, registry.LoanListOptions{State: registry.LoanStateOpen})
-		if err != nil {
-			return nil, err
-		}
-		for _, l := range loans {
-			if l == nil {
-				continue
-			}
-			if _, dup := seen[l.CommodityID]; dup {
-				continue
-			}
-			seen[l.CommodityID] = struct{}{}
-			ids = append(ids, l.CommodityID)
-		}
-		offset += len(loans)
-		// Defensive break: an empty page or reaching the reported total
-		// both stop the loop. The empty-page guard avoids a hot loop if
-		// a backend ever returns total > rows-available (would only
-		// happen with a buggy registry, but the cost of the guard is
-		// nothing and the cost of an infinite loop is everything).
-		if len(loans) == 0 || offset >= total {
-			break
-		}
-	}
-	return ids, nil
 }
 
 // getCommodity gets a commodity by ID.

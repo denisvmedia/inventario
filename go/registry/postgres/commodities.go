@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -378,18 +377,10 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 		add(cond.In("status", anyStrings(opts.Statuses)...))
 	}
 	add(commodityAreaExpr(cond, opts))
-	if q := strings.TrimSpace(opts.Search); q != "" {
-		// LOWER() + LIKE rather than ILIKE so the existing functional
-		// index (commodities_name_lower_idx) is hit. ILIKE bypasses
-		// the index on Postgres < 14 because the planner can't see
-		// the case-folded form.
-		pattern := cond.Args.Add("%" + strings.ToLower(q) + "%")
-		match := fmt.Sprintf("LOWER(name) LIKE %s OR LOWER(short_name) LIKE %s", pattern, pattern)
-		if n, ok := models.ParseAssetID(q); ok {
-			match += " OR " + cond.Equal("asset_number", n)
-		}
-		add("(" + match + ")")
+	for _, term := range registry.SplitSearchTerms(opts.Search) {
+		add(searchTermExpr(cond, term, opts.SearchTagLabels[term]))
 	}
+	exprs = append(exprs, tagFilterExprs(cond, opts.Tags)...)
 	add(warrantyStatusExpr(cond, opts))
 	if opts.WarrantyExpiresBefore != "" {
 		// Same empty-string defense as the warranty-status branches —
@@ -404,6 +395,47 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 	add(lentOutExpr(opts.LentOut, commoditiesTable, loansTable))
 
 	return andWhere(cond, exprs...)
+}
+
+// searchTermExpr is the SQL form of one term of registry.MatchCommoditySearch.
+// The generated search_text column joins every text field, tag slugs
+// included, with U+001F, and a term never holds a control character, so one
+// escaped ILIKE against it equals "some field contains the term"; the trigram
+// index commodities_search_text_trgm_idx serves it. A tag found by its label
+// arrives as a pre-resolved slug list, matched with ?| on the GIN-indexed
+// tags column, and a term that reads as an asset ID also matches the number.
+func searchTermExpr(cond *sqlb.Cond, term string, labelSlugs []string) string {
+	alternatives := []string{"search_text ILIKE " + cond.Var(containsPattern(term))}
+	if len(labelSlugs) > 0 {
+		alternatives = append(alternatives, "tags ?| "+cond.Var(labelSlugs)+"::text[]")
+	}
+	if n, ok := models.ParseAssetID(term); ok {
+		alternatives = append(alternatives, cond.Equal("asset_number", n))
+	}
+	return cond.Or(alternatives...)
+}
+
+// tagFilterExprs states registry.CommodityTagFilter.Matches in SQL, one
+// AND-ed expression per part. The ?& and ?| operators use the GIN index on
+// tags. A NULL tags column is read as an empty list, the way
+// TagRegistry.GetStats counts untagged items, so an item without tags passes
+// an exclusion instead of vanishing on a NULL.
+func tagFilterExprs(cond *sqlb.Cond, f registry.CommodityTagFilter) []string {
+	var exprs []string
+	if f.Untagged {
+		exprs = append(exprs, "jsonb_array_length(COALESCE(tags, '[]'::jsonb)) = 0")
+	}
+	if len(f.Include) > 0 {
+		op := "?&"
+		if f.Mode == registry.TagMatchAny {
+			op = "?|"
+		}
+		exprs = append(exprs, "tags "+op+" "+cond.Var(f.Include)+"::text[]")
+	}
+	if len(f.Exclude) > 0 {
+		exprs = append(exprs, "NOT (COALESCE(tags, '[]'::jsonb) ?| "+cond.Var(f.Exclude)+"::text[])")
+	}
+	return exprs
 }
 
 // commodityAreaExpr builds the AreaID / Unassigned predicate (issue #1986).
