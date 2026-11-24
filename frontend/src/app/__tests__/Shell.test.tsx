@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Route } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { Shell } from "@/app/Shell"
@@ -19,6 +19,11 @@ import { __resetHttpForTests } from "@/lib/http"
 // and with a group, and check what the tour does in each.
 
 const SEEN_KEY = `inventario-tour-seen-v1:${authHandlers.fixtureUser.id}`
+
+// The suite-wide matchMedia stub from test/setup.ts. A test that needs a
+// narrow screen swaps in its own and afterEach puts this one back. It is a
+// shared vi.fn, so vi.spyOn + mockRestore would wipe its implementation.
+const originalMatchMedia = window.matchMedia
 
 // Stands in for the routed page. It exposes the tour controls Shell
 // provides, so a test can read the blocker and force a restart the UI
@@ -64,6 +69,10 @@ beforeEach(() => {
   __resetHttpForTests()
 })
 
+afterEach(() => {
+  window.matchMedia = originalMatchMedia
+})
+
 describe("<Shell /> — onboarding tour without a group (#2787)", () => {
   it("does not open the tour, does not mark it seen, and offers no restart", async () => {
     server.use(...authHandlers.signedIn(), ...groupHandlers.empty())
@@ -89,8 +98,8 @@ describe("<Shell /> — onboarding tour without a group (#2787)", () => {
 
   it("closes a forced restart at once without marking the tour seen", async () => {
     // Nothing in the UI restarts the tour without a group, but the restart
-    // handler still exists; with no step target on the page the overlay
-    // must close itself rather than walk through centered cards.
+    // handler still exists; with nothing on the page to point at, the tour
+    // must close at once rather than walk through centered cards.
     //
     // The user saw the tour before; restart() clears that flag, so a null
     // flag afterwards shows that the restart ran and that closing did not
@@ -135,6 +144,44 @@ describe("<Shell /> — onboarding tour with a group", () => {
     await user.click(screen.getByTestId("onboarding-skip-icon"))
     await waitFor(() => expect(screen.queryByTestId("onboarding-tour")).not.toBeInTheDocument())
     expect(window.localStorage.getItem(SEEN_KEY)).toBe("1")
+  })
+
+  it("closes an open tour without marking it seen when the window narrows", async () => {
+    // The mobile query answers from `narrow`; flipping it and firing the
+    // change listeners is what a resize below the breakpoint does.
+    let narrow = false
+    const listeners = new Set<() => void>()
+    window.matchMedia = vi.fn().mockImplementation((query: string) => {
+      const isMobileQuery = query.includes("max-width")
+      return {
+        get matches() {
+          return isMobileQuery && narrow
+        },
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: (_type: string, cb: () => void) => {
+          if (isMobileQuery) listeners.add(cb)
+        },
+        removeEventListener: (_type: string, cb: () => void) => {
+          listeners.delete(cb)
+        },
+        dispatchEvent: vi.fn(),
+      } as unknown as MediaQueryList
+    })
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list())
+    renderShell("/g/household")
+    expect(await screen.findByTestId("onboarding-tour")).toBeInTheDocument()
+
+    act(() => {
+      narrow = true
+      listeners.forEach((cb) => cb())
+    })
+
+    await waitFor(() => expect(screen.queryByTestId("onboarding-tour")).not.toBeInTheDocument())
+    expect(screen.getByTestId("probe-blocker")).toHaveTextContent("narrowScreen")
+    expect(window.localStorage.getItem(SEEN_KEY)).toBeNull()
   })
 
   it("offers Restart product tour in the user menu", async () => {

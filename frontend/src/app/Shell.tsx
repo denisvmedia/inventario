@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useEffect, useMemo } from "react"
 import { Outlet } from "react-router-dom"
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -69,6 +69,14 @@ export function Shell() {
     () => ({ restart: tour.restart, blocker: tourBlocker }),
     [tour.restart, tourBlocker]
   )
+  // A blocker can appear while the tour is open: the window narrows below
+  // the mobile breakpoint and the sidebar turns into a closed sheet, so the
+  // highlights would point at elements that are no longer on screen. Close
+  // the tour without marking it seen; it can run again once it fits.
+  const { isOpen: tourIsOpen, close: closeTour } = tour
+  useEffect(() => {
+    if (tourIsOpen && tourBlocker) closeTour()
+  }, [tourIsOpen, tourBlocker, closeTour])
 
   return (
     <RouteTitleProvider>
@@ -106,7 +114,7 @@ export function Shell() {
                 {/* Faint build-commit watermark, bottom-right, hidden on
                     mobile; renders nothing in dev/tests (#1972). */}
                 <CommitBadge />
-                {tour.isOpen ? (
+                {tour.isOpen && !tourBlocker ? (
                   <OnboardingTour
                     step={tour.step}
                     onNext={tour.next}
