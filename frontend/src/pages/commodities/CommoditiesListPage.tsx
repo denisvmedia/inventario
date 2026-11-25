@@ -557,6 +557,9 @@ export function CommoditiesListPage() {
           selection={selection}
           rows={rows}
           total={total}
+          // A placeholder is the previous query's page, whose digest names
+          // other items; "Select all matching" waits for the real one.
+          selectionDigest={list.isPlaceholderData ? "" : (list.data?.selectionDigest ?? "")}
           query={query}
           slug={slug}
           areas={areas.data ?? []}

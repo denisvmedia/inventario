@@ -176,7 +176,15 @@ interface BulkHandlerOptions {
 export function bulkResultResponse(result: {
   succeeded?: string[]
   skipped?: { id: string; name?: string }[]
-  failed?: { id: string; name?: string; code?: string; error?: string }[]
+  failed?: {
+    id: string
+    name?: string
+    code?: string
+    error?: string
+    field?: string
+    reason?: string
+  }[]
+  notes?: { id: string; name?: string; code: string }[]
 }) {
   return HttpResponse.json({
     data: {
@@ -186,6 +194,7 @@ export function bulkResultResponse(result: {
         succeeded: result.succeeded ?? [],
         failed: result.failed ?? [],
         ...(result.skipped ? { skipped: result.skipped } : {}),
+        ...(result.notes ? { notes: result.notes } : {}),
       },
     },
   })

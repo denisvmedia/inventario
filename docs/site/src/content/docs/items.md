@@ -526,7 +526,9 @@ On the **All Items** page you can act on several items at once:
    - **Print labels** — opens the label page with a label for each selected
      item (see [Print labels](#print-labels)).
    - **Delete** — moves the selected items to the [Trash](../trash/) after a
-     confirmation. The message that follows has an **Undo** button.
+     confirmation. The message that follows has an **Undo** button. If an
+     item went to the Trash but some of its files could not follow it, a
+     second message says so; those files stay on the Files page.
 
 Each item is changed the way a single change would change it: the same checks
 apply, and the change shows in the item's history. An item that already has
@@ -541,15 +543,18 @@ selection** goes back to no selection. **Print labels** is not offered for
 this selection.
 
 Inventario checks the selection again when you confirm an action. If the
-number of matching items changed in the meantime, for example because someone
-added an item, nothing is changed and a message asks you to check the list and
-try again. One action takes up to 500 items; when more match, narrow the
-filters first.
+matching items changed in the meantime, for example because someone added an
+item or edited one so that it no longer matches, nothing is changed: the
+selection is cleared and a message asks you to check the list and select the
+items again. This holds even when as many items match as before, if they are
+not the same ones. One action takes up to 500 items; when more match, narrow
+the filters first.
 
 ### When some items fail
 
 If some items could not be changed, a dialog lists each of them with the
-reason. The items that failed stay selected. Click an item's name to open it
+reason. The items that failed stay selected. A move to an area someone
+deleted in the meantime changes no item and shows an error instead. Click an item's name to open it
 and fix it, or click **Retry failed items** to run the same action on those
 items again.
 

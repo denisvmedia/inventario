@@ -60,6 +60,7 @@ export function useCommodities(opts: ListCommoditiesOptions = {}, query: QueryOp
     total: number
     covers: Record<string, CommodityCover>
     matches: Record<string, CommoditySearchMatch[]>
+    selectionDigest: string
   }>({
     queryKey: commodityKeys.list(slug, opts),
     queryFn: ({ signal }) => listCommodities({ ...opts, signal }),

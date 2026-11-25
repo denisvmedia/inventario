@@ -214,10 +214,15 @@ test.describe('Commodities — bulk edit', () => {
       // The request named the query, and the server resolved it to every
       // matching item, the one on the second page included.
       const sent = updated.request().postDataJSON() as {
-        data: { attributes: { ids?: string[]; query?: string; expected_count?: number } }
+        data: {
+          attributes: { ids?: string[]; query?: string; expected_count?: number; expected_digest?: string }
+        }
       }
       expect(sent.data.attributes.ids).toBeUndefined()
       expect(sent.data.attributes.expected_count).toBe(total)
+      // The digest of the matched ids the list gave, so a swapped item is
+      // refused as a changed count is.
+      expect(sent.data.attributes.expected_digest).toMatch(/^[0-9a-f]{64}$/)
       const body = (await updated.json()) as { data: { attributes: { succeeded: string[] } } }
       expect(body.data.attributes.succeeded).toHaveLength(total)
       const last = await getCommodityViaAPI(request, auth, group.slug, ids[total - 1])

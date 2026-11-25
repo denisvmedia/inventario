@@ -77,6 +77,11 @@ export interface CommodityBulkActionsProps {
   rows: Commodity[]
   /** How many items the query matches, on every page. */
   total: number
+  /**
+   * The list's digest of the ids the query matches (meta.selection_digest);
+   * empty when a bulk action cannot take the query.
+   */
+  selectionDigest: string
   query: CommodityQuery
   slug?: string
   areas: Area[]
@@ -94,6 +99,7 @@ export function CommodityBulkActions({
   selection,
   rows,
   total,
+  selectionDigest,
   query,
   slug,
   areas,
@@ -121,11 +127,11 @@ export function CommodityBulkActions({
   const pageIds = rows.map((r) => r.id ?? "").filter(Boolean)
   const checked = selection.checkedOn(pageIds)
   const pageSelected = pageIds.length > 0 && pageIds.every((id) => checked.has(id))
-  const count = selection.count(total)
+  const count = selection.count
   const pending = bulkDelete.isPending || bulkMove.isPending || bulkUpdate.isPending
 
   function currentTarget(): Target {
-    return { selection: selection.toRequest(commodityQueryParam(query), total), count }
+    return { selection: selection.toRequest(commodityQueryParam(query)), count }
   }
 
   function openDialog(kind: DialogKind) {
@@ -154,8 +160,19 @@ export function CommodityBulkActions({
       reportError(action, err)
       return false
     }
-    report(action, result)
+    report(action, withRowNames(result))
     return true
+  }
+
+  // withRowNames names the failed items the server did not name (not_sent:
+  // a later request of the action never ran) from the rows on the page.
+  function withRowNames(result: CommodityBulkResult): CommodityBulkResult {
+    if (result.failed.every((f) => f.name)) return result
+    const names = new Map(rows.map((r) => [r.id ?? "", r.name ?? ""]))
+    return {
+      ...result,
+      failed: result.failed.map((f) => (f.name ? f : { ...f, name: names.get(f.id) ?? "" })),
+    }
   }
 
   function report(action: BulkAction, result: CommodityBulkResult) {
@@ -164,6 +181,8 @@ export function CommodityBulkActions({
       toast.success(t("commodities:toast.bulkDeleted", { count: done }), {
         action: undoDelete(result.succeeded),
       })
+      const filesKept = result.notes.filter((n) => n.code === "files_kept").length
+      if (filesKept > 0) toast.warning(t("commodities:toast.bulkFilesKept", { count: filesKept }))
     }
     if (result.failed.length > 0) {
       setOutcome({ action, result })
@@ -194,13 +213,16 @@ export function CommodityBulkActions({
     const meta = getServerErrorMeta(err) ?? {}
     if (code === "bulk.selection_changed") {
       // Sending the same request again would fail the same way: close the
-      // dialog so the user looks at the refreshed list first.
+      // dialog and drop "all matching", whose items are out of date, so the
+      // user looks at the refreshed list and selects again.
       setDialog(null)
+      selection.clear()
+      const expected = meta.expected ?? ""
+      const matched = meta.matched ?? ""
       toast.error(
-        t("commodities:toast.bulkSelectionChanged", {
-          expected: meta.expected ?? "",
-          matched: meta.matched ?? "",
-        })
+        expected === matched
+          ? t("commodities:toast.bulkSelectionSwapped")
+          : t("commodities:toast.bulkSelectionChanged", { expected, matched })
       )
       return
     }
@@ -263,10 +285,11 @@ export function CommodityBulkActions({
     locked ? cn("cursor-not-allowed opacity-50", hoverClass) : undefined
 
   const countLabel = selection.allMatching
-    ? t("commodities:bulk.allMatchingSelected", { count: total })
+    ? t("commodities:bulk.allMatchingSelected", { count })
     : t("commodities:bulk.selected", { count })
   // "Select all N matching" is offered once the whole page is selected and
-  // the query matches more than the page.
+  // the query matches more than the page. It needs the list's digest of the
+  // matching items, which the list gives up to MAX_BULK_QUERY_ITEMS.
   const offerAllMatching = !selection.allMatching && pageSelected && total > pageIds.length
 
   return (
@@ -276,13 +299,13 @@ export function CommodityBulkActions({
           label={
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span data-testid="commodities-bulk-count">{countLabel}</span>
-              {offerAllMatching && total <= MAX_BULK_QUERY_ITEMS ? (
+              {offerAllMatching && total <= MAX_BULK_QUERY_ITEMS && selectionDigest ? (
                 <Button
                   type="button"
                   variant="link"
                   size="sm"
                   className="h-auto p-0"
-                  onClick={selection.selectAllMatching}
+                  onClick={() => selection.selectAllMatching(total, selectionDigest)}
                   data-testid="commodities-select-all-matching"
                 >
                   {t("commodities:bulk.selectAllMatching", { count: total })}

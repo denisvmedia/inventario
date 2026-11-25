@@ -1,6 +1,7 @@
 // Data-layer functions for the Trash. Hooks live in `./hooks.ts`.
 // Deleted items and files wait under /trash until they are restored, deleted
 // for good, or purged by the server once the retention runs out.
+import { sendInChunks } from "@/lib/bulk-chunks"
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -140,19 +141,21 @@ export async function restoreCommodity(id: string): Promise<CommodityRestoreResu
 const MAX_RESTORE_IDS = 100
 
 // Restores items from Trash. More ids than one request takes, as Undo after
-// a bulk delete of "all matching" items sends, go in several requests.
+// a bulk delete of "all matching" items sends, go in several requests; when
+// a later one fails, what the earlier ones restored is kept and the rest is
+// reported as failed (sendInChunks).
 export async function restoreCommodities(ids: string[]): Promise<BulkRestoreResult> {
+  const { parts, unsent } = await sendInChunks(ids, MAX_RESTORE_IDS, (chunk) =>
+    http.post<BulkRestoreEnvelope>("/trash/commodities/restore", bulkBody("commodities", chunk))
+  )
   const merged: BulkRestoreResult = { succeeded: [], failed: [], areaRemoved: [] }
-  for (let i = 0; i < ids.length; i += MAX_RESTORE_IDS) {
-    const body = await http.post<BulkRestoreEnvelope>(
-      "/trash/commodities/restore",
-      bulkBody("commodities", ids.slice(i, i + MAX_RESTORE_IDS))
-    )
+  for (const body of parts) {
     const part = bulkResult(body)
     merged.succeeded.push(...part.succeeded)
     merged.failed.push(...part.failed)
     merged.areaRemoved.push(...(body.data?.attributes?.area_removed ?? []))
   }
+  for (const id of unsent) merged.failed.push({ id, error: "" })
   return merged
 }
 

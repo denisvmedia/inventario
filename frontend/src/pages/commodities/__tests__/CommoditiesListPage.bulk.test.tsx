@@ -48,10 +48,13 @@ const ROWS = [
 ]
 
 // listWithTotal serves one page of rows for a query that matches `total`
-// items in all.
-function listWithTotal(rows: unknown[], total: number) {
+// items in all, with the selection digest the server gives up to 500.
+function listWithTotal(rows: unknown[], total: number, digest = `digest-${total}`) {
   return msw.get(apiUrl(`/g/${SLUG}/commodities`), () =>
-    HttpResponse.json({ data: rows, meta: { commodities: total } })
+    HttpResponse.json({
+      data: rows,
+      meta: { commodities: total, ...(total <= 500 && digest ? { selection_digest: digest } : {}) },
+    })
   )
 }
 
@@ -94,6 +97,7 @@ beforeEach(() => {
   localStorage.removeItem("commodities:viewMode")
   vi.mocked(toast.success).mockClear()
   vi.mocked(toast.error).mockClear()
+  vi.mocked(toast.warning).mockClear()
   server.use(
     msw.get(apiUrl(`/g/${SLUG}/settings`), () => HttpResponse.json({})),
     ...groupHandlers.list(groupFixture),
@@ -176,6 +180,7 @@ describe("<CommoditiesListPage /> bulk actions", () => {
     await waitFor(() => expect(requests).toHaveLength(1))
     expect(requests[0].ids).toBeUndefined()
     expect(requests[0].expected_count).toBe(120)
+    expect(requests[0].expected_digest).toBe("digest-120")
     expect(requests[0].patch).toEqual({ type: "electronics" })
     const query = new URLSearchParams(requests[0].query as string)
     expect(query.get("include_inactive")).toBe("false")
@@ -202,6 +207,17 @@ describe("<CommoditiesListPage /> bulk actions", () => {
     await user.click(within(cards[0]).getByTestId("commodity-select"))
     await user.click(screen.getByTestId("commodities-select-all"))
     expect(await screen.findByTestId("commodities-select-all-too-many")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodities-select-all-matching")).toBeNull()
+  })
+
+  it("does not offer all matching items without the list's digest of them", async () => {
+    const user = userEvent.setup()
+    server.use(listWithTotal(ROWS, 120, ""))
+    renderList()
+    const cards = await screen.findAllByTestId("commodity-card")
+    await user.click(within(cards[0]).getByTestId("commodity-select"))
+    await user.click(screen.getByTestId("commodities-select-all"))
+    expect(screen.getByTestId("commodities-bulk-count")).toHaveTextContent("2 items selected")
     expect(screen.queryByTestId("commodities-select-all-matching")).toBeNull()
   })
 
@@ -263,6 +279,8 @@ describe("<CommoditiesListPage /> bulk actions", () => {
                     name: "Second",
                     code: "invalid",
                     error: "short_name: cannot be blank.",
+                    field: "short_name",
+                    reason: "validation_is_empty",
                   },
                 ],
               })
@@ -282,7 +300,8 @@ describe("<CommoditiesListPage /> bulk actions", () => {
       "href",
       expect.stringContaining(`/g/${SLUG}/commodities/c2`)
     )
-    expect(within(failed).getByText("short_name: cannot be blank.")).toBeInTheDocument()
+    // The reason is said in the user's language, not the server's English.
+    expect(within(failed).getByText("Short name is required.")).toBeInTheDocument()
     expect(await axe(result)).toHaveNoViolations()
     // The failed item stays selected.
     expect(screen.getByTestId("commodities-bulk-count")).toHaveTextContent("1 item selected")
@@ -294,11 +313,26 @@ describe("<CommoditiesListPage /> bulk actions", () => {
     expect(toast.success).toHaveBeenCalledWith("1 item updated.", expect.anything())
   })
 
-  it("refuses to act when the query now matches a different number of items", async () => {
+  it.each([
+    {
+      name: "a different number of items",
+      matched: "121",
+      message:
+        "The filter now matches 121 items, not 120. Nothing was changed. Check the list and try again.",
+    },
+    {
+      name: "as many items with one swapped",
+      matched: "120",
+      message:
+        "The items the filter matches changed since you selected them. Nothing was changed. Check the list and select them again.",
+    },
+  ])("refuses to act when the query now matches $name", async ({ matched, message }) => {
     const user = userEvent.setup()
+    const requests: Record<string, unknown>[] = []
     server.use(
       listWithTotal(ROWS, 120),
       ...commodityHandlers.bulkDelete(SLUG, {
+        onRequest: (a) => requests.push(a),
         respond: () =>
           HttpResponse.json(
             {
@@ -306,7 +340,7 @@ describe("<CommoditiesListPage /> bulk actions", () => {
                 {
                   status: "Conflict",
                   code: "bulk.selection_changed",
-                  meta: { expected: "120", matched: "121" },
+                  meta: { expected: "120", matched },
                 },
               ],
             },
@@ -325,15 +359,42 @@ describe("<CommoditiesListPage /> bulk actions", () => {
     const buttons = screen.getAllByRole("button", { name: /^Delete$/i })
     await user.click(buttons[buttons.length - 1])
 
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message, undefined))
+    expect(requests[0].expected_digest).toBe("digest-120")
+    // The selection named items that are out of date, so it is dropped.
     await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith(
-        "The filter now matches 121 items, not 120. Nothing was changed. Check the list and try again.",
-        undefined
+      expect(screen.queryByTestId("commodities-bulk-bar")).not.toBeInTheDocument()
+    )
+  })
+
+  it("offers Undo for the deleted items and says when their files stayed", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...commodityHandlers.list(SLUG, ROWS),
+      ...commodityHandlers.bulkDelete(SLUG, {
+        respond: () =>
+          bulkResultResponse({
+            succeeded: ["c1", "c2"],
+            notes: [{ id: "c2", name: "Second", code: "files_kept" }],
+          }),
+      })
+    )
+    renderList()
+    await selectBoth(user)
+    await user.click(screen.getByTestId("commodities-bulk-delete"))
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
+    const buttons = screen.getAllByRole("button", { name: /^Delete$/i })
+    await user.click(buttons[buttons.length - 1])
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "2 items moved to the trash.",
+        expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) })
       )
     )
-    // Nothing happened, so the selection is still there.
-    expect(screen.getByTestId("commodities-bulk-count")).toHaveTextContent(
-      "All 120 matching items selected"
+    expect(toast.warning).toHaveBeenCalledWith(
+      "1 item is in the trash, but some of its files stayed. You'll find them under Files.",
+      undefined
     )
   })
 })

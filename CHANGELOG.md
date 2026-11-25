@@ -31,10 +31,14 @@ the section matching the tag and publishes it as the GitHub Release body. See
   own history event. When some items fail, a dialog lists them with the reason,
   keeps them selected and offers a retry of those items alone. The new
   `POST /commodities/bulk-update` takes ids or a query of the item query
-  contract with the number of items it was seen to match, and refuses with 409
-  when that number changed; `bulk-move` and `bulk-delete` take the same
-  selection, and all three answer with the items that changed, were skipped as
-  unchanged, or failed with a reason. A query may select up to 500 items. The
+  contract with the number and the digest of the items it was seen to match
+  (`meta.selection_digest` of `GET /commodities`), and refuses with 409 when
+  the query selects other items by then, even as many; `bulk-move` and
+  `bulk-delete` take the same selection, and all three answer with the items
+  that changed, were skipped as unchanged, or failed with a reason (a
+  validation failure names the field and the rule, so the app can say it in
+  the user's language). A query may select up to 500 items. `bulk-move` to an
+  area that does not exist is refused with 422 before any item changes. The
   Files page's bulk bar gains **Tags…**, which adds and removes tags on the
   selected files the same way, through the new `POST /files/bulk-update`
   ([#2798](https://github.com/denisvmedia/inventario/issues/2798)).

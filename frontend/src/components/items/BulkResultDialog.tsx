@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import type { CommodityBulkResult } from "@/features/commodities/api"
+import { bulkFailureReason } from "@/features/commodities/bulkFailureReason"
 
 export interface BulkResultDialogProps {
   open: boolean
@@ -36,12 +37,6 @@ export function BulkResultDialog({
 }: BulkResultDialogProps) {
   const { t } = useTranslation()
   if (!result) return null
-
-  function reason(f: CommodityBulkResult["failed"][number]): string {
-    if (f.code === "not_found") return t("commodities:bulk.result.notFound")
-    if (f.code === "invalid" && f.error) return f.error
-    return t("commodities:bulk.result.failed")
-  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -76,7 +71,7 @@ export function BulkResultDialog({
                 ) : (
                   <span className="font-medium">{name}</span>
                 )}
-                <span className="text-muted-foreground">{reason(f)}</span>
+                <span className="text-muted-foreground">{bulkFailureReason(t, f)}</span>
               </li>
             )
           })}

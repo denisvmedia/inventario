@@ -3,6 +3,7 @@
 // #1398 (category enum) + #1399 (legacy backfill); the FE consumes a
 // single endpoint regardless of whether a row originated as an image,
 // invoice, or manual on the legacy split-table side.
+import { sendInChunks } from "@/lib/bulk-chunks"
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -295,7 +296,9 @@ export interface FileBulkTagsChange {
 }
 
 // Adds tags to and removes tags from the files; tags the change does not
-// name stay on each file. Sends at most 100 ids per request.
+// name stay on each file. Sends at most 100 ids per request; when a later
+// request fails, what the earlier ones changed is kept and the rest is
+// reported as failed (sendInChunks).
 export async function bulkUpdateFileTags(
   ids: string[],
   change: FileBulkTagsChange
@@ -303,14 +306,13 @@ export async function bulkUpdateFileTags(
   const tags: NonNullable<Schema<"jsonapi.FileBulkPatch">["tags"]> = {}
   if (change.add.length > 0) tags.add = change.add
   if (change.remove.length > 0) tags.remove = change.remove
-  const merged: FileBulkResult = { succeeded: [], skipped: [], failed: [] }
-  for (let i = 0; i < ids.length; i += MAX_BULK_FILE_IDS) {
-    const body = await http.post<Schema<"jsonapi.BulkResultResponse">>(`/files/bulk-update`, {
-      data: {
-        type: "files",
-        attributes: { ids: ids.slice(i, i + MAX_BULK_FILE_IDS), patch: { tags } },
-      },
+  const { parts, unsent } = await sendInChunks(ids, MAX_BULK_FILE_IDS, (chunk) =>
+    http.post<Schema<"jsonapi.BulkResultResponse">>(`/files/bulk-update`, {
+      data: { type: "files", attributes: { ids: chunk, patch: { tags } } },
     })
+  )
+  const merged: FileBulkResult = { succeeded: [], skipped: [], failed: [] }
+  for (const body of parts) {
     const attrs = body?.data?.attributes
     merged.succeeded.push(...(attrs?.succeeded ?? []))
     merged.skipped.push(
@@ -324,6 +326,7 @@ export async function bulkUpdateFileTags(
       }))
     )
   }
+  for (const id of unsent) merged.failed.push({ id, name: "", error: "" })
   return merged
 }
 
