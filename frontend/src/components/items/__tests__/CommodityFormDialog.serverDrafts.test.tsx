@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Route, useLocation } from "react-router-dom"
 import { act, fireEvent, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -85,8 +85,29 @@ async function openResumed(id: string, name: string, props: Parameters<typeof re
   return { ...rendered, input }
 }
 
-async function walkToFiles(user: ReturnType<typeof userEvent.setup>) {
-  for (const step of ["purchase", "warranty", "tags", "files"]) {
+// openResumedOn opens draft id in the form and waits for the step it lands
+// on: a draft that has a type opens past Basics, on the step it still needs.
+async function openResumedOn(
+  id: string,
+  stepTestId: string,
+  props: Parameters<typeof renderForm>[0] = {}
+) {
+  const rendered = renderForm({ ...props, resumeDraftId: id })
+  await screen.findByTestId(stepTestId)
+  return rendered
+}
+
+// toBasics goes back to Basics with the stepper and returns the Name field.
+async function toBasics(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Basics" }))
+  return screen.findByLabelText(/^Name$/i)
+}
+
+async function walkToFiles(
+  user: ReturnType<typeof userEvent.setup>,
+  steps = ["purchase", "warranty", "tags", "files"]
+) {
+  for (const step of steps) {
     await user.click(screen.getByTestId("commodity-form-next"))
     if (step === "purchase") await screen.findByLabelText(/Purchase date/i)
     if (step === "warranty") await screen.findByTestId("commodity-form-warranty-step")
@@ -101,6 +122,13 @@ function refusal(code: string, meta: Record<string, string> = {}) {
     errors: [{ status: "409", code, meta }],
   })
 }
+
+// The form copies its values to localStorage a frame after each change. Let
+// that frame pass, so a test that ends right after opening the form does not
+// leave its values in the next test's storage.
+afterEach(async () => {
+  await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
+})
 
 beforeEach(() => {
   clearAuth()
@@ -147,6 +175,47 @@ describe("<CommodityFormDialog /> server drafts", () => {
     expect(shortName).toHaveValue("Garage drill")
   })
 
+  // Continue picks up where the draft was left (#2794): the first step with
+  // a field the form refuses, else the step after the last one with values.
+  it.each([
+    ["Basics, while the type is missing", { name: "Lamp", short_name: "Lamp" }, "basics"],
+    [
+      "Purchase, after a filled Basics",
+      { name: "Lamp", short_name: "Lamp", type: "furniture" },
+      "purchase",
+    ],
+    [
+      "Warranty, after a purchase price",
+      { name: "Lamp", short_name: "Lamp", type: "furniture", original_price: "40" },
+      "warranty",
+    ],
+    [
+      "Files, after tags",
+      { name: "Lamp", short_name: "Lamp", type: "furniture", tags: ["living-room"] },
+      "files",
+    ],
+    [
+      "Purchase, for a foreign price with no group-currency amount",
+      {
+        name: "Lamp",
+        short_name: "Lamp",
+        type: "furniture",
+        original_price: "40",
+        original_price_currency: "EUR",
+        tags: ["living-room"],
+      },
+      "purchase",
+    ],
+  ])("opens a resumed draft on %s", async (_label, values, step) => {
+    const fake = draftHandlers.backend(SLUG, [{ id: "d1", revision: 1, values }])
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    await openResumedOn("d1", `commodity-form-${step}-step`)
+    // The steps before it are one click away.
+    if (step !== "basics") {
+      expect(screen.getByRole("button", { name: "Basics" })).toBeEnabled()
+    }
+  })
+
   it("promotes a resumed draft instead of creating an item", async () => {
     const fake = draftHandlers.backend(SLUG, [
       {
@@ -157,18 +226,13 @@ describe("<CommodityFormDialog /> server drafts", () => {
     ])
     server.use(...groupHandlers.list(groups), ...fake.handlers)
     const user = userEvent.setup()
-    const { onSubmit } = renderForm({ resumeDraftId: "d1" })
-    // A resumed draft opens on Basics with its values and the switch off.
-    const name = await screen.findByLabelText(/^Name$/i)
-    await waitFor(() => expect(name).toHaveValue("Couch"))
+    const { onSubmit } = await openResumedOn("d1", "commodity-form-purchase-step")
+    // Basics is filled in, so the draft opens on the next step; Basics shows
+    // its values and the switch off.
+    const name = await toBasics(user)
+    expect(name).toHaveValue("Couch")
     expect(screen.getByLabelText(/Save as draft/i)).not.toBeChecked()
-    for (const step of ["Purchase date", "warranty", "tags", "files"]) {
-      await user.click(screen.getByTestId("commodity-form-next"))
-      if (step === "Purchase date") await screen.findByLabelText(/Purchase date/i)
-      if (step === "warranty") await screen.findByTestId("commodity-form-warranty-step")
-      if (step === "tags") await screen.findByTestId("commodity-tags-input")
-      if (step === "files") await screen.findByTestId("commodity-form-files-step")
-    }
+    await walkToFiles(user)
     await user.click(screen.getByTestId("commodity-form-submit"))
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     const [values, draft] = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]
@@ -212,17 +276,11 @@ describe("<CommodityFormDialog /> server drafts", () => {
       .fn()
       .mockRejectedValue(new HttpError("boom", 422, `/g/${SLUG}/drafts/d1/promote`, envelope))
     const user = userEvent.setup()
-    renderForm({ resumeDraftId: "d1", onSubmit })
-    const name = await screen.findByLabelText(/^Name$/i)
-    await waitFor(() => expect(name).toHaveValue("Drill"))
-    await user.click(screen.getByTestId("commodity-form-next"))
+    // The seller is on Purchase, so the draft opens on Warranty.
+    await openResumedOn("d1", "commodity-form-warranty-step", { onSubmit })
+    await user.click(screen.getByRole("button", { name: "Purchase" }))
     expect(await screen.findByTestId("commodity-seller-gone")).toBeInTheDocument()
-    for (const step of ["warranty", "tags", "files"]) {
-      await user.click(screen.getByTestId("commodity-form-next"))
-      if (step === "warranty") await screen.findByTestId("commodity-form-warranty-step")
-      if (step === "tags") await screen.findByTestId("commodity-tags-input")
-      if (step === "files") await screen.findByTestId("commodity-form-files-step")
-    }
+    await walkToFiles(user, ["warranty", "tags", "files"])
     await user.click(screen.getByTestId("commodity-form-submit"))
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     const [values, draft] = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]
@@ -311,7 +369,9 @@ describe("<CommodityFormDialog /> server drafts", () => {
       ...fake.handlers
     )
     const user = userEvent.setup()
-    const { onOpenChange, input } = await openResumed("d1", "Dinghy")
+    const { onOpenChange } = await openResumedOn("d1", "commodity-form-purchase-step")
+    const input = await toBasics(user)
+    expect(input).toHaveValue("Dinghy")
     await user.type(input, " 2")
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-save-draft"))
@@ -382,8 +442,8 @@ describe("<CommodityFormDialog /> server drafts", () => {
       .fn()
       .mockRejectedValueOnce(new HttpError("unavailable", 503, `/g/${SLUG}/drafts/d1/promote`, {}))
       .mockResolvedValueOnce({ id: "item-from-d1" })
-    await openResumed("d1", "Lamp", { onSubmit })
-    await walkToFiles(user)
+    await openResumedOn("d1", "commodity-form-purchase-step", { onSubmit })
+    await walkToFiles(user, ["warranty", "tags", "files"])
     await user.click(screen.getByTestId("commodity-form-submit"))
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     await user.click(await screen.findByTestId("commodity-form-submit"))
@@ -404,8 +464,10 @@ describe("<CommodityFormDialog /> server drafts", () => {
     const onSubmit = vi
       .fn()
       .mockRejectedValue(refusal("draft.promoted", { commodity_id: "item-7" }))
-    const { onOpenChange } = await openResumed("d1", "Lamp", { onSubmit })
-    await walkToFiles(user)
+    const { onOpenChange } = await openResumedOn("d1", "commodity-form-purchase-step", {
+      onSubmit,
+    })
+    await walkToFiles(user, ["warranty", "tags", "files"])
     await user.click(screen.getByTestId("commodity-form-submit"))
     await screen.findByTestId("draft-save-promoted")
     await user.click(screen.getByTestId("draft-promoted-open-item"))

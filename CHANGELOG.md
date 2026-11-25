@@ -36,6 +36,15 @@ the section matching the tag and publishes it as the GitHub Release body. See
   `no_purchase_date`, and `GET /inbox/checks` returns the counts
   ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
 
+- The items to review can be checked one after another. Review one by one
+  on the inbox opens the first of them, and an item opened from the inbox
+  shows a review bar: Mark as reviewed turns its draft switch off and opens
+  the next item, or returns to the inbox after the last one; Skip opens the
+  next item unchanged. Previous, Next and Save and next in the edit form walk
+  the same list. Continue on a draft opens the Add item dialog on the first
+  step that still needs input instead of Basics
+  ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
+
 - Save as draft in the Add item dialog saves the form and its files on the
   server as a draft of the group, so an item started on one device can be
   finished on another. Nothing is required to save a draft; a **Save draft**

@@ -36,8 +36,12 @@ of 50 rows.
 ## Finish a draft
 
 - **Continue** opens the draft in the **Add item** dialog on top of the inbox,
-  with its values and files. Add the item to finish it; the draft leaves the
-  inbox. Close the dialog to come back to the inbox with the draft unchanged.
+  with its values and files. The dialog opens on the first step that still
+  needs input: the step with a field to correct, or else the step after the
+  last one the draft has values on. The steps before it are one click away on
+  the step bar or with **Back**. Add the item to finish it; the draft leaves
+  the inbox. Close the dialog to come back to the inbox with the draft
+  unchanged.
 - **Discard** deletes the draft after you confirm. Its files that nothing else
   uses go to the [Trash](../trash/).
 
@@ -60,6 +64,22 @@ group currency, the item stays in the inbox and the message says what to fix,
 with an **Open item** button. An unknown purchase date or price is fine: a
 reviewed item can keep them unknown, and it does not come back to the inbox
 for them.
+
+## Review the items one by one
+
+**Review one by one**, at the top of the inbox, opens the first item to
+review. An item opened from the inbox shows a review bar with its place in
+the list, for example "Item 1 of 4 to review":
+
+- **Mark as reviewed** marks the item as reviewed, as on the inbox row, and
+  opens the next item. After the last one, you are back in the inbox.
+- **Skip** opens the next item and leaves this one in the inbox.
+
+Edit the item on its page as usual in between: the fields of the **Details**
+tab, or **Edit** for the whole form. **Previous** and **Next** at the top, and
+**Save and next** in the edit form, move through the same list (see
+[Go through a list one item at a time](../items/#go-through-a-list-one-item-at-a-time)).
+**Back to items** returns to the inbox.
 
 ## Missing details
 
@@ -86,4 +106,5 @@ one click away.
 ## Who can do what
 
 Everyone in the group sees the same inbox. Members with the **Viewer** role
-see the rows but cannot continue, discard, or review them.
+see the rows but cannot continue, discard, or review them, and do not get the
+review bar.

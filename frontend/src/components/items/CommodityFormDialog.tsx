@@ -255,6 +255,32 @@ const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
   files: [],
 }
 
+// resumeStep is the step a resumed server draft opens on (#2794), so Continue
+// picks up where the draft was left instead of walking every step again: the
+// first step with a field the form refuses, else the step after the last one
+// the draft holds values on. The earlier steps stay one click away, on the
+// stepper and with Back.
+function resumeStep(
+  schema: ReturnType<typeof buildCommoditySchema>,
+  values: CommodityFormInput,
+  defaults: CommodityFormInput
+): FormStepKey {
+  const parsed = schema.safeParse(values)
+  if (!parsed.success) {
+    const failing = new Set(parsed.error.issues.map((issue) => String(issue.path[0])))
+    const invalid = FORM_STEPS.find((s) => STEP_FIELDS[s].some((f) => failing.has(f)))
+    if (invalid) return invalid
+  }
+  let lastFilled = -1
+  FORM_STEPS.forEach((s, i) => {
+    const filled = STEP_FIELDS[s].some(
+      (f) => f !== "draft" && JSON.stringify(values[f]) !== JSON.stringify(defaults[f])
+    )
+    if (filled) lastFilled = i
+  })
+  return FORM_STEPS[Math.min(lastFilled + 1, FORM_STEPS.length - 1)]
+}
+
 // CommodityFormDialog hosts the multi-step Add Item / Edit form. Five
 // steps mirror the design mock: Basics → Purchase → Warranty → Extras
 // → Files. Files still renders a `ComingSoonBanner` because the unified
@@ -481,7 +507,16 @@ export function CommodityFormDialog({
     if (openDraft && baseRevision && localKey) writeBaseRevision(localKey, baseRevision)
     setDraftSave({ kind: "idle" })
     setRestoredUnsaved(serverMode && unsaved)
-    setStep(initialStep)
+    if (resumeId) {
+      // A resumed draft opens on the step it still needs, with the steps
+      // before it shown as visited.
+      const landing = openDraft ? resumeStep(schema, starting, defaults) : initialStep
+      const reached = FORM_STEPS.indexOf(landing as FormStepKey)
+      setStep(landing)
+      setVisitedSteps(new Set(reached > 0 ? FORM_STEPS.slice(0, reached + 1) : openingVisitedSteps))
+    } else {
+      setStep(initialStep)
+    }
     setServerError(null)
     setScannedSeller("")
     // Track whether reset() seeded values from a localStorage draft.
@@ -535,6 +570,8 @@ export function CommodityFormDialog({
     resumeLoading,
     resumed,
     serverMode,
+    schema,
+    openingVisitedSteps,
   ])
 
   // Mark each form step visited the moment we land on it. The
@@ -554,10 +591,11 @@ export function CommodityFormDialog({
   // explicitly resets to Basics so its visited set should be a fresh
   // singleton; reopening for a new commodity should also start clean.
 
+  // A resumed draft sets its own once it has loaded (the reset effect above).
   useEffect(() => {
-    if (!open) return
+    if (!open || resumeId) return
     setVisitedSteps(new Set(openingVisitedSteps))
-  }, [open, openingVisitedSteps])
+  }, [open, openingVisitedSteps, resumeId])
 
   // Auto-save the form to localStorage on every change while the dialog
   // is open in create mode. Debounced to a single rAF tick so a burst

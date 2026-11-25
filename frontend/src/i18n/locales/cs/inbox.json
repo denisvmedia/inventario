@@ -54,5 +54,12 @@
   },
   "title": "Schránka",
   "undo": "Zpět",
-  "undoFailed": "Položku se nepodařilo znovu označit jako koncept."
+  "undoFailed": "Položku se nepodařilo znovu označit jako koncept.",
+  "walk": {
+    "failed": "Položky ke kontrole se nepodařilo načíst.",
+    "label": "Kontrola",
+    "position": "Položka {{position}} z {{total}} ke kontrole",
+    "skip": "Přeskočit",
+    "start": "Kontrolovat postupně"
+  }
 }

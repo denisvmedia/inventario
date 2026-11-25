@@ -6,17 +6,21 @@ import { axe } from "jest-axe"
 import { http, HttpResponse } from "msw"
 
 import { CommodityDetailPage, CommodityDetailSheet } from "@/pages/commodities/CommodityDetailPage"
+import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { capture } from "@/test/capture"
+import { toastSpies } from "@/test/global-mocks"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import {
   apiUrl,
   areaHandlers,
+  authHandlers,
   commodityHandlers,
   fileHandlers,
   groupHandlers,
+  inboxHandlers,
   locationHandlers,
   tagHandlers,
 } from "@/test/handlers"
@@ -1230,5 +1234,145 @@ describe("<CommodityDetailSheet /> (#1546 modal-routes overlay)", () => {
       expect(screen.getByTestId("list-backdrop")).toHaveTextContent(`/g/${SLUG}/commodities`)
     )
     expect(screen.queryByTestId("commodity-detail-sheet")).toBeNull()
+  })
+})
+
+// Opened from the inbox, an item marked as draft walks the Items to review
+// list: Mark as reviewed clears the mark and opens the next one, Skip opens
+// the next one as it is (#2794).
+describe("<CommodityDetailPage /> review from the inbox", () => {
+  const REVIEW = `/g/${SLUG}/inbox?reason=item_draft`
+  const FROM_INBOX = `from=${encodeURIComponent(REVIEW)}`
+
+  function draftRow(id: string, name: string) {
+    const row = itemRow(id, name)
+    row.attributes.draft = true
+    return row
+  }
+
+  // The items behind serveItems, with the inbox listing those still marked
+  // as draft, and the member's role.
+  function serveReview(rows: ReturnType<typeof itemRow>[], role = "user") {
+    const puts = serveItems(rows)
+    const stillDraft = () =>
+      rows.filter((r) => {
+        const last = puts.filter((p) => p.id === r.id).at(-1)
+        return last ? last.attributes.draft === true : r.attributes.draft === true
+      })
+    server.use(
+      ...authHandlers.signedIn(),
+      http.get(apiUrl("/groups/g1/members"), () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: "m1",
+              type: "memberships",
+              attributes: { group_id: "g1", member_user_id: "u1", role },
+            },
+          ],
+        })
+      ),
+      http.get(apiUrl(`/g/${SLUG}/inbox`), () => {
+        const entries = stillDraft().map((r) =>
+          inboxHandlers.itemDraft(r.id, String(r.attributes.name))
+        )
+        return HttpResponse.json({
+          data: entries,
+          meta: {
+            entries: entries.length,
+            counts: { total: entries.length, reasons: { item_draft: entries.length } },
+          },
+        })
+      })
+    )
+    return puts
+  }
+
+  function renderReview(initialPath: string) {
+    setAccessToken("good-token")
+    const element = (
+      <AuthProvider>
+        <GroupProvider>
+          <ConfirmProvider>
+            <CommodityDetailPage />
+            <LocationProbe />
+          </ConfirmProvider>
+        </GroupProvider>
+      </AuthProvider>
+    )
+    return renderWithProviders({
+      initialPath,
+      routes: (
+        <>
+          <Route path="/g/:groupSlug/commodities/:id" element={element} />
+          <Route path="/g/:groupSlug/inbox" element={<LocationProbe />} />
+        </>
+      ),
+    })
+  }
+
+  it("marks the item as reviewed and opens the next one", async () => {
+    const user = userEvent.setup()
+    const puts = serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp")])
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    expect(await screen.findByTestId("commodity-review-position")).toHaveTextContent(
+      "Item 1 of 2 to review"
+    )
+    // Back returns to the inbox list it came from.
+    expect(screen.getByTestId("commodity-detail-back")).toHaveAttribute("href", REVIEW)
+    await user.click(screen.getByTestId("commodity-review-mark"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toMatchObject({ id: "c1", attributes: { name: "Bike", draft: false } })
+    await waitFor(() =>
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(
+        `/g/${SLUG}/commodities/c2?${FROM_INBOX}`
+      )
+    )
+    expect(toastSpies.success).toHaveBeenCalledWith(
+      "“Bike” marked as reviewed",
+      expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) })
+    )
+    // The reviewed item left the list: the next one is now the only one.
+    expect(await screen.findByTestId("commodity-review-position")).toHaveTextContent(
+      "Item 1 of 1 to review"
+    )
+  })
+
+  it("returns to the inbox after the last item", async () => {
+    const user = userEvent.setup()
+    serveReview([draftRow("c1", "Bike")])
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    await screen.findByTestId("commodity-review-position")
+    // Nothing to skip to.
+    expect(screen.queryByTestId("commodity-review-skip")).toBeNull()
+    await user.click(screen.getByTestId("commodity-review-mark"))
+    await waitFor(() => expect(screen.getByTestId("location-probe")).toHaveTextContent(REVIEW))
+  })
+
+  it("skips to the next item without changing the current one", async () => {
+    const user = userEvent.setup()
+    const puts = serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp")])
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    await screen.findByTestId("commodity-review-position")
+    await user.click(screen.getByTestId("commodity-review-skip"))
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-review-position")).toHaveTextContent(
+        "Item 2 of 2 to review"
+      )
+    )
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      `/g/${SLUG}/commodities/c2?${FROM_INBOX}`
+    )
+    expect(puts).toHaveLength(0)
+  })
+
+  it("shows no review bar to a viewer or on a reviewed item", async () => {
+    serveReview([itemRow("c1", "Bike"), draftRow("c2", "Lamp")], "viewer")
+    renderReview(`/g/${SLUG}/commodities/c2?${FROM_INBOX}`)
+    expect(await screen.findByRole("heading", { name: /^lamp$/i, level: 1 })).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("1 of 1")
+    )
+    expect(screen.queryByTestId("commodity-review-bar")).toBeNull()
   })
 })

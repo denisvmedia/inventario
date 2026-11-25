@@ -202,7 +202,8 @@ saved and how many files it has. While there are any, a line at the top of
 the **All Items** page says how many and has an **Open inbox** button.
 
 - **Continue** opens the draft in the **Add item** dialog with its values and
-  files. Turn **Save as draft** on and click **Save draft** to save your
+  files, on the first step that still needs input (see
+  [Finish a draft](../inbox/#finish-a-draft)). Turn **Save as draft** on and click **Save draft** to save your
   changes, or finish the item and click **Add item** to create it. The draft's
   files move to the new item, and the draft is gone. Clicking **Add item**
   again after a lost connection does not create a second item.
@@ -392,6 +393,10 @@ from, with its search, filters, sort, and page:
 If an edit takes an item out of the list, for example because you renamed it so
 it no longer matches the search, the page says so. **Save and next** still opens
 the item that came after it.
+
+An item opened from the [Inbox](../inbox/#review-the-items-one-by-one) walks
+the inbox's items to review the same way, and **Back to items** returns to the
+inbox.
 
 ## Asset IDs and QR labels
 

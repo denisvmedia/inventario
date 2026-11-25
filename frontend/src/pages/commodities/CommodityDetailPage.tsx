@@ -7,6 +7,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom"
+import { useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
@@ -125,6 +126,13 @@ import {
   commoditiesListSource,
   isCommoditiesListContext,
 } from "@/features/commodities/listContext"
+import { commodityKeys } from "@/features/commodities/keys"
+import { useMyGroupRole } from "@/features/group/roles"
+import { setCommodityDraft } from "@/features/inbox/api"
+import { useSetItemDraft } from "@/features/inbox/hooks"
+import { inboxReviewSource, isInboxReviewContext } from "@/features/inbox/listContext"
+import { reviewRefusal } from "@/features/inbox/reviewRefusal"
+import { InboxReviewBar } from "@/components/items/InboxReviewBar"
 import {
   commodityListHref,
   commoditySellerHref,
@@ -251,6 +259,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const undoDelete = useUndoItemDelete()
   const setCover = useSetCommodityCover(id)
   const toast = useAppToast()
+  const queryClient = useQueryClient()
   const confirm = useConfirm()
   // The Files tab label gets a count badge driven by this query.
   // perPage=1 keeps the round-trip cheap — we only need `meta.total`.
@@ -317,7 +326,9 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // (lib/list-context.ts): Back returns to it, and Previous / Next / Save
   // and next walk it in its filters and order (hooks/useListNavigation.ts).
   // The list queries wait for the group, as the list page does, so both
-  // build the same query keys and share the cached pages.
+  // build the same query keys and share the cached pages. Opened from the
+  // inbox, it walks the items to review the same way, and the review bar
+  // marks each one as reviewed (features/inbox/listContext.ts).
   const location = useLocation()
   const groupReady = !!currentGroup?.slug
   const from = useMemo(
@@ -325,15 +336,21 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     [searchParams, slug]
   )
   const itemsList = from && slug && isCommoditiesListContext(from, slug) ? from : null
-  const source = useMemo(
-    () => (itemsList && groupReady && slug ? commoditiesListSource(itemsList, slug) : null),
-    [itemsList, groupReady, slug]
-  )
+  const reviewList = from && slug && isInboxReviewContext(from, slug) ? from : null
+  const walked = itemsList ?? reviewList
+  const source = useMemo(() => {
+    if (!groupReady || !slug) return null
+    if (itemsList) return commoditiesListSource(itemsList, slug)
+    if (reviewList) return inboxReviewSource(reviewList, slug)
+    return null
+  }, [itemsList, reviewList, groupReady, slug])
   const nav = useListNavigation({ source, currentId: id || undefined })
   // The list context to carry: on the list page that holds the item.
-  const currentContext = itemsList ? withListContextPage(itemsList, nav.page) : from
-  const contextAt = (page: number) =>
-    itemsList ? withListContextPage(itemsList, page) : currentContext
+  const currentContext = walked ? withListContextPage(walked, nav.page) : from
+  const contextAt = (page: number) => (walked ? withListContextPage(walked, page) : currentContext)
+  const role = useMyGroupRole()
+  const canWrite = role === "user" || role === "admin" || role === "owner"
+  const setDraft = useSetItemDraft()
 
   // Navigates without leaving the sheet: the sheet's background (the list
   // behind it) moves along to the list page the context now points at.
@@ -379,6 +396,33 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   function goToNeighbor(target: ListNeighbor, edit: boolean) {
     const ctx = contextAt(target.page)
     go(itemHref(target.id, ctx, edit), ctx)
+  }
+  // Clears the draft mark of an item opened from the inbox, then moves to
+  // the next item to review, or back to the inbox after the last one. The
+  // next item is read before the save, which takes this one out of the list.
+  async function markReviewedAndNext(title: string) {
+    const next = nav.next
+    try {
+      await setDraft.mutateAsync({ id, draft: false })
+    } catch (err) {
+      const problems = reviewRefusal(t, err)
+      if (problems) toast.error(t("inbox:reviewFailed"), { description: problems })
+      else toast.error(parseServerError(err, t("inbox:reviewFailed")))
+      return
+    }
+    toast.success(t("inbox:reviewed", { title }), {
+      action: {
+        label: t("inbox:undo"),
+        onClick: () => {
+          setCommodityDraft(id, true).then(
+            () => void queryClient.invalidateQueries({ queryKey: commodityKeys.group(slug ?? "") }),
+            (err: unknown) => toast.error(parseServerError(err, t("inbox:undoFailed")))
+          )
+        },
+      },
+    })
+    if (next) goToNeighbor(next, false)
+    else if (currentContext) navigate(listContextHref(currentContext))
   }
 
   const commodity = detail.data?.commodity
@@ -747,6 +791,21 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           <p className="text-sm text-muted-foreground" data-testid="commodity-detail-not-in-list">
             {t("commodities:listNav.notInList")}
           </p>
+        ) : null}
+        {reviewList && canWrite && commodity.draft ? (
+          <InboxReviewBar
+            position={nav.position}
+            total={nav.total}
+            hasNext={!!nav.next}
+            pending={setDraft.isPending}
+            disabled={migrationLock.locked}
+            disabledReason={t("errors:lockedDuringMigration")}
+            onSkip={() => {
+              if (nav.next) goToNeighbor(nav.next, false)
+            }}
+            onReview={() => void markReviewedAndNext(commodity.name ?? "")}
+            className={isSheet ? "mt-3" : undefined}
+          />
         ) : null}
 
         {/* Header (mock parity: `<SheetHeader pt-6 pb-4 px-0>`). The

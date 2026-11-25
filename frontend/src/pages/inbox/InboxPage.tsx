@@ -11,6 +11,7 @@ import {
   FilePen,
   ImageOff,
   Inbox,
+  ListChecks,
   MapPinOff,
   Package,
   Paperclip,
@@ -30,6 +31,7 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { commodityKeys } from "@/features/commodities/keys"
+import { commodityHref } from "@/features/commodities/listContext"
 import {
   commodityListHref,
   commodityQueryFromApiQuery,
@@ -40,20 +42,27 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useMyGroupRole } from "@/features/group/roles"
 import {
   INBOX_REASONS,
+  listInbox,
   setCommodityDraft,
   type InboxCounts,
   type InboxEntry,
   type InboxReason,
 } from "@/features/inbox/api"
 import { useInbox, useInboxChecks, useInboxCount, useSetItemDraft } from "@/features/inbox/hooks"
+import { inboxKeys } from "@/features/inbox/keys"
+import {
+  INBOX_PAGE_SIZE,
+  inboxReviewContext,
+  inboxReviewOptions,
+  reviewPageForAllOffset,
+} from "@/features/inbox/listContext"
 import { reviewRefusal } from "@/features/inbox/reviewRefusal"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatRelative } from "@/lib/intl"
+import type { ListContext } from "@/lib/list-context"
 import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
-
-const PER_PAGE = 50
 
 type ReasonFilter = "all" | InboxReason
 const REASON_FILTERS: readonly ReasonFilter[] = ["all", ...INBOX_REASONS]
@@ -88,8 +97,11 @@ export function InboxPage() {
   const inbox = useInbox({
     reason: reason === "all" ? undefined : reason,
     page,
-    perPage: PER_PAGE,
+    perPage: INBOX_PAGE_SIZE,
   })
+  const role = useMyGroupRole()
+  // Members who may edit content; nobody while the role is still loading.
+  const canWrite = role === "user" || role === "admin" || role === "owner"
   // Every page carries the counts of the whole inbox, so the tabs read
   // them from the page on screen. While the page of a newly selected tab
   // loads there is none, so the tabs keep the sidebar's count.
@@ -118,6 +130,11 @@ export function InboxPage() {
         title={t("inbox:title")}
         subtitle={t("inbox:subtitle")}
         subtitleClassName="max-w-prose"
+        actions={
+          canWrite && (counts?.reasons.item_draft ?? 0) > 0 ? (
+            <ReviewWalkButton slug={slug} />
+          ) : null
+        }
       />
 
       <Tabs value={reason} onValueChange={setReason} data-testid="inbox-tabs">
@@ -130,13 +147,55 @@ export function InboxPage() {
         </TabsList>
         {REASON_FILTERS.map((r) => (
           <TabsContent key={r} value={r} className="mt-4">
-            <InboxList slug={slug} reason={r} page={page} onPage={setPage} inbox={inbox} />
+            <InboxList
+              slug={slug}
+              reason={r}
+              page={page}
+              onPage={setPage}
+              inbox={inbox}
+              canWrite={canWrite}
+            />
           </TabsContent>
         ))}
       </Tabs>
 
       <MissingDetails slug={slug} />
     </Page>
+  )
+}
+
+// Opens the first item to review over the inbox. Its page walks the Items to
+// review list: Mark as reviewed or Skip moves to the next item, so the list
+// can be cleared without coming back here after each one.
+function ReviewWalkButton({ slug }: { slug: string }) {
+  const { t } = useTranslation(["inbox"])
+  const navigate = useNavigate()
+  const location = useLocation()
+  const qc = useQueryClient()
+  const toast = useAppToast()
+
+  async function start() {
+    const opts = inboxReviewOptions(1)
+    try {
+      const first = await qc.fetchQuery({
+        queryKey: inboxKeys.list(slug, opts),
+        queryFn: ({ signal }) => listInbox(opts, signal),
+      })
+      const id = first.entries[0]?.id
+      if (!id) return
+      navigate(commodityHref(slug, id, inboxReviewContext(slug)), {
+        state: { background: location },
+      })
+    } catch (err) {
+      toast.error(parseServerError(err, t("inbox:walk.failed")))
+    }
+  }
+
+  return (
+    <Button type="button" onClick={() => void start()} data-testid="inbox-review-walk">
+      <ListChecks className="size-4" aria-hidden="true" />
+      {t("inbox:walk.start")}
+    </Button>
   )
 }
 
@@ -162,15 +221,22 @@ interface InboxListProps {
   page: number
   onPage: (page: number) => void
   inbox: ReturnType<typeof useInbox>
+  canWrite: boolean
 }
 
-function InboxList({ slug, reason, page, onPage, inbox }: InboxListProps) {
+function InboxList({ slug, reason, page, onPage, inbox, canWrite }: InboxListProps) {
   const { t } = useTranslation(["inbox"])
-  const role = useMyGroupRole()
-  // Members who may edit content; nobody while the role is still loading.
-  const canWrite = role === "user" || role === "admin" || role === "owner"
   const total = inbox.data?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
+  const totalPages = Math.max(1, Math.ceil(total / INBOX_PAGE_SIZE))
+  // An item opened from a row walks the Items to review list from the page
+  // that holds it (features/inbox/listContext.ts).
+  const reviewPage = (index: number) =>
+    reason === "item_draft"
+      ? page
+      : reviewPageForAllOffset(
+          (page - 1) * INBOX_PAGE_SIZE + index,
+          inbox.data?.counts.reasons.draft ?? 0
+        )
 
   // Clearing the last entries of the last page leaves the page past the
   // end; step back to the page that now ends the list.
@@ -209,7 +275,12 @@ function InboxList({ slug, reason, page, onPage, inbox }: InboxListProps) {
           {entries.map((entry, i) => (
             <li key={`${entry.kind}-${entry.id}`}>
               {i > 0 ? <Separator /> : null}
-              <InboxRow entry={entry} slug={slug} canWrite={canWrite} />
+              <InboxRow
+                entry={entry}
+                slug={slug}
+                canWrite={canWrite}
+                reviewContext={inboxReviewContext(slug, reviewPage(i))}
+              />
             </li>
           ))}
         </ul>
@@ -230,6 +301,8 @@ interface RowProps {
   entry: InboxEntry
   slug: string
   canWrite: boolean
+  // The list an item opened from the row walks.
+  reviewContext: ListContext
 }
 
 function InboxRow(props: RowProps) {
@@ -383,14 +456,14 @@ function DraftRow({ entry, slug, canWrite }: RowProps) {
 // reviewed" clears the mark, which the server accepts only when the item
 // passes those checks. Unknown purchase data passes (#2813), so a reviewed
 // item does not come back for it.
-function ItemRow({ entry, slug, canWrite }: RowProps) {
+function ItemRow({ entry, slug, canWrite, reviewContext }: RowProps) {
   const { t } = useTranslation(["inbox"])
   const location = useLocation()
   const navigate = useNavigate()
   const toast = useAppToast()
   const qc = useQueryClient()
   const setDraft = useSetItemDraft()
-  const href = `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(entry.id)}`
+  const href = commodityHref(slug, entry.id, reviewContext)
   const title = entry.title
 
   function openItem() {

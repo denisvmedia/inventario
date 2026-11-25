@@ -48,5 +48,12 @@
   },
   "title": "Inbox",
   "undo": "Undo",
-  "undoFailed": "The item could not be marked as draft again."
+  "undoFailed": "The item could not be marked as draft again.",
+  "walk": {
+    "failed": "The items to review could not be loaded.",
+    "label": "Review",
+    "position": "Item {{position}} of {{total}} to review",
+    "skip": "Skip",
+    "start": "Review one by one"
+  }
 }

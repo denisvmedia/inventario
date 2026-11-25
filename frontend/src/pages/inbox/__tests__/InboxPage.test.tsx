@@ -19,6 +19,7 @@ import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
 const SLUG = "household"
+const REVIEW_FROM = `from=${encodeURIComponent(`/g/${SLUG}/inbox?reason=item_draft`)}`
 const groups: Schema<"models.LocationGroup">[] = [
   { id: "g1", slug: SLUG, name: "Household", group_currency: "USD" },
 ]
@@ -280,8 +281,36 @@ describe("<InboxPage />", () => {
     renderPage()
     await user.click(await screen.findByTestId("inbox-open-c1"))
     const loc = await screen.findByTestId("loc")
-    expect(loc).toHaveTextContent(`/g/${SLUG}/commodities/c1`)
+    // The item walks the items to review from there.
+    expect(loc).toHaveTextContent(`/g/${SLUG}/commodities/c1?${REVIEW_FROM}`)
     expect(loc).toHaveAttribute("data-background", `/g/${SLUG}/inbox`)
+  })
+
+  it("opens the first item to review to walk them one by one", async () => {
+    const fake = inboxHandlers.backend(SLUG, [
+      inboxHandlers.draft("d1", "Cordless drill"),
+      inboxHandlers.itemDraft("c1", "Bike"),
+      inboxHandlers.itemDraft("c2", "Lamp"),
+    ])
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("inbox-review-walk"))
+    const loc = await screen.findByTestId("loc")
+    expect(loc).toHaveTextContent(`/g/${SLUG}/commodities/c1?${REVIEW_FROM}`)
+    expect(loc).toHaveAttribute("data-background", `/g/${SLUG}/inbox`)
+  })
+
+  it("offers no walk without items to review or to a viewer", async () => {
+    seed("viewer")
+    renderPage()
+    await screen.findByTestId("inbox-open-c1")
+    expect(screen.queryByTestId("inbox-review-walk")).not.toBeInTheDocument()
   })
 
   it("offers a viewer no actions", async () => {
