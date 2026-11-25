@@ -133,7 +133,7 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		}},
 		{"files", func() error {
 			reg := r.files.CreateServiceRegistry()
-			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+			return purgeByTenantGroup(ctx, tenantID, groupID, serviceRows(reg, reg.List), reg.Delete)
 		}},
 		// commodity_events purged before commodities so the FK CASCADE
 		// (postgres) and the explicit-delete (memory) match the parity
@@ -151,7 +151,7 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		// (tenant, group) pair.
 		{"maintenance_reminders", func() error {
 			scheduleReg := r.maintenanceSchedules.CreateServiceRegistry()
-			schedules, listErr := scheduleReg.List(ctx)
+			schedules, listErr := serviceRows(scheduleReg, scheduleReg.List)(ctx)
 			if listErr != nil {
 				return listErr
 			}
@@ -170,7 +170,7 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		// deletes explicitly to keep tenant + group scoping local.
 		{"maintenance_schedules", func() error {
 			reg := r.maintenanceSchedules.CreateServiceRegistry()
-			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+			return purgeByTenantGroup(ctx, tenantID, groupID, serviceRows(reg, reg.List), reg.Delete)
 		}},
 		// Item reminder sends (#2805) before their reminders, reminders
 		// before commodities, as in the postgres purger.
@@ -206,15 +206,15 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		}},
 		{"commodity_services", func() error {
 			reg := r.commodityServices.CreateServiceRegistry()
-			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+			return purgeByTenantGroup(ctx, tenantID, groupID, serviceRows(reg, reg.List), reg.Delete)
 		}},
 		{"commodity_loans", func() error {
 			reg := r.commodityLoans.CreateServiceRegistry()
-			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+			return purgeByTenantGroup(ctx, tenantID, groupID, serviceRows(reg, reg.List), reg.Delete)
 		}},
 		{"commodities", func() error {
 			reg := r.commodities.CreateServiceRegistry()
-			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+			return purgeByTenantGroup(ctx, tenantID, groupID, serviceRows(reg, reg.List), reg.Delete)
 		}},
 		{"areas", func() error {
 			reg := r.areas.CreateServiceRegistry()

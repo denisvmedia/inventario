@@ -89,20 +89,35 @@ func (r *CommodityServiceRegistry) Get(ctx context.Context, id string) (*models.
 	return &svc, nil
 }
 
+// List returns the group's rows of live items; the rows of trashed items are
+// left out.
 func (r *CommodityServiceRegistry) List(ctx context.Context) ([]*models.CommodityService, error) {
-	var services []*models.CommodityService
-	for svc, err := range r.newSQLRegistry().Scan(ctx) {
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to list commodity services", err)
-		}
-		s := svc
-		services = append(services, &s)
+	var out []*models.CommodityService
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		table := string(r.tableNames.CommodityServices())
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE %s`, table,
+			liveCommodityOf(string(r.tableNames.Commodities()), table, "commodity_id"))
+		var err error
+		out, err = scanAll[models.CommodityService](ctx, tx, query)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list commodity services", err)
 	}
-	return services, nil
+	return out, nil
 }
 
+// Count counts the group's rows of live items.
 func (r *CommodityServiceRegistry) Count(ctx context.Context) (int, error) {
-	cnt, err := r.newSQLRegistry().Count(ctx)
+	var cnt int
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		table := string(r.tableNames.CommodityServices())
+		query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s`, table,
+			liveCommodityOf(string(r.tableNames.Commodities()), table, "commodity_id"))
+		var err error
+		cnt, err = countRows(ctx, tx, query)
+		return err
+	})
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to count commodity services", err)
 	}
@@ -202,14 +217,16 @@ func (r *CommodityServiceRegistry) ListPaginated(ctx context.Context, offset, li
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countSB := newSelect().Select("COUNT(*)").From(string(r.tableNames.CommodityServices()))
-		countQuery, countArgs := addWhere(countSB, where).Build()
+		table := string(r.tableNames.CommodityServices())
+		live := liveCommodityOf(string(r.tableNames.Commodities()), table, "commodity_id")
+		countSB := newSelect().Select("COUNT(*)").From(table)
+		countQuery, countArgs := addWhere(countSB, where).Where(live).Build()
 		if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 			return errxtrace.Wrap("failed to count commodity services", err)
 		}
 
-		dataSB := newSelect().Select("*").From(string(r.tableNames.CommodityServices()))
-		addWhere(dataSB, where).OrderByDesc("sent_at").OrderByDesc("created_at")
+		dataSB := newSelect().Select("*").From(table)
+		addWhere(dataSB, where).Where(live).OrderByDesc("sent_at").OrderByDesc("created_at")
 		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {

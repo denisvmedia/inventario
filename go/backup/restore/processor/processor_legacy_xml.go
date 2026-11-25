@@ -647,6 +647,9 @@ func shouldWriteFileBlob(
 	if options.DryRun {
 		return false
 	}
+	if existing != nil && existing.TrashedFiles[xmlFile.ID] {
+		return false
+	}
 	if existing != nil && existing.Files != nil {
 		if _, dupe := existing.Files[xmlFile.ID]; dupe && options.Strategy == types.RestoreStrategyMergeAdd {
 			return false
@@ -849,11 +852,14 @@ func (l *RestoreOperationProcessor) predictFileAction(xmlID string, options type
 	case types.RestoreStrategyFullReplace:
 		return "create"
 	case types.RestoreStrategyMergeAdd:
-		if _, ok := existing.Files[xmlID]; ok {
+		if _, ok := existing.Files[xmlID]; ok || existing.TrashedFiles[xmlID] {
 			return "skip"
 		}
 		return "create"
 	case types.RestoreStrategyMergeUpdate:
+		if existing.TrashedFiles[xmlID] {
+			return "skip"
+		}
 		if _, ok := existing.Files[xmlID]; ok {
 			return "update"
 		}

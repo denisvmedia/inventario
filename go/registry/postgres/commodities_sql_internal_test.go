@@ -20,7 +20,7 @@ import (
 func TestCommodityListSQL(t *testing.T) {
 	lentOut := true
 	notLentOut := false
-	const selectPrefix = "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE "
+	const selectPrefix = "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE deleted_at IS NULL AND "
 
 	for _, tc := range []struct {
 		name string
@@ -45,7 +45,7 @@ func TestCommodityListSQL(t *testing.T) {
 		{
 			name: "IncludeInactive drops both defaults",
 			opts: registry.CommodityListOptions{IncludeInactive: true},
-			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities ORDER BY LOWER(name) ASC, id ASC LIMIT $1 OFFSET $2",
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE deleted_at IS NULL ORDER BY LOWER(name) ASC, id ASC LIMIT $1 OFFSET $2",
 			args: []any{24, 0},
 		},
 		{
@@ -91,7 +91,7 @@ func TestCommodityListSQL(t *testing.T) {
 				Search:          `A-0042 "red drill"`,
 				SearchTagLabels: map[string][]string{"red drill": {"power-tools", "red"}},
 			},
-			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE " +
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE deleted_at IS NULL AND " +
 				"(search_text ILIKE $1 OR asset_number = $2) AND " +
 				"(search_text ILIKE $3 OR tags ?| $4::text[]) " +
 				"ORDER BY LOWER(name) ASC, id ASC LIMIT $5 OFFSET $6",
@@ -102,7 +102,7 @@ func TestCommodityListSQL(t *testing.T) {
 			// does in the memory backend.
 			name: "LIKE wildcards in a term are escaped",
 			opts: registry.CommodityListOptions{IncludeInactive: true, Search: `50%_off\`},
-			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE (search_text ILIKE $1) " +
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE deleted_at IS NULL AND (search_text ILIKE $1) " +
 				"ORDER BY LOWER(name) ASC, id ASC LIMIT $2 OFFSET $3",
 			args: []any{`%50\%\_off\\%`, 24, 0},
 		},
@@ -112,7 +112,7 @@ func TestCommodityListSQL(t *testing.T) {
 				IncludeInactive: true,
 				Tags:            registry.CommodityTagFilter{Include: []string{"a", "b"}, Exclude: []string{"c"}},
 			},
-			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE " +
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE deleted_at IS NULL AND " +
 				"tags ?& $1::text[] AND NOT (COALESCE(tags, '[]'::jsonb) ?| $2::text[]) " +
 				"ORDER BY LOWER(name) ASC, id ASC LIMIT $3 OFFSET $4",
 			args: []any{[]string{"a", "b"}, []string{"c"}, 24, 0},
@@ -123,7 +123,7 @@ func TestCommodityListSQL(t *testing.T) {
 				IncludeInactive: true,
 				Tags:            registry.CommodityTagFilter{Include: []string{"a", "b"}, Mode: registry.TagMatchAny},
 			},
-			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE tags ?| $1::text[] " +
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE deleted_at IS NULL AND tags ?| $1::text[] " +
 				"ORDER BY LOWER(name) ASC, id ASC LIMIT $2 OFFSET $3",
 			args: []any{[]string{"a", "b"}, 24, 0},
 		},
@@ -134,7 +134,7 @@ func TestCommodityListSQL(t *testing.T) {
 				IncludeInactive: true,
 				Tags:            registry.CommodityTagFilter{Untagged: true},
 			},
-			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE " +
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE deleted_at IS NULL AND " +
 				"jsonb_array_length(COALESCE(tags, '[]'::jsonb)) = 0 " +
 				"ORDER BY LOWER(name) ASC, id ASC LIMIT $1 OFFSET $2",
 			args: []any{24, 0},
@@ -242,7 +242,7 @@ func TestCommodityCountSQLSharesThePredicate(t *testing.T) {
 	countSQL, countArgs := countSB.Build()
 
 	c.Check(countSQL, qt.Equals,
-		"SELECT COUNT(*) FROM commodities WHERE draft = $1 AND status IN ($2) AND (search_text ILIKE $3)")
+		"SELECT COUNT(*) FROM commodities WHERE deleted_at IS NULL AND draft = $1 AND status IN ($2) AND (search_text ILIKE $3)")
 	c.Check(countArgs, qt.DeepEquals, []any{false, "in_use", "%drill%"})
 }
 

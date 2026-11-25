@@ -215,6 +215,10 @@ func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Ar
 // callers are tests; the group/tenant purgers never call this method — they
 // bypass it entirely with raw `DELETE FROM <table>` sweeps that also wipe the
 // (tenant, group)'s files table.
+//
+// Trashed items do not block the delete: the same transaction clears their
+// area, and they keep the area they came from in deleted_from_area_id, so a
+// restore can tell the user the item came back unassigned.
 func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 	reg := r.newSQLRegistry()
 	err := reg.Delete(ctx, id, func(ctx context.Context, tx *sqlx.Tx) error {
@@ -225,6 +229,10 @@ func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 		}
 		if len(commodities) > 0 {
 			return errxtrace.Wrap("area has commodities", registry.ErrCannotDelete)
+		}
+		release := fmt.Sprintf(`UPDATE %s SET area_id = NULL WHERE area_id = $1 AND %s`, r.tableNames.Commodities(), trashedRow)
+		if _, err := tx.ExecContext(ctx, release, id); err != nil {
+			return errxtrace.Wrap("failed to release trashed commodities", err)
 		}
 		return nil
 	})
@@ -269,6 +277,7 @@ func (r *AreaRegistry) GetTotalValue(ctx context.Context, areaID string, currenc
 			WHERE area_id = $1
 			AND (original_price_currency = $2 OR $2 = '')
 			AND draft = false
+			AND deleted_at IS NULL
 	`, r.tableNames.Commodities())
 
 		err := tx.GetContext(ctx, &totalValue, sql, areaID, currency)
@@ -328,17 +337,13 @@ func (r *AreaRegistry) get(ctx context.Context, id string) (*models.Area, error)
 	return &area, nil
 }
 
+// getCommodities returns the ids of the live items filed under the area.
 func (r *AreaRegistry) getCommodities(ctx context.Context, tx *sqlx.Tx, areaID string) ([]string, error) {
 	var commodities []string
-
-	comReg := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities())
-	for commodity, err := range comReg.ScanByField(ctx, store.Pair("area_id", areaID)) {
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to list commodities", err)
-		}
-		commodities = append(commodities, commodity.GetID())
+	query := fmt.Sprintf(`SELECT id FROM %s WHERE area_id = $1 AND %s`, r.tableNames.Commodities(), liveRow)
+	if err := tx.SelectContext(ctx, &commodities, query, areaID); err != nil {
+		return nil, errxtrace.Wrap("failed to list commodities", err)
 	}
-
 	return commodities, nil
 }
 

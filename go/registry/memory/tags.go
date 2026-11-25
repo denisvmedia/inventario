@@ -511,6 +511,11 @@ func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, kind models.Tag
 			}
 			fileCount++
 		}
+		if fr, ok := r.fileRegistry.(*FileRegistry); ok {
+			fr.rewriteTrashedTags(func(tags models.StringSlice) (bool, models.StringSlice) {
+				return replaceTagSlugString(tags, oldSlug, newSlug)
+			})
+		}
 		return 0, fileCount, nil
 	}
 
@@ -529,6 +534,11 @@ func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, kind models.Tag
 			return commodityCount, 0, errxtrace.Wrap("failed to rewrite commodity tag", err)
 		}
 		commodityCount++
+	}
+	if cr, ok := r.commodityRegistry.(*CommodityRegistry); ok {
+		cr.rewriteTrashedTags(func(tags models.ValuerSlice[string]) (bool, models.ValuerSlice[string]) {
+			return replaceTagSlug(tags, oldSlug, newSlug)
+		})
 	}
 	return commodityCount, 0, nil
 }
@@ -551,6 +561,11 @@ func (r *TagRegistry) StripSlugReferences(ctx context.Context, kind models.TagKi
 			}
 			fileCount++
 		}
+		if fr, ok := r.fileRegistry.(*FileRegistry); ok {
+			fr.rewriteTrashedTags(func(tags models.StringSlice) (bool, models.StringSlice) {
+				return stripTagSlugString(tags, slug)
+			})
+		}
 		return 0, fileCount, nil
 	}
 
@@ -569,6 +584,11 @@ func (r *TagRegistry) StripSlugReferences(ctx context.Context, kind models.TagKi
 			return commodityCount, 0, errxtrace.Wrap("failed to strip commodity tag", err)
 		}
 		commodityCount++
+	}
+	if cr, ok := r.commodityRegistry.(*CommodityRegistry); ok {
+		cr.rewriteTrashedTags(func(tags models.ValuerSlice[string]) (bool, models.ValuerSlice[string]) {
+			return stripTagSlug(tags, slug)
+		})
 	}
 	return commodityCount, 0, nil
 }
@@ -641,10 +661,10 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 	if usage.Commodities+usage.Files > 0 && !force {
 		return usage, registry.ErrTagInUse
 	}
-	if usage.Commodities+usage.Files > 0 {
-		if _, _, err := r.StripSlugReferences(ctx, current.Kind, current.Slug); err != nil {
-			return usage, errxtrace.Wrap("failed to strip slug references", err)
-		}
+	// The strip runs even when no live row uses the tag: trashed rows may
+	// still carry it, and a restored item must not bring it back.
+	if _, _, err := r.StripSlugReferences(ctx, current.Kind, current.Slug); err != nil {
+		return usage, errxtrace.Wrap("failed to strip slug references", err)
 	}
 	if err := r.Delete(ctx, id); err != nil {
 		return usage, errxtrace.Wrap("failed to delete tag", err)

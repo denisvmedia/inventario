@@ -65,6 +65,11 @@ type Config struct {
 	OrphanFileGCInterval string `yaml:"orphan_file_gc_interval" env:"ORPHAN_FILE_GC_INTERVAL" env-default:""`
 	OrphanFileGCMinAge   string `yaml:"orphan_file_gc_min_age" env:"ORPHAN_FILE_GC_MIN_AGE" env-default:""`
 	OrphanFileGCMode     string `yaml:"orphan_file_gc_mode" env:"ORPHAN_FILE_GC_MODE" env-default:""`
+	// TrashRetention is how long a deleted item or file stays in Trash before
+	// the purge worker deletes it for good; TrashPurgeInterval is how often
+	// that worker runs.
+	TrashRetention     string `yaml:"trash_retention" env:"TRASH_RETENTION" env-default:""`
+	TrashPurgeInterval string `yaml:"trash_purge_interval" env:"TRASH_PURGE_INTERVAL" env-default:""`
 
 	JWTSecret      string `yaml:"jwt_secret" env:"JWT_SECRET" env-default:""`
 	FileSigningKey string `yaml:"file_signing_key" env:"FILE_SIGNING_KEY" env-default:""`
@@ -482,6 +487,17 @@ func (c *Config) setWorkerDefaults() {
 		c.WorkerControlRefreshInterval = defaults.GetWorkerControlRefreshInterval()
 	}
 	c.setOrphanFileGCDefaults()
+	c.setTrashDefaults()
+}
+
+// setTrashDefaults applies defaults to the Trash retention knobs.
+func (c *Config) setTrashDefaults() {
+	if c.TrashRetention == "" {
+		c.TrashRetention = defaults.GetTrashRetention()
+	}
+	if c.TrashPurgeInterval == "" {
+		c.TrashPurgeInterval = defaults.GetTrashPurgeInterval()
+	}
 }
 
 // setOrphanFileGCDefaults applies defaults to the orphan-file GC knobs (#2237).

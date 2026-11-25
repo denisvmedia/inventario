@@ -90,20 +90,35 @@ func (r *CommodityLoanRegistry) Get(ctx context.Context, id string) (*models.Com
 	return &loan, nil
 }
 
+// List returns the group's rows of live items; the rows of trashed items are
+// left out.
 func (r *CommodityLoanRegistry) List(ctx context.Context) ([]*models.CommodityLoan, error) {
-	var loans []*models.CommodityLoan
-	for loan, err := range r.newSQLRegistry().Scan(ctx) {
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to list commodity loans", err)
-		}
-		l := loan
-		loans = append(loans, &l)
+	var out []*models.CommodityLoan
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		table := string(r.tableNames.CommodityLoans())
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE %s`, table,
+			liveCommodityOf(string(r.tableNames.Commodities()), table, "commodity_id"))
+		var err error
+		out, err = scanAll[models.CommodityLoan](ctx, tx, query)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list commodity loans", err)
 	}
-	return loans, nil
+	return out, nil
 }
 
+// Count counts the group's rows of live items.
 func (r *CommodityLoanRegistry) Count(ctx context.Context) (int, error) {
-	cnt, err := r.newSQLRegistry().Count(ctx)
+	var cnt int
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		table := string(r.tableNames.CommodityLoans())
+		query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s`, table,
+			liveCommodityOf(string(r.tableNames.Commodities()), table, "commodity_id"))
+		var err error
+		cnt, err = countRows(ctx, tx, query)
+		return err
+	})
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to count commodity loans", err)
 	}
@@ -204,14 +219,16 @@ func (r *CommodityLoanRegistry) ListPaginated(ctx context.Context, offset, limit
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countSB := newSelect().Select("COUNT(*)").From(string(r.tableNames.CommodityLoans()))
-		countQuery, countArgs := addWhere(countSB, where).Build()
+		table := string(r.tableNames.CommodityLoans())
+		live := liveCommodityOf(string(r.tableNames.Commodities()), table, "commodity_id")
+		countSB := newSelect().Select("COUNT(*)").From(table)
+		countQuery, countArgs := addWhere(countSB, where).Where(live).Build()
 		if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 			return errxtrace.Wrap("failed to count commodity loans", err)
 		}
 
-		dataSB := newSelect().Select("*").From(string(r.tableNames.CommodityLoans()))
-		addWhere(dataSB, where).OrderByDesc("lent_at").OrderByDesc("created_at")
+		dataSB := newSelect().Select("*").From(table)
+		addWhere(dataSB, where).Where(live).OrderByDesc("lent_at").OrderByDesc("created_at")
 		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
@@ -275,7 +292,7 @@ func (r *CommodityLoanRegistry) ListPendingReminders(ctx context.Context, kind r
 		// a single group via RLS.
 		return nil, errxtrace.Wrap("ListPendingReminders requires service-mode registry", registry.ErrInvalidInput)
 	}
-	query, args, err := pendingLoanRemindersQuery(string(r.tableNames.CommodityLoans()), kind, now, dueSoonDays)
+	query, args, err := pendingLoanRemindersQuery(string(r.tableNames.CommodityLoans()), string(r.tableNames.Commodities()), kind, now, dueSoonDays)
 	if err != nil {
 		return nil, err
 	}
@@ -305,11 +322,12 @@ func (r *CommodityLoanRegistry) ListPendingReminders(ctx context.Context, kind r
 }
 
 // pendingLoanRemindersQuery selects the open loans with a due date that still
-// owe the given reminder, earliest due date first.
-func pendingLoanRemindersQuery(table string, kind registry.LoanReminderKind, now time.Time, dueSoonDays int) (string, []any, error) {
+// owe the given reminder, earliest due date first. Loans of trashed items owe
+// nothing while the item is in Trash.
+func pendingLoanRemindersQuery(table, commoditiesTable string, kind registry.LoanReminderKind, now time.Time, dueSoonDays int) (string, []any, error) {
 	today := now.UTC().Format("2006-01-02")
 	sb := newSelect().Select("*").From(table)
-	sb.Where("returned_at IS NULL", "due_back_at IS NOT NULL")
+	sb.Where("returned_at IS NULL", "due_back_at IS NOT NULL", liveCommodityOf(commoditiesTable, table, "commodity_id"))
 	switch kind {
 	case registry.LoanReminderKindOverdue:
 		sb.Where(sb.LessThan("due_back_at", today), "reminder_sent_overdue = false")

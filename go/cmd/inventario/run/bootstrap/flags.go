@@ -42,6 +42,8 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.CurrencyMigrationInterval, "currency-migration-interval", cfg.CurrencyMigrationInterval, "Currency migration worker active-poll interval (when pending rows exist; idle cadence is fixed at 1m). Values like 5s, 10s.")
 	flags.StringVar(&cfg.BusinessMetricsInterval, "business-metrics-interval", cfg.BusinessMetricsInterval, "Interval between installation-wide business-metrics collection sweeps (#843; e.g., 60s)")
 	flags.StringVar(&cfg.OrphanFileGCInterval, "orphan-file-gc-interval", cfg.OrphanFileGCInterval, "Interval between orphan-file GC sweeps (#2237; e.g., 24h)")
+	flags.StringVar(&cfg.TrashRetention, "trash-retention", cfg.TrashRetention, "How long deleted items and files stay in Trash before they are deleted for good (default 720h, 30 days)")
+	flags.StringVar(&cfg.TrashPurgeInterval, "trash-purge-interval", cfg.TrashPurgeInterval, "Interval between Trash purge sweeps (e.g., 1h)")
 
 	flags.StringVar(&cfg.OrphanFileGCMinAge, "orphan-file-gc-min-age", cfg.OrphanFileGCMinAge, "Minimum age a file row / thumbnail blob must reach before the orphan-file GC considers it (#2237; default 72h, hard floor 24h)")
 	//nolint:lll

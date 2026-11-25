@@ -759,6 +759,9 @@ func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, lin
 	}
 	dbID, ok := w.resolveLinkedDBID(link)
 	if !ok {
+		if w.linksToTrashedItem(link) {
+			return nil
+		}
 		w.stats.ErrorCount++
 		w.stats.Errors = append(w.stats.Errors,
 			fmt.Sprintf("file %s references unmapped %s %s", fileUUID, link.linkedType, link.entityUUID))
@@ -837,6 +840,13 @@ func (w *inbWalker) registerEntityFileRefs(refs []types.INBEntityFileRef) error 
 		}
 	}
 	return nil
+}
+
+// linksToTrashedItem reports whether the link points at an item that waits in
+// Trash. A merge leaves that item alone, so the link is skipped without
+// counting an error.
+func (w *inbWalker) linksToTrashedItem(link inbFileLink) bool {
+	return link.linkedType == models.FileLinkCommodity && w.existing.TrashedCommodities[link.entityUUID]
 }
 
 // resolveLinkedDBID maps a file's archived link to the destination entity's DB id.
@@ -931,6 +941,10 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	// exists — both known here — so the bytes can be drained (skip) instead of
 	// committed to blobKey. This mirrors the legacy XML path's
 	// shouldWriteFileBlob guard, which already gates the blob write.
+	if w.existing.TrashedFiles[pending.ref.ID] {
+		// The file is in Trash: a merge leaves it there.
+		return w.skipFileMember(r, hdr.Size, blobKey)
+	}
 	action := decideFileStrategyAction(w.options.Strategy, w.existing.Files[pending.ref.ID])
 
 	if action == fileActionSkip {
@@ -1001,6 +1015,9 @@ func (w *inbWalker) resolveLinks(pending *inbPendingFile) (links []types.INBFile
 		}
 		dbID, ok := w.resolveLinkedDBID(link)
 		if !ok {
+			if w.linksToTrashedItem(link) {
+				continue
+			}
 			w.stats.ErrorCount++
 			w.stats.Errors = append(w.stats.Errors,
 				fmt.Sprintf("file %s references unmapped %s %s", pending.ref.ID, link.linkedType, link.entityUUID))

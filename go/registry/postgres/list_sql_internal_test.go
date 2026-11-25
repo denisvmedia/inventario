@@ -157,6 +157,7 @@ func TestPendingLoanRemindersSQL(t *testing.T) {
 			want: sqlCase{
 				name: "overdue",
 				sql: "SELECT * FROM commodity_loans WHERE returned_at IS NULL AND due_back_at IS NOT NULL AND " +
+					"EXISTS (SELECT 1 FROM commodities tc WHERE tc.id = commodity_loans.commodity_id AND tc.deleted_at IS NULL) AND " +
 					"due_back_at < $1 AND reminder_sent_overdue = false ORDER BY due_back_at ASC, id ASC",
 				args: []any{"2026-05-10"},
 			},
@@ -166,6 +167,7 @@ func TestPendingLoanRemindersSQL(t *testing.T) {
 			want: sqlCase{
 				name: "due soon",
 				sql: "SELECT * FROM commodity_loans WHERE returned_at IS NULL AND due_back_at IS NOT NULL AND " +
+					"EXISTS (SELECT 1 FROM commodities tc WHERE tc.id = commodity_loans.commodity_id AND tc.deleted_at IS NULL) AND " +
 					"due_back_at >= $1 AND due_back_at <= $2 AND reminder_sent_due_soon = false ORDER BY due_back_at ASC, id ASC",
 				args: []any{"2026-05-10", "2026-05-13"},
 			},
@@ -173,7 +175,7 @@ func TestPendingLoanRemindersSQL(t *testing.T) {
 	} {
 		t.Run(tc.want.name, func(t *testing.T) {
 			c := qt.New(t)
-			got, args, err := pendingLoanRemindersQuery("commodity_loans", tc.kind, now, 3)
+			got, args, err := pendingLoanRemindersQuery("commodity_loans", "commodities", tc.kind, now, 3)
 			c.Assert(err, qt.IsNil)
 			checkSQL(c, got, args, tc.want)
 		})
@@ -183,7 +185,7 @@ func TestPendingLoanRemindersSQL(t *testing.T) {
 func TestPendingLoanRemindersSQLRejectsUnknownKind(t *testing.T) {
 	c := qt.New(t)
 
-	_, _, err := pendingLoanRemindersQuery("commodity_loans", "weekly", time.Now(), 3)
+	_, _, err := pendingLoanRemindersQuery("commodity_loans", "commodities", "weekly", time.Now(), 3)
 	c.Assert(err, qt.ErrorIs, registry.ErrInvalidInput)
 }
 
@@ -215,7 +217,7 @@ func TestMaintenanceWhereSQL(t *testing.T) {
 
 func TestTagListSQL(t *testing.T) {
 	r := &TagRegistry{tableNames: store.DefaultTableNames}
-	const usage = "(SELECT COUNT(*) FROM commodities WHERE tags @> jsonb_build_array(t.slug))"
+	const usage = "(SELECT COUNT(*) FROM commodities WHERE tags @> jsonb_build_array(t.slug) AND deleted_at IS NULL)"
 
 	for _, tc := range []struct {
 		opts registry.TagListOptions
@@ -411,7 +413,7 @@ func TestOrphanCandidatesSQL(t *testing.T) {
 	// A candidate has at least one link and no link that keeps it: one of a
 	// type outside the allowlist, one with an empty entity id, one younger than
 	// the cutoff, or one whose entity still exists.
-	head := "SELECT f.* FROM files f WHERE f.created_at < $1 AND f.updated_at < $2 AND "
+	head := "SELECT f.* FROM files f WHERE f.deleted_at IS NULL AND f.created_at < $1 AND f.updated_at < $2 AND "
 	links := func(cutoff string) string {
 		return "EXISTS (SELECT 1 FROM file_links l WHERE l.file_id = f.id) " +
 			"AND NOT EXISTS (SELECT 1 FROM file_links l WHERE l.file_id = f.id AND (" +

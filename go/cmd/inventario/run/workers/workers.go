@@ -167,6 +167,7 @@ func (c *Command) run() error {
 			bootstrap.StartLoginEventRetentionWorker,
 			bootstrap.StartGroupPurgeWorker,
 			bootstrap.StartOrphanFileGCWorker,
+			bootstrap.StartTrashPurgeWorker,
 			bootstrap.StartWarrantyReminderWorker,
 			bootstrap.StartStorageQuotaReminderWorker,
 			bootstrap.StartLoanReminderWorker,

@@ -538,6 +538,18 @@ table "commodities" {
     type = BOOLEAN
     default = "true"
   }
+  column "deleted_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "deleted_by" {
+    type = TEXT
+    null = true
+  }
+  column "deleted_from_area_id" {
+    type = TEXT
+    null = true
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -581,6 +593,10 @@ table "commodities" {
   index "commodities_active_idx" {
     where = "draft = false"
     columns = [column.status, column.area_id]
+  }
+  index "commodities_deleted_at_idx" {
+    where = "deleted_at IS NOT NULL"
+    columns = [column.deleted_at]
   }
   index "commodities_draft_idx" {
     where = "draft = true"
@@ -1772,6 +1788,18 @@ table "files" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
   }
+  column "deleted_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "deleted_by" {
+    type = TEXT
+    null = true
+  }
+  column "deleted_with_commodity_id" {
+    type = TEXT
+    null = true
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -1834,6 +1862,14 @@ table "files" {
   foreign_key "fk_entity_created_by" {
     columns = [column.created_by_user_id]
     ref_columns = [table.users.column.id]
+  }
+  index "files_deleted_at_idx" {
+    where = "deleted_at IS NOT NULL"
+    columns = [column.deleted_at]
+  }
+  index "files_deleted_with_commodity_idx" {
+    where = "deleted_with_commodity_id IS NOT NULL"
+    columns = [column.deleted_with_commodity_id]
   }
   index "files_linked_entity_idx" {
     columns = [column.linked_entity_type, column.linked_entity_id]
