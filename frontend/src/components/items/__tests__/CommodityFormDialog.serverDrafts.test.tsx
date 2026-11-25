@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route, useLocation } from "react-router-dom"
 import { act, fireEvent, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -122,13 +122,6 @@ function refusal(code: string, meta: Record<string, string> = {}) {
     errors: [{ status: "409", code, meta }],
   })
 }
-
-// The form copies its values to localStorage a frame after each change. Let
-// that frame pass, so a test that ends right after opening the form does not
-// leave its values in the next test's storage.
-afterEach(async () => {
-  await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
-})
 
 beforeEach(() => {
   clearAuth()

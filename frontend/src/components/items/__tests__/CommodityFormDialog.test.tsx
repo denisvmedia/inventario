@@ -1,5 +1,6 @@
+import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
-import { screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
@@ -504,6 +505,40 @@ describe("<CommodityFormDialog />", () => {
     // "Persisted" name — clearDraft removes the entry entirely.
     const after = window.localStorage.getItem(draftKey)
     expect(after).toBeNull()
+  })
+
+  it("does not write the values back to the device after the form closes", async () => {
+    const user = userEvent.setup()
+    const draftKey = "commodity-draft:test:create"
+    let setOpen: (open: boolean) => void = () => {}
+    function Harness() {
+      const [open, set] = useState(true)
+      setOpen = set
+      return (
+        <CommodityFormDialog
+          open={open}
+          onOpenChange={set}
+          mode="create"
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+          draftKey={draftKey}
+        />
+      )
+    }
+    renderWithProviders({ children: <Harness /> })
+    await walkPastAi(user)
+    const name = await screen.findByLabelText(/^Name$/i)
+    // A change and the close in the same frame, as when a save clears the
+    // stored draft and closes the form.
+    act(() => {
+      fireEvent.change(name, { target: { value: "Late lamp" } })
+      setOpen(false)
+      window.localStorage.removeItem(draftKey)
+    })
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
+    expect(window.localStorage.getItem(draftKey)).toBeNull()
   })
 
   // Issue #1554: bundle commodities (count > 1) cannot carry warranty

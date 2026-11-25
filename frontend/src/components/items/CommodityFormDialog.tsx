@@ -599,14 +599,21 @@ export function CommodityFormDialog({
 
   // Auto-save the form to localStorage on every change while the dialog
   // is open in create mode. Debounced to a single rAF tick so a burst
-  // of typing doesn't write to storage on every keystroke.
+  // of typing doesn't write to storage on every keystroke. A write still
+  // waiting when the dialog closes is dropped: the save and discard paths
+  // clear the stored draft before closing, and a late write would put the
+  // closed form's values back.
   useEffect(() => {
     if (!open || !persistDrafts || !localKey) return
+    let frame = 0
     const subscription = watch((values) => {
-      const id = window.requestAnimationFrame(() => writeDraft(localKey, values))
-      return () => window.cancelAnimationFrame(id)
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => writeDraft(localKey, values))
     })
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      window.cancelAnimationFrame(frame)
+    }
   }, [open, persistDrafts, localKey, watch])
 
   // The short name follows the name until the user types one (#2812), so
