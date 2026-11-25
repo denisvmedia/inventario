@@ -24,14 +24,16 @@ the section matching the tag and publishes it as the GitHub Release body. See
   load it or save as a new draft, which gets the old draft's files too. A
   draft finished or discarded on another device is not saved over: the dialog
   offers to open the item or save as a new draft. Drafts stay out of item
-  lists, counts, search, reports, reminders and backups; their files are
-  standalone files in backups. A full-replace restore deletes the group's
-  drafts and brings their files back from the backup as standalone files.
-  Deleting an account deletes the drafts its user started; files other
-  members saved with them stay as standalone files. The short name of a new
-  item follows the name until one is typed. The new API is `/drafts` (list,
-  create with a client key, save with a revision, discard, promote with a
-  promotion key that makes a retry return the same item). The dialog no
+  lists, counts, search, reports, saved views and reminders. A whole-group
+  backup carries the open drafts with their files (format 3.4; a 3.3 reader
+  restores it without them). A restore links a draft to the restored area,
+  seller and files; a merge keeps a draft the group already has and reports it
+  in the restore log, and a full replace replaces the group's drafts with the
+  backup's. Deleting an account deletes the drafts its user started; files
+  other members saved with them stay as standalone files. The short name of a
+  new item follows the name until one is typed. The new API is `/drafts`
+  (list, create with a client key, save with a revision, discard, promote with
+  a promotion key that makes a retry return the same item). The dialog no
   longer creates items flagged as drafts; editing an item keeps that switch
   ([#2812](https://github.com/denisvmedia/inventario/issues/2812)).
 

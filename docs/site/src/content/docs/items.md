@@ -214,13 +214,12 @@ Members with the **Viewer** role see the card but cannot continue or discard a
 draft.
 
 A draft is not an item. It is not in item lists, counts, search results,
-reports, reminders, or [backups](../backup-and-restore/), and it never
-expires. The files saved with a draft are ordinary files: you find them on the
-[Files](../files-and-photos/) page, and backups include them as standalone
-files. A [full replace restore](../backup-and-restore/#pick-a-strategy)
-deletes the group's drafts, and
-[deleting your account](../settings-and-account/) deletes the drafts you
-started; in both cases their files are kept as standalone files.
+reports, saved views or reminders, and it never expires. The files saved with
+a draft are ordinary files: you find them on the
+[Files](../files-and-photos/) page. A [backup](../backup-and-restore/) of the
+whole group includes the drafts and their files, and restoring it brings them
+back. [Deleting your account](../settings-and-account/) deletes the drafts
+you started; their files are kept as standalone files.
 
 If someone saves the same draft on another device after you opened it, saving
 yours does not overwrite theirs. The dialog says that the draft changed and
