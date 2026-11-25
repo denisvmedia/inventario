@@ -160,7 +160,7 @@ type CustomFieldDefinition struct {
 // ItemTypeCustomField.
 type CustomFieldTemplate struct {
 	ItemTypeID   string    `json:"item_type_id" example:"8f1c..."`
-	DefaultValue JSONValue `json:"default_value" swaggertype:"object"`
+	DefaultValue JSONValue `json:"default_value"`
 }
 
 // CustomFieldDefinitionIndexes defines the indexes of the

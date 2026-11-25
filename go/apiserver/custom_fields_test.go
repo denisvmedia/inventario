@@ -9,6 +9,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
 )
@@ -63,14 +64,21 @@ func TestCustomFields_CRUDAndItemValues(t *testing.T) {
 	var errs jsonapi.Errors
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &errs), qt.IsNil)
 	c.Assert(errs.Errors, qt.HasLen, 1)
+	// The field errors sit where a binding error puts the item's other
+	// fields, with their codes on the same path.
 	var detail struct {
 		Error struct {
-			CustomFields map[string]string `json:"custom_fields"`
+			Data struct {
+				Attributes struct {
+					CustomFields map[string]string `json:"custom_fields"`
+				} `json:"attributes"`
+			} `json:"data"`
 		} `json:"error"`
 	}
 	c.Assert(json.Unmarshal(errs.Errors[0].UserError, &detail), qt.IsNil)
-	c.Check(detail.Error.CustomFields, qt.HasLen, 2)
-	c.Check(detail.Error.CustomFields["unknown"], qt.Not(qt.Equals), "")
+	c.Check(detail.Error.Data.Attributes.CustomFields, qt.HasLen, 2)
+	c.Check(detail.Error.Data.Attributes.CustomFields["unknown"], qt.Not(qt.Equals), "")
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].error.errorCodes.data.attributes.custom_fields.unknown.code"), "custom_field_unknown")
 
 	// The list carries usage per field and per option.
 	rr = env.do(http.MethodGet, "/custom-fields", "")
@@ -130,7 +138,14 @@ func TestCustomFields_CRUDAndItemValues(t *testing.T) {
 	c.Check(rr.Body.String(), qt.Contains, `"item_count":1`)
 	rr = env.do(http.MethodDelete, "/custom-fields/"+plate.Data.ID+"?delete_values=maybe", "")
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
-	rr = env.do(http.MethodDelete, "/custom-fields/"+plate.Data.ID+"?delete_values=true", "")
+	rr = env.do(http.MethodDelete, "/custom-fields/"+plate.Data.ID+"?delete_values=true&expected_values=-1", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+	// The member confirmed two items, but one has a value.
+	rr = env.do(http.MethodDelete, "/custom-fields/"+plate.Data.ID+"?delete_values=true&expected_values=2", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), qt.Contains, "custom_field.in_use")
+	c.Check(rr.Body.String(), qt.Contains, `"item_count":1`)
+	rr = env.do(http.MethodDelete, "/custom-fields/"+plate.Data.ID+"?delete_values=true&expected_values=1", "")
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
 	var deleted jsonapi.CustomFieldDeleteResponse
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &deleted), qt.IsNil)

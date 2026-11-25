@@ -369,6 +369,13 @@ func RestoredDraftFromContext(ctx context.Context, now time.Time) (RestoredDraft
 // ListPaginated with CommodityListOptions.Trashed see trashed items only. Update refuses a trashed item with ErrNotFound. Code that
 // queries the commodities table directly (a new worker, a report) has to apply
 // the same filter: in SQL, `deleted_at IS NULL`; in Go, Commodity.IsTrashed.
+// CommodityName is an item's ID and name, and whether it is in Trash.
+type CommodityName struct {
+	ID      string `db:"id"`
+	Name    string `db:"name"`
+	Trashed bool   `db:"trashed"`
+}
+
 type CommodityRegistry interface {
 	Registry[models.Commodity]
 
@@ -472,6 +479,12 @@ type CommodityRegistry interface {
 	// commodity fetch in listGroupLoans (issue #1512); the cover-resolver
 	// follow-up (#1451) is expected to reuse the same primitive.
 	GetMany(ctx context.Context, ids []string) ([]*models.Commodity, error)
+
+	// GetNames returns the name of each item among ids, live or in Trash,
+	// and whether it is in Trash, in one round trip and in unspecified
+	// order. An id with no item in scope is dropped, and a repeated id is
+	// listed once. It names the items that item link values point at.
+	GetNames(ctx context.Context, ids []string) ([]CommodityName, error)
 
 	// Enhanced search methods
 	// SearchByTags(ctx context.Context, tags []string, operator TagOperator) ([]*models.Commodity, error)
@@ -1655,9 +1668,15 @@ type CustomFieldRegistry interface {
 
 	// DeleteWithValues deletes the field with id together with its values
 	// and template entries, in one transaction, and returns how many items
-	// had a value.
-	DeleteWithValues(ctx context.Context, id string) (int, error)
+	// had a value. expected is how many items the caller confirmed to lose
+	// a value, or AnyValueCount; when another number of items has a value,
+	// it fails with ErrCustomFieldInUse and nothing is deleted.
+	DeleteWithValues(ctx context.Context, id string, expected int) (int, error)
 }
+
+// AnyValueCount lets CustomFieldRegistry.DeleteWithValues delete the values
+// of any number of items.
+const AnyValueCount = -1
 
 // CommodityReminderSendRegistry records which reminder emails the worker
 // has claimed. One row per (reminder, occurrence, lead time); the unique

@@ -216,7 +216,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 
 	// The base registry returns the stored pointer; hand out a copy so a
 	// caller's change does not reach the store without Update.
-	return new(*newCommodity), nil
+	return copyOut(newCommodity), nil
 }
 
 // lockItemType checks that slug names an item type of groupID and holds the
@@ -274,8 +274,7 @@ func (r *CommodityRegistry) ListByGroup(_ context.Context, tenantID, groupID str
 			continue
 		}
 		if commodity.TenantID == tenantID && commodity.GroupID == groupID {
-			cp := *commodity
-			out = append(out, &cp)
+			out = append(out, copyOut(commodity))
 		}
 	}
 	slices.SortStableFunc(out, func(a, b *models.Commodity) int {
@@ -314,8 +313,30 @@ func (r *CommodityRegistry) GetMany(_ context.Context, ids []string) ([]*models.
 		if !r.isItemVisible(item) || item.IsTrashed() {
 			continue
 		}
-		cp := *item
-		out = append(out, &cp)
+		out = append(out, copyOut(item))
+	}
+	return out, nil
+}
+
+// GetNames returns the names of the items among ids, live or in Trash.
+func (r *CommodityRegistry) GetNames(_ context.Context, ids []string) ([]registry.CommodityName, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	seen := make(map[string]bool, len(ids))
+	var out []registry.CommodityName
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		item, ok := r.items.Get(id)
+		if !ok || item == nil || !r.isItemVisible(item) {
+			continue
+		}
+		out = append(out, registry.CommodityName{ID: item.ID, Name: item.Name, Trashed: item.IsTrashed()})
 	}
 	return out, nil
 }
@@ -467,7 +488,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		}
 	}
 
-	return new(*updatedCommodity), nil
+	return copyOut(updatedCommodity), nil
 }
 
 // ListPaginated returns a paginated list of commodities along with the total count.

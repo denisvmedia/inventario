@@ -6345,6 +6345,8 @@ export type paths = {
                 query?: {
                     /** @description Delete the field's values along with it */
                     delete_values?: boolean;
+                    /** @description With delete_values=true: how many items the member confirmed to lose a value. When another number of items has one, the delete is refused with 409 custom_field.in_use and the counts in meta */
+                    expected_values?: number;
                 };
                 header?: never;
                 path: {
@@ -6375,7 +6377,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Items have a value of the field and delete_values was not true */
+                /** @description Items have a value of the field and delete_values was not true, or expected_values is not how many items have one */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -6384,7 +6386,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description delete_values is not a boolean */
+                /** @description delete_values is not a boolean, or expected_values is not a whole number of at least 0 */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -16628,7 +16630,7 @@ export type components = {
              *     read them with the item and write them in the item's transaction,
              *     after checking each one against its field.
              */
-            custom_fields?: Record<string, never>;
+            custom_fields?: components["schemas"]["models.CustomFieldValuesSchema"];
             /**
              * @description DeletedAt is when the item was moved to Trash, nil while it is live. A
              *     trashed item keeps its id, asset number, history, loans, service
@@ -16910,9 +16912,12 @@ export type components = {
             label?: string;
         };
         "models.CustomFieldTemplate": {
-            default_value?: Record<string, never>;
+            default_value?: unknown;
             /** @example 8f1c... */
             item_type_id?: string;
+        };
+        "models.CustomFieldValuesSchema": {
+            [key: string]: unknown;
         };
         "models.Export": {
             area_count?: number;

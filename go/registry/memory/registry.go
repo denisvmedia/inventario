@@ -53,6 +53,18 @@ func (r *Registry[T, P]) Create(ctx context.Context, item T) (P, error) {
 	return iitem, nil
 }
 
+// copyOut returns a copy of a stored item for a caller, so a change the
+// caller makes does not reach the store. A struct copy is enough for most
+// items, but a commodity's custom field values are a map of byte slices,
+// which a struct copy would share with the store.
+func copyOut[T any](item *T) *T {
+	cp := *item
+	if c, ok := any(&cp).(*models.Commodity); ok {
+		c.CustomFields = c.CustomFields.Clone()
+	}
+	return &cp
+}
+
 func (r *Registry[_, P]) Get(_ context.Context, id string) (P, error) {
 	var zero P
 	// Debug, not Info: this fires on every read, and the access log already
@@ -71,8 +83,7 @@ func (r *Registry[_, P]) Get(_ context.Context, id string) (P, error) {
 		return nil, registry.ErrNotFound
 	}
 
-	vitem := *item
-	return &vitem, nil
+	return copyOut(item), nil
 }
 
 func (r *Registry[_, P]) List(_ context.Context) ([]P, error) {
@@ -87,8 +98,7 @@ func (r *Registry[_, P]) List(_ context.Context) ([]P, error) {
 			continue
 		}
 
-		v := *item
-		items = append(items, &v)
+		items = append(items, copyOut(item))
 	}
 	return items, nil
 }
@@ -305,8 +315,7 @@ func (r *Registry[_, P]) GetWithUser(ctx context.Context, id string) (P, error) 
 		}
 	}
 
-	vitem := *item
-	return &vitem, nil
+	return copyOut(item), nil
 }
 
 // ListWithUser lists entities with user context filtering
@@ -332,13 +341,11 @@ func (r *Registry[_, P]) ListWithUser(ctx context.Context) ([]P, error) {
 		// Check if the entity belongs to the user
 		if userAware, ok := any(item).(models.UserAware); ok {
 			if userAware.GetUserID() == userID {
-				v := *item
-				filteredItems = append(filteredItems, &v)
+				filteredItems = append(filteredItems, copyOut(item))
 			}
 		} else {
 			// If entity is not UserAware, include it (for backward compatibility)
-			v := *item
-			filteredItems = append(filteredItems, &v)
+			filteredItems = append(filteredItems, copyOut(item))
 		}
 	}
 	r.lock.RUnlock()

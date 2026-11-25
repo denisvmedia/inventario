@@ -53,6 +53,16 @@ func (v CustomFieldValues) Clone() CustomFieldValues {
 	return out
 }
 
+// CustomFieldValuesSchema is how the API schema documents CustomFieldValues:
+// an object whose values are each a value in its field type's API form.
+// Only the Swagger generator reads it, through the replace in go/.swaggo;
+// without it a json.RawMessage would be documented as an array of bytes.
+type CustomFieldValuesSchema map[string]any
+
+// JSONValueSchema is how the API schema documents a JSONValue: any JSON
+// value, null included. Only the Swagger generator reads it (go/.swaggo).
+type JSONValueSchema any
+
 // IsNullJSON reports whether raw is a JSON null (or empty), which clears a
 // value on a write.
 func IsNullJSON(raw json.RawMessage) bool {
@@ -97,9 +107,11 @@ type CustomFieldData struct {
 
 // JSON returns the API form of v for a field of type t: a string for text,
 // long text, URL, date (YYYY-MM-DD), select (the option ID) and item link
-// (the item ID); a number for a number; true or false for yes/no; and
-// {"amount": number, "currency": "EUR"} for money. It returns nil when v
-// holds no value of type t.
+// (the item ID); a decimal string for a number ("12.5"), since a number
+// can have more digits than a JavaScript number keeps; true or false for
+// yes/no; and {"amount": number, "currency": "EUR"} for money, whose 15
+// digits a JavaScript number does keep. It returns nil when v holds no
+// value of type t.
 func (v CustomFieldData) JSON(t CustomFieldType) json.RawMessage {
 	str := func(p *string) json.RawMessage {
 		if p == nil {
@@ -126,7 +138,7 @@ func (v CustomFieldData) JSON(t CustomFieldType) json.RawMessage {
 		if v.Number == nil {
 			return nil
 		}
-		return json.RawMessage(v.Number.String())
+		return str(new(v.Number.String()))
 	case CustomFieldTypeBoolean:
 		if v.Bool == nil {
 			return nil
@@ -179,7 +191,8 @@ func (d *CustomFieldDefinition) ParseValue(raw json.RawMessage) (CustomFieldData
 		if err != nil {
 			return out, err
 		}
-		if _, err := time.Parse(time.DateOnly, s); err != nil {
+		// PostgreSQL has no year 0, which time.Parse accepts.
+		if t, err := time.Parse(time.DateOnly, s); err != nil || t.Year() < 1 {
 			return out, validation.NewError("custom_field_invalid_date", "must be a date as YYYY-MM-DD")
 		}
 		out.Date = new(Date(s))
@@ -246,10 +259,15 @@ func parseCustomFieldItemLink(raw json.RawMessage) (CustomFieldData, error) {
 	return out, nil
 }
 
+// parseCustomFieldString reads a JSON string. A NUL character is refused,
+// since PostgreSQL cannot store it in a text column.
 func parseCustomFieldString(raw json.RawMessage) (string, error) {
 	var s string
 	if err := json.Unmarshal(raw, &s); err != nil {
 		return "", validation.NewError("custom_field_invalid_text", "must be a string")
+	}
+	if strings.ContainsRune(s, 0) {
+		return "", validation.NewError("custom_field_invalid_character", "must not contain a NUL character")
 	}
 	return s, nil
 }
@@ -271,8 +289,8 @@ func parseCustomFieldURL(raw json.RawMessage) (string, error) {
 	return s, nil
 }
 
-// parseCustomFieldDecimal reads a JSON number, or a string holding one, and
-// checks its digits against the limits.
+// parseCustomFieldDecimal reads a string holding a decimal number, the form
+// JSON returns, or a JSON number, and checks its digits against the limits.
 func parseCustomFieldDecimal(raw json.RawMessage, intDigits, fracDigits int32) (decimal.Decimal, error) {
 	invalid := validation.NewError("custom_field_invalid_number", "must be a number")
 	text := strings.TrimSpace(string(raw))

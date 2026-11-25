@@ -5,6 +5,8 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jellydator/validation"
 
 	"go.5x5.cz/inventario/models"
@@ -129,4 +131,14 @@ func ApplyCustomFieldWritePlan(stored models.CustomFieldValues, plan CustomField
 		return nil
 	}
 	return out
+}
+
+// CheckCustomFieldValueCount is the check of CustomFieldRegistry.Delete
+// (expected 0) and DeleteWithValues: it fails with ErrCustomFieldInUse when
+// items, not expected of them, have a value of the field.
+func CheckCustomFieldValueCount(id string, items, expected int) error {
+	if expected == AnyValueCount || items == expected {
+		return nil
+	}
+	return errxtrace.Classify(ErrCustomFieldInUse, errx.Attrs("custom_field_id", id, "items", items, "expected", expected))
 }

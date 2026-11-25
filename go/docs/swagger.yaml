@@ -4960,13 +4960,14 @@ definitions:
         type: number
         x-nullable: "true"
       custom_fields:
+        allOf:
+        - $ref: '#/definitions/models.CustomFieldValuesSchema'
         description: |-
           CustomFields are the item's custom field values (#2803), keyed by
           field ID; see CustomFieldValues for the read and write rules. They are
           rows of commodity_custom_field_values, not a column: the registries
           read them with the item and write them in the item's transaction,
           after checking each one against its field.
-        type: object
       deleted_at:
         description: |-
           DeletedAt is when the item was moved to Trash, nil while it is live. A
@@ -5365,11 +5366,13 @@ definitions:
     type: object
   models.CustomFieldTemplate:
     properties:
-      default_value:
-        type: object
+      default_value: {}
       item_type_id:
         example: 8f1c...
         type: string
+    type: object
+  models.CustomFieldValuesSchema:
+    additionalProperties: {}
     type: object
   models.Export:
     properties:
@@ -10238,6 +10241,12 @@ paths:
         in: query
         name: delete_values
         type: boolean
+      - description: 'With delete_values=true: how many items the member confirmed
+          to lose a value. When another number of items has one, the delete is refused
+          with 409 custom_field.in_use and the counts in meta'
+        in: query
+        name: expected_values
+        type: integer
       produces:
       - application/vnd.api+json
       responses:
@@ -10250,11 +10259,13 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "409":
-          description: Items have a value of the field and delete_values was not true
+          description: Items have a value of the field and delete_values was not true,
+            or expected_values is not how many items have one
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
-          description: delete_values is not a boolean
+          description: delete_values is not a boolean, or expected_values is not a
+            whole number of at least 0
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Delete a custom field

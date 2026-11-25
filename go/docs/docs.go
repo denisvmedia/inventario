@@ -5399,6 +5399,12 @@ const docTemplate = `{
                         "description": "Delete the field's values along with it",
                         "name": "delete_values",
                         "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "With delete_values=true: how many items the member confirmed to lose a value. When another number of items has one, the delete is refused with 409 custom_field.in_use and the counts in meta",
+                        "name": "expected_values",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -5415,13 +5421,13 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Items have a value of the field and delete_values was not true",
+                        "description": "Items have a value of the field and delete_values was not true, or expected_values is not how many items have one",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "422": {
-                        "description": "delete_values is not a boolean",
+                        "description": "delete_values is not a boolean, or expected_values is not a whole number of at least 0",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -18421,7 +18427,11 @@ const docTemplate = `{
                 },
                 "custom_fields": {
                     "description": "CustomFields are the item's custom field values (#2803), keyed by\nfield ID; see CustomFieldValues for the read and write rules. They are\nrows of commodity_custom_field_values, not a column: the registries\nread them with the item and write them in the item's transaction,\nafter checking each one against its field.",
-                    "type": "object"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.CustomFieldValuesSchema"
+                        }
+                    ]
                 },
                 "deleted_at": {
                     "description": "DeletedAt is when the item was moved to Trash, nil while it is live. A\ntrashed item keeps its id, asset number, history, loans, service\nrecords, maintenance schedules and attachments, and is left out of every\nordinary read of the registries until it is restored or purged (see\nregistry.CommodityRegistry). Server-managed: only the registry's trash\noperations write it; Create and Update ignore a caller's value.",
@@ -18812,14 +18822,16 @@ const docTemplate = `{
         "models.CustomFieldTemplate": {
             "type": "object",
             "properties": {
-                "default_value": {
-                    "type": "object"
-                },
+                "default_value": {},
                 "item_type_id": {
                     "type": "string",
                     "example": "8f1c..."
                 }
             }
+        },
+        "models.CustomFieldValuesSchema": {
+            "type": "object",
+            "additionalProperties": {}
         },
         "models.Export": {
             "type": "object",
