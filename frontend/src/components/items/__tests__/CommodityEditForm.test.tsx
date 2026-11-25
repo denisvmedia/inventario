@@ -443,7 +443,7 @@ describe("<CommodityEditForm /> custom fields", () => {
       ...customFieldHandlers.list(SLUG, [
         { ...fields[0], templates: [{ item_type_id: "type-equipment" }] },
         { ...fields[1], templates: [{ item_type_id: "type-equipment", default_value: "ZZ" }] },
-        { ...fields[2], templates: [{ item_type_id: "type-equipment", default_value: 3 }] },
+        { ...fields[2], templates: [{ item_type_id: "type-equipment", default_value: "3" }] },
       ])
     )
     const user = userEvent.setup()
@@ -461,7 +461,7 @@ describe("<CommodityEditForm /> custom fields", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     const req = onSubmit.mock.calls[0][0] as UpdateCommodityRequest
     expect(req.type).toBe("equipment")
-    expect(req.custom_fields).toEqual({ "cf-plate": "AB 123", "cf-weight": 3 })
+    expect(req.custom_fields).toEqual({ "cf-plate": "AB 123", "cf-weight": "3" })
   })
 
   it("shows a value the server refused under its field", async () => {

@@ -9,6 +9,7 @@ import {
   isSavedViewChanged,
   savedViewHref,
   savedViewQuery,
+  savedViewQueryString,
   staleReferences,
 } from "../view"
 
@@ -61,6 +62,16 @@ describe("isSavedViewChanged", () => {
   it("is false for the same filter in another order", () => {
     const query = { ...DEFAULT_COMMODITY_QUERY, types: ["equipment", "other"] }
     expect(isSavedViewChanged(view, query, "grid")).toBe(false)
+  })
+
+  // The filter menu writes the options of an "in" condition in the order
+  // they were ticked; the server stores them sorted.
+  it("is false right after saving options ticked in another order", () => {
+    const list = parseCommodityQuery(new URLSearchParams("cf=f1:in:opt-b,opt-a"))
+    const sent = savedViewQueryString(list)
+    expect(sent).toContain("cf=f1%3Ain%3Aopt-a%2Copt-b")
+    const stored = { query: sent, layout: "" as const }
+    expect(isSavedViewChanged(stored, list, "list")).toBe(false)
   })
 
   it("is true when a condition or the sort differs", () => {

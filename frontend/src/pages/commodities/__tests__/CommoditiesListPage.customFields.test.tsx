@@ -145,8 +145,9 @@ describe("<CommoditiesListPage /> custom fields (#2803)", () => {
     await user.click(screen.getByTestId("commodities-filter-cf-option-opt-diesel"))
     await user.click(add)
 
+    // The request names the options in the order the server stores them.
     await waitFor(() =>
-      expect(lastQuery(queries).getAll("cf")).toEqual(["cf-fuel:in:opt-petrol,opt-diesel"])
+      expect(lastQuery(queries).getAll("cf")).toEqual(["cf-fuel:in:opt-diesel,opt-petrol"])
     )
     expect(screen.getByTestId("commodities-filter-cf-condition-0")).toHaveTextContent(
       "Fuel: Petrol, Diesel"

@@ -255,7 +255,7 @@ describe("<CustomFieldsListPage />", () => {
       expect(screen.queryByTestId("custom-field-form-dialog")).not.toBeInTheDocument()
     )
     expect(body.value?.data.attributes.templates).toEqual([
-      { item_type_id: "type-other", default_value: 12 },
+      { item_type_id: "type-other", default_value: "12" },
     ])
   })
 
