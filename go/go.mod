@@ -19,6 +19,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.80.0
 	github.com/bojanz/currency v1.5.1
 	github.com/fergusstrange/embedded-postgres v1.34.0
+	github.com/fergusstrange/embedded-postgres/v2 v2.0.1
 	github.com/frankban/quicktest v1.14.6
 	github.com/gabriel-vasile/mimetype v1.4.16
 	github.com/getsentry/sentry-go v0.50.0
