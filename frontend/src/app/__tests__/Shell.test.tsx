@@ -193,7 +193,15 @@ describe("<Shell /> — onboarding tour with a group", () => {
       server.use(...authHandlers.signedIn(), ...groupHandlers.list())
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       renderShell("/g/household")
-      await user.click(await screen.findByTestId("probe-restart"))
+      // restart() needs the user (the seen flag is per user) and the group
+      // (the steps point at its sidebar entries), so wait for both first.
+      await waitFor(() =>
+        expect(screen.getByTestId("probe-user")).toHaveTextContent(
+          String(authHandlers.fixtureUser.id)
+        )
+      )
+      expect(await screen.findByTestId("sidebar-inventory-group")).toBeInTheDocument()
+      await user.click(screen.getByTestId("probe-restart"))
       expect(await screen.findByTestId("onboarding-tour")).toBeInTheDocument()
 
       screenWidth.set("narrow")
