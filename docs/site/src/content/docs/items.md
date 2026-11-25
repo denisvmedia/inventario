@@ -446,6 +446,9 @@ picks the layout until you choose one here, and changing it in Settings drops
 that choice on the device you change it on. A page size other than 24 is part of
 the page URL, so a bookmarked or shared page shows the same items on any device.
 
+**Views**, next to the layout buttons, keeps the current filters under a name;
+see [Saved views](#saved-views).
+
 :::tip[Bookmark a filtered view]
 Your filters and sort are kept in the page URL, so you can bookmark or share a
 filtered view. If a link asks for a filter the list can't apply (for example a
@@ -505,6 +508,92 @@ already has: the search and the other filters stay, and the list goes back to
 the first page. A tag on the item page, or a tag's name on the [Tags](../tags/)
 page, opens **All Items** filtered by that tag alone, with **Show inactive**
 on, so it lists every item that has the tag.
+
+### Saved views
+
+A saved view keeps a set of filters, the search, the sort and the layout under
+a name, so a list you open often is one click away.
+
+1. Set up the list the way you want it.
+2. Click **Views** in the toolbar and choose **Save view…**.
+3. Give the view a name (up to 60 characters) and pick an icon.
+4. Choose where it shows: **Sidebar**, **Dashboard**, or both.
+5. Click **Save view**.
+
+A view in the sidebar appears under **Saved views** with the number of items it
+lists. A view on the Dashboard gets a card with that number and its first five
+items. The number is counted the same way as the list, so the sidebar, the
+Dashboard and the opened view agree.
+
+Where a view shows is your own choice. Putting a view in your sidebar or on
+your Dashboard, or taking it off, changes only what you see: every member
+places the views they can see for themselves.
+
+Dates in a view stay relative: a view of **Expiring Soon** warranties shows the
+warranties that expire soon on the day you open it, not the ones that did when
+you saved it.
+
+While a view is open, the **Views** button shows its name. If you change a
+filter, the sort or the layout, a dot on the button says the list no longer
+matches the view, and the **Views** menu offers **Save changes** (to update the
+view) and **Revert to saved** (to go back to it). **Close view** keeps the
+current filters and leaves the view.
+
+If a view refers to an area, a tag or a seller that was deleted, it still opens
+and still applies that condition, so it shows what still matches (often
+nothing, for a deleted area or seller). The **Views** button shows a warning,
+and the menu says what no longer exists; on the **Saved views** page the
+condition reads **Deleted area** or **Deleted seller**, or a tag is marked
+**(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
+views that use it.
+
+**Manage views** in the **Views** menu, or the gear next to **Saved views** in
+the sidebar, opens the **Saved views** page with every view you can see: your
+own and the shared ones. Each row shows the view's filters, and the item count
+of a view in your sidebar or on your Dashboard. You can put any of them in
+your sidebar or on your Dashboard. A view you can change also lets you rename
+it or change its icon (**Edit**), move it up or down, and delete it. To change
+a view's filters, open it, adjust the list, and choose **Save changes**.
+
+Until you keep views of your own, the Dashboard offers a few to start with:
+**Expiring warranties**, **Lent out**, **Without a location** and
+**Untagged**. **Add** saves one to the sidebar and the Dashboard; the **×**
+hides the suggestions.
+
+#### Personal and shared views
+
+A view is **personal**: only you see it. Tick **Share with the group** when you
+save or edit it to show it to everyone in the group. Other members find a
+shared view in the **Views** menu and on the **Saved views** page; it shows in
+their sidebar or on their Dashboard only after they put it there. Sharing a
+view shares the filter, not access: each member sees the items they can see.
+Viewers can keep personal views; sharing needs the **User** role or higher.
+
+You can change and delete your personal views. You can change a shared view
+you created while you have the **User** role or higher; with the **Viewer**
+role you can still delete it. Administrators and owners can change or delete
+any shared view. When a view stops being shared, it leaves the sidebar and the
+Dashboard of the other members.
+
+You can keep up to 50 views of your own in a group, and a group can have up to
+50 shared views.
+
+A view uses the filters of the All Items page. A link that filters by a
+warranty end date can't be saved as a view, because that date would never
+change. If a future update stops supporting a filter a view uses, the view shows a
+warning (**Needs an update**) in the **Views** menu and the sidebar, the
+**Saved views** page names the filter, and the view no longer opens: the list
+would leave that filter out and show more than the view. A link or bookmark to such a view shows **This view
+cannot be opened** instead of the list; **Close view** shows the list with the
+filters the link still has. Delete the view and save the filter again. The same
+happens to a view with a filter the page you have open does not know yet
+(reload the page to get the current version), and to a view that required a
+deleted tag when the tag it excludes is renamed to the deleted tag's slug.
+
+If the saved views cannot be loaded, a link or bookmark to a view shows **This
+view could not be loaded** instead of the list, so the list never shows items
+the view leaves out. **Try again** loads the views again; **Close view** shows
+the list with the filters the link has.
 
 ## Select and change items in bulk
 

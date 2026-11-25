@@ -7192,6 +7192,332 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/saved-views": {
+            "get": {
+                "description": "The member's own saved views and every view shared with the group, ordered by position, then name. meta.limits carries the limits the server keeps.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "saved_views"
+                ],
+                "summary": "List saved views",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SavedViewsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Store an item query (the query string of GET /commodities, limited to the parameters the items list edits) under a name. The query is validated and stored in canonical form. Sharing with the group takes the user role.\nshow_in_sidebar and show_on_dashboard place the view for the creator only; sharing places it for nobody else.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "saved_views"
+                ],
+                "summary": "Create a saved view",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Saved view attributes",
+                        "name": "view",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SavedViewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SavedViewResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Sharing needs the user role (saved_view.forbidden)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid attributes, an invalid query (query.invalid_parameter) or a limit reached (saved_view.limit_reached)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/saved-views/counts": {
+            "get": {
+                "description": "Per saved view ID, the number of items its query selects, for the views the member shows in their sidebar or on their dashboard.\nEach count uses the filter of GET /commodities. A view whose query cannot run (query_error) has no entry.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "saved_views"
+                ],
+                "summary": "Count the items of saved views",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SavedViewCountsResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/saved-views/reorder": {
+            "post": {
+                "description": "Put the listed views in the given order among the positions they hold now; views left out keep their positions. Every view must be one the member may edit.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "saved_views"
+                ],
+                "summary": "Reorder saved views",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Saved view IDs in the new order",
+                        "name": "order",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SavedViewReorderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "403": {
+                        "description": "A listed view may not be changed (saved_view.forbidden)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "A listed view was not found or is listed twice",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid payload",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/saved-views/{savedViewID}": {
+            "get": {
+                "description": "One saved view: the member's own, or one shared with the group. Another member's personal view is a 404.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "saved_views"
+                ],
+                "summary": "Get a saved view",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Saved view ID",
+                        "name": "savedViewID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SavedViewResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Saved view not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Remove a saved view. A member may delete the views they created; admins may delete any shared view.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "saved_views"
+                ],
+                "summary": "Delete a saved view",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Saved view ID",
+                        "name": "savedViewID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "403": {
+                        "description": "Not allowed to delete this view (saved_view.forbidden)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Saved view not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Change the fields given; the others stay. A new query is validated and stored in canonical form under the current query version.\nThe member who created a view edits it; a shared view also takes the user role, and admins may edit any shared view.\nshow_in_sidebar and show_on_dashboard change where the requesting member shows the view; any member who sees it may set them.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "saved_views"
+                ],
+                "summary": "Update a saved view",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Saved view ID",
+                        "name": "savedViewID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Saved view attributes to change",
+                        "name": "view",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SavedViewUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SavedViewResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Not allowed to change this view (saved_view.forbidden)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Saved view not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid attributes, an invalid query (query.invalid_parameter) or a limit reached (saved_view.limit_reached)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/search": {
             "get": {
                 "description": "Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).\nEvery filter parameter of that endpoint except ` + "`" + `type` + "`" + ` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.\nDrafts and inactive items are included unless include_inactive=false.\nLocations match on name and address and areas on name: every white-space separated term of q has to be found, ignoring case; results are sorted by name.\nTags (item and file tags) match when q is found in the label or the slug, ignoring case; results are sorted by label.",
@@ -15036,6 +15362,339 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/jsonapi.RestoreOperationResponseData"
                     }
+                }
+            }
+        },
+        "jsonapi.SavedViewAttributes": {
+            "type": "object",
+            "properties": {
+                "can_delete": {
+                    "type": "boolean"
+                },
+                "can_edit": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "entity": {
+                    "description": "Entity is the list the view filters; only \"commodities\" exists.",
+                    "type": "string",
+                    "enum": [
+                        "commodities"
+                    ],
+                    "example": "commodities"
+                },
+                "icon": {
+                    "type": "string",
+                    "example": "shield"
+                },
+                "layout": {
+                    "description": "Layout is grid (photo cards), compact, list, or empty for the\nviewer's default.",
+                    "type": "string",
+                    "enum": [
+                        "",
+                        "grid",
+                        "compact",
+                        "list"
+                    ],
+                    "example": "list"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Expiring warranties"
+                },
+                "owned": {
+                    "description": "Owned is true for the views the requesting member created.",
+                    "type": "boolean"
+                },
+                "query": {
+                    "description": "Query is the canonical query string of the view in the parameter\nnames of GET /commodities, without the leading \"?\".",
+                    "type": "string",
+                    "example": "warranty_status=expiring\u0026sort=name"
+                },
+                "query_error": {
+                    "description": "QueryError is set when the stored query cannot run; such a view has\nno count and should be edited before it is opened.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.SavedViewQueryError"
+                        }
+                    ]
+                },
+                "query_version": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "shared": {
+                    "type": "boolean"
+                },
+                "show_in_sidebar": {
+                    "description": "ShowInSidebar and ShowOnDashboard are where the requesting member\nshows the view. Each member places the views they see on their own.",
+                    "type": "boolean"
+                },
+                "show_on_dashboard": {
+                    "type": "boolean"
+                },
+                "sort_order": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.SavedViewCounts": {
+            "type": "object",
+            "properties": {
+                "counts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "jsonapi.SavedViewCountsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SavedViewCounts"
+                }
+            }
+        },
+        "jsonapi.SavedViewData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.SavedViewAttributes"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "saved_views"
+                    ],
+                    "example": "saved_views"
+                }
+            }
+        },
+        "jsonapi.SavedViewLimits": {
+            "type": "object",
+            "properties": {
+                "can_share": {
+                    "description": "CanShare is true when the requesting member may share views.",
+                    "type": "boolean"
+                },
+                "max_name_length": {
+                    "type": "integer",
+                    "example": 60
+                },
+                "max_per_user": {
+                    "type": "integer",
+                    "example": 50
+                },
+                "max_shared": {
+                    "type": "integer",
+                    "example": 50
+                }
+            }
+        },
+        "jsonapi.SavedViewQueryError": {
+            "type": "object",
+            "properties": {
+                "parameter": {
+                    "type": "string",
+                    "example": "warranty_expires_before"
+                },
+                "reason": {
+                    "type": "string",
+                    "example": "is not available in a saved view"
+                }
+            }
+        },
+        "jsonapi.SavedViewReorderRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SavedViewReorderRequestData"
+                }
+            }
+        },
+        "jsonapi.SavedViewReorderRequestAttributes": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.SavedViewReorderRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.SavedViewReorderRequestAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "saved_views_reorder"
+                    ],
+                    "example": "saved_views_reorder"
+                }
+            }
+        },
+        "jsonapi.SavedViewRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SavedViewRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.SavedViewRequestData": {
+            "type": "object",
+            "properties": {
+                "icon": {
+                    "type": "string",
+                    "example": "shield"
+                },
+                "layout": {
+                    "type": "string",
+                    "enum": [
+                        "",
+                        "grid",
+                        "compact",
+                        "list"
+                    ],
+                    "example": "list"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Expiring warranties"
+                },
+                "query": {
+                    "type": "string",
+                    "example": "warranty_status=expiring"
+                },
+                "shared": {
+                    "type": "boolean"
+                },
+                "show_in_sidebar": {
+                    "type": "boolean"
+                },
+                "show_on_dashboard": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "jsonapi.SavedViewRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.SavedViewRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "saved_views"
+                    ],
+                    "example": "saved_views"
+                }
+            }
+        },
+        "jsonapi.SavedViewResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SavedViewData"
+                }
+            }
+        },
+        "jsonapi.SavedViewUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SavedViewUpdateRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.SavedViewUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "icon": {
+                    "type": "string"
+                },
+                "layout": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "query": {
+                    "type": "string"
+                },
+                "shared": {
+                    "type": "boolean"
+                },
+                "show_in_sidebar": {
+                    "type": "boolean"
+                },
+                "show_on_dashboard": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "jsonapi.SavedViewUpdateRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.SavedViewUpdateRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "saved_views"
+                    ],
+                    "example": "saved_views"
+                }
+            }
+        },
+        "jsonapi.SavedViewsMeta": {
+            "type": "object",
+            "properties": {
+                "limits": {
+                    "$ref": "#/definitions/jsonapi.SavedViewLimits"
+                },
+                "total": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                }
+            }
+        },
+        "jsonapi.SavedViewsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.SavedViewData"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.SavedViewsMeta"
                 }
             }
         },

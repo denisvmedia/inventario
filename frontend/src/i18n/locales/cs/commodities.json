@@ -585,6 +585,161 @@
     "sectionExtras": "Doplňky",
     "sectionPurchase": "Nákup"
   },
+  "savedViews": {
+    "conditions": {
+      "ascending": "vzestupně",
+      "deletedArea": "Smazaná oblast",
+      "deletedTag": "{{condition}} (štítek smazán)",
+      "descending": "sestupně",
+      "inactive": "Včetně neaktivních",
+      "notTag": "Bez {{tag}}",
+      "seller": "Prodejce {{seller}}",
+      "sort": "Řazeno podle: {{field}}, {{direction}}",
+      "tag": "Štítek {{tag}}",
+      "tagAny": "Kterýkoli z: {{tag}}",
+      "text": "Hledat „{{text}}“",
+      "untagged": "Bez štítků"
+    },
+    "dashboard": {
+      "count_one": "{{count}} položka",
+      "count_few": "{{count}} položky",
+      "count_many": "{{count}} položky",
+      "count_other": "{{count}} položek",
+      "empty": "Tomuto pohledu teď neodpovídá žádná položka.",
+      "error": "Položky tohoto pohledu se nepodařilo načíst.",
+      "open": "Otevřít"
+    },
+    "delete": {
+      "confirm": "Smazat pohled",
+      "description": "Pohled zmizí. Položky, které zobrazoval, zůstanou beze změny.",
+      "sharedDescription": "Pohled zmizí všem ve skupině. Položky, které zobrazoval, zůstanou beze změny.",
+      "title": "Smazat „{{name}}“?"
+    },
+    "dialog": {
+      "create": "Uložit pohled",
+      "createDescription": "Uloží aktuální filtry, řazení a rozvržení pod názvem.",
+      "createTitle": "Uložit pohled",
+      "editDescription": "Filtry změníte tak, že pohled otevřete, upravíte seznam a zvolíte Uložit změny.",
+      "editTitle": "Upravit pohled",
+      "failed": "Pohled se nepodařilo uložit.",
+      "forbidden": "Tuto změnu pohledu provést nemůžete.",
+      "icon": "Ikona",
+      "invalidQuery": "Filtr tohoto seznamu nelze v pohledu uložit ({{parameter}}). Změňte filtry a zkuste to znovu.",
+      "limitReached": "Dosáhli jste počtu pohledů, které můžete mít. Pro uložení nového jeden smažte.",
+      "name": "Název",
+      "namePlaceholder": "např. Končící záruky",
+      "nameRequired": "Zadejte název.",
+      "nameTooLong": "Použijte nejvýše {{max}} znaků.",
+      "placement": "Zobrazit v",
+      "save": "Uložit",
+      "shared": "Sdílet se skupinou",
+      "sharedHint": "Všichni ve skupině najdou pohled v nabídce Pohledy a na stránce Uložené pohledy. V postranním panelu nebo na přehledu se jim zobrazí, až když si ho tam přidají. Každý člen stále vidí jen položky, které vidět smí.",
+      "sharedNeedsRole": "Pohledy mohou sdílet jen členové s rolí uživatel a vyšší.",
+      "showInSidebar": "Postranní panel",
+      "showOnDashboard": "Přehled"
+    },
+    "icons": {
+      "alert": "Upozornění",
+      "archive": "Archiv",
+      "banknote": "Bankovka",
+      "bookmark": "Záložka",
+      "car": "Auto",
+      "clock": "Hodiny",
+      "gift": "Dárek",
+      "heart": "Srdce",
+      "home": "Domov",
+      "map-pin": "Špendlík",
+      "package": "Balík",
+      "shield": "Štít",
+      "star": "Hvězda",
+      "tag": "Štítek",
+      "wrench": "Klíč",
+      "zap": "Blesk"
+    },
+    "menu": {
+      "button": "Pohledy",
+      "changed": "Změněno",
+      "changedHint": "Seznam se liší od uloženého pohledu.",
+      "close": "Zavřít pohled",
+      "manage": "Spravovat pohledy",
+      "revert": "Vrátit uložené",
+      "save": "Uložit pohled…",
+      "saveAsNew": "Uložit jako nový pohled…",
+      "saveChanges": "Uložit změny",
+      "unchangedHint": "Seznam zobrazuje uložený pohled.",
+      "views": "Uložené pohledy"
+    },
+    "page": {
+      "actions": "Akce pro {{name}}",
+      "delete": "Smazat",
+      "documentTitle": "Uložené pohledy",
+      "edit": "Upravit",
+      "emptyDescription": "Vyfiltrujte seznam položek a zvolte Pohledy → Uložit pohled, aby se filtr objevil zde.",
+      "emptyTitle": "Zatím žádné uložené pohledy",
+      "errorDescription": "Obnovte stránku nebo to zkuste za chvíli znovu.",
+      "errorTitle": "Uložené pohledy se nepodařilo načíst",
+      "heading": "Uložené pohledy",
+      "moveDown": "Posunout dolů",
+      "moveUp": "Posunout nahoru",
+      "openItems": "Otevřít seznam položek",
+      "personal": "Osobní",
+      "shared": "Sdílený",
+      "subtitle": "Filtry uložené pod názvem. Osobní pohledy vidíte jen vy; sdílené vidí celá skupina a každý člen v nich vidí jen položky, které vidět smí."
+    },
+    "queryError": {
+      "long": "Tento pohled má filtr, který už nelze použít ({{parameter}}). Smažte ho a uložte filtr znovu ze seznamu položek.",
+      "short": "Vyžaduje úpravu",
+      "title": "Tento pohled nelze otevřít"
+    },
+    "stale": {
+      "area": "Oblast tohoto pohledu byla smazána.",
+      "hint": "Označené podmínky odkazují na něco, co bylo smazáno. Pohled je stále uplatňuje, takže zobrazuje to, co stále odpovídá.",
+      "sellers_one": "Prodejce tohoto pohledu byl smazán.",
+      "sellers_few": "{{count}} prodejci tohoto pohledu byli smazáni.",
+      "sellers_many": "{{count}} prodejce tohoto pohledu bylo smazáno.",
+      "sellers_other": "{{count}} prodejců tohoto pohledu bylo smazáno.",
+      "tags_one": "Štítek {{tags}} už neexistuje.",
+      "tags_few": "Štítky {{tags}} už neexistují.",
+      "tags_many": "Štítky {{tags}} už neexistují.",
+      "tags_other": "Štítky {{tags}} už neexistují.",
+      "title": "Odkazuje na smazané věci"
+    },
+    "suggestions": {
+      "add": "Přidat",
+      "description": "Mějte filtr na jedno kliknutí v postranním panelu i zde. Později ho můžete změnit nebo smazat.",
+      "dismiss": "Skrýt návrhy",
+      "expiringWarranties": {
+        "description": "Položky, kterým brzy končí záruka",
+        "name": "Končící záruky"
+      },
+      "lentOut": {
+        "description": "Položky, které jsou právě zapůjčené",
+        "name": "Zapůjčené"
+      },
+      "noLocation": {
+        "description": "Položky, které nejsou v žádné oblasti",
+        "name": "Bez umístění"
+      },
+      "title": "Začněte uloženým pohledem",
+      "untagged": {
+        "description": "Položky bez štítku",
+        "name": "Bez štítků"
+      }
+    },
+    "toast": {
+      "created": "Pohled „{{name}}“ uložen",
+      "createFailed": "Pohled se nepodařilo uložit.",
+      "deleted": "Pohled „{{name}}“ smazán",
+      "deleteFailed": "Pohled se nepodařilo smazat.",
+      "reorderFailed": "Pohled se nepodařilo přesunout.",
+      "updated": "Pohled „{{name}}“ upraven",
+      "updateFailed": "Pohled se nepodařilo upravit."
+    },
+    "unavailable": {
+      "description": "Seznam zůstane skrytý, dokud se pohled nenačte, aby nikdy neukázal položky, které pohled vynechává.",
+      "title": "Tento pohled se nepodařilo načíst"
+    }
+  },
   "searchMatch": {
     "field": {
       "asset_id": "Inventární číslo",

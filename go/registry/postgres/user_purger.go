@@ -108,6 +108,10 @@ var userDeleteByUserID = []func(t store.TableNames) string{
 
 	// Weekly digest idempotency claims (#1391).
 	func(t store.TableNames) string { return string(t.WeeklyDigestSends()) },
+
+	// Where the member shows saved views, their own and the shared views of
+	// others.
+	func(t store.TableNames) string { return string(t.SavedViewPlacements()) },
 }
 
 // PurgeUserDependents clears every user-scoped auth/identity row (and nulls the
@@ -180,6 +184,22 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		// rides the tenant_id template as defense-in-depth.
 		if err := r.purgeGroupInvitesAudit(ctx, tx, tenantID, userID); err != nil {
 			return err
+		}
+
+		// Saved views are per-user settings that carry created_by_user_id
+		// rather than user_id: a member's views, shared ones included, go
+		// with the member, and with them every member's placements (ON
+		// DELETE CASCADE). The column is NOT NULL FK -> users(id) NO ACTION.
+		savedViews := string(r.tableNames.SavedViews())
+		savedViewQuery := fmt.Sprintf(
+			"DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", savedViews,
+		)
+		if _, err := tx.ExecContext(ctx, savedViewQuery, tenantID, userID); err != nil {
+			return errxtrace.Wrap(
+				"failed to purge user saved views",
+				err,
+				errx.Attrs("table", savedViews, "tenant_id", tenantID, "user_id", userID),
+			)
 		}
 
 		// Item reminders (#2805) email only the person who created them, so
