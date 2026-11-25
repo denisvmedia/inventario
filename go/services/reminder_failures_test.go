@@ -32,6 +32,34 @@ func (r *flakyUserRegistry) Get(ctx context.Context, id string) (*models.User, e
 	return r.UserRegistry.Get(ctx, id)
 }
 
+// flakyWarrantyEmail records warranty emails, or fails them while failing
+// is set.
+type flakyWarrantyEmail struct {
+	*recordingEmailService
+	failing bool
+}
+
+func (f *flakyWarrantyEmail) SendWarrantyReminderEmail(ctx context.Context, to, name, commodityName, expiryDate, commodityURL string, thresholdDays int) error {
+	if f.failing {
+		return errors.New("queue down")
+	}
+	return f.recordingEmailService.SendWarrantyReminderEmail(ctx, to, name, commodityName, expiryDate, commodityURL, thresholdDays)
+}
+
+// flakyMaintenanceEmail records maintenance emails, or fails them while
+// failing is set.
+type flakyMaintenanceEmail struct {
+	*recordingMaintenanceEmailService
+	failing bool
+}
+
+func (f *flakyMaintenanceEmail) SendMaintenanceReminderEmail(ctx context.Context, to, name, commodityName, title, dueDate, commodityURL string, thresholdDays int) error {
+	if f.failing {
+		return errors.New("queue down")
+	}
+	return f.recordingMaintenanceEmailService.SendMaintenanceReminderEmail(ctx, to, name, commodityName, title, dueDate, commodityURL, thresholdDays)
+}
+
 func recipientsByItem(pairs [][2]string) map[string][]string {
 	out := map[string][]string{}
 	for _, p := range pairs {
@@ -176,4 +204,70 @@ func TestLoanReminderService_LenderLookupFailureLeavesFlagFalse(t *testing.T) {
 	reloaded, err = regSet.CommodityLoanRegistry.Get(ctx, loan.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(reloaded.ReminderSentOverdue, qt.IsTrue)
+}
+
+// A row written without an email (no recipient was due that lead time)
+// must not hold back a farther lead time chosen later. Here the 60-day
+// row is silent and the 30-day email failed, so no reminder has gone out
+// when the owner switches to a 90-day lead time.
+func TestWarrantyReminderService_SilentRowDoesNotHoldBackAFartherLeadTime(t *testing.T) {
+	c := qt.New(t)
+	env := newItemReminderEnv(c)
+	now := time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)
+	expires := dateOffset(now, 30)
+	_, err := env.regSet.CommodityRegistry.Create(env.ctx, models.Commodity{
+		Name:              "Fridge",
+		ShortName:         "fridge",
+		Type:              models.CommodityTypeWhiteGoods,
+		Status:            models.CommodityStatusInUse,
+		Count:             1,
+		WarrantyExpiresAt: &expires,
+	})
+	c.Assert(err, qt.IsNil)
+
+	email := &flakyWarrantyEmail{recordingEmailService: &recordingEmailService{}, failing: true}
+	svc := services.NewWarrantyReminderService(env.fs, email, urlBuilder).
+		WithPreferences(notifications.NewService(env.fs.SettingsRegistryFactory))
+
+	stats, err := svc.RemindOnce(env.ctx, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.Failed, qt.Equals, 1)
+
+	setUserSetting(c, env.fs, env.user, models.SettingNameNotificationsWarrantyLeadTimes, []int{90})
+	email.failing = false
+	stats, err = svc.RemindOnce(env.ctx, now.AddDate(0, 0, 1))
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.Failed, qt.Equals, 0)
+	c.Assert(warrantySends(email.recordingEmailService), qt.DeepEquals, []sentTo{{To: "owner@example.com", Days: 90}})
+}
+
+func TestMaintenanceReminderService_SilentRowDoesNotHoldBackAFartherLeadTime(t *testing.T) {
+	c := qt.New(t)
+	env := newItemReminderEnv(c)
+	now := time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)
+	_, err := env.regSet.MaintenanceScheduleRegistry.Create(env.ctx, models.MaintenanceSchedule{
+		CommodityID:  env.commodity.ID,
+		Title:        "Clean the filter",
+		IntervalDays: 90,
+		NextDueAt:    dateOffset(now, 7),
+		Enabled:      true,
+	})
+	c.Assert(err, qt.IsNil)
+
+	email := &flakyMaintenanceEmail{recordingMaintenanceEmailService: &recordingMaintenanceEmailService{}, failing: true}
+	svc := services.NewMaintenanceReminderService(env.fs, email, urlBuilder).
+		WithPreferences(notifications.NewService(env.fs.SettingsRegistryFactory))
+
+	// 7 days out with the defaults [14, 7, 1]: the 14-day row is silent and
+	// the 7-day email fails.
+	stats, err := svc.RemindOnce(env.ctx, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.Failed, qt.Equals, 1)
+
+	setUserSetting(c, env.fs, env.user, models.SettingNameNotificationsMaintenanceLeadTimes, []int{30})
+	email.failing = false
+	stats, err = svc.RemindOnce(env.ctx, now.AddDate(0, 0, 1))
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.Failed, qt.Equals, 0)
+	c.Assert(maintenanceSends(email.recordingMaintenanceEmailService), qt.DeepEquals, []sentTo{{To: "owner@example.com", Days: 30}})
 }

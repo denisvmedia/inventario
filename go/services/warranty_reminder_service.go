@@ -332,7 +332,7 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 	// counter is meaningful. Skip the recipient lookup entirely (it
 	// would be a no-op) and write the row directly.
 	if s.emailSvc == nil {
-		ok, commitErr := s.commitReminderRow(ctx, c, threshold, now)
+		ok, commitErr := s.commitReminderRow(ctx, c, threshold, now, true)
 		if commitErr != nil {
 			return false, errxtrace.Wrap("warranty reminder: insert idempotency row", commitErr)
 		}
@@ -348,7 +348,7 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 	if len(recipients) == 0 {
 		// No one to email — write the row anyway so the worker stops
 		// re-considering this (commodity, threshold) on every tick.
-		ok, commitErr := s.commitReminderRow(ctx, c, threshold, now)
+		ok, commitErr := s.commitReminderRow(ctx, c, threshold, now, true)
 		if commitErr != nil {
 			return false, errxtrace.Wrap("warranty reminder: insert idempotency row (no recipients)", commitErr)
 		}
@@ -366,7 +366,7 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 		return false, err
 	}
 	if superseded {
-		if _, err := s.commitReminderRow(ctx, c, threshold, now); err != nil {
+		if _, err := s.commitReminderRow(ctx, c, threshold, now, true); err != nil {
 			return false, errxtrace.Wrap("warranty reminder: insert idempotency row (superseded)", err)
 		}
 		return false, nil
@@ -389,12 +389,12 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 		// `inventario_warranty_reminders_sent_total`) is for actually-
 		// emitted reminders and would otherwise drift upwards every
 		// time a fully-opted-out cohort matched a threshold.
-		if _, err := s.commitReminderRow(ctx, c, threshold, now); err != nil {
+		if _, err := s.commitReminderRow(ctx, c, threshold, now, true); err != nil {
 			return false, errxtrace.Wrap("warranty reminder: insert idempotency row (all opted out)", err)
 		}
 		return false, nil
 	}
-	ok, err := s.commitReminderRow(ctx, c, threshold, now)
+	ok, err := s.commitReminderRow(ctx, c, threshold, now, false)
 	if err != nil {
 		return false, errxtrace.Wrap("warranty reminder: insert idempotency row", err)
 	}
@@ -468,7 +468,8 @@ func (s *WarrantyReminderService) fanOutToRecipients(
 // 60 sent and the lead times changed to [90, 30, 7], an item 45 days out
 // is due the 90-day reminder, but its owner already had the 60-day one.
 // A larger lead time is never sent after a smaller one, the same rule as
-// item reminders.
+// item reminders. Only a row whose email went out counts: a silent row
+// (nobody due, everyone opted out) does not hold the reminder back.
 func (s *WarrantyReminderService) supersededByCloserSend(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, recipients []warrantyRecipient, now time.Time) (bool, error) {
 	if !slices.ContainsFunc(recipients, func(r warrantyRecipient) bool { return r.dueFor(threshold) }) {
 		return false, nil
@@ -485,10 +486,12 @@ func (s *WarrantyReminderService) supersededByCloserSend(ctx context.Context, c 
 }
 
 // commitReminderRow writes the (commodity, threshold) idempotency row
-// stamped with the sweep's `now`. Returns (true, nil) iff this call
-// was the winner of the unique-constraint race; (false, nil) for the
-// loser (a concurrent sweep already wrote the row).
-func (s *WarrantyReminderService) commitReminderRow(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, now time.Time) (bool, error) {
+// stamped with the sweep's `now`. silent marks a row written without an
+// email, so it does not hold back a farther lead time later
+// (supersededByCloserSend). Returns (true, nil) iff this call was the
+// winner of the unique-constraint race; (false, nil) for the loser (a
+// concurrent sweep already wrote the row).
+func (s *WarrantyReminderService) commitReminderRow(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, now time.Time, silent bool) (bool, error) {
 	reminder := models.WarrantyReminder{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        c.TenantID,
@@ -498,6 +501,7 @@ func (s *WarrantyReminderService) commitReminderRow(ctx context.Context, c *mode
 		CommodityID:   c.ID,
 		ThresholdDays: int(threshold),
 		SentAt:        now,
+		Silent:        silent,
 	}
 	return s.factorySet.WarrantyReminderRegistry.CreateOnce(ctx, reminder)
 }

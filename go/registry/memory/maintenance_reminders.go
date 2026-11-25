@@ -53,8 +53,8 @@ func (r *MaintenanceReminderRegistry) HasSent(_ context.Context, scheduleID stri
 	return false, nil
 }
 
-// HasSentInRange checks whether a row exists for the schedule with
-// fromDays <= threshold < belowDays.
+// HasSentInRange checks whether a row that is not silent exists for the
+// schedule with fromDays <= threshold < belowDays.
 func (r *MaintenanceReminderRegistry) HasSentInRange(_ context.Context, scheduleID string, fromDays, belowDays int) (bool, error) {
 	if scheduleID == "" {
 		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ScheduleID"))
@@ -63,7 +63,7 @@ func (r *MaintenanceReminderRegistry) HasSentInRange(_ context.Context, schedule
 	defer r.lock.RUnlock()
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		v := pair.Value
-		if v.ScheduleID == scheduleID && v.ThresholdDays >= fromDays && v.ThresholdDays < belowDays {
+		if v.ScheduleID == scheduleID && v.ThresholdDays >= fromDays && v.ThresholdDays < belowDays && !v.Silent {
 			return true, nil
 		}
 	}

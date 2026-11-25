@@ -52,8 +52,8 @@ func (r *MaintenanceReminderRegistry) HasSent(ctx context.Context, scheduleID st
 	return count > 0, nil
 }
 
-// HasSentInRange reports whether a row exists for the schedule with
-// fromDays <= threshold_days < belowDays.
+// HasSentInRange reports whether a row that is not silent exists for the
+// schedule with fromDays <= threshold_days < belowDays.
 func (r *MaintenanceReminderRegistry) HasSentInRange(ctx context.Context, scheduleID string, fromDays, belowDays int) (bool, error) {
 	if scheduleID == "" {
 		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ScheduleID"))
@@ -61,7 +61,7 @@ func (r *MaintenanceReminderRegistry) HasSentInRange(ctx context.Context, schedu
 	var exists bool
 	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
-			`SELECT EXISTS (SELECT 1 FROM %s WHERE schedule_id = $1 AND threshold_days >= $2 AND threshold_days < $3)`,
+			`SELECT EXISTS (SELECT 1 FROM %s WHERE schedule_id = $1 AND threshold_days >= $2 AND threshold_days < $3 AND NOT silent)`,
 			r.tableNames.MaintenanceReminders(),
 		)
 		return tx.QueryRowxContext(ctx, query, scheduleID, fromDays, belowDays).Scan(&exists)
@@ -93,8 +93,8 @@ func (r *MaintenanceReminderRegistry) CreateOnce(ctx context.Context, reminder m
 	inserted := false
 	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
-			`INSERT INTO %s (id, tenant_id, group_id, created_by_user_id, schedule_id, threshold_days, sent_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`INSERT INTO %s (id, tenant_id, group_id, created_by_user_id, schedule_id, threshold_days, sent_at, silent)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			 ON CONFLICT (schedule_id, threshold_days) DO NOTHING`,
 			r.tableNames.MaintenanceReminders(),
 		)
@@ -106,6 +106,7 @@ func (r *MaintenanceReminderRegistry) CreateOnce(ctx context.Context, reminder m
 			reminder.ScheduleID,
 			reminder.ThresholdDays,
 			reminder.SentAt.UTC(),
+			reminder.Silent,
 		)
 		if execErr != nil {
 			// Treat unique-violation as the no-op outcome too — defence

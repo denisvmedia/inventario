@@ -38,6 +38,18 @@ func TestReminderRows_Postgres_HasSentInRange(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(got, qt.IsFalse, qt.Commentf("another commodity's rows do not count"))
 
+	// A silent row (written without an email) keeps its threshold from
+	// being processed again but does not hold back a farther lead time.
+	won, err = warranty.CreateOnce(ctx, models.WarrantyReminder{TenantGroupAwareEntityID: owner, CommodityID: f.commBID, ThresholdDays: 30, Silent: true})
+	c.Assert(err, qt.IsNil)
+	c.Assert(won, qt.IsTrue)
+	sent, err := warranty.HasSent(ctx, f.commBID, 30)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sent, qt.IsTrue)
+	got, err = warranty.HasSentInRange(ctx, f.commBID, 1, 365)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.IsFalse, qt.Commentf("a silent row does not count as sent"))
+
 	schedule, err := f.groupASet.MaintenanceScheduleRegistry.Create(f.ctxA, models.MaintenanceSchedule{
 		CommodityID:  f.commAID,
 		Title:        "Clean the filter",
@@ -56,4 +68,14 @@ func TestReminderRows_Postgres_HasSentInRange(t *testing.T) {
 	got, err = maintenance.HasSentInRange(ctx, schedule.ID, 1, 14)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got, qt.IsFalse)
+
+	won, err = maintenance.CreateOnce(ctx, models.MaintenanceReminder{TenantGroupAwareEntityID: owner, ScheduleID: schedule.ID, ThresholdDays: 7, Silent: true})
+	c.Assert(err, qt.IsNil)
+	c.Assert(won, qt.IsTrue)
+	sent, err = maintenance.HasSent(ctx, schedule.ID, 7)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sent, qt.IsTrue)
+	got, err = maintenance.HasSentInRange(ctx, schedule.ID, 1, 14)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.IsFalse, qt.Commentf("a silent row does not count as sent"))
 }

@@ -355,7 +355,7 @@ func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.M
 		// no email was enqueued so SentByThreshold must not move.
 		return s.commitWithoutSend(ctx, m, threshold, now, "all opted out", commodity)
 	}
-	ok, err := s.commitReminderRow(ctx, m, threshold, now)
+	ok, err := s.commitReminderRow(ctx, m, threshold, now, false)
 	if err != nil {
 		return false, errxtrace.Wrap("maintenance reminder: insert idempotency row", err)
 	}
@@ -365,8 +365,8 @@ func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.M
 // supersededByCloserSend reports whether a reminder at a closer lead time
 // than threshold has already gone out for m in this cycle, while threshold
 // is due for some recipient. See the warranty service: a larger lead time
-// is never sent after a smaller one. The overdue reminder is never
-// superseded.
+// is never sent after a smaller one, and a silent row does not count. The
+// overdue reminder is never superseded.
 func (s *MaintenanceReminderService) supersededByCloserSend(ctx context.Context, m *models.MaintenanceSchedule, threshold models.MaintenanceReminderThreshold, target maintenanceTarget) (bool, error) {
 	if threshold == models.MaintenanceReminderOverdue {
 		return false, nil
@@ -387,8 +387,9 @@ func (s *MaintenanceReminderService) supersededByCloserSend(ctx context.Context,
 // commitWithoutSend handles the four "commit the row, no email
 // fires" early-return branches of processOne (stub mode, missing
 // commodity, no recipients, fully-opted-out cohort). It writes the
-// idempotency row so the worker stops re-evaluating the (schedule,
-// threshold) tuple, logs a per-branch breadcrumb, and returns
+// idempotency row, marked silent, so the worker stops re-evaluating the
+// (schedule, threshold) tuple without the row holding back a farther
+// lead time later; logs a per-branch breadcrumb; and returns
 // (false, nil) so the SentByThreshold counter doesn't move.
 // Extracted from processOne to keep the parent under gocyclo's
 // ceiling and put the per-branch wording in one place. `reason` is
@@ -396,7 +397,7 @@ func (s *MaintenanceReminderService) supersededByCloserSend(ctx context.Context,
 // optional context (nil for the stub / commodity-missing paths
 // since the commodity is unavailable there).
 func (s *MaintenanceReminderService) commitWithoutSend(ctx context.Context, m *models.MaintenanceSchedule, threshold models.MaintenanceReminderThreshold, now time.Time, reason string, commodity *models.Commodity) (bool, error) {
-	ok, commitErr := s.commitReminderRow(ctx, m, threshold, now)
+	ok, commitErr := s.commitReminderRow(ctx, m, threshold, now, true)
 	if commitErr != nil {
 		return false, errxtrace.Wrap("maintenance reminder: insert idempotency row ("+reason+")", commitErr)
 	}
@@ -464,7 +465,9 @@ func (s *MaintenanceReminderService) fanOutToRecipients(
 	return attempted, enqueueErrs, firstEnqueueErr
 }
 
-func (s *MaintenanceReminderService) commitReminderRow(ctx context.Context, m *models.MaintenanceSchedule, threshold models.MaintenanceReminderThreshold, now time.Time) (bool, error) {
+// commitReminderRow writes the (schedule, threshold) idempotency row.
+// silent marks a row written without an email; see commitWithoutSend.
+func (s *MaintenanceReminderService) commitReminderRow(ctx context.Context, m *models.MaintenanceSchedule, threshold models.MaintenanceReminderThreshold, now time.Time, silent bool) (bool, error) {
 	reminder := models.MaintenanceReminder{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID:        m.TenantID,
@@ -474,6 +477,7 @@ func (s *MaintenanceReminderService) commitReminderRow(ctx context.Context, m *m
 		ScheduleID:    m.ID,
 		ThresholdDays: int(threshold),
 		SentAt:        now,
+		Silent:        silent,
 	}
 	return s.factorySet.MaintenanceReminderRegistry.CreateOnce(ctx, reminder)
 }

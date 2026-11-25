@@ -1,4 +1,4 @@
-h1:/kGn8PF4BCZ5y77hYj7/D3987o82Gz3G/dMf0Csgabg=
+h1:PJertLjDVG+JgOy+hW7zitY8EyHXY133l+UgPCjD4rc=
 1789480900_initial_schema.down.sql h1:1b5WJAVMPaNbRsvj+nzs1R6KLQEEm8xv7OkV0gANX8w=
 1789480900_initial_schema.up.sql h1:isJ61I94xBD3lTD8QEQyAyDKIg4ld2KQSYG8JLxvQJ4=
 1789504168_enable_rls_on_operation_slots.down.sql h1:fZyTow/In0YkYczSN7gM6igXsUSxyJgRjo4QOLf1pWI=
@@ -23,3 +23,5 @@ h1:/kGn8PF4BCZ5y77hYj7/D3987o82Gz3G/dMf0Csgabg=
 1795574405_legacy_zero_prices.up.sql h1:hTj9ZJBg4HiqFW2pX4FWOgecviTtZAjR9W16ifArYY4=
 1795585401_add_commodity_reminders.down.sql h1:qTutsVCBz6L9Z4of72jBoI6yx/GcJSSc5A4zlA980gg=
 1795585401_add_commodity_reminders.up.sql h1:cED/rWg3qFYabFzrUB4kReFueHneegrYRssNyz+s37o=
+1795590050_add_reminder_rows_silent.down.sql h1:zVeCPweV5rsauweORovWxST75n8TpUp+2VZbj9Qp29o=
+1795590050_add_reminder_rows_silent.up.sql h1:tPC7c9Yr2eQdJnEfxjTOgmRX7MJ3eAby3ys7yG6A9vc=

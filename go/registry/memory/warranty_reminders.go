@@ -41,14 +41,14 @@ func (r *WarrantyReminderRegistry) HasSent(_ context.Context, commodityID string
 	return false, nil
 }
 
-// HasSentInRange checks whether a row exists for the commodity with
-// fromDays <= threshold < belowDays.
+// HasSentInRange checks whether a row that is not silent exists for the
+// commodity with fromDays <= threshold < belowDays.
 func (r *WarrantyReminderRegistry) HasSentInRange(_ context.Context, commodityID string, fromDays, belowDays int) (bool, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		v := pair.Value
-		if v.CommodityID == commodityID && v.ThresholdDays >= fromDays && v.ThresholdDays < belowDays {
+		if v.CommodityID == commodityID && v.ThresholdDays >= fromDays && v.ThresholdDays < belowDays && !v.Silent {
 			return true, nil
 		}
 	}

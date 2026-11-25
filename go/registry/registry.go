@@ -1075,9 +1075,11 @@ type MaintenanceReminderRegistry interface {
 	// given (schedule, threshold) tuple.
 	HasSent(ctx context.Context, scheduleID string, thresholdDays int) (bool, error)
 
-	// HasSentInRange reports whether a reminder row exists for the
-	// schedule with fromDays <= threshold < belowDays. The worker uses
-	// it to skip a lead time once a closer one has gone out (#2805).
+	// HasSentInRange reports whether a reminder row that is not silent
+	// exists for the schedule with fromDays <= threshold < belowDays. The
+	// worker uses it to skip a lead time once an email for a closer one
+	// has gone out (#2805). Silent rows do not count: no email went out
+	// for them.
 	HasSentInRange(ctx context.Context, scheduleID string, fromDays, belowDays int) (bool, error)
 
 	// CreateOnce attempts to insert the reminder row. Returns
@@ -1684,9 +1686,11 @@ type WarrantyReminderRegistry interface {
 	// the email-render path when the row is present.
 	HasSent(ctx context.Context, commodityID string, thresholdDays int) (bool, error)
 
-	// HasSentInRange reports whether a reminder row exists for the
-	// commodity with fromDays <= threshold < belowDays. The worker uses
-	// it to skip a lead time once a closer one has gone out (#2805).
+	// HasSentInRange reports whether a reminder row that is not silent
+	// exists for the commodity with fromDays <= threshold < belowDays. The
+	// worker uses it to skip a lead time once an email for a closer one
+	// has gone out (#2805). Silent rows do not count: no email went out
+	// for them.
 	HasSentInRange(ctx context.Context, commodityID string, fromDays, belowDays int) (bool, error)
 
 	// CreateOnce attempts to insert the reminder row. Returns

@@ -140,6 +140,15 @@ type MaintenanceReminder struct {
 	// queue's own job log records final delivery.
 	//ptah:schema:field name="sent_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	SentAt time.Time `json:"sent_at" db:"sent_at"`
+
+	// Silent is true when the row was written without an email going out:
+	// the commodity was gone, no recipient was due this lead time, every
+	// recipient had opted out, there was no recipient, or a closer reminder
+	// had already gone out. A silent row still keeps the threshold from
+	// being processed again, but only a row that is not silent holds back
+	// a farther lead time (HasSentInRange).
+	//ptah:schema:field name="silent" type="BOOLEAN" not_null="true" default="false"
+	Silent bool `json:"silent" db:"silent"`
 }
 
 // MaintenanceReminderIndexes defines indexes for maintenance_reminders.
