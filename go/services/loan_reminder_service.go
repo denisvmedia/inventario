@@ -112,12 +112,12 @@ func (s *LoanReminderService) RemindOnce(ctx context.Context, now time.Time) (Lo
 	if s.factorySet == nil {
 		return stats, errxtrace.Wrap("loan reminder service: factorySet is required", registry.ErrFieldRequired)
 	}
-	prefsCache := s.prefsForSweep()
+	sweep := &loanSweep{prefs: s.prefsForSweep(), lenders: map[string]loanLender{}}
 	for _, kind := range []registry.LoanReminderKind{
 		registry.LoanReminderKindOverdue,
 		registry.LoanReminderKindDueSoon,
 	} {
-		sent, failed, err := s.sweepKind(ctx, kind, now, prefsCache)
+		sent, failed, err := s.sweepKind(ctx, kind, now, sweep)
 		if err != nil {
 			return stats, err
 		}
@@ -130,7 +130,7 @@ func (s *LoanReminderService) RemindOnce(ctx context.Context, now time.Time) (Lo
 // sweepKind runs the registry list + per-loan processing for one kind.
 // Returns (sent, failed, listErr) — listErr fails the whole sweep, but
 // a per-loan failure just bumps `failed` and the loop moves on.
-func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanReminderKind, now time.Time, prefsCache *notifications.Cache) (sent, failed int, listErr error) {
+func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanReminderKind, now time.Time, sweep *loanSweep) (sent, failed int, listErr error) {
 	if s.factorySet.CommodityLoanRegistryFactory == nil {
 		// Defensive: if the factory wiring is incomplete (a test or a
 		// stripped-down bootstrap), fail the sweep with a controlled
@@ -146,7 +146,7 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 		return 0, 0, errxtrace.Wrap("loan reminder: list pending", err)
 	}
 	for _, l := range loans {
-		ok, processErr := s.processOne(ctx, loanReg, l, kind, now, prefsCache)
+		ok, processErr := s.processOne(ctx, loanReg, l, kind, now, sweep)
 		if processErr != nil {
 			failed++
 			slog.Error("loan reminder failed",
@@ -188,8 +188,9 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 //     no recipient (flag still flipped) OR opted out (flag NOT flipped)
 //     OR concurrent worker won the flip.
 //   - (false, err) — enqueue or flip-side failure that should retry.
-func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.CommodityLoanRegistry, l *models.CommodityLoan, kind registry.LoanReminderKind, now time.Time, prefsCache *notifications.Cache) (bool, error) {
-	lender, recipientEmail, recipientName := s.lookupLender(ctx, l)
+func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.CommodityLoanRegistry, l *models.CommodityLoan, kind registry.LoanReminderKind, now time.Time, sweep *loanSweep) (bool, error) {
+	prefsCache := sweep.prefs
+	lender, recipientEmail, recipientName := s.cachedLender(ctx, l, sweep)
 	if kind == registry.LoanReminderKindDueSoon && computeDaysDelta(l.DueBackAt, now) > s.leadTimeFor(ctx, lender, prefsCache) {
 		// Not inside the lender's lead time yet. The flag stays false,
 		// so a later sweep sends the reminder once the date is close
@@ -299,6 +300,39 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 		)
 	}
 	return true, nil
+}
+
+// loanSweep holds what one sweep reuses across loans and both kinds: the
+// preferences cache and the lenders already looked up. The due-soon query
+// reaches up to models.LoanReminderMaxLeadDays ahead, so most of its loans
+// are dropped by the lead-time check, which needs the lender; one lender
+// usually has many loans.
+type loanSweep struct {
+	prefs   *notifications.Cache
+	lenders map[string]loanLender
+}
+
+type loanLender struct {
+	user        *models.User
+	email, name string
+}
+
+// cachedLender returns lookupLender, reusing a lender already found in
+// this sweep. A failed lookup is not cached: lookupLender reports it as "no
+// recipient", which flips the loan's flag, and a transient error must not
+// do that to every other loan of the same lender.
+func (s *LoanReminderService) cachedLender(ctx context.Context, l *models.CommodityLoan, sweep *loanSweep) (lender *models.User, email, name string) {
+	if l == nil {
+		return nil, "", ""
+	}
+	if cached, ok := sweep.lenders[l.CreatedByUserID]; ok {
+		return cached.user, cached.email, cached.name
+	}
+	lender, email, name = s.lookupLender(ctx, l)
+	if lender != nil {
+		sweep.lenders[l.CreatedByUserID] = loanLender{user: lender, email: email, name: name}
+	}
+	return lender, email, name
 }
 
 // lookupLender returns the resolved lender User + its email + display
