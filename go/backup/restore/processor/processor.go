@@ -57,11 +57,12 @@ const maxSupportedInbMajor = 3
 
 var (
 	// ErrJSONDocTooLarge is returned when a JSON document member (a location
-	// document, the area-less commodities document of #1986, or the
-	// non-commodity files document of #2235) declares a size above
-	// maxJSONDocBytes. Without a per-member cap one document could claim up to
-	// the 8 GiB total and OOM the worker via io.ReadAll. The failing member name
-	// is attached, so the message stays diagnosable across all three.
+	// document, the area-less commodities document of #1986, the drafts
+	// document, or the non-commodity files document of #2235) declares a size
+	// above maxJSONDocBytes. Without a per-member cap one document could claim
+	// up to the 8 GiB total and OOM the worker via io.ReadAll. The failing
+	// member name is attached, so the message stays diagnosable across all of
+	// them.
 	ErrJSONDocTooLarge = errx.NewSentinel("backup JSON document exceeds the maximum allowed size")
 
 	// ErrMissingFileMembers is returned when one or more declared commodity file
@@ -255,6 +256,8 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		fileRefs:  map[string]*inbPendingFile{},
 		delivered: map[string]string{},
 		parked:    map[string]bool{},
+
+		draftIDs: map[string]string{},
 
 		priceReading: types.PricesOmitZero,
 	}
@@ -455,6 +458,11 @@ type inbWalker struct {
 	// set after the walk, once every item they may name is restored.
 	customFields map[string]*restoredCustomField
 	pendingLinks []inbPendingLink
+	// draftIDs maps an archived draft's UUID to the restored draft's DB id.
+	// A link to an archived draft that is not in it (a draft a merge kept,
+	// one that failed to restore, one the archive does not carry) is left
+	// out without an error.
+	draftIDs map[string]string
 }
 
 // handleMember dispatches a tar member: the manifest is read for nothing
@@ -470,6 +478,9 @@ func (w *inbWalker) handleMember(hdr *tar.Header, r io.Reader) error {
 		// Non-commodity files document (issue #2235). It lives UNDER the `files/`
 		// prefix, so it must be matched before the file-bytes case below.
 		return w.handleFilesMember(hdr, r)
+	case hdr.Name == types.INBDraftsMember:
+		// Drafts document (format 3.5), also under `files/`.
+		return w.handleDraftsMember(hdr, r)
 	case strings.HasPrefix(hdr.Name, "files/"):
 		return w.handleFileMember(hdr, r)
 	case hdr.Name == types.INBUnassignedMember:
@@ -860,7 +871,9 @@ func (w *inbWalker) registerRef(ref types.INBFileRef, link inbFileLink) error {
 // reference that arrived after the file's bytes. The attach is idempotent, so a
 // retried restore never duplicates a link.
 func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, link inbFileLink) error {
-	if link.linkedType == "" {
+	if fileUUID == "" || link.linkedType == "" || w.isUnrestoredDraft(link) {
+		// fileUUID is empty for bytes that arrived before any reference
+		// could use them; they were dropped with a counted error.
 		return nil
 	}
 	dbID, ok := w.resolveLinkedDBID(link)
@@ -985,6 +998,8 @@ func (w *inbWalker) resolveLinkedDBID(link inbFileLink) (string, bool) {
 		dbID, found = w.idMapping.Locations[link.entityUUID]
 	case "area":
 		dbID, found = w.idMapping.Areas[link.entityUUID]
+	case models.FileLinkDraft:
+		dbID, found = w.draftIDs[link.entityUUID]
 	default:
 		return "", false
 	}
@@ -1002,8 +1017,13 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	pending, ok := w.fileRefs[hdr.Name]
 	if !ok {
 		// A file member with no matching reference is rejected — restoring it
-		// would create an orphan blob with no owning row.
+		// would create an orphan blob with no owning row. It still counts as
+		// delivered: the document that referenced it first may have failed
+		// (an item that did not validate, or any item in a dry run), and a
+		// later reference to the same file must not fail the whole restore
+		// as a missing member.
 		_, _ = io.Copy(io.Discard, r)
+		w.delivered[hdr.Name] = ""
 		w.stats.ErrorCount++
 		w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("file member %s has no matching reference", hdr.Name))
 		return nil
@@ -1149,7 +1169,9 @@ func (w *inbWalker) finishFileRow(action fileAction, fileUUID, fileID string, li
 func (w *inbWalker) resolveLinks(pending *inbPendingFile) (links []types.INBFileLink, standalone bool, holderID string) {
 	live := false
 	for _, link := range pending.links {
-		if link.linkedType == "" {
+		if link.linkedType == "" || w.isUnrestoredDraft(link) {
+			// A file only drafts the restore did not recreate used is
+			// restored as a standalone file rather than lost.
 			standalone = true
 			continue
 		}

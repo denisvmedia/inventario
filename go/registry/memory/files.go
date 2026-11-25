@@ -80,6 +80,12 @@ func (f *FileRegistryFactory) MustCreateUserRegistry(ctx context.Context) regist
 }
 
 func (f *FileRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.FileRegistry, error) {
+	return f.createUserFileRegistry(ctx)
+}
+
+// createUserFileRegistry is CreateUserRegistry with the concrete type, for
+// the memory registries that need the unexported link helpers.
+func (f *FileRegistryFactory) createUserFileRegistry(ctx context.Context) (*FileRegistry, error) {
 	user, err := appctx.RequireUserFromContext(ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get user from context", err)
@@ -589,6 +595,26 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 	sortFilesNewestFirst(filtered)
 
 	return filtered, nil
+}
+
+// CountLinkedTo returns how many live files are linked to each entity.
+func (r *FileRegistry) CountLinkedTo(ctx context.Context, entityType string, entityIDs []string) (map[string]int, error) {
+	out := make(map[string]int, len(entityIDs))
+	if len(entityIDs) == 0 {
+		return out, nil
+	}
+	allFiles, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range allFiles {
+		for _, id := range entityIDs {
+			if file.LinkTo(entityType, id) != nil {
+				out[id]++
+			}
+		}
+	}
+	return out, nil
 }
 
 // ListByGroup returns every file belonging to the given (tenant_id, group_id)

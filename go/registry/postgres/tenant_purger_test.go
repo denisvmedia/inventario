@@ -77,6 +77,8 @@ func seedTenantWithDependents(c *qt.C, ctx context.Context, fs *registry.Factory
 	seedTagCommodity(c, userSet, userCtx, areaID, "Widget "+slug)
 	seedTagFile(c, userSet, userCtx, "file-"+slug)
 	mustCreateTag(c, userSet.TagRegistry, userCtx, models.TagKindCommodity, "tag-"+slug)
+	_, _, err = userSet.CommodityDraftRegistry.CreateOrGet(userCtx, models.CommodityDraft{ClientKey: "draft-" + slug})
+	c.Assert(err, qt.IsNil)
 
 	// Tenant-only auth rows.
 	_, err = svc.RefreshTokenRegistry.Create(ctx, models.RefreshToken{
@@ -142,7 +144,7 @@ func TestTenantPurger_Postgres_PurgesAllTenantDependents(t *testing.T) {
 
 	// Every dependent table is empty for tenant A.
 	for _, table := range []string{
-		"locations", "areas", "commodities", "files", "tags",
+		"locations", "areas", "commodities", "files", "tags", "commodity_drafts",
 		"location_groups", "users", "refresh_tokens", "login_events",
 	} {
 		c.Assert(countRowsForTenant(c, dbx, table, a.tenantID), qt.Equals, 0,
@@ -158,7 +160,7 @@ func TestTenantPurger_Postgres_PurgesAllTenantDependents(t *testing.T) {
 
 	// Tenant B is untouched — same table set still carries its rows.
 	for _, table := range []string{
-		"locations", "areas", "commodities", "files", "tags",
+		"locations", "areas", "commodities", "files", "tags", "commodity_drafts",
 		"location_groups", "users", "refresh_tokens", "login_events",
 	} {
 		c.Assert(countRowsForTenant(c, dbx, table, b.tenantID) > 0, qt.IsTrue,

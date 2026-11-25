@@ -316,3 +316,37 @@ func TestSavedViews_AdminUnsharesAnotherMembersView(t *testing.T) {
 	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.shared"), false)
 	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.show_in_sidebar"), true)
 }
+
+// TestSavedViews_DraftsAreNotCounted: a server draft (#2812) is not an item,
+// so no saved view counts it, whatever the view's query.
+func TestSavedViews_DraftsAreNotCounted(t *testing.T) {
+	c := qt.New(t)
+	env := newSavedViewsEnv(c)
+	all := env.create(c, env.adminID, map[string]any{"name": "Everything", "show_in_sidebar": true})
+	byName := env.create(c, env.adminID, map[string]any{"name": "Gadgets", "show_in_sidebar": true, "query": "q=Unfinished+gadget&include_inactive=true"})
+
+	counts := func() map[string]int {
+		rr := env.do(c, http.MethodGet, "/counts", env.adminID, nil)
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", rr.Body.String()))
+		var resp struct {
+			Data struct {
+				Counts map[string]int `json:"counts"`
+			} `json:"data"`
+		}
+		c.Assert(json.Unmarshal(rr.Body.Bytes(), &resp), qt.IsNil)
+		return resp.Data.Counts
+	}
+	before := counts()
+
+	req := must.Must(http.NewRequest(http.MethodPost, "/api/v1/g/"+env.slug+"/drafts",
+		bytes.NewReader([]byte(draftCreateBody("saved-view-draft", "Unfinished gadget")))))
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+	addTestUserAuthHeader(req, env.adminID)
+	rr := httptest.NewRecorder()
+	env.handler.ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body: %s", rr.Body.String()))
+
+	after := counts()
+	c.Assert(after[all], qt.Equals, before[all])
+	c.Assert(after[byName], qt.Equals, 0)
+}

@@ -132,6 +132,10 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// before commodities.
 	func(t store.TableNames) string { return string(t.CommodityReminders()) },
 
+	// Drafts (#2812). group_id -> location_groups and created_by_user_id ->
+	// users NO ACTION; no other table references them.
+	func(t store.TableNames) string { return string(t.CommodityDrafts()) },
+
 	// Currency-migration audit rows (#2095). migration_id ->
 	// currency_migrations CASCADE, commodity_id -> commodities SET NULL.
 	// Dropped before both currency_migrations and commodities.

@@ -422,7 +422,7 @@ func (l *RestoreOperationProcessor) unparkFile(ctx context.Context, fileDBID str
 
 // clearExistingData removes all existing data for full replace strategy. The
 // group's Trash is emptied first: an item or file waiting there would otherwise
-// keep its UUID and collide with the archive's copy. Then three passes, in this
+// keep its UUID and collide with the archive's copy. Then four passes, in this
 // order:
 //
 //  1. PurgeLocationRecursive per location — cascades areas, their commodities,
@@ -433,11 +433,14 @@ func (l *RestoreOperationProcessor) unparkFile(ctx context.Context, fileDBID str
 //     above, so before #2236 its row survived a full_replace while the file sweep
 //     below still deleted its attachments (a zombie item with no files) — and its
 //     preserved UUID then collided with the archive's own copy on re-create.
-//  3. A type-agnostic sweep of the remaining files (rows + blobs), which catches
+//  3. The group's drafts (#2812), in every state, with their file links. The
+//     archive's open drafts take their place: the drafts member recreates
+//     them, and the files member links their files to them again.
+//  4. A type-agnostic sweep of the remaining files (rows + blobs), which catches
 //     standalone files and any orphan. linked_entity_type='export' is skipped:
 //     that is the archive being restored plus the backup history, not inventory.
 //
-// Pass 2 sits BETWEEN the other two on purpose: DeleteCommodityRecursive cleans a
+// Pass 2 runs before the sweep on purpose: DeleteCommodityRecursive cleans a
 // commodity's own files (row + blob + thumbnails) instead of having them yanked
 // out from under a live row by the sweep.
 func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error {
@@ -472,6 +475,10 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 	if err != nil {
 		return errxtrace.Wrap("failed to create user file registry for clear", err)
 	}
+	if err := l.clearDrafts(ctx, fileReg); err != nil {
+		return err
+	}
+
 	files, err := fileReg.List(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to list files for deletion", err)
@@ -489,6 +496,29 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 		}
 	}
 
+	return nil
+}
+
+// clearDrafts deletes every draft of the group, open, promoted or being
+// discarded, and the links of files to them. The files themselves are left
+// to the sweep that follows. RLS-scoped registry, as for the locations.
+func (l *RestoreOperationProcessor) clearDrafts(ctx context.Context, fileReg registry.FileRegistry) error {
+	draftReg, err := l.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user draft registry for clear", err)
+	}
+	drafts, err := draftReg.List(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list drafts for deletion", err)
+	}
+	for _, draft := range drafts {
+		if _, err := fileReg.RemoveLinksToEntity(ctx, models.FileLinkDraft, draft.ID); err != nil {
+			return errxtrace.Wrap("failed to remove draft file links", err, errx.Attrs("draft_id", draft.ID))
+		}
+		if err := draftReg.Delete(ctx, draft.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
+			return errxtrace.Wrap("failed to delete draft", err, errx.Attrs("draft_id", draft.ID))
+		}
+	}
 	return nil
 }
 
